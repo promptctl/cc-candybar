@@ -96,13 +96,11 @@ a new category here — that forces code review of the pattern.
 | `src/segments/git.ts` (`execGitAsync`) | `git` | async | no | Single helper used by every `git` segment query — branch, status, sha, tag, stash, upstream, repo-name, ahead/behind, fallback-branch, rev-list. Per-call timeout is 2000ms (but see **F4**). |
 | `src/segments/tmux.ts` (`askSessionName`) | `tmux` | async | no | `tmux -S <socket> display-message -p -t <pane> '#S'`, against the pane the session's client reported (`ClientHints.tmux`); skipped when it reported none. Once per pane, then every 30 s while a session's view holds the pane. 2000ms timeout. |
 | `src/var-system/sources.ts` (`execShell`) | `user-shell` | async | no | `/bin/sh -c <user-command>` for `declareShell` variables. **No timeout.** Currently unused at runtime (see **F6**). |
-| `src/daemon/server.ts` (`clickCopy`) | `click.pbcopy` | sync | no | Click verb `copy`: `/usr/bin/pbcopy <stdin>`. |
-| `src/daemon/server.ts` (`clickOpenVscode`) | `click.open` | sync | no | Click verb `open-vscode`: `/usr/bin/open -a "Visual Studio Code" <path>`. |
+| `src/daemon/verbs/index.ts` (`pbcopy`) | `click.pbcopy` | async | no | Click verbs `copy-text` and `copy-diagnostic`: `/usr/bin/pbcopy <stdin>`, an effect performed after the click's turn. |
+| `src/daemon/verbs/index.ts` (`openVscode`) | `click.open` | async | no | Click verb `open-in-vscode`: `/usr/bin/open -a "Visual Studio Code" <path>`, an effect performed after the click's turn. |
 | `src/install/index.ts` | `install.codesign` | sync | no | `codesign` ad-hoc signs the assembled URL-handler `.app`. One-shot during `cc-candybar install`. |
 | `src/install/index.ts` | `install.killall` | sync | no | `killall` quits the resident handler a previous install left running, so Launch Services starts the new one. |
 | `src/install/index.ts` | `install.lsregister` | sync | no | `lsregister -f <bundle>` to register `cc-candybar://`. |
-| `src/install/index.ts` | `install.pbcopy` | sync | no | URL-handler-side `copy` verb (daemon-down fallback). |
-| `src/install/index.ts` | `install.open` | sync | no | URL-handler-side `open-vscode` verb (daemon-down fallback). |
 | `src/daemon/acquire.ts` (`spawnDaemonDetachedReal`) | `daemon-spawn` | sync | **yes** | The one place a daemon process is born. `node --max-old-space-size=400 <script> daemon`, `detached:true`, `stdio:"ignore"`. |
 
 ### Daemon-launch script (`src/daemon/acquire.ts`)

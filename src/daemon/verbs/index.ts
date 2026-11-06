@@ -382,7 +382,7 @@ function requireSessionId(value: string): SessionId {
   return parsed.id;
 }
 
-// [LAW:types-are-the-program] A single-argument verb (toolbar/show-config)
+// [LAW:types-are-the-program] A single-argument verb (toolbar-toggle, back)
 // carries ONE argument: the WHOLE value, decoded once. It must NOT split on "/"
 // the way the multi-arg set-state does, since a single-arg value may contain "/"
 // and would be truncated at the first slash if split. The verb's
@@ -522,8 +522,8 @@ export async function clickHandoff(
   }
 }
 
-// One clipboard primitive, no decode — both the `copy` verb (decodes a wire
-// segment) and the diagnostic verbs (already hold a plain message) funnel here.
+// One clipboard primitive, no decode: copy-text (its text segment) and the
+// diagnostic verbs (a plain message) both funnel here.
 function pbcopy(text: string, ctx: ClickContext): void {
   launch(
     ctx,
@@ -1999,6 +1999,11 @@ const repoConfig: VerbHandler = (value, ctx) => {
 // plain object would be a truthy hit on Object.prototype that then throws on
 // invocation (RENDER_FAILED instead of BAD_REQUEST). Map makes the wrong
 // dispatch unrepresentable, matching src/daemon/session-state.ts.
+//
+// [LAW:one-source-of-truth] Every leaf verb's first wire segment is the
+// session it was clicked in, so membership here is what makes an effect name
+// its click's session (`clickSessionOf`). A verb that names none is a link
+// kind beside this table, as the probe is.
 const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_COPY, copy],
   [VERB_OPEN_VSCODE, openVscode],
@@ -2027,6 +2032,9 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_COPY_DIAGNOSTIC, copyDiagnostic],
 ]);
 
+// The verbs a dispatch may carry as its effects.
+export const LEAF_VERB_NAMES: ReadonlySet<string> = new Set(LEAF_VERBS.keys());
+
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
 // `/`-separated segments (decodeSegments); every other verb decodes its whole
 // value as one argument (oneArg).
@@ -2045,38 +2053,6 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_APPLY_LAYOUT_OP,
   VERB_UNDO,
   VERB_REDO,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
-  VERB_SLASH,
-  VERB_RUN,
-  VERB_REPO_CONFIG,
-  VERB_COPY_DIAGNOSTIC,
-  VERB_COPY,
-  VERB_OPEN_VSCODE,
-]);
-
-// [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
-// id — the set `dispatch` reads to know which session a failing click should
-// surface its error in. Membership here is the fact; a verb that carries the
-// session id first joins by one row, not one more `||`.
-const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
-  VERB_SET_STATE,
-  VERB_STEP_STATE,
-  VERB_SET_CONFIG,
-  VERB_STEP_CONFIG,
-  VERB_RESET_CONFIG,
-  VERB_SAVE,
-  VERB_SAVE_PRESET,
-  VERB_SAVE_THEME_DEFAULT,
-  VERB_DELETE_PRESET,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_UNDO,
-  VERB_REDO,
-  VERB_BACK,
-  VERB_REWIND,
-  VERB_TOOLBAR_TOGGLE,
-  VERB_APPLY_UPDATE,
-  VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
   VERB_SLASH,
@@ -2109,12 +2085,10 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 //
 // [LAW:one-source-of-truth] Per-step errors are written to session state
 // so the bar shows WHICH step(s) failed, for the hold src/daemon/click-error.ts
-// sets. Only possible when a session ID
-// is available from a set-state or toolbar-toggle effect in the same click.
+// sets.
 // [LAW:one-source-of-truth] The session a click is in: the first segment of
-// its first session-bearing effect — every SESSION_FIRST_VERBS member carries
-// it there — or none. Dispatch surfaces a failed step in that session's bar,
-// and the daemon counts the click as that session's activity
+// its first leaf effect, or none. Dispatch surfaces a failed step in that
+// session's bar, and the daemon counts the click as that session's activity
 // (src/daemon/menu-idle.ts). [LAW:single-enforcer] It is read as it crosses
 // the one session-id checkpoint, so every reader of a click's session reads
 // the same checked value; one that fails is no session's, and its verb
@@ -2131,7 +2105,7 @@ export function clickSessionOf(
 function sessionOfEffects(
   effects: readonly ParsedEffect[],
 ): ParsedSessionId | null {
-  const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
+  const bearing = effects.find((e) => LEAF_VERB_NAMES.has(e.verb));
   // Only the session's own segment is read: a step's malformed argument is
   // that step's error to hold on the bar, after the click has found its
   // session.

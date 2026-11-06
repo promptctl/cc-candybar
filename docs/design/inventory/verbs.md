@@ -27,7 +27,7 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 - `dlog` writes the click event to `<state>/daemon.log`.
 - `<state>` is `stateDir()`, normally `~/.local/state/cc-candybar`.
 
-**Exception:** `doctor-probe` is not in `SESSION_FIRST_VERBS`, so `journaled` has no session and skips the lane and view follow-ups. It still opens and commits empty journals.
+**Exception:** `probe` is a link kind, not a leaf verb: it names no session, takes no turn and describes nothing.
 
 **Touch codes:** P picks (`session-state.json`), SH settings history, NH navigation history (memory only), CF config file, CC Claude Code process or pane, TM tmux, OS another session, MA machine, SS source storage. Anything not listed is not touched by the handler.
 

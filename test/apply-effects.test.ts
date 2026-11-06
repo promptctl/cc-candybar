@@ -104,6 +104,8 @@ describe("a copy click's launch is an effect", () => {
     expect(r.applyLines()[1]).toMatch(
       new RegExp(`^apply kind=effect-done verb=${verb} sid=s1 effect=launch:pbcopy outcome=failed said="pbcopy failed \\(.*no pasteboard\\)" effects=- revision=\\d+$`),
     );
+    // The bar shows it, and the log still says it as a warning.
+    expect(r.warned).toEqual([r.applyLines()[1]]);
   });
 
   // A link drawn when copy carried only its text spelled the verb `copy`. Its

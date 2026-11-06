@@ -1088,7 +1088,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // `oneArg` owns the single matching decode — so the template never hand-rolls
   // a `urlEncode`, and the path round-trips untouched through one codec.
   //
-  // open* route through the open-vscode verb (`open -a "Visual Studio Code"
+  // open* route through the open-in-vscode verb (`open -a "Visual Studio Code"
   // <path>`), so they pass a bare filesystem path — a directory or a file the
   // editor opens directly — NOT a `vscode://` URL (which `open -a` would treat
   // as a literal filename, not a deep link).
