@@ -97,7 +97,9 @@ describe("a turn that cannot be stamped", () => {
     const settled = changed.length;
     runInAction(() => broken.set(true));
     expect(changed.length).toBeGreaterThan(settled);
-    expect(view.source.failure()).toContain("update watch exploded");
+    // The facts source's fault: the turn is taken over the document it kept.
+    expect(view.source.failure()).toMatchObject({ cause: "facts" });
+    expect(view.source.failure()?.reason).toContain("update watch exploded");
     // The bar is still the last turn's, whole.
     expect(view.source.payload()).toEqual(before);
     expect(logged.join("\n")).toContain("update watch exploded");
@@ -133,7 +135,7 @@ describe("a fault that persists", () => {
     const woken = changed.length;
 
     runInAction(() => landings.set(1));
-    expect(view.source.failure()).toContain("update watch exploded");
+    expect(view.source.failure()?.reason).toContain("update watch exploded");
     expect(view.source.payload()).toBe(payload);
     expect(logged.length).toBe(lines);
     expect(changed.length).toBe(woken);

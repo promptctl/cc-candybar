@@ -11,19 +11,19 @@
 // time — the cache's current one. A successor's opening document starts its
 // sequence again, which a replay shows at its instant as the live bar did.
 //
-// [LAW:one-type-per-behavior] Where a view is entered, and wherever its turn's
-// hold moves, the turn the bar is drawn from is written whole: the recording
-// opens on it, and a replay takes it and holds its own turn as the live one
-// was held.
+// [LAW:one-type-per-behavior] Where a view is entered, wherever its turn's
+// hold moves, and around a draw of a view the recording is not on, the turn
+// the bar is drawn from is written whole: the recording opens on it, and a
+// replay takes it and holds its own turn as the live one was held. A hold is
+// a view's, so every line follows the turn of the view it came from.
 
 import { inspect } from "node:util";
 import { appendFileSync, closeSync, openSync, unlinkSync } from "node:fs";
-import { reaction, type IReactionPublic } from "mobx";
+import { reaction } from "mobx";
 import type { DiagnosticList } from "../render/diagnostics.js";
 import {
   formatLine,
   type DrawState,
-  type FactsLine,
   type RecordingLine,
   type RequestLine,
   type SessionRequest,
@@ -39,11 +39,12 @@ import type { Recorded } from "./protocol.js";
 import type { SessionId } from "./session-id.js";
 import type { SessionSource } from "./session-source.js";
 
-// What a recording reads of the cache: the session's current view, the
-// documents its follow stamps, the home its payloads are composed against, and
+// What a recording reads of a view: the documents its follow stamps, the
+// request it is declared with, the home its payloads are composed against, and
 // the turn its bar is drawn from and whether that turn is held.
 export interface RecordedView {
   readonly followed: SessionView["followed"];
+  readonly facts: () => SessionRequest;
   readonly source: Pick<SessionSource, "home" | "turn" | "held">;
 }
 
@@ -92,25 +93,25 @@ export interface Arrival {
   readonly noted: ReadonlySet<object>;
 }
 
-// What a draw read: its view's document, the request the view was declared
-// with, what the session's clicks and menus left for it, and the diagnostics
-// the draw built.
+// What a draw read: the view its request holds, what the session's clicks and
+// menus left for it, and the diagnostics the draw built.
 export interface DrawnFrom {
-  readonly document: FactsLine;
-  readonly declaration: SessionRequest;
+  readonly view: RecordedView;
   readonly state: DrawState;
   readonly diagnostics: DiagnosticList;
 }
 
 interface Open {
   readonly sink: RecordingSink;
-  // The reactions the current view's lines are written from, each disposed
-  // when the recording leaves the view.
-  readonly watching: Set<IReactionPublic>;
-  // The last document and the last declaration this recording wrote: what a
-  // replay's view holds at the next line.
+  // The disposers of the reactions the current view's lines are written
+  // from, each called when the recording leaves the view.
+  readonly watching: Set<() => void>;
+  // The last document and the last declaration this recording wrote, and the
+  // view and hold of the last turn: what a replay's view holds at the next
+  // line.
   document: SessionFacts | null;
   declaration: SessionRequest | null;
+  turn: { readonly view: RecordedView; readonly held: boolean } | null;
 }
 
 export function sessionRecorder(
@@ -123,7 +124,7 @@ export function sessionRecorder(
   // is, not for a view the close retired.
   let closed = false;
   const detach = (rec: Open): void => {
-    for (const watch of rec.watching) watch.dispose();
+    for (const dispose of rec.watching) dispose();
     rec.watching.clear();
   };
   const end = (sessionId: string, rec: Open, how: RecordingEnd): void => {
@@ -157,38 +158,46 @@ export function sessionRecorder(
       end(sessionId, rec, { kind: "failed", error: e });
     }
   };
+  // [LAW:one-source-of-truth] The turn of `view` as it stands, written when
+  // the replay's view does not already hold it: another view's turn was the
+  // last written, or this view's hold moved since.
+  const writeTurn = (
+    sessionId: string,
+    rec: Open,
+    view: RecordedView,
+  ): void => {
+    const held = view.source.held();
+    if (rec.turn?.view === view && rec.turn.held === held) return;
+    rec.turn = { view, held };
+    write(sessionId, rec, { kind: "turn", held, ...view.source.turn() });
+  };
   // The session's current view, written from: its turn now and wherever the
   // turn's hold moves, and its document now and each it takes after. With no
   // view, nothing, until the cache enters one.
-  // [LAW:no-ambient-temporal-coupling] Each write is made holding its own
-  // reaction's handle, so a write that ends the recording disposes the
-  // reaction that made it — the first one included, which runs before
-  // `reaction` has returned, or at the end of the batch it was entered in. The
-  // turn is watched first, so a recording opens on it.
+  // [LAW:no-ambient-temporal-coupling] A reaction's first run comes before
+  // `reaction` returns, or at the end of the batch it was entered in, so its
+  // disposer is kept the moment it is returned: a detach later in that batch
+  // disposes it before it runs, and one whose first run ended the recording is
+  // disposed here. The turn is watched first, so a recording opens on it.
   const attach = (sessionId: string, rec: Open): void => {
     const view = views.sessionView(sessionId);
     if (view === null) return;
-    const watch = <T>(read: () => T, lineOf: (value: T) => RecordingLine) => {
+    const watch = <T>(read: () => T, effect: (value: T) => void): void => {
       // A write before this one ended the recording: nothing more is watched.
       if (!open.get(sessionId)?.has(rec)) return;
-      reaction(
-        read,
-        (value, _prior, self) => {
-          rec.watching.add(self);
-          write(sessionId, rec, lineOf(value));
-        },
-        { fireImmediately: true },
-      );
+      const dispose = reaction(read, effect, { fireImmediately: true });
+      if (open.get(sessionId)?.has(rec)) rec.watching.add(dispose);
+      else dispose();
     };
     watch(
       () => view.source.held(),
-      (held) => ({ kind: "turn", held, ...view.source.turn() }),
+      () => writeTurn(sessionId, rec, view),
     );
     // The document the turn line just wrote is the follow's while the turn is
     // not held: `write` skips a document already the last written.
     watch(
       () => view.followed.stamped(),
-      (line) => ({ kind: "facts", ...line }),
+      (line) => write(sessionId, rec, { kind: "facts", ...line }),
     );
   };
   return {
@@ -207,6 +216,7 @@ export function sessionRecorder(
         watching: new Set(),
         document: null,
         declaration: null,
+        turn: null,
       };
       const recs = open.get(session) ?? new Set<Open>();
       open.set(session, recs.add(rec));
@@ -232,27 +242,41 @@ export function sessionRecorder(
       }
       return { at: line.at, noted };
     },
-    // [LAW:one-source-of-truth] A replay draws from the last document and the
-    // last declaration before the draw line, so those are the ones the draw
-    // read: each offered again here, and written when it is not the last this
-    // recording wrote, as a request's held view the session moved away from
-    // has, the current view at the draw after that, and a follow that stamped
-    // past a held turn's document.
-    drew(
-      sessionId,
-      { at: request, noted },
-      { document, declaration, state, diagnostics },
-    ) {
+    // [LAW:one-source-of-truth] A replay draws from the last turn, the last
+    // document and the last declaration before the draw line, so those are
+    // the ones the draw read: each offered again here, and written when it is
+    // not the last this recording wrote. The view a request holds can be one
+    // the session moved away from during its wait, with a hold of its own, so
+    // its turn goes before the draw and the current view's after it: the
+    // lines that follow are the current view's. A follow that stamped past a
+    // held turn's document writes that document again too.
+    drew(sessionId, { at: request, noted }, { view, state, diagnostics }) {
+      const current = views.sessionView(sessionId);
       for (const rec of open.get(sessionId) ?? []) {
         if (!noted.has(rec)) continue;
-        const lines: RecordingLine[] = [
-          { kind: "facts", ...document },
-          { kind: "declared", request: declaration },
-          { kind: "draw", request, state, diagnostics },
+        const writes: Array<() => void> = [
+          () => writeTurn(sessionId, rec, view),
+          () =>
+            write(sessionId, rec, {
+              kind: "facts",
+              ...view.followed.stamped(),
+            }),
+          () =>
+            write(sessionId, rec, { kind: "declared", request: view.facts() }),
+          () =>
+            write(sessionId, rec, {
+              kind: "draw",
+              request,
+              state,
+              diagnostics,
+            }),
+          ...(current === null
+            ? []
+            : [() => writeTurn(sessionId, rec, current)]),
         ];
         // A write that failed ended the recording: nothing more is offered.
-        for (const line of lines) {
-          if (open.get(sessionId)?.has(rec)) write(sessionId, rec, line);
+        for (const next of writes) {
+          if (open.get(sessionId)?.has(rec)) next();
         }
       }
     },
@@ -317,15 +341,15 @@ export function settleRequest(
 }
 
 // [LAW:single-enforcer] A request's answer, in the request path's one place
-// for it: drawn from the view the request holds, then noted with the document
-// its follow holds, the declaration and the session's state that draw read, and
-// the diagnostics it built. The note is taken in the draw's own turn, so
-// nothing moves between the two, and only once the draw returned: an answer
-// that threw drew nothing a replay could draw. The idle instant is the one the
-// draw says it was handed (`MenuIdle.drawn`), because the frame it drew has
-// moved the clock since. The document is the follow's, not the turn's: a held
-// turn keeps an older one, which a replay's held turn keeps by itself, while
-// the follow's run lanes read the newest.
+// for it: drawn from the view the request holds, then noted with that view,
+// the session's state the draw read, and the diagnostics it built. The note is
+// taken in the draw's own turn, so nothing moves between the two, and only
+// once the draw returned: an answer that threw drew nothing a replay could
+// draw. The idle instant is the one the draw says it was handed
+// (`MenuIdle.drawn`), because the frame it drew has moved the clock since. The
+// document noted is the follow's, not the turn's: a held turn keeps an older
+// one, which a replay's held turn keeps by itself, while the follow's run
+// lanes read the newest.
 export function drawRequest<
   T extends {
     readonly idleSince: Instant | undefined;
@@ -333,10 +357,8 @@ export function drawRequest<
   },
 >(
   recorder: Pick<SessionRecorder, "drew">,
-  view: Pick<
-    SessionView<ViewSource, SessionRequest>,
-    "sessionId" | "facts" | "followed"
-  > & {
+  view: RecordedView & {
+    readonly sessionId: string;
     readonly source: Pick<SessionSource, "state">;
   },
   arrival: Arrival,
@@ -344,8 +366,7 @@ export function drawRequest<
 ): T {
   const drawn = draw();
   recorder.drew(view.sessionId, arrival, {
-    document: view.followed.stamped(),
-    declaration: view.facts(),
+    view,
     state: { ...view.source.state(), idleSince: drawn.idleSince },
     diagnostics: drawn.diagnostics,
   });

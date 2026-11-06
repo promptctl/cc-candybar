@@ -73,8 +73,8 @@ export interface SessionSource extends ViewSource {
   // Why the turn after the one every read above is of could not be taken, or
   // why the facts source could not stamp the document it holds, or null when
   // the latest turn completed on a stamped document: while it is set the bar
-  // is drawn from the last turn that did, and says so.
-  readonly failure: () => string | null;
+  // is drawn from the last turn that did, and says which.
+  readonly failure: () => TurnFailure | null;
   // What the session's clicks left for a draw now: the store's values and
   // revision for it, which its `state` variables and its frame memory read,
   // and the histories' depths the turn's payload carries. A recording notes it
@@ -86,7 +86,7 @@ export interface SessionSource extends ViewSource {
 // next turn's inputs could not be read, so the turn is held on the last one
 // taken; or the facts source could not restamp its document, so the turn is
 // taken over the one it kept.
-interface TurnFailure {
+export interface TurnFailure {
   readonly cause: "inputs" | "facts";
   readonly reason: string;
 }
@@ -305,7 +305,7 @@ export function sessionSource(
       held: () => turn.get().failure?.cause === "inputs",
       home: () => turn.get().compose.home,
       hints: () => turn.get().compose.hints,
-      failure: () => turn.get().failure?.reason ?? null,
+      failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective,
       state: () => ({
         values: deps.sessionState.values(sessionId),

@@ -558,14 +558,18 @@ export function drawRender(
     ...(entry.lastWarning === null
       ? []
       : [{ kind: "load" as const, message: entry.lastWarning }]),
-    // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
-    // drawn from the last one that was, so the bar says it is behind.
+    // [LAW:no-silent-failure] A turn that could not be taken, or taken over a
+    // document that could not be stamped, leaves the bar drawn from older
+    // facts, so the bar says it is behind and why.
     ...(failure === null
       ? []
       : [
           {
             kind: "facts" as const,
-            message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure}`,
+            message:
+              failure.cause === "inputs"
+                ? `the bar is held on the last turn taken: ${failure.reason}`
+                : `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure.reason}`,
           },
         ]),
   ];
@@ -898,8 +902,6 @@ function arrived(
   );
 }
 
-// [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
-// request `req` reported, and the config inputs it renders from now.
 // [LAW:single-enforcer] A request's answer, drawn and noted for its
 // recordings: the list the draw built is the one a recording carries, which
 // its door's indicator and its viewer read.
@@ -914,6 +916,8 @@ export function drawForAnswer(
   });
 }
 
+// [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
+// request `req` reported, and the config inputs it renders from now.
 export function laneSessionOf(req: CheckedRenderRequest): LaneSession {
   return {
     sessionId: req.hookData.session_id,

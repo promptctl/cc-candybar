@@ -469,6 +469,7 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     );
     const settling = settleRequest(live.recorder, held.view, at);
     return {
+      view: held.view,
       answer: async (): Promise<Frame> => {
         using _held = held;
         await landed(clock, held.view, stepMs);
@@ -1623,5 +1624,36 @@ test("a click between draws, before the turn is held, replays in the held frames
   expect(during.rows.filter((row) => row.kind === "menu")).not.toEqual([]);
   expect(textOf(during)).toContain("↶");
   expect(textOf(during)).toContain("⚠ 1");
+  await expectReplayed(file, s.configFile, liveFrames);
+});
+
+test("a request answered from a held view the session moved away from replays that view's held turn, and the current view's after it", async () => {
+  const s = liveSession({ runsMs: 300, stepMs: 50 });
+  const other = sessionDir();
+  await s.requestFrom(s.cwd, s.configFile);
+  const { file, liveFrames } = await recordHeld(s, "moved-held.jsonl", async () => {
+    await s.after(1000);
+    // A's wait is open on the first view when B opens the second.
+    const a = s.arrive(s.cwd, s.configFile);
+    await s.after(100);
+    const b = s.arrive(other.cwd, other.configFile);
+    // Both views' facts land, then their turns stop reading before either
+    // answer is drawn, and a pick lands.
+    await landed(s.clock, a.view, 50);
+    await landed(s.clock, b.view, 50);
+    held(s, HELD_REASON);
+    pick(s, [{ key: SETTINGS.theme.sessionKey, value: "nord" }]);
+    const frames = [await a.answer(), await b.answer()];
+    held(s, null);
+    return frames;
+  });
+  const liveText = liveFrames.map(textOf);
+  expect(liveText[0]).toContain(`dir=${s.cwd}`);
+  expect(liveText[1]).toContain(`dir=${other.cwd}`);
+  // The first view's hold crosses as its own turn, not the current view's.
+  const heldAt = readRecording(file).lines.flatMap((line) =>
+    line.kind === "turn" && line.held ? [line.request.cwd] : [],
+  );
+  expect(heldAt).toContain(s.cwd);
   await expectReplayed(file, s.configFile, liveFrames);
 });
