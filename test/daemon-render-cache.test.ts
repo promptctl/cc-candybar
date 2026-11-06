@@ -1,5 +1,4 @@
 import { FACTS_NOTHING } from "./helpers/facts";
-import type { FollowDeclaration } from "../src/daemon/facts-source";
 // [LAW:single-enforcer] Tests for the RenderCache invariants that bzh.2
 // changed: cache identity (projectDir+cwd, args ignored), last-known-good
 // preservation across failed reloads, candidate-dir watcher firing when a
@@ -1494,7 +1493,6 @@ describe("RenderCache idle sweep", () => {
         dir,
         viewFacts(dir, "s1"),
         {
-          sessionState: new SessionState(),
           source: SOURCES_NOTHING,
           // The follow the view took of its facts source, whose dispose the
           // test counts.
@@ -1519,23 +1517,20 @@ describe("RenderCache idle sweep", () => {
     }
   });
 
-  test("a view follows what its declaration names: a request naming other keys, or the session's preset moving, follows again at once", () => {
+  test("a view follows what its declaration names: a request naming other keys follows again at once, and a preset moving follows nothing", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({
       clock: systemTimekeeper,
       logger: () => {},
     });
     const sessionState = new SessionState();
-    // Each follow names the request's directory and the closure it was
-    // declared for, so the record says which request and which preset the
-    // view follows at. What a follow holds is the facts source's own
-    // (test/facts-source.test.ts).
-    const closures: Array<ReadonlySet<string>> = [];
+    // Each follow names the request's directory, so the record says which
+    // request the view follows at. What a follow holds is the facts source's
+    // own (test/facts-source.test.ts).
     const follows: string[] = [];
     let disposed = 0;
-    const noted = (facts: ViewFacts, { closure }: FollowDeclaration): void => {
-      if (!closures.includes(closure)) closures.push(closure);
-      follows.push(`${facts.cwd} closure:${closures.indexOf(closure)}`);
+    const noted = (facts: ViewFacts): void => {
+      follows.push(String(facts.cwd));
     };
     const cache = new RenderCache(
       {
@@ -1551,7 +1546,7 @@ describe("RenderCache idle sweep", () => {
         source: SOURCES_NOTHING,
         facts: {
           follow: (facts, declaration) => {
-            noted(facts, declaration);
+            noted(facts);
             return {
               ...FACTS_NOTHING.follow(facts, declaration),
               follow: noted,
@@ -1584,36 +1579,26 @@ describe("RenderCache idle sweep", () => {
         return hold.view;
       })();
       // A view opens followed, at the request it opens with.
-      expect(follows).toEqual(["/a closure:0"]);
+      expect(follows).toEqual(["/a"]);
       // The same request — a frame drawn by it — follows nothing again.
       view.requested(a);
       expect(follows).toHaveLength(1);
 
       // A request naming another key follows again at once.
       view.requested(request("/b"));
-      expect(follows).toEqual(["/a closure:0", "/b closure:0"]);
+      expect(follows).toEqual(["/a", "/b"]);
 
-      // A pick of another session's, or of this one's that moves no preset,
-      // follows nothing.
+      // No pick follows anything, the session's preset moving included: the
+      // layout places no hold.
       sessionState.set("s2", "preset", "compact");
       sessionState.set("s1", "theme", "nord");
+      sessionState.set("s1", "preset", "compact");
       expect(follows).toHaveLength(2);
 
-      // The session's preset moving follows at its closure, with no render.
-      sessionState.set("s1", "preset", "compact");
-      expect(follows).toEqual([
-        "/a closure:0",
-        "/b closure:0",
-        "/b closure:1",
-      ]);
-
-      // Closing the view disposes its follow and stops following: a later
-      // pick reaches nothing.
+      // Closing the view disposes its follow.
       cache.releaseIdle();
       cache.releaseIdle();
       expect(disposed).toBe(1);
-      sessionState.set("s1", "preset", "verbose");
-      expect(follows).toHaveLength(3);
     } finally {
       cache.close();
       watchers.closeAll();

@@ -6,11 +6,11 @@
 // Every sample is checked against what the fixture holds, so a read that
 // returned early, empty or stale is a failure and not a fast sample.
 
-import { cacheDir } from "../../../src/daemon/paths";
 import path from "node:path";
 import { processWorld } from "../../../src/host.js";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
+import { offlinePricing } from "../../../src/segments/pricing.js";
 import { GitService } from "../../../src/segments/git.js";
 import { hookData } from "../../lib/hook-data.js";
 import {
@@ -135,7 +135,7 @@ const coldFold = ([
       const ms = await repeat(plan.samples, async () => {
         const store = new SessionUsageStore({
           host: world.host,
-          cacheDir: cacheDir(world.home),
+          pricing: offlinePricing(),
           clock: world.clock,
           sweepIntervalMs: 0,
         });
@@ -171,7 +171,7 @@ const warmFold = (
       const world = processWorld();
       const store = new SessionUsageStore({
         host: world.host,
-        cacheDir: cacheDir(world.home),
+        pricing: offlinePricing(),
         clock: world.clock,
         sweepIntervalMs: 0,
       });

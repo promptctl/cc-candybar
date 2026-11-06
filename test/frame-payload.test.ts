@@ -63,21 +63,6 @@ const HOOK = {
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
 } as unknown as ClaudeHookData;
 
-// One path per lane, so every lane is read.
-const EVERY_LANE = new Set([
-  "git.branch",
-  "git.prNumber",
-  "tmux.session",
-  "session.cost",
-  "today.cost",
-  "speed.output",
-  "context.totalTokens",
-  "metrics.messageCount",
-  "activity.running",
-  "cache.expiresAt",
-  "autocompact.window",
-]);
-
 const GIT = {
   branch: "main",
   status: "clean",
@@ -128,14 +113,12 @@ function counted(pr?: unknown) {
         cwd: undefined,
         hints: HINTS,
       },
-      EVERY_LANE,
     ),
   } as unknown as RenderPayloadDeps;
   const inputs = (): PayloadInputs => ({
     hookData: HOOK,
     deps,
     cwd: undefined,
-    neededInputPaths: EVERY_LANE,
     hints: HINTS,
   });
   // A request: its refresh and wait, then the view's payload it draws.
@@ -145,7 +128,7 @@ function counted(pr?: unknown) {
   };
   // `today` as a draw at `at` projects it.
   const today = (at = AT) =>
-    todayOf(readingsOf(inputs(), new Map()).today, at);
+    todayOf(readingsOf(inputs()).today, at);
   return { reads, inputs, request, today, deps, logs };
 }
 
@@ -220,7 +203,7 @@ describe("a frame's payload", () => {
     deps.usageStore.daysOutside = () => {
       throw new Error("days bug");
     };
-    expect(readingsOf(inputs(), new Map()).today).toMatchObject({
+    expect(readingsOf(inputs()).today).toMatchObject({
       kind: "failed",
     });
     expect(payloadOf(inputs(), DRAW).git).toMatchObject({ branch: "main" });
@@ -234,21 +217,10 @@ describe("a frame's payload", () => {
     await request();
     const before = reads["today"];
     deps.faults.refreshed(HOOK.session_id, "today", "scan threw");
-    expect(readingsOf(inputs(), new Map()).today).toEqual(
+    expect(readingsOf(inputs()).today).toEqual(
       failed("scan threw", "read"),
     );
     expect(reads["today"]).toBe(before);
-  });
-
-  test("a frame reading the context window and no autocompact leaves autocompact pending unread", () => {
-    const { inputs } = counted();
-    const contextOnly = {
-      ...inputs(),
-      neededInputPaths: new Set(["context.contextLeft"]),
-    };
-    const payload = payloadOf(contextOnly, DRAW);
-    expect(payload.context).toEqual(pendingOf("unread"));
-    expect(payload.autocompact).toEqual(pendingOf("unread"));
   });
 
   test("autocompact's controls are not answered while the context window they are capped to is not", async () => {

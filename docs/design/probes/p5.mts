@@ -72,7 +72,7 @@ const view = openView(state, cwd, { sessionId, hookData, cwd, hints }, {
   log,
 });
 const eff = view.source.effective();
-const inputs = { hookData, deps: { ...providers, lanes: view.lanes }, cwd, neededInputPaths: state.neededInputPaths(eff.preset), hints };
+const inputs = { hookData, deps: { ...providers, lanes: view.lanes }, cwd, hints };
 const at0 = instantOf(new Date());
 const refreshed = new Map();
 const t0 = performance.now();

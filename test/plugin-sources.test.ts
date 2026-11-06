@@ -55,7 +55,8 @@ import { textOf, ansiOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
-import { locations, stateDir, cacheDir } from "../src/daemon/paths";
+import { locations, stateDir } from "../src/daemon/paths";
+import { offlinePricing } from "../src/segments/pricing";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
@@ -156,7 +157,7 @@ function rig(): Rig {
     clock: systemTimekeeper,
     launcher: world.launcher,
     host,
-    cacheDir: cacheDir(homeOf(host)),
+    pricing: offlinePricing(),
     watchers,
     fileEvents: new FileEventDelivery({
       clock: systemTimekeeper,
@@ -729,8 +730,8 @@ describe("a source's document", () => {
   });
 });
 
-describe("the view declares the sources its preset reads", () => {
-  test("a preset reading a source holds its key; one not reading it holds nothing; a switch releases it", async () => {
+describe("the view declares the sources its config declares", () => {
+  test("a view holds a declared source's key whatever its preset places, and a switch moves no hold", async () => {
     const r = rig();
     const file = config(
       ["plugins.p.gated"],
@@ -741,20 +742,21 @@ describe("the view declares the sources its preset reads", () => {
     expect(Object.keys(view.source.facts().sources)).toEqual([STATUS]);
     expect(r.providers.managedStorage.stats().held).toBe(1);
     r.sessionState.set("s1", "preset", "bare");
-    // The source stays a key of the document, the preset no longer reads it,
-    // so it is pending for want of a declaration.
-    expect(view.source.facts().sources[STATUS]).toEqual(pendingOf("unread"));
-    expect(r.providers.managedStorage.stats().held).toBe(0);
+    // A preset pick moves no hold: the source is the config's, read as before.
+    expect(view.source.facts().sources[STATUS]).not.toEqual(
+      pendingOf("unread"),
+    );
+    expect(r.providers.managedStorage.stats().held).toBe(1);
     expect(draw(view).text).toContain("mine");
   });
 
-  test("a config placing no segment that reads the source holds nothing", async () => {
+  test("a config placing no segment that reads the source holds it all the same", async () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
-    // The source is the config's, so the document carries its key; the preset
-    // reads nothing of it, so it is pending and nothing is held.
-    expect(view.source.facts().sources[STATUS]).toEqual(pendingOf("unread"));
-    expect(r.providers.managedStorage.stats().held).toBe(0);
+    // The source is the config's, so the document carries its key and the
+    // view holds it, whatever the layout places.
+    expect(Object.keys(view.source.facts().sources)).toEqual([STATUS]);
+    expect(r.providers.managedStorage.stats().held).toBe(1);
     // The state still holds its folder's watch: a source is the config's.
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
@@ -806,7 +808,7 @@ describe("a session's facts document", () => {
     instantOf(new Date(1_700_000_000_000)),
   );
 
-  test("is total as the view opens; a declared source its preset does not read is pending, not missing", () => {
+  test("is total as the view opens; a declared source not answered yet is pending, not missing", () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
     const doc = view.source.facts();

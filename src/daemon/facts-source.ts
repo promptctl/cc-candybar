@@ -32,7 +32,6 @@ import {
   readingsOf,
   settledLanes,
   settlePayload,
-  sourcesRead,
   type DeclaredLanes,
   type DeclaredSources,
   type PayloadInputs,
@@ -43,10 +42,10 @@ import {
 import type { SessionId } from "./session-id";
 
 // What a view declares of a session beyond the request it draws by: the
-// payload paths its preset reads, and the plugin sources its config declares
-// at the storage keys the state's build took for them.
+// plugin sources its config declares, at the storage keys the state's build
+// took for them. Every built-in is gathered, so nothing a layout places is
+// declared.
 export interface FollowDeclaration {
-  readonly closure: ReadonlySet<string>;
   readonly sources: DeclaredSources;
 }
 
@@ -75,7 +74,7 @@ export interface Settling {
 
 export interface Followed extends FollowedFacts {
   // The same session followed again at other keys: a request naming other
-  // hints or another directory, a preset placing other segments. Synchronous,
+  // hints or another directory. Synchronous,
   // in the caller's own turn, so a frame drawn in that turn draws the view
   // declared for it.
   follow(facts: ViewFacts, declaration: FollowDeclaration): void;
@@ -104,13 +103,11 @@ export interface InProcessFactsDeps {
   readonly update: () => Fact<UpdateNotice>;
 }
 
-// What a follow holds of its declaration: the request, what it declares, and
-// the lanes that declaration took — one record, written whole by each
-// declaration, so a reader never joins one declaration's request to another's
-// lanes.
+// What a follow holds of its declaration: the request and the lanes that
+// declaration took — one record, written whole by each declaration, so a
+// reader never joins one declaration's request to another's lanes.
 interface Declared {
   readonly facts: ViewFacts;
-  readonly declaration: FollowDeclaration;
   readonly lanes: DeclaredLanes;
 }
 
@@ -212,7 +209,7 @@ export function inProcessFacts({
       // follow's dispose closes it.
       const lanesFor = (
         facts: ViewFacts,
-        { closure, sources }: FollowDeclaration,
+        { sources }: FollowDeclaration,
       ): DeclaredLanes => {
         try {
           const {
@@ -220,14 +217,14 @@ export function inProcessFacts({
             acquired,
             released,
           } = holds.declare(() =>
-            declareLanes(providers, holds, facts, closure, sources),
+            declareLanes(providers, holds, facts, sources),
           );
           for (const fault of faults) {
             log("error", `session view declaration threw sid=${sid} ${fault}`);
           }
-          // [LAW:verifiable-goals] A declaration that moved a hold — a preset
-          // click, a request naming another key — says so; one that kept what
-          // the view held, every other request's, writes nothing.
+          // [LAW:verifiable-goals] A declaration that moved a hold — a request
+          // naming another key — says so; one that kept what the view held,
+          // every other request's, writes nothing.
           if (acquired + released > 0) {
             log(
               "info",
@@ -242,24 +239,22 @@ export function inProcessFacts({
           );
           return settledLanes(
             failed(`view declaration threw: ${String(e)}`, "read"),
-            sourcesRead(closure, sources),
+            [...sources.keys()],
           );
         }
       };
       const declared = observable.box<Declared>(
-        { facts, declaration, lanes: lanesFor(facts, declaration) },
+        { facts, lanes: lanesFor(facts, declaration) },
         { deep: false },
       );
       // [LAW:one-source-of-truth] What the owners are read by: the request
-      // and the closure and lanes of ONE declaration, never a closure from one
-      // paired with another's lanes.
+      // and the lanes of ONE declaration.
       const inputs = computed((): PayloadInputs => {
-        const { facts, declaration } = declared.get();
+        const { facts } = declared.get();
         return {
           hookData: facts.hookData,
           cwd: facts.cwd,
           hints: facts.hints,
-          neededInputPaths: declaration.closure,
           // The lanes as declared now, read at each call: a settle in flight
           // waits out the lanes a follow during it took, not the ones it
           // started with.
@@ -267,9 +262,7 @@ export function inProcessFacts({
         };
       });
       // What the session's owners hold now, read once per turn.
-      const readings = computed(() =>
-        readingsOf(inputs.get(), declared.get().declaration.sources),
-      );
+      const readings = computed(() => readingsOf(inputs.get()));
       // [LAW:one-source-of-truth] The reaction is installed before the first
       // stamp, so the derivations above are observed from the follow's first
       // read: a computed nobody observes is recomputed on every read, and the
@@ -335,7 +328,7 @@ export function inProcessFacts({
         failure: () => box.get().failure,
         follow: (facts, declaration) => {
           const lanes = lanesFor(facts, declaration);
-          runInAction(() => declared.set({ facts, declaration, lanes }));
+          runInAction(() => declared.set({ facts, lanes }));
         },
         settle: (at) => {
           const refreshed: Refreshed = new Map();

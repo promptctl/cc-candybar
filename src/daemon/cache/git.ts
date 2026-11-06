@@ -221,8 +221,8 @@ export interface GitCacheStats {
 }
 
 // [LAW:single-enforcer] What one hold holds: the repo, one option set of it,
-// and its PR when shown — so a home reading another closure takes a hold of its
-// own, and the closure it left is released by the home's next declaration.
+// and its PR when shown — so a home asking another set takes a hold of its
+// own, and the set it left is released by the home's next declaration.
 function holdKey(root: string, value: string, showsPr: boolean): string {
   return `git:${root}|${value}|${showsPr ? "pr" : "-"}`;
 }

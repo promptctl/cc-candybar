@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 
-import { PricingService } from "../../src/segments/pricing";
+import { fetchPricingData } from "../../src/segments/pricing";
 
 // The one seam is the network: `get` answers with a real Readable that has the
 // reads a test pushes, so what decodes them across a read boundary is node's
@@ -27,9 +27,15 @@ jest.mock("node:https", () => ({
   },
 }));
 
-const fetchPricing = () => PricingService["fetchPricingData"]();
+const fetchPricing = () => fetchPricingData(new AbortController().signal);
 
-const entry = (name: string) => ({ name, input: 1, output: 2, cache_read: 3 });
+const entry = (name: string) => ({
+  name,
+  input: 1,
+  output: 2,
+  cache_read: 3,
+  cache_write_5m: 4,
+});
 
 const inTwoReads = (body: Buffer) => [
   body.subarray(0, body.length / 2),

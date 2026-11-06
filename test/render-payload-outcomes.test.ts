@@ -88,14 +88,6 @@ const TMUX_PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
-const GIT_PATHS = new Set([
-  "git.branch",
-  "git.ahead",
-  "git.sha",
-  "git.stash",
-  "git.upstream",
-]);
-
 function hookData(transcriptPath: string) {
   return {
     hook_event_name: "Status",
@@ -123,7 +115,6 @@ describe("payloadOf — git outcome lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -142,7 +133,6 @@ describe("payloadOf — git outcome lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -172,7 +162,6 @@ describe("payloadOf — git outcome lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -227,7 +216,6 @@ describe("payloadOf — git outcome lane", () => {
               instantOf(new Date((committedAt + secondsLater) * 1000)),
               deps,
               undefined,
-              new Set(["git.committedAt"]),
               EFFECTIVE_GLOBALS,
               NO_HINTS,
               NO_CONFIG_FILE,
@@ -242,9 +230,7 @@ describe("payloadOf — git outcome lane", () => {
 });
 
 describe("payloadOf — cache outcome lane", () => {
-  const CACHE_PATHS = new Set(["cache.expiresAt"]);
-
-  test("unreadable transcript: no cache key, one warn log", async () => {
+    test("unreadable transcript: no cache key, one warn log", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cc-payload-cache-"));
     const transcript = join(dir, "transcript.jsonl");
     writeFileSync(transcript, "{}\n");
@@ -262,7 +248,6 @@ describe("payloadOf — cache outcome lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      CACHE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -294,7 +279,6 @@ describe("payloadOf — cache outcome lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      CACHE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -310,15 +294,7 @@ describe("payloadOf — cache outcome lane", () => {
 // The five lanes migrated after PR #96 (session/today/context/metrics/tmux)
 // share the exact same contract as git/cache — one behavior, one type.
 describe("payloadOf — migrated lanes share the outcome contract", () => {
-  const LANE_PATHS = new Set([
-    "session.cost",
-    "today.cost",
-    "context.totalTokens",
-    "metrics.messageCount",
-    "tmux.session",
-  ]);
-
-  // [LAW:no-silent-failure] A failed lane was logged by the refresh that
+    // [LAW:no-silent-failure] A failed lane was logged by the refresh that
   // failed, its owner's (these stubs stand in for owners); the payload
   // derived from it logs nothing again.
   test("failed lanes project as missing fields, and the payload logs none of them", async () => {
@@ -337,7 +313,6 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -372,7 +347,6 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      LANE_PATHS,
       EFFECTIVE_GLOBALS,
       { tmux: TMUX_PANE },
       NO_CONFIG_FILE,
@@ -398,7 +372,6 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      LANE_PATHS,
       EFFECTIVE_GLOBALS,
       { tmux: TMUX_PANE },
       NO_CONFIG_FILE,
@@ -434,7 +407,6 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      LANE_PATHS,
       EFFECTIVE_GLOBALS,
       hints,
       NO_CONFIG_FILE,
@@ -459,7 +431,6 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      LANE_PATHS,
       EFFECTIVE_GLOBALS,
       { tmux: TMUX_PANE },
       NO_CONFIG_FILE,
@@ -495,7 +466,6 @@ describe("payloadOf — effective globals projection", () => {
       instantOf(new Date()),
       depsWith(ABSENT, logs),
       undefined,
-      new Set(), // no provider lane needed for this projection
       effective,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -530,16 +500,7 @@ describe("payloadOf — git PR projection", () => {
   // [LAW:no-silent-failure] The PR field is the one git field whose `failed`
   // does NOT collapse to a missing key: it surfaces as `prError` (a visible
   // render value) AND logs, so a forge outage is distinct from "no PR".
-  const PR_PATHS = new Set([
-    "git.branch",
-    "git.prNumber",
-    "git.prState",
-    "git.prUrl",
-    "git.prError",
-    "git.prEarlier",
-  ]);
-
-  test("open PR (ok) → prNumber/prState/prUrl projected, nothing logged", async () => {
+    test("open PR (ok) → prNumber/prState/prUrl projected, nothing logged", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(
       ok({
@@ -562,7 +523,6 @@ describe("payloadOf — git PR projection", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -609,7 +569,6 @@ describe("payloadOf — git PR projection", () => {
         instantOf(new Date()),
         deps,
         undefined,
-        PR_PATHS,
         EFFECTIVE_GLOBALS,
         NO_HINTS,
         NO_CONFIG_FILE,
@@ -620,17 +579,16 @@ describe("payloadOf — git PR projection", () => {
         status: "clean",
         prEarlier: state,
       });
-      expect(prFactOf(payload.git, true)).toBe(`earlier-${state}`);
+      expect(prFactOf(payload.git)).toBe(`earlier-${state}`);
       expect(logs).toEqual([]);
     },
   );
 
-  test("a render reading no PR has no PR fact, whatever git's state", () => {
-    expect(prFactOf(pendingOf("unread"), false)).toBe("-");
-    expect(prFactOf(pendingOf("unread"), true)).toBe("pending");
+  test("a payload whose git is not answered yet has a pending PR fact", () => {
+    expect(prFactOf(pendingOf("unread"))).toBe("pending");
   });
 
-  test("a layout reading only git.prEarlier still asks the forge", async () => {
+  test("the repository is read with the forge lookup on, whatever the layout reads", async () => {
     const asked: GitInfoOptions[] = [];
     const deps = depsWith(ABSENT, [], {
       ...absentOwners(),
@@ -647,7 +605,6 @@ describe("payloadOf — git PR projection", () => {
       instantOf(new Date()),
       deps,
       "/repo",
-      new Set(["git.prEarlier"]),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -674,7 +631,6 @@ describe("payloadOf — git PR projection", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -706,7 +662,6 @@ describe("payloadOf — git PR projection", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -725,8 +680,7 @@ describe("payloadOf — git PR projection", () => {
 // segment shows. The refusal is logged by its owner, once per read that
 // failed (test/autocompact-provider.test.ts), never by the render.
 describe("payloadOf — autocompact lane", () => {
-  const AUTOCOMPACT_PATHS = new Set(["autocompact.window"]);
-  const run = async (
+    const run = async (
     read: Outcome<number | "auto">,
     hints: ClientHints,
     logs: LogEntry[],
@@ -743,7 +697,6 @@ describe("payloadOf — autocompact lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       hints,
       NO_CONFIG_FILE,
@@ -783,7 +736,6 @@ describe("payloadOf — autocompact lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -810,7 +762,6 @@ describe("payloadOf — autocompact lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -840,7 +791,7 @@ describe("payloadOf — autocompact lane", () => {
 // brandon-client-hints-7ua: the today lane answers for the Claude Code THIS
 // render's client runs under — its config directory — never the daemon's env.
 describe("payloadOf — the lanes that read a session's Claude Code", () => {
-  const run = async (paths: string[], hints: ClientHints) => {
+  const run = async (hints: ClientHints) => {
     const seeded: unknown[] = [];
     const deps = depsWith(ABSENT, [], {
       usageStore: fakeUsage({
@@ -856,7 +807,6 @@ describe("payloadOf — the lanes that read a session's Claude Code", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      new Set(paths),
       EFFECTIVE_GLOBALS,
       hints,
       NO_CONFIG_FILE,
@@ -865,11 +815,11 @@ describe("payloadOf — the lanes that read a session's Claude Code", () => {
   };
 
   test("today seeds the client's directory", async () => {
-    const zai = await run(["today.cost"], {
+    const zai = await run({
       claudeConfigDir: "/home/u/.claude.zai",
     });
     expect(zai.seeded).toEqual(["/home/u/.claude.zai"]);
-    expect((await run(["today.cost"], NO_HINTS)).seeded).toEqual([undefined]);
+    expect((await run(NO_HINTS)).seeded).toEqual([undefined]);
   });
 });
 
@@ -884,7 +834,6 @@ describe("payloadOf — config file and resume command", () => {
       instantOf(new Date()),
       depsWith(ABSENT, []),
       undefined,
-      new Set(),
       EFFECTIVE_GLOBALS,
       hints,
       { ...NO_CONFIG_FILE, configPath },
@@ -916,7 +865,6 @@ describe("payloadOf — config file and resume command", () => {
       instantOf(new Date()),
       depsWith(ABSENT, []),
       undefined,
-      new Set(),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -949,7 +897,6 @@ describe("settlePayload — what a request waits on", () => {
         instantOf(new Date()),
         deps,
         undefined,
-        new Set(["tmux.session"]),
         EFFECTIVE_GLOBALS,
         { tmux: { socket: "/s", pane: "%7", truecolor: null } },
         NO_CONFIG_FILE,
@@ -1010,7 +957,6 @@ describe("settlePayload — what a request waits on", () => {
         at,
         deps,
         undefined,
-        new Set(["git.branch", "git.prNumber", "today.cost"]),
         EFFECTIVE_GLOBALS,
         NO_HINTS,
         NO_CONFIG_FILE,

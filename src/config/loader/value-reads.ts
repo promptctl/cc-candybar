@@ -2,7 +2,7 @@
 // edge here: a variable's template, the key its cache re-runs on and the names
 // it depends on, and in a template every action it binds, whose own text
 // `realize` evaluates inside that template. Every walk that asks what a value
-// reads — the input closure, the projection fold, the cycle graph, the
+// reads — the doctor's input paths, the projection fold, the cycle graph, the
 // variable-scope fold, the rule-slot check and the unused check — asks this,
 // so an edge kind is added here once and none of them can miss it.
 //
@@ -121,7 +121,7 @@ export function valueReads({ names, helpers, actions }: ReadBasis): ValueReads {
 // `path`, and a plugin source's own name, since its reading travels in the
 // payload at the name it is declared under. Every other kind reads the payload
 // only through the declarations it reads (`ofVariable`). A walk that follows
-// what a value reads down to the payload — the input closure, the rule-slot
+// what a value reads down to the payload — the doctor's input paths, the rule-slot
 // check, the projection fold — asks this, so a kind that reads the payload is
 // spelled here once.
 export function payloadPathOf(

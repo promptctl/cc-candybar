@@ -42,6 +42,7 @@ import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
 import { FileEventDelivery } from "./cache/file-events";
 import type { Monotonic, Timekeeper } from "../time";
+import type { Pricing } from "../segments/pricing";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import { SourceRuns } from "../var-system/source-runs";
 import {
@@ -164,6 +165,14 @@ export interface DaemonAdapters {
   }) => LimitsDeps;
   // The registry the update notice asks which release is newest.
   readonly fetch: typeof fetch;
+  // What prices a transcript entry that carries no cost, over the home's cache
+  // directory. It ends with the daemon's closing signal, so no step of the
+  // close has to remember it.
+  readonly pricing: (own: {
+    readonly cacheRoot: string;
+    readonly closing: AbortSignal;
+    readonly log: DaemonLogger;
+  }) => Pricing;
   // How the binary watch reads the bundle's mtime.
   readonly stat: BundleStat;
 }
@@ -373,10 +382,15 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     watchers: watcherRegistry,
     fileEvents,
   });
+  const pricing = inputs.pricing({
+    cacheRoot: cacheDir(home),
+    closing: closing.signal,
+    log,
+  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
-    cacheDir: cacheDir(home),
+    pricing,
     watchers: watcherRegistry,
     fileEvents,
     clock,

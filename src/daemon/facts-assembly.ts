@@ -14,11 +14,6 @@ import { ABSENT, ok, pendingOf, type Reading } from "../utils/outcome";
 import type { SessionId } from "./session-id";
 import type { Readings } from "./render-payload";
 
-// [LAW:dataflow-not-control-flow] A built-in the closure does not gather has
-// no reading, and its fact says so: pending, never a read that found nothing.
-const gathered = <T>(on: boolean, reading: Reading<T>): Reading<T> =>
-  on ? reading : pendingOf("unread");
-
 // A reading's value carried through `project`; every other arm as it stands.
 const over = <T, U>(
   reading: Reading<T>,
@@ -27,8 +22,8 @@ const over = <T, U>(
 
 // [LAW:types-are-the-program] The PR is its own fact (its cost is its own),
 // asked of the repository's lane: no repository has no PR, a repository that
-// failed to read cannot be asked, and a repository read without a PR lane (the
-// closure did not ask) has not been asked.
+// failed to read cannot be asked, and a repository read without a PR lane has
+// not been asked.
 function prOf(git: Reading<GitInfo>): Reading<PullRequest> {
   switch (git.kind) {
     case "pending":
@@ -68,42 +63,36 @@ export function assembleFacts(
   update: Fact<UpdateNotice>,
   at: Instant,
 ): SessionFacts {
-  const { lanes, gathered: on } = readings;
-  const git = gathered(on.git, lanes.git);
+  const { lanes } = readings;
+  const git = lanes.git;
   const stamp = <T>(held: Fact<T> | undefined, reading: Reading<T>): Fact<T> =>
     restamp(held, reading, at);
   const held = prior?.builtins;
 
   const builtins: BuiltinFacts = {
-    session: stamp(held?.session, gathered(on.session, lanes.usage)),
-    today: stamp(held?.today, gathered(on.today, readings.today)),
-    speed: stamp(held?.speed, gathered(on.speed, lanes.speed)),
-    context: stamp(held?.context, gathered(on.context, lanes.context)),
-    metrics: stamp(held?.metrics, gathered(on.metrics, lanes.metrics)),
-    activity: stamp(held?.activity, gathered(on.activity, lanes.activity)),
-    cache: stamp(held?.cache, gathered(on.cache, lanes.cache)),
-    autocompact: stamp(
-      held?.autocompact,
-      gathered(on.autocompact, lanes.autoCompact),
-    ),
+    session: stamp(held?.session, lanes.usage),
+    today: stamp(held?.today, readings.today),
+    speed: stamp(held?.speed, lanes.speed),
+    context: stamp(held?.context, lanes.context),
+    metrics: stamp(held?.metrics, lanes.metrics),
+    activity: stamp(held?.activity, lanes.activity),
+    cache: stamp(held?.cache, lanes.cache),
+    autocompact: stamp(held?.autocompact, lanes.autoCompact),
     git: stamp(held?.git, over(git, gitFactsOf)),
     pr: stamp(held?.pr, prOf(git)),
     tmux: stamp(
       held?.tmux,
-      over(gathered(on.tmux, lanes.tmuxSession), (name) => ({ session: name })),
+      over(lanes.tmuxSession, (name) => ({ session: name })),
     ),
-    hostName: stamp(held?.hostName, gathered(on.hostName, lanes.hostName)),
-    hostUser: stamp(held?.hostUser, gathered(on.hostUser, lanes.hostUser)),
+    hostName: stamp(held?.hostName, lanes.hostName),
+    hostUser: stamp(held?.hostUser, lanes.hostUser),
   };
   // [LAW:dataflow-not-control-flow] Every source the config declares has a
-  // key; one the closure does not reach has no lane, and is pending.
+  // lane, so a key: the declaration holds each one.
   const sources: Record<string, Fact<SourceValue>> = Object.fromEntries(
-    readings.declaredSources.map((name) => [
+    [...lanes.sources].map(([name, reading]) => [
       name,
-      stamp(
-        prior?.sources[name],
-        lanes.sources.get(name) ?? pendingOf("unread"),
-      ),
+      stamp(prior?.sources[name], reading),
     ]),
   );
 

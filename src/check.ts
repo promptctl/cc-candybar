@@ -70,7 +70,6 @@ import { instantOf, type Instant } from "./utils/instant.js";
 import { perSetting } from "./config/setting-projections.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
-  buildNeededPrefixes,
   composePayload,
   renderOptionsOf,
   todayOf,
@@ -313,21 +312,6 @@ function checkReadings(
     // [LAW:one-source-of-truth] One day's sums, which the draw projects to its
     // own day (`todayOf`) as the daemon's draw does.
     today: ok<TodayFacts>({ sums: oneDay(at, 12.5, 3_400_000), own: {} }),
-    gathered: {
-      git: true,
-      session: true,
-      today: true,
-      context: true,
-      metrics: true,
-      activity: true,
-      tmux: true,
-      hostName: true,
-      hostUser: true,
-      cache: true,
-      speed: true,
-      autocompact: true,
-    },
-    declaredSources: sources,
     faults: [],
   };
 }
@@ -355,8 +339,6 @@ export function checkPayload(
     {
       hookData,
       hints: CHECK_HINTS,
-      // The checked config's own closure, as the daemon gates by its own.
-      neededInputPaths: buildNeededPrefixes(config, effective.preset),
       home: CHECK_HOME,
     },
     {

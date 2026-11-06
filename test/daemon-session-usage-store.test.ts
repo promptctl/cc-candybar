@@ -1,4 +1,4 @@
-import { cacheDir } from "../src/daemon/paths";
+import { offlinePricing } from "../src/segments/pricing";
 import { homeOf } from "../src/daemon/home";
 import { systemTimekeeper } from "../src/time";
 import { reaction } from "mobx";
@@ -113,7 +113,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -144,7 +144,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       ledger,
     });
@@ -199,7 +199,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -225,7 +225,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -255,7 +255,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -310,7 +310,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       logger: (_level, msg) => lines.push(msg),
     });
@@ -338,7 +338,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       staleAgeMs: 1,
       logger: (_level, msg) => lines.push(msg),
@@ -366,7 +366,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       staleAgeMs: 1,
       logger: (_level, msg) => lines.push(msg),
@@ -390,7 +390,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       staleAgeMs: 1,
     });
@@ -413,7 +413,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       staleAgeMs: 1,
       logger: (_level, msg) => lines.push(msg),
@@ -450,7 +450,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       staleAgeMs: 300,
     });
@@ -479,7 +479,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -509,7 +509,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -536,7 +536,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -567,7 +567,7 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -579,7 +579,7 @@ describe("SessionUsageStore — session projection", () => {
       const store2 = new SessionUsageStore({
         clock: systemTimekeeper,
         host: HOST,
-        cacheDir: cacheDir(homeOf(HOST)),
+        pricing: offlinePricing(),
         sweepIntervalMs: 0,
       });
       const kConcurrent = await countFsOps(() =>
@@ -647,7 +647,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -720,7 +720,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -750,7 +750,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -793,7 +793,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       rescan: { okMs: PERIOD_MS, failedMs: PERIOD_MS },
       logger: (level, msg) => lines.push(`${level} ${msg}`),
@@ -879,7 +879,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 50 },
       logger: (level, msg) => {
@@ -945,7 +945,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 50 },
     });
@@ -990,7 +990,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 60_000 },
       logger: (level, msg) => lines.push(`${level} ${msg}`),
@@ -1037,7 +1037,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
       rescan: { okMs: 60_000, failedMs: 60_000 },
     });
@@ -1067,7 +1067,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -1102,7 +1102,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -1133,7 +1133,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     try {
@@ -1163,7 +1163,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
       host: HOST,
-      cacheDir: cacheDir(homeOf(HOST)),
+      pricing: offlinePricing(),
       sweepIntervalMs: 0,
     });
     store.close();

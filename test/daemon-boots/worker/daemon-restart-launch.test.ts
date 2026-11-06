@@ -134,13 +134,13 @@ esac
     // same whether the pass went on to it or had not got there yet.
     const refused = () => first.daemon.stats.subprocessRefused.get("git");
     await until(() => refused() === 1, "the pass's next launch refused");
-    expect(asked()).toEqual(["status", "log"]);
+    expect(asked().sort()).toEqual(["config", "log", "status"]);
     expect(second.daemon.stats.subprocessTotal).toBe(0);
     expect(second.daemon.stats.subprocessRefused.size).toBe(0);
 
     await second.daemon.close(NO_TMUX_AT_EXIT);
     expect(refused()).toBe(1);
-    expect(asked()).toEqual(["status", "log"]);
+    expect(asked().sort()).toEqual(["config", "log", "status"]);
     for (const daemon of up.splice(0).reverse()) await daemon.stop();
     await answer;
   });
