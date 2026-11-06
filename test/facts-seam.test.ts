@@ -227,7 +227,6 @@ function rig(
       clock,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       runs,
       sessionState,
       watchers,
