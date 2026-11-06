@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-661",
+      "ref": "refs/pull/661/merge",
+      "sha": "23e8cd32e02f33ceb3ee5a2ba36390bfaf2bf13f",
+      "timestamp": "2026-11-06T23:50:14.923Z",
+      "commits": [
+        {
+          "sha": "23e8cd32e02f33ceb3ee5a2ba36390bfaf2bf13f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:49:15Z",
+          "message": "Merge f2d16fc6255f3df5cf5b6084a03a3291f06801dc into 873a8e0e0be2d843b7d0b4c308831e2d20b5bde1\n"
+        },
+        {
+          "sha": "f2d16fc6255f3df5cf5b6084a03a3291f06801dc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:49:05-07:00",
+          "message": "fix(testing): a wait keeps its deadline on the case's clock, so faking the sandbox's clock freezes none (brandon-menus-sjhy.r62)\n\nFrom the second high review pass. untilHeard keeps its 48 rounds, ended\nearly only by the case; a bound says what set it, so a pool wait the case\ncut no longer blames the machine; render failures name their last bound.\n"
+        },
+        {
+          "sha": "e6f3ad12fb264b931ec6eda5ff6684b906fd8d9b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:39:52-07:00",
+          "message": "fix(testing): untilHeard ends at a deadline, the pool reads its case after its own start time, and the rest of a case is a bound (brandon-menus-sjhy.r62)\n\nFrom the medium review pass. A cut wait names the margin it keeps, and a\nrequest whose deadline the daemon is told is sent under that same bound.\n"
+        },
+        {
+          "sha": "f452031b1de9f0160e4bcfde4945003ba29c0718",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:32:15-07:00",
+          "message": "fix(testing): a wait's sub-steps share its one deadline, and every request failure names its bound (brandon-menus-sjhy.r62)\n\nFrom the high review pass: the pool's start-time read and a request's\nconnect each spent time the wait had not charged; a cut render stated an\nuncut deadline to the daemon; untilHeard ran past its case; a test whose\nbefore-hook failed left its case's deadline set.\n"
+        },
+        {
+          "sha": "e9b9e31f221542d49b62134f4bb9f1af0335f81d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T16:23:05-07:00",
+          "message": "fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62)\n\nA real-daemon case spent a pool slot wait (20 s), readiness (12 s) and its\nown waits inside one Jest timeout (30 s), each sized alone, so their sum\ncould pass it and Jest's anonymous timeout fired first. The test\nenvironment now keeps the running hook's or test's deadline, computed as\njest-circus arms its timer, and every budgeted wait (the pool, readiness,\nuntil, throughout, sendDaemonRequest) is bounded by the smaller of its own\nbudget and that time, less a margin derived from the longest step a wait\ntakes between deadline checks. The process tier's copies of the 30 s go.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-659",
       "ref": "refs/pull/659/merge",
       "sha": "600c84f3b3786130396b61ea9ed32cce5722ee1d",
@@ -56,42 +99,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-06T23:39:48Z",
           "message": "chore(release): set `package.json` to 1.208.2 [skip ci]\n\n## [1.208.2](https://github.com/promptctl/cc-candybar/compare/v1.208.1...v1.208.2) (2026-11-06)\n\n### Bug Fixes\n\n* **facts:** a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se) ([#649](https://github.com/promptctl/cc-candybar/issues/649)) ([86bb0ba](https://github.com/promptctl/cc-candybar/commit/86bb0ba47f70ca3b852845b916d66bb727486aae))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-661",
-      "ref": "refs/pull/661/merge",
-      "sha": "b65b220da9c9fefb600250d177872a14b532e172",
-      "timestamp": "2026-11-06T23:40:59.734Z",
-      "commits": [
-        {
-          "sha": "b65b220da9c9fefb600250d177872a14b532e172",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:40:04Z",
-          "message": "Merge e6f3ad12fb264b931ec6eda5ff6684b906fd8d9b into d8a5b19a71575bb8d1069ee4caebfcb8133bb6a1\n"
-        },
-        {
-          "sha": "e6f3ad12fb264b931ec6eda5ff6684b906fd8d9b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:39:52-07:00",
-          "message": "fix(testing): untilHeard ends at a deadline, the pool reads its case after its own start time, and the rest of a case is a bound (brandon-menus-sjhy.r62)\n\nFrom the medium review pass. A cut wait names the margin it keeps, and a\nrequest whose deadline the daemon is told is sent under that same bound.\n"
-        },
-        {
-          "sha": "f452031b1de9f0160e4bcfde4945003ba29c0718",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:32:15-07:00",
-          "message": "fix(testing): a wait's sub-steps share its one deadline, and every request failure names its bound (brandon-menus-sjhy.r62)\n\nFrom the high review pass: the pool's start-time read and a request's\nconnect each spent time the wait had not charged; a cut render stated an\nuncut deadline to the daemon; untilHeard ran past its case; a test whose\nbefore-hook failed left its case's deadline set.\n"
-        },
-        {
-          "sha": "e9b9e31f221542d49b62134f4bb9f1af0335f81d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T16:23:05-07:00",
-          "message": "fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62)\n\nA real-daemon case spent a pool slot wait (20 s), readiness (12 s) and its\nown waits inside one Jest timeout (30 s), each sized alone, so their sum\ncould pass it and Jest's anonymous timeout fired first. The test\nenvironment now keeps the running hook's or test's deadline, computed as\njest-circus arms its timer, and every budgeted wait (the pool, readiness,\nuntil, throughout, sendDaemonRequest) is bounded by the smaller of its own\nbudget and that time, less a margin derived from the longest step a wait\ntakes between deadline checks. The process tier's copies of the 30 s go.\n"
         }
       ]
     },
