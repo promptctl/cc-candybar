@@ -1,3 +1,37 @@
+## [1.192.0](https://github.com/promptctl/cc-candybar/compare/v1.191.0...v1.192.0) (2026-11-06)
+
+### ⚠ BREAKING CHANGES
+
+* **click:** the load-config click verb and the examples' config
+switcher are removed; a config linking to the verb fails to load.
+
+* review(high): one report shape for a template's issues; the retired-URL check says what it reads; keep the flag-over-hint coverage
+
+- cross-ref: the three places that reported a template's issue at the helper
+  or the declaration collapse to one local report; the retired-verb loop is
+  one line of it.
+- The retired-verb check reads every string literal, not only a link
+  argument, so its comment and message say 'spells', not 'links to'.
+- scheme.ts states the real one-way-deps reason: the codec imports config
+  modules, so config must not import the codec.
+- Restore the e2e coverage that the deleted pick test carried along:
+  --config outranks the configEnv hint, and an empty flag is no flag.
+- Drop the stale load-config lines in the design docs and a render-cache
+  comment that still named a click as a view mover.
+
+* review(medium): drop the request facts an open failure kept for the removed follow; the design docs say load-config is gone
+
+The open-failure entry carried the request facts so a click that moved
+the origin could reopen by them; with the follow gone nothing reads
+them, so the entry is the error alone. The home spec and the isolation
+survey no longer list load-config as work to do.
+
+* test: lower the daemon-boot ratchet to 201, the cases left after the load-config e2e blocks went
+
+### Features
+
+* **click:** remove the load-config verb (candybar-gather-renderer-76bb.f00.bju) ([#620](https://github.com/promptctl/cc-candybar/issues/620)) ([505a8e2](https://github.com/promptctl/cc-candybar/commit/505a8e2d94696c8ff2409af7041987247b684318))
+
 ## [1.191.0](https://github.com/promptctl/cc-candybar/compare/v1.190.0...v1.191.0) (2026-11-06)
 
 ### Features
