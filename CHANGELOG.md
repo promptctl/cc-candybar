@@ -1,3 +1,9 @@
+## [1.199.1](https://github.com/promptctl/cc-candybar/compare/v1.199.0...v1.199.1) (2026-11-06)
+
+### Bug Fixes
+
+* **test:** the daemon close case counts only its own timers, and no file leaves a git provider open (candybar-testing-0x6u.6f3) ([#631](https://github.com/promptctl/cc-candybar/issues/631)) ([1ad2084](https://github.com/promptctl/cc-candybar/commit/1ad208491233c500feb1dce4da7f3eb61a288b1d))
+
 ## [1.199.0](https://github.com/promptctl/cc-candybar/compare/v1.198.1...v1.199.0) (2026-11-06)
 
 ### Features
