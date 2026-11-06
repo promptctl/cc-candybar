@@ -30,6 +30,7 @@ import {
   NAME_ENV,
   RUNTIME_DIR_ENV,
   homeOf,
+  parseRendererName,
   socketFile,
   type RendererHome,
 } from "../../src/daemon/home";
@@ -50,7 +51,7 @@ export interface IsolatedDaemonEnv {
 // [LAW:one-source-of-truth] Every prepared home is named alike: each has a
 // runtime directory of its own under its root, so names need only differ
 // within one, and none do.
-const ISOLATED_NAME = "test";
+const ISOLATED_NAME = parseRendererName("test");
 
 // The smaller of the two platform limits, so a path that passes here passes on
 // both. Linux allows 108; there is no gain in letting a test that works on

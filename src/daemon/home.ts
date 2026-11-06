@@ -46,9 +46,10 @@ export const MAIN_NAME = "main";
 // the same socket, state and cache as the daemon it reaches.
 export const HOME_ENV = "CC_CANDYBAR_HOME";
 export const NAME_ENV = "CC_CANDYBAR_NAME";
-// The per-uid runtime directory's override, for tests, as the breaker's
-// registry has one: a worker's sockets live under its own temporary directory
-// and never meet the machine's.
+// The per-uid runtime directory's override, as the breaker's registry has
+// one: a test worker's sockets live under its own temporary directory and
+// never meet the machine's, and a renderer states it on every child it starts
+// so the child reaches the directory its parent binds in (paths.ts).
 export const RUNTIME_DIR_ENV = "CC_CANDYBAR_RUNTIME_DIR";
 // The socket file a name derives in the runtime directory: main's stays
 // `socket`; a named home's carries a suffix, so no name can collide with
@@ -87,7 +88,7 @@ export function parseRendererName(raw: string): RendererName {
 // [LAW:one-source-of-truth] The socket file is one function of the name, which
 // the URL handler will compute from a link's name alone; the links lane spells
 // the same function in Swift.
-export function socketFile(name: string): string {
+export function socketFile(name: typeof MAIN_NAME | RendererName): string {
   return name === MAIN_NAME
     ? MAIN_SOCKET_FILE
     : `${name}${NAMED_SOCKET_SUFFIX}`;

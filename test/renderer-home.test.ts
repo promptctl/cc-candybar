@@ -72,7 +72,7 @@ describe("a renderer's name", () => {
 
   test("a socket file is the name's: main's stays `socket`, any other carries the suffix", () => {
     expect(socketFile("main")).toBe("socket");
-    expect(socketFile("dev-bar")).toBe("dev-bar.sock");
+    expect(socketFile(parseRendererName("dev-bar"))).toBe("dev-bar.sock");
   });
 });
 

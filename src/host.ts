@@ -44,10 +44,24 @@ export function processWorld(): World {
   const clock = systemTimekeeper;
   return {
     host,
-    // [LAW:parse-dont-validate] A half-set home refuses the process here, before
-    // any subcommand derives a path from it.
-    home: homeOf(host),
+    home: processHome(host),
     launcher: systemOneShotLauncher({ inherited: process.env }, clock),
     clock,
   };
+}
+
+// [LAW:parse-dont-validate] A home the environment misstates refuses the
+// process here, before any entry derives a path from it, in one line naming
+// the rule, as the Rust client refuses the same input. Every entry (the CLI,
+// the demo, the gallery, the load gate) builds its world here, so the refusal
+// is spoken once and the same way; there is no world yet to report through.
+function processHome(host: Host): RendererHome {
+  try {
+    return homeOf(host);
+  } catch (error) {
+    process.stderr.write(
+      `cc-candybar: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    process.exit(1);
+  }
 }
