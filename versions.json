@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-633",
+      "ref": "refs/pull/633/merge",
+      "sha": "bc260c643b1b44fd4a26d71f5a9e2605490df7bf",
+      "timestamp": "2026-11-06T18:55:40.210Z",
+      "commits": [
+        {
+          "sha": "bc260c643b1b44fd4a26d71f5a9e2605490df7bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:54:46Z",
+          "message": "Merge 0964b204fc4c45f3f4a8f7dbbf591f51dc127700 into 0af5d1f4ce463b0bebbbe6a4b6107d2943900c54\n"
+        },
+        {
+          "sha": "0964b204fc4c45f3f4a8f7dbbf591f51dc127700",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:54:26-07:00",
+          "message": "fix(doctor): a gather that reads the whole session record is refused, so only keys read by name are stamped (candybar-gather-renderer-76bb.1dh.c3l)\n"
+        },
+        {
+          "sha": "ca14207605ca5eac57c8a0025903c45c428d033a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:50:06-07:00",
+          "message": "test(doctor): the round trip's click names its renderer, as every link now does (candybar-gather-renderer-76bb.1dh.c3l)\n"
+        },
+        {
+          "sha": "fa622242c209ba8aa2d2d2d8e44922feca536c37",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:46:53-07:00",
+          "message": "test(apply): a dispatch's refused step and its failed launch are two held failures, proven on the click path (candybar-gather-renderer-76bb.1dh.c3l)\n"
+        },
+        {
+          "sha": "d116ce8e6121e22321b8884565b6dd6747c79b70",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T08:41:12-07:00",
+          "message": "feat(apply): no turn awaits a launch; a doctor step is an effect gathered in no turn; each click failure is its own held message (candybar-gather-renderer-76bb.1dh.c3l)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-644",
       "ref": "refs/pull/644/merge",
       "sha": "6131fddf5a7a55d53b9214aa08a0a0beb0782b8c",
@@ -107,49 +150,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T02:36:44-07:00",
           "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-633",
-      "ref": "refs/pull/633/merge",
-      "sha": "d6ad4151c914d74a96657a2c41b9006388db06e8",
-      "timestamp": "2026-11-06T09:28:08.446Z",
-      "commits": [
-        {
-          "sha": "d6ad4151c914d74a96657a2c41b9006388db06e8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T09:27:16Z",
-          "message": "Merge 36dcaba1d4153d7201b6192d4040e2df2c3bdc5f into 5bc4b1644438e6c6202cedb3b5da327ab8e07bfd\n"
-        },
-        {
-          "sha": "36dcaba1d4153d7201b6192d4040e2df2c3bdc5f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:20:56-07:00",
-          "message": "refactor(apply): a synchronous click needs no in-flight bracket on the idle clock; journaled refuses an async handler (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "509691aadec75f841ce256af5428021770e4b5eb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:10:19-07:00",
-          "message": "fix(apply): a probe link is refused by no client's leaving; the doctor stamps the hints it reads; the click error keeps its record's shape (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "8b83f4a46536c7430b04027edb790630d19999d7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:41:11-07:00",
-          "message": "fix(apply): each click failure is its own held message; a fault's stack reaches the log; no gather starts after close (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "1a8b52e2236d421174f9749e318ae7c500b6834b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T01:19:30-07:00",
-          "message": "feat(apply): no turn awaits a launch; a doctor step is an effect, and a held click error accumulates (candybar-gather-renderer-76bb.1dh.c3l)\n\nA turn is a synchronous call: its body cannot be async (Synchronous<T>), a\nrender request never waits behind another session's probes, and no draw can\nread a click half landed. A doctor step describes an effect; the performer\ngathers after the click's turn through a recording view, and the landing\nchecks the gather's read set and config in the turn that writes the report.\nLands yth: a click error held while the last is live joins it.\n"
         }
       ]
     }
