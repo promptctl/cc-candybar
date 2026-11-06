@@ -23071,7 +23071,8 @@ function answeredBy(last2, shown) {
 // src/utils/instant.ts
 init_globals();
 var instantOf = (date2) => date2.getTime() / 1e3;
-var dateOf = (at) => new Date(at * 1e3);
+var msOf = (at) => Math.round(at * 1e3);
+var dateOf = (at) => new Date(msOf(at));
 var instantAt = (clock) => instantOf(new Date(clock.now()));
 
 // src/proc/launch.ts
@@ -69301,7 +69302,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.199.2";
+var PACKAGE_VERSION = "1.200.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -76772,11 +76773,17 @@ function resolvePath2(obj, dotPath) {
 }
 
 // src/facts/recording.ts
+var RECORDING_VERSION = 2;
 var LANES2 = new Set(REFRESH_LANES);
 function formatLine(line) {
-  const json2 = line.kind === "recording" ? { kind: line.kind, v: FACTS_VERSION, session: line.session } : line.kind === "facts" ? { kind: line.kind, at: line.at, facts: line.facts } : {
+  const json2 = line.kind === "recording" ? {
     kind: line.kind,
-    at: line.at,
+    v: RECORDING_VERSION,
+    session: line.session,
+    home: line.home
+  } : line.kind === "facts" ? { kind: line.kind, at: line.at, facts: line.facts } : line.kind === "draw" ? { kind: line.kind, request: line.request } : {
+    kind: line.kind,
+    ...line.kind === "request" && { at: line.at },
     hookData: line.request.hookData,
     cwd: line.request.cwd,
     hints: line.request.hints
@@ -76799,6 +76806,10 @@ function sessionRecorder(views, log) {
   const write = (sessionId2, rec, line) => {
     try {
       rec.sink.write(line);
+      if (line.kind === "facts") rec.document = line.facts;
+      if (line.kind === "request" || line.kind === "declared") {
+        rec.declaration = line.request;
+      }
     } catch (e) {
       log("error", `recording sid=${JSON.stringify(sessionId2)}: ${inspect(e)}`);
       end(sessionId2, rec, { kind: "failed", error: e });
@@ -76821,16 +76832,26 @@ function sessionRecorder(views, log) {
       if (closed) {
         throw new Error("the daemon is closing: it records nothing more");
       }
-      if (views.sessionView(session) === null) {
+      const view = views.sessionView(session);
+      if (view === null) {
         throw new Error(
           `no view of session ${JSON.stringify(session)} is open in this daemon: it has not drawn a bar here since the daemon started, or its view closed while it was idle`
         );
       }
-      const rec = { sink, detach: () => {
-      } };
+      const rec = {
+        sink,
+        detach: () => {
+        },
+        document: null,
+        declaration: null
+      };
       const recs = open2.get(session) ?? /* @__PURE__ */ new Set();
       open2.set(session, recs.add(rec));
-      write(session, rec, { kind: "recording", session });
+      write(session, rec, {
+        kind: "recording",
+        session,
+        home: view.source.home()
+      });
       if (recs.has(rec)) attach(session, rec);
       return () => end(session, rec, { kind: "stopped" });
     },
@@ -76841,8 +76862,29 @@ function sessionRecorder(views, log) {
       }
     },
     arrived(sessionId2, line) {
+      const noted = /* @__PURE__ */ new Set();
       for (const rec of open2.get(sessionId2) ?? []) {
         write(sessionId2, rec, { kind: "request", ...line });
+        noted.add(rec);
+      }
+      return { at: line.at, noted };
+    },
+    // [LAW:one-source-of-truth] A replay draws from the last document and the
+    // last declaration before the draw line, so those are the ones the draw
+    // read: each written again here when it is not the last this recording
+    // wrote, as a request's held view the session moved away from has, and
+    // the current view at the draw after that.
+    drew(sessionId2, { at: request2, noted }, { document, declaration }) {
+      for (const rec of open2.get(sessionId2) ?? []) {
+        if (!noted.has(rec)) continue;
+        const lines2 = [
+          ...rec.document === document.facts ? [] : [{ kind: "facts", ...document }],
+          ...rec.declaration === declaration ? [] : [{ kind: "declared", request: declaration }],
+          { kind: "draw", request: request2 }
+        ];
+        for (const line of lines2) {
+          if (open2.get(sessionId2)?.has(rec)) write(sessionId2, rec, line);
+        }
       }
     },
     close() {
@@ -76874,8 +76916,19 @@ function recordedCache(build, log) {
   return { cache: cache2, recorder };
 }
 function settleRequest(recorder, view, at) {
-  recorder.arrived(view.sessionId, { at, request: view.facts() });
-  return view.settle(at);
+  const arrival = recorder.arrived(view.sessionId, {
+    at,
+    request: view.facts()
+  });
+  return { ...view.settle(at), arrival };
+}
+function drawRequest(recorder, view, arrival, draw2) {
+  const drawn = draw2();
+  recorder.drew(view.sessionId, arrival, {
+    document: view.source.stamped(),
+    declaration: view.facts()
+  });
+  return drawn;
 }
 var RecordingFailed = class extends Error {
   name = "RecordingFailed";
@@ -76894,7 +76947,7 @@ function recordToFile(recorder, clock, session, path45, seconds, left) {
       return;
     }
     let lines2 = 0;
-    let requests = 0;
+    let answers = 0;
     let stop2 = () => {
     };
     const clearTimer = clock.after(seconds * 1e3, () => stop2());
@@ -76904,7 +76957,7 @@ function recordToFile(recorder, clock, session, path45, seconds, left) {
       write: (line) => {
         appendFileSync(fd, formatLine(line));
         lines2++;
-        if (line.kind === "request") requests++;
+        if (line.kind === "draw") answers++;
       },
       end: (how) => {
         clearTimer();
@@ -76912,7 +76965,7 @@ function recordToFile(recorder, clock, session, path45, seconds, left) {
         let error = how.kind === "failed" ? how.error : null;
         try {
           closeSync(fd);
-          if (requests === 0) unlinkSync(path45);
+          if (answers === 0) unlinkSync(path45);
         } catch (e) {
           error ??= e;
         }
@@ -76920,7 +76973,7 @@ function recordToFile(recorder, clock, session, path45, seconds, left) {
           resolve({
             path: path45,
             lines: lines2,
-            requests,
+            answers,
             daemonClosed: how.kind === "closed"
           });
         } else {
@@ -77452,10 +77505,11 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       ended,
       refreshed: refreshedFact(settling.refreshed)
     });
-    const { drawn, answersClick, pipeShown, delivered, lanes } = drawRender(
-      parts,
-      setup,
-      ANSWERING
+    const { drawn, answersClick, pipeShown, delivered, lanes } = drawRequest(
+      parts.recorder,
+      setup.view,
+      settling.arrival,
+      () => drawRender(parts, setup, ANSWERING)
     );
     const sessionId2 = req.sessionId;
     const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
@@ -83479,8 +83533,8 @@ function inProcessFacts({
 init_globals();
 function taken(prior, moved) {
   if (moved.kind === "failed") return failedWith(prior, moved.reason);
-  return prior.failure === moved.facts && moved.document === prior.document && moved.compose === prior.compose && moved.draw === prior.draw ? prior : {
-    document: moved.document,
+  return prior.failure === moved.facts && moved.stamped === prior.stamped && moved.compose === prior.compose && moved.draw === prior.draw ? prior : {
+    stamped: moved.stamped,
     compose: moved.compose,
     draw: moved.draw,
     failure: moved.facts
@@ -83525,7 +83579,7 @@ function sessionSource(deps) {
     );
     const turn = observable.box(
       {
-        document: followed.stamped().facts,
+        stamped: followed.stamped(),
         compose: compose.read(),
         draw: draw2.read(),
         failure: followed.failure()
@@ -83538,7 +83592,7 @@ function sessionSource(deps) {
           try {
             return {
               kind: "read",
-              document: followed.stamped().facts,
+              stamped: followed.stamped(),
               facts: followed.failure(),
               compose: compose.read(),
               draw: draw2.read()
@@ -83571,13 +83625,15 @@ function sessionSource(deps) {
       )
     );
     const payload = store.derive("session.payload", "computed", () => {
-      const { document, compose: composed2, draw: drawn } = turn.get();
-      return composePayload(document, composed2, drawn);
+      const { stamped: stamped2, compose: composed2, draw: drawn } = turn.get();
+      return composePayload(stamped2.facts, composed2, drawn);
     });
     return {
       payload: () => payload.read(),
       effective: () => turn.get().draw.effective,
-      facts: () => turn.get().document,
+      facts: () => turn.get().stamped.facts,
+      stamped: () => turn.get().stamped,
+      home: () => turn.get().compose.home,
       hints: () => turn.get().compose.hints,
       failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective
