@@ -1,3 +1,4 @@
+import { FACTS_NOTHING } from "./helpers/facts";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.2 —
 // persistent config writes — driven through the real spine, mirroring
 // dsl-actions.test.ts's model for `set`:
@@ -54,7 +55,6 @@ import { isGlobalsField } from "../src/config/loader/globals";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
   renderCacheBudget,
@@ -879,7 +879,7 @@ function makeCache(): {
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
-      declare: DECLARES_NOTHING,
+      facts: FACTS_NOTHING,
     },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),

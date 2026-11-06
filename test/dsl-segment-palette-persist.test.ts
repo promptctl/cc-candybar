@@ -1,3 +1,4 @@
+import { FACTS_NOTHING } from "./helpers/facts";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.6 —
 // per-segment palette override as a menu-able domain — mirroring
 // dsl-persist-actions.test.ts's model for the Globals-scoped `persist`
@@ -59,7 +60,6 @@ import {
 import type { DslConfig } from "../src/config/dsl-types";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
   renderCacheBudget,
@@ -492,7 +492,7 @@ function makeCache(): {
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
-      declare: DECLARES_NOTHING,
+      facts: FACTS_NOTHING,
     },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),

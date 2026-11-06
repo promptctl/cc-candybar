@@ -1,21 +1,18 @@
 import { compareStructural } from "mobx";
 import { restamp, type Fact } from "../facts/fact";
-import type {
-  BuiltinFacts,
-  GitFacts,
-  SessionFacts,
-  SourceValue,
-  UpdateNotice,
+import {
+  FACTS_VERSION,
+  type BuiltinFacts,
+  type GitFacts,
+  type SessionFacts,
+  type SourceValue,
+  type UpdateNotice,
 } from "../facts/session-facts";
 import type { GitInfo, PullRequest } from "../segments/git";
 import type { Instant } from "../utils/instant";
 import { ABSENT, ok, pendingOf, type Reading } from "../utils/outcome";
 import type { SessionId } from "./session-id";
 import type { Readings } from "./render-payload";
-
-// The shape of a facts document on the wire; a document of another version is
-// not this one.
-export const FACTS_VERSION = 1;
 
 // [LAW:dataflow-not-control-flow] A built-in the closure does not gather has
 // no reading, and its fact says so: pending, never a read that found nothing.

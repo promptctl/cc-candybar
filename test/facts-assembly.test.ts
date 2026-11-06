@@ -5,7 +5,8 @@
 
 import { restamp, type Fact } from "../src/facts/fact";
 import type { BuiltinFacts } from "../src/facts/session-facts";
-import { assembleFacts, FACTS_VERSION } from "../src/daemon/facts-assembly";
+import { assembleFacts } from "../src/daemon/facts-assembly";
+import { FACTS_VERSION } from "../src/facts/session-facts";
 import type { Update } from "../src/daemon/update-notice";
 import {
   readingsOf,

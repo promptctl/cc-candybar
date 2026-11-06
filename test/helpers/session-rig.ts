@@ -14,12 +14,14 @@ import {
 import { WatcherRegistry } from "../../src/daemon/cache/watchers";
 import { homeOf } from "../../src/daemon/home";
 import { stateDir } from "../../src/daemon/paths";
-import { declareLanes, settlePayload } from "../../src/daemon/render-payload";
+import { inProcessFacts } from "../../src/daemon/facts-source";
 import {
   sessionSource,
   type SessionSource,
   type SessionSourceDeps,
 } from "../../src/daemon/session-source";
+import type { Fact } from "../../src/facts/fact";
+import type { UpdateNotice } from "../../src/facts/session-facts";
 import { SessionState } from "../../src/daemon/session-state";
 import { EMPTY_HISTORY_DEPTH } from "../../src/daemon/settings-history";
 import { systemTimekeeper } from "../../src/time";
@@ -131,17 +133,20 @@ export function fixedOwners(
 export type SessionRig = ReturnType<typeof sessionRig>;
 
 // The daemon's composition over those owners. `source` overrides what the
-// session source reads beyond the owners (the update fact, the depths), `log`
-// is the daemon's log, and `observers` hear what the cache tells the daemon.
+// session source reads beyond the document (the depths), `update` is the
+// daemon's update fact as the facts source reads it, `log` is the daemon's
+// log, and `observers` hear what the cache tells the daemon.
 export function sessionRig(
   dir: string,
   cleanups: Array<() => void>,
   {
     source = {},
+    update = () => pendingOf("unread"),
     log = () => {},
     observers = {},
   }: {
     readonly source?: Partial<SessionSourceDeps>;
+    readonly update?: () => Fact<UpdateNotice>;
     readonly log?: (level: string, message: string) => void;
     readonly observers?: RenderCacheObservers;
   } = {},
@@ -169,12 +174,10 @@ export function sessionRig(
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(providers as never, holds, facts, closure, sources),
+      facts: inProcessFacts({ providers: providers as never, update }),
       source: sessionSource({
         providers: providers as never,
         sessionState,
-        update: () => pendingOf("unread"),
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
         ...source,
@@ -226,18 +229,6 @@ export async function openSettled(
   const held = rig.cache.holdSession(dir, dir, configFile, request);
   cleanups.push(() => held[Symbol.dispose]());
   const { view } = held;
-  await settlePayload(
-    {
-      hookData: request.hookData,
-      deps: { ...rig.providers, lanes: view.lanes } as never,
-      cwd: PROJECT,
-      neededInputPaths: view.state.neededInputPaths(
-        view.source.effective().preset,
-      ),
-      hints: request.hints,
-    },
-    AT,
-    new Map(),
-  );
+  await view.settle(AT).landed;
   return view;
 }

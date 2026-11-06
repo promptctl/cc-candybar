@@ -1,11 +1,11 @@
 import { homeOf } from "../src/daemon/home";
+import { FACTS_NOTHING } from "./helpers/facts";
 import fs from "node:fs";
 import { HOST, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
 import {
-  DECLARES_NOTHING,
   RenderCache,
   SOURCES_NOTHING,
   type LoadCause,
@@ -71,7 +71,7 @@ function rig() {
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
-      declare: DECLARES_NOTHING,
+      facts: FACTS_NOTHING,
       log: (_level, line) => lines.push(line),
     },
     {

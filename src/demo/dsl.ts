@@ -53,12 +53,11 @@ import { processWorld } from "../host.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { parseClientHints } from "../daemon/protocol.js";
 import {
-  declareLanes,
   renderOptionsOf,
   renderWidth,
-  settlePayload,
   todayOf,
 } from "../daemon/render-payload.js";
+import { inProcessFacts } from "../daemon/facts-source.js";
 import { sessionIdOf } from "../daemon/session-id.js";
 import { sessionSource } from "../daemon/session-source.js";
 import { SessionState } from "../daemon/session-state.js";
@@ -191,12 +190,10 @@ async function renderFrames(): Promise<void> {
     { sessionId, hookData, cwd, hints },
     {
       sessionState,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(providers, holds, facts, closure, sources),
+      facts: inProcessFacts({ providers, update: () => updateFact.get() }),
       source: sessionSource({
         providers,
         sessionState,
-        update: () => updateFact.get(),
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),
@@ -221,17 +218,9 @@ async function renderFrames(): Promise<void> {
       // [LAW:effects-at-boundaries] Each frame is one status-line tick: one
       // instant, sampled here as the daemon samples it per request.
       const at = instantOf(new Date(world.clock.now()));
-      await settlePayload(
-        {
-          hookData,
-          deps: { ...providers, lanes: view.lanes },
-          cwd,
-          neededInputPaths: state.neededInputPaths(effective.preset),
-          hints,
-        },
-        at,
-        new Map(),
-      );
+      // What the tick starts of the facts, landed, as the daemon's request
+      // waits for it.
+      await view.settle(at).landed;
       const { frame: drawn } = drawDsl(
         state.config,
         state.compiled,

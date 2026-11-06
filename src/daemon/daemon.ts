@@ -54,7 +54,7 @@ import { apply } from "./apply.js";
 import type { DoctorEdge, DoctorStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
-import { declareLanes } from "./render-payload.js";
+import { inProcessFacts } from "./facts-source.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import { EffectSessions } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds } from "./frame-feed.js";
@@ -541,16 +541,18 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       storage: managedStorage,
       signer: linkSigner,
       gates,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(payloadProviders, holds, facts, closure, sources),
+      // [LAW:single-enforcer] Where every session's facts come from: the
+      // in-process arm over the daemon's own owners, which logs the refreshes
+      // it makes through the one ledger, so a view's payload logs none of them.
+      facts: inProcessFacts({
+        providers: payloadProviders,
+        update: () => updateFact.get(),
+      }),
       // [LAW:single-enforcer] What every session's view draws from: its payload
-      // derived over its declaration, its picks and its histories' depths.
+      // derived over its document, its picks and its histories' depths.
       source: sessionSource({
-        // [LAW:single-enforcer] Every provider logs the refreshes it makes,
-        // through the one ledger, so a view's payload logs none of them.
         providers: payloadProviders,
         sessionState,
-        update: () => updateFact.get(),
         history: (sessionId) => settingsHistory.depth(sessionId),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>

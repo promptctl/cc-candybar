@@ -1,3 +1,4 @@
+import { FACTS_NOTHING } from "./helpers/facts";
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
 import { HOST, locs } from "./helpers/host";
@@ -78,7 +79,6 @@ import { deriveConfigActionValidators } from "../src/daemon/foundations/config-v
 import { configGate } from "./helpers/gates";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
   renderCacheBudget,
@@ -1036,7 +1036,7 @@ function makeCache(reloads?: ReloadSignal): {
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
-      declare: DECLARES_NOTHING,
+      facts: FACTS_NOTHING,
     },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
@@ -1254,7 +1254,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         sessionState,
         watchers,
         source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
+        facts: FACTS_NOTHING,
         log: (_level, line) => lines.push(line),
       },
       {

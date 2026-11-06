@@ -16,7 +16,11 @@ import path from "node:path";
 import { GitDataProvider, PR_PERIOD } from "../src/daemon/cache/git";
 import { SOURCES_NOTHING, RenderCache } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import { inProcessFacts } from "../src/daemon/facts-source";
+import { sessionSource, type SessionSource } from "../src/daemon/session-source";
+import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { SessionState } from "../src/daemon/session-state";
+import { absentOwners } from "./helpers/payload-owners";
 import { parseClientHints } from "../src/daemon/protocol";
 import { sessionIdOf } from "../src/daemon/session-id";
 import {
@@ -30,7 +34,7 @@ import {
   type PullRequest,
 } from "../src/segments/git";
 import { Holds } from "../src/utils/holds";
-import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
+import { ABSENT, failed, ok, pendingOf, type Outcome } from "../src/utils/outcome";
 import { settledLane, type Lane } from "../src/utils/reading";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
@@ -122,11 +126,8 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   cleanups.push(() => watchers.closeAll());
   // Only git is under test; the menu's other keyed lanes are declared into
   // owners that hold nothing.
-  const owners = {
-    gitProvider: git,
-    tmuxService: { declare: () => settledLane(ABSENT) },
-    usageStore: { declareToday: () => settledLane(ABSENT) },
-  } as unknown as KeyedOwners;
+  // Only git is under test; the other owners answer nothing.
+  const providers = { ...absentOwners(), log: () => {}, gitProvider: git };
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
@@ -139,8 +140,10 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(owners, holds, facts, closure, sources),
+      facts: inProcessFacts({
+        providers: providers as never,
+        update: () => pendingOf("unread"),
+      }),
     },
     { budgetBytes: () => 1024 * 1024 * 1024 },
   );
@@ -269,12 +272,11 @@ function gitCache() {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const owners = {
-    gitProvider: git,
-    tmuxService: { declare: () => settledLane(ABSENT) },
-    usageStore: { declareToday: () => settledLane(ABSENT) },
-  } as unknown as KeyedOwners;
-  const cache = new RenderCache(
+  // Only git is under test; the other owners answer nothing. The view draws
+  // through the session source, so a test reads the repo off its document.
+  const providers = { ...absentOwners(), log: () => {}, gitProvider: git };
+  const sessionState = new SessionState();
+  const cache = new RenderCache<SessionSource>(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
@@ -283,11 +285,18 @@ function gitCache() {
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState,
       watchers,
-      source: SOURCES_NOTHING,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(owners, holds, facts, closure, sources),
+      facts: inProcessFacts({
+        providers: providers as never,
+        update: () => pendingOf("unread"),
+      }),
+      source: sessionSource({
+        providers: providers as never,
+        sessionState,
+        history: () => EMPTY_HISTORY_DEPTH,
+        navigation: () => 0,
+      }),
     },
     { budgetBytes: () => 1024 * 1024 * 1024 },
   );
@@ -316,7 +325,7 @@ test("a reload under a view no request reaches opens its successor declared: git
   cache.reload(dir, dir, undefined, { kind: "write" });
   const successor = cache.latestView()!;
   expect(successor).not.toBe(view);
-  expect(successor.lanes().git.current()).toMatchObject({
+  expect(successor.source.facts().builtins.git).toMatchObject({
     kind: "ok",
     value: { branch: "main" },
   });
@@ -333,11 +342,11 @@ test("frames on an open view neither resolve a directory nor take a hold", async
     // Each frame reads the lanes its view declared, as `readLanes` does,
     // across more than the resolution window.
     for (let frame = 0; frame < 120; frame++) {
-      expect(view.lanes().git.current()).toMatchObject({ kind: "ok" });
+      expect(view.source.facts().builtins.git).toMatchObject({ kind: "ok" });
       await jest.advanceTimersByTimeAsync(1000 / 30);
     }
     jest.advanceTimersByTime(60_000);
-    expect(view.lanes().git.current()).toMatchObject({ kind: "ok" });
+    expect(view.source.facts().builtins.git).toMatchObject({ kind: "ok" });
     expect(inner.resolutions).toBe(resolutions);
     expect(take).not.toHaveBeenCalled();
   } finally {

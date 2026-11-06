@@ -1,3 +1,4 @@
+import { FACTS_NOTHING } from "./helpers/facts";
 // [LAW:behavior-not-structure] A plugin, end to end, as the two programs that
 // meet it see it: `cc-candybar check` (the verdict an authoring agent reads)
 // and the loaded config's live variable store (what the daemon renders from).
@@ -27,7 +28,6 @@ import {
   pluginLoadLine,
   RenderCache,
   renderCacheBudget,
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
 } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -1000,7 +1000,7 @@ describe("an installed plugin", () => {
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
+        facts: FACTS_NOTHING,
       },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );
@@ -1667,7 +1667,7 @@ describe("an installed plugin", () => {
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
+        facts: FACTS_NOTHING,
       },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );
