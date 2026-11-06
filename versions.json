@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-655",
+      "ref": "refs/pull/655/merge",
+      "sha": "b3604007d4b69bed5c87a2bcad8e59a45e0be044",
+      "timestamp": "2026-11-06T21:42:25.079Z",
+      "commits": [
+        {
+          "sha": "b3604007d4b69bed5c87a2bcad8e59a45e0be044",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:41:35-07:00",
+          "message": "Merge e1c39eacf235e0f2a6a2fd3f5fc3d5210ff7e1db into 4f8902896b866dd001944102be7ed0716f005520\n"
+        },
+        {
+          "sha": "e1c39eacf235e0f2a6a2fd3f5fc3d5210ff7e1db",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:38:27-07:00",
+          "message": "feat(dial): the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em)\n\nA Dialer port (src/dial/) with one adapter over a unix socket, an in-memory fake that listens and holds paths on a clock, and one contract both pass. The round trip, the frame stream and acquire's probe dial through the World's dialer; a dial's refusal is typed at the adapter, so interpretException reads no errno out of a message. Lint keeps net in the adapter and the daemon's listener, in src and in tests. The nine test files that stood up their own sockets listen on the fake; the kernel bind cases move to test/integration.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-654",
       "ref": "refs/pull/654/merge",
       "sha": "81d287257f2f8af165187e45593955cdfed9d7da",
