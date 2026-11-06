@@ -82,18 +82,18 @@ describe("click wire — encode/decode round-trip", () => {
   test("N effects ride one URL in author order (set leads, copy follows)", () => {
     const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_SET_STATE, args: [SID, "theme", "nord"] },
-      { verb: VERB_COPY, args: ["copied!"] },
+      { verb: VERB_COPY, args: [SID, "copied!"] },
     ]);
     expect(effectsOf(url)).toEqual([
       { verb: "set-state", args: [SID, "theme", "nord"] },
-      { verb: "copy", args: ["copied!"] },
+      { verb: VERB_COPY, args: [SID, "copied!"] },
     ]);
   });
 
   test("values bearing /, & and = round-trip intact (slash-safety)", () => {
     const nasty = "a/b&c=d/e";
-    const url = effectsUrl(MAIN_NAME, [{ verb: VERB_COPY, args: [nasty] }]);
-    expect(effectsOf(url)).toEqual([{ verb: "copy", args: [nasty] }]);
+    const url = effectsUrl(MAIN_NAME, [{ verb: VERB_COPY, args: [SID, nasty] }]);
+    expect(effectsOf(url)).toEqual([{ verb: VERB_COPY, args: [SID, nasty] }]);
   });
 
   test("encodeSegments/decodeSegments are inverse, even with embedded slashes", () => {
@@ -104,11 +104,11 @@ describe("click wire — encode/decode round-trip", () => {
   test("parseEffects preserves order and keeps each tail encoded for the handler", () => {
     const url = effectsUrl(MAIN_NAME, [
       { verb: VERB_SET_STATE, args: [SID, "k", "v"] },
-      { verb: VERB_COPY, args: ["x"] },
+      { verb: VERB_COPY, args: [SID, "x"] },
     ]);
     const { value } = linkClick(url);
     const parsed = parseEffects(value);
-    expect(parsed.map((e) => e.verb)).toEqual(["set-state", "copy"]);
+    expect(parsed.map((e) => e.verb)).toEqual(["set-state", VERB_COPY]);
   });
 });
 
@@ -190,13 +190,13 @@ describe("a link says in words what its click does", () => {
       },
       "edit remove:model in presets.a.root",
     ],
-    [{ verb: VERB_COPY, args: ["/tmp/proj"] }, "copy /tmp/proj"],
+    [{ verb: VERB_COPY, args: [SID, "/tmp/proj"] }, "copy /tmp/proj"],
     [
       { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "42"] },
       "copy diagnostic",
     ],
     [
-      { verb: VERB_OPEN_VSCODE, args: ["/tmp/a.ts"] },
+      { verb: VERB_OPEN_VSCODE, args: [SID, "/tmp/a.ts"] },
       "open /tmp/a.ts in vs code",
     ],
     [{ verb: VERB_TOOLBAR_TOGGLE, args: [SID] }, "toggle the toolbar"],
@@ -280,7 +280,7 @@ describe("a link says in words what its click does", () => {
 
   test("a long copied text keeps both ends, whole characters at each", () => {
     const text = does([
-      { verb: VERB_COPY, args: [`${"🍫".repeat(80)}/config.json5`] },
+      { verb: VERB_COPY, args: [SID, `${"🍫".repeat(80)}/config.json5`] },
     ]);
     expect(text).toMatch(/^copy 🍫+\.\.\.🍫+\/config\.json5$/u);
     expect([...text].length).toBeLessThanOrEqual("copy ".length + 60);
@@ -379,10 +379,12 @@ describe("a link names the renderer that drew it", () => {
 
 describe("parseHandlerUrl — verb split, value raw", () => {
   test("dispatch URL → verb=dispatch, value is the raw query string", () => {
-    const url = effectsUrl(MAIN_NAME, [{ verb: VERB_COPY, args: ["hi"] }]);
+    const url = effectsUrl(MAIN_NAME, [{ verb: VERB_COPY, args: [SID, "hi"] }]);
     const { verb, value } = linkClick(url);
     expect(verb).toBe(VERB_DISPATCH);
-    expect(parseEffects(value)).toEqual([{ verb: "copy", value: "hi" }]);
+    expect(parseEffects(value)).toEqual([
+      { verb: VERB_COPY, value: `${SID}/hi` },
+    ]);
   });
 
   test("a '?' in a tail is data, not a delimiter", () => {
@@ -442,10 +444,10 @@ describe("parseHandlerUrl — verb split, value raw", () => {
   test("effectsOf mirrors the daemon's per-verb decode (single-arg whole, set-state segmented)", () => {
     const at = (verb: string, tail: string): string =>
       addressedLink(MAIN_NAME, verb, tail);
-    // A single-arg verb decodes the whole value: `copy/a/b` → one arg "a/b",
+    // A copy is its session and its text, the text's own "/" escaped as data,
     // matching what the copy handler copies.
-    expect(effectsOf(at(VERB_COPY, "a/b"))).toEqual([
-      { verb: "copy", args: ["a/b"] },
+    expect(effectsOf(at(VERB_COPY, "s1/a%2Fb"))).toEqual([
+      { verb: VERB_COPY, args: ["s1", "a/b"] },
     ]);
     // set-state, the one multi-arg verb, still segments.
     expect(effectsOf(at(VERB_SET_STATE, "s1/theme/nord"))).toEqual([
@@ -502,7 +504,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
       verb: VERB_SET_STATE,
       value: `${sid}/${k}/${v}`,
     });
-    const copy = { verb: VERB_COPY, value: "x" };
+    const copy = { verb: VERB_COPY, value: "a/x" };
     // Order is the click's: the copy between two writes keeps its place.
     expect(
       batchAdjacentWrites([set("a", "k1", "v1"), set("a", "k2", "v2"), copy, set("a", "k3", "v3")]),

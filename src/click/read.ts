@@ -16,7 +16,7 @@ import {
   VERB_OPEN_VSCODE,
 } from "./wire";
 import { isBarLink } from "./scheme";
-import { SEGMENTED_VERBS } from "../daemon/verbs";
+import { LEAF_VERB_NAMES, SEGMENTED_VERBS, VERBS } from "../daemon/verbs";
 
 /** One link the bar drew: its visible text and its URL. */
 export interface DrawnLink {
@@ -54,8 +54,8 @@ export interface DecodedEffect {
 // [LAW:one-source-of-truth] Decode an effect's value the way its daemon handler
 // does, from the daemon's own list (src/daemon/verbs SEGMENTED_VERBS): those
 // verbs' values are `/`-separated segments; every other verb takes ONE
-// argument, the whole value decoded once, so a `copy/a/b` link reports one
-// arg "a/b" (exactly what the copy handler copies).
+// argument, the whole value decoded once, so a `toolbar-toggle/a/b` link
+// reports one arg "a/b".
 function decodeArgs(verb: string, value: string): string[] {
   return SEGMENTED_VERBS.has(verb)
     ? decodeSegments(value)
@@ -69,20 +69,33 @@ export type DrawnClick =
 // [LAW:parse-dont-validate] A drawn link's click as the daemon splits it, its
 // ordered effects (a link whose verb is not dispatch is the one-effect case),
 // or the reason the daemon refuses it: a config can compute a link at the
-// draw that the parse refuses, or whose value carries a malformed escape.
+// draw that the parse refuses, or whose value carries a malformed escape, and
+// a frame drawn by an older daemon can name a verb this one has retired.
 export function drawnClickOf(url: string): DrawnClick {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
   const { verb, value } = link;
+  // A dispatch carries leaf verbs; a link may name any verb the daemon has.
+  const known = verb === VERB_DISPATCH ? LEAF_VERB_NAMES : VERBS;
   try {
-    const effects =
-      verb === VERB_DISPATCH
-        ? parseEffects(value).map((e) => ({
-            verb: e.verb,
-            args: decodeArgs(e.verb, e.value),
-          }))
-        : [{ verb, args: decodeArgs(verb, value) }];
-    return { ok: true, effects };
+    const raw =
+      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+    // The verb is read before its value, as the daemon reads it: a verb it
+    // has not is refused whatever its value holds.
+    const unknown = raw.find((e) => !known.has(e.verb));
+    if (unknown !== undefined) {
+      return {
+        ok: false,
+        problem: `the daemon has no verb "${unknown.verb}": ${url}`,
+      };
+    }
+    return {
+      ok: true,
+      effects: raw.map((e) => ({
+        verb: e.verb,
+        args: decodeArgs(e.verb, e.value),
+      })),
+    };
   } catch (error) {
     return {
       ok: false,

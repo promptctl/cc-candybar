@@ -27,7 +27,7 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 - `dlog` writes the click event to `<state>/daemon.log`.
 - `<state>` is `stateDir()`, normally `~/.local/state/cc-candybar`.
 
-**Exceptions:** `copy`, `open-vscode` and `doctor-probe` are not in `SESSION_FIRST_VERBS`, so `journaled` has no session and skips the lane and view follow-ups. It still opens and commits empty journals.
+**Exception:** `probe` is a link kind, not a leaf verb: it names no session, takes no turn and describes nothing.
 
 **Touch codes:** P picks (`session-state.json`), SH settings history, NH navigation history (memory only), CF config file, CC Claude Code process or pane, TM tmux, OS another session, MA machine, SS source storage. Anything not listed is not touched by the handler.
 
@@ -35,9 +35,9 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 
 | Verb | DaemonContext fields beyond baseline | Files written | Programs launched | Touches | Class | In a dev Draw |
 |---|---|---|---|---|---|---|
-| `copy` | `dlog` | none | `/usr/bin/pbcopy` | clipboard only | host | Clipboard is outside your stated isolation; allow it. Needs a message to Facts if Facts owns all programs |
+| `copy-text` | `dlog` | none | `/usr/bin/pbcopy` | clipboard only | host | Clipboard is outside your stated isolation; allow it. Needs a message to Facts if Facts owns all programs |
 | `copy-diagnostic` | `diagnosticCopy`, `dlog` | none | `pbcopy` | clipboard; reads `renderCache.copies` | host | Same; text comes from the dev Draw's own frames |
-| `open-vscode` | `dlog` | none | `/usr/bin/open -a "Visual Studio Code" <path>`; path is not gated | editor | host | Same as `copy` |
+| `open-in-vscode` | `dlog` | none | `/usr/bin/open -a "Visual Studio Code" <path>`; path is not gated | editor | host | Same as `copy-text` |
 | `load-config` | `dlog` | `session-state.json` | none | P (`config-override`), not SH or NH; L | picks | Own copy. Shape check only: any absolute `.json`/`.json5` path. Later durable clicks would write to that path unless remapped |
 | `set-state` | `configFor`, `dlog` | `session-state.json`; `settings-history.json` for setting keys or edit-mode toggles | none | P; SH for settings; NH for navigation keys; L | picks | Own copy. Lanes must not go to Facts |
 | `step-state` | `configFor`, `dlog` | same | none | P, SH or NH; L possible | picks | Own copy |
@@ -133,7 +133,7 @@ Other points:
 | `run` | Draw to Facts: `run{RunRequest}`, Facts to Draw: `runFailed{sid, text}`. Storage keys come from Draw's config, and `supersede` runs in Facts |
 | `apply-update` | Draw to Facts: `applyUpdate`. Facts to Draw: update facts for the notice and the dismiss gate |
 | Doctor verbs | Draw to Facts: `gatherDoctorFacts{sid, origin, needs}`. `doctor-fix` also sends `writeClaudeSettings`, live Draw only |
-| `copy`, `copy-diagnostic`, `open-vscode`, plain URLs | Draw to Facts: `host{copy|open}`, if Facts owns all programs |
+| `copy-text`, `copy-diagnostic`, `open-in-vscode`, plain URLs | Draw to Facts: `host{copy|open}`, if Facts owns all programs |
 | `tmux-status-click` | Facts to Draw: `linkClicked{url, via}`, sent to the Draw that drew the frame |
 | `repo-config` | Draw to Facts: the answer, so Facts knows which sources may run |
 | All clicks | Facts to Draw: `requestFacts{sid, origin, hints}`, because verbs fail with "has not rendered yet" without them |

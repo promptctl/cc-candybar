@@ -382,16 +382,27 @@ function requireSessionId(value: string): SessionId {
   return parsed.id;
 }
 
-// [LAW:types-are-the-program] A single-argument verb (copy/open/toolbar/show-
-// config) carries ONE argument: the WHOLE value, decoded once. It must NOT split
-// on "/" the way the multi-arg set-state does — a single-arg value legitimately
-// contains "/" (a copy of "a/b", an open path), and a `copy/a/b` link
-// would be truncated at the first slash if split. The verb's
+// [LAW:types-are-the-program] A single-argument verb (toolbar-toggle, back)
+// carries ONE argument: the WHOLE value, decoded once. It must NOT split on "/"
+// the way the multi-arg set-state does, since a single-arg value may contain "/"
+// and would be truncated at the first slash if split. The verb's
 // arity picks the codec: 1 arg → decode the whole tail; N args → decodeSegments.
 // parseHandlerUrl no longer decodes the value, so the decode lives with the verb
 // that knows its shape [LAW:single-enforcer].
 function oneArg(value: string): string {
   return decodeWire(() => decodeURIComponent(value));
+}
+
+// The argument of a verb that carries `[sessionId, argument]` (copy, open): each
+// is encoded whole, so a copied text's own "/" is data, never a separator.
+function sessionArg(value: string): string {
+  const parts = decodeWire(() => decodeSegments(value));
+  if (parts.length !== 2)
+    throw new BadVerbArgs(
+      `expected a session and one argument, got ${parts.length} segments`,
+    );
+  requireSessionId(parts[0]!);
+  return parts[1]!;
 }
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────
@@ -511,8 +522,8 @@ export async function clickHandoff(
   }
 }
 
-// One clipboard primitive, no decode — both the `copy` verb (decodes a wire
-// segment) and the diagnostic verbs (already hold a plain message) funnel here.
+// One clipboard primitive, no decode: copy-text (its text segment) and the
+// diagnostic verbs (a plain message) both funnel here.
 function pbcopy(text: string, ctx: ClickContext): void {
   launch(
     ctx,
@@ -527,7 +538,7 @@ function launch(ctx: ClickContext, spec: LaunchSpec, what: string): void {
 }
 
 const copy: VerbHandler = (value, ctx) => {
-  pbcopy(oneArg(value), ctx);
+  pbcopy(sessionArg(value), ctx);
 };
 
 // [LAW:parse-dont-validate] The renderer a copy click names: the surface it
@@ -563,7 +574,7 @@ const openVscode: VerbHandler = (value, ctx) => {
     ctx,
     {
       bin: "/usr/bin/open",
-      args: ["-a", "Visual Studio Code", oneArg(value)],
+      args: ["-a", "Visual Studio Code", sessionArg(value)],
       category: "click.open",
     },
     'open -a "Visual Studio Code"',
@@ -1988,6 +1999,11 @@ const repoConfig: VerbHandler = (value, ctx) => {
 // plain object would be a truthy hit on Object.prototype that then throws on
 // invocation (RENDER_FAILED instead of BAD_REQUEST). Map makes the wrong
 // dispatch unrepresentable, matching src/daemon/session-state.ts.
+//
+// [LAW:one-source-of-truth] Every leaf verb's first wire segment is the
+// session it was clicked in, so membership here is what makes an effect name
+// its click's session (`clickSessionOf`). A verb that names none is a link
+// kind beside this table, as the probe is.
 const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_COPY, copy],
   [VERB_OPEN_VSCODE, openVscode],
@@ -2016,6 +2032,9 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_COPY_DIAGNOSTIC, copyDiagnostic],
 ]);
 
+// The verbs a dispatch may carry as its effects.
+export const LEAF_VERB_NAMES: ReadonlySet<string> = new Set(LEAF_VERBS.keys());
+
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
 // `/`-separated segments (decodeSegments); every other verb decodes its whole
 // value as one argument (oneArg).
@@ -2040,36 +2059,8 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_RUN,
   VERB_REPO_CONFIG,
   VERB_COPY_DIAGNOSTIC,
-]);
-
-// [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
-// id — the set `dispatch` reads to know which session a failing click should
-// surface its error in. Membership here is the fact; a verb that carries the
-// session id first joins by one row, not one more `||`.
-const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
-  VERB_SET_STATE,
-  VERB_STEP_STATE,
-  VERB_SET_CONFIG,
-  VERB_STEP_CONFIG,
-  VERB_RESET_CONFIG,
-  VERB_SAVE,
-  VERB_SAVE_PRESET,
-  VERB_SAVE_THEME_DEFAULT,
-  VERB_DELETE_PRESET,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_UNDO,
-  VERB_REDO,
-  VERB_BACK,
-  VERB_REWIND,
-  VERB_TOOLBAR_TOGGLE,
-  VERB_APPLY_UPDATE,
-  VERB_DOCTOR_RUN,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
-  VERB_SLASH,
-  VERB_RUN,
-  VERB_REPO_CONFIG,
-  VERB_COPY_DIAGNOSTIC,
+  VERB_COPY,
+  VERB_OPEN_VSCODE,
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
@@ -2094,12 +2085,10 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 //
 // [LAW:one-source-of-truth] Per-step errors are written to session state
 // so the bar shows WHICH step(s) failed, for the hold src/daemon/click-error.ts
-// sets. Only possible when a session ID
-// is available from a set-state or toolbar-toggle effect in the same click.
+// sets.
 // [LAW:one-source-of-truth] The session a click is in: the first segment of
-// its first session-bearing effect — every SESSION_FIRST_VERBS member carries
-// it there — or none. Dispatch surfaces a failed step in that session's bar,
-// and the daemon counts the click as that session's activity
+// its first leaf effect, or none. Dispatch surfaces a failed step in that
+// session's bar, and the daemon counts the click as that session's activity
 // (src/daemon/menu-idle.ts). [LAW:single-enforcer] It is read as it crosses
 // the one session-id checkpoint, so every reader of a click's session reads
 // the same checked value; one that fails is no session's, and its verb
@@ -2116,7 +2105,7 @@ export function clickSessionOf(
 function sessionOfEffects(
   effects: readonly ParsedEffect[],
 ): ParsedSessionId | null {
-  const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
+  const bearing = effects.find((e) => LEAF_VERB_NAMES.has(e.verb));
   // Only the session's own segment is read: a step's malformed argument is
   // that step's error to hold on the bar, after the click has found its
   // session.

@@ -210,7 +210,7 @@ describe("clicking the directory copies the full path", () => {
     const cellLinks = linksOf(rendered);
     expect(cellLinks.map((l) => l.text)).toEqual(["~/c/c/s/d/leaf"]);
     expect(effectsOf(cellLinks[0]!.url)).toEqual([
-      { verb: VERB_COPY, args: [current_dir] },
+      { verb: VERB_COPY, args: ["dir-fish-test-0000-0000-000000000000", current_dir] },
     ]);
   });
 });

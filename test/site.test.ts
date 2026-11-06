@@ -60,7 +60,7 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     const door = (await transport.render(size)).links.find((l) => l.text === "🍫");
     const clicked = await transport.click(door.url, size);
     const opened = await transport.frame(size);
-    const copy = clicked.links.find((l) => l.does.startsWith("copy "));
+    const copy = clicked.links.find((l) => l.does.startsWith("copy-text "));
     const copied = await transport.click(copy.url, size); // bare Node has no clipboard
     transport.scenario.seek(27 / 90);
     const working = await transport.frame(size);

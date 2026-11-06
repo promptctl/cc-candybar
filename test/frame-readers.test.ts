@@ -154,14 +154,30 @@ describe("describeLink", () => {
 
   test("a drawn link whose value carries a malformed escape reads as its refusal", () => {
     expect(
-      describeLink({ text: "x", url: "cc-candybar://to/main/copy/100%" }, "s"),
-    ).toMatch(/^refused: the link's value does not decode .*: cc-candybar:\/\/to\/main\/copy\/100%$/);
+      describeLink({ text: "x", url: "cc-candybar://to/main/toolbar-toggle/100%" }, "s"),
+    ).toMatch(/^refused: the link's value does not decode .*: cc-candybar:\/\/to\/main\/toolbar-toggle\/100%$/);
+  });
+
+  // A frame an older daemon drew can name a verb this one retired; its click
+  // is refused, so it reads as refused, never as the act it once was.
+  test("a link naming a verb the daemon has not reads as its refusal", () => {
+    expect(describeLink({ text: "x", url: "cc-candybar://to/main/copy/s" }, "s")).toBe(
+      'refused: the daemon has no verb "copy": cc-candybar://to/main/copy/s',
+    );
+    const dispatched = `cc-candybar://to/main/dispatch/does=copy&e=${encodeURIComponent("copy/s")}`;
+    expect(describeLink({ text: "x", url: dispatched }, "s")).toBe(
+      `refused: the daemon has no verb "copy": ${dispatched}`,
+    );
+    // Its value is never read, so a malformed escape in it is not the reason.
+    expect(describeLink({ text: "x", url: "cc-candybar://to/main/copy/100%" }, "s")).toBe(
+      'refused: the daemon has no verb "copy": cc-candybar://to/main/copy/100%',
+    );
   });
 
   test("an addressed link reads as its effects, and an outside link as opened", () => {
     expect(
-      describeLink({ text: "x", url: "cc-candybar://to/main/copy/s" }, "s"),
-    ).toBe("copy <session>");
+      describeLink({ text: "x", url: "cc-candybar://to/main/toolbar-toggle/s" }, "s"),
+    ).toBe("toolbar-toggle <session>");
     expect(describeLink({ text: "x", url: B }, "s")).toBe(`opens ${B}`);
   });
 });
