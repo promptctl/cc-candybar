@@ -4,39 +4,39 @@
     {
       "version": "pr-646",
       "ref": "refs/pull/646/merge",
-      "sha": "4664bc37ae4a4de0bfaffc92607c209ed9f74f08",
-      "timestamp": "2026-11-06T21:16:23.560Z",
+      "sha": "5c5878624a343a74ac05368da2a70852c103c900",
+      "timestamp": "2026-11-06T21:17:22.211Z",
       "commits": [
         {
-          "sha": "4664bc37ae4a4de0bfaffc92607c209ed9f74f08",
+          "sha": "5c5878624a343a74ac05368da2a70852c103c900",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T21:15:29Z",
-          "message": "Merge 105e2af4c1bae6ef159ea85d16b8d91b0ce194f0 into 3b85a8464e84d21d582e674567b70a353a6c3100\n"
+          "timestamp": "2026-11-06T14:16:12-07:00",
+          "message": "Merge 8292d0020887a55cfa9e1d8b371b4d427cf05619 into 3b85a8464e84d21d582e674567b70a353a6c3100\n"
         },
         {
-          "sha": "105e2af4c1bae6ef159ea85d16b8d91b0ce194f0",
+          "sha": "8292d0020887a55cfa9e1d8b371b4d427cf05619",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T13:29:27-07:00",
           "message": "fix(apply): a queued lane setup is refused at close; every write asks for its turn first (candybar-gather-renderer-76bb.1dh.9kk)\n\nA lane setup waits in its session's effect order, so one still queued when\nthe daemon closes would start a restart no daemon is left to attach. The\nlane setup owner closes with the daemon and refuses it as the close, as a\nqueued run is. A run the close aborted is answered as the close rather\nthan as a failure that only the teardown's order kept off the bar.\n\nThe store asks for the turn at the top of every public write, before an\nempty batch or a held revision decides that nothing moves, so a write out\nof its turn is refused whatever it would have written.\n"
         },
         {
-          "sha": "14d3639d07a9ada575f52e2505434a4d0b13a40a",
+          "sha": "7ffa046c3fa91815038bf4c1a24ef03ebf86a960",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T13:17:43-07:00",
           "message": "fix(apply): a request is drawn once applied; a run's sources resume whatever its launch did (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe request arm no longer draws: `applyRequest` applies the request and then\nbegins its draw, so a request whose apply rejected strands no draw. The\neffects the request's turn described go on its render event.\n\nA run's launch is awaited in a try/finally, so a launcher that throws still\nresumes the run's sources and leaves nothing counted running.\n\nThe lane setup effect is declared by the lane setup owner, which the effect\nunion names from above, so the two no longer import each other.\n"
         },
         {
-          "sha": "fdfdb2f21248eecf774e1cf0186922c23df9b0e1",
+          "sha": "3c244085af6401ae02769a8c7fe7a501d20daee8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:56:21-07:00",
           "message": "fix(apply): a request's arrival settles in its turn; a queued run is counted (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe lane setups a request's arrival settles were taken off the owed list\nduring the draw and reached the performer only once the draw had answered,\nso a click made during the wait was performed ahead of them, and a draw that\nthrew lost them. The arrival (owed setups and the tmux status line) now\nsettles in the request's turn, measured as a click's switches are, and the\narm answers with the draw under way, so the turn's effects join the\nsession's order as the turn ends.\n\nA run superseded by its click and still waiting behind the session's earlier\neffects shows in the run stats as queued. The lane outcome's comment says\nwhat underway now means, and a write's refusal text is built only when\nrefused.\n"
         },
         {
-          "sha": "aeeba45c40f8d221ae6a00ed6dbb028b6d0d0538",
+          "sha": "5f3672cbb0c64260c721b44a7f683c50b3c4d6c7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:35:32-07:00",
