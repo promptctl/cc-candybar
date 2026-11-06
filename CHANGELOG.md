@@ -1,3 +1,13 @@
+## [1.207.0](https://github.com/promptctl/cc-candybar/compare/v1.206.0...v1.207.0) (2026-11-06)
+
+### Features
+
+* **dial:** the client reaches its daemon through one dialer port, and no test hand-rolls a socket (candybar-testing-ihvy.5em) ([#655](https://github.com/promptctl/cc-candybar/issues/655)) ([466c05a](https://github.com/promptctl/cc-candybar/commit/466c05ac9e0e8203441238a3692bac06838e69a9))
+
+### Bug Fixes
+
+* **test:** the parent-watchdog case waits for a serving daemon under the shared readiness budget, and for its exit by name (brandon-menus-sjhy.26f) ([#654](https://github.com/promptctl/cc-candybar/issues/654)) ([0345c0f](https://github.com/promptctl/cc-candybar/commit/0345c0ff3dc537298327e838f5410e5b53301804))
+
 ## [1.206.0](https://github.com/promptctl/cc-candybar/compare/v1.205.1...v1.206.0) (2026-11-06)
 
 ### Features
