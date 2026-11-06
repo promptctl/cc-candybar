@@ -82087,9 +82087,9 @@ var RenderCache = class {
   // itself, not frames happening to read the view within each sweep.
   pins = /* @__PURE__ */ new Map();
   // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error and the request the opening was for, until a view opens for
-  // it: a frame draws that error, never the last bar it pushed. Written only
-  // by `opened`, which sets either this or the session's view, never both.
+  // the error, until a view opens for it: a frame draws that error, never the
+  // last bar it pushed. Written only by `opened`, which sets either this or
+  // the session's view, never both.
   openFailures = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -82309,7 +82309,7 @@ var RenderCache = class {
         log: this.log
       });
     } catch (error) {
-      this.openFailures.set(sessionId2, { error, facts });
+      this.openFailures.set(sessionId2, { error });
       throw error;
     }
     this.openFailures.delete(sessionId2);
@@ -83221,6 +83221,7 @@ var MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 var PRIOR_OPTION = "@cc-candybar-status-prior";
 var WROTE_OPTION = "@cc-candybar-status-wrote";
 var BINDING_OPTION = "@cc-candybar-binding-prior";
+var RENDERER_OPTION = "@cc-candybar-renderer";
 var CLICK_KEY = ["-T", "root", "MouseDown1Status"];
 var INDICES = Array.from({ length: MAX_STATUS_ROWS }, (_, i) => i);
 var rowOption = (row2) => `@cc-candybar-row-${row2}`;
@@ -83336,12 +83337,22 @@ function leftBehind(prior, wrote, owner) {
     why: `the daemon at ${JSON.stringify(parsed2.owner)} draws it`
   };
 }
-function installPlan(session, answers, owner) {
+var nameWrite = (session, name) => [
+  "set-option",
+  "-t",
+  session,
+  RENDERER_OPTION,
+  name
+];
+function installPlan(session, answers, owner, name) {
   const [statusWordNow = "", ...rest2] = answers;
   const own2 = ownOf(rest2.slice(0, 2 + MAX_STATUS_ROWS));
   const globals = rest2.slice(2 + MAX_STATUS_ROWS, 2 + 2 * MAX_STATUS_ROWS);
   const [prior = "", wrote = ""] = rest2.slice(2 + 2 * MAX_STATUS_ROWS);
-  if (prior !== "") return leftBehind(prior, wrote, owner);
+  if (prior !== "") {
+    const left = leftBehind(prior, wrote, owner);
+    return left.kind === "theirs" ? left : { ...left, commands: [nameWrite(session, name)] };
+  }
   const base = statusRows(statusWordNow);
   const above = {};
   for (let i = 0; i < base; i++) {
@@ -83369,6 +83380,7 @@ function installPlan(session, answers, owner) {
     prior: laid,
     commands: [
       ["set-option", "-t", session, PRIOR_OPTION, JSON.stringify(laid)],
+      nameWrite(session, name),
       ...arrayWrite(session, wroteFormats)
     ]
   };
@@ -83407,7 +83419,8 @@ function restorePlan(session, prior, answers) {
       rowOption(i)
     ]),
     ["set-option", "-q", "-u", "-t", session, PRIOR_OPTION],
-    ["set-option", "-q", "-u", "-t", session, WROTE_OPTION]
+    ["set-option", "-q", "-u", "-t", session, WROTE_OPTION],
+    ["set-option", "-q", "-u", "-t", session, RENDERER_OPTION]
   );
   return { commands, kept };
 }
@@ -83679,19 +83692,22 @@ var TmuxStatusLines = class {
       `#{session_id}	#{${PRIOR_OPTION}}	#{${WROTE_OPTION}}`
     ]);
     if (run3.kind === "ok") {
+      const names = [];
       for (const line of run3.stdout.split("\n")) {
         const [session, prior, wrote = ""] = line.split("	");
         if (session === void 0 || prior === void 0 || prior === "")
           continue;
         const found2 = leftBehind(prior, wrote, this.deps.owner);
-        if (found2.kind === "ours")
+        if (found2.kind === "ours") {
           server.layouts.set(session, {
             prior: found2.prior,
             rows: [],
             status: found2.status
           });
-        else this.leave(socket, server, session, found2.why);
+          names.push(nameWrite(session, this.deps.name));
+        } else this.leave(socket, server, session, found2.why);
       }
+      await this.write(socket, names);
     }
     const answers = await this.ask(socket, [showGlobal(BINDING_OPTION)]);
     const saved = answers?.[0] ?? "";
@@ -83725,7 +83741,7 @@ var TmuxStatusLines = class {
   async install(socket, server, session) {
     const answers = await this.ask(socket, INSTALL_QUERIES(session));
     if (answers === null || this.closed) return null;
-    const plan = installPlan(session, answers, this.deps.owner);
+    const plan = installPlan(session, answers, this.deps.owner, this.deps.name);
     if (plan.kind === "theirs") {
       this.leave(socket, server, session, plan.why);
       return null;
@@ -83736,10 +83752,10 @@ var TmuxStatusLines = class {
       status: plan.kind === "ours" ? plan.status : plan.prior.base
     };
     server.layouts.set(session, layout);
-    if (plan.kind === "lay-out") await this.write(socket, plan.commands);
+    await this.write(socket, plan.commands);
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`
+      `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} renderer=${this.deps.name} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`
     );
     return layout;
   }
@@ -84907,6 +84923,10 @@ function createDaemon(inputs) {
       "url-handle"
     ].join(" "),
     owner: paths2.socket,
+    // [LAW:one-source-of-truth] The main renderer's name (docs/design/
+    // gather-and-renderer.md, section 17), the one renderer until the home
+    // carries a name.
+    name: "main",
     log
   });
   const frameFeeds = new FrameFeeds({
