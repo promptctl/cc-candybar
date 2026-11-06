@@ -4756,7 +4756,7 @@ var require_lib = __commonJS({
     var NUMERIC_RANGE = /^(-?\d+)\.\.(-?\d+)(?:\.\.(-?\d+))?$/;
     var ALPHA_RANGE = /^([a-zA-Z])\.\.([a-zA-Z])(?:\.\.(-?\d+))?$/;
     var PADDED = /^-?0\d/;
-    var rangeOf3 = (body, max2) => {
+    var rangeOf2 = (body, max2) => {
       let match = NUMERIC_RANGE.exec(body);
       const alpha = !match;
       if (alpha)
@@ -4792,7 +4792,7 @@ var require_lib = __commonJS({
         if (close < 0)
           continue;
         const body = pattern2.slice(open2 + 1, close);
-        const alts = commaSplit(body) || rangeOf3(body, max2);
+        const alts = commaSplit(body) || rangeOf2(body, max2);
         if (!alts)
           continue;
         const prefix = pattern2.slice(0, open2);
@@ -51891,11 +51891,13 @@ function writeAtomic(at, text4, mode) {
   const tmp = `${file}.tmp`;
   const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
-    fs_default.writeFileSync(
-      tmp,
-      text4,
-      fileMode === void 0 ? {} : { mode: fileMode }
-    );
+    const fd = fs_default.openSync(tmp, "w", fileMode);
+    try {
+      fs_default.writeFileSync(fd, text4);
+      fs_default.fsyncSync(fd);
+    } finally {
+      fs_default.closeSync(fd);
+    }
     fs_default.renameSync(tmp, file);
   } catch (e) {
     fs_default.rmSync(tmp, { force: true });
@@ -55467,12 +55469,12 @@ function renderFailedFrame(message) {
     DIAGNOSTIC_ERROR_COLORS
   );
 }
-function laneEncoded(encode2, frame2) {
+function laneEncoded(encode3, frame2) {
   try {
-    return encode2(frame2);
+    return encode3(frame2);
   } catch (error) {
     const why2 = error instanceof Error ? error.message : String(error);
-    return encode2(
+    return encode3(
       diagnosticFrame(`\u26A0 cc-candybar ${why2}`, DIAGNOSTIC_ERROR_COLORS)
     );
   }
@@ -69344,7 +69346,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.201.0";
+var PACKAGE_VERSION = "1.201.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -70006,6 +70008,9 @@ function watchProbeDir(home) {
 function logPath(home) {
   return import_node_path29.default.join(stateDir(home), "daemon.log");
 }
+function linkIdsPath(home) {
+  return import_node_path29.default.join(stateDir(home), "link-ids");
+}
 function daemonPaths(home) {
   return {
     socket: socketPath(home),
@@ -70016,7 +70021,8 @@ function daemonPaths(home) {
     settingsHistory: settingsHistoryPath(home),
     storedRoot: storedRoot(home),
     watchProbe: watchProbeDir(home),
-    spawnBackoff: spawnBackoffPath(home)
+    spawnBackoff: spawnBackoffPath(home),
+    linkIds: linkIdsPath(home)
   };
 }
 function dataHome(host) {
@@ -70274,6 +70280,7 @@ var RuntimeStats = class _RuntimeStats {
         found: 0
       },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
+      linkIds: { minted: 0, reused: 0, evicted: 0, reservations: 0, faults: 0 },
       watchersActive: 0,
       dirWatchesActive: 0,
       handlerProbes: [],
@@ -70330,6 +70337,7 @@ var RuntimeStats = class _RuntimeStats {
       sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,
       tmuxStatus: extras.tmuxStatus,
+      linkIds: extras.linkIds,
       watchers: {
         active: extras.watchersActive,
         opened: this.watchersOpened,
@@ -76287,15 +76295,33 @@ var FrameFeeds = class {
     }
     const held = this.feeds.get(sessionId2);
     const feed2 = held ?? this.open(sessionId2);
-    feed2.followers.set(sub2, null);
-    if (!feed2.rates.has(sub2.lane)) feed2.rates.set(sub2.lane, []);
-    if (held !== void 0) this.send(feed2, sub2);
+    const follower = {
+      lane: this.laneOf(feed2, sub2.lane),
+      sent: null
+    };
+    feed2.followers.set(sub2, follower);
+    this.send(sub2, follower);
     this.hasten(feed2);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${feed2.followers.size} view=${lanes === null ? "N" : "Y"}`
     );
     return () => this.unsubscribe(feed2, sub2);
+  }
+  // The feed's `lane`, made with its encoder as the lane's first subscriber
+  // joins. A feed that already pushed a frame encodes it for the lane then,
+  // once, so the subscriber is handed the bar as it stands.
+  laneOf(feed2, lane) {
+    const held = feed2.lanes.get(lane);
+    if (held !== void 0) return held;
+    const encode3 = this.deps.encoders[lane]();
+    const made = {
+      rate: [],
+      encode: encode3,
+      out: feed2.last === null ? null : encode3(feed2.last.bar, answerOf3(feed2.last.answers, lane))
+    };
+    feed2.lanes.set(lane, made);
+    return made;
   }
   // The lanes whose subscribers follow the session's frames and draw them now.
   following(sessionId2) {
@@ -76354,7 +76380,7 @@ var FrameFeeds = class {
     const since = at - RATE_WINDOW_S;
     const shown = this.shown(feed2);
     return perLane((lane) => {
-      const rate = feed2.rates.get(lane);
+      const rate = feed2.lanes.get(lane)?.rate;
       if (rate === void 0) return UNFOLLOWED;
       let subscribers = 0;
       for (const sub2 of feed2.followers.keys())
@@ -76382,7 +76408,7 @@ var FrameFeeds = class {
     const feed2 = {
       sessionId: sessionId2,
       followers: /* @__PURE__ */ new Map(),
-      rates: /* @__PURE__ */ new Map(),
+      lanes: /* @__PURE__ */ new Map(),
       unwatch: this.deps.watch(sessionId2, () => this.wake(sessionId2, "state")),
       unpin: this.deps.pin(sessionId2),
       phase: { kind: "waiting" },
@@ -76418,7 +76444,7 @@ var FrameFeeds = class {
   unsubscribe(feed2, sub2) {
     if (!feed2.followers.delete(sub2)) return;
     if (![...feed2.followers.keys()].some((s) => s.lane === sub2.lane))
-      feed2.rates.delete(sub2.lane);
+      feed2.lanes.delete(sub2.lane);
     if (feed2.followers.size > 0) {
       this.hasten(feed2);
       return;
@@ -76590,26 +76616,29 @@ var FrameFeeds = class {
       resp: JSON.stringify(frame2.resp),
       statusline: JSON.stringify(frame2.statusline)
     };
-    if (feed2.last?.answers.resp === answers.resp && feed2.last.answers.statusline === answers.statusline)
+    const outs = [...feed2.lanes].map(([lane, held]) => ({
+      held,
+      out: held.encode(frame2.bar, answerOf3(answers, lane))
+    }));
+    if (feed2.last?.answers.resp === answers.resp && feed2.last.answers.statusline === answers.statusline && outs.every(({ held, out }) => held.out?.json === out.json))
       return;
-    const before = feed2.last?.answers ?? null;
     feed2.last = { bar: frame2.bar, answers };
     this.pushed++;
     feed2.pushed++;
     if (frame2.failure !== null)
       this.deps.log(frame2.failure.level, frame2.failure.line);
-    for (const [lane, rate] of feed2.rates)
-      if (before === null || answerOf3(before, lane) !== answerOf3(answers, lane))
-        noteSent(rate, at);
-    for (const sub2 of feed2.followers.keys()) this.send(feed2, sub2);
+    for (const { held, out } of outs) {
+      if (held.out?.json !== out.json) noteSent(held.rate, at);
+      held.out = out;
+    }
+    for (const [sub2, follower] of feed2.followers) this.send(sub2, follower);
   }
-  // The last frame's answer for `sub`'s lane, unless it was sent that already.
-  send(feed2, sub2) {
-    if (feed2.last === null) return;
-    const json2 = answerOf3(feed2.last.answers, sub2.lane);
-    if (feed2.followers.get(sub2) === json2) return;
-    sub2.frame(feed2.last.bar, json2);
-    feed2.followers.set(sub2, json2);
+  // The last frame as `sub`'s lane encoded it, unless it was sent that already.
+  send(sub2, follower) {
+    const { out } = follower.lane;
+    if (out === null || follower.sent === out.json) return;
+    sub2.frame(out);
+    follower.sent = out.json;
   }
   // A subscription its lane's toggle refuses, told why.
   refuse(sessionId2, sub2) {
@@ -77242,6 +77271,7 @@ function drawRender(parts, setup, drawing2) {
     frameFeeds,
     renderCache,
     updateWatch,
+    linkIds,
     links: links2,
     fileEvents,
     renderWarnings,
@@ -77281,6 +77311,9 @@ function drawRender(parts, setup, drawing2) {
     said(hintsError),
     sourced("load", entry.lastError),
     sourced("update-act", updateWatch.error()),
+    // [LAW:no-silent-failure] The home's link-id counter, faulted: no tmux
+    // status line's link clicks until it can issue ids again.
+    sourced("link-ids", linkIds.error()),
     ...state.dropped.map((e) => ({
       about: `dropped\0${e.file}`,
       text: e.message,
@@ -78333,6 +78366,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         },
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
+        linkIds: parts.linkIds.stats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),
@@ -83698,6 +83732,314 @@ function sessionSource(deps) {
   };
 }
 
+// src/daemon/lane-frames.ts
+init_globals();
+
+// src/band/frames.ts
+init_globals();
+var STANDARD_NAMES = [
+  "black",
+  "red",
+  "green",
+  "yellow",
+  "blue",
+  "magenta",
+  "cyan",
+  "white",
+  "blackBright",
+  "redBright",
+  "greenBright",
+  "yellowBright",
+  "blueBright",
+  "magentaBright",
+  "cyanBright",
+  "whiteBright"
+];
+function runColor(drawn) {
+  if (drawn === void 0) return void 0;
+  const spec = ColorSpec.parse(drawn);
+  if (spec.isDefault) return void 0;
+  const fixed = spec.fixedValue;
+  if (fixed !== void 0) return fixed.hex;
+  const name = spec.type === ColorDepth.STANDARD && spec.number !== void 0 ? STANDARD_NAMES[spec.number] : void 0;
+  if (name === void 0) {
+    throw new Error(`frames: no band colour for ${spec.name}`);
+  }
+  return name;
+}
+var ATTRIBUTES2 = {
+  bold: "bold",
+  dim: "dimColor",
+  italic: "italic",
+  underline: "underline",
+  strike: "strikethrough",
+  reverse: "inverse",
+  blink: null,
+  blink2: null,
+  conceal: null,
+  underline2: null,
+  frame: null,
+  encircle: null,
+  overline: null
+};
+function bandRun({ text: text4, fg, bg, attrs = [], link }) {
+  const color = runColor(fg);
+  const backgroundColor = runColor(bg);
+  const attributes = {};
+  for (const name of attrs) {
+    const prop = ATTRIBUTES2[name];
+    if (prop === null)
+      throw new Error(`frames: the band cannot draw ${name} text`);
+    attributes[prop] = true;
+  }
+  return {
+    text: text4,
+    ...color !== void 0 && { color },
+    ...backgroundColor !== void 0 && { backgroundColor },
+    ...attributes,
+    ...link !== void 0 && { href: link }
+  };
+}
+function encode(frame2) {
+  return {
+    ok: true,
+    band: frame2.rows.map((row2) => mergedRuns(row2).map(bandRun))
+  };
+}
+function bandFrame(frame2) {
+  return laneEncoded(encode, frame2);
+}
+
+// src/tmux-status/frames.ts
+init_globals();
+var STANDARD_NAMES2 = [
+  "black",
+  "red",
+  "green",
+  "yellow",
+  "blue",
+  "magenta",
+  "cyan",
+  "white",
+  "brightblack",
+  "brightred",
+  "brightgreen",
+  "brightyellow",
+  "brightblue",
+  "brightmagenta",
+  "brightcyan",
+  "brightwhite"
+];
+function tmuxColor(drawn) {
+  if (drawn === void 0) return "terminal";
+  const spec = ColorSpec.parse(drawn);
+  if (spec.isDefault) return "terminal";
+  switch (spec.type) {
+    case ColorDepth.STANDARD: {
+      const name = spec.number === void 0 ? void 0 : STANDARD_NAMES2[spec.number];
+      if (name !== void 0) return name;
+      break;
+    }
+    case ColorDepth.EIGHT_BIT:
+      if (spec.number !== void 0) return `colour${spec.number}`;
+      break;
+    case ColorDepth.TRUECOLOR: {
+      const fixed = spec.fixedValue;
+      if (fixed !== void 0) return fixed.hex;
+      break;
+    }
+    case ColorDepth.DEFAULT:
+    case ColorDepth.WINDOWS:
+      break;
+  }
+  throw new Error(`frames: no tmux colour for ${spec.name}`);
+}
+var ATTRIBUTES3 = {
+  bold: "bold",
+  dim: "dim",
+  italic: "italics",
+  underline: "underscore",
+  strike: "strikethrough",
+  reverse: "reverse",
+  blink: "blink",
+  conceal: "hidden",
+  underline2: "double-underscore",
+  overline: "overline",
+  blink2: null,
+  frame: null,
+  encircle: null
+};
+function escaped(text4) {
+  return text4.replaceAll("#", "##");
+}
+function directive({ fg, bg, attrs = [] }) {
+  const attributes = attrs.map((name) => {
+    const tmux3 = ATTRIBUTES3[name];
+    if (tmux3 === null)
+      throw new Error(`frames: a tmux status line cannot draw ${name} text`);
+    return tmux3;
+  });
+  return `#[${["none", `fg=${tmuxColor(fg)}`, `bg=${tmuxColor(bg)}`, ...attributes].join(",")}]`;
+}
+function encode2(frame2, rangeOf2) {
+  const links2 = {};
+  const drawn = (run3) => {
+    const text4 = directive(run3) + escaped(run3.text);
+    if (run3.link === void 0) return text4;
+    const range = rangeOf2(run3.link);
+    if (range === null) return text4;
+    links2[range] = run3.link;
+    return `#[range=user|${range}]${text4}#[norange]`;
+  };
+  const rows = frame2.rows.map((row2) => mergedRuns(row2).map(drawn).join(""));
+  return { rows, links: links2 };
+}
+function tmuxStatusFrame(frame2, ids) {
+  return ids.frame(
+    (rangeOf2) => laneEncoded((drawn) => encode2(drawn, rangeOf2), frame2)
+  );
+}
+
+// src/tmux-status/link-ids.ts
+init_globals();
+var RANGE_PREFIX = "ccb";
+var LINK_IDS_PER_SURFACE = 256;
+var LinkIds = class {
+  constructor(source, cap = LINK_IDS_PER_SURFACE) {
+    this.source = source;
+    this.cap = cap;
+  }
+  source;
+  cap;
+  ranges = /* @__PURE__ */ new Map();
+  // [LAW:no-ambient-temporal-coupling] One frame drawn through the table:
+  // `draw` names each link's range with `rangeOf`, and eviction waits until
+  // the frame is drawn, so it never takes a link the frame holds.
+  frame(draw2) {
+    const drawn = /* @__PURE__ */ new Set();
+    const drawnAs = draw2((url) => {
+      drawn.add(url);
+      return this.rangeOf(url);
+    });
+    for (const oldest of this.ranges.keys()) {
+      if (this.ranges.size <= this.cap || drawn.has(oldest)) break;
+      this.ranges.delete(oldest);
+      this.source.evicted();
+    }
+    return drawnAs;
+  }
+  // The range id `url` is drawn under, or null while the counter can issue
+  // none.
+  rangeOf(url) {
+    const held = this.ranges.get(url);
+    if (held !== void 0) {
+      this.ranges.delete(url);
+      this.ranges.set(url, held);
+      this.source.reused();
+      return held;
+    }
+    const id2 = this.source.next();
+    if (id2 === null) return null;
+    const range = RANGE_PREFIX + id2.toString(36);
+    this.ranges.set(url, range);
+    return range;
+  }
+};
+
+// src/daemon/lane-frames.ts
+function laneEncoders(ids) {
+  return {
+    band: () => (bar) => ({
+      json: JSON.stringify(bandFrame(bar)),
+      value: null
+    }),
+    statusline: () => (_bar, json2) => ({ json: json2, value: null }),
+    pane: () => (_bar, json2) => ({ json: json2, value: null }),
+    tmuxStatus: () => {
+      const table = new LinkIds(ids);
+      return (bar) => {
+        const value = tmuxStatusFrame(bar, table);
+        return { json: JSON.stringify({ ok: true, tmuxStatus: value }), value };
+      };
+    }
+  };
+}
+
+// src/daemon/link-id-allocator.ts
+init_globals();
+var LINK_ID_BLOCK = 1024;
+var COUNT = /^\d{1,15}\n?$/;
+var LAST_COUNT = 10 ** 15 - 1;
+var REMEDY = "remove it and a new one is made, starting again from 0 (a click on a status row drawn before then may run a link drawn since)";
+function linkIdAllocator(deps) {
+  const { file, clock, retryMs, log } = deps;
+  let reserved = 0;
+  let state = { kind: "ready", next: 0 };
+  let minted = 0;
+  let reused = 0;
+  let evicted = 0;
+  let reservations = 0;
+  let faults = 0;
+  const reserve = () => {
+    try {
+      const base = Math.max(readCount(file), reserved);
+      const end = base + LINK_ID_BLOCK;
+      if (end > LAST_COUNT)
+        throw new Error(
+          `${file} holds ${base}, too near the last count for another block: ${REMEDY}`
+        );
+      writeAtomic(file, `${end}
+`, 384);
+      reserved = end;
+      reservations++;
+      if (state.kind === "faulted")
+        log("info", `link ids: ${file} reserved again`);
+      return { kind: "ready", next: base };
+    } catch (e) {
+      faults++;
+      const reason = `link ids: ${e.message}`;
+      if (state.kind !== "faulted" || state.reason !== reason)
+        log("error", reason);
+      return {
+        kind: "faulted",
+        reason,
+        clear: clock.after(retryMs, () => state = reserve(), { unref: true })
+      };
+    }
+  };
+  return {
+    next() {
+      if (state.kind === "ready" && state.next === reserved) state = reserve();
+      if (state.kind !== "ready") return null;
+      minted++;
+      return state.next++;
+    },
+    reused: () => void reused++,
+    evicted: () => void evicted++,
+    error: () => state.kind === "faulted" ? state.reason : null,
+    stats: () => ({ minted, reused, evicted, reservations, faults }),
+    close() {
+      if (state.kind === "faulted") state.clear();
+      state = { kind: "closed" };
+    }
+  };
+}
+function readCount(file) {
+  let text4;
+  try {
+    text4 = fs_default.readFileSync(file, "utf8");
+  } catch (e) {
+    if (e.code === "ENOENT") return 0;
+    throw e;
+  }
+  if (!COUNT.test(text4)) {
+    throw new Error(
+      `${file} holds ${JSON.stringify(text4.slice(0, 40))}, not a count: ${REMEDY}`
+    );
+  }
+  return Number(text4.trim());
+}
+
 // src/daemon/pane-visibility.ts
 init_globals();
 var LIST_PANES_FORMAT = "#{pane_id} #{session_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active}";
@@ -83851,100 +84193,6 @@ function sameView(a, b) {
 
 // src/daemon/tmux-status.ts
 init_globals();
-
-// src/tmux-status/frames.ts
-init_globals();
-var RANGE_PREFIX = "ccb";
-var RANGE_HASH_HEX = 15 - RANGE_PREFIX.length;
-function rangeOf2(url) {
-  return RANGE_PREFIX + createHash("sha256").update(url).digest("hex").slice(0, RANGE_HASH_HEX);
-}
-var STANDARD_NAMES = [
-  "black",
-  "red",
-  "green",
-  "yellow",
-  "blue",
-  "magenta",
-  "cyan",
-  "white",
-  "brightblack",
-  "brightred",
-  "brightgreen",
-  "brightyellow",
-  "brightblue",
-  "brightmagenta",
-  "brightcyan",
-  "brightwhite"
-];
-function tmuxColor(drawn) {
-  if (drawn === void 0) return "terminal";
-  const spec = ColorSpec.parse(drawn);
-  if (spec.isDefault) return "terminal";
-  switch (spec.type) {
-    case ColorDepth.STANDARD: {
-      const name = spec.number === void 0 ? void 0 : STANDARD_NAMES[spec.number];
-      if (name !== void 0) return name;
-      break;
-    }
-    case ColorDepth.EIGHT_BIT:
-      if (spec.number !== void 0) return `colour${spec.number}`;
-      break;
-    case ColorDepth.TRUECOLOR: {
-      const fixed = spec.fixedValue;
-      if (fixed !== void 0) return fixed.hex;
-      break;
-    }
-    case ColorDepth.DEFAULT:
-    case ColorDepth.WINDOWS:
-      break;
-  }
-  throw new Error(`frames: no tmux colour for ${spec.name}`);
-}
-var ATTRIBUTES2 = {
-  bold: "bold",
-  dim: "dim",
-  italic: "italics",
-  underline: "underscore",
-  strike: "strikethrough",
-  reverse: "reverse",
-  blink: "blink",
-  conceal: "hidden",
-  underline2: "double-underscore",
-  overline: "overline",
-  blink2: null,
-  frame: null,
-  encircle: null
-};
-function escaped(text4) {
-  return text4.replaceAll("#", "##");
-}
-function directive({ fg, bg, attrs = [] }) {
-  const attributes = attrs.map((name) => {
-    const tmux3 = ATTRIBUTES2[name];
-    if (tmux3 === null)
-      throw new Error(`frames: a tmux status line cannot draw ${name} text`);
-    return tmux3;
-  });
-  return `#[${["none", `fg=${tmuxColor(fg)}`, `bg=${tmuxColor(bg)}`, ...attributes].join(",")}]`;
-}
-function encode(frame2) {
-  const links2 = {};
-  const drawn = (run3) => {
-    const text4 = directive(run3) + escaped(run3.text);
-    if (run3.link === void 0) return text4;
-    const range = rangeOf2(run3.link);
-    links2[range] = run3.link;
-    return `#[range=user|${range}]${text4}#[norange]`;
-  };
-  const rows = frame2.rows.map((row2) => mergedRuns(row2).map(drawn).join(""));
-  return { rows, links: links2 };
-}
-function tmuxStatusFrame(frame2) {
-  return laneEncoded(encode, frame2);
-}
-
-// src/daemon/tmux-status.ts
 var MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 var PRIOR_OPTION = "@cc-candybar-status-prior";
 var WROTE_OPTION = "@cc-candybar-status-wrote";
@@ -84158,10 +84406,10 @@ function boundOf2(listKeys) {
   const found2 = BOUND.exec(listKeys);
   return found2 === null ? null : { line: found2[0], command: found2[1] };
 }
-var clickUrl = (name, socket) => addressedLink(
+var clickUrl = (name, socket, mac) => addressedLink(
   name,
   VERB_TMUX_STATUS_CLICK,
-  `${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`
+  `${encodeSegments([socket, mac])}/#{s/%//:pane_id}/#{q:mouse_status_range}`
 );
 var isClickBinding = (bound) => bound?.command.includes(`/${VERB_TMUX_STATUS_CLICK}/`) ?? false;
 function bindingRestorePlan(prior, listKeys) {
@@ -84219,8 +84467,10 @@ var TmuxStatusLines = class {
     );
     entry.unsubscribe = this.deps.subscribe(sessionId2, {
       lane: "tmuxStatus",
-      frame: (bar) => {
-        entry.frame = tmuxStatusFrame(bar);
+      // The bar as the feed encoded it for this lane, its ranges named from
+      // the session's link-id table (src/tmux-status/link-ids.ts).
+      frame: (out) => {
+        entry.frame = out.value;
         this.reconcile(entry.socket);
       },
       refused: (resp) => {
@@ -84286,20 +84536,26 @@ var TmuxStatusLines = class {
     }
   }
   // A click on the range `<range>` of pane `%<n>` on the server `<socket>`
-  // (segments, as the binding's URL carries them): the link the frame the
-  // daemon drew there marks it with.
+  // (segments, as the binding's URL carries them, after the mac the binding
+  // was signed with): the link the frame the daemon drew there marks it with.
   linkAt(value) {
     const segments = segmentsOf2(value);
-    const [socket, pane, range, ...extra] = segments ?? [];
-    if (segments === null || socket === void 0 || pane === void 0 || range === void 0 || extra.length > 0)
+    const [socket, mac, pane, range, ...extra] = segments ?? [];
+    if (segments === null || socket === void 0 || mac === void 0 || pane === void 0 || range === void 0 || extra.length > 0)
       return {
         kind: "refused",
-        reason: `tmux-status-click needs <socket>/<pane>/<range>, got ${JSON.stringify(value)}`
+        reason: `tmux-status-click needs <socket>/<mac>/<pane>/<range>, got ${JSON.stringify(value)}`
+      };
+    if (!this.deps.signer.verifyBinding(socket, mac))
+      return {
+        kind: "refused",
+        reason: `a status-line click on ${JSON.stringify(socket)} whose mac is not this renderer's binding's`
       };
     const held = [...this.held.values()].find(
       (h) => h.socket === socket && h.pane === `%${pane}`
     );
-    const url = held?.frame?.links[range];
+    const links2 = held?.frame?.links;
+    const url = links2 !== void 0 && Object.hasOwn(links2, range) ? links2[range] : void 0;
     return url === void 0 ? {
       kind: "refused",
       reason: `pane %${pane}'s status line draws no link ${range} now`
@@ -84566,7 +84822,7 @@ var TmuxStatusLines = class {
         "if-shell",
         "-F",
         `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`,
-        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(this.deps.name, socket)}`)}`,
+        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(this.deps.name, socket, this.deps.signer.signBinding(socket))}`)}`,
         ...prior === null ? [] : [prior.command]
       ],
       ["set-option", "-g", BINDING_OPTION, JSON.stringify(record2)]
@@ -85701,6 +85957,13 @@ function createDaemon(inputs) {
     // gather-and-renderer.md, section 17): a click on a row this renderer
     // holds is resolved to this renderer's socket from the name alone.
     name: home.name,
+    signer: inputs.linkSigner,
+    log
+  });
+  const linkIds = linkIdAllocator({
+    file: paths2.linkIds,
+    clock,
+    retryMs: FEED_PERIODS.still,
     log
   });
   const frameFeeds = new FrameFeeds({
@@ -85723,6 +85986,7 @@ function createDaemon(inputs) {
     watching: () => paneVisibility.follow(),
     refreshes: () => refreshLedger.totals(),
     periods: FEED_PERIODS,
+    encoders: laneEncoders(linkIds),
     clock,
     instant,
     log
@@ -85951,6 +86215,7 @@ function createDaemon(inputs) {
     laneSetups,
     tmuxStatusLines,
     frameFeeds,
+    linkIds,
     renderWarnings,
     renderCache,
     recorder,
@@ -86005,6 +86270,7 @@ function createDaemon(inputs) {
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
         ["frameFeeds close", () => frameFeeds.close()],
+        ["linkIds close", () => linkIds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],
         ["updateWatch close", () => updateWatch.close()],
         ["binaryWatch close", () => binaryWatch.close()],
@@ -86877,26 +87143,30 @@ var import_node_path51 = __toESM(require_path_browserify(), 1);
 init_globals();
 var LINK_KEY_BYTES = 32;
 var MAC_SPELLING = /^[0-9a-f]{64}$/;
-function digest(key, fields2) {
-  return createHmac("sha256", key).update(
-    JSON.stringify([
-      fields2.sessionId,
-      fields2.action,
-      fields2.declaration,
-      fields2.evaluated
-    ])
-  ).digest();
+function digest(key, signed) {
+  return createHmac("sha256", key).update(JSON.stringify(signed)).digest();
 }
+var linkFields2 = (fields2) => [
+  fields2.sessionId,
+  fields2.action,
+  fields2.declaration,
+  fields2.evaluated
+];
+var bindingFields = (socket) => [
+  VERB_TMUX_STATUS_CLICK,
+  socket
+];
 function linkSigner(key) {
   if (key.length !== LINK_KEY_BYTES) {
     throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
   }
+  const sign = (signed) => digest(key, signed).toString("hex");
+  const verify = (signed, mac) => MAC_SPELLING.test(mac) && timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, signed));
   return {
-    sign: (fields2) => digest(key, fields2).toString("hex"),
-    verify: (fields2, mac) => {
-      if (!MAC_SPELLING.test(mac)) return false;
-      return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
-    }
+    sign: (fields2) => sign(linkFields2(fields2)),
+    verify: (fields2, mac) => verify(linkFields2(fields2), mac),
+    signBinding: (socket) => sign(bindingFields(socket)),
+    verifyBinding: (socket, mac) => verify(bindingFields(socket), mac)
   };
 }
 
@@ -86909,7 +87179,9 @@ function linkSignerFromKeyFile(file) {
   const loaded = () => signer ??= readOrCreate(file);
   return {
     sign: (fields2) => loaded().sign(fields2),
-    verify: (fields2, mac) => loaded().verify(fields2, mac)
+    verify: (fields2, mac) => loaded().verify(fields2, mac),
+    signBinding: (socket) => loaded().signBinding(socket),
+    verifyBinding: (socket, mac) => loaded().verifyBinding(socket, mac)
   };
 }
 function readOrCreate(file) {

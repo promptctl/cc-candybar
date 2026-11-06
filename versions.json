@@ -2,67 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-640",
-      "ref": "refs/pull/640/merge",
-      "sha": "26ea72dd2dabc5cf6aebdeba4a1a7e50bf01ec04",
-      "timestamp": "2026-11-06T13:09:52.923Z",
-      "commits": [
-        {
-          "sha": "26ea72dd2dabc5cf6aebdeba4a1a7e50bf01ec04",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:09:01Z",
-          "message": "Merge b2758a3914f9f974f5ceace69ed3c60961c94007 into 92b37b434431196653866fb703390e57bf15d948\n"
-        },
-        {
-          "sha": "b2758a3914f9f974f5ceace69ed3c60961c94007",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T06:08:50-07:00",
-          "message": "fix(links): a status-row click carries the mac its binding was signed with, since a range id is a counter anyone can guess (candybar-gather-renderer-76bb.b2l.e1n)\n\nAny web page can open a cc-candybar:// URL, and a status-row click resolves\nto a signed link the row draws, so with counter ids a page could run any\naction on the row. The binding now carries the link key's mac over its\nserver's socket, and linkAt refuses a click without it before resolving\nthe range; a range resolves only to the frame's own entries. Spec section\n18 carries the mac in the binding. A closed allocator issues no id and\nwrites nothing, and a block that would pass the last count is a fault, not\na file its own reader refuses.\n"
-        },
-        {
-          "sha": "e9132cb9e70bb3d1932d6e4b1463b0159df49827",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T05:55:29-07:00",
-          "message": "fix(links): a status row's table evicts once a frame is drawn, never a link the frame holds (candybar-gather-renderer-76bb.b2l.e1n)\n\nA row of more links than the cap kept evicting its own earlier links, so\nevery frame minted them again. The cap's comment says what it is for: a\nclick resolves against the frame the row last drew, not the table. The\ninventory docs stop naming the digest and the old tmuxStatusFrame call.\n"
-        },
-        {
-          "sha": "7c49d1b449f135002ab492ebb816a36c99b882f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T05:51:22-07:00",
-          "message": "fix(links): a still row drawn while the counter was faulted gets its ranges back; the count is written through the one atomic write, flushed before its rename (candybar-gather-renderer-76bb.b2l.e1n)\n\nA frame is unchanged only when every lane encodes it as it did the last,\nsince the tmux status line's encoding reads ids the answers do not carry.\nwriteAtomic fsyncs before renaming, so a crash leaves the old file or the\nnew one, never an empty one. The reused stat names what it counts, and the\ninventory docs stop naming the digest and the per-subscriber encode.\n"
-        },
-        {
-          "sha": "44b4143b48139bf7ec2063ac1dee064c97383a16",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T05:41:36-07:00",
-          "message": "feat(links): a tmux range id is ccb plus a base36 link id from a counter in the home's state, held per session and surface and minted once a frame; the URL digest goes (candybar-gather-renderer-76bb.b2l.e1n)\n\n- A feed encodes each lane once a frame through one encoder per (session,\n  lane), so the tmux row and `frames --lane tmuxStatus` share one minting.\n- The tmux lane's encoder holds an LRU table keyed by the link's URL (cap 256):\n  a redraw reuses its id, so an animating row mints nothing.\n- The home's counter reserves ids a block at a time (hi/lo), so a restarted\n  renderer starts past every id the last one issued.\n- A counter fault is every bar's warning; its retry is the allocator's own\n  timer, one attempt a still period, so it clears with nothing minting.\n- Stats gain linkIds { minted, reused, evicted, reservations, faults }.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f62952f2c7273142b5ad4581bd6d5f05bd29044f",
-      "timestamp": "2026-11-06T12:28:22.826Z",
+      "sha": "0e482bd299f59cc7c9dfc947682469722309833d",
+      "timestamp": "2026-11-06T13:18:31.029Z",
       "commits": [
         {
-          "sha": "f62952f2c7273142b5ad4581bd6d5f05bd29044f",
+          "sha": "0e482bd299f59cc7c9dfc947682469722309833d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T05:27:36-07:00",
-          "message": "fix(facts): a recording replays a session's picks and open menus: each draw carries the state it read (candybar-gather-renderer-76bb.6pj.gs4) (#639)\n\n* fix(facts): a recording replays a session's picks and open menus: each draw carries the state it read (candybar-gather-renderer-76bb.6pj.gs4)\n\nA recording carried the session's documents and requests but not what its\nclicks left, so a replay drew every pick absent, every menu closed, both\nhistories empty and no closing flash.\n\nEach draw line now carries the session's draw state: the store's values and\nrevision for the session, the settings history's and back history's depths,\nand when its menus' idle period began. The revision crosses as itself because\nframe memory keeps the last frame only while it holds; the idle instant is the\none the draw was handed, which the daemon's draw and the seam rig both read\nthrough one MenuIdle method that hands, draws and observes. The replay\nrestores each draw's state before drawing it. The recording format is v3.\n\n* fix(facts): a recorded draw state the store could not have held is refused; a replayed draw whose depths held moves nothing (candybar-gather-renderer-76bb.6pj.gs4)\n\n* fix(facts): a session the store's file holds empty is not taken up, so a recorded state holds the store's revision rule; the replay restores under its view's session (candybar-gather-renderer-76bb.6pj.gs4)\n\n* fix(facts): the replay's depths compare every history field; the design states what a draw line carries (candybar-gather-renderer-76bb.6pj.gs4)"
+          "timestamp": "2026-11-06T06:17:45-07:00",
+          "message": "feat(links): a tmux range id is ccb plus a base36 link id from a counter in the home's state; the URL digest goes (candybar-gather-renderer-76bb.b2l.e1n) (#640)\n\n* feat(links): a tmux range id is ccb plus a base36 link id from a counter in the home's state, held per session and surface and minted once a frame; the URL digest goes (candybar-gather-renderer-76bb.b2l.e1n)\n\n- A feed encodes each lane once a frame through one encoder per (session,\n  lane), so the tmux row and `frames --lane tmuxStatus` share one minting.\n- The tmux lane's encoder holds an LRU table keyed by the link's URL (cap 256):\n  a redraw reuses its id, so an animating row mints nothing.\n- The home's counter reserves ids a block at a time (hi/lo), so a restarted\n  renderer starts past every id the last one issued.\n- A counter fault is every bar's warning; its retry is the allocator's own\n  timer, one attempt a still period, so it clears with nothing minting.\n- Stats gain linkIds { minted, reused, evicted, reservations, faults }.\n\n* fix(links): a still row drawn while the counter was faulted gets its ranges back; the count is written through the one atomic write, flushed before its rename (candybar-gather-renderer-76bb.b2l.e1n)\n\nA frame is unchanged only when every lane encodes it as it did the last,\nsince the tmux status line's encoding reads ids the answers do not carry.\nwriteAtomic fsyncs before renaming, so a crash leaves the old file or the\nnew one, never an empty one. The reused stat names what it counts, and the\ninventory docs stop naming the digest and the per-subscriber encode.\n\n* fix(links): a status row's table evicts once a frame is drawn, never a link the frame holds (candybar-gather-renderer-76bb.b2l.e1n)\n\nA row of more links than the cap kept evicting its own earlier links, so\nevery frame minted them again. The cap's comment says what it is for: a\nclick resolves against the frame the row last drew, not the table. The\ninventory docs stop naming the digest and the old tmuxStatusFrame call.\n\n* fix(links): a status-row click carries the mac its binding was signed with, since a range id is a counter anyone can guess (candybar-gather-renderer-76bb.b2l.e1n)\n\nAny web page can open a cc-candybar:// URL, and a status-row click resolves\nto a signed link the row draws, so with counter ids a page could run any\naction on the row. The binding now carries the link key's mac over its\nserver's socket, and linkAt refuses a click without it before resolving\nthe range; a range resolves only to the frame's own entries. Spec section\n18 carries the mac in the binding. A closed allocator issues no id and\nwrites nothing, and a block that would pass the last count is a fault, not\na file its own reader refuses."
         },
         {
-          "sha": "09bf7a07c277d77ba521aba00c7d13b8cc3bb634",
+          "sha": "92b37b434431196653866fb703390e57bf15d948",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T12:10:57Z",
-          "message": "chore(release): set `package.json` to 1.201.0 [skip ci]\n\n## [1.201.0](https://github.com/promptctl/cc-candybar/compare/v1.200.1...v1.201.0) (2026-11-06)\n\n### ⚠ BREAKING CHANGES\n\n* **links:** one link grammar: a link that names no renderer is refused naming its form (candybar-gather-renderer-76bb.b2l.eul) (#638)\n\n### Features\n\n* **links:** one link grammar: a link that names no renderer is refused naming its form (candybar-gather-renderer-76bb.b2l.eul) ([#638](https://github.com/promptctl/cc-candybar/issues/638)) ([5b7989a](https://github.com/promptctl/cc-candybar/commit/5b7989a64a1f6bc3a423a4869e89dbf55505a6f4))\n"
+          "timestamp": "2026-11-06T12:40:22Z",
+          "message": "chore(release): set `package.json` to 1.201.1 [skip ci]\n\n## [1.201.1](https://github.com/promptctl/cc-candybar/compare/v1.201.0...v1.201.1) (2026-11-06)\n\n### Bug Fixes\n\n* **facts:** a recording replays a session's picks and open menus: each draw carries the state it read (candybar-gather-renderer-76bb.6pj.gs4) ([#639](https://github.com/promptctl/cc-candybar/issues/639)) ([f62952f](https://github.com/promptctl/cc-candybar/commit/f62952f2c7273142b5ad4581bd6d5f05bd29044f))\n"
         }
       ]
     },
