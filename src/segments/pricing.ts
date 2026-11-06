@@ -184,7 +184,13 @@ export function livePricing(owner: LiveOwner): Pricing {
     table: () =>
       owner.closing.aborted
         ? Promise.resolve(OFFLINE_PRICING_DATA)
-        : (loading ??= loadTable(owner)),
+        : (loading ??= loadTable(owner).catch((e: unknown) => {
+            // [LAW:single-enforcer] The one place "never rejects" holds: a
+            // throw anywhere in the load is kept as the bundled rates, and
+            // said, so a fold never fails on its price.
+            owner.log("error", `pricing load threw: ${String(e)}`);
+            return OFFLINE_PRICING_DATA;
+          })),
   };
 }
 

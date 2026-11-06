@@ -21,12 +21,15 @@ interface Asked {
   answer(body: unknown): void;
 }
 let asked: Asked[] = [];
+// A `get` that throws as it is called, as node's does on options it refuses.
+let getThrows: Error | null = null;
 
 jest.mock("node:https", () => ({
   get: (
     options: Asked["options"],
     onResponse: (response: Readable) => void,
   ) => {
+    if (getThrows !== null) throw getThrows;
     const request = Object.assign(new EventEmitter(), {
       end: () => {},
       destroy: () => {},
@@ -75,6 +78,7 @@ const live = () =>
   });
 beforeEach(() => {
   asked = [];
+  getThrows = null;
   warnings.length = 0;
   closing = new AbortController();
   cacheRoot = jestTmpDir("cache");
@@ -153,6 +157,13 @@ describe("a daemon's pricing", () => {
     expect(fs.existsSync(path.join(cacheRoot, "usage", "pricing.json"))).toBe(
       false,
     );
+  });
+
+  test("a load that throws prices by the bundled rates, and says so", async () => {
+    getThrows = new Error("bad options");
+
+    expect(await live().table()).toEqual(await offlinePricing().table());
+    expect(warnings).toEqual(["pricing load threw: Error: bad options"]);
   });
 
   test("after the owner's close, no load starts", async () => {

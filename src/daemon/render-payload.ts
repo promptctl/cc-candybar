@@ -959,9 +959,10 @@ export function settledLanes(
 }
 
 // [LAW:dataflow-not-control-flow] The one option set every session reads git
-// at. The facts document is total, so a field is never left unread for want of
-// a template that reads it: every invocation a field costs is made, and a
-// repository's state is one value however many configs draw it.
+// at. The facts document is total, so no field a template can read is left
+// unread for want of a layout that places it, and a repository's state is one
+// value however many configs draw it. The tag is not among them: no field of
+// the document carries it.
 const GIT_READS: GitInfoOptions = {
   showSha: true,
   showWorkingTree: true,
@@ -1053,10 +1054,12 @@ export function readingsOf(inputs: PayloadInputs): Readings {
   const { hookData, deps } = inputs;
   const sessionId = hookData.session_id;
   const lanes = deps.lanes();
-  // [LAW:no-silent-failure] A read that throws is a bug in its owner: logged
-  // here, by the read that met it — a frame's included, whose failures go
-  // nowhere else — and that lane's failure, so it costs its own cells, never
-  // the bar. A lane whose refresh threw is that failure (RefreshFaults).
+  // [LAW:no-silent-failure][LAW:single-enforcer] A read that throws is a bug
+  // in its owner: logged here, the one site a read's throw is logged — a
+  // frame's included, whose failures go nowhere else — and that lane's
+  // failure, so it costs its own cells, never the bar. A lane whose refresh
+  // threw is that failure (RefreshFaults); a refresh that answered failed was
+  // logged by its owner, which met it.
   const read = <T>(lane: RefreshLane, value: () => T): T | Outcome<never> => {
     const fault = deps.faults.of(sessionId, lane);
     if (fault !== undefined) return fault;
