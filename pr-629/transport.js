@@ -23969,6 +23969,9 @@ function clickErrorAt(state, sessionId2, at, render3) {
   const kind = eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, render3);
   return kind === "over" ? { kind } : { kind, error: last2 };
 }
+function toAnswer(hold2) {
+  return (hold2.kind === "held" || hold2.kind === "owed") && !hold2.error.answered ? hold2.error : null;
+}
 function recordOf(raw) {
   let value;
   try {
@@ -65988,6 +65991,13 @@ var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
   ...EARLIER_URL_FRAME_VERSIONS,
   URL_FRAME_VERSION
 ]);
+var MAX_RECORD_SECONDS = Math.floor((2 ** 31 - 1) / 1e3) - 60;
+function parseRecordSeconds(n) {
+  return typeof n === "number" && n > 0 && n <= MAX_RECORD_SECONDS ? { ok: true, seconds: n } : {
+    ok: false,
+    problem: `is not a span of seconds above 0 and at most ${MAX_RECORD_SECONDS}`
+  };
+}
 var MAX_FRAME_BYTES = 16 * 1024 * 1024;
 function sanitizeClient(v) {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
@@ -72326,21 +72336,6 @@ function daemonGates() {
   });
 }
 
-// src/daemon/foundations/render-origin.ts
-init_globals();
-function encodeRenderOrigin({
-  projectDir,
-  cwd: cwd2,
-  target
-}) {
-  return JSON.stringify({
-    projectDir,
-    cwd: cwd2,
-    configFile: target.path ?? null,
-    source: target.source
-  });
-}
-
 // src/dsl/render.ts
 init_globals();
 
@@ -76706,12 +76701,14 @@ function sessionRecorder(views, log) {
   };
   const attach = (sessionId2, rec) => {
     const view = views.sessionView(sessionId2);
-    rec.detach = view === null ? () => {
-    } : reaction(
-      () => view.followed.stamped(),
-      (line) => write(sessionId2, rec, { kind: "facts", ...line }),
-      { fireImmediately: true }
-    );
+    if (view === null) {
+      rec.detach = () => {
+      };
+      return;
+    }
+    const facts = (line) => write(sessionId2, rec, { kind: "facts", ...line });
+    rec.detach = reaction(() => view.followed.stamped(), facts);
+    facts(view.followed.stamped());
   };
   return {
     record(session, sink) {
@@ -76770,7 +76767,7 @@ function settleRequest(recorder, view, at) {
   recorder.arrived(view.sessionId, { at, request: view.facts() });
   return view.settle(at);
 }
-function recordToFile(recorder, clock, session, path43, seconds) {
+function recordToFile(recorder, clock, session, path43, seconds, left) {
   return new Promise((resolve, reject2) => {
     let fd;
     try {
@@ -76788,22 +76785,32 @@ function recordToFile(recorder, clock, session, path43, seconds) {
     let stop2 = () => {
     };
     const clearTimer = clock.after(seconds * 1e3, () => stop2());
+    const leave = () => stop2();
     const sink = {
+      // A whole line or the write's error: one write call may take part of it.
       write: (line) => {
-        writeSync(fd, formatLine(line));
+        appendFileSync(fd, formatLine(line));
         lines2++;
         if (line.kind === "request") requests++;
       },
       end: (failure) => {
         clearTimer();
-        closeSync(fd);
-        if (failure === null) resolve({ path: path43, lines: lines2, requests });
-        else reject2(new Error(`writing ${path43}: ${String(failure)}`));
+        left.removeEventListener("abort", leave);
+        let ended = failure;
+        try {
+          closeSync(fd);
+        } catch (e) {
+          ended ??= e;
+        }
+        if (ended === null) resolve({ path: path43, lines: lines2, requests });
+        else reject2(new Error(`writing ${path43}: ${String(ended)}`));
       }
     };
+    left.addEventListener("abort", leave, { once: true });
     try {
       stop2 = recorder.record(session, sink);
     } catch (e) {
+      left.removeEventListener("abort", leave);
       clearTimer();
       closeSync(fd);
       unlinkSync(path43);
@@ -76828,7 +76835,7 @@ var RENDER_ANSWERS = {
 function renderFrame(parts, sessionId2, fps, at) {
   const { clock, frameFeeds } = parts;
   const started2 = clock.monotonic();
-  const facts = [];
+  const facts = [["sid", sessionId2]];
   try {
     var _stack = [];
     try {
@@ -76923,11 +76930,8 @@ function lanesAt(parts, origin, sessionId2) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function requestFacts(req, at, facts) {
-  noteFacts(facts, {
-    sid: req.sessionId,
-    at: at.toFixed(3)
-  });
+function requestFacts(req, at, facts, renderer) {
+  noteFacts(facts, { renderer, at: at.toFixed(3) });
   const hints = req.hints;
   const refused2 = refusedHints(req, hints);
   const hintsError = refusedHintsError(refused2);
@@ -76955,7 +76959,7 @@ function setUpRender(parts, arrived3, at, facts) {
       ...dir !== void 0 && import_node_path34.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
-  const hintsError = requestFacts(req, at, facts);
+  const hintsError = requestFacts(req, at, facts, parts.rendererName);
   noteFacts(facts, { encoding: req.encoding });
   const origin = req.requested;
   const hold2 = renderCache.holdSession(
@@ -76977,7 +76981,7 @@ function setUpFrame(parts, sessionId2, at, facts) {
   const req = hold2.view.facts();
   let hintsError;
   try {
-    hintsError = requestFacts(req, at, facts);
+    hintsError = requestFacts(req, at, facts, parts.rendererName);
   } catch (e) {
     hold2[Symbol.dispose]();
     throw e;
@@ -77099,6 +77103,7 @@ function drawRender(parts, setup, drawing2) {
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
   noteFacts(facts, sourcesFactOf(document.sources));
   noteFacts(facts, {
+    factsSeq: String(document.seq),
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
     // [LAW:one-source-of-truth] The closure the payload's git fact was read
@@ -77251,28 +77256,11 @@ function drawRender(parts, setup, drawing2) {
     },
     evaluated: evaluated2,
     cellBreaks,
-    clickShown,
+    answersClick: toAnswer(clickHold),
     pipeShown,
     delivered,
     lanes
   };
-}
-function recordRequest(parts, req) {
-  const { sessionState } = parts;
-  const sessionId2 = req.sessionId;
-  const { client: _client, ...recorded } = req.hints;
-  const hintRecord = JSON.stringify(recorded);
-  if (sessionState.get(sessionId2, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
-    sessionState.set(sessionId2, SESSION_CLIENT_HINTS_KEY, hintRecord);
-  }
-  const origin = encodeRenderOrigin(req.requested);
-  if (sessionState.get(sessionId2, SESSION_RENDER_ORIGIN_KEY) !== origin) {
-    sessionState.set(sessionId2, SESSION_RENDER_ORIGIN_KEY, origin);
-  }
-}
-async function answerRequest(parts, req, at, waitEndsAt, facts) {
-  recordRequest(parts, req);
-  return drawAnswer(parts, req, at, waitEndsAt, facts);
 }
 function arrived2(parts, req, lanes) {
   const { laneSetups, tmuxStatusLines } = parts;
@@ -77337,7 +77325,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
       ended,
       refreshed: refreshedFact(settling.refreshed)
     });
-    const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
+    const { drawn, answersClick, pipeShown, delivered, lanes } = drawRender(
       parts,
       setup,
       ANSWERING
@@ -77355,7 +77343,7 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     return {
       resp,
       motion: drawn.body.motion,
-      clickShown,
+      answersClick,
       pipeShown,
       delivered
     };
@@ -77403,18 +77391,59 @@ function describeEffect(effect) {
   return describe4(effect);
 }
 
+// src/daemon/foundations/render-origin.ts
+init_globals();
+function encodeRenderOrigin({
+  projectDir,
+  cwd: cwd2,
+  target
+}) {
+  return JSON.stringify({
+    projectDir,
+    cwd: cwd2,
+    configFile: target.path ?? null,
+    source: target.source
+  });
+}
+
 // src/daemon/apply.ts
 var NO_EFFECTS = [];
+var turnWaits = (facts) => ({
+  waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
+  gone: () => false
+});
 var ARMS = {
-  // [LAW:single-enforcer] exception: the request takes no turn yet, so its
-  // writes (the session's render origin and client hints) still land outside
-  // one. They join the turn with the request's own (the next story of this
-  // lane), now that a click's launches no longer hold it.
-  request: async ({ req, at, waitEndsAt, facts }, parts) => ({
-    answer: await answerRequest(parts, req, at, waitEndsAt, facts),
-    effects: NO_EFFECTS,
-    facts: []
-  }),
+  // [LAW:single-enforcer] The request's writes take their turn as a click's
+  // do: what it said of its client and the config inputs it named land in one
+  // batch between the journal's begin and commit, and the draw begins once
+  // the turn is over, so it never reads the request's hints beside a click
+  // the turn was waiting on. The turn waits behind every turn, daemon-wide:
+  // a click's head gather runs ahead of its turn and delays no request, but a
+  // gather inside a turn (a doctor step after a dispatch's first, or one
+  // repeated for a config that changed) holds every session's request for as
+  // long as its probes run, each bounded by its launch timeout, and that wait
+  // is spent from the request's budget. The same gather is the one way a
+  // draw, this one or a feed's, reads a click half landed: a click that takes
+  // its turn while the draw waits on its sources has landed its first write
+  // and parked before its last. Its wait and the revision its own turn left
+  // go on the request's line, the render event, which is its record and opens
+  // with the session the edge noted.
+  request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw: draw2 }) => {
+    const revision = await verbCtx.journalTurns.take(
+      "request",
+      turnWaits(facts),
+      async () => {
+        recordRequest(verbCtx.sessionState, req);
+        return verbCtx.sessionState.revision(req.sessionId);
+      }
+    );
+    noteFacts(facts, { revision: String(revision) });
+    return {
+      answer: await draw2(req, at, waitEndsAt, facts),
+      effects: NO_EFFECTS,
+      facts: []
+    };
+  },
   // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
   // is here, so the timer cannot close a menu under any click Apply carries.
   // The turn hands its effects over once it has committed (`described`), and
@@ -77453,10 +77482,7 @@ var ARMS = {
     const facts = [];
     await verbCtx.journalTurns.take(
       "effect-done",
-      {
-        waited: (ms) => facts.push(["turnWait", `${ms}ms`]),
-        gone: () => false
-      },
+      turnWaits(facts),
       async () => {
         if (outcome.kind === "failed" && of.session !== null) {
           holdClickError(
@@ -77469,8 +77495,35 @@ var ARMS = {
       }
     );
     return { answer: void 0, effects: NO_EFFECTS, facts };
+  },
+  // [LAW:single-enforcer] The one write after a request's answer went out: the
+  // click error it carried is marked answered (src/daemon/click-error.ts), in
+  // a turn as every write is, so no frame reads the mark beside a click's
+  // writes half landed.
+  answered: async ({ session, error }, { verbCtx }) => {
+    const facts = [];
+    await verbCtx.journalTurns.take(
+      "answered",
+      turnWaits(facts),
+      async () => answeredClickError(verbCtx.sessionState, session, error)
+    );
+    return { answer: void 0, effects: NO_EFFECTS, facts };
   }
 };
+function recordRequest(state, req) {
+  const { client: _client, ...recorded } = req.hints;
+  const said = [
+    { key: SESSION_CLIENT_HINTS_KEY, value: JSON.stringify(recorded) },
+    {
+      key: SESSION_RENDER_ORIGIN_KEY,
+      value: encodeRenderOrigin(req.requested)
+    }
+  ];
+  state.setBatch(
+    req.sessionId,
+    said.filter(({ key, value }) => state.get(req.sessionId, key) !== value)
+  );
+}
 async function apply(event, parts) {
   const arm2 = ARMS[event.kind];
   const applied2 = await arm2(event, parts);
@@ -77523,6 +77576,7 @@ var LINE = {
   request: () => null,
   click: (_event, { answer: answer2 }) => answer2 === null ? APPLIED : refused(answer2),
   "menu-idle": () => APPLIED,
+  answered: () => APPLIED,
   "effect-done": ({ effect, outcome }) => ({
     level: OUTCOME_LEVEL[outcome.kind],
     facts: [
@@ -77536,8 +77590,21 @@ var ORIGIN = {
   request: ({ req }) => ({ verb: "request", session: req.sessionId }),
   click: ({ verb, pending: pending2 }) => ({ verb: verb.name, session: pending2 }),
   "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
-  "effect-done": ({ of }) => of
+  "effect-done": ({ of }) => of,
+  answered: ({ session }) => ({ verb: "answered", session })
 };
+function sayUnapplied(log, kind, said, error) {
+  log(
+    error instanceof DaemonClosing ? "info" : "error",
+    `apply: ${kind} not applied (${said}): ${inspect(error)}`
+  );
+}
+function applyUnanswered(event, parts, said) {
+  return apply(event, parts).then(
+    () => void 0,
+    (e) => sayUnapplied(parts.log, event.kind, said, e)
+  );
+}
 function originOf(event) {
   const origin = ORIGIN[event.kind];
   return origin(event);
@@ -77572,14 +77639,11 @@ function performAll(parts, of, effects) {
   return parts.verbCtx.journalTurns.performing(of.session, async () => {
     for (const effect of effects) {
       const outcome = await perform2(effect, parts);
-      try {
-        await apply({ kind: "effect-done", of, effect, outcome }, parts);
-      } catch (e) {
-        parts.log(
-          e instanceof DaemonClosing ? "info" : "error",
-          `apply: effect-done not applied (${describeEffect(effect)} ${outcome.kind}: ${outcome.said}): ${inspect(e)}`
-        );
-      }
+      await applyUnanswered(
+        { kind: "effect-done", of, effect, outcome },
+        parts,
+        `${describeEffect(effect)} ${outcome.kind}: ${outcome.said}`
+      );
     }
   });
 }
@@ -77887,13 +77951,14 @@ function parseRecordRequest(req) {
       problem: `record's path is not an absolute path: ${JSON.stringify(path43)}`
     };
   }
-  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) {
+  const span = parseRecordSeconds(seconds);
+  if (!span.ok) {
     return {
       ok: false,
-      problem: `record's seconds is not a positive number: ${JSON.stringify(seconds)}`
+      problem: `record's seconds ${JSON.stringify(seconds)} ${span.problem}`
     };
   }
-  return { ok: true, session: id2.id, path: path43, seconds };
+  return { ok: true, session: id2.id, path: path43, seconds: span.seconds };
 }
 function recording(parts, req) {
   const parsed2 = parseRecordRequest(req);
@@ -77901,7 +77966,14 @@ function recording(parts, req) {
   const { session, path: path43, seconds } = parsed2;
   return {
     kind: "held",
-    start: () => recordToFile(parts.recorder, parts.clock, session, path43, seconds).then(
+    start: (left) => recordToFile(
+      parts.recorder,
+      parts.clock,
+      session,
+      path43,
+      seconds,
+      left
+    ).then(
       (recorded) => stay({ ok: true, recorded }),
       (e) => stay({
         ok: false,
@@ -77970,7 +78042,6 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     effectSessions,
     menuIdle,
     journalTurns,
-    sessionState,
     tmuxStatusLines,
     watcherRegistry,
     limits,
@@ -78019,9 +78090,9 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
         sessionState: {
-          sessions: sessionState.size(),
-          observers: sessionState.observers(),
-          revision: sessionState.latestRevision()
+          sessions: parts.sessionGauges.size(),
+          observers: parts.sessionGauges.observers(),
+          revision: parts.sessionGauges.latestRevision()
         },
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
@@ -78063,6 +78134,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       order2
     );
     if (checked.ok) {
+      noteFacts(facts, { sid: checked.req.sessionId });
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
@@ -78085,21 +78157,28 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       },
       parts
     ).then(
-      ({ answer: { resp, motion, clickShown, pipeShown, delivered } }) => {
+      ({
+        answer: { resp, motion, answersClick, pipeShown, delivered }
+      }) => {
         sighted(checked.req, motion);
         return {
           outcome: { kind: "ok" },
           resp,
           // [LAW:single-enforcer] An answer carrying the click error or the
           // launcher's pipe event that reaches its client is the one that
-          // delivered it (src/utils/event-hold.ts).
+          // delivered it (src/utils/event-hold.ts). The click error's mark
+          // is a write, so it is an event the arm makes in a turn.
           delivered: () => {
             delivered();
-            if (clickShown !== null)
-              answeredClickError(
-                sessionState,
-                checked.req.sessionId,
-                clickShown
+            if (answersClick !== null)
+              void applyUnanswered(
+                {
+                  kind: "answered",
+                  session: checked.req.sessionId,
+                  error: answersClick
+                },
+                parts,
+                `sid=${checked.req.sessionId}`
               );
             if (pipeShown !== null)
               parts.launcher.answeredPipeEvent(pipeShown);
@@ -78109,7 +78188,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       (error) => {
         sighted(checked.req, "failed");
         return {
-          outcome: { kind: "threw", error },
+          outcome: daemonOutcome(error),
           resp: renderFailed(error),
           delivered: NOTHING_DELIVERED
         };
@@ -78312,12 +78391,17 @@ async function clickRan(click3) {
   try {
     return await click3();
   } catch (error) {
-    if (error instanceof BadVerbArgs)
-      return { kind: "bad-request", problems: [error.message] };
-    if (error instanceof DaemonClosing) return { kind: "closing", error };
-    if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
-    return { kind: "threw", error };
+    return thrownOutcome(error);
   }
+}
+function thrownOutcome(error) {
+  if (error instanceof BadVerbArgs)
+    return { kind: "bad-request", problems: [error.message] };
+  if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
+  return daemonOutcome(error);
+}
+function daemonOutcome(error) {
+  return error instanceof DaemonClosing ? { kind: "closing", error } : { kind: "threw", error };
 }
 var VERB_FACT = {
   link: "verb",
@@ -85428,7 +85512,12 @@ function createDaemon(inputs) {
   });
   const probe2 = inputs.probe(launcher);
   const storage = inputs.storage(log);
-  const sessionState = new SessionState(storage.session);
+  const store = new SessionState(storage.session);
+  const journalTurns = new JournalTurns({
+    log,
+    monotonic: () => clock.monotonic()
+  });
+  const sessionState = inputs.sessionWrites(store, journalTurns);
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -85490,16 +85579,16 @@ function createDaemon(inputs) {
     close: async (session, idle) => {
       await apply({ kind: "menu-idle", session, idle }, parts);
     },
-    failed: (sessionId2, error) => log(
-      error instanceof DaemonClosing ? "info" : "error",
-      `menu-idle: close failed (session=${sessionId2}): ${inspect(error)}`
-    )
+    failed: (sessionId2, error) => sayUnapplied(log, "menu-idle", `session=${sessionId2}`, error)
   });
   const linkSigner2 = inputs.linkSigner;
   const runs = new Runs({
     supersede: (storage2, sessionId2) => managedStorage.supersede(storage2, sessionId2),
     launch: launcher.launch,
-    state: sessionState,
+    // [LAW:single-enforcer] exception: a run's ending holds a click error
+    // outside any turn, so it writes the store and not the view; it becomes an
+    // effect-done in the next story of this lane.
+    state: store,
     log,
     now: instant,
     clock
@@ -85519,7 +85608,9 @@ function createDaemon(inputs) {
       home,
       preload: stableAttachPreload(bundle.path, host)
     },
-    state: sessionState,
+    // [LAW:single-enforcer] exception: as a run's ending, a lane setup's
+    // failure is held outside any turn, so it writes the store.
+    state: store,
     log,
     now: instant,
     defer: (run3) => void clock.defer(run3)
@@ -85707,10 +85798,6 @@ function createDaemon(inputs) {
     onApplied: () => binaryWatch.checkNow(),
     log
   });
-  const journalTurns = new JournalTurns({
-    log,
-    monotonic: () => clock.monotonic()
-  });
   const verbCtx = {
     gates,
     sessionState,
@@ -85784,6 +85871,9 @@ function createDaemon(inputs) {
     fileEvents,
     payloadProviders,
     sessionState,
+    sessionGauges: store,
+    rendererName: home.name,
+    draw: (req, at, waitEndsAt, facts) => drawAnswer(parts, req, at, waitEndsAt, facts),
     effectSessions,
     menuIdle,
     journalTurns,
@@ -85867,7 +85957,7 @@ function createDaemon(inputs) {
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => sessionState.close()]
+        ["sessionState close", () => store.close()]
       ];
       for (const [step4, run3] of teardown) {
         try {
@@ -86792,6 +86882,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     storage: (log) => fileStorage(paths2, log, machine),
+    sessionWrites: (store) => store,
     doctorStores: fileStores(paths2.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
