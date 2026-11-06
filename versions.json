@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "dec17fec2a409d867f331d5898b3ab81d111b5ea",
+      "timestamp": "2026-11-06T21:28:20.006Z",
+      "commits": [
+        {
+          "sha": "dec17fec2a409d867f331d5898b3ab81d111b5ea",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:27:21-07:00",
+          "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk) (#646)\n\n* feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n\n* fix(apply): a request's arrival settles in its turn; a queued run is counted (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe lane setups a request's arrival settles were taken off the owed list\nduring the draw and reached the performer only once the draw had answered,\nso a click made during the wait was performed ahead of them, and a draw that\nthrew lost them. The arrival (owed setups and the tmux status line) now\nsettles in the request's turn, measured as a click's switches are, and the\narm answers with the draw under way, so the turn's effects join the\nsession's order as the turn ends.\n\nA run superseded by its click and still waiting behind the session's earlier\neffects shows in the run stats as queued. The lane outcome's comment says\nwhat underway now means, and a write's refusal text is built only when\nrefused.\n\n* fix(apply): a request is drawn once applied; a run's sources resume whatever its launch did (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe request arm no longer draws: `applyRequest` applies the request and then\nbegins its draw, so a request whose apply rejected strands no draw. The\neffects the request's turn described go on its render event.\n\nA run's launch is awaited in a try/finally, so a launcher that throws still\nresumes the run's sources and leaves nothing counted running.\n\nThe lane setup effect is declared by the lane setup owner, which the effect\nunion names from above, so the two no longer import each other.\n\n* fix(apply): a queued lane setup is refused at close; every write asks for its turn first (candybar-gather-renderer-76bb.1dh.9kk)\n\nA lane setup waits in its session's effect order, so one still queued when\nthe daemon closes would start a restart no daemon is left to attach. The\nlane setup owner closes with the daemon and refuses it as the close, as a\nqueued run is. A run the close aborted is answered as the close rather\nthan as a failure that only the teardown's order kept off the bar.\n\nThe store asks for the turn at the top of every public write, before an\nempty batch or a held revision decides that nothing moves, so a write out\nof its turn is refused whatever it would have written."
+        }
+      ]
+    },
+    {
       "version": "pr-653",
       "ref": "refs/pull/653/merge",
       "sha": "b08d207a3f6015c47d5dbbfcb9d6f5876656f638",
@@ -34,71 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T14:07:41-07:00",
           "message": "fix(test): the launch-group abort case reaches its window by what it observes, not a sleep (brandon-menus-sjhy.irc)\n\nThe case means one state: the child ended, its group is gone, and the launch\nhas not yet sampled the group. A 1300 ms sleep aimed at it, so a loaded\nmachine saw the launch's own sample land first and read ok:true.\n\nThe case now launches on a held clock, so the launch samples the group only\nwhen the case advances it. It waits, by condition, for the child's pidfile,\nfor the group's end, and for the launch to have seen the exit, then aborts\nand advances. The holder outside the group, which keeps the child's close\nfrom concluding first, lives until the case removes its directory, not for\n3 s of real time.\n\nThe launcher's owner moves into launcherOn(clock), shared by the beforeEach\nand this case.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-646",
-      "ref": "refs/pull/646/merge",
-      "sha": "5c5878624a343a74ac05368da2a70852c103c900",
-      "timestamp": "2026-11-06T21:17:22.211Z",
-      "commits": [
-        {
-          "sha": "5c5878624a343a74ac05368da2a70852c103c900",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:16:12-07:00",
-          "message": "Merge 8292d0020887a55cfa9e1d8b371b4d427cf05619 into 3b85a8464e84d21d582e674567b70a353a6c3100\n"
-        },
-        {
-          "sha": "8292d0020887a55cfa9e1d8b371b4d427cf05619",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:29:27-07:00",
-          "message": "fix(apply): a queued lane setup is refused at close; every write asks for its turn first (candybar-gather-renderer-76bb.1dh.9kk)\n\nA lane setup waits in its session's effect order, so one still queued when\nthe daemon closes would start a restart no daemon is left to attach. The\nlane setup owner closes with the daemon and refuses it as the close, as a\nqueued run is. A run the close aborted is answered as the close rather\nthan as a failure that only the teardown's order kept off the bar.\n\nThe store asks for the turn at the top of every public write, before an\nempty batch or a held revision decides that nothing moves, so a write out\nof its turn is refused whatever it would have written.\n"
-        },
-        {
-          "sha": "7ffa046c3fa91815038bf4c1a24ef03ebf86a960",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:17:43-07:00",
-          "message": "fix(apply): a request is drawn once applied; a run's sources resume whatever its launch did (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe request arm no longer draws: `applyRequest` applies the request and then\nbegins its draw, so a request whose apply rejected strands no draw. The\neffects the request's turn described go on its render event.\n\nA run's launch is awaited in a try/finally, so a launcher that throws still\nresumes the run's sources and leaves nothing counted running.\n\nThe lane setup effect is declared by the lane setup owner, which the effect\nunion names from above, so the two no longer import each other.\n"
-        },
-        {
-          "sha": "3c244085af6401ae02769a8c7fe7a501d20daee8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:56:21-07:00",
-          "message": "fix(apply): a request's arrival settles in its turn; a queued run is counted (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe lane setups a request's arrival settles were taken off the owed list\nduring the draw and reached the performer only once the draw had answered,\nso a click made during the wait was performed ahead of them, and a draw that\nthrew lost them. The arrival (owed setups and the tmux status line) now\nsettles in the request's turn, measured as a click's switches are, and the\narm answers with the draw under way, so the turn's effects join the\nsession's order as the turn ends.\n\nA run superseded by its click and still waiting behind the session's earlier\neffects shows in the run stats as queued. The lane outcome's comment says\nwhat underway now means, and a write's refusal text is built only when\nrefused.\n"
-        },
-        {
-          "sha": "5f3672cbb0c64260c721b44a7f683c50b3c4d6c7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:35:32-07:00",
-          "message": "feat(apply): session state has one writer; a run and a lane setup are effects (candybar-gather-renderer-76bb.1dh.9kk)\n\nThe session store refuses a write made while no journal turn is held, in\nevery daemon. A turn is synchronous, so a write while one is held is that\nturn's own, and one check at the store's single write path is the whole\nenforcement. The test-only view that refused such writes, its adapter\nseam and the separate gauges field are gone.\n\nThe two writers left outside a turn now report through effect-done:\n\n- A `run` click supersedes its sources in its turn, so they read pending\n  from the click on, and describes the launch as a `run` effect. The\n  performer runs the program behind the session's earlier effects; the\n  run owner answers how it ended and no longer writes the bar.\n- A lane setup is a `lane-setup` effect, settled by the click or the\n  request that owes it and run by the performer. Its own per-session\n  queue and defer are replaced by the performer's per-session order.\n\nThe check command, the demo and the doctor's command line build their\nstore with a holder that always holds, since each is one synchronous run.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "3b85a8464e84d21d582e674567b70a353a6c3100",
-      "timestamp": "2026-11-06T21:13:45.784Z",
-      "commits": [
-        {
-          "sha": "3b85a8464e84d21d582e674567b70a353a6c3100",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T14:12:58-07:00",
-          "message": "test(spawner): signal the trapping program only once it says its trap is set (candybar-testing-ihvy.0hw) (#652)\n\n* test(spawner): signal the trapping program only once it says its trap is set (candybar-testing-ihvy.0hw)\n\n* test(spawner): the contract states that a realised program writes nothing before its trap is set (candybar-testing-ihvy.0hw)\n\n* test(spawner): the system realiser traps every signal a behaviour ignores, before any output (candybar-testing-ihvy.0hw)"
-        },
-        {
-          "sha": "8640ee7cc89cf9582c81417c6d7fe86b92085480",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T21:09:39Z",
-          "message": "chore(release): set `package.json` to 1.205.1 [skip ci]\n\n## [1.205.1](https://github.com/promptctl/cc-candybar/compare/v1.205.0...v1.205.1) (2026-11-06)\n\n### Bug Fixes\n\n* **click:** copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182) ([#650](https://github.com/promptctl/cc-candybar/issues/650)) ([242a73c](https://github.com/promptctl/cc-candybar/commit/242a73c2288bc60ae5b871e410be3d5c45b88c48))\n"
         }
       ]
     },

@@ -23430,7 +23430,7 @@ async function launchWaited(state, opts) {
     const stdout2 = capture(state, opts.category, child.stdout, ends);
     const stderr2 = capture(state, opts.category, child.stderr, ends);
     const output = () => ({ stdout: stdout2.take(), stderr: stderr2.take() });
-    let settled3 = false;
+    let settled4 = false;
     let timer = null;
     let killTimer = null;
     let groupEndTimer = null;
@@ -23441,8 +23441,8 @@ async function launchWaited(state, opts) {
       state.inFlight.delete(onAbort);
     };
     const finish = (deliver) => {
-      if (settled3) return;
-      settled3 = true;
+      if (settled4) return;
+      settled4 = true;
       timer?.();
       killTimer?.();
       groupEndTimer?.();
@@ -23477,7 +23477,7 @@ async function launchWaited(state, opts) {
     const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
     if (group !== void 0) {
       const awaitGroupEnd = (delayMs) => {
-        if (settled3) return;
+        if (settled4) return;
         if (spawner.groupGone(group)) {
           clock.defer(concludeWithGroup);
           return;
@@ -35258,7 +35258,7 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
     const hex3 = own2(pair, side);
     return hex3 === void 0 ? [] : [[hex3, pair[side]]];
   })));
-  const settled3 = new Map([...colors].filter((hex3) => !rgba.has(hex3)).map((hex3) => [hex3, 1]));
+  const settled4 = new Map([...colors].filter((hex3) => !rgba.has(hex3)).map((hex3) => [hex3, 1]));
   const lightness2 = (hex3) => Oklch.fromRgba(rgba.get(hex3)).l;
   for (const hex3 of [...colors].filter((hex4) => rgba.has(hex4)).sort((a, b) => lightness2(b) - lightness2(a))) {
     const facing = pairs2.flatMap((pair) => {
@@ -35266,7 +35266,7 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
       if (mine === void 0)
         return [];
       const partner = own2(pair, mine === "fg" ? "bg" : "fg");
-      return [[pair, mine, partner === void 0 ? 0 : settled3.get(partner) ?? 0]];
+      return [[pair, mine, partner === void 0 ? 0 : settled4.get(partner) ?? 0]];
     });
     const holds2 = (share) => facing.every(([pair, mine, theirs]) => {
       const floor2 = floorOf(pair, depth);
@@ -35281,16 +35281,16 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
       const mid = (lo + hi) / 2;
       [lo, hi] = holds2(mid) ? [mid, hi] : [lo, mid];
     }
-    settled3.set(hex3, lo);
+    settled4.set(hex3, lo);
   }
-  return settled3;
+  return settled4;
 }
 function onColors(loop, colors) {
-  const settled3 = new WeakMemo();
+  const settled4 = new WeakMemo();
   const settle3 = (drawn) => {
     const lit = colors ?? drawn.colors;
     const key = [drawnKey(drawn), "|", ...lit].join(" ");
-    return settled3.get(drawn.theme, () => new Memo()).get(key, () => shares(drawn, lit, loop.touch));
+    return settled4.get(drawn.theme, () => new Memo()).get(key, () => shares(drawn, lit, loop.touch));
   };
   return stillOnSlots(atShares(loop, settle3));
 }
@@ -35675,13 +35675,13 @@ function wheel(curve, z) {
   const P2 = curve.seconds;
   const stray = ({ row: row2, centre }, t2) => noise(t2 / STRAY_PERIODS[0], centre / STRAY_SPREAD + 5.9, z + row2 / STRAY_SPREAD + 2.3) + 0.5 * noise(t2 / STRAY_PERIODS[1], centre / STRAY_SPREAD + 97.3, z + row2 / STRAY_SPREAD + 7.1);
   const turned = (place, t2) => 360 * t2 / P2 + curve.swing * STRAY * ((stray(place, t2) - stray(place, 0)) / 1.5);
-  const settled3 = new WeakMemo();
+  const settled4 = new WeakMemo();
   return stillOnSlots((drawn) => {
     const { colors, fills, depth, theme: theme24 } = drawn;
     const own2 = (terminal, color) => !terminal && colors.has(color.hex);
     const boundWith = (color, other, theirs) => fills.has(color.hex) || !theirs ? color.hex : other.hex;
     const keyOf2 = (color, bound) => `${color.hex} ${bound}`;
-    const bounds = settled3.get(theme24, () => new Memo()).get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
+    const bounds = settled4.get(theme24, () => new Memo()).get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
       const other = side === "fg" ? "bg" : "fg";
       return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
     }));
@@ -65025,12 +65025,16 @@ var EPHEMERAL_SESSION_STORAGE = {
 };
 var DEFAULT_MAX_SESSIONS = 256;
 var SessionState = class {
-  constructor(storage = EPHEMERAL_SESSION_STORAGE, maxSessions = DEFAULT_MAX_SESSIONS) {
+  // [LAW:types-are-the-program] The holder is required: a store that could
+  // be built without one would write outside every turn unseen.
+  constructor(turns, storage = EPHEMERAL_SESSION_STORAGE, maxSessions = DEFAULT_MAX_SESSIONS) {
+    this.turns = turns;
     this.maxSessions = maxSessions;
     this.storage = storage;
     this.sessions = /* @__PURE__ */ new Map();
     this.hydrateFromStorage();
   }
+  turns;
   maxSessions;
   // [LAW:types-are-the-program] Insertion order is recency order: the store
   // cannot hold more than maxSessions, so "bounded on disk" is structural, not
@@ -65118,6 +65122,7 @@ var SessionState = class {
   // verb body validates that pairs is non-empty before calling, so
   // this is the public-API safety net rather than the hot path.
   setBatch(sessionId2, pairs2) {
+    this.held(sessionId2);
     if (pairs2.length === 0) return;
     this.commit(sessionId2, (session) => {
       if (pairs2.some(({ key, value }) => session.values.get(key) !== value))
@@ -65126,6 +65131,7 @@ var SessionState = class {
     });
   }
   clear(sessionId2, key) {
+    this.held(sessionId2);
     this.commit(sessionId2, (session) => {
       if (session.values.delete(key)) session.revision = ++this.head;
     });
@@ -65138,6 +65144,7 @@ var SessionState = class {
   // raised to it, so no later write mints a revision the store has held. A
   // session already at the revision holds its values: nothing moves.
   restore(sessionId2, values2, revision) {
+    this.held(sessionId2);
     if ((this.sessions.get(sessionId2)?.revision ?? 0) === revision) return;
     this.commit(sessionId2, (session) => {
       session.values.clear();
@@ -65171,15 +65178,16 @@ var SessionState = class {
       this.atom.reportChanged();
     });
   }
-  // [LAW:one-source-of-truth] Drop state for sessions that no longer exist.
-  prune(activeSessionIds) {
-    runInAction(() => {
-      for (const id2 of this.sessions.keys()) {
-        if (!activeSessionIds.has(id2)) this.sessions.delete(id2);
-      }
-      this.persist();
-      this.atom.reportChanged();
-    });
+  // [LAW:single-enforcer][LAW:no-silent-failure] The one check that a write
+  // is a turn's: every public write asks here first, before it decides
+  // whether anything moves, so a write out of its turn is refused whatever it
+  // would have written.
+  held(sessionId2) {
+    if (this.turns.inTurn() === null) {
+      throw new Error(
+        `session state: a write of ${JSON.stringify(sessionId2)} outside any turn`
+      );
+    }
   }
   // Move-to-end: re-inserting at the tail makes this the most-recently-used.
   touch(sessionId2, session) {
@@ -65200,9 +65208,9 @@ var SessionState = class {
     this.storage.flush();
   }
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
-  // lands, and anything that lands later (a render that was awaiting, a run
-  // settling) stays in memory, so it can never write over the file a next
-  // daemon has taken up.
+  // lands, and the store persists nothing after, so it can never write over
+  // the file a next daemon has taken up. The closed turns refuse every write
+  // that would follow (`held`).
   close() {
     this.flush();
     this.storage = EPHEMERAL_SESSION_STORAGE;
@@ -70382,7 +70390,14 @@ var RuntimeStats = class _RuntimeStats {
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
       journalTurns: { gathers: 0 },
-      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
+      runs: {
+        started: 0,
+        failed: 0,
+        timedOut: 0,
+        refused: 0,
+        running: 0,
+        queued: 0
+      },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
@@ -71773,7 +71788,7 @@ var run2 = (value, ctx) => {
     }
     throw e;
   }
-  ctx.runs.start(request2);
+  ctx.effect({ kind: "run", id: ctx.runs.superseded(request2), run: request2 });
 };
 var repoConfig = (value, ctx) => {
   const [sessionId2 = "", dir = "", answer2 = "", mac = ""] = decodeWire(
@@ -71934,10 +71949,12 @@ function journaled(sid, ctx, handler) {
   if (lanes !== null) {
     try {
       const after = lanes.read();
-      ctx.lanes.clicked(
-        lanes.sessionId,
-        journal.written() ? lanes.before : after,
-        after
+      effects.push(
+        ...ctx.lanes.clicked(
+          lanes.sessionId,
+          journal.written() ? lanes.before : after,
+          after
+        )
       );
     } catch (e) {
       failures.push(e);
@@ -72077,6 +72094,16 @@ init_globals();
 // src/daemon/runs.ts
 init_globals();
 var import_node_path35 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/effect-outcome.ts
+init_globals();
+var PERFORMED = { kind: "ok", said: "" };
+var failed2 = (said) => ({
+  kind: "failed",
+  said
+});
+
+// src/daemon/runs.ts
 var RUN_TIMEOUT_MS = 1e4;
 function outcomeOf(result) {
   if (result.ok) return "ok";
@@ -72107,6 +72134,9 @@ var Runs = class {
   deps;
   timeoutMs;
   inFlight = /* @__PURE__ */ new Set();
+  // Each superseded run's resumes, until its launch takes them.
+  held = /* @__PURE__ */ new Map();
+  minted = 0;
   started = 0;
   failed = 0;
   timedOut = 0;
@@ -72116,35 +72146,51 @@ var Runs = class {
     this.deps = deps;
     this.timeoutMs = deps.timeoutMs ?? RUN_TIMEOUT_MS;
   }
-  // Start one run and return at once. Every source it refreshes reads pending
-  // from now until the program has exited, and then is read fresh.
-  start(run3) {
-    if (this.closed) throw new Error("run owner used after close");
-    const resumes = run3.refreshes.map(
-      (r) => this.deps.supersede(r.storage, run3.sessionId)
+  // [LAW:no-ambient-temporal-coupling] In the click's turn: every source the
+  // run refreshes reads pending from now until its program has exited, so no
+  // draw after the click shows the value from before it, however long the
+  // launch waits behind the session's earlier effects.
+  superseded(run3) {
+    if (this.closed) throw new DaemonClosing("run");
+    const id2 = ++this.minted;
+    this.held.set(
+      id2,
+      run3.refreshes.map((r) => this.deps.supersede(r.storage, run3.sessionId))
     );
+    return id2;
+  }
+  // The performer's launch of the run `id` superseded, answering how it
+  // ended; then every source it superseded is read fresh.
+  async run(id2, run3) {
+    if (this.closed) throw new DaemonClosing("run");
+    const resumes = this.held.get(id2);
+    if (resumes === void 0) {
+      throw new Error(`run ${id2} (${run3.action}) was never superseded`);
+    }
+    this.held.delete(id2);
     const abort = new AbortController();
     this.inFlight.add(abort);
     this.started++;
     const [program, ...args] = run3.argv;
     const startedAt = this.deps.clock.monotonic();
-    void this.deps.launch({
-      // [LAW:types-are-the-program] A relative program path is the
-      // declaring file's, as the directory it runs in is; a bare name is
-      // looked up on PATH.
-      bin: program.includes("/") ? import_node_path35.default.resolve(run3.cwd, program) : program,
-      args,
-      envOverlay: run3.envOverlay,
-      cwd: run3.cwd,
-      timeoutMs: this.timeoutMs,
-      signal: abort.signal,
-      category: "click.run"
-    }).then(
-      (result) => this.ended(run3, result, elapsedMs(this.deps.clock, startedAt))
-    ).finally(() => {
+    try {
+      const result = await this.deps.launch({
+        // [LAW:types-are-the-program] A relative program path is the
+        // declaring file's, as the directory it runs in is; a bare name is
+        // looked up on PATH.
+        bin: program.includes("/") ? import_node_path35.default.resolve(run3.cwd, program) : program,
+        args,
+        envOverlay: run3.envOverlay,
+        cwd: run3.cwd,
+        timeoutMs: this.timeoutMs,
+        signal: abort.signal,
+        category: "click.run"
+      });
+      return this.ended(run3, result, elapsedMs(this.deps.clock, startedAt));
+    } finally {
       this.inFlight.delete(abort);
       for (const resume of resumes) resume();
-    });
+    }
   }
   // A link refused before anything ran: counted, and its one event.
   refused(sessionId2, action2, reason) {
@@ -72160,13 +72206,16 @@ var Runs = class {
       failed: this.failed,
       timedOut: this.timedOut,
       refused: this.refusals,
-      running: this.inFlight.size
+      running: this.inFlight.size,
+      queued: this.held.size
     };
   }
   // Aborts every run in flight; each resumes its sources once its program is
-  // gone.
+  // gone. A run never launched resumes nothing: its sources close with the
+  // daemon.
   close() {
     this.closed = true;
+    this.held.clear();
     for (const abort of this.inFlight) abort.abort();
   }
   ended(run3, result, took) {
@@ -72176,14 +72225,10 @@ var Runs = class {
       `run sid=${valueOf(run3.sessionId)} action=${valueOf(run3.action)} program=${valueOf(run3.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`
     );
     if (outcome === "timeout") this.timedOut++;
-    if (result.ok || outcome === "aborted") return;
+    if (result.ok) return PERFORMED;
+    if (outcome === "aborted") throw new DaemonClosing("run");
     if (outcome !== "timeout") this.failed++;
-    holdClickError(
-      this.deps.state,
-      run3.sessionId,
-      `run ${run3.action}: ${failureText(result)}`,
-      this.deps.now()
-    );
+    return failed2(`run ${run3.action}: ${failureText(result)}`);
   }
 };
 
@@ -77315,19 +77360,23 @@ function viewLanes(parts, sessionId2) {
   }
 }
 function lanesAt(parts, origin, sessionId2) {
+  const latest = parts.frameFeeds.latest(sessionId2);
+  return switchesAt(
+    parts,
+    origin,
+    sessionId2,
+    latest === null || inTmux(latest.hints.tmux)
+  );
+}
+function switchesAt(parts, origin, sessionId2, tmux3) {
   var _stack = [];
   try {
-    const { renderCache, frameFeeds } = parts;
-    const hold2 = __using(_stack, renderCache.hold(
+    const hold2 = __using(_stack, parts.renderCache.hold(
       origin.projectDir,
       origin.cwd,
       origin.target.path
     ));
-    const latest = frameFeeds.latest(sessionId2);
-    return laneSwitches(
-      sessionGlobals2(parts, sessionId2, hold2.state),
-      latest === null || inTmux(latest.hints.tmux)
-    );
+    return laneSwitches(sessionGlobals2(parts, sessionId2, hold2.state), tmux3);
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
@@ -77353,13 +77402,13 @@ function requestFacts(req, at, facts, renderer) {
   });
   return hintsError;
 }
-function setUpRender(parts, arrived3, at, facts) {
+function setUpRender(parts, arrived2, at, facts) {
   const { renderCache } = parts;
-  const dir = arrived3.hookData.workspace?.current_dir ?? arrived3.cwd;
+  const dir = arrived2.hookData.workspace?.current_dir ?? arrived2.cwd;
   const req = {
-    ...arrived3,
+    ...arrived2,
     hookData: {
-      ...arrived3.hookData,
+      ...arrived2.hookData,
       ...dir !== void 0 && import_node_path37.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
@@ -77677,14 +77726,16 @@ function drawRender(parts, setup, drawing2) {
     idleSince
   };
 }
-function arrived2(parts, req, lanes) {
+function requestArrived(parts, req) {
   const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.noted(laneSessionOf(req), lanes);
-  tmuxStatusLines.observe(
-    req.hookData.session_id,
-    req.hints.tmux,
-    lanes.tmuxStatus
+  const lanes = switchesAt(
+    parts,
+    req.requested,
+    req.sessionId,
+    inTmux(req.hints.tmux)
   );
+  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
+  return laneSetups.noted(laneSessionOf(req), lanes);
 }
 function drawForAnswer(parts, setup, arrival) {
   return drawRequest(parts.recorder, setup.view, arrival, () => {
@@ -77704,25 +77755,20 @@ function laneSessionOf(req) {
 function laneClicked(parts, sessionId2, before, after) {
   const { frameFeeds, laneSetups, tmuxStatusLines } = parts;
   const latest = frameFeeds.latest(sessionId2);
-  laneSetups.clicked(
+  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
+    tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
+  return laneSetups.clicked(
     sessionId2,
     latest === null ? null : laneSessionOf(latest),
     before,
     after
   );
-  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
-    tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
 }
 async function drawAnswer(parts, req, at, waitEndsAt, facts) {
   var _stack = [];
   try {
     const { clock, frameFeeds, log } = parts;
     const setup = __using(_stack, setUpRender(parts, req, at, facts));
-    arrived2(
-      parts,
-      req,
-      laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
-    );
     const settling = settleRequest(parts.recorder, setup.view, at);
     const waitFrom = clock.monotonic();
     const budget = waitEndsAt - waitFrom;
@@ -77798,15 +77844,12 @@ init_globals();
 
 // src/daemon/effect.ts
 init_globals();
-var PERFORMED = { kind: "ok", said: "" };
-var failed2 = (said) => ({
-  kind: "failed",
-  said
-});
 var DESCRIBE = {
   launch: ({ what }) => `launch:${what}`,
   "type-slash": ({ line }) => `type-slash:${line}`,
   "apply-update": () => "apply-update",
+  run: ({ run: run3 }) => `run:${run3.action}`,
+  "lane-setup": ({ lane, on: on2 }) => `lane-setup:${lane}-${on2 ? "on" : "off"}`,
   doctor: ({ step: step4 }) => `doctor:${step4.kind}`
 };
 function describeEffect(effect) {
@@ -77819,23 +77862,27 @@ var NO_EFFECTS = [];
 var ARMS = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
-  // batch in a journal turn, and the draw begins once the turn is over. A turn
-  // is synchronous (src/daemon/journal-turns.ts), so the request waits behind
-  // no other session's work, and no draw, this one or a feed's, can read a
-  // click half landed. The revision its turn left goes on the request's line,
-  // the render event, which is its record and opens with the session the edge
-  // noted.
-  request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw: draw2 }) => {
-    const revision = verbCtx.journalTurns.take("request", () => {
+  // batch in a journal turn, with what its arrival settles (the lane setups
+  // its session's clicks owed, described as the turn's effects), and its draw
+  // begins once the turn is over (`applyRequest`). A turn is synchronous
+  // (src/daemon/journal-turns.ts), so the request waits behind no other
+  // session's work, and no draw, this one or a feed's, can read a click half
+  // landed. The revision its turn left and the effects it described go on the
+  // request's line, the render event, which is its record and opens with the
+  // session the edge noted.
+  request: async ({ req, facts }, { verbCtx }) => {
+    const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
-      return verbCtx.sessionState.revision(req.sessionId);
+      return {
+        effects: verbCtx.lanes.arrived(req),
+        revision: verbCtx.sessionState.revision(req.sessionId)
+      };
     });
-    noteFacts(facts, { revision: String(revision) });
-    return {
-      answer: await draw2(req, at, waitEndsAt, facts),
-      effects: NO_EFFECTS,
-      facts: []
-    };
+    noteFacts(facts, {
+      revision: String(turn.revision),
+      effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-"
+    });
+    return { answer: void 0, effects: turn.effects, facts: [] };
   },
   // The turn hands its effects over once it has committed (`described`), and
   // a refused step is answered beside them; a click whose client has left is
@@ -77904,6 +77951,8 @@ var LANDINGS = {
   launch: asIs,
   "type-slash": asIs,
   "apply-update": asIs,
+  run: asIs,
+  "lane-setup": asIs,
   doctor: ({ effect, outcome }, verbCtx) => {
     if (outcome.kind === "failed") return outcome;
     landDoctor(verbCtx, effect, outcome.gathered);
@@ -77974,6 +78023,10 @@ async function apply(event, parts) {
   };
 }
 var NOTHING_PERFORMED = Promise.resolve();
+async function applyRequest(event, parts) {
+  await apply(event, parts);
+  return parts.draw(event.req, event.at, event.waitEndsAt, event.facts);
+}
 var APPLIED = { level: "info", facts: [["outcome", "ok"]] };
 var refused = ({ error }) => ({
   level: "info",
@@ -78033,6 +78086,8 @@ var PERFORM = {
     await verbCtx.applyUpdate();
     return PERFORMED;
   },
+  run: ({ id: id2, run: run3 }, { verbCtx }) => verbCtx.runs.run(id2, run3),
+  "lane-setup": (effect, { verbCtx }) => verbCtx.lanes.setup(effect),
   // The doctor's probes, gathered after the click's turn, in no turn: its
   // step lands with the facts (`LANDINGS`).
   doctor: async (effect, { verbCtx }) => ({
@@ -78531,9 +78586,9 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
         sessionState: {
-          sessions: parts.sessionGauges.size(),
-          observers: parts.sessionGauges.observers(),
-          revision: parts.sessionGauges.latestRevision()
+          sessions: parts.sessionState.size(),
+          observers: parts.sessionState.observers(),
+          revision: parts.sessionState.latestRevision()
         },
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
@@ -78586,7 +78641,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
-    const rendered = !checked.ok ? refusedRender(checked.problems) : await apply(
+    const rendered = !checked.ok ? refusedRender(checked.problems) : await applyRequest(
       {
         kind: "request",
         req: checked.req,
@@ -78605,9 +78660,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       },
       parts
     ).then(
-      ({
-        answer: { resp, motion, answersClick, pipeShown, delivered }
-      }) => {
+      ({ resp, motion, answersClick, pipeShown, delivered }) => {
         sighted(checked.req, motion);
         return {
           outcome: { kind: "ok" },
@@ -82494,9 +82547,9 @@ var causeField = (cause) => {
       return `${cause.kind}:${new Date(cause.since).toISOString()}`;
   }
 };
-function configLoadedLine(entry, cause, settled3) {
+function configLoadedLine(entry, cause, settled4) {
   const dirs = (ds) => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled4} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
@@ -85744,20 +85797,17 @@ var LaneSetups = class {
   deps;
   // Each session's owed lanes, least recently owed first.
   owed = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time.
-  setups = new KeyedSerialQueue();
-  // A click of `sessionId` moved its switches from `before` to `after`.
-  // `session` is the session as its latest request reported it, or null when
-  // this daemon holds none yet.
+  closed = false;
+  // A click of `sessionId` moved its switches from `before` to `after`: the
+  // setups it settles. `session` is the session as its latest request
+  // reported it, or null when this daemon holds none yet, which owes them.
   clicked(sessionId2, session, before, after) {
     const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
     const owed = this.take(sessionId2);
     for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
     const byOf = (lane) => moved.includes(lane) ? "click" : "owed";
-    if (session !== null) {
-      this.settle(session, owed, after, byOf);
-      return;
-    }
+    if (session !== null)
+      return settled3(session, owed, after, byOf, this.deps.log);
     for (const [lane, from] of owed)
       if (from === after[lane]) owed.delete(lane);
     if (moved.length > 0) {
@@ -85778,46 +85828,39 @@ var LaneSetups = class {
         `lane: owed dropped sid=${JSON.stringify(oldest)} lanes=${[...lanes.keys()].join(",")}`
       );
     }
+    return [];
   }
   // A request of `session` arrived, finding its switches at `switches`: the
-  // setups its clicks owe start now.
+  // setups its clicks owe, settled now.
   noted(session, switches) {
-    this.settle(session, this.take(session.sessionId), switches, () => "owed");
+    return settled3(
+      session,
+      this.take(session.sessionId),
+      switches,
+      () => "owed",
+      this.deps.log
+    );
   }
   take(sessionId2) {
     const owed = this.owed.get(sessionId2) ?? /* @__PURE__ */ new Map();
     this.owed.delete(sessionId2);
     return owed;
   }
-  // [LAW:dataflow-not-control-flow] Each owed lane is brought to its switch
-  // `now`, unless the switch stands where the lane already is, and either
-  // way is said, under what started it: this click's move, or one owed from
-  // before.
-  settle(session, owed, now2, byOf) {
-    for (const [lane, from] of owed) {
-      if (now2[lane] !== from) this.start(session, lane, now2[lane], byOf(lane));
-      else
-        this.deps.log(
-          "info",
-          `lane: ${lane} ${from ? "on" : "off"} \u2014 nothing owed: its switch is back where the lane is by=${byOf(lane)} (session=${session.sessionId})`
-        );
-    }
-  }
-  start(session, lane, on2, by) {
-    this.deps.defer(
-      () => void this.setups.run(
-        session.sessionId,
-        () => this.sync(session, lane, on2, by)
-      )
-    );
-  }
-  // Resolves once the setup has finished, however it ended.
-  async sync(session, lane, on2, by) {
+  // [LAW:effects-at-boundaries] The performer's run of one setup, answering
+  // how it ended: a part still underway once the plan answers is waited out,
+  // so the session's next effect starts after it.
+  async setup({
+    session,
+    lane,
+    on: on2,
+    by
+  }) {
+    if (this.closed) throw new DaemonClosing("lane setup");
     const where = `by=${by} (session=${session.sessionId})`;
-    const failed3 = (error) => {
+    const ended = (error) => {
       const text4 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
       this.deps.log("warn", `${text4} ${where}`);
-      holdClickError(this.deps.state, session.sessionId, text4, this.deps.now());
+      return failed2(text4);
     };
     let outcome;
     try {
@@ -85827,21 +85870,41 @@ var LaneSetups = class {
         this.deps.edge
       );
     } catch (error) {
-      failed3(error);
-      return;
+      return ended(error);
     }
     this.deps.log(
       "info",
       `lane: ${lane} ${on2 ? "on" : "off"} \u2014 ${outcome.said} ${where}`
     );
-    if (outcome.kind === "underway") {
-      await outcome.finished.then(
-        (finished) => this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
-        failed3
-      );
-    }
+    if (outcome.kind === "done") return { kind: "ok", said: outcome.said };
+    return outcome.finished.then((finished) => {
+      this.deps.log("info", `lane: ${lane} ${finished} ${where}`);
+      return { kind: "ok", said: finished };
+    }, ended);
+  }
+  close() {
+    this.closed = true;
   }
 };
+function settled3(session, owed, now2, byOf, log) {
+  const setups = [];
+  for (const [lane, from] of owed) {
+    if (now2[lane] !== from)
+      setups.push({
+        kind: "lane-setup",
+        session,
+        lane,
+        on: now2[lane],
+        by: byOf(lane)
+      });
+    else
+      log(
+        "info",
+        `lane: ${lane} ${from ? "on" : "off"} \u2014 nothing owed: its switch is back where the lane is by=${byOf(lane)} (session=${session.sessionId})`
+      );
+  }
+  return setups;
+}
 
 // src/daemon/render-warnings.ts
 init_globals();
@@ -86146,9 +86209,8 @@ function createDaemon(inputs) {
   });
   const probe3 = inputs.probe(launcher);
   const storage = inputs.storage(log);
-  const store2 = new SessionState(storage.session);
   const journalTurns = new JournalTurns();
-  const sessionState = inputs.sessionWrites(store2, journalTurns);
+  const sessionState = new SessionState(journalTurns, storage.session);
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -86222,12 +86284,7 @@ function createDaemon(inputs) {
   const runs = new Runs({
     supersede: (storage2, sessionId2) => managedStorage.supersede(storage2, sessionId2),
     launch: launcher.launch,
-    // [LAW:single-enforcer] exception: a run's ending holds a click error
-    // outside any turn, so it writes the store and not the view; it becomes an
-    // effect-done in the next story of this lane.
-    state: store2,
     log,
-    now: instant,
     clock
   });
   const laneSetups = new LaneSetups({
@@ -86245,12 +86302,7 @@ function createDaemon(inputs) {
       home,
       preload: stableAttachPreload(bundle.path, host)
     },
-    // [LAW:single-enforcer] exception: as a run's ending, a lane setup's
-    // failure is held outside any turn, so it writes the store.
-    state: store2,
-    log,
-    now: instant,
-    defer: (run3) => void clock.defer(run3)
+    log
   });
   const tmuxStatusLines = new TmuxStatusLines({
     edge: {
@@ -86378,8 +86430,8 @@ function createDaemon(inputs) {
           // daemon.log with its cause — the operator's only record of why a load
           // ran, and whether a save was picked up cleanly, kept rendering
           // last-known-good behind an error, or resolved to a different file.
-          onReload: (entry, sessions, cause, settled3) => {
-            log("info", configLoadedLine(entry, cause, settled3));
+          onReload: (entry, sessions, cause, settled4) => {
+            log("info", configLoadedLine(entry, cause, settled4));
             for (const sessionId2 of sessions)
               frameFeeds.wake(sessionId2, "reload");
           },
@@ -86496,7 +86548,9 @@ function createDaemon(inputs) {
     runs,
     lanes: {
       of: (origin, sessionId2) => lanesAt(parts, origin, sessionId2),
-      clicked: (sessionId2, before, after) => laneClicked(parts, sessionId2, before, after)
+      clicked: (sessionId2, before, after) => laneClicked(parts, sessionId2, before, after),
+      arrived: (req) => requestArrived(parts, req),
+      setup: (effect) => laneSetups.setup(effect)
     },
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
@@ -86518,7 +86572,6 @@ function createDaemon(inputs) {
     fileEvents,
     payloadProviders,
     sessionState,
-    sessionGauges: store2,
     rendererName: home.name,
     draw: (req, at, waitEndsAt, facts) => drawAnswer(parts, req, at, waitEndsAt, facts),
     effectSessions,
@@ -86584,6 +86637,9 @@ function createDaemon(inputs) {
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
+        // A lane setup still queued behind the session's earlier effects is
+        // refused, as a queued run is (`runs close`).
+        ["laneSetups close", () => laneSetups.close()],
         ["frameFeeds close", () => frameFeeds.close()],
         ["linkIds close", () => linkIds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],
@@ -86606,7 +86662,7 @@ function createDaemon(inputs) {
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => store2.close()]
+        ["sessionState close", () => sessionState.close()]
       ];
       for (const [step4, run3] of teardown) {
         try {
@@ -87537,7 +87593,6 @@ function productionAdapters(paths2, daemonLog, machine) {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     storage: (log) => fileStorage(paths2, log, machine),
-    sessionWrites: (store2) => store2,
     doctorStores: fileStores(paths2.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
