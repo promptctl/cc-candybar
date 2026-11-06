@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-627",
+      "ref": "refs/pull/627/merge",
+      "sha": "139742500618ca67d1227821ab2dcec5839d13d4",
+      "timestamp": "2026-11-06T06:35:53.481Z",
+      "commits": [
+        {
+          "sha": "139742500618ca67d1227821ab2dcec5839d13d4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T06:35:00Z",
+          "message": "Merge c9fd6932f7e85ad6e0601f5ab223b2a811010df2 into a38c437bf19653dbd6f983f06de25bc82f2d4a58\n"
+        },
+        {
+          "sha": "c9fd6932f7e85ad6e0601f5ab223b2a811010df2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:28:26-07:00",
+          "message": "fix(apply): an answer asks for the click error's mark only until one has carried it; a render's throw is the daemon's unless the close refused it (candybar-gather-renderer-76bb.1dh.1ql)\n"
+        },
+        {
+          "sha": "3e7bc4dc0cabe6f2f8dfac6cea081fedd1ca87b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:14:44-07:00",
+          "message": "fix(apply): the answered mark's line names its own verb; comments say what an in-turn gather lets a draw read (candybar-gather-renderer-76bb.1dh.1ql)\n"
+        },
+        {
+          "sha": "5bb28c82861125c08f14b8333098077db8cd93cc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:11:04-07:00",
+          "message": "fix(apply): a render refused at its turn names its session and logs as the close; one rule says what an unanswered event's refusal is (candybar-gather-renderer-76bb.1dh.1ql)\n\n- The render edge notes the session first on the request's line, so a request\n  the close refused at its turn still names it; the draw no longer notes it.\n- A render's thrown error maps to its outcome as a click's does: the close is\n  `closing` at info, not `threw` at error.\n- The request arm reads the revision inside its own turn and notes its facts\n  straight onto the line.\n- The menu idle close says its refusal through the one rule the delivery edge\n  and the performer use.\n- The no-write test counts the store's persists, which an unfiltered batch\n  bumps without moving the revision; a new case pins the close refusing a\n  queued request.\n- The arm's comment states that an in-turn gather holds every request; the fix\n  that no turn awaits a launch is candybar-gather-renderer-76bb.1dh.c3l.\n"
+        },
+        {
+          "sha": "967c8a8b90d1635c26d97f9b97dbd278213d9eb6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T22:37:33-07:00",
+          "message": "feat(apply): a request takes its turn; its two writes are one batch in the request arm, and the answered mark is an event (candybar-gather-renderer-76bb.1dh.1ql)\n\nThe request arm records what the client said (client-hints, render-origin)\nas one setBatch inside a journal turn and draws once the turn is over, so a\nrequest that arrives while a click's turn is held draws the click whole,\nnever its first write beside the request's hints. The turn waits behind\nturns alone: a click's head gather holds none. The click error's answered\nmark, the one other request-path write, is an `answered` event whose arm\ntakes a turn; the delivery edge applies it as the performer applies\neffect-done, with a refusal said in the log.\n\nThe render line gains renderer=main, factsSeq, turnWait and revision; the\nrequest's apply line stays null, since the render event is its one record.\nThe daemon's draw is a port on the request arm's parts, so the arm is\ndriven below the daemon. The daemon's adapters gain `sessionWrites`: the\nproduction daemon writes the store, every daemon built in a worker writes\nthrough the write-outside-turn instrument. A run's ending and a lane\nsetup's failure still write the store outside a turn (the next story).\n\nTests: test/request-turn.test.ts races a request against a click whose\ndoctor gathers inside its turn under a held clock, and against one parked\nin its head gather; apply-effects covers the answered mark's turn. The\nboot ratchet forbids a new in-worker case, so the race lives at the root\nover Apply and the real journal turns.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "a38c437bf19653dbd6f983f06de25bc82f2d4a58",
@@ -106,28 +149,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-03T10:07:10-07:00",
           "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-627",
-      "ref": "refs/pull/627/merge",
-      "sha": "56a307e4d41f6e4d5e6e8002d8ee6c17b2b84729",
-      "timestamp": "2026-11-06T05:40:41.109Z",
-      "commits": [
-        {
-          "sha": "56a307e4d41f6e4d5e6e8002d8ee6c17b2b84729",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T05:39:46Z",
-          "message": "Merge 9ae3f5e3cd40f4a71f57d6f53f8ce963d72ab135 into 9b6790b0d73afbdd6c683accf7b693cffe16c89e\n"
-        },
-        {
-          "sha": "9ae3f5e3cd40f4a71f57d6f53f8ce963d72ab135",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:37:33-07:00",
-          "message": "feat(apply): a request takes its turn; its two writes are one batch in the request arm, and the answered mark is an event (candybar-gather-renderer-76bb.1dh.1ql)\n\nThe request arm records what the client said (client-hints, render-origin)\nas one setBatch inside a journal turn and draws once the turn is over, so a\nrequest that arrives while a click's turn is held draws the click whole,\nnever its first write beside the request's hints. The turn waits behind\nturns alone: a click's head gather holds none. The click error's answered\nmark, the one other request-path write, is an `answered` event whose arm\ntakes a turn; the delivery edge applies it as the performer applies\neffect-done, with a refusal said in the log.\n\nThe render line gains renderer=main, factsSeq, turnWait and revision; the\nrequest's apply line stays null, since the render event is its one record.\nThe daemon's draw is a port on the request arm's parts, so the arm is\ndriven below the daemon. The daemon's adapters gain `sessionWrites`: the\nproduction daemon writes the store, every daemon built in a worker writes\nthrough the write-outside-turn instrument. A run's ending and a lane\nsetup's failure still write the store outside a turn (the next story).\n\nTests: test/request-turn.test.ts races a request against a click whose\ndoctor gathers inside its turn under a held clock, and against one parked\nin its head gather; apply-effects covers the answered mark's turn. The\nboot ratchet forbids a new in-worker case, so the race lives at the root\nover Apply and the real journal turns.\n"
         }
       ]
     }
