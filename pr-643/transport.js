@@ -21279,9 +21279,9 @@ var require_dist = __commonJS({
       var _library = false;
       var _shared = createCommonjsModule(function(module2) {
         var SHARED = "__core-js_shared__";
-        var store = _global[SHARED] || (_global[SHARED] = {});
+        var store2 = _global[SHARED] || (_global[SHARED] = {});
         (module2.exports = function(key2, value) {
-          return store[key2] || (store[key2] = value !== void 0 ? value : {});
+          return store2[key2] || (store2[key2] = value !== void 0 ? value : {});
         })("versions", []).push({
           version: _core.version,
           mode: _library ? "pure" : "global",
@@ -23103,7 +23103,7 @@ var RATE_LIMITS = {
   // for any human click cadence.
   "click.pbcopy": 1e3,
   "click.open": 1e3,
-  // A click's probe, run ahead of its turn for up to its 2 s timeout.
+  // A doctor click's probe, run after its turn for up to its 2 s timeout.
   "doctor.tmux": 1e3,
   "doctor.font": 1e3,
   "doctor.process": 1e3,
@@ -23999,34 +23999,61 @@ init_globals();
 var KEY = "click.error";
 var CLICK_ERROR_HOLD_S = 5;
 function holdClickError(state, sessionId2, text4, at) {
-  const record2 = { text: text4, at, answered: false };
-  state.set(sessionId2, KEY, JSON.stringify(record2));
+  const live = clickErrors(state, sessionId2).filter(
+    (e) => eventHoldAt(e, CLICK_ERROR_HOLD_S, at, "request") !== "over"
+  );
+  store(state, sessionId2, {
+    newest: { text: text4, at, answered: false },
+    earlier: live
+  });
 }
-function answeredClickError(state, sessionId2, error) {
-  const last2 = lastClickError(state, sessionId2);
-  if (last2 === null || !answeredBy(last2, error)) return;
-  state.set(sessionId2, KEY, JSON.stringify({ ...last2, answered: true }));
+function answeredClickError(state, sessionId2, errors2) {
+  const stored = storedOf(state, sessionId2);
+  if (stored === null) return;
+  const mark = (e) => errors2.some((shown) => answeredBy(e, shown)) ? { ...e, answered: true } : e;
+  const marked = {
+    newest: mark(stored.newest),
+    earlier: stored.earlier.map(mark)
+  };
+  const unmoved = marked.newest === stored.newest && marked.earlier.every((e, i) => e === stored.earlier[i]);
+  if (!unmoved) store(state, sessionId2, marked);
 }
-function lastClickError(state, sessionId2) {
+function clickErrors(state, sessionId2) {
+  const stored = storedOf(state, sessionId2);
+  return stored === null ? [] : [...stored.earlier, stored.newest];
+}
+function clickErrorsAt(state, sessionId2, at, render3) {
+  return clickErrors(state, sessionId2).map((error) => ({
+    error,
+    hold: eventHoldAt(error, CLICK_ERROR_HOLD_S, at, render3)
+  }));
+}
+var shownClickErrors = (errors2) => errors2.flatMap(({ error, hold: hold2 }) => hold2 === "over" ? [] : [error]);
+var toAnswer = (errors2) => shownClickErrors(errors2).filter((error) => !error.answered);
+function store(state, sessionId2, { newest, earlier }) {
+  state.set(sessionId2, KEY, JSON.stringify({ ...newest, earlier }));
+}
+function storedOf(state, sessionId2) {
   const raw = state.get(sessionId2, KEY);
-  return raw === null ? null : recordOf(raw);
-}
-function clickErrorAt(state, sessionId2, at, render3) {
-  const last2 = lastClickError(state, sessionId2);
-  if (last2 === null) return { kind: "none" };
-  const kind = eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, render3);
-  return kind === "over" ? { kind } : { kind, error: last2 };
-}
-function toAnswer(hold2) {
-  return (hold2.kind === "held" || hold2.kind === "owed") && !hold2.error.answered ? hold2.error : null;
-}
-function recordOf(raw) {
+  if (raw === null) return null;
   let value;
   try {
     value = JSON.parse(raw);
   } catch {
     return null;
   }
+  const newest = recordOf(value);
+  if (newest === null) return null;
+  const { earlier } = value;
+  return {
+    newest,
+    earlier: Array.isArray(earlier) ? earlier.flatMap((e) => {
+      const record2 = recordOf(e);
+      return record2 === null ? [] : [record2];
+    }) : []
+  };
+}
+function recordOf(value) {
   if (typeof value !== "object" || value === null) return null;
   const { text: text4, at, answered: answered2 } = value;
   return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? { text: text4, at, answered: answered2 === true } : null;
@@ -51748,16 +51775,16 @@ function createCcCandybarEngine(opts) {
 
 // src/template-engine/scope.ts
 init_globals();
-function buildScope(store) {
-  const names = new Set(store.names());
-  return makeProxy(store, names, "");
+function buildScope(store2) {
+  const names = new Set(store2.names());
+  return makeProxy(store2, names, "");
 }
-function makeProxy(store, names, prefix) {
+function makeProxy(store2, names, prefix) {
   return new Proxy(/* @__PURE__ */ Object.create(null), {
     has(_, key) {
       if (typeof key !== "string") return false;
       const fullKey = prefix ? `${prefix}.${key}` : key;
-      if (names.has(fullKey)) return !absentDocument(store, fullKey);
+      if (names.has(fullKey)) return !absentDocument(store2, fullKey);
       const nsPrefix = `${fullKey}.`;
       for (const n of names) {
         if (n.startsWith(nsPrefix)) return true;
@@ -51768,14 +51795,14 @@ function makeProxy(store, names, prefix) {
       if (typeof key !== "string") return void 0;
       const fullKey = prefix ? `${prefix}.${key}` : key;
       if (names.has(fullKey)) {
-        if (store.getKind(fullKey) !== "document") return store.read(fullKey);
-        const doc = store.readDocument(fullKey);
+        if (store2.getKind(fullKey) !== "document") return store2.read(fullKey);
+        const doc = store2.readDocument(fullKey);
         return doc.kind === "absent" ? void 0 : unwrapDocument(fullKey, doc);
       }
       const nsPrefix = `${fullKey}.`;
       for (const n of names) {
         if (n.startsWith(nsPrefix)) {
-          return makeProxy(store, names, fullKey);
+          return makeProxy(store2, names, fullKey);
         }
       }
       return void 0;
@@ -51788,8 +51815,8 @@ function placementScope(scope, settings) {
     get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
   });
 }
-function absentDocument(store, name) {
-  return store.getKind(name) === "document" && store.readDocument(name).kind === "absent";
+function absentDocument(store2, name) {
+  return store2.getKind(name) === "document" && store2.readDocument(name).kind === "absent";
 }
 function unwrapDocument(name, doc) {
   switch (doc.kind) {
@@ -52726,11 +52753,11 @@ function unread() {
   return observable.box(pending("unread"), { deep: false });
 }
 function pending(why2) {
-  let land;
+  let land2;
   const landed = new Promise((resolve) => {
-    land = resolve;
+    land2 = resolve;
   });
-  return { kind: "pending", why: why2, landed, land };
+  return { kind: "pending", why: why2, landed, land: land2 };
 }
 function settle(source, outcome) {
   const prior = source.reading.get();
@@ -53568,9 +53595,9 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(runs, store, defaultEmptyValue = "", sessionState, parent = null) {
+  constructor(runs, store2, defaultEmptyValue = "", sessionState, parent = null) {
     this.runs = runs;
-    this.store = store;
+    this.store = store2;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
     this.sessionState = sessionState;
@@ -64287,33 +64314,33 @@ function openRoots(nest, read2) {
 
 // src/daemon/closing-view.ts
 init_globals();
-function closingView(store, nestOf2, log) {
-  const write = (sessionId2, writes, land) => {
+function closingView(store2, nestOf2, log) {
+  const write = (sessionId2, writes, land2) => {
     const folds = closeNested(
       nestOf2(sessionId2),
-      (key) => store.get(sessionId2, key),
+      (key) => store2.get(sessionId2, key),
       writes
     );
     runInAction(() => {
-      land();
-      for (const key of folds) store.clear(sessionId2, key);
+      land2();
+      for (const key of folds) store2.clear(sessionId2, key);
     });
     if (folds.length > 0) {
       log(`close-nested: folded=${folds.join(",")} (session=${sessionId2})`);
     }
   };
-  const setBatch = (sessionId2, pairs2) => write(sessionId2, pairs2, () => store.setBatch(sessionId2, pairs2));
+  const setBatch = (sessionId2, pairs2) => write(sessionId2, pairs2, () => store2.setBatch(sessionId2, pairs2));
   return {
-    get: (sessionId2, key) => store.get(sessionId2, key),
-    revision: (sessionId2) => store.revision(sessionId2),
-    values: (sessionId2) => store.values(sessionId2),
+    get: (sessionId2, key) => store2.get(sessionId2, key),
+    revision: (sessionId2) => store2.revision(sessionId2),
+    values: (sessionId2) => store2.values(sessionId2),
     set: (sessionId2, key, value) => setBatch(sessionId2, [{ key, value }]),
     setBatch,
     // A cleared key reads its default, so it closes what its old value held.
     clear: (sessionId2, key) => write(
       sessionId2,
       [{ key, value: nestOf2(sessionId2).defaultOf(key) }],
-      () => store.clear(sessionId2, key)
+      () => store2.clear(sessionId2, key)
     )
   };
 }
@@ -64577,14 +64604,14 @@ function requireValueTarget(key) {
   }
   return target;
 }
-function commit2(store, home, before, after, refuse4) {
+function commit2(store2, home, before, after, refuse4) {
   const will = loadOrRefuse(home, after);
   let held;
   const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse4(home, was, will);
-  writeConfigText(home.path, after, store.logger);
-  store.record(home.path, before, after);
+  writeConfigText(home.path, after, store2.logger);
+  store2.record(home.path, before, after);
 }
 function refuseHidden(home, was, will) {
   const hidden = hiddenBy(home, was(), will);
@@ -64685,10 +64712,10 @@ function readValue(file, key) {
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
   return node !== void 0 && "value" in node ? node.value : void 0;
 }
-function writeValues(store, home, pairs2) {
-  writeDrafts(store, home, pairs2, []);
+function writeValues(store2, home, pairs2) {
+  writeDrafts(store2, home, pairs2, []);
 }
-function writeDrafts(store, home, pairs2, placements) {
+function writeDrafts(store2, home, pairs2, placements) {
   const before = readConfigText(home.path);
   const valued = pairs2.reduce(
     (text4, [key, raw]) => setValue(
@@ -64700,7 +64727,7 @@ function writeDrafts(store, home, pairs2, placements) {
     before ?? ""
   );
   commit2(
-    store,
+    store2,
     home,
     before,
     homeOnly(
@@ -64752,7 +64779,7 @@ function deleteAtPath(text4, path45) {
   const ownPreset = path45[0] === "presets" && path45.length > 2 && !isBundledPreset(path45[1]);
   return deleteValue(text4, path45, ownPreset ? 2 : 0);
 }
-function deleteValues(store, home, keys2) {
+function deleteValues(store2, home, keys2) {
   const targets = keys2.map(requireTarget);
   const before = readConfigText(home.path);
   if (before === null) return;
@@ -64761,7 +64788,7 @@ function deleteValues(store, home, keys2) {
     before
   );
   if (after === before) return;
-  commit2(store, home, before, after, releases);
+  commit2(store2, home, before, after, releases);
 }
 var SAVED_PRESET_PREFIX = "custom-";
 function presetKeys(doc) {
@@ -64787,7 +64814,7 @@ function freePresetName(doc, home) {
     (_, i) => `${SAVED_PRESET_PREFIX}${i + 1}`
   ).find((candidate) => !taken2.has(ident(candidate)));
 }
-function writePreset(store, home, from, globals, picks, placements) {
+function writePreset(store2, home, from, globals, picks, placements) {
   const before = readConfigText(home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc, home);
@@ -64822,10 +64849,10 @@ function writePreset(store, home, from, globals, picks, placements) {
       ownRow
     )
   );
-  commit2(store, home, before, placed2, refuseHidden);
+  commit2(store2, home, before, placed2, refuseHidden);
   return name;
 }
-function writeThemeDefault(store, home, theme24, look) {
+function writeThemeDefault(store2, home, theme24, look) {
   const before = readConfigText(home.path);
   const after = setValue(
     before ?? "",
@@ -64833,9 +64860,9 @@ function writeThemeDefault(store, home, theme24, look) {
     json5Text(look),
     JSON5_DIALECT
   );
-  commit2(store, home, before, after, refuseHidden);
+  commit2(store2, home, before, after, refuseHidden);
 }
-function deletePreset(store, home, name) {
+function deletePreset(store2, home, name) {
   if (isBundledPreset(name)) {
     throw new BadVerbArgs(
       `cannot delete preset "${name}": it is bundled \u2014 reset its settings instead`
@@ -64855,14 +64882,14 @@ function deletePreset(store, home, name) {
     ...selected?.kind === "string" && selected.value === name ? [["globals", "preset"]] : []
   ];
   commit2(
-    store,
+    store2,
     home,
     before,
     paths2.reduce((text4, at) => deleteAtPath(text4, at), before),
     releases
   );
 }
-function applyLayoutOp(store, home, key, op) {
+function applyLayoutOp(store2, home, key, op) {
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
@@ -64885,7 +64912,7 @@ function applyLayoutOp(store, home, key, op) {
       `${placement.path.join(".")} in ${home.path} has no placement "${subject}" \u2014 the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`
     );
   }
-  commit2(store, home, before, after, refuseHidden);
+  commit2(store2, home, before, after, refuseHidden);
   return placed2;
 }
 function spliceOp(text4, path45, op, rendered) {
@@ -64908,25 +64935,25 @@ var import_node_path19 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/session-state.ts
 init_globals();
-function recordingView(store, records, onChange) {
+function recordingView(store2, records, onChange) {
   const recorded = (sessionId2, keys2, write) => {
-    const before = keys2.filter(records).map((key) => ({ key, before: store.get(sessionId2, key) }));
+    const before = keys2.filter(records).map((key) => ({ key, before: store2.get(sessionId2, key) }));
     write();
     for (const { key, before: b } of before) {
-      onChange(sessionId2, key, b, store.get(sessionId2, key));
+      onChange(sessionId2, key, b, store2.get(sessionId2, key));
     }
   };
   return {
-    get: (sessionId2, key) => store.get(sessionId2, key),
-    revision: (sessionId2) => store.revision(sessionId2),
-    values: (sessionId2) => store.values(sessionId2),
-    set: (sessionId2, key, value) => recorded(sessionId2, [key], () => store.set(sessionId2, key, value)),
+    get: (sessionId2, key) => store2.get(sessionId2, key),
+    revision: (sessionId2) => store2.revision(sessionId2),
+    values: (sessionId2) => store2.values(sessionId2),
+    set: (sessionId2, key, value) => recorded(sessionId2, [key], () => store2.set(sessionId2, key, value)),
     setBatch: (sessionId2, pairs2) => recorded(
       sessionId2,
       pairs2.map((p2) => p2.key),
-      () => store.setBatch(sessionId2, pairs2)
+      () => store2.setBatch(sessionId2, pairs2)
     ),
-    clear: (sessionId2, key) => recorded(sessionId2, [key], () => store.clear(sessionId2, key))
+    clear: (sessionId2, key) => recorded(sessionId2, [key], () => store2.clear(sessionId2, key))
   };
 }
 var EPHEMERAL_SESSION_STORAGE = {
@@ -66051,9 +66078,9 @@ var repoConfigs = (dir) => {
     }
   };
 };
-function recordAnswer(store, dir, answer2) {
+function recordAnswer(store2, dir, answer2) {
   let recorded = { superseded: [], absent: [], unchecked: [] };
-  const filed = store.update((book) => {
+  const filed = store2.update((book) => {
     const others = Object.keys(book).filter((d) => d !== dir).map((d) => ({ d, found: presence(d) }));
     recorded = {
       superseded: others.filter(
@@ -70292,8 +70319,8 @@ var RuntimeStats = class _RuntimeStats {
         budgetBytes: 0
       },
       effectCache: { sessions: 0, effects: 0 },
-      menuIdle: { sessions: 0, armed: 0, pending: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
+      menuIdle: { sessions: 0, armed: 0 },
+      journalTurns: { gathers: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
@@ -70692,10 +70719,6 @@ function parseSessionId(raw) {
 }
 
 // src/daemon/verbs/index.ts
-var inTurn = (handler) => ({
-  gathers: false,
-  prepare: async (value) => (ctx) => handler(value, ctx)
-});
 function requireSessionId(value) {
   const parsed2 = parseSessionId(value);
   if (!parsed2.ok) throw new BadVerbArgs(`session id ${parsed2.problem}`);
@@ -70787,7 +70810,9 @@ function pbcopy(text4, ctx) {
 function launch(ctx, spec, what) {
   ctx.effect({ kind: "launch", spec, what });
 }
-var copy = async (value, ctx) => pbcopy(oneArg(value), ctx);
+var copy = (value, ctx) => {
+  pbcopy(oneArg(value), ctx);
+};
 var DRAWERS = /* @__PURE__ */ new Set([
   "request",
   "feed"
@@ -70797,7 +70822,7 @@ function requireDrawer(by) {
     throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
   return by;
 }
-var copyDiagnostic = async (value, ctx) => {
+var copyDiagnostic = (value, ctx) => {
   const [sessionId2 = "", by = "", key = ""] = decodeWire(
     () => decodeSegments(value)
   );
@@ -70809,22 +70834,24 @@ var copyDiagnostic = async (value, ctx) => {
     );
   pbcopy(text4, ctx);
 };
-var openVscode = async (value, ctx) => launch(
-  ctx,
-  {
-    bin: "/usr/bin/open",
-    args: ["-a", "Visual Studio Code", oneArg(value)],
-    category: "click.open"
-  },
-  'open -a "Visual Studio Code"'
-);
-var toolbarToggle = async (value, ctx) => {
+var openVscode = (value, ctx) => {
+  launch(
+    ctx,
+    {
+      bin: "/usr/bin/open",
+      args: ["-a", "Visual Studio Code", oneArg(value)],
+      category: "click.open"
+    },
+    'open -a "Visual Studio Code"'
+  );
+};
+var toolbarToggle = (value, ctx) => {
   const sessionId2 = requireSessionId(oneArg(value));
   const expanded = ctx.navigating.get(sessionId2, "toolbar-expanded");
   if (expanded) ctx.navigating.clear(sessionId2, "toolbar-expanded");
   else ctx.navigating.set(sessionId2, "toolbar-expanded", "1");
 };
-var setState = async (rawValue, ctx) => {
+var setState = (rawValue, ctx) => {
   const [sessionId2 = "", ...rest2] = decodeWire(() => decodeSegments(rawValue));
   const sid = requireSessionId(sessionId2);
   const gate2 = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
@@ -70864,7 +70891,7 @@ function stepWithin(current, by, min2, max2) {
   if (n < min2) return current === min2 ? max2 : min2;
   return n;
 }
-var stepState = async (rawValue, ctx) => {
+var stepState = (rawValue, ctx) => {
   const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
     () => decodeSegments(rawValue)
   );
@@ -71005,7 +71032,7 @@ function editStore(ctx, sid) {
     logger: ctx.log
   };
 }
-var setConfig = async (rawValue, ctx) => {
+var setConfig = (rawValue, ctx) => {
   const [sessionId2 = "", key = "", incoming = ""] = decodeWire(
     () => decodeSegments(rawValue)
   );
@@ -71033,7 +71060,7 @@ var setConfig = async (rawValue, ctx) => {
     `set-config: ${landing.key}=${result.value} \u2192 ${home.path} (session=${sid})`
   );
 };
-var stepConfig = async (rawValue, ctx) => {
+var stepConfig = (rawValue, ctx) => {
   const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
     () => decodeSegments(rawValue)
   );
@@ -71081,7 +71108,7 @@ var stepConfig = async (rawValue, ctx) => {
     `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
   );
 };
-var save = async (value, ctx) => {
+var save = (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
@@ -71124,7 +71151,7 @@ function gatePlacements(verb, gate2, placements) {
     if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
   }
 }
-var savePreset = async (value, ctx) => {
+var savePreset = (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
@@ -71162,7 +71189,7 @@ var savePreset = async (value, ctx) => {
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${home.path} (session=${sid})`
   );
 };
-var saveThemeDefault = async (value, ctx) => {
+var saveThemeDefault = (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
@@ -71192,7 +71219,7 @@ var saveThemeDefault = async (value, ctx) => {
     `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${home.path} (session=${sid})`
   );
 };
-var deletePreset2 = async (value, ctx) => {
+var deletePreset2 = (value, ctx) => {
   const [sessionId2 = "", name = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   if (!name) {
@@ -71208,7 +71235,7 @@ var deletePreset2 = async (value, ctx) => {
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
   ctx.log("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
 };
-var resetConfig = async (value, ctx) => {
+var resetConfig = (value, ctx) => {
   const [sessionId2 = "", ...keys2] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
@@ -71255,7 +71282,7 @@ function endedSessionKeys(ended, configuring) {
     ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
   ]);
 }
-var applyLayoutOp2 = async (rawValue, ctx) => {
+var applyLayoutOp2 = (rawValue, ctx) => {
   const [sessionId2 = "", key = "", opToken = ""] = decodeWire(
     () => decodeSegments(rawValue)
   );
@@ -71289,7 +71316,7 @@ var applyLayoutOp2 = async (rawValue, ctx) => {
     `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
   );
 };
-var undo = async (value, ctx) => {
+var undo = (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   ctx.journal.commit();
@@ -71298,7 +71325,7 @@ var undo = async (value, ctx) => {
   reloadIfWritten(ctx, sid, step4);
   ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
 };
-var back = async (value, ctx) => {
+var back = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   const { step: step4, discarded } = ctx.navigation.back(
     sid,
@@ -71308,7 +71335,7 @@ var back = async (value, ctx) => {
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
-var rewind = async (value, ctx) => {
+var rewind = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   ctx.journal.commit();
   ctx.journal.wrote();
@@ -71319,7 +71346,7 @@ var rewind = async (value, ctx) => {
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
   );
 };
-var redo = async (value, ctx) => {
+var redo = (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   ctx.journal.commit();
@@ -71328,7 +71355,7 @@ var redo = async (value, ctx) => {
   reloadIfWritten(ctx, sid, step4);
   ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
-var applyUpdate = async (value, ctx) => {
+var applyUpdate = (value, ctx) => {
   requireSessionId(oneArg(value));
   ctx.effect({ kind: "apply-update" });
 };
@@ -71358,20 +71385,70 @@ function writeReport(ctx, sid, facts) {
     `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
   );
 }
-async function clickGather(ctx, sid, doctor, load) {
-  const scope = {
-    kind: "clicked",
-    sessionId: sid,
-    via: ctx.arrival.via
+function describeDoctor(ctx, sid, step4) {
+  ctx.effect({ kind: "doctor", session: sid, step: step4, arrival: ctx.arrival });
+}
+function recordingReads(store2, reads) {
+  const refused2 = (what) => {
+    throw new Error(`doctor: the gather ${what}; a gather writes nothing`);
   };
+  return {
+    get: (sid, key) => {
+      const value = store2.get(sid, key);
+      reads.set(JSON.stringify([sid, key]), {
+        what: key,
+        value,
+        again: (state) => state.get(sid, key)
+      });
+      return value;
+    },
+    // [LAW:no-silent-failure] A gather reads keys by name, so each is stamped
+    // as it is read: the whole record read as one would stamp every write the
+    // session takes during the probes, a resize's hints among them.
+    values: () => refused2("read every key; a gather reads keys by name"),
+    revision: (sid) => store2.revision(sid),
+    set: (_sid, key) => refused2(`set ${key}`),
+    setBatch: () => refused2("wrote a batch"),
+    clear: (_sid, key) => refused2(`cleared ${key}`)
+  };
+}
+function movedSince(ctx, sid, stamp2) {
+  for (const { what, value, again } of stamp2.reads) {
+    if (again(ctx.sessionState) !== value) return what;
+  }
+  const stands = ctx.doctor.loadConfig(sessionOrigin(ctx, sid));
+  return stands.config === stamp2.load.config && stands.error === stamp2.load.error && stands.warning === stamp2.load.warning ? null : "config";
+}
+function doctorHints(state, sid) {
+  const { tmux: tmux3, claudeConfigDir: claudeConfigDir2, terminalEnv, ssh } = sessionHints(
+    { sessionState: state },
+    sid
+  );
+  return { tmux: tmux3, claudeConfigDir: claudeConfigDir2, terminalEnv, ssh };
+}
+async function gatherOnce(ctx, sid, arrival, doctor) {
+  const reads = /* @__PURE__ */ new Map();
+  const seen = {
+    ...ctx,
+    sessionState: recordingReads(ctx.sessionState, reads)
+  };
+  const hintsRead = (state) => JSON.stringify(doctorHints(state, sid));
+  const hints = doctorHints(ctx.sessionState, sid);
+  reads.set("hints", {
+    what: SESSION_CLIENT_HINTS_KEY,
+    value: JSON.stringify(hints),
+    again: hintsRead
+  });
+  const load = doctor.loadConfig(sessionOrigin(seen, sid));
+  const scope = { kind: "clicked", sessionId: sid, via: arrival.via };
   const said = ctx.clients.ofSession(sid, ctx.now());
   let facts;
   try {
     facts = await gatherFacts(
       { ...doctor, loadConfig: () => load },
-      sessionHints(ctx, sid),
-      sessionOrigin(ctx, sid),
-      (key) => ctx.sessionState.get(sid, key),
+      hints,
+      sessionOrigin(seen, sid),
+      (key) => seen.sessionState.get(sid, key),
       { kind: "ok", value: ctx.serving() },
       { kind: "ok", value: said.map((s) => s.rateLimits) },
       { kind: "ok", value: said.map((s) => s.transcript) },
@@ -71384,7 +71461,7 @@ async function clickGather(ctx, sid, doctor, load) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
     throw e;
   }
-  const gathered = {
+  return {
     facts,
     // The client that drew the bar this click came from, and the daemon the
     // click reached — this process.
@@ -71393,25 +71470,18 @@ async function clickGather(ctx, sid, doctor, load) {
       ctx.bundle,
       said.map((s) => s.client)
     ),
-    current: async (now2) => {
-      const stands = doctor.loadConfig(sessionOrigin(now2, sid));
-      const same2 = stands.config === load.config && stands.error === load.error && stands.warning === load.warning;
-      return same2 ? gathered : clickGather(now2, sid, doctor, stands);
-    }
+    stamp: { load, reads: [...reads.values()] }
   };
-  return gathered;
 }
-var gatherClick = (ctx, sid) => {
+async function gatherDoctor(ctx, effect) {
   const doctor = oneAskPerClick(ctx.doctor);
-  return clickGather(
-    ctx,
-    sid,
-    doctor,
-    doctor.loadConfig(sessionOrigin(ctx, sid))
-  );
-};
-async function clickFacts(ctx, sid, gathered) {
-  const { facts, install: install2 } = await ctx.gather(gathered.current);
+  const sid = effect.session;
+  return ctx.journalTurns.gathering(async () => {
+    const first2 = await gatherOnce(ctx, sid, effect.arrival, doctor);
+    return movedSince(ctx, sid, first2.stamp) === null ? first2 : gatherOnce(ctx, sid, effect.arrival, doctor);
+  });
+}
+function landedFacts(ctx, sid, arrival, { facts, install: install2 }) {
   const stores = readStores(ctx.doctorStores);
   const read2 = {
     ...facts,
@@ -71421,14 +71491,14 @@ async function clickFacts(ctx, sid, gathered) {
   };
   return {
     ...read2,
-    urlHandler: clickArrived(ctx.arrival),
+    urlHandler: clickArrived(arrival),
     install: install2,
-    clicked: clickedFrom(ctx, read2)
+    clicked: clickedFrom(ctx, arrival, read2)
   };
 }
-function clickedFrom(ctx, { terminal, clicked }) {
+function clickedFrom(ctx, arrival, { terminal, clicked }) {
   const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
-  if (sighting === null || ctx.arrival.via !== "link") return clicked;
+  if (sighting === null || arrival.via !== "link") return clicked;
   try {
     return ctx.doctorStores.clicked.update(
       (list2) => withClicked(list2, sighting)
@@ -71441,15 +71511,77 @@ function clickedFrom(ctx, { terminal, clicked }) {
     return clicked;
   }
 }
-var doctorRun = {
-  gathers: true,
-  prepare: async (value, ctx) => {
-    const sid = requireSessionId(oneArg(value));
-    const gathered = await gatherClick(ctx, sid);
-    return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered));
+var DOCTOR_STEPS = {
+  run: (ctx, sid, _step, facts) => writeReport(ctx, sid, facts),
+  // Re-probe THIS check at click time and perform the fix its fresh verdict
+  // carries — never a fix cached from the render that drew the `[fix]`,
+  // because the world may have moved (the var got set, the tmux server went
+  // away). Then re-run over the post-fix facts, so the row flips to the
+  // truthful reason.
+  fix: (ctx, sid, { check }, facts) => {
+    const verdict = check.probe(facts);
+    if (verdict.ok || verdict.fix === void 0) {
+      throw new BadVerbArgs(
+        `doctor-fix: ${check.label} \u2014 ${verdict.ok ? "nothing to fix" : verdict.reason}`
+      );
+    }
+    const after = applyFix(ctx.doctorStores, verdict.fix, facts);
+    if (after.kind === "failed") {
+      throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
+    }
+    ctx.log(
+      "info",
+      `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
+    );
+    writeReport(ctx, sid, after.value);
+  },
+  // Record what the user saw of the glyphs THIS check's fresh verdict shows,
+  // under the sighting they are — never a sighting cached from the render
+  // that drew the ✓ and ✗, since the session's terminal or joiner may have
+  // moved — then re-run over those same facts with the mark folded in.
+  mark: (ctx, sid, { check, mark }, facts) => {
+    const verdict = check.probe(facts);
+    if (verdict.ok || verdict.sighting === void 0) {
+      throw new BadVerbArgs(
+        `doctor-mark: ${check.label} \u2014 ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`
+      );
+    }
+    const marks = ctx.doctorStores.marks.update(
+      (book) => withMark(book, check.name, verdict.sighting.id, mark)
+    );
+    if (marks.kind === "failed") {
+      throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
+    }
+    ctx.log(
+      "info",
+      `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
+    );
+    writeReport(ctx, sid, { ...facts, marks });
   }
 };
-var doctorProbe = async (value, ctx) => {
+function landDoctor(ctx, effect, gathered) {
+  const sid = effect.session;
+  const moved = movedSince(ctx, sid, gathered.stamp);
+  if (moved !== null) {
+    throw new BadVerbArgs(
+      `doctor: the session's ${moved} changed during the doctor's probes \u2014 click again`
+    );
+  }
+  landStep(
+    ctx,
+    sid,
+    effect.step,
+    landedFacts(ctx, sid, effect.arrival, gathered)
+  );
+}
+function landStep(ctx, sid, step4, facts) {
+  const land2 = DOCTOR_STEPS[step4.kind];
+  land2(ctx, sid, step4, facts);
+}
+var doctorRun = (value, ctx) => {
+  describeDoctor(ctx, requireSessionId(oneArg(value)), { kind: "run" });
+};
+var doctorProbe = (value, ctx) => {
   const nonce = parseProbeNonce(oneArg(value));
   if (nonce === null) {
     throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
@@ -71463,83 +71595,34 @@ var doctorProbe = async (value, ctx) => {
     `doctor-probe: arrived nonce=${nonce} delivery=${delivery.kind}`
   );
 };
-var doctorFix = {
-  gathers: true,
-  prepare: async (value, ctx) => {
-    const [sessionId2 = "", checkName = ""] = decodeWire(
-      () => decodeSegments(value)
-    );
-    const sid = requireSessionId(sessionId2);
-    const check = checkByName(checkName);
-    if (check === void 0) {
-      throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
-    }
-    const gathered = await gatherClick(ctx, sid);
-    return async (c) => {
-      const facts = await clickFacts(c, sid, gathered);
-      const verdict = check.probe(facts);
-      if (verdict.ok || verdict.fix === void 0) {
-        throw new BadVerbArgs(
-          `doctor-fix: ${check.label} \u2014 ${verdict.ok ? "nothing to fix" : verdict.reason}`
-        );
-      }
-      const after = applyFix(c.doctorStores, verdict.fix, facts);
-      if (after.kind === "failed") {
-        throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
-      }
-      c.log(
-        "info",
-        `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
-      );
-      writeReport(c, sid, after.value);
-    };
+var doctorFix = (value, ctx) => {
+  const [sessionId2 = "", checkName = ""] = decodeWire(
+    () => decodeSegments(value)
+  );
+  const sid = requireSessionId(sessionId2);
+  const check = checkByName(checkName);
+  if (check === void 0) {
+    throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
   }
+  describeDoctor(ctx, sid, { kind: "fix", check });
 };
-var doctorMark = {
-  gathers: true,
-  prepare: async (value, ctx) => {
-    const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
-      () => decodeSegments(value)
-    );
-    const sid = requireSessionId(sessionId2);
-    const check = checkByName(checkName);
-    if (check === void 0) {
-      throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
-    }
-    if (!GLYPH_MARKS.includes(mark)) {
-      throw new BadVerbArgs(
-        `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
-      );
-    }
-    const gathered = await gatherClick(ctx, sid);
-    return async (c) => {
-      const facts = await clickFacts(c, sid, gathered);
-      const verdict = check.probe(facts);
-      if (verdict.ok || verdict.sighting === void 0) {
-        throw new BadVerbArgs(
-          `doctor-mark: ${check.label} \u2014 ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`
-        );
-      }
-      const made = [
-        check.name,
-        verdict.sighting.id,
-        mark
-      ];
-      const marks = c.doctorStores.marks.update(
-        (book) => withMark(book, ...made)
-      );
-      if (marks.kind === "failed") {
-        throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
-      }
-      c.log(
-        "info",
-        `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
-      );
-      writeReport(c, sid, { ...facts, marks });
-    };
+var doctorMark = (value, ctx) => {
+  const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
+    () => decodeSegments(value)
+  );
+  const sid = requireSessionId(sessionId2);
+  const check = checkByName(checkName);
+  if (check === void 0) {
+    throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
   }
+  if (!GLYPH_MARKS.includes(mark)) {
+    throw new BadVerbArgs(
+      `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
+    );
+  }
+  describeDoctor(ctx, sid, { kind: "mark", check, mark });
 };
-var slash = async (value, ctx) => {
+var slash = (value, ctx) => {
   const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const declared = Object.values(
@@ -71611,7 +71694,7 @@ function runOf2([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx)
     }))
   };
 }
-var run2 = async (value, ctx) => {
+var run2 = (value, ctx) => {
   let named3 = { sessionId: "-", action: "-" };
   let request2;
   try {
@@ -71626,7 +71709,7 @@ var run2 = async (value, ctx) => {
   }
   ctx.runs.start(request2);
 };
-var repoConfig = async (value, ctx) => {
+var repoConfig = (value, ctx) => {
   const [sessionId2 = "", dir = "", answer2 = "", mac = ""] = decodeWire(
     () => decodeSegments(value)
   );
@@ -71650,32 +71733,32 @@ var repoConfig = async (value, ctx) => {
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
 var LEAF_VERBS = /* @__PURE__ */ new Map([
-  [VERB_COPY, inTurn(copy)],
-  [VERB_OPEN_VSCODE, inTurn(openVscode)],
-  [VERB_SET_STATE, inTurn(setState)],
-  [VERB_STEP_STATE, inTurn(stepState)],
-  [VERB_SET_CONFIG, inTurn(setConfig)],
-  [VERB_STEP_CONFIG, inTurn(stepConfig)],
-  [VERB_RESET_CONFIG, inTurn(resetConfig)],
-  [VERB_SAVE, inTurn(save)],
-  [VERB_SAVE_PRESET, inTurn(savePreset)],
-  [VERB_SAVE_THEME_DEFAULT, inTurn(saveThemeDefault)],
-  [VERB_DELETE_PRESET, inTurn(deletePreset2)],
-  [VERB_APPLY_LAYOUT_OP, inTurn(applyLayoutOp2)],
-  [VERB_UNDO, inTurn(undo)],
-  [VERB_REDO, inTurn(redo)],
-  [VERB_BACK, inTurn(back)],
-  [VERB_REWIND, inTurn(rewind)],
-  [VERB_TOOLBAR_TOGGLE, inTurn(toolbarToggle)],
-  [VERB_APPLY_UPDATE, inTurn(applyUpdate)],
+  [VERB_COPY, copy],
+  [VERB_OPEN_VSCODE, openVscode],
+  [VERB_SET_STATE, setState],
+  [VERB_STEP_STATE, stepState],
+  [VERB_SET_CONFIG, setConfig],
+  [VERB_STEP_CONFIG, stepConfig],
+  [VERB_RESET_CONFIG, resetConfig],
+  [VERB_SAVE, save],
+  [VERB_SAVE_PRESET, savePreset],
+  [VERB_SAVE_THEME_DEFAULT, saveThemeDefault],
+  [VERB_DELETE_PRESET, deletePreset2],
+  [VERB_APPLY_LAYOUT_OP, applyLayoutOp2],
+  [VERB_UNDO, undo],
+  [VERB_REDO, redo],
+  [VERB_BACK, back],
+  [VERB_REWIND, rewind],
+  [VERB_TOOLBAR_TOGGLE, toolbarToggle],
+  [VERB_APPLY_UPDATE, applyUpdate],
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_DOCTOR_PROBE, inTurn(doctorProbe)],
-  [VERB_SLASH, inTurn(slash)],
-  [VERB_RUN, inTurn(run2)],
-  [VERB_REPO_CONFIG, inTurn(repoConfig)],
-  [VERB_COPY_DIAGNOSTIC, inTurn(copyDiagnostic)]
+  [VERB_DOCTOR_PROBE, doctorProbe],
+  [VERB_SLASH, slash],
+  [VERB_RUN, run2],
+  [VERB_REPO_CONFIG, repoConfig],
+  [VERB_COPY_DIAGNOSTIC, copyDiagnostic]
 ]);
 var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
   VERB_SET_STATE,
@@ -71732,39 +71815,25 @@ function sessionOfEffects(effects) {
   const sid = bearing === void 0 ? "" : decodeWire(() => decodeFirstSegment(bearing.value));
   return sid === "" ? null : parseSessionId(sid);
 }
-var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepare(value, ctx)).catch(
-  (e) => () => Promise.reject(e)
-);
-async function perform(verb, value, ctx, gathered) {
-  const step4 = gathered ?? await ctx.gather((full) => verb.prepare(value, full));
+function perform(handler, value, ctx) {
   const described = [];
-  await step4({ ...ctx, effect: (effect) => void described.push(effect) });
+  handler(value, { ...ctx, effect: (effect) => void described.push(effect) });
   for (const effect of described) ctx.effect(effect);
 }
-async function headGather(rawValue, ctx) {
-  const [head] = batchAdjacentWrites(parseEffects(rawValue));
-  const leaf = head === void 0 ? void 0 : LEAF_VERBS.get(head.verb);
-  return leaf?.gathers ? hoisted(leaf, head.value, ctx) : void 0;
-}
-async function foldEffects(rawValue, ctx, gathered) {
+function foldEffects(rawValue, ctx) {
   const errors2 = [];
   let operational = false;
   const effects = parseEffects(rawValue);
   const session = sessionOfEffects(effects);
-  for (const [i, { verb, value }] of batchAdjacentWrites(effects).entries()) {
+  for (const { verb, value } of batchAdjacentWrites(effects)) {
     const leaf = LEAF_VERBS.get(verb);
     if (!leaf) {
       errors2.push(`unknown effect verb "${verb}"`);
       continue;
     }
     try {
-      await perform(leaf, value, ctx, i === 0 ? gathered : void 0);
+      perform(leaf, value, ctx);
     } catch (e) {
-      if (e instanceof DaemonClosing) {
-        if (errors2.length > 0)
-          ctx.log("warn", `dispatch: ${errors2.join("; ")}`);
-        throw e;
-      }
       if (!(e instanceof BadVerbArgs)) operational = true;
       errors2.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -71790,50 +71859,36 @@ function throwAll(failures) {
     );
   }
 }
-async function journaled(sid, ctx, turn, handler) {
+function journaled(sid, ctx, handler) {
   const lanes = sid === null ? null : laneMeter(ctx, sid);
   const journal = ctx.history.begin();
   const navigation = ctx.navigation.begin(journal.sessionState);
-  const commit3 = turn.holds(() => {
-    const failed3 = [];
-    for (const step4 of [navigation, journal]) {
-      try {
-        step4.commit();
-      } catch (e) {
-        failed3.push(e);
-      }
-    }
-    throwAll(failed3);
-  });
   const failures = [];
-  const closing = (store) => closingView(
-    store,
+  const closing = (store2) => closingView(
+    store2,
     (sid2) => nestOf(ctx, sid2),
     (line) => ctx.log("info", line)
   );
-  const journaling = {
-    ...ctx,
-    sessionState: closing(journal.sessionState),
-    journal,
-    navigating: closing(navigation.sessionState)
-  };
   const effects = [];
   try {
-    await handler({
-      ...journaling,
-      effect: (effect) => void effects.push(effect),
-      gather: (work) => turn.landed(work(journaling))
+    handler({
+      ...ctx,
+      sessionState: closing(journal.sessionState),
+      journal,
+      navigating: closing(navigation.sessionState),
+      effect: (effect) => void effects.push(effect)
     });
   } catch (e) {
     failures.push(e);
   }
-  let live = true;
-  try {
-    live = commit3();
-  } catch (e) {
-    failures.push(e);
+  for (const step4 of [navigation, journal]) {
+    try {
+      step4.commit();
+    } catch (e) {
+      failures.push(e);
+    }
   }
-  if (live && lanes !== null) {
+  if (lanes !== null) {
     try {
       const after = lanes.read();
       ctx.lanes.clicked(
@@ -71845,21 +71900,19 @@ async function journaled(sid, ctx, turn, handler) {
       failures.push(e);
     }
   }
-  if (live) ctx.described(effects);
+  ctx.described(effects);
   throwAll(failures);
 }
-function click(verb, gather, handler) {
-  return async (value, ctx) => {
+function click(verb, handler) {
+  return (value, ctx) => {
+    if (ctx.gone()) throw new ClickAbandoned(verb);
     const session = clickSessionOf(verb, value);
     const sid = session?.ok ? session.id : null;
-    return ctx.journalTurns.click(
+    ctx.journalTurns.take(
       verb,
-      sid,
-      ctx.asker,
-      () => gather(value, ctx),
-      (gathered, turn) => journaled(sid, ctx, turn, async (c) => {
+      () => journaled(sid, ctx, (c) => {
         try {
-          await handler(value, c, gathered);
+          handler(value, c);
         } finally {
           if (sid !== null) ctx.clickLanded(sid);
         }
@@ -71871,14 +71924,12 @@ var VERBS = new Map([
   ...[...LEAF_VERBS].map(
     ([verb, leaf]) => [
       verb,
-      click(
-        verb,
-        async (value, ctx) => leaf.gathers ? hoisted(leaf, value, ctx) : void 0,
-        (value, ctx, gathered) => perform(leaf, value, ctx, gathered)
-      )
+      click(verb, (value, ctx) => {
+        perform(leaf, value, ctx);
+      })
     ]
   ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)],
+  [VERB_DISPATCH, click(VERB_DISPATCH, foldEffects)],
   // After the leaves, so it replaces the click they built: a probe writes no
   // journal, so nothing may refuse it for a turn, and it describes nothing.
   [VERB_DOCTOR_PROBE, doctorProbe]
@@ -71891,13 +71942,9 @@ function clickVerb(name) {
   return run3 === void 0 ? null : { name, run: run3 };
 }
 function closeIdleMenus(sid, idle, ctx) {
-  return ctx.journalTurns.take(
+  ctx.journalTurns.take(
     "menu-idle",
-    {
-      waited: (ms) => ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
-      gone: () => false
-    },
-    (turn) => journaled(sid, ctx, turn, async (c) => {
+    () => journaled(sid, ctx, (c) => {
       if (!idle.stillIdle()) {
         c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
         return;
@@ -72996,8 +73043,8 @@ function parseActionTemplate(parse3, src, name) {
     );
   }
 }
-function readVar(store, name) {
-  return store.has(name) ? toString(store.read(name)) : "";
+function readVar(store2, name) {
+  return store2.has(name) ? toString(store2.read(name)) : "";
 }
 function evalTemplate(tpl, scope) {
   return tpl.evaluate(scope).map((f) => f.plain).join("");
@@ -73026,13 +73073,13 @@ function linkOver(cell3, url, current = false) {
   linked.end = "";
   return linked;
 }
-function cycleIndex(c, store) {
-  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
+function cycleIndex(c, store2) {
+  return Math.max(c.members.indexOf(readVar(store2, c.stateVar)), 0);
 }
-function realize(c, display, boundValue, store, sessionId2, signer) {
+function realize(c, display, boundValue, store2, sessionId2, signer) {
   switch (c.kind) {
     case "set-literal": {
-      const current = readVar(store, c.stateVar);
+      const current = readVar(store2, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
         active: current === c.value
@@ -73040,7 +73087,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     }
     case "set-option": {
       const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
+      const current = readVar(store2, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
         active: current === value
@@ -73048,14 +73095,14 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     }
     case "set-int": {
       const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
+      const current = readVar(store2, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
         active: current === value
       };
     }
     case "set-cycle": {
-      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      const next = c.members[(cycleIndex(c, store2) + 1) % c.members.length];
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next] }],
         active: false
@@ -73077,7 +73124,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         effects: [
           {
             verb: VERB_COPY,
-            args: [evalTemplate(c.text, buildScope(store))]
+            args: [evalTemplate(c.text, buildScope(store2))]
           }
         ],
         active: false
@@ -73087,7 +73134,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         effects: [
           {
             verb: VERB_OPEN_VSCODE,
-            args: [evalTemplate(c.target, buildScope(store))]
+            args: [evalTemplate(c.target, buildScope(store2))]
           }
         ],
         active: false
@@ -73098,7 +73145,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
     // the write durable, not the click itself.
     case "persist-literal": {
-      const current = readVar(store, c.stateVar);
+      const current = readVar(store2, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, c.value] }],
         active: current === c.value
@@ -73106,14 +73153,14 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     }
     case "persist-option": {
       const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
+      const current = readVar(store2, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, value] }],
         active: current === value
       };
     }
     case "persist-cycle": {
-      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      const next = c.members[(cycleIndex(c, store2) + 1) % c.members.length];
       return {
         effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, next] }],
         active: false
@@ -73181,7 +73228,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         effects: [
           {
             verb: VERB_DELETE_PRESET,
-            args: [sessionId2, evalTemplate(c.name, buildScope(store))]
+            args: [sessionId2, evalTemplate(c.name, buildScope(store2))]
           }
         ],
         active: false
@@ -73216,7 +73263,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     // mac, so the click runs what the bar showed and nothing a URL made up.
     // Never "active": a run is a one-shot trigger.
     case "run": {
-      const scope = buildScope(store);
+      const scope = buildScope(store2);
       const evaluated2 = JSON.stringify({
         run: c.argv.map((item) => evalTemplate(item, scope)),
         env: Object.fromEntries(
@@ -73260,7 +73307,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         c.head,
         display,
         boundValue,
-        store,
+        store2,
         sessionId2,
         signer
       );
@@ -73268,7 +73315,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         effects: [
           ...head.effects,
           ...c.rest.flatMap(
-            (m) => realize(m, display, void 0, store, sessionId2, signer).effects
+            (m) => realize(m, display, void 0, store2, sessionId2, signer).effects
           )
         ],
         active: head.active
@@ -73300,7 +73347,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     }
   }
 }
-function selectDisplay(name, action2, displays, store) {
+function selectDisplay(name, action2, displays, store2) {
   if (displays.length === 0) {
     throw new Error(`action "${name}" needs a display (the clickable text)`);
   }
@@ -73309,7 +73356,7 @@ function selectDisplay(name, action2, displays, store) {
       `action "${name}"`,
       displays,
       action2.members.length,
-      cycleIndex(action2, store)
+      cycleIndex(action2, store2)
     );
     return { display, boundValue: void 0 };
   }
@@ -73325,19 +73372,19 @@ function renderAction(name, displays, runtime) {
   if (!declared) {
     throw new Error(`action "${name}" is not declared in this config`);
   }
-  const store = renderBinding(runtime, `action "${name}"`).store;
+  const store2 = renderBinding(runtime, `action "${name}"`).store;
   const { display, boundValue } = selectDisplay(
     name,
     presentedAction(declared),
     displays,
-    store
+    store2
   );
-  const sessionId2 = readVar(store, "session.id");
+  const sessionId2 = readVar(store2, "session.id");
   const { effects, active: active2 } = realize(
     declared,
     display.plain,
     boundValue,
-    store,
+    store2,
     sessionId2,
     runtime.links.signer
   );
@@ -73356,13 +73403,13 @@ function actionFuncs(runtime) {
 
 // src/render/disclosure-close.ts
 init_globals();
-function disclosureCloseFragment(to, store, key) {
+function disclosureCloseFragment(to, store2, key) {
   return linkFragment(
     DISCLOSURE_GLYPH_CLOSE,
     effectsUrl(to, [
       {
         verb: VERB_SET_STATE,
-        args: [readVar(store, "session.id"), key, DISCLOSURE_CLOSED]
+        args: [readVar(store2, "session.id"), key, DISCLOSURE_CLOSED]
       }
     ]),
     false
@@ -73656,9 +73703,9 @@ function requireOptionKind(runtime, name, helper) {
 }
 function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
   const declared = runtime.compiled.get(applyName);
-  const store = renderBinding(runtime, "picker").store;
-  const sessionId2 = readVar(store, "session.id");
-  const current = "stateVar" in apply2 ? readVar(store, apply2.stateVar) : void 0;
+  const store2 = renderBinding(runtime, "picker").store;
+  const sessionId2 = readVar(store2, "session.id");
+  const current = "stateVar" in apply2 ? readVar(store2, apply2.stateVar) : void 0;
   const optionFace = (i, label2) => {
     const option = apply2.options[i];
     return itemPaint(
@@ -73681,7 +73728,7 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
     available,
     navReserve
   );
-  const rawPage = parseInt(readVar(store, page2.stateVar), 10);
+  const rawPage = parseInt(readVar(store2, page2.stateVar), 10);
   const pageHolding = (index) => Math.max(
     0,
     pages.findIndex(
@@ -73708,7 +73755,7 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
       declared,
       option,
       option,
-      store,
+      store2,
       sessionId2,
       runtime.links.signer
     ).effects,
@@ -73732,7 +73779,7 @@ function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint
             declared,
             option,
             option,
-            store,
+            store2,
             sessionId2,
             runtime.links.signer
           ).effects,
@@ -73868,17 +73915,17 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
     );
   }
-  const store = renderBinding(runtime, "carousel").store;
-  if (!store.has(apply2.stateVar)) {
+  const store2 = renderBinding(runtime, "carousel").store;
+  if (!store2.has(apply2.stateVar)) {
     throw new Error(
       `carousel references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
     );
   }
   const declared = runtime.compiled.get(applyName);
-  const sessionId2 = readVar(store, "session.id");
+  const sessionId2 = readVar(store2, "session.id");
   const { options } = apply2;
   if (options.length === 0) return assemble([]);
-  const indexAt = ringAround(options, readVar(store, apply2.stateVar));
+  const indexAt = ringAround(options, readVar(store2, apply2.stateVar));
   const ring = (offset) => options[indexAt(offset)];
   const step4 = (offset) => effectsUrl(
     runtime.links.to,
@@ -73886,7 +73933,7 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
       declared,
       ring(offset),
       ring(offset),
-      store,
+      store2,
       sessionId2,
       runtime.links.signer
     ).effects
@@ -73909,7 +73956,7 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
           runtime.compiled.get(openName),
           ring(0),
           void 0,
-          store,
+          store2,
           sessionId2,
           runtime.links.signer
         ).effects
@@ -74231,9 +74278,9 @@ function renderMenu(applyName, displays, options, runtime) {
   const stateKey = menuStateKey(placement.placementId, applyName, options.key);
   const pageKey = menuPageKey(stateKey);
   const member = menuMember(applyName);
-  const store = renderBinding(action2, "menu").store;
-  const open2 = readVar(store, stateKey) === member;
-  const sessionId2 = readVar(store, "session.id");
+  const store2 = renderBinding(action2, "menu").store;
+  const open2 = readVar(store2, stateKey) === member;
+  const sessionId2 = readVar(store2, "session.id");
   const successor = open2 ? DISCLOSURE_CLOSED : member;
   const glyph = linkFragment(
     pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open2 ? 1 : 0),
@@ -75020,13 +75067,13 @@ var sameLook2 = sameBy({
   decor: sameDecor
 });
 var ViewParts = class {
-  constructor(store, registry, source, view) {
-    this.store = store;
+  constructor(store2, registry, source, view) {
+    this.store = store2;
     this.registry = registry;
     this.source = source;
     this.view = observable.box(view, { deep: false });
-    this.scope = buildScope(store);
-    this.depth = store.derive("drawn depth", "computed", () => {
+    this.scope = buildScope(store2);
+    this.depth = store2.derive("drawn depth", "computed", () => {
       const said = this.inputAt(COLOR_PATH);
       return said.kind === "found" && typeof said.value === "string" && isColorCompatibility(said.value) ? said.value : COLOR_FLOOR;
     });
@@ -75036,7 +75083,7 @@ var ViewParts = class {
     const phase = this.phase;
     const layout = () => this.layout.read();
     this.binding = {
-      store,
+      store: store2,
       registry,
       get width() {
         return drawn.width;
@@ -75326,18 +75373,18 @@ var ViewParts = class {
     return this.placement(node).gate().kind !== "hidden";
   }
 };
-function bindView(source, store, registry, view) {
-  const parts = source.views.get(store);
+function bindView(source, store2, registry, view) {
+  const parts = source.views.get(store2);
   if (parts !== void 0) {
     parts.bind(view);
     return parts;
   }
-  const made = new ViewParts(store, registry, source, view);
-  source.views.set(store, made);
+  const made = new ViewParts(store2, registry, source, view);
+  source.views.set(store2, made);
   return made;
 }
-function partsOf(source, store) {
-  const parts = source.views.get(store);
+function partsOf(source, store2) {
+  const parts = source.views.get(store2);
   if (parts === void 0) {
     throw new Error(
       "a store was drawn before its view was bound (bindView): its inputs have no source"
@@ -76016,7 +76063,7 @@ function segmentsUnder(node) {
     ...node.opens === void 0 ? [] : segmentsUnder(node.opens.body)
   ];
 }
-function drawDsl(config2, compiled, store, registry, projected, at, opts, observers, selection2) {
+function drawDsl(config2, compiled, store2, registry, projected, at, opts, observers, selection2) {
   var _stack = [];
   try {
     const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
@@ -76024,7 +76071,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     const effects = selection2.effects ?? new SessionEffects("");
     const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
     const drawClock = __using(_stack, bindClock(at, clock.timeline));
-    const parts = partsOf(compiled, store);
+    const parts = partsOf(compiled, store2);
     const drawOpts = {
       ...opts,
       colorCompatibility: parts.colorCompatibility()
@@ -76154,7 +76201,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         // [LAW:one-source-of-truth] The row ✕ reads the session id from the
         // same store every other affordance's URL does, and is addressed as
         // every link the compile draws is.
-        closeDisclosure: (key) => disclosureCloseFragment(compiled.links.to, store, key),
+        closeDisclosure: (key) => disclosureCloseFragment(compiled.links.to, store2, key),
         placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
         lastDrawn: (id2) => last2?.placements.get(id2),
         waited: (variable) => waited.add(variable),
@@ -77336,8 +77383,7 @@ function drawRender(parts, setup, drawing2) {
   const hints = view.source.hints();
   const width = payload.term.cols;
   noteFacts(facts, { width: String(width) });
-  const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
-  const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
+  const clickHolds = clickErrorsAt(sessionState, sessionId2, at, drawing2.by);
   const updates = updateWatch.notice({
     to: links2.to,
     sessionId: sessionId2,
@@ -77364,7 +77410,9 @@ function drawRender(parts, setup, drawing2) {
       text: e.message,
       copy: e.prompt
     })),
-    said(clickShown?.text)
+    ...shownClickErrors(clickHolds).map(
+      (e) => sourced(`click\0${e.at}\0${e.text}`, e.text)
+    )
   ].flatMap(
     ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
   );
@@ -77543,7 +77591,8 @@ function drawRender(parts, setup, drawing2) {
     // draw, `per-draw` at this frame's instant; `-` for none.
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors2.length > 0 ? "Y" : "N",
-    clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
+    // Each click error as this frame held it, oldest first: `-` for none.
+    clickError: clickHolds.map(({ hold: hold2 }) => hold2).join(",") || "-",
     // The launcher's pipe event as this frame showed it: `-` for not at all.
     pipeEvent: pipeWarning?.hold ?? "-",
     upd: String(updates.length),
@@ -77566,7 +77615,7 @@ function drawRender(parts, setup, drawing2) {
     },
     evaluated: evaluated2,
     cellBreaks,
-    answersClick: toAnswer(clickHold),
+    answersClick: toAnswer(clickHolds),
     pipeShown,
     delivered,
     lanes,
@@ -77702,7 +77751,8 @@ var failed2 = (said) => ({
 var DESCRIBE = {
   launch: ({ what }) => `launch:${what}`,
   "type-slash": ({ line }) => `type-slash:${line}`,
-  "apply-update": () => "apply-update"
+  "apply-update": () => "apply-update",
+  doctor: ({ step: step4 }) => `doctor:${step4.kind}`
 };
 function describeEffect(effect) {
   const describe4 = DESCRIBE[effect.kind];
@@ -77711,35 +77761,20 @@ function describeEffect(effect) {
 
 // src/daemon/apply.ts
 var NO_EFFECTS = [];
-var turnWaits = (facts) => ({
-  waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-  gone: () => false
-});
 var ARMS = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
-  // batch between the journal's begin and commit, and the draw begins once
-  // the turn is over, so it never reads the request's hints beside a click
-  // the turn was waiting on. The turn waits behind every turn, daemon-wide:
-  // a click's head gather runs ahead of its turn and delays no request, but a
-  // gather inside a turn (a doctor step after a dispatch's first, or one
-  // repeated for a config that changed) holds every session's request for as
-  // long as its probes run, each bounded by its launch timeout, and that wait
-  // is spent from the request's budget. The same gather is the one way a
-  // draw, this one or a feed's, reads a click half landed: a click that takes
-  // its turn while the draw waits on its sources has landed its first write
-  // and parked before its last. Its wait and the revision its own turn left
-  // go on the request's line, the render event, which is its record and opens
-  // with the session the edge noted.
+  // batch in a journal turn, and the draw begins once the turn is over. A turn
+  // is synchronous (src/daemon/journal-turns.ts), so the request waits behind
+  // no other session's work, and no draw, this one or a feed's, can read a
+  // click half landed. The revision its turn left goes on the request's line,
+  // the render event, which is its record and opens with the session the edge
+  // noted.
   request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw: draw2 }) => {
-    const revision = await verbCtx.journalTurns.take(
-      "request",
-      turnWaits(facts),
-      async () => {
-        recordRequest(verbCtx.sessionState, req);
-        return verbCtx.sessionState.revision(req.sessionId);
-      }
-    );
+    const revision = verbCtx.journalTurns.take("request", () => {
+      recordRequest(verbCtx.sessionState, req);
+      return verbCtx.sessionState.revision(req.sessionId);
+    });
     noteFacts(facts, { revision: String(revision) });
     return {
       answer: await draw2(req, at, waitEndsAt, facts),
@@ -77747,72 +77782,93 @@ var ARMS = {
       facts: []
     };
   },
-  // [LAW:single-enforcer] The click's whole bracket on its menus' idle clock
-  // is here, so the timer cannot close a menu under any click Apply carries.
   // The turn hands its effects over once it has committed (`described`), and
-  // a refused step is answered beside them.
-  click: async ({ verb, value, arrival, pending: pending2, asker }, { verbCtx, menuIdle }) => {
-    if (pending2 !== null) menuIdle.clickArrived(pending2);
+  // a refused step is answered beside them; a click whose client has left is
+  // refused by the verb, where it would land (src/daemon/verbs/index.ts). A
+  // turn is synchronous, so no idle timer can close a menu under one.
+  click: async ({ verb, value, arrival, gone }, { verbCtx }) => {
     const effects = [];
     let answer2 = null;
     try {
-      await verb.run(value, {
+      verb.run(value, {
         ...verbCtx,
         arrival,
-        asker,
+        gone,
         described: (described) => void effects.push(...described)
       });
     } catch (error) {
       answer2 = { error };
-    } finally {
-      if (pending2 !== null) menuIdle.clickSettled(pending2);
     }
     return { answer: answer2, effects, facts: [] };
   },
   "menu-idle": async ({ session, idle }, { verbCtx }) => {
     const effects = [];
-    await closeIdleMenus(session, idle, {
+    closeIdleMenus(session, idle, {
       ...verbCtx,
       described: (described) => void effects.push(...described)
     });
     return { answer: void 0, effects, facts: [] };
   },
-  // [LAW:single-enforcer] The one writer of what a failed effect leaves: the
-  // session's click error, held in a turn of its own as every write is, and
-  // shown as a failed dispatch's is (src/daemon/click-error.ts). A click that
-  // names no session has no bar; its apply line is the record.
-  "effect-done": async ({ of, outcome }, { verbCtx }) => {
-    const facts = [];
-    await verbCtx.journalTurns.take(
-      "effect-done",
-      turnWaits(facts),
-      async () => {
-        if (outcome.kind === "failed" && of.session !== null) {
-          holdClickError(
-            verbCtx.sessionState,
-            of.session,
-            outcome.said,
-            verbCtx.now()
-          );
-        }
+  // [LAW:single-enforcer] The one writer of what an effect's outcome leaves:
+  // its landing, in a turn of its own as every write is, answers how it went
+  // (`LANDINGS`), and a failure is held as the session's click error, shown as
+  // a failed dispatch's is (src/daemon/click-error.ts). A click that names no
+  // session has no bar; its apply line is the record.
+  "effect-done": async ({ of, done: done2 }, parts) => {
+    const { verbCtx } = parts;
+    const outcome = verbCtx.journalTurns.take("effect-done", () => {
+      const landed = land(done2, parts);
+      if (landed.kind === "failed" && of.session !== null) {
+        holdClickError(
+          verbCtx.sessionState,
+          of.session,
+          landed.said,
+          verbCtx.now()
+        );
       }
-    );
-    return { answer: void 0, effects: NO_EFFECTS, facts };
+      return landed;
+    });
+    return { answer: outcome, effects: NO_EFFECTS, facts: [] };
   },
   // [LAW:single-enforcer] The one write after a request's answer went out: the
-  // click error it carried is marked answered (src/daemon/click-error.ts), in
+  // click errors it carried are marked answered (src/daemon/click-error.ts), in
   // a turn as every write is, so no frame reads the mark beside a click's
   // writes half landed.
-  answered: async ({ session, error }, { verbCtx }) => {
-    const facts = [];
-    await verbCtx.journalTurns.take(
+  answered: async ({ session, errors: errors2 }, { verbCtx }) => {
+    verbCtx.journalTurns.take(
       "answered",
-      turnWaits(facts),
-      async () => answeredClickError(verbCtx.sessionState, session, error)
+      () => answeredClickError(verbCtx.sessionState, session, errors2)
     );
-    return { answer: void 0, effects: NO_EFFECTS, facts };
+    return { answer: void 0, effects: NO_EFFECTS, facts: [] };
   }
 };
+var asIs = ({
+  outcome
+}) => outcome;
+var LANDINGS = {
+  launch: asIs,
+  "type-slash": asIs,
+  "apply-update": asIs,
+  doctor: ({ effect, outcome }, verbCtx) => {
+    if (outcome.kind === "failed") return outcome;
+    landDoctor(verbCtx, effect, outcome.gathered);
+    return PERFORMED;
+  }
+};
+function land(done2, parts) {
+  const landing = LANDINGS[done2.effect.kind];
+  try {
+    return landing(done2, parts.verbCtx);
+  } catch (e) {
+    return thrown(done2.effect, e, parts.log);
+  }
+}
+function thrown(effect, e, log) {
+  if (!(e instanceof BadVerbArgs || e instanceof DaemonClosing)) {
+    log("error", `apply: ${describeEffect(effect)} threw: ${inspect(e)}`);
+  }
+  return failed2(e instanceof Error ? e.message : String(e));
+}
 function recordRequest(state, req) {
   const { client: _client, configEnv: _configEnv, ...recorded } = req.hints;
   const said = [
@@ -77880,18 +77936,18 @@ var LINE = {
   click: (_event, { answer: answer2 }) => answer2 === null ? APPLIED : refused(answer2),
   "menu-idle": () => APPLIED,
   answered: () => APPLIED,
-  "effect-done": ({ effect, outcome }) => ({
-    level: OUTCOME_LEVEL[outcome.kind],
+  "effect-done": ({ done: done2 }, { answer: answer2 }) => ({
+    level: OUTCOME_LEVEL[answer2.kind],
     facts: [
-      ["effect", describeEffect(effect)],
-      ["outcome", outcome.kind],
-      ["said", outcome.said || "-"]
+      ["effect", describeEffect(done2.effect)],
+      ["outcome", answer2.kind],
+      ["said", answer2.said || "-"]
     ]
   })
 };
 var ORIGIN = {
   request: ({ req }) => ({ verb: "request", session: req.sessionId }),
-  click: ({ verb, pending: pending2 }) => ({ verb: verb.name, session: pending2 }),
+  click: ({ verb, session }) => ({ verb: verb.name, session }),
   "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
   "effect-done": ({ of }) => of,
   answered: ({ session }) => ({ verb: "answered", session })
@@ -77921,7 +77977,13 @@ var PERFORM = {
   "apply-update": async (_effect, { verbCtx }) => {
     await verbCtx.applyUpdate();
     return PERFORMED;
-  }
+  },
+  // The doctor's probes, gathered after the click's turn, in no turn: its
+  // step lands with the facts (`LANDINGS`).
+  doctor: async (effect, { verbCtx }) => ({
+    kind: "gathered",
+    gathered: await gatherDoctor(verbCtx, effect)
+  })
 };
 async function clickLaunch(launcher, spec, what) {
   const result = await launcher.launch({
@@ -77932,20 +77994,22 @@ async function clickLaunch(launcher, spec, what) {
 }
 async function perform2(effect, parts) {
   const performer = PERFORM[effect.kind];
+  let outcome;
   try {
-    return await performer(effect, parts);
+    outcome = await performer(effect, parts);
   } catch (e) {
-    return failed2(e instanceof Error ? e.message : String(e));
+    outcome = thrown(effect, e, parts.log);
   }
+  return { effect, outcome };
 }
 function performAll(parts, of, effects) {
   return parts.verbCtx.journalTurns.performing(of.session, async () => {
     for (const effect of effects) {
-      const outcome = await perform2(effect, parts);
+      const done2 = await perform2(effect, parts);
       await applyUnanswered(
-        { kind: "effect-done", of, effect, outcome },
+        { kind: "effect-done", of, done: done2 },
         parts,
-        `${describeEffect(effect)} ${outcome.kind}: ${outcome.said}`
+        `${describeEffect(effect)} ${done2.outcome.kind}${"said" in done2.outcome ? `: ${done2.outcome.said}` : ""}`
       );
     }
   });
@@ -78085,12 +78149,12 @@ function buildDebugSnapshot(what, state) {
 }
 function introspectVars(state) {
   if (state === null) return [];
-  const { store, registry, config: config2 } = state;
+  const { store: store2, registry, config: config2 } = state;
   const sourceByName = buildSourceKindIndex(config2);
-  const names = store.names().sort();
+  const names = store2.names().sort();
   const out = [];
   for (const name of names) {
-    const node = store.getNode(name);
+    const node = store2.getNode(name);
     const value = valueOf2(node);
     const err = registry.getLastError(name);
     out.push({
@@ -78098,7 +78162,7 @@ function introspectVars(state) {
       source: sourceByName.get(name) ?? null,
       ...value,
       lastError: err !== void 0 ? { timestampMs: err.timestamp, message: err.message } : null,
-      ageMs: ageFromNode(node.lastUpdatedMs(), store.clock)
+      ageMs: ageFromNode(node.lastUpdatedMs(), store2.clock)
     });
   }
   return out;
@@ -78151,8 +78215,8 @@ function sourceKindOf(decl) {
 }
 function introspectSegments(state) {
   if (state === null) return [];
-  const { store, config: config2, lastRenderBySegment } = state;
-  const declaredNames = new Set(store.names());
+  const { store: store2, config: config2, lastRenderBySegment } = state;
+  const declaredNames = new Set(store2.names());
   const segNames = orderedSegmentNames(config2);
   const placed2 = placementsBySegment(config2);
   const out = [];
@@ -78499,12 +78563,12 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           // is a write, so it is an event the arm makes in a turn.
           delivered: () => {
             delivered();
-            if (answersClick !== null)
+            if (answersClick.length > 0)
               void applyUnanswered(
                 {
                   kind: "answered",
                   session: checked.req.sessionId,
-                  error: answersClick
+                  errors: answersClick
                 },
                 parts,
                 `sid=${checked.req.sessionId}`
@@ -78765,23 +78829,18 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
     return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
-  const session = clickSessionOf(verb, value);
-  const pending2 = session?.ok ? session.id : null;
-  if (session === null) noteFacts(facts, { sid: "-" });
-  else if (pending2 !== null) noteFacts(facts, { sid: pending2 });
+  const named3 = clickSessionOf(verb, value);
+  const session = named3?.ok ? named3.id : null;
+  if (named3 === null) noteFacts(facts, { sid: "-" });
+  else if (session !== null) noteFacts(facts, { sid: session });
   const { answer: answer2 } = await apply(
     {
       kind: "click",
       verb: resolved,
       value,
       arrival,
-      pending: pending2,
-      asker: {
-        placed: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-        gathered: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
-        waited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-        gone: clientGone
-      }
+      session,
+      gone: clientGone
     },
     parts
   );
@@ -82430,7 +82489,7 @@ function watchTargetsFor(entry, locs) {
 function joinWarnings(parts) {
   return parts.filter(Boolean).join("\n") || null;
 }
-var thrown = (err) => err instanceof Error ? err.message : String(err);
+var thrown2 = (err) => err instanceof Error ? err.message : String(err);
 function plugins(p2) {
   return {
     loaded: p2.loaded,
@@ -82525,10 +82584,10 @@ function buildRenderState(load, deps) {
     (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
   );
   const warnings = [];
-  const store = new VariableStore(deps.clock);
+  const store2 = new VariableStore(deps.clock);
   const registry = new SourceRegistry(
     NO_RUNS,
-    store,
+    store2,
     config2.globals.default_empty_value ?? "",
     deps.sessionState
   );
@@ -82562,7 +82621,7 @@ function buildRenderState(load, deps) {
       compileKey: registration.compileKey,
       loadKey: load.key,
       buildWarnings: warnings,
-      store,
+      store: store2,
       registry,
       compiled: registration.compiled,
       // What a reset clears is the home's: resets write nowhere else.
@@ -82620,7 +82679,7 @@ function settle2(frame2, chain2, resolveWarnings, attempt4, clock) {
         kind: "failed",
         warning: warning(attempt4.warnings),
         state: null,
-        error: thrown(attempt4.cause),
+        error: thrown2(attempt4.cause),
         cause: attempt4.cause
       };
   }
@@ -82664,7 +82723,7 @@ function fallbackState(cwd2, repo2, deps) {
   );
   const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
   if (built.kind === "failed")
-    throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
+    throw new Error(`bundled default failed to load: ${thrown2(built.cause)}`, {
       cause: built.cause
     });
   return built.state;
@@ -83354,8 +83413,8 @@ var NavigationHistory = class {
   );
   // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
   // walk `back` itself makes, so the count cannot promise a step it discards.
-  depth(sessionId2, store, gate2) {
-    return this.restorable(sessionId2, store, gate2).length;
+  depth(sessionId2, store2, gate2) {
+    return this.restorable(sessionId2, store2, gate2).length;
   }
   // The steps going back would restore, oldest first: walking down from the
   // newest over the state as each restore would leave it, a step is restored
@@ -83365,9 +83424,9 @@ var NavigationHistory = class {
   // view that is gone — rewritten since (a layout edit releasing the placement
   // it configured), or no longer one the config admits (that placement
   // removed, a group renamed) — and is discarded rather than replayed.
-  restorable(sessionId2, store, gate2) {
+  restorable(sessionId2, store2, gate2) {
     const state = /* @__PURE__ */ new Map();
-    const read2 = (key) => state.has(key) ? state.get(key) : store.get(sessionId2, key);
+    const read2 = (key) => state.has(key) ? state.get(key) : store2.get(sessionId2, key);
     const kept = [];
     for (const step4 of [...this.past.get(sessionId2) ?? []].reverse()) {
       const holds2 = step4.every(
@@ -83382,10 +83441,10 @@ var NavigationHistory = class {
   // `store` is the click's own view of session state — the settings journal's,
   // so a navigating click that also picks a setting still records the pick
   // where undo reaches it.
-  begin(store) {
+  begin(store2) {
     const pending2 = /* @__PURE__ */ new Map();
     const sessionState = recordingView(
-      store,
+      store2,
       isNavigationKey,
       (sessionId2, key, before, after) => {
         const changes = pending2.get(sessionId2) ?? /* @__PURE__ */ new Map();
@@ -83411,9 +83470,9 @@ var NavigationHistory = class {
   // returns it, with how many steps it discarded (restorable). Written through
   // the bare store, never a navigation journal, so going back is not itself a
   // step.
-  back(sessionId2, store, gate2) {
+  back(sessionId2, store2, gate2) {
     const all2 = this.past.get(sessionId2) ?? [];
-    const steps2 = this.restorable(sessionId2, store, gate2);
+    const steps2 = this.restorable(sessionId2, store2, gate2);
     const step4 = steps2.at(-1);
     const discarded = all2.length - steps2.length;
     if (step4 === void 0) {
@@ -83426,9 +83485,9 @@ var NavigationHistory = class {
       const restored = step4.flatMap(
         ({ key, before }) => before === null ? [] : [{ key, value: before }]
       );
-      if (restored.length > 0) store.setBatch(sessionId2, restored);
+      if (restored.length > 0) store2.setBatch(sessionId2, restored);
       for (const { key, before } of step4) {
-        if (before === null) store.clear(sessionId2, key);
+        if (before === null) store2.clear(sessionId2, key);
       }
     });
     this.put(sessionId2, steps2.slice(0, -1));
@@ -83775,9 +83834,9 @@ function taken(prior, moved, picks) {
   };
 }
 function sessionSource(deps) {
-  return ({ sessionId: sessionId2, state, store, declared, followed, onDispose }) => {
+  return ({ sessionId: sessionId2, state, store: store2, declared, followed, onDispose }) => {
     const pick2 = (key) => deps.sessionState.get(sessionId2, key);
-    const effective = store.derive(
+    const effective = store2.derive(
       "session.effective",
       "computed",
       () => resolveEffectiveGlobals(
@@ -83786,7 +83845,7 @@ function sessionSource(deps) {
         (preset) => state.authoredRoots.has(preset)
       )
     );
-    const compose = store.derive(
+    const compose = store2.derive(
       "session.compose",
       "computed",
       () => {
@@ -83798,7 +83857,7 @@ function sessionSource(deps) {
         };
       }
     );
-    const draw2 = store.derive(
+    const draw2 = store2.derive(
       "session.draw",
       "computed",
       () => ({
@@ -83866,7 +83925,7 @@ function sessionSource(deps) {
         }
       )
     );
-    const payload = store.derive("session.payload", "computed", () => {
+    const payload = store2.derive("session.payload", "computed", () => {
       const { stamped: stamped2, compose: composed2, draw: drawn } = turn.get();
       return composePayload(stamped2.facts, composed2, drawn);
     });
@@ -85783,83 +85842,45 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 
 // src/daemon/journal-turns.ts
 init_globals();
-var DAEMON_WIDE = "journals";
 var GATHERS = "gathers";
 var CLICKLESS = "clickless";
 var JournalTurns = class {
-  constructor(deps) {
-    this.deps = deps;
-  }
-  deps;
-  queue = new KeyedSerialQueue();
-  sessions = new KeyedSerialQueue();
   gathers = new KeyedSerialQueue();
   effects = new KeyedSerialQueue();
   open = true;
-  inFlight = null;
   holder = null;
-  queued = 0;
   gathersInFlight = 0;
-  // Runs `body` in its turn, unless the daemon closed or the asker left while
-  // it waited: a click whose client took a TIMEOUT never lands, so clicking
-  // again cannot revert a toggle.
-  take(verb, { waited, gone }, body) {
-    const asked2 = this.deps.monotonic();
-    this.queued++;
-    return this.queue.run(DAEMON_WIDE, async () => {
-      this.queued--;
-      this.refuseClosed(verb);
-      if (gone()) throw new ClickAbandoned(verb);
-      const since = this.deps.monotonic();
-      waited(spanMs(asked2, since));
-      this.holder = { verb, since };
-      try {
-        return await body({
-          holds: (commit3) => {
-            const held = { verb, commit: commit3 };
-            this.inFlight = held;
-            return () => this.commit(held);
-          },
-          landed: (p2) => p2.finally(() => this.refuseClosed(verb))
-        });
-      } finally {
-        this.holder = null;
-      }
-    });
+  // Runs `body` as `verb`'s turn and answers what it answered, or throws what
+  // it threw. Refused once the daemon has closed, and inside another turn: a
+  // turn nested in a turn would nest two journals.
+  take(verb, body) {
+    if (!this.open) throw new DaemonClosing(verb);
+    if (this.holder !== null) {
+      throw new Error(`journal: ${verb} took a turn inside ${this.holder}'s`);
+    }
+    this.holder = verb;
+    try {
+      return body();
+    } finally {
+      this.holder = null;
+    }
   }
-  // A click from arrival to landing: in `session`'s order (a click naming none
-  // goes straight on), `gather` outside any turn, `body` in one.
-  // [LAW:single-enforcer] `gone` is read for a click's waits and never for its
-  // own gather: a client that left at the head of its queue, or after the
-  // gather while the turn was awaited, refuses the click; one that left during
-  // the gather does not, since a gather outlasts a client's budget through no
-  // fault of a re-click. With no gather `left` is false, as it was just read.
-  click(verb, session, { placed: placed2, waited, gone, gathered }, gather, body) {
-    const arrived3 = this.deps.monotonic();
-    const inPlace = async () => {
-      placed2(elapsedMs(this.deps, arrived3));
-      this.refuseClosed(verb);
-      if (gone()) throw new ClickAbandoned(verb);
-      const started2 = this.deps.monotonic();
-      const gathering = await gather();
-      gathered(elapsedMs(this.deps, started2));
-      const left = gone();
-      return this.take(
-        verb,
-        { waited, gone: () => !left && gone() },
-        (turn) => body(gathering, turn)
-      );
-    };
-    return session === null ? inPlace() : this.sessions.run(session, inPlace);
+  // [LAW:single-enforcer] The verb whose turn body is running now, or null.
+  // Turns are synchronous, so a write made while one is held is that turn's.
+  inTurn() {
+    return this.holder;
   }
-  // A click's gather, one at a time daemon-wide and in no turn, as the turn once
-  // kept them: its probes share rate windows across sessions, so a slow gather
-  // refuses none behind it. Two within a window still meet the limiter's
-  // refusal, the doctor's 'click again'.
+  // A doctor's gather, one at a time daemon-wide and in no turn: its probes
+  // share rate windows across sessions, so a slow gather refuses none behind
+  // it. Two within a window still meet the limiter's refusal, the doctor's
+  // 'click again'.
   async gathering(gather) {
     this.gathersInFlight++;
     try {
-      return await this.gathers.run(GATHERS, gather);
+      return await this.gathers.run(GATHERS, () => {
+        if (!this.open) throw new DaemonClosing("doctor");
+        return gather();
+      });
     } finally {
       this.gathersInFlight--;
     }
@@ -85867,39 +85888,19 @@ var JournalTurns = class {
   // [LAW:no-ambient-temporal-coupling] A session's effects run one at a time,
   // in the order their turns committed, after them: a performer that reads
   // before it acts (the pane read before a slash is typed) sees what the
-  // session's earlier effects left, as it did when a launch held the turn.
-  // The order is the performer's, not the turn's: the session's next click
-  // takes its turn while the last click's effects still run, and no close
-  // refuses it, since an outcome after close is said in the log.
+  // session's earlier effects left, and two doctor clicks of one session reach
+  // their verdicts in the order they were clicked. The order is the
+  // performer's, not the turn's: the session's next click takes its turn while
+  // the last click's effects still run, and no close refuses it, since an
+  // outcome after close is said in the log.
   performing(session, work) {
     return this.effects.run(session ?? CLICKLESS, work);
   }
   getStats() {
-    const { holder, queued } = this;
-    return {
-      holder: holder?.verb ?? null,
-      heldMs: holder === null ? 0 : elapsedMs(this.deps, holder.since),
-      queued,
-      gathers: this.gathersInFlight
-    };
+    return { gathers: this.gathersInFlight };
   }
   close() {
     this.open = false;
-    if (this.inFlight === null) return;
-    this.deps.log(
-      "warn",
-      `journal: ${this.inFlight.verb} cut off by close, committing what landed`
-    );
-    this.commit(this.inFlight);
-  }
-  refuseClosed(verb) {
-    if (!this.open) throw new DaemonClosing(verb);
-  }
-  commit(held) {
-    if (this.inFlight !== held) return false;
-    this.inFlight = null;
-    held.commit();
-    return true;
   }
 };
 
@@ -85912,9 +85913,6 @@ var MenuIdle = class {
   }
   deps;
   sessions = /* @__PURE__ */ new Map();
-  // Clicks in flight per session, entries deleted at zero. Apart from the
-  // records, which eviction drops under a click that is still in flight.
-  pending = /* @__PURE__ */ new Map();
   disposed = false;
   // A click in the session starts a new idle period.
   clicked(sessionId2, at) {
@@ -85922,26 +85920,12 @@ var MenuIdle = class {
     idle.since = at;
     this.settle(sessionId2);
   }
-  // A click of the session arrived: no deadline until it settles.
-  clickArrived(sessionId2) {
-    this.pending.set(sessionId2, (this.pending.get(sessionId2) ?? 0) + 1);
-    if (this.sessions.has(sessionId2)) this.settle(sessionId2);
-  }
-  // A click of the session landed or was refused, after any landing stamp. A
-  // record evicted meanwhile has no timer left to follow it.
-  clickSettled(sessionId2) {
-    const left = this.pending.get(sessionId2) - 1;
-    if (left === 0) this.pending.delete(sessionId2);
-    else this.pending.set(sessionId2, left);
-    if (this.sessions.has(sessionId2)) this.settle(sessionId2);
-  }
   // When the idle period of the menus the session's last frame drew began —
   // its last click, or the first frame that drew them, whichever is later —
   // or nothing, while it drew none: a menu that appears now has only begun.
-  // Nothing too while a click is in flight: no close is due to count down to.
   since(sessionId2, at) {
     const idle = this.record(sessionId2, at);
-    return idle.shown && !this.pending.has(sessionId2) ? idle.since : void 0;
+    return idle.shown ? idle.since : void 0;
   }
   // [LAW:single-enforcer] One frame of the session drawn under its idle
   // period: the draw is handed the period's start as it stands before the
@@ -85974,14 +85958,11 @@ var MenuIdle = class {
     idle.timeoutS = timeoutS;
     this.settle(sessionId2);
   }
-  // The sessions whose clocks are kept, those whose close timer is armed, and
-  // the clicks in flight.
+  // The sessions whose clocks are kept, and those whose close timer is armed.
   getStats() {
     let armed = 0;
     for (const idle of this.sessions.values()) if (idle.timer !== null) armed++;
-    let pending2 = 0;
-    for (const count of this.pending.values()) pending2 += count;
-    return { sessions: this.sessions.size, armed, pending: pending2 };
+    return { sessions: this.sessions.size, armed };
   }
   dispose() {
     this.disposed = true;
@@ -86009,7 +85990,7 @@ var MenuIdle = class {
   // [LAW:single-enforcer] The one place the timer follows the record.
   settle(sessionId2) {
     const idle = this.sessions.get(sessionId2);
-    const due = idle.shown && !idle.closing && !this.disposed && !this.pending.has(sessionId2) ? closesAt(idle.since, idle.timeoutS) : null;
+    const due = idle.shown && !idle.closing && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;
@@ -86042,9 +86023,9 @@ var MenuIdle = class {
     const closing = {
       idleS: now2 - idle.since,
       timeoutS: idle.timeoutS,
-      // A click arrived after this firing is queued behind the close, and an
-      // evicted record stops counting, so its session is no longer known idle.
-      stillIdle: () => this.sessions.get(sessionId2) === idle && !this.pending.has(sessionId2),
+      // An evicted record stops counting, so its session is no longer known
+      // idle.
+      stillIdle: () => this.sessions.get(sessionId2) === idle,
       closed: () => {
         idle.since = now2;
         idle.shown = false;
@@ -86102,12 +86083,9 @@ function createDaemon(inputs) {
   });
   const probe2 = inputs.probe(launcher);
   const storage = inputs.storage(log);
-  const store = new SessionState(storage.session);
-  const journalTurns = new JournalTurns({
-    log,
-    monotonic: () => clock.monotonic()
-  });
-  const sessionState = inputs.sessionWrites(store, journalTurns);
+  const store2 = new SessionState(storage.session);
+  const journalTurns = new JournalTurns();
+  const sessionState = inputs.sessionWrites(store2, journalTurns);
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -86183,7 +86161,7 @@ function createDaemon(inputs) {
     // [LAW:single-enforcer] exception: a run's ending holds a click error
     // outside any turn, so it writes the store and not the view; it becomes an
     // effect-done in the next story of this lane.
-    state: store,
+    state: store2,
     log,
     now: instant,
     clock
@@ -86205,7 +86183,7 @@ function createDaemon(inputs) {
     },
     // [LAW:single-enforcer] exception: as a run's ending, a lane setup's
     // failure is held outside any turn, so it writes the store.
-    state: store,
+    state: store2,
     log,
     now: instant,
     defer: (run3) => void clock.defer(run3)
@@ -86242,8 +86220,8 @@ function createDaemon(inputs) {
   const frameFeeds = new FrameFeeds({
     render: (sessionId2, fps, at) => renderFrame(parts, sessionId2, fps, at),
     // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
-    // which fires in a later turn. A click that awaits gives up the loop, so a
-    // frame may show its writes ahead of its commit; the step stays whole.
+    // which fires in a later turn. A click's turn is synchronous, so no frame
+    // reads its writes before its commit.
     watch: (sessionId2, onChange) => reaction(() => sessionState.revision(sessionId2), onChange),
     lanes: (sessionId2) => viewLanes(parts, sessionId2),
     // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
@@ -86476,7 +86454,7 @@ function createDaemon(inputs) {
     fileEvents,
     payloadProviders,
     sessionState,
-    sessionGauges: store,
+    sessionGauges: store2,
     rendererName: home.name,
     draw: (req, at, waitEndsAt, facts) => drawAnswer(parts, req, at, waitEndsAt, facts),
     effectSessions,
@@ -86564,7 +86542,7 @@ function createDaemon(inputs) {
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => store.close()]
+        ["sessionState close", () => store2.close()]
       ];
       for (const [step4, run3] of teardown) {
         try {
@@ -87495,7 +87473,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     storage: (log) => fileStorage(paths2, log, machine),
-    sessionWrites: (store) => store,
+    sessionWrites: (store2) => store2,
     doctorStores: fileStores(paths2.state),
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
