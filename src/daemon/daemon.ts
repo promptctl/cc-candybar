@@ -83,7 +83,7 @@ import { reaction } from "mobx";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { ClaudeInputEdge } from "../claude-input/edge.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
-import type { LaneSetupEffect } from "./effect.js";
+import type { LaneSetupEffect } from "./lane-setup.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { RendererLinks } from "../click/renderer-links.js";
 import { RenderWarningRecords } from "./render-warnings.js";

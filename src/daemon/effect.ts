@@ -10,9 +10,8 @@ import type { DoctorEdge, gatherFacts } from "../doctor/edge.js";
 import type { ClickArrival } from "../doctor/sightings.js";
 import type { LaunchOpts } from "../proc/launch.js";
 import type { TmuxHint } from "../tmux-hint.js";
-import type { Lane } from "../config/lanes.js";
 import type { EffectOutcome } from "./effect-outcome.js";
-import type { LaneSession, SetupCause } from "./lane-setup.js";
+import type { LaneSetupEffect } from "./lane-setup.js";
 import type { RunId, RunRequest } from "./runs.js";
 import type { SessionStateReader } from "./session-state.js";
 
@@ -44,18 +43,6 @@ export type Effect =
   | { readonly kind: "run"; readonly id: RunId; readonly run: RunRequest }
   | LaneSetupEffect
   | DoctorEffect;
-
-// [LAW:one-source-of-truth] A lane brought to its switch for a session, as
-// the session's latest request reported it (src/daemon/lane-setup.ts): what a
-// click that moved the switch owes, or a request settles that a click before
-// it left owed (`by`).
-export interface LaneSetupEffect {
-  readonly kind: "lane-setup";
-  readonly session: LaneSession;
-  readonly lane: Lane;
-  readonly on: boolean;
-  readonly by: SetupCause;
-}
 
 // A doctor click's step (src/daemon/verbs/index.ts): its probes gathered after
 // the click's turn, and its answer landed with the outcome. `arrival` is how

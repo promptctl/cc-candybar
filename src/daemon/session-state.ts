@@ -358,9 +358,9 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
-  // lands, and anything that lands later (a render that was awaiting, a run
-  // settling) stays in memory, so it can never write over the file a next
-  // daemon has taken up.
+  // lands, and the store persists nothing after, so it can never write over
+  // the file a next daemon has taken up. The closed turns refuse every write
+  // that would follow (`held`).
   close(): void {
     this.flush();
     this.storage = EPHEMERAL_SESSION_STORAGE;

@@ -114,8 +114,7 @@ export interface ClickRefusal {
 
 // What applying each kind answers its source with.
 interface Answers {
-  // The draw, begun once the request's turn is over.
-  readonly request: Promise<RequestAnswer>;
+  readonly request: void;
   readonly click: ClickRefusal | null;
   readonly "menu-idle": void;
   // How the effect went, as it landed.
@@ -124,12 +123,11 @@ interface Answers {
 }
 
 // [LAW:types-are-the-program] What each arm reads of the daemon: every arm
-// writes through the verb context and says what it did through the log; the
-// request draws through the daemon's draw once its turn is over. A test
-// applies an event over exactly those and nothing more.
+// writes through the verb context and says what it did through the log. A
+// test applies an event over exactly those and nothing more.
 export type ApplyParts = Pick<DaemonParts, "verbCtx" | "log">;
 interface ArmParts {
-  readonly request: ApplyParts & Pick<DaemonParts, "draw">;
+  readonly request: ApplyParts;
   readonly click: ApplyParts;
   readonly "menu-idle": ApplyParts;
   readonly "effect-done": ApplyParts;
@@ -168,16 +166,14 @@ export const ARMS: ApplyArms<Event> = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
   // batch in a journal turn, with what its arrival settles (the lane setups
-  // its session's clicks owed, described as the turn's effects), and the draw
-  // begins once the turn is over. A turn is synchronous
+  // its session's clicks owed, described as the turn's effects), and its draw
+  // begins once the turn is over (`applyRequest`). A turn is synchronous
   // (src/daemon/journal-turns.ts), so the request waits behind no other
   // session's work, and no draw, this one or a feed's, can read a click half
-  // landed. The revision its turn left goes on the request's line, the render
-  // event, which is its record and opens with the session the edge noted.
-  // [LAW:no-ambient-temporal-coupling] The arm answers with the draw under
-  // way, so its turn's effects join the session's order as the turn ends,
-  // ahead of any later event's, and are performed however the draw ends.
-  request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw }) => {
+  // landed. The revision its turn left and the effects it described go on the
+  // request's line, the render event, which is its record and opens with the
+  // session the edge noted.
+  request: async ({ req, facts }, { verbCtx }) => {
     const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
       return {
@@ -185,12 +181,11 @@ export const ARMS: ApplyArms<Event> = {
         revision: verbCtx.sessionState.revision(req.sessionId),
       };
     });
-    noteFacts(facts, { revision: String(turn.revision) });
-    return {
-      answer: draw(req, at, waitEndsAt, facts),
-      effects: turn.effects,
-      facts: [],
-    };
+    noteFacts(facts, {
+      revision: String(turn.revision),
+      effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-",
+    });
+    return { answer: undefined, effects: turn.effects, facts: [] };
   },
   // The turn hands its effects over once it has committed (`described`), and
   // a refused step is answered beside them; a click whose client has left is
@@ -392,6 +387,19 @@ export async function apply<K extends Event["kind"]>(
 }
 
 const NOTHING_PERFORMED: Promise<void> = Promise.resolve();
+
+// [LAW:no-ambient-temporal-coupling] A request applied, then drawn: the draw
+// begins once its turn is over and the effects the turn described have joined
+// the session's order, so a click made during the draw's wait is performed
+// after them, a draw that fails loses none, and a request its turn refused is
+// never drawn.
+export async function applyRequest(
+  event: Extract<Event, { readonly kind: "request" }>,
+  parts: ApplyParts & Pick<DaemonParts, "draw">,
+): Promise<RequestAnswer> {
+  await apply(event, parts);
+  return parts.draw(event.req, event.at, event.waitEndsAt, event.facts);
+}
 
 // [LAW:nothing-unseen] One `apply` line per applied event, from the layer
 // every event passes through: the kind, the verb, the session, the effects

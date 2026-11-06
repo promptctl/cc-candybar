@@ -1030,6 +1030,17 @@ describe("the run owner", () => {
     );
   });
 
+  test("a launcher that throws leaves nothing running, and the run's sources resume", async () => {
+    const o = owner(undefined, () => {
+      throw new Error("the launcher refused its options");
+    });
+    await expect(o.started(o.run("")).ended).rejects.toThrow(
+      "the launcher refused its options",
+    );
+    expect(o.held).toContain(`resume /s ${SID}`);
+    expect(o.runs.stats()).toMatchObject({ running: 0, queued: 0 });
+  });
+
   test("closing the owner aborts the run in flight and resumes its sources; one never launched resumes nothing", async () => {
     const o = owner();
     const { ended } = o.started(o.run("sleep 30"));
@@ -1046,7 +1057,7 @@ describe("the run owner", () => {
     expect(o.runs.stats()).toMatchObject({ failed: 0, running: 0 });
     // [LAW:no-silent-failure] A launch the close overtook is the daemon's
     // close, said as such (at info, by Apply), not a fault.
-    expect(() => o.runs.run(queued, o.run("true"))).toThrow(DaemonClosing);
+    await expect(o.runs.run(queued, o.run("true"))).rejects.toThrow(DaemonClosing);
     expect(() => o.runs.superseded(o.run("true"))).toThrow(DaemonClosing);
   });
 });

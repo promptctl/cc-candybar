@@ -17,7 +17,7 @@ import {
   VERB_DOCTOR_RUN,
   VERB_TOOLBAR_TOGGLE,
 } from "../src/click/wire";
-import { apply } from "../src/daemon/apply";
+import { applyRequest } from "../src/daemon/apply";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import type { RequestAnswer } from "../src/daemon/draw-bar";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
@@ -27,9 +27,8 @@ import type { RequestFacts } from "../src/daemon/request-event";
 import { sessionIdOf } from "../src/daemon/session-id";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { DaemonClosing } from "../src/daemon/verb-error";
-import type { LaneSetupEffect } from "../src/daemon/effect";
 import { PERFORMED } from "../src/daemon/effect-outcome";
-import type { LaneSession } from "../src/daemon/lane-setup";
+import type { LaneSession, LaneSetupEffect } from "../src/daemon/lane-setup";
 import { doctorReportKeys } from "../src/doctor/report";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DoctorEdge } from "../src/doctor/edge";
@@ -161,7 +160,7 @@ function rig() {
   };
   const render = (termCols: number, sid = SID) => {
     const facts: RequestFacts = [];
-    const answered = apply(
+    const answered = applyRequest(
       {
         kind: "request",
         req: request(termCols, sid),
@@ -170,7 +169,7 @@ function rig() {
         facts,
       },
       parts,
-    ).then(({ answer }) => answer);
+    );
     return { answered, facts };
   };
   const waitOn = (wait: Promise<void>) => (sources = wait);
@@ -195,7 +194,10 @@ describe("a request takes its turn", () => {
     expect(r.drawn).toEqual([
       { toolbar: null, hints: JSON.stringify({ termCols: 60 }), report: false, holder: null },
     ]);
-    expect(facts).toEqual([["revision", String(r.sessionState.revision(SID))]]);
+    expect(facts).toEqual([
+      ["revision", String(r.sessionState.revision(SID))],
+      ["effects", "-"],
+    ]);
     r.parked.open();
     await click.performed;
   });
@@ -255,7 +257,10 @@ describe("a request takes its turn", () => {
     await answered;
     expect(r.persisted.saves).toBe(saves);
     expect(r.sessionState.revision(SID)).toBe(revision);
-    expect(facts).toEqual([["revision", String(revision)]]);
+    expect(facts).toEqual([
+      ["revision", String(revision)],
+      ["effects", "-"],
+    ]);
   });
 });
 
@@ -299,12 +304,13 @@ describe("a request's arrival settles in its turn", () => {
       },
     };
     const { arrival: _arrival, described: _described, ...verbCtx } = ctx;
+    const facts: RequestFacts = [];
     const render = () =>
-      apply(
-        { kind: "request", req: request(60), at: AT, waitEndsAt: clock.monotonic(), facts: [] },
+      applyRequest(
+        { kind: "request", req: request(60), at: AT, waitEndsAt: clock.monotonic(), facts },
         { verbCtx, log: ctx.log, draw },
       );
-    return { ctx, performed, render };
+    return { ctx, facts, performed, render };
   }
 
   test("a click made while the request's draw waits is performed after the setups the request settled", async () => {
@@ -313,15 +319,16 @@ describe("a request's arrival settles in its turn", () => {
       await sources.wait;
       return ANSWER;
     });
-    const request = await r.render();
+    const answered = r.render();
     await drain();
-    // The draw still waits, and the setup it settled is already performed.
+    // The draw still waits, and the setup it settled is already performed,
+    // named on the request's line.
     expect(r.performed).toEqual(["on by=owed"]);
+    expect(r.facts).toContainEqual(["effects", "lane-setup:statusline-on"]);
     const click = await applyClick(effectsUrl(MAIN_NAME, [toggle]), r.ctx);
     await click.performed;
     sources.open();
-    await request.answer;
-    await request.performed;
+    await answered;
     expect(r.performed).toEqual(["on by=owed", "off by=click"]);
   });
 
@@ -329,9 +336,8 @@ describe("a request's arrival settles in its turn", () => {
     const r = arrivalRig(async () => {
       throw new Error("the draw failed");
     });
-    const request = await r.render();
-    await expect(request.answer).rejects.toThrow("the draw failed");
-    await request.performed;
+    await expect(r.render()).rejects.toThrow("the draw failed");
+    await drain();
     expect(r.performed).toEqual(["on by=owed"]);
   });
 });

@@ -150,7 +150,7 @@ export class Runs {
 
   // The performer's launch of the run `id` superseded, answering how it
   // ended; then every source it superseded is read fresh.
-  run(id: RunId, run: RunRequest): Promise<EffectOutcome> {
+  async run(id: RunId, run: RunRequest): Promise<EffectOutcome> {
     if (this.closed) throw new DaemonClosing("run");
     const resumes = this.held.get(id);
     if (resumes === undefined) {
@@ -162,8 +162,8 @@ export class Runs {
     this.started++;
     const [program, ...args] = run.argv;
     const startedAt = this.deps.clock.monotonic();
-    return this.deps
-      .launch({
+    try {
+      const result = await this.deps.launch({
         // [LAW:types-are-the-program] A relative program path is the
         // declaring file's, as the directory it runs in is; a bare name is
         // looked up on PATH.
@@ -174,16 +174,15 @@ export class Runs {
         timeoutMs: this.timeoutMs,
         signal: abort.signal,
         category: "click.run",
-      })
-      .then((result) =>
-        this.ended(run, result, elapsedMs(this.deps.clock, startedAt)),
-      )
-      .finally(() => {
-        this.inFlight.delete(abort);
-        // [LAW:no-ambient-temporal-coupling] However the run ended, every
-        // source it superseded resumes, so each starts one fresh read.
-        for (const resume of resumes) resume();
       });
+      return this.ended(run, result, elapsedMs(this.deps.clock, startedAt));
+    } finally {
+      this.inFlight.delete(abort);
+      // [LAW:no-ambient-temporal-coupling] However the run ended, a launch
+      // that threw included, every source it superseded resumes, so each
+      // starts one fresh read.
+      for (const resume of resumes) resume();
+    }
   }
 
   // A link refused before anything ran: counted, and its one event.

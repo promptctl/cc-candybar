@@ -44,7 +44,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { clickUrl, recordRender, testVerbContext } from "./helpers/click";
-import type { LaneSetupEffect } from "../src/daemon/effect";
+import type { LaneSetupEffect } from "../src/daemon/lane-setup";
 import { failed, type EffectOutcome } from "../src/daemon/effect-outcome";
 import { LANES, type Lane, type LaneSwitches } from "../src/config/lanes";
 import type { TmuxHint } from "../src/tmux-hint";

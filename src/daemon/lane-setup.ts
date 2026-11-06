@@ -35,7 +35,6 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import type { LaneSetupEffect } from "./effect.js";
 import { failed, type EffectOutcome } from "./effect-outcome.js";
 import type { SessionFacts } from "./session-env.js";
 import type { ClientHints } from "./protocol.js";
@@ -618,6 +617,18 @@ const MAX_SESSIONS_OWED = 1024;
 // What started a setup: the session's own click, or its first request after
 // a click this daemon could not set up then.
 export type SetupCause = "click" | "owed";
+
+// [LAW:one-way-deps] A lane brought to its switch for a session, as the
+// session's latest request reported it: what a click that moved the switch
+// owes, or a request settles that a click before it left owed (`by`). An
+// effect (src/daemon/effect.ts), which names it from above.
+export interface LaneSetupEffect {
+  readonly kind: "lane-setup";
+  readonly session: LaneSession;
+  readonly lane: Lane;
+  readonly on: boolean;
+  readonly by: SetupCause;
+}
 
 // The lanes a session's clicks moved and no setup has brought in line yet,
 // each by where its switch stood before the first of those clicks: what the
