@@ -49,6 +49,10 @@ import { parseRendererAddress, type RendererAddress } from "../daemon/home.js";
 // scripts/check-protocol.mjs.
 export const LINK_TO = "to";
 
+// What every link opens with: the scheme, then the address.
+const LINK_PREFIX = `${URL_SCHEME}://`;
+const ADDRESS = `${LINK_TO}/`;
+
 // [LAW:one-source-of-truth] The verb vocabulary. The daemon's VERBS registry
 // keys off these and every emitter builds effects with them, so the emitted
 // verb and the dispatched handler cannot name-drift.
@@ -360,7 +364,7 @@ export function addressedLink(
   verb: string,
   tail: string,
 ): string {
-  return `${URL_SCHEME}://${LINK_TO}/${to}/${verb}/${tail}`;
+  return `${LINK_PREFIX}${ADDRESS}${to}/${verb}/${tail}`;
 }
 
 // [LAW:dataflow-not-control-flow] Parse the dispatch verb's raw value (an
@@ -456,22 +460,23 @@ export type HandlerUrl =
 // name is never decoded either: the URL handler reads it raw, and the name
 // rule admits no character an escape would spell.
 export function parseHandlerUrl(rawUrl: string): HandlerUrl {
-  const prefix = `${URL_SCHEME}://`;
-  if (!rawUrl.startsWith(prefix)) {
-    return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
+  if (!rawUrl.startsWith(LINK_PREFIX)) {
+    return {
+      ok: false,
+      problem: `expected a ${LINK_PREFIX} link, got: ${rawUrl}`,
+    };
   }
-  const rest = rawUrl.slice(prefix.length);
-  const addressed = `${LINK_TO}/`;
-  if (!rest.startsWith(addressed)) {
+  const rest = rawUrl.slice(LINK_PREFIX.length);
+  if (!rest.startsWith(ADDRESS)) {
     const form = rest.includes("/")
-      ? `the direct verb form ${prefix}<verb>/…`
-      : `the bare copy form ${prefix}<value>`;
+      ? `the direct verb form ${LINK_PREFIX}<verb>/…`
+      : `the bare copy form ${LINK_PREFIX}<value>`;
     return {
       ok: false,
       problem: `the link is in ${form}, which names no renderer: ${rawUrl}`,
     };
   }
-  const named = rest.slice(addressed.length);
+  const named = rest.slice(ADDRESS.length);
   const slash = named.indexOf("/");
   if (slash === -1) {
     return {
@@ -490,16 +495,16 @@ export function parseHandlerUrl(rawUrl: string): HandlerUrl {
 }
 
 // [LAW:single-enforcer] Whether text a config spells opens a bar link that
-// can never name a renderer, whatever the draw joins to it: it opens with
-// neither the address nor a start of it (`cc-candybar://`, `…://t`). Text is
-// read as a head here, not as a whole link, because a literal may be only a
-// link's start, its name, verb or tail computed at the draw; whether a whole
-// link clicks is the parse's to say, at the click.
+// can never name a renderer, whatever the draw joins to it: its head opens
+// with neither the address nor a start of it (`cc-candybar://`, `…://t`).
+// Text is read as a head here, not as a whole link, because a literal may be
+// only a link's start, or a printf format whose verbs fill in the rest at the
+// draw, so the head ends at the first `%`; whether a whole link clicks is the
+// parse's to say, at the click.
 export function spellsUnaddressedLink(text: string): boolean {
   if (!isBarLink(text)) return false;
-  const rest = text.slice(`${URL_SCHEME}://`.length);
-  const addressed = `${LINK_TO}/`;
-  return !rest.startsWith(addressed) && !addressed.startsWith(rest);
+  const head = text.slice(LINK_PREFIX.length).split("%")[0]!;
+  return !head.startsWith(ADDRESS) && !ADDRESS.startsWith(head);
 }
 
 // A `<verb>/<tail>` run as a click addressed to `to`.

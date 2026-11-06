@@ -8,7 +8,7 @@
 
 import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
-import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
+import { describeLink, drawnClickOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import { daemonGates } from "../src/daemon/update-keys";
@@ -225,9 +225,11 @@ function copy(text: string): Promise<string | null> {
 
 // A click carrying a verb that acts on the machine (HOST_VERBS) is never sent
 // to the daemon, as on any bar driven outside a real session. A click that only
-// copies is the page's own to do: its clipboard.
+// copies is the page's own to do: its clipboard. A link the parse refuses
+// fires nothing on the machine; the daemon refuses its click, with the reason.
 async function click(url: string, size: Size) {
-  const effects = effectsOf(url);
+  const drawn = drawnClickOf(url);
+  const effects = drawn.ok ? drawn.effects : [];
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);

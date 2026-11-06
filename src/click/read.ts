@@ -62,42 +62,44 @@ function decodeArgs(verb: string, value: string): string[] {
     : [decodeURIComponent(value)];
 }
 
-// [LAW:no-silent-failure] A link a bar DREW, as the daemon splits it. A reader
-// of drawn links holds links the renderer wrote, so one the daemon would refuse
-// is a bug in the draw, thrown here rather than carried as a refusal.
-export function clickOf(url: string): { verb: string; value: string } {
+export type DrawnClick =
+  | { readonly ok: true; readonly effects: DecodedEffect[] }
+  | { readonly ok: false; readonly problem: string };
+
+// [LAW:parse-dont-validate] A drawn link's click as the daemon splits it, its
+// ordered effects (a link whose verb is not dispatch is the one-effect case),
+// or the link parse's reason the daemon refuses it: a config can compute a
+// link at the draw that the parse refuses.
+export function drawnClickOf(url: string): DrawnClick {
   const link = parseHandlerUrl(url);
-  if (!link.ok) throw new Error(link.problem);
-  return { verb: link.verb, value: link.value };
+  if (!link.ok) return link;
+  const { verb, value } = link;
+  if (verb !== VERB_DISPATCH)
+    return { ok: true, effects: [{ verb, args: decodeArgs(verb, value) }] };
+  return {
+    ok: true,
+    effects: parseEffects(value).map((e) => ({
+      verb: e.verb,
+      args: decodeArgs(e.verb, e.value),
+    })),
+  };
 }
 
-/** A click URL's ordered effect list (verb + decoded args); a link whose verb is not dispatch is the one-effect case. */
+// [LAW:no-silent-failure] A drawn link's effects, for a reader holding links
+// the renderer itself wrote, so one the parse refuses is a bug in the draw,
+// thrown here rather than carried as a refusal.
 export function effectsOf(url: string): DecodedEffect[] {
-  return effectsOfClick(clickOf(url));
+  const click = drawnClickOf(url);
+  if (!click.ok) throw new Error(click.problem);
+  return click.effects;
 }
 
-function effectsOfClick({
-  verb,
-  value,
-}: {
-  verb: string;
-  value: string;
-}): DecodedEffect[] {
-  if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
-  return parseEffects(value).map((e) => ({
-    verb: e.verb,
-    args: decodeArgs(e.verb, e.value),
-  }));
-}
-
-/** The effects a click on `link` fires, `verb arg…` each, `;` between; `sessionId` reads as `<session>`. */
+/** The effects a click on `link` fires, `verb arg…` each, `;` between, or the parse's refusal; `sessionId` reads as `<session>`. */
 export function describeLink(link: DrawnLink, sessionId: string): string {
   if (!isBarLink(link.url)) return `opens ${link.url}`;
-  // A link a config computes at the draw can be one the daemon refuses, and
-  // the refusal is what its click does.
-  const click = parseHandlerUrl(link.url);
+  const click = drawnClickOf(link.url);
   if (!click.ok) return `refused: ${click.problem}`;
-  return effectsOfClick(click)
+  return click.effects
     .map(({ verb, args }) =>
       [verb, ...args.map((a) => (a === sessionId ? "<session>" : a))].join(" "),
     )

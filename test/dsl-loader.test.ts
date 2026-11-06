@@ -1748,6 +1748,7 @@ describe("loadDslConfig — cross-references", () => {
       '{{ link "cc-candybar://to/main/x/1" "go" }}',
       '{{ link (printf "%s/copy/%s" "cc-candybar://to/main" "x") "go" }}',
       '{{ link (printf "cc-candybar://to/%s/copy/%s" "main" "x") "go" }}',
+      '{{ link (printf "cc-candybar://%s/copy/%s" "to/main" "x") "go" }}',
       '{{ if hasPrefix "x" "cc-candybar://" }}x{{ end }}',
       '{{ link "https://example.com/cc-candybar://x" "go" }}',
     ]) {
