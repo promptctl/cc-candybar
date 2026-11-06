@@ -53,7 +53,7 @@ export function processWorld(): World {
 // [LAW:parse-dont-validate] A home the environment misstates refuses the
 // process here, before any entry derives a path from it, in one line naming
 // the rule, as the Rust client refuses the same input. Every entry (the CLI,
-// the demo, the gallery, the load gate) builds its world here, so the refusal
+// the demo, the gallery) builds its world here, so the refusal
 // is spoken once and the same way; there is no world yet to report through.
 function processHome(host: Host): RendererHome {
   try {

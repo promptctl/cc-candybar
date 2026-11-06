@@ -690,7 +690,7 @@ function canConnect(
 // value the same way (rust-client/src/launch.rs).
 //
 // [LAW:one-source-of-truth] node's argv for a daemon running `script`: what
-// the client spawns, and what the load gate spawns to measure the same thing.
+// the client spawns, and what the benchmark's world spawns to drive the same.
 export function daemonArgs(script: string, env: NodeJS.ProcessEnv): string[] {
   return [`--max-old-space-size=${heapCapMb(env)}`, script, "daemon"];
 }

@@ -162,7 +162,7 @@ These are word matches across the 301 test files. `links(` is a heuristic, and t
 - `src/daemon/update-notice.ts`: three sites.
 - `src/daemon/repo-configs.ts`: `repoQuestions`, signed.
 - `src/daemon/lane-handoff.ts`: `laneHandoff`.
-- Click drivers only: `scripts/load-gate.ts` and `scripts/bench/suites/wire.ts`. 21 test files also call it.
+- Click drivers only: `scripts/bench/suites/wire.ts`. 21 test files also call it.
 
 **Not through it**
 - `src/daemon/tmux-status.ts`: `CLICK_URL` spells `cc-candybar://` by hand and is bound into tmux's root key table for the server's lifetime. `isClickBinding` matches on it, and another daemon can adopt the binding.

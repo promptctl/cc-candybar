@@ -1,6 +1,6 @@
 // A Claude Code transcript, as Claude Code writes it.
 //
-// [LAW:one-source-of-truth] The load gate and the benchmark both need a
+// [LAW:one-source-of-truth] The benchmark's world and its fixtures both need a
 // transcript that the daemon folds as it folds a real one (usage on the
 // assistant entry, a tool call and its result, a prompt). One generator, so a
 // change to what the fold reads is a change to one fixture, not two that drift.
