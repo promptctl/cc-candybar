@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-637",
+      "ref": "refs/pull/637/merge",
+      "sha": "e3c1fe670ef5f743a544bbfcaeda3fee5b41fdba",
+      "timestamp": "2026-11-06T10:04:25.644Z",
+      "commits": [
+        {
+          "sha": "e3c1fe670ef5f743a544bbfcaeda3fee5b41fdba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T03:03:11-07:00",
+          "message": "Merge 62f90c2eb5b7df26b058a32f2295b752b9dd534e into 52e519f362165f3c41349e0c094ad562c05278d7\n"
+        },
+        {
+          "sha": "62f90c2eb5b7df26b058a32f2295b752b9dd534e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T03:01:50-07:00",
+          "message": "fix(disk): the fake walks a new entry's parent, makes a `..` folder, refuses a move into itself and forgets a failed watch; path derivation takes a Filesystem (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "1989de0dd24bce109325153f7d66dedec5ba89c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:52:06-07:00",
+          "message": "fix(disk): the fake moves, removes, writes through links and resolves `..` as the kernel does; repo-configs is made on the tree that watches it; the real disk is owned (candybar-testing-ihvy.y10)\n"
+        },
+        {
+          "sha": "94dc9da4d62e649dded6c689ca8ab075ea8128e5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T02:36:44-07:00",
+          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-635",
       "ref": "refs/pull/635/merge",
       "sha": "73df9cfb37c3e76aec99055fb22b68448a142c96",
@@ -34,42 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T02:12:37-07:00",
           "message": "fix(just): deploy builds the URL handler app on macOS, so install from a checkout finds it\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-637",
-      "ref": "refs/pull/637/merge",
-      "sha": "12d6a61eeced131a493038d7b019c345ad7845e9",
-      "timestamp": "2026-11-06T10:03:16.712Z",
-      "commits": [
-        {
-          "sha": "12d6a61eeced131a493038d7b019c345ad7845e9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T10:02:07Z",
-          "message": "Merge 4a586593a7d20c898707eef2fb271d486c33cfa7 into 52e519f362165f3c41349e0c094ad562c05278d7\n"
-        },
-        {
-          "sha": "4a586593a7d20c898707eef2fb271d486c33cfa7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T03:01:50-07:00",
-          "message": "fix(disk): the fake walks a new entry's parent, makes a `..` folder, refuses a move into itself and forgets a failed watch; path derivation takes a Filesystem (candybar-testing-ihvy.y10)\n"
-        },
-        {
-          "sha": "f003bb9b1b10c913f30ba598412951635ea338e4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:52:06-07:00",
-          "message": "fix(disk): the fake moves, removes, writes through links and resolves `..` as the kernel does; repo-configs is made on the tree that watches it; the real disk is owned (candybar-testing-ihvy.y10)\n"
-        },
-        {
-          "sha": "04a745483d3759d4ad7011f9110892ff63982371",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T02:36:44-07:00",
-          "message": "feat(disk): files and their watch events go through one filesystem port, first used by the watcher registry and the binary watch (candybar-testing-ihvy.y10)\n\nA Filesystem port (src/disk/) with one adapter over fs, an in-memory fake whose writes emit the events a watch would on the clock, and one contract both pass. The watcher registry, its delivery owner, plugin storage, folder identity, the link walk and the binary watch read the disk through it; IdentityRead and BundleStat are gone. A lint rule bans fs outside the adapter, with an allowlist of the files still to move.\n"
         }
       ]
     },
