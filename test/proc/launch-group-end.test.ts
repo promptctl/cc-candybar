@@ -1,4 +1,10 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -21,10 +27,16 @@ import { instantOf, type Instant } from "../../src/utils/instant";
 // python reaches portably: macOS has no setsid command.
 const python = (code: string) => ({ bin: "python3", args: ["-c", code] });
 
-const SET = "import os,sys,time\n";
-// Forks a process that leaves the group and holds the inherited stdout for 3 s.
-const FORK_HOLDER =
-  "if os.fork()==0:\n  os.setsid()\n  time.sleep(3)\n  os._exit(0)\n";
+// `hold` waits while its path exists: a case ends what it holds by removing the
+// path, and the minute's bound ends it when a killed worker never does.
+const SET =
+  "import os,sys,time\ndef hold(p):\n  b=time.time()+60\n  while os.path.exists(p) and time.time()<b: time.sleep(0.05)\n";
+// The case's directory, removed after it: what holds by it outlives the case's
+// body, so a launch that waited for it could not resolve.
+let holding: string;
+// Forks a process that leaves the group and holds the inherited stdout.
+const forkHolder = () =>
+  `if os.fork()==0:\n  os.setsid()\n  hold(${JSON.stringify(holding)})\n  os._exit(0)\n`;
 
 interface DrainClose {
   category: LaunchCategory;
@@ -68,9 +80,13 @@ beforeEach(() => {
   drainsClosed = [];
   drainRead = 0;
   heard = [];
+  holding = mkdtempSync(join(tmpdir(), "launch-group-end-"));
   launcher = launcherOn(systemTimekeeper);
 });
-afterEach(() => ending.abort());
+afterEach(() => {
+  rmSync(holding, { recursive: true, force: true });
+  ending.abort();
+});
 
 const launch = (run: { bin: string; args: string[] }, timeoutMs?: number) =>
   launcher.launch({
@@ -84,20 +100,18 @@ describe("a launch whose child ends with a descendant outside its group", () => 
   it.each([[undefined], [2000]])(
     "resolves on the child's exit code (timeoutMs %s)",
     async (timeoutMs) => {
-      const t0 = Date.now();
       const r = await launch(
-        python(`${SET}print('out',flush=True)\n${FORK_HOLDER}os._exit(0)\n`),
+        python(`${SET}print('out',flush=True)\n${forkHolder()}os._exit(0)\n`),
         timeoutMs,
       );
       expect(r).toMatchObject({ ok: true, exitCode: 0, stdout: "out\n" });
-      expect(Date.now() - t0).toBeLessThan(2000);
     },
   );
 
   it("shows a character cut short at the end of its output as U+FFFD", async () => {
     const r = await launch(
       python(
-        `${SET}os.write(1,b'ok \\xe2')\nos.write(2,b'no \\xe2')\n${FORK_HOLDER}os._exit(0)\n`,
+        `${SET}os.write(1,b'ok \\xe2')\nos.write(2,b'no \\xe2')\n${forkHolder()}os._exit(0)\n`,
       ),
     );
     expect(r).toMatchObject({
@@ -123,74 +137,76 @@ describe("a launch whose child ends with a descendant outside its group", () => 
     }
   });
 
-  it("reports the child's exit when its group ended before the timeout", async () => {
-    const r = await launch(
-      {
-        bin: "sh",
-        args: [
-          "-c",
-          'sleep 0.9 & python3 -c "$1"; exit 0',
-          "sh",
-          `${SET}${FORK_HOLDER}`,
-        ],
-      },
-      1450,
+  // [LAW:no-ambient-temporal-coupling] A launch whose group ended between two of
+  // its samples: its child exits at once, a sample sees the group's one member
+  // alive and arms the next poll, then the member ends. The launch runs on a
+  // held clock, so it samples only when the case advances, and the case moves
+  // on each end it observes, never on a span of real time. Every timer the
+  // launch arms waits on the case, kill grace included, so a case resolves its
+  // launch by the advance it makes next.
+  const groupEndedBetweenSamples = async (timeoutMs?: number) => {
+    const clock = heldClock(new Date());
+    const member = join(holding, "member");
+    const pidFile = join(holding, "group");
+    writeFileSync(member, "");
+    const abort = new AbortController();
+    const running = launcherOn(clock).launch({
+      category: "user-shell",
+      bin: "sh",
+      args: [
+        "-c",
+        'echo $$ > "$2"; python3 -c "$3" & python3 -c "$1"; exit 0',
+        "sh",
+        `${SET}${forkHolder()}`,
+        pidFile,
+        `${SET}hold(${JSON.stringify(member)})\n`,
+      ],
+      signal: abort.signal,
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    });
+    const armed = clock.pending();
+    await until(
+      () => existsSync(pidFile) && readFileSync(pidFile, "utf8").endsWith("\n"),
+      "the child to name its group",
     );
-    expect(r).toMatchObject({ ok: true, exitCode: 0 });
+    const group = Number(readFileSync(pidFile, "utf8"));
+    // The launch has seen the child exit: its first sample waits on the clock.
+    await until(
+      () => clock.pending() > armed,
+      "the launch to see its child exit",
+    );
+    clock.advance(0);
+    rmSync(member);
+    await until(
+      () => systemSpawner.groupGone(group),
+      "the group's member to end",
+    );
+    return { clock, abort, running };
+  };
+
+  it("reports the child's exit when its group ended before the timeout", async () => {
+    // The timeout falls before the next sample, which waits at least a poll.
+    const { clock, running } = await groupEndedBetweenSamples(1);
+    clock.advance(1);
+    expect(await running).toMatchObject({ ok: true, exitCode: 0 });
   });
 
-  // [LAW:no-ambient-temporal-coupling] The abort lands after the group's end and
-  // before the launch samples it: the launch's clock is held, so it samples only
-  // when the case advances it, and the case waits for each end it observes. The
-  // holder outside the group keeps the child's close from concluding first, so
-  // it lives until the case removes its directory, not for a span of real time;
-  // its minute's bound outlasts the case's own timeout, so a killed run leaves
-  // nothing polling.
   it("reports an abort once the child has ended, whatever the group did", async () => {
-    const clock = heldClock(new Date());
-    const held = launcherOn(clock);
-    const dir = mkdtempSync(join(tmpdir(), "launch-group-end-"));
-    const pidFile = join(dir, "group");
-    const abort = new AbortController();
-    try {
-      const running = held.launch({
-        category: "user-shell",
-        bin: "sh",
-        args: [
-          "-c",
-          'echo $$ > "$2"; sleep 0.1 & python3 -c "$1"; exit 0',
-          "sh",
-          `${SET}if os.fork()==0:\n  os.setsid()\n  bound=time.time()+60\n  while os.path.isdir(${JSON.stringify(dir)}) and time.time()<bound: time.sleep(0.05)\n  os._exit(0)\n`,
-          pidFile,
-        ],
-        signal: abort.signal,
-      });
-      const armed = clock.pending();
-      await until(
-        () => existsSync(pidFile) && readFileSync(pidFile, "utf8").endsWith("\n"),
-        "the child to name its group",
-      );
-      const group = Number(readFileSync(pidFile, "utf8"));
-      await until(() => systemSpawner.groupGone(group), "the child's group to end");
-      // The launch has seen the child exit: its sample of the group waits on the clock.
-      await until(() => clock.pending() > armed, "the launch to see its child exit");
-      abort.abort();
-      clock.advance(0);
-      expect(await running).toMatchObject({ ok: false, reason: "aborted" });
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const { clock, abort, running } = await groupEndedBetweenSamples();
+    abort.abort();
+    clock.advance(0);
+    expect(await running).toMatchObject({ ok: false, reason: "aborted" });
   });
 
   it("reports a non-zero exit as one", async () => {
-    const r = await launch(python(`${SET}${FORK_HOLDER}os._exit(3)\n`));
+    const r = await launch(python(`${SET}${forkHolder()}os._exit(3)\n`));
     expect(r).toMatchObject({ ok: false, reason: "non-zero", exitCode: 3 });
   });
 
   it("resolves timeout for a child that ignores SIGTERM", async () => {
     const r = await launch(
       python(
-        `${SET}import signal\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\n${FORK_HOLDER}time.sleep(10)\n`,
+        `${SET}import signal\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\n${forkHolder()}time.sleep(10)\n`,
       ),
       200,
     );
@@ -205,7 +221,7 @@ describe("a launch whose child ends with a descendant outside its group", () => 
           "-c",
           'sleep 0.002 & python3 -c "$1"; exit 0',
           "sh",
-          `${SET}${FORK_HOLDER}`,
+          `${SET}${forkHolder()}`,
         ],
       });
       expect(r.ok).toBe(true);
@@ -215,15 +231,13 @@ describe("a launch whose child ends with a descendant outside its group", () => 
   it("is bounded by its timeout when a zombie keeps the group from ending", async () => {
     // A member forks a child it never reaps, then leaves the group holding
     // stdout: the zombie stays a member of the group for the holder's life.
-    const t0 = Date.now();
     const r = await launch(
       python(
-        `${SET}if os.fork()==0:\n  if os.fork()==0:\n    os._exit(0)\n  os.setsid()\n  time.sleep(3)\n  os._exit(0)\nos._exit(0)\n`,
+        `${SET}if os.fork()==0:\n  if os.fork()==0:\n    os._exit(0)\n  os.setsid()\n  hold(${JSON.stringify(holding)})\n  os._exit(0)\nos._exit(0)\n`,
       ),
       300,
     );
     expect(r).toMatchObject({ ok: false, reason: "timeout" });
-    expect(Date.now() - t0).toBeLessThan(2000);
   });
 });
 
