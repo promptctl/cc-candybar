@@ -4,15 +4,22 @@
     {
       "version": "pr-640",
       "ref": "refs/pull/640/merge",
-      "sha": "4fbc5e0df30570119456846818424f8570210019",
-      "timestamp": "2026-11-06T12:44:27.546Z",
+      "sha": "4e9e669cfee18ba8c0642a01ae7cab4b26ea6b75",
+      "timestamp": "2026-11-06T12:53:58.287Z",
       "commits": [
         {
-          "sha": "4fbc5e0df30570119456846818424f8570210019",
+          "sha": "4e9e669cfee18ba8c0642a01ae7cab4b26ea6b75",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:43:41Z",
-          "message": "Merge 44b4143b48139bf7ec2063ac1dee064c97383a16 into 92b37b434431196653866fb703390e57bf15d948\n"
+          "timestamp": "2026-11-06T12:51:36Z",
+          "message": "Merge 7c49d1b449f135002ab492ebb816a36c99b882f8 into 92b37b434431196653866fb703390e57bf15d948\n"
+        },
+        {
+          "sha": "7c49d1b449f135002ab492ebb816a36c99b882f8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T05:51:22-07:00",
+          "message": "fix(links): a still row drawn while the counter was faulted gets its ranges back; the count is written through the one atomic write, flushed before its rename (candybar-gather-renderer-76bb.b2l.e1n)\n\nA frame is unchanged only when every lane encodes it as it did the last,\nsince the tmux status line's encoding reads ids the answers do not carry.\nwriteAtomic fsyncs before renaming, so a crash leaves the old file or the\nnew one, never an empty one. The reused stat names what it counts, and the\ninventory docs stop naming the digest and the per-subscriber encode.\n"
         },
         {
           "sha": "44b4143b48139bf7ec2063ac1dee064c97383a16",
