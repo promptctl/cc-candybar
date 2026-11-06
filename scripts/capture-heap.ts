@@ -104,7 +104,7 @@ function footprint(pid: number): { physFootprintMb: number; table: string } {
 
 const world = await startWorld(
   values.config === undefined ? "{}\n" : fs.readFileSync(values.config, "utf8"),
-  { NODE_OPTIONS: heapSnapshotArgs(OUT).join(" ") },
+  { NODE_OPTIONS: heapSnapshotArgs(OUT).map((a) => `"${a}"`).join(" ") },
 );
 try {
   const pid = (await world.stats()).pid;

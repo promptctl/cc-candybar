@@ -9,10 +9,13 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { sleep } from "../bench/measure.js";
+
 export const HEAP_SNAPSHOT_SIGNAL = "SIGUSR2";
 
-// The daemon's argv (or NODE_OPTIONS, joined by spaces) that makes the signal
-// write a snapshot under `dir`.
+// The daemon's argv that makes the signal write a snapshot under `dir`. Into
+// NODE_OPTIONS each goes double-quoted, as Node reads it: a space in `dir`
+// would otherwise split the option in two.
 export function heapSnapshotArgs(dir: string): string[] {
   return [
     `--heapsnapshot-signal=${HEAP_SNAPSHOT_SIGNAL}`,
@@ -33,12 +36,15 @@ function endsWithBrace(file: string, size: number): boolean {
   }
 }
 
-// The snapshots `pid` has written under `dir`: V8 names each for the pid that
-// wrote it, so another process's snapshot there is never this daemon's.
+// The snapshots `pid` has written under `dir`: V8 names each
+// `Heap.<yyyymmdd>.<hhmmss>.<pid>.<tid>.<seq>.heapsnapshot`, so another
+// process's snapshot there is never this daemon's. Anchored on the shape,
+// because a pid is six digits as often as a time of day is.
 function snapshotsOf(dir: string, pid: number): string[] {
+  const own = new RegExp(`^Heap\\.\\d{8}\\.\\d{6}\\.${pid}\\..*\\.heapsnapshot$`);
   return fs
     .readdirSync(dir)
-    .filter((f) => f.endsWith(".heapsnapshot") && f.includes(`.${pid}.`))
+    .filter((f) => own.test(f))
     .map((f) => path.join(dir, f));
 }
 
@@ -71,6 +77,6 @@ export async function heapSnapshot(
     if (Date.now() > deadline) {
       throw new Error(`no whole snapshot in ${dir} after ${waitMs} ms`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await sleep(2000);
   }
 }
