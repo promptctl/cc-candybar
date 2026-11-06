@@ -11,6 +11,7 @@ import {
   drawAnswer,
   lanesAt,
   laneClicked,
+  requestArrived,
   renderFrame,
   viewLanes,
 } from "./draw-bar.js";
@@ -22,7 +23,7 @@ import {
   type ReplyRequest,
 } from "./reply.js";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
-import type { SessionStateRW, SessionStorage } from "./session-state";
+import type { SessionStorage } from "./session-state";
 import type { HistoryStorage } from "./settings-history";
 import type {
   LaunchOwner,
@@ -82,6 +83,7 @@ import { reaction } from "mobx";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { ClaudeInputEdge } from "../claude-input/edge.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
+import type { LaneSetupEffect } from "./lane-setup.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { RendererLinks } from "../click/renderer-links.js";
 import { RenderWarningRecords } from "./render-warnings.js";
@@ -129,15 +131,6 @@ export interface DaemonAdapters {
   // writer. Built over the daemon's log: a write in flight at the close finishes
   // after it, and what it logs says so like any other line of the daemon's work.
   readonly storage: (log: DaemonLogger) => DaemonStorage;
-  // [LAW:single-enforcer] What the request and click paths write session state
-  // through: the store itself, or a view over it. The store refuses nothing
-  // of its own while owners outside Apply still write it (a run's ending, a
-  // lane's setup), so the test harness hands in the view that refuses a write
-  // made while no journal turn is held, and the daemon writes through it.
-  readonly sessionWrites: (
-    store: SessionStateRW,
-    turns: Pick<JournalTurns, "inTurn">,
-  ) => SessionStateRW;
   // The doctor's stores, which this daemon files.
   readonly doctorStores: DoctorStores;
   // The doctor's reads of the machine, over the config load it is handed.
@@ -322,10 +315,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
   const storage = inputs.storage(log);
-  const store = new SessionState(storage.session);
-  // [LAW:single-enforcer] The one owner of every journal's turn.
+  // [LAW:single-enforcer] The one owner of every journal's turn, and so of
+  // when session state may be written: the store refuses a write while no
+  // turn is held.
   const journalTurns = new JournalTurns();
-  const sessionState = inputs.sessionWrites(store, journalTurns);
+  const sessionState = new SessionState(journalTurns, storage.session);
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -432,12 +426,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     supersede: (storage, sessionId) =>
       managedStorage.supersede(storage, sessionId),
     launch: launcher.launch,
-    // [LAW:single-enforcer] exception: a run's ending holds a click error
-    // outside any turn, so it writes the store and not the view; it becomes an
-    // effect-done in the next story of this lane.
-    state: store,
     log,
-    now: instant,
     clock,
   });
   // [LAW:single-enforcer] The one owner of what turning an animation lane on or
@@ -458,12 +447,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       home,
       preload: stableAttachPreload(bundle.path, host),
     },
-    // [LAW:single-enforcer] exception: as a run's ending, a lane setup's
-    // failure is held outside any turn, so it writes the store.
-    state: store,
     log,
-    now: instant,
-    defer: (run) => void clock.defer(run),
   });
   // [LAW:single-enforcer] The one writer of the tmux status line lane's tmux
   // state (src/daemon/tmux-status.ts).
@@ -773,6 +757,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         lanesAt(parts, origin, sessionId),
       clicked: (sessionId: string, before: LaneSwitches, after: LaneSwitches) =>
         laneClicked(parts, sessionId, before, after),
+      arrived: (req: CheckedRenderRequest) => requestArrived(parts, req),
+      setup: (effect: LaneSetupEffect) => laneSetups.setup(effect),
     },
     diagnosticCopy: (sessionId: string, by: Drawing["by"], key: string) =>
       renderCache.drawnCopy(sessionId, by, key),
@@ -796,7 +782,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     fileEvents,
     payloadProviders,
     sessionState,
-    sessionGauges: store,
     rendererName: home.name,
     draw: (req, at, waitEndsAt, facts) =>
       drawAnswer(parts, req, at, waitEndsAt, facts),
@@ -867,6 +852,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
+        // A lane setup still queued behind the session's earlier effects is
+        // refused, as a queued run is (`runs close`).
+        ["laneSetups close", () => laneSetups.close()],
         ["frameFeeds close", () => frameFeeds.close()],
         ["linkIds close", () => linkIds.close()],
         ["menuIdle dispose", () => menuIdle.dispose()],
@@ -889,7 +877,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => store.close()],
+        ["sessionState close", () => sessionState.close()],
       ];
       for (const [step, run] of teardown) {
         try {

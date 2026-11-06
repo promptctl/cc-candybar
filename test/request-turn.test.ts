@@ -17,7 +17,7 @@ import {
   VERB_DOCTOR_RUN,
   VERB_TOOLBAR_TOGGLE,
 } from "../src/click/wire";
-import { apply } from "../src/daemon/apply";
+import { applyRequest } from "../src/daemon/apply";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import type { RequestAnswer } from "../src/daemon/draw-bar";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
@@ -25,8 +25,10 @@ import { JournalTurns } from "../src/daemon/journal-turns";
 import type { CheckedRenderRequest } from "../src/daemon/render-checkpoint";
 import type { RequestFacts } from "../src/daemon/request-event";
 import { sessionIdOf } from "../src/daemon/session-id";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { DaemonClosing } from "../src/daemon/verb-error";
+import { PERFORMED } from "../src/daemon/effect-outcome";
+import type { LaneSession, LaneSetupEffect } from "../src/daemon/lane-setup";
 import { doctorReportKeys } from "../src/doctor/report";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DoctorEdge } from "../src/doctor/edge";
@@ -106,7 +108,7 @@ function rig() {
   // How many times the store persisted: a write that changes nothing still
   // persists and fires the session's atom, which the revision does not show.
   const persisted = { saves: 0 };
-  const sessionState = new SessionState({
+  const sessionState = new SessionState(SINGLE_RUN, {
     load: () => ({}),
     save: () => void persisted.saves++,
     flush: () => {},
@@ -158,7 +160,7 @@ function rig() {
   };
   const render = (termCols: number, sid = SID) => {
     const facts: RequestFacts = [];
-    const answered = apply(
+    const answered = applyRequest(
       {
         kind: "request",
         req: request(termCols, sid),
@@ -192,7 +194,10 @@ describe("a request takes its turn", () => {
     expect(r.drawn).toEqual([
       { toolbar: null, hints: JSON.stringify({ termCols: 60 }), report: false, holder: null },
     ]);
-    expect(facts).toEqual([["revision", String(r.sessionState.revision(SID))]]);
+    expect(facts).toEqual([
+      ["revision", String(r.sessionState.revision(SID))],
+      ["effects", "-"],
+    ]);
     r.parked.open();
     await click.performed;
   });
@@ -252,6 +257,87 @@ describe("a request takes its turn", () => {
     await answered;
     expect(r.persisted.saves).toBe(saves);
     expect(r.sessionState.revision(SID)).toBe(revision);
-    expect(facts).toEqual([["revision", String(revision)]]);
+    expect(facts).toEqual([
+      ["revision", String(revision)],
+      ["effects", "-"],
+    ]);
+  });
+});
+
+// [LAW:no-ambient-temporal-coupling] What a request's arrival settles is its
+// turn's: the lane setups its session's clicks owed join the session's order
+// as the turn ends, so a click made while the draw waits is performed after
+// them, and a draw that fails loses none.
+describe("a request's arrival settles in its turn", () => {
+  const setup = (on: boolean, by: LaneSetupEffect["by"]): LaneSetupEffect => ({
+    kind: "lane-setup",
+    session: { sessionId: SID } as unknown as LaneSession,
+    lane: "statusline",
+    on,
+    by,
+  });
+
+  function arrivalRig(draw: () => Promise<RequestAnswer>) {
+    const clock = heldClock(START);
+    const sessionState = new SessionState(SINGLE_RUN);
+    recordRender(sessionState, SID, DIR);
+    const turns = new JournalTurns();
+    const performed: string[] = [];
+    // The request settles the setup its session's earlier click owed; the
+    // click after it moves the lane back.
+    let owed: readonly LaneSetupEffect[] = [setup(true, "owed")];
+    const base = testVerbContext(sessionState, undefined, EMPTY_DEFAULT, undefined, turns);
+    const ctx: VerbContext = {
+      ...base,
+      lanes: {
+        ...base.lanes,
+        arrived: () => {
+          const settled = owed;
+          owed = [];
+          return settled;
+        },
+        clicked: () => [setup(false, "click")],
+        setup: async ({ on, by }) => {
+          performed.push(`${on ? "on" : "off"} by=${by}`);
+          return PERFORMED;
+        },
+      },
+    };
+    const { arrival: _arrival, described: _described, ...verbCtx } = ctx;
+    const facts: RequestFacts = [];
+    const render = () =>
+      applyRequest(
+        { kind: "request", req: request(60), at: AT, waitEndsAt: clock.monotonic(), facts },
+        { verbCtx, log: ctx.log, draw },
+      );
+    return { ctx, facts, performed, render };
+  }
+
+  test("a click made while the request's draw waits is performed after the setups the request settled", async () => {
+    const sources = gate();
+    const r = arrivalRig(async () => {
+      await sources.wait;
+      return ANSWER;
+    });
+    const answered = r.render();
+    await drain();
+    // The draw still waits, and the setup it settled is already performed,
+    // named on the request's line.
+    expect(r.performed).toEqual(["on by=owed"]);
+    expect(r.facts).toContainEqual(["effects", "lane-setup:statusline-on"]);
+    const click = await applyClick(effectsUrl(MAIN_NAME, [toggle]), r.ctx);
+    await click.performed;
+    sources.open();
+    await answered;
+    expect(r.performed).toEqual(["on by=owed", "off by=click"]);
+  });
+
+  test("a draw that fails loses none of the setups its request settled", async () => {
+    const r = arrivalRig(async () => {
+      throw new Error("the draw failed");
+    });
+    await expect(r.render()).rejects.toThrow("the draw failed");
+    await drain();
+    expect(r.performed).toEqual(["on by=owed"]);
   });
 });

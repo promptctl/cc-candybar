@@ -9,7 +9,7 @@ import { storedRootAt } from "../src/daemon/paths";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import {
   fileHistoryStorage,
   SettingsHistory,
@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 function rig(storage?: ConstructorParameters<typeof SettingsHistory>[2]) {
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const history = new SettingsHistory(sessionState, () => {}, storage);
   // One click that rewrites the config file: the file already holds `to` when
   // the journal is told, as a verb handler reports it.
@@ -260,7 +260,7 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
 describe("the savepoint under the history's bounds", () => {
   test("a net change alone over the byte bound releases the savepoint, said in the log", () => {
     const logs: string[] = [];
-    const history = new SettingsHistory(new SessionState(), (_l, m) =>
+    const history = new SettingsHistory(new SessionState(SINGLE_RUN), (_l, m) =>
       logs.push(m),
     );
     const toggle = history.begin();
@@ -313,7 +313,7 @@ describe("the savepoint survives a restart", () => {
     first.toggle("arrange");
     first.edit();
     const second = new SettingsHistory(
-      new SessionState(),
+      new SessionState(SINGLE_RUN),
       () => {},
       fileHistoryStorage(historyFile, storedRootAt(dir), () => {}),
     );
@@ -445,7 +445,7 @@ describe("the savepoint survives a restart", () => {
       }),
     );
     const history = new SettingsHistory(
-      new SessionState(),
+      new SessionState(SINGLE_RUN),
       () => {},
       fileHistoryStorage(historyFile, storedRootAt(dir), () => {}),
     );

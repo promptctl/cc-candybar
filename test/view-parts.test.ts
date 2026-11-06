@@ -11,7 +11,7 @@ import { TEST_LINKS } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
@@ -37,7 +37,7 @@ const A = instantOf(new Date(2026, 5, 4, 12, 34, 56));
 const B = instantOf(new Date(2026, 5, 4, 12, 34, 57));
 
 // A view of `config`: its store and registry, and the compile it draws with.
-function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
+function viewOf(config: ValidatedConfig, sessionState = new SessionState(SINGLE_RUN)) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
@@ -307,7 +307,7 @@ describe("a kept view draws what a fresh one draws", () => {
   );
 
   test("through the bundled bar's clicks and picks", async () => {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const kept = viewOf(config, sessionState);
     recordRender(sessionState, SID);
     const ctx = testVerbContext(sessionState, undefined, config);

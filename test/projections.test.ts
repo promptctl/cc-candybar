@@ -20,7 +20,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { loadFromDisk, pluginLoadLine } from "../src/daemon/cache/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
@@ -201,7 +201,7 @@ test("the config load line names the load's projections", () => {
     const file = path.join(dir, "config.json5");
     fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
     const loaded = loadFromDisk(dir, dir, file, { clock: systemTimekeeper, stateDir: stateDir(WORLD.home), locations: locs(), storage: NO_PLUGIN_STORAGE, links: TEST_LINKS, gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
     });
     expect(loaded.error).toBeNull();
     loaded.state!.registry.dispose();

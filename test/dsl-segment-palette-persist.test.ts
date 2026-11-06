@@ -45,7 +45,7 @@ import { TEST_LINKS } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";
@@ -267,7 +267,7 @@ let durable: DurableConfig;
 function persistBar(src: string, sessionId = "s1", dflt?: DslConfig) {
   if (durable.text() === null) durable.write(src);
   // The session's render origin is the file's, not the rig's own recorded one.
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   durable.seedOrigin(sessionState, sessionId);
   const rig = buildRig({
     source: src,
@@ -478,7 +478,7 @@ function makeCache(): {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
     {

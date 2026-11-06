@@ -32,7 +32,7 @@ import {
   sessionSource,
   type SessionSource,
 } from "../src/daemon/session-source";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { drawDsl } from "../src/dsl/render";
 import { LOADING_GLYPH } from "../src/dsl/node-registry";
@@ -44,12 +44,19 @@ import { parseDslConfig } from "../src/config/dsl-loader";
 import { ConfigError } from "../src/config/loader/diagnostics";
 import { instantOf } from "../src/utils/instant";
 import { Runs, type RunRequest } from "../src/daemon/runs";
+import { failed } from "../src/daemon/effect-outcome";
+import { DaemonClosing } from "../src/daemon/verb-error";
 import { sessionEnv } from "../src/daemon/session-env";
 import { lastClickError } from "../src/daemon/click-error";
 import { linkSigner } from "../src/click/link-signer";
 import { linkSignerFromKeyFile } from "../src/daemon/link-key";
 import { runDeclaration, type RunAction } from "../src/config/action";
-import { effectsUrl, VERB_RUN, type EvaluatedRun } from "../src/click/wire";
+import {
+  effectsUrl,
+  VERB_APPLY_UPDATE,
+  VERB_RUN,
+  type EvaluatedRun,
+} from "../src/click/wire";
 import { BadVerbArgs, type VerbContext } from "../src/daemon/verbs";
 import {
   SESSION_CLIENT_HINTS_KEY,
@@ -58,7 +65,13 @@ import {
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
 import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import type { StorageKey } from "../src/daemon/cache/managed-storage";
-import { clickUrl, effectsOf, testVerbContext, TEST_STORED_ROOT } from "./helpers/click";
+import {
+  applyClick,
+  clickUrl,
+  effectsOf,
+  testVerbContext,
+  TEST_STORED_ROOT,
+} from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER, TEST_LINKS } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
 import { throughout, until } from "./helpers/until";
@@ -213,7 +226,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     logger: log,
     ledger: new RefreshLedger(log),
   });
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const cache = new RenderCache<SessionSource, SessionRequest>(
     {
       clock: systemTimekeeper,
@@ -243,9 +256,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     clock: systemTimekeeper,
     supersede: (key, sid) => providers.managedStorage.supersede(key, sid),
     launch,
-    state: sessionState,
     log,
-    now: () => instantOf(new Date()),
   });
   cleanups.push(() => {
     runs.close();
@@ -764,7 +775,9 @@ describe("a click on a run link", () => {
     await writeUntilRead(view, STATUS, SID, { home: "/h/old" });
     expect(draw(view).text).toContain("home=/h/old");
 
-    await clickUrl(link.url, clickContext(r, view));
+    // [LAW:effects-at-boundaries] The click is answered once its turn has
+    // committed; the run it described is still being performed.
+    const { performed } = await applyClick(link.url, clickContext(r, view));
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 1 });
     // `superseded` is the state no request waits on
     // (test/render-payload-outcomes.test.ts).
@@ -786,11 +799,73 @@ describe("a click on a run link", () => {
     );
 
     program.exit();
+    await performed;
     await until(
       () => draw(view).text.includes("home=/h/new"),
       "the program's write",
     );
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 0 });
+  });
+
+  test("a run clicked behind its session's effect underway reads pending from the click and is counted queued, and its program starts once that effect has ended", async () => {
+    const program = heldLaunch();
+    const r = rig(program.launch);
+    const { view, link } = await drawnLink(r);
+    await writeUntilRead(view, STATUS, SID, { home: "/h/old" });
+    let release!: () => void;
+    const ctx = clickContext(r, view, {
+      applyUpdate: () => new Promise<void>((resolve) => (release = resolve)),
+    });
+    const update = await applyClick(
+      effectsUrl(MAIN_NAME, [{ verb: VERB_APPLY_UPDATE, args: [SID] }]),
+      ctx,
+    );
+    const ran = await applyClick(link.url, ctx);
+    // [LAW:no-ambient-temporal-coupling] Pending is the click's turn's, so the
+    // draw after the click never shows the value from before it, however long
+    // the program waits behind the session's earlier effect.
+    expect(view.source.facts().sources[STATUS]!).toMatchObject({
+      kind: "pending",
+      why: "superseded",
+    });
+    // [LAW:nothing-unseen] The wait is seen: the run is queued, not running.
+    expect(r.runs.stats()).toMatchObject({ started: 0, running: 0, queued: 1 });
+    release();
+    await update.performed;
+    await until(() => r.runs.stats().running === 1, "the program's start");
+    expect(r.runs.stats()).toMatchObject({ queued: 0 });
+    programWrites(SID, { home: "/h/new" });
+    program.exit();
+    await ran.performed;
+    await until(
+      () => draw(view).text.includes("home=/h/new"),
+      "the program's write",
+    );
+  });
+
+  test("a failed run's error reaches the bar as its effect-done", async () => {
+    const lines: string[] = [];
+    const r = rig(async () => ({
+      ok: false,
+      reason: "non-zero",
+      stdout: "",
+      stderr: "it broke",
+      exitCode: 3,
+      signal: null,
+    }));
+    const { view, link } = await drawnLink(r);
+    await clickUrl(
+      link.url,
+      clickContext(r, view, { log: (level, msg) => lines.push(`${level} ${msg}`) }),
+    );
+    expect(lastClickError(r.sessionState, SID)?.text).toBe(
+      "run plugins.p.go: exited with code 3: it broke",
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^warn apply kind=effect-done verb=dispatch sid=s1 effect=run:plugins\.p\.go outcome=failed /,
+      ),
+    );
   });
 
   test("the program runs in its declaring file's directory and sees the session, never the daemon", async () => {
@@ -840,7 +915,6 @@ describe("the run owner", () => {
     launch: Launcher["launch"] = processLauncher.launch,
   ) {
     const lines: string[] = [];
-    const sessionState = new SessionState();
     const held: string[] = [];
     const runs = new Runs({
       clock: systemTimekeeper,
@@ -849,9 +923,7 @@ describe("the run owner", () => {
         return () => held.push(`resume ${key.folder} ${sid}`);
       },
       launch,
-      state: sessionState,
       log: (level, message) => lines.push(`${level} ${message}`),
-      now: () => instantOf(new Date()),
       timeoutMs,
     });
     cleanups.push(() => runs.close());
@@ -867,15 +939,20 @@ describe("the run owner", () => {
       cwd: dir,
       refreshes: [{ name: STATUS, storage: KEY }],
     });
-    return { runs, lines, sessionState, held, run };
+    // A run as the click and the performer take it: superseded in the
+    // click's turn, then launched.
+    const started = (request: RunRequest) => {
+      const id = runs.superseded(request);
+      return { id, ended: runs.run(id, request) };
+    };
+    return { runs, lines, held, run, started };
   }
 
-  test("a non-zero exit puts the trimmed stderr in the session's bar, and counts as failed", async () => {
+  test("a non-zero exit answers the trimmed stderr, and counts as failed", async () => {
     const o = owner();
-    o.runs.start(o.run(`echo "  it broke  " >&2; exit 3`));
+    const { ended } = o.started(o.run(`echo "  it broke  " >&2; exit 3`));
     expect(o.held).toEqual([`supersede /s ${SID}`]);
-    await until(() => o.runs.stats().running === 0, "the run's end");
-    expect(lastClickError(o.sessionState, SID)?.text).toBe("run act: exited with code 3: it broke");
+    expect(await ended).toEqual(failed("run act: exited with code 3: it broke"));
     expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
     expect(o.runs.stats()).toMatchObject({
       started: 1,
@@ -889,19 +966,17 @@ describe("the run owner", () => {
     );
   });
 
-  test("a non-zero exit that says nothing puts the reason in the bar", async () => {
+  test("a non-zero exit that says nothing answers the reason", async () => {
     const o = owner();
-    o.runs.start(o.run("exit 4"));
-    await until(() => o.runs.stats().running === 0, "the run's end");
-    expect(lastClickError(o.sessionState, SID)?.text).toBe("run act: exited with code 4");
+    expect(await o.started(o.run("exit 4")).ended).toEqual(
+      failed("run act: exited with code 4"),
+    );
   });
 
-  test("a timeout puts the reason in the bar, resumes its sources, and counts as timed out", async () => {
+  test("a timeout answers the reason, resumes its sources, and counts as timed out", async () => {
     const o = owner(200);
-    o.runs.start(o.run("sleep 5"));
-    await until(() => o.runs.stats().running === 0, "the timeout");
-    expect(lastClickError(o.sessionState, SID)?.text).toBe(
-      "run act: timed out after 0.2 s",
+    expect(await o.started(o.run("sleep 5")).ended).toEqual(
+      failed("run act: timed out after 0.2 s"),
     );
     expect(o.held).toContain(`resume /s ${SID}`);
     expect(o.runs.stats()).toMatchObject({
@@ -912,12 +987,10 @@ describe("the run owner", () => {
     expect(o.lines).toContainEqual(expect.stringContaining("outcome=timeout"));
   });
 
-  test("a program that floods its output puts the limit in the bar, not the flood, and counts as failed", async () => {
+  test("a program that floods its output answers the limit, not the flood, and counts as failed", async () => {
     const o = owner();
-    o.runs.start(o.run("yes >&2"));
-    await until(() => o.runs.stats().running === 0, "the flood's end");
-    expect(lastClickError(o.sessionState, SID)?.text).toBe(
-      `run act: output exceeded ${MAX_CAPTURED_BYTES} bytes`,
+    expect(await o.started(o.run("yes >&2")).ended).toEqual(
+      failed(`run act: output exceeded ${MAX_CAPTURED_BYTES} bytes`),
     );
     expect(o.held).toContain(`resume /s ${SID}`);
     expect(o.runs.stats()).toMatchObject({ failed: 1, timedOut: 0 });
@@ -926,7 +999,7 @@ describe("the run owner", () => {
     );
   });
 
-  test("a run its launcher ended for a failed pipe puts the pipe's error in the bar, not its cut-short words", async () => {
+  test("a run its launcher ended for a failed pipe answers the pipe's error, not its cut-short words", async () => {
     const o = owner(undefined, async () => ({
       ok: false,
       reason: "pipe-error",
@@ -936,22 +1009,18 @@ describe("the run owner", () => {
       signal: "SIGTERM",
       error: "a pipe failed to read: EIO",
     }));
-    o.runs.start(o.run(""));
-    await until(() => o.runs.stats().running === 0, "the run's end");
-    expect(lastClickError(o.sessionState, SID)?.text).toBe(
-      "run act: a pipe failed to read: EIO",
+    expect(await o.started(o.run("")).ended).toEqual(
+      failed("run act: a pipe failed to read: EIO"),
     );
     expect(o.runs.stats()).toMatchObject({ failed: 1 });
     expect(o.lines).toContainEqual(expect.stringContaining("outcome=pipe"));
   });
 
-  test("a program that cannot start puts why in the bar, and counts as failed", async () => {
+  test("a program that cannot start answers why, and counts as failed", async () => {
     const o = owner();
-    o.runs.start({ ...o.run(""), argv: ["./no-such-program"] });
-    await until(() => o.runs.stats().running === 0, "the failed launch");
-    expect(lastClickError(o.sessionState, SID)?.text).toMatch(
-      /^run act: .*ENOENT/,
-    );
+    expect(
+      await o.started({ ...o.run(""), argv: ["./no-such-program"] }).ended,
+    ).toEqual(failed(expect.stringMatching(/^run act: .*ENOENT/)));
     expect(o.held).toContain(`resume /s ${SID}`);
     expect(o.runs.stats()).toMatchObject({ failed: 1 });
     expect(o.lines).toContainEqual(
@@ -961,18 +1030,36 @@ describe("the run owner", () => {
     );
   });
 
-  test("closing the owner aborts the run in flight and resumes its sources; nothing lands in the bar", async () => {
+  test("a launcher that throws leaves nothing running, and the run's sources resume", async () => {
+    const o = owner(undefined, () => {
+      throw new Error("the launcher refused its options");
+    });
+    await expect(o.started(o.run("")).ended).rejects.toThrow(
+      "the launcher refused its options",
+    );
+    expect(o.held).toContain(`resume /s ${SID}`);
+    expect(o.runs.stats()).toMatchObject({ running: 0, queued: 0 });
+  });
+
+  test("closing the owner aborts the run in flight, answered as the close, and resumes its sources; one never launched resumes nothing", async () => {
     const o = owner();
-    o.runs.start(o.run("sleep 30"));
+    const { ended } = o.started(o.run("sleep 30"));
+    const queued = o.runs.superseded(o.run("true"));
     expect(o.runs.stats().running).toBe(1);
     o.runs.close();
-    await until(() => o.runs.stats().running === 0, "the aborted run's end");
-    expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
+    // The run the close aborted is answered as the close, not as a failure.
+    await expect(ended).rejects.toThrow(DaemonClosing);
+    expect(o.held).toEqual([
+      `supersede /s ${SID}`,
+      `supersede /s ${SID}`,
+      `resume /s ${SID}`,
+    ]);
     expect(o.lines).toContainEqual(expect.stringContaining("outcome=aborted"));
-    expect(lastClickError(o.sessionState, SID)).toBeNull();
-    expect(() => o.runs.start(o.run("true"))).toThrow(
-      "run owner used after close",
-    );
+    expect(o.runs.stats()).toMatchObject({ failed: 0, running: 0 });
+    // [LAW:no-silent-failure] A launch the close overtook is the daemon's
+    // close, said as such (at info, by Apply), not a fault.
+    await expect(o.runs.run(queued, o.run("true"))).rejects.toThrow(DaemonClosing);
+    expect(() => o.runs.superseded(o.run("true"))).toThrow(DaemonClosing);
   });
 });
 

@@ -40,7 +40,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, effectsOf } from "./helpers/click";
@@ -158,7 +158,7 @@ afterEach(() => {
 function buildEditRuntime(src: string, sessionId = "s1") {
   durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED);
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
@@ -820,7 +820,7 @@ describe("a segment row's chrome rides its row", () => {
 describe("edit chrome is ordinary segment data — no special-cased render path", () => {
   test("padding applies to a chrome segment exactly like a hand-authored one", () => {
     const config = parseAndValidate("<test>", BASE, ALLOWED);
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });

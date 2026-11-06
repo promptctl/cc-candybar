@@ -48,7 +48,7 @@ import {
   sessionSource,
   type SessionSource,
 } from "../src/daemon/session-source";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { observable, runInAction, type IObservableValue } from "mobx";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
@@ -312,7 +312,7 @@ function rig(
     logger: log,
     ledger: new RefreshLedger(log),
   });
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const update = newUpdateFact();
   const runs = new SourceRuns({ launcher, clock });
   const depths = observable.box<Depths>(NEVER_CLICKED, { deep: false });

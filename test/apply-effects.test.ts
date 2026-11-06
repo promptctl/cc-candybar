@@ -3,8 +3,9 @@ import { MAIN_NAME } from "../src/daemon/home";
 // describes them, the click answers once the turn has committed, the performer
 // runs them after it in the order described, and each outcome comes back
 // through Apply as an effect-done event, whose arm holds a failure for the
-// session's bar. The write-outside-turn instrument (test/helpers/writes-in-turn.ts)
-// is proven to bite here, beside the path it watches.
+// session's bar. The store's refusal of a write outside a turn is proven to
+// bite here, beside the path it guards: every rig here writes the store its
+// clicks' turns hold.
 
 import {
   VERB_APPLY_UPDATE,
@@ -21,7 +22,7 @@ import {
   lastClickError,
 } from "../src/daemon/click-error";
 import { JournalTurns } from "../src/daemon/journal-turns";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { BadVerbArgs, type VerbContext } from "../src/daemon/verbs";
 import { exits, program, readsStdin, runsFor } from "../src/proc/spawner-fake";
 import { instantOf } from "../src/utils/instant";
@@ -30,7 +31,6 @@ import { applyUnanswered } from "../src/daemon/apply";
 import { applyClick, applyClickAnswered, clickUrl, testVerbContext } from "./helpers/click";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
-import { writesInTurn } from "./helpers/writes-in-turn";
 
 const SID = "s1";
 const PBCOPY = "/usr/bin/pbcopy";
@@ -39,11 +39,12 @@ const AT = new Date("2026-11-05T12:00:00Z");
 // On the machine's clock unless a case holds one to keep a program running.
 function rig(clock: Timekeeper = systemTimekeeper) {
   const { launcher, spawner, started } = fakeLauncher(clock);
-  const sessionState = new SessionState();
+  const journalTurns = new JournalTurns();
+  const sessionState = new SessionState(journalTurns);
   const logged: string[] = [];
   const warned: string[] = [];
   const ctx: VerbContext = {
-    ...testVerbContext(sessionState),
+    ...testVerbContext(sessionState, undefined, undefined, undefined, journalTurns),
     launcher,
     log: (level, line) => {
       logged.push(line);
@@ -245,17 +246,30 @@ describe("a session's effects run in the order their turns committed", () => {
   });
 });
 
-describe("the write-outside-turn instrument", () => {
-  test("a write with no turn held throws; one inside a turn lands", () => {
-    const store = new SessionState();
+describe("the store refuses a write outside a turn", () => {
+  test("a write from a timer throws and lands nothing; one inside a turn lands", async () => {
     const turns = new JournalTurns();
-    const watched = writesInTurn(store, turns);
-    expect(() => watched.set(SID, "k", "v")).toThrow(/outside any journal turn: set k/);
-    expect(() => watched.setBatch(SID, [{ key: "k", value: "v" }])).toThrow(/setBatch k/);
-    expect(() => watched.clear(SID, "k")).toThrow(/clear k/);
+    const store = new SessionState(turns);
+    const fromTimer = await new Promise<unknown>((resolve) =>
+      setTimeout(() => {
+        try {
+          store.setBatch(SID, [{ key: "k", value: "v" }]);
+          resolve(null);
+        } catch (e) {
+          resolve(e);
+        }
+      }, 0),
+    );
+    expect(String(fromTimer)).toMatch(/session state: a write of "s1" outside any turn/);
+    expect(() => store.clear(SID, "k")).toThrow(/outside any turn/);
+    // Refused whatever it would have written: a batch that writes nothing,
+    // and a restore to the revision the store already holds.
+    expect(() => store.setBatch(SID, [])).toThrow(/outside any turn/);
+    expect(() => store.restore(SID, {}, 0)).toThrow(/outside any turn/);
     expect(store.get(SID, "k")).toBeNull();
-    turns.take("test", () => watched.set(SID, "k", "v"));
-    expect(watched.get(SID, "k")).toBe("v");
+    expect(store.revision(SID)).toBe(0);
+    turns.take("test", () => store.set(SID, "k", "v"));
+    expect(store.get(SID, "k")).toBe("v");
   });
 
   test("a write made from a performer, after the click's turn, fails the click path", async () => {
@@ -270,7 +284,7 @@ describe("the write-outside-turn instrument", () => {
     };
     await clickUrl(`cc-candybar://to/main/${VERB_APPLY_UPDATE}/${encodeURIComponent(SID)}`, ctx);
     expect(r.sessionState.get(SID, "slipped")).toBeNull();
-    expect(lastClickError(r.sessionState, SID)?.text).toMatch(/outside any journal turn: set slipped/);
+    expect(lastClickError(r.sessionState, SID)?.text).toMatch(/outside any turn/);
   });
 });
 

@@ -34,7 +34,7 @@ import {
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { pluginRoots } from "../src/config/loader/plugin-folders";
 import { hasCacheField } from "../src/config/dsl-types";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { textOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
@@ -595,7 +595,7 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     storage: NO_PLUGIN_STORAGE,
     links: TEST_LINKS,
     gates: bareGates(),
-    sessionState: new SessionState(),
+    sessionState: new SessionState(SINGLE_RUN),
   });
   try {
     expect(loaded.state?.plugins.loaded).toEqual([
@@ -655,7 +655,7 @@ describe("a plugin's own variables", () => {
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
     });
     try {
       expect(loaded.state?.plugins.loaded).toEqual([
@@ -703,7 +703,7 @@ describe("a plugin's own variables", () => {
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
     });
     try {
       const vars = loaded.state!.config.variables;
@@ -761,7 +761,7 @@ describe("a plugin's own variables", () => {
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
     });
     try {
       expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
@@ -780,7 +780,7 @@ describe("a plugin's own variables", () => {
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
     });
     try {
       expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
@@ -932,7 +932,7 @@ describe("an installed plugin", () => {
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
-        sessionState: new SessionState(),
+        sessionState: new SessionState(SINGLE_RUN),
       },
     );
     try {
@@ -992,7 +992,7 @@ describe("an installed plugin", () => {
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
-        sessionState: new SessionState(),
+        sessionState: new SessionState(SINGLE_RUN),
         watchers,
         source: SOURCES_NOTHING,
         facts: factsRunning(runs),
@@ -1075,7 +1075,7 @@ describe("an installed plugin", () => {
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
-        sessionState: new SessionState(),
+        sessionState: new SessionState(SINGLE_RUN),
       });
       loaded.state?.registry.dispose();
       return pluginLoadLine(loaded.layers, loaded.state!, loaded.ms);
@@ -1619,7 +1619,7 @@ describe("an installed plugin", () => {
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
     });
     try {
       expect(loaded.state?.plugins.loaded).toEqual([
@@ -1656,7 +1656,7 @@ describe("an installed plugin", () => {
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
-        sessionState: new SessionState(),
+        sessionState: new SessionState(SINGLE_RUN),
         watchers,
         source: SOURCES_NOTHING,
         facts: FACTS_NOTHING,
@@ -1761,7 +1761,7 @@ describe("an installed plugin", () => {
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
     });
     try {
       expect(loaded.state?.plugins.loaded).toEqual([]);
@@ -1842,7 +1842,7 @@ describe("an installed plugin", () => {
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
     });
     try {
       expect([...(loaded.state?.plugins.reached ?? [])]).toEqual([def]);
@@ -2004,7 +2004,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
     });
     try {
       expect(loaded.error).toBeNull();

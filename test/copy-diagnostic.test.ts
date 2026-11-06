@@ -7,7 +7,7 @@ import { MAIN_NAME } from "../src/daemon/home";
 import { type LaunchOpts } from "../src/proc/launch";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
 import { clickUrl, testVerbContext } from "./helpers/click";
 
@@ -47,7 +47,7 @@ test("the first line's click copies the full prompt, though its link carries onl
   expect(link.length).toBeLessThan(200);
   expect(link).not.toContain("placement");
   await clickUrl(link, {
-    ...testVerbContext(new SessionState()),
+    ...testVerbContext(new SessionState(SINGLE_RUN)),
     launcher: recording,
     diagnosticCopy: (sid, by, key) =>
       sid === SID && by === "request" ? copies.get(key) : undefined,
@@ -61,7 +61,7 @@ test("a key the session's last draw no longer lists is refused, and nothing is c
   const { list } = drawn();
   const link = list[0]!.lines[0]![0].link!;
   await expect(clickUrl(link, {
-      ...testVerbContext(new SessionState()),
+      ...testVerbContext(new SessionState(SINGLE_RUN)),
     launcher: recording,
       diagnosticCopy: () => undefined,
     }),

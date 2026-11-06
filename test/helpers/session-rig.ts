@@ -24,7 +24,7 @@ import {
 } from "../../src/daemon/session-source";
 import type { Fact } from "../../src/facts/fact";
 import type { UpdateNotice } from "../../src/facts/session-facts";
-import { SessionState } from "../../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../../src/daemon/session-state";
 import { EMPTY_HISTORY_DEPTH } from "../../src/daemon/settings-history";
 import { systemTimekeeper } from "../../src/time";
 import { instantOf } from "../../src/utils/instant";
@@ -154,7 +154,7 @@ export function sessionRig(
   } = {},
 ) {
   const providers = fixedOwners(log);
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     logger: () => {},
   });

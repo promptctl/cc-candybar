@@ -13,7 +13,7 @@ import { TEST_LINKS } from "./helpers/link-signer";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -81,7 +81,7 @@ function renderedEntry(
 
 describe("VariableStore.dispose releases every computed's subscriptions", () => {
   it("a disposed registry leaves the SessionState atom with only the live entries' observers", () => {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     expect(sessionState.observers()).toBe(0);
 
     const first = renderedEntry(sessionState);
@@ -107,14 +107,14 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
   // brandon-unfiled-3248.8ro6 step 6: what a draw keeps of its parts lives in
   // its store, and goes with its variables.
   it("releases the parts a draw kept beside the variables", () => {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const variables = renderedEntry(sessionState, false).dispose();
     expect(renderedEntry(sessionState).dispose()).toBeGreaterThan(variables);
     expect(sessionState.observers()).toBe(0);
   });
 
   it("refuses a declaration after dispose: it would subscribe with no release to come", () => {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
     store.defineComputed("a", "string", () => sessionState.get(SID, "a") ?? "");
     expect(store.read("a")).toBe("");
@@ -135,7 +135,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
   });
 
   it("a never-rendered registry subscribes nothing, and its dispose changes nothing", () => {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
     registerDslConfig(
@@ -154,7 +154,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
   });
 
   it("keeps the pull-only cache while live: two reads with no change evaluate once", () => {
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
     let evaluations = 0;
     store.defineComputed("theme", "string", () => {

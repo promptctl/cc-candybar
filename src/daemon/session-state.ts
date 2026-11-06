@@ -3,7 +3,7 @@
 // no DI wiring, no cache invalidation.
 //
 // [LAW:single-enforcer] Reads are MobX-tracked through a single internal atom.
-// Every get() reports observed; every set/clear/prune reports changed. A DSL
+// Every get() reports observed; every set/clear reports changed. A DSL
 // computed that reads SessionState via this object will re-evaluate whenever
 // any (sessionId, key) pair mutates — coarse-grained on purpose, since
 // session-state mutations are rare (clicks) and computeds are cheap. The
@@ -15,6 +15,18 @@
 // without any observer see no change in behavior.
 
 import { createAtom, type IAtom, runInAction } from "mobx";
+import type { JournalTurns } from "./journal-turns.js";
+
+// [LAW:single-enforcer] Who says whether a turn is held: the daemon's journal
+// turns (src/daemon/journal-turns.ts). A turn is synchronous, so a write made
+// while one is held is that turn's own, and a write made while none is held
+// came from a callback no event explains.
+export type TurnHolder = Pick<JournalTurns, "inTurn">;
+
+// The holder of a store that one synchronous run writes, start to finish:
+// the check command, the demo, the doctor's command line, a test that seeds
+// a store. Nothing else runs beside such a run, so it always holds.
+export const SINGLE_RUN: TurnHolder = { inTurn: () => "single-run" };
 
 export interface SessionStateReader {
   get(sessionId: string, key: string): string | null;
@@ -141,7 +153,10 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // session-state's load — mutations are rare and computeds are cheap.
   private readonly atom: IAtom = createAtom("SessionState");
 
+  // [LAW:types-are-the-program] The holder is required: a store that could
+  // be built without one would write outside every turn unseen.
   constructor(
+    private readonly turns: TurnHolder,
     storage: SessionStorage = EPHEMERAL_SESSION_STORAGE,
     private readonly maxSessions: number = DEFAULT_MAX_SESSIONS,
   ) {
@@ -245,6 +260,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     sessionId: string,
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void {
+    this.held(sessionId);
     if (pairs.length === 0) return;
     this.commit(sessionId, (session) => {
       if (pairs.some(({ key, value }) => session.values.get(key) !== value))
@@ -254,6 +270,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   clear(sessionId: string, key: string): void {
+    this.held(sessionId);
     this.commit(sessionId, (session) => {
       if (session.values.delete(key)) session.revision = ++this.head;
     });
@@ -271,6 +288,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     values: Readonly<Record<string, string>>,
     revision: number,
   ): void {
+    this.held(sessionId);
     if ((this.sessions.get(sessionId)?.revision ?? 0) === revision) return;
     this.commit(sessionId, (session) => {
       session.values.clear();
@@ -306,15 +324,16 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     });
   }
 
-  // [LAW:one-source-of-truth] Drop state for sessions that no longer exist.
-  prune(activeSessionIds: Set<string>): void {
-    runInAction(() => {
-      for (const id of this.sessions.keys()) {
-        if (!activeSessionIds.has(id)) this.sessions.delete(id);
-      }
-      this.persist();
-      this.atom.reportChanged();
-    });
+  // [LAW:single-enforcer][LAW:no-silent-failure] The one check that a write
+  // is a turn's: every public write asks here first, before it decides
+  // whether anything moves, so a write out of its turn is refused whatever it
+  // would have written.
+  private held(sessionId: string): void {
+    if (this.turns.inTurn() === null) {
+      throw new Error(
+        `session state: a write of ${JSON.stringify(sessionId)} outside any turn`,
+      );
+    }
   }
 
   // Move-to-end: re-inserting at the tail makes this the most-recently-used.
@@ -342,9 +361,9 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
-  // lands, and anything that lands later (a render that was awaiting, a run
-  // settling) stays in memory, so it can never write over the file a next
-  // daemon has taken up.
+  // lands, and the store persists nothing after, so it can never write over
+  // the file a next daemon has taken up. The closed turns refuse every write
+  // that would follow (`held`).
   close(): void {
     this.flush();
     this.storage = EPHEMERAL_SESSION_STORAGE;

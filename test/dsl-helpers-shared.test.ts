@@ -9,7 +9,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { systemTimekeeper } from "../src/time";
 
 // [LAW:verifiable-goals] The 2026-09-03 outage in numbers: the helper preamble
@@ -39,7 +39,7 @@ function registerStdlib() {
     "<default>",
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
   return { registry, compiled: registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" }) };
 }
 

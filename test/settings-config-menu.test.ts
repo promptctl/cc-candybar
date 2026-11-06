@@ -28,7 +28,7 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { POLLED, PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
 import { ConfigError, loadConfigSource } from "../src/config/dsl-loader";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig } from "../src/dsl/render";
@@ -106,7 +106,7 @@ function rig(
   // the `tmux.pane` input every render's payload carries.
   tmuxPane: string;
 } {
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   durable?.write(source);
   if (durable === undefined) recordRender(sessionState, SID);
   else durable.seedOrigin(sessionState, SID);

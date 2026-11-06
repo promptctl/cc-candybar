@@ -8,7 +8,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame, Run } from "../src/render/frame";
 import { TEST_LINKS } from "./helpers/link-signer";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -53,7 +53,7 @@ function renderer(): {
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
   const compiled = registerDslConfig(CONFIG, registry, { links: TEST_LINKS, cwd: "/tmp" });
   return {
     render: (at) =>
@@ -132,7 +132,7 @@ describe("a stored instant is read against the frame's instant", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(),
+      new SessionState(SINGLE_RUN),
     );
     try {
       const compiled = registerDslConfig(BUNDLED, registry, { links: TEST_LINKS, cwd: "/tmp" });
@@ -162,7 +162,7 @@ describe("a stored instant is read against the frame's instant", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(),
+      new SessionState(SINGLE_RUN),
     );
     try {
       const compiled = registerDslConfig(BUNDLED, registry, { links: TEST_LINKS, cwd: "/tmp" });

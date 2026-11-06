@@ -16,7 +16,7 @@ import { picked, selectionFor } from "./helpers/selection";
 import { configurePlacement } from "./helpers/configure";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
@@ -54,7 +54,7 @@ afterEach(() => {
 
 function thresholdBar(src: string, utilization: number) {
   durable.write(src);
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   durable.seedOrigin(sessionState, SID);
   const rig = buildRig({
     source: src,

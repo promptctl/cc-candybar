@@ -15,7 +15,7 @@ import { perSetting } from "../../src/config/setting-projections";
 import { checkPayload } from "../../src/check";
 import { renderOptionsOf } from "../../src/daemon/render-payload";
 import type { Frame } from "../../src/render/frame";
-import { SessionState } from "../../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../../src/daemon/session-state";
 import { registerDslConfig, type RenderWarning } from "../../src/dsl/render";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
 import type { Instant } from "../../src/utils/instant";
@@ -58,7 +58,7 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
-  const session = new SessionState();
+  const session = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/home/tester/code/project" });

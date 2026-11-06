@@ -18,7 +18,7 @@ import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { inProcessFacts } from "../src/daemon/facts-source";
 import { sessionSource, type SessionSource } from "../src/daemon/session-source";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { absentOwners } from "./helpers/payload-owners";
 import { parseClientHints } from "../src/daemon/protocol";
 import { sessionIdOf } from "../src/daemon/session-id";
@@ -118,7 +118,7 @@ test("a view reads the PR from its declaration whatever its preset places, and a
     logger: () => {},
   });
   cleanups.push(() => git.close());
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
     logger: () => {},
   });
@@ -267,7 +267,7 @@ function gitCache() {
   // Only git is under test; the other owners answer nothing. The view draws
   // through the session source, so a test reads the repo off its document.
   const providers = { ...absentOwners(), log: () => {}, gitProvider: git };
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const cache = new RenderCache<SessionSource, SessionRequest>(
     {
       clock: systemTimekeeper,

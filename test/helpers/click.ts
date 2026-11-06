@@ -19,7 +19,6 @@ import {
 import { parseHandlerUrl } from "../../src/click/wire";
 import { apply, type ClickRefusal } from "../../src/daemon/apply";
 import { clickSessionOf, clickVerb } from "../../src/daemon/verbs";
-import { writesInTurn } from "./writes-in-turn";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 import { describeEffect } from "../../src/daemon/effect";
@@ -70,8 +69,7 @@ export function recordRender(
 // The history is ephemeral unless the caller hands one in: a test that is not
 // isolated from the real state dir must never write the daemon's history file
 // (test/helpers/durable-config.ts hands in one under its own temp root).
-// The turns are the context's own unless the caller holds them: the writes
-// the instrument below judges are held by whichever turns the click takes.
+// The turns are the context's own unless the caller holds them.
 export function testVerbContext(
   sessionState: SessionStateRW,
   history?: SettingsHistory,
@@ -79,16 +77,12 @@ export function testVerbContext(
   host: Host = HOST,
   journalTurns: JournalTurns = new JournalTurns(),
 ): VerbContext {
-  // [LAW:nothing-unseen] Every write a click makes crosses the ordering
-  // instrument (test/helpers/writes-in-turn.ts): the context's store, and the
-  // history whose journal writes through it.
-  const inTurn = writesInTurn(sessionState, journalTurns);
   return {
     gates: bareGates(),
     stateDir: stateDir(homeOf(host)), locations: locations(host, homeOf(host)),
     storedRoot: storedRoot(homeOf(host)),
-    sessionState: inTurn,
-    history: history ?? new SettingsHistory(inTurn, () => {}),
+    sessionState,
+    history: history ?? new SettingsHistory(sessionState, () => {}),
     navigation: new NavigationHistory(),
     journalTurns,
     // [LAW:no-silent-failure] A turn's effects go to the arm that ran it
@@ -201,7 +195,10 @@ export function testVerbContext(
     },
     links: TEST_LINKS,
     runs: {
-      start: () => {
+      superseded: () => {
+        throw new Error("run: no run owner in this test");
+      },
+      run: () => {
         throw new Error("run: no run owner in this test");
       },
       refused: () => {
@@ -211,8 +208,9 @@ export function testVerbContext(
     // A click of a session that has rendered measures its lane switches over
     // that same config, as the daemon's does; a test that handed in none
     // switches no lane on. No lane owner runs here: a test that reads what a
-    // click set up hands in its own `clicked`. A session here rendered in a
-    // tmux pane, so the tmux status line is its to switch.
+    // click or a request set up hands in its own `clicked` or `arrived`. A
+    // session here rendered in a tmux pane, so the tmux status line is its to
+    // switch.
     lanes: {
       of: (_origin, sid) =>
         config === undefined
@@ -225,7 +223,11 @@ export function testVerbContext(
               ),
               true,
             ),
-      clicked: () => {},
+      clicked: () => [],
+      arrived: () => [],
+      setup: () => {
+        throw new Error("lane setup: no lane owner in this test");
+      },
     },
     // No draw here lists a diagnostic, so a copy-diagnostic click is refused.
     diagnosticCopy: () => undefined,

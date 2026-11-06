@@ -39,7 +39,7 @@ import type { DslConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers";
@@ -417,7 +417,7 @@ function buildPersistRuntime(
 ) {
   durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
@@ -573,7 +573,7 @@ describe("persist action click → the config file", () => {
     }`;
     durable.write(src);
     const config = parseAndValidate("<test>", src, ALLOWED);
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     durable.seedOrigin(sessionState, "s1");
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(unscriptedRuns(),
@@ -826,7 +826,7 @@ describe("persist action click → the config file", () => {
       }`,
       ALLOWED,
     );
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     durable.seedOrigin(sessionState, "s1");
     const ctx: VerbContext = testVerbContext(
       sessionState,
@@ -865,7 +865,7 @@ function makeCache(): {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
     {
@@ -903,7 +903,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       }`,
       ALLOWED,
     );
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const named = join(durable.projectDir, "named.json5");
     durable.seedOrigin(sessionState, "s1", named);
     durable.write(`{ globals: { palette: "textual-dark" } }`);
@@ -943,7 +943,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       }`,
       ALLOWED,
     );
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     durable.seedOrigin(sessionState, "s1");
     const ctx: VerbContext = testVerbContext(
       sessionState,
@@ -1111,7 +1111,7 @@ describe("RenderCache: the config file is the durable store", () => {
       // A session that picked its own theme via `set` still overrides it —
       // session state is consulted BEFORE globals.palette, so the file only
       // ever changes what a session sees when it hasn't picked anything.
-      const sessionState = new SessionState();
+      const sessionState = new SessionState(SINGLE_RUN);
       sessionState.set("s1", "theme", "dracula");
       expect(
         resolveThemeSelection(

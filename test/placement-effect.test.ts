@@ -11,7 +11,7 @@ import { linkUrls } from "./helpers/frame";
 import { TEST_LINKS } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -74,7 +74,7 @@ function renderer(
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const session = new SessionState();
+  const session = new SessionState(SINGLE_RUN);
   for (const [key, value] of Object.entries(state)) session.set("s", key, value);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });

@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import { apply, applyUnanswered } from "./apply.js";
+import { apply, applyRequest, applyUnanswered } from "./apply.js";
 import { NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
 import {
   checkRenderRequest,
@@ -364,9 +364,9 @@ export async function replyTo(
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
         sessionState: {
-          sessions: parts.sessionGauges.size(),
-          observers: parts.sessionGauges.observers(),
-          revision: parts.sessionGauges.latestRevision(),
+          sessions: parts.sessionState.size(),
+          observers: parts.sessionState.observers(),
+          revision: parts.sessionState.latestRevision(),
         },
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
@@ -453,7 +453,7 @@ export async function replyTo(
       delivered: () => void;
     } = !checked.ok
       ? refusedRender(checked.problems)
-      : await apply(
+      : await applyRequest(
           {
             kind: "request",
             req: checked.req,
@@ -472,9 +472,7 @@ export async function replyTo(
           },
           parts,
         ).then(
-          ({
-            answer: { resp, motion, answersClick, pipeShown, delivered },
-          }) => {
+          ({ resp, motion, answersClick, pipeShown, delivered }) => {
             sighted(checked.req, motion);
             return {
               outcome: { kind: "ok" } as const,

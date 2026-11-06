@@ -21,7 +21,7 @@ import type { Palette, RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { bindRender } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import {
   FOLLOW_BAR,
   listResolvablePaletteNames,
@@ -76,7 +76,7 @@ const decided = (name: string) => ({
 });
 
 function themeBar(src: string) {
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   durable.seedOrigin(sessionState, SID);
   const rig = buildRig({
     source: src,

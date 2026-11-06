@@ -55,7 +55,7 @@ import type { World } from "./host";
 import { timeoutSignal } from "./time";
 import { SourceRegistry } from "./var-system/sources.js";
 import { SourceRuns } from "./var-system/source-runs.js";
-import { SessionState } from "./daemon/session-state.js";
+import { SessionState, SINGLE_RUN } from "./daemon/session-state.js";
 import {
   bindPayload,
   drawDsl,
@@ -623,7 +623,7 @@ export async function prepareConfig(
     runs,
     store,
     config.globals.default_empty_value ?? "",
-    new SessionState(),
+    new SessionState(SINGLE_RUN),
   );
   try {
     // [LAW:single-enforcer] check draws links as the daemon under its home

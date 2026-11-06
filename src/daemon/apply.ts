@@ -35,14 +35,12 @@ import type { DaemonParts } from "./daemon-parts.js";
 import type { RequestAnswer } from "./draw-bar.js";
 import {
   describeEffect,
-  failed,
-  PERFORMED,
   type Effect,
   type EffectDone,
-  type EffectOutcome,
   type LaunchSpec,
   type OutcomeOf,
 } from "./effect.js";
+import { failed, PERFORMED, type EffectOutcome } from "./effect-outcome.js";
 import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
@@ -116,7 +114,7 @@ export interface ClickRefusal {
 
 // What applying each kind answers its source with.
 interface Answers {
-  readonly request: RequestAnswer;
+  readonly request: void;
   readonly click: ClickRefusal | null;
   readonly "menu-idle": void;
   // How the effect went, as it landed.
@@ -125,12 +123,11 @@ interface Answers {
 }
 
 // [LAW:types-are-the-program] What each arm reads of the daemon: every arm
-// writes through the verb context and says what it did through the log; the
-// request draws through the daemon's draw once its turn is over. A test
-// applies an event over exactly those and nothing more.
+// writes through the verb context and says what it did through the log. A
+// test applies an event over exactly those and nothing more.
 export type ApplyParts = Pick<DaemonParts, "verbCtx" | "log">;
 interface ArmParts {
-  readonly request: ApplyParts & Pick<DaemonParts, "draw">;
+  readonly request: ApplyParts;
   readonly click: ApplyParts;
   readonly "menu-idle": ApplyParts;
   readonly "effect-done": ApplyParts;
@@ -168,23 +165,27 @@ const NO_EFFECTS: readonly Effect[] = [];
 export const ARMS: ApplyArms<Event> = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
-  // batch in a journal turn, and the draw begins once the turn is over. A turn
-  // is synchronous (src/daemon/journal-turns.ts), so the request waits behind
-  // no other session's work, and no draw, this one or a feed's, can read a
-  // click half landed. The revision its turn left goes on the request's line,
-  // the render event, which is its record and opens with the session the edge
-  // noted.
-  request: async ({ req, at, waitEndsAt, facts }, { verbCtx, draw }) => {
-    const revision = verbCtx.journalTurns.take("request", () => {
+  // batch in a journal turn, with what its arrival settles (the lane setups
+  // its session's clicks owed, described as the turn's effects), and its draw
+  // begins once the turn is over (`applyRequest`). A turn is synchronous
+  // (src/daemon/journal-turns.ts), so the request waits behind no other
+  // session's work, and no draw, this one or a feed's, can read a click half
+  // landed. The revision its turn left and the effects it described go on the
+  // request's line, the render event, which is its record and opens with the
+  // session the edge noted.
+  request: async ({ req, facts }, { verbCtx }) => {
+    const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
-      return verbCtx.sessionState.revision(req.sessionId);
+      return {
+        effects: verbCtx.lanes.arrived(req),
+        revision: verbCtx.sessionState.revision(req.sessionId),
+      };
     });
-    noteFacts(facts, { revision: String(revision) });
-    return {
-      answer: await draw(req, at, waitEndsAt, facts),
-      effects: NO_EFFECTS,
-      facts: [],
-    };
+    noteFacts(facts, {
+      revision: String(turn.revision),
+      effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-",
+    });
+    return { answer: undefined, effects: turn.effects, facts: [] };
   },
   // The turn hands its effects over once it has committed (`described`), and
   // a refused step is answered beside them; a click whose client has left is
@@ -264,6 +265,8 @@ const LANDINGS: Landings = {
   launch: asIs,
   "type-slash": asIs,
   "apply-update": asIs,
+  run: asIs,
+  "lane-setup": asIs,
   doctor: ({ effect, outcome }, verbCtx) => {
     if (outcome.kind === "failed") return outcome;
     landDoctor(verbCtx, effect, outcome.gathered);
@@ -384,6 +387,19 @@ export async function apply<K extends Event["kind"]>(
 }
 
 const NOTHING_PERFORMED: Promise<void> = Promise.resolve();
+
+// [LAW:no-ambient-temporal-coupling] A request applied, then drawn: the draw
+// begins once its turn is over and the effects the turn described have joined
+// the session's order, so a click made during the draw's wait is performed
+// after them, a draw that fails loses none, and a request its turn refused is
+// never drawn.
+export async function applyRequest(
+  event: Extract<Event, { readonly kind: "request" }>,
+  parts: ApplyParts & Pick<DaemonParts, "draw">,
+): Promise<RequestAnswer> {
+  await apply(event, parts);
+  return parts.draw(event.req, event.at, event.waitEndsAt, event.facts);
+}
 
 // [LAW:nothing-unseen] One `apply` line per applied event, from the layer
 // every event passes through: the kind, the verb, the session, the effects
@@ -507,6 +523,8 @@ const PERFORM: Performers = {
     await verbCtx.applyUpdate();
     return PERFORMED;
   },
+  run: ({ id, run }, { verbCtx }) => verbCtx.runs.run(id, run),
+  "lane-setup": (effect, { verbCtx }) => verbCtx.lanes.setup(effect),
   // The doctor's probes, gathered after the click's turn, in no turn: its
   // step lands with the facts (`LANDINGS`).
   doctor: async (effect, { verbCtx }) => ({

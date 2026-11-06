@@ -5,7 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import { parseSessionId } from "../src/daemon/session-id";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { BadVerbArgs, VERBS } from "../src/daemon/verbs";
 import { encodeSegments } from "../src/click/wire";
 import { testVerbContext } from "./helpers/click";
@@ -37,7 +37,7 @@ describe("a click's session id", () => {
   const stepState = VERBS.get("step-state")!;
 
   test.each(REFUSED)("refuses %s", async (_, raw, problem) => {
-    const ctx = testVerbContext(new SessionState());
+    const ctx = testVerbContext(new SessionState(SINGLE_RUN));
     expect(() => toggle(encodeURIComponent(raw), ctx)).toThrow(BadVerbArgs);
     expect(() => toggle(encodeURIComponent(raw), ctx)).toThrow(problem);
     expect(() => stepState(encodeSegments([raw, "k", "1"]), ctx)).toThrow(
@@ -46,7 +46,7 @@ describe("a click's session id", () => {
   });
 
   test("passes a UUID", async () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     const uuid = randomUUID();
     await toggle(encodeURIComponent(uuid), testVerbContext(state));
     expect(state.get(uuid, "toolbar-expanded")).toBe("1");

@@ -16,7 +16,7 @@ import {
   RenderCache,
 } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { TEST_LINKS } from "./helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
@@ -94,7 +94,7 @@ function setUp() {
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
       gates: bareGates(),
-      sessionState: new SessionState(),
+      sessionState: new SessionState(SINGLE_RUN),
       watchers,
       source: SOURCES_NOTHING,
       facts: factsRunning(runs),

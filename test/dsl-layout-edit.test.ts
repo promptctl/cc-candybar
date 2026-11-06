@@ -61,7 +61,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
 import { authoredFragment } from "../src/daemon/config-file-store";
@@ -553,7 +553,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   // each time a click reloads it.
   let current = config;
   const log: string[] = [];
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
@@ -810,7 +810,7 @@ describe("apply-layout-op click → the config file", () => {
 
   test("a hand-crafted click carrying an undeclared op token is rejected loudly", async () => {
     const { config } = buildLayoutRuntime(SRC);
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     durable.seedOrigin(sessionState, "s1");
     const ctx: VerbContext = testVerbContext(
       sessionState,
@@ -838,7 +838,7 @@ describe("apply-layout-op click → the config file", () => {
   test("a click on a session with no recorded render origin is refused — no file to write", async () => {
     const { config } = buildLayoutRuntime(SRC);
     const ctx: VerbContext = testVerbContext(
-      new SessionState(),
+      new SessionState(SINGLE_RUN),
       undefined,
       config,
       durable.host,
@@ -893,7 +893,7 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
     const store = new VariableStore(systemTimekeeper);
     // The banner is edit chrome: visible only with edit mode open AND the
     // preset customized, so the render below opens edit mode for "s1".
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
@@ -953,7 +953,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
 
   function renderGated(config: ReturnType<typeof buildConfig>): string {
     const store = new VariableStore(systemTimekeeper);
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
     sessionState.set("s1", EDIT_LIVE_KEY, "open");
@@ -1024,7 +1024,7 @@ function makeCache(reloads?: ReloadSignal): {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
@@ -1240,7 +1240,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       logger: () => {},
     });
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,

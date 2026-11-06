@@ -6,11 +6,11 @@
 // relies on.
 
 import { computed, autorun } from "mobx";
-import { SessionState } from "../../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../../src/daemon/session-state";
 
 describe("SessionState MobX integration", () => {
   test("computed re-evaluates after set()", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     const cell = computed(() => state.get("s1", "theme") ?? "(unset)");
 
     const observed: string[] = [];
@@ -30,7 +30,7 @@ describe("SessionState MobX integration", () => {
   });
 
   test("computed re-evaluates after clear()", () => {
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     state.set("s1", "theme", "ocean");
 
     const cell = computed(() => state.get("s1", "theme") ?? "(unset)");
@@ -52,7 +52,7 @@ describe("SessionState MobX integration", () => {
     // *propagation* to autoruns/observers when the derived value is unchanged.
     // This is the correct contract: session-state writes are rare, computeds
     // are cheap to re-evaluate, and the render layer reads value-not-signal.
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     const cell = computed(() => state.get("s1", "theme") ?? "");
 
     const observed: string[] = [];
@@ -71,7 +71,7 @@ describe("SessionState MobX integration", () => {
   test("get outside a reactive context still works and is silent", () => {
     // Most callers read SessionState directly (segments renderer, install
     // path). reportObserved outside a tracking context is a no-op.
-    const state = new SessionState();
+    const state = new SessionState(SINGLE_RUN);
     state.set("s1", "theme", "ocean");
     expect(state.get("s1", "theme")).toBe("ocean");
     expect(state.get("s1", "missing")).toBeNull();

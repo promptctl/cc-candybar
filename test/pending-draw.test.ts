@@ -12,7 +12,7 @@ import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
 import { heldClock } from "./helpers/held-clock";
 import { TEST_LINKS } from "./helpers/link-signer";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import {
@@ -69,7 +69,7 @@ function renderer(cfg: ValidatedConfig) {
   spawner.program(shell("sleep 60"), hangs());
   spawner.program(shell("sleep 0.2; printf ''"), runsFor(200, exits(0)));
   const store = new VariableStore(clock);
-  const session = new SessionState();
+  const session = new SessionState(SINGLE_RUN);
   const registry = new SourceRegistry(new SourceRuns({ launcher: launcher, clock: systemTimekeeper }), store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const drawn = lastBinding(compiled.menuRuntime.action);

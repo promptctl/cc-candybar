@@ -21,7 +21,7 @@ import {
   knownOptionDomainNames,
   resolveOptionDomain,
 } from "../../src/config/option-domain";
-import { SessionState } from "../../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../../src/daemon/session-state";
 import {
   compileDslConfig,
   registerCompiled,
@@ -202,7 +202,7 @@ export function buildRig(init: RigInit = {}): Rig {
     init.base ?? EMPTY_DEFAULT,
     init.palettes ?? ALL_PALETTES,
   );
-  const sessionState = init.sessionState ?? new SessionState();
+  const sessionState = init.sessionState ?? new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(
     unscriptedRuns(),

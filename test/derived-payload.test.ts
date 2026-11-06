@@ -22,7 +22,7 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { bindView } from "../src/dsl/parts";
 import { drawDsl, registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { SourceRegistry, VariableStore } from "../src/var-system";
 import { instantOf } from "../src/utils/instant";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -49,7 +49,7 @@ function viewOver(
   runs: string,
 ) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store, "", new SessionState());
+  const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store, "", new SessionState(SINGLE_RUN));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: os.tmpdir() });
   const answer = observable.box(payload, { deep: false });
   const selections = resolveEffectiveGlobals(

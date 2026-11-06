@@ -4,11 +4,11 @@
 // the daemon draws.
 
 import { autorun } from "mobx";
-import { SessionState } from "../../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
 
 test("one session's step moves its own depth and no other session's", () => {
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const history = new SettingsHistory(sessionState, () => {});
   const pick = (sessionId: string, theme: string): void => {
     const journal = history.begin();

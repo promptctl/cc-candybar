@@ -13,7 +13,7 @@ import { linkUrls } from "./helpers/frame";
 import { TEST_LINKS } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -71,7 +71,7 @@ interface Frame {
 
 // A renderer over one load of `cfg`, as a render cache entry's frames are
 // drawn until it reloads.
-function renderer(cfg: ValidatedConfig, session = new SessionState()) {
+function renderer(cfg: ValidatedConfig, session = new SessionState(SINGLE_RUN)) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
   const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });

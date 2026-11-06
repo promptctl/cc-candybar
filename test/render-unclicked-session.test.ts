@@ -13,7 +13,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { globalsFor, picked } from "./helpers/selection";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { STYLE_FLOOR, THEME_FLOOR } from "../src/themes";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
@@ -51,7 +51,7 @@ const SRC = `{
 test("a session that has never clicked draws the declared preset and style, not the floors", () => {
   const config = parseAndValidate("<omitted>", SRC, new Set([THEME_FLOOR]));
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
   try {
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
     const at = instantOf(new Date());

@@ -8,7 +8,7 @@ import fs, {
 } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { FileSessionStorage } from "../src/daemon/session-state-file";
 import { throughout, until } from "./helpers/until";
 import { systemTimekeeper } from "../src/time";
@@ -30,23 +30,23 @@ describe("SessionState disk persistence", () => {
   // write-back fires synchronously rather than leaving a debounced timer that
   // could touch the filesystem after the temp dir is cleaned up.
   const restore = () => {
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
+    const ss = new SessionState(SINGLE_RUN, new FileSessionStorage(file, systemTimekeeper, 0));
     ss.flush();
     return ss;
   };
 
   it("the ephemeral default reads no file, and a file storage loads it at construction", () => {
     writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }));
-    expect(new SessionState().get("s1", "theme")).toBeNull();
+    expect(new SessionState(SINGLE_RUN).get("s1", "theme")).toBeNull();
     expect(
-      new SessionState(new FileSessionStorage(file, systemTimekeeper, 0)).get("s1", "theme"),
+      new SessionState(SINGLE_RUN, new FileSessionStorage(file, systemTimekeeper, 0)).get("s1", "theme"),
     ).toBe("nord");
   });
 
   // [LAW:no-ambient-temporal-coupling] What lands after a daemon closed stays
   // in memory: a late write can't land over the file a next daemon took up.
   it("a write after close reaches memory and not the file", () => {
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
+    const ss = new SessionState(SINGLE_RUN, new FileSessionStorage(file, systemTimekeeper, 0));
     ss.set("s1", "theme", "nord");
     ss.close();
     const closedWith = readFileSync(file, "utf8");
@@ -62,7 +62,7 @@ describe("SessionState disk persistence", () => {
   // says what it wrote and how long it held the thread.
   it("each flush logs the bytes and sessions it wrote and how long it took", () => {
     const logged: string[] = [];
-    const ss = new SessionState(
+    const ss = new SessionState(SINGLE_RUN,
       new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
     );
     ss.set("s1", "theme", "dracula");
@@ -82,7 +82,7 @@ describe("SessionState disk persistence", () => {
   // called, and the file still lands whole, owner-only.
   it("a debounced save lands on disk by itself and says so", async () => {
     const logged: string[] = [];
-    const ss = new SessionState(
+    const ss = new SessionState(SINGLE_RUN,
       new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
     );
     ss.set("s1", "theme", "nord");
@@ -102,7 +102,7 @@ describe("SessionState disk persistence", () => {
   // a failure.
   it("a synchronous flush while the debounced rename is in flight keeps the newer state", async () => {
     const logged: string[] = [];
-    const ss = new SessionState(
+    const ss = new SessionState(SINGLE_RUN,
       new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
     );
     const rename = fs.promises.rename;
@@ -144,7 +144,7 @@ describe("SessionState disk persistence", () => {
     // A real debounce: the newer state the failed flush leaves pending is
     // rescheduled once the raced write lands, and must not land before the
     // file is read back.
-    const ss = new SessionState(
+    const ss = new SessionState(SINGLE_RUN,
       new FileSessionStorage(file, systemTimekeeper, 500, (_level, line) => logged.push(line)),
     );
     const rename = fs.promises.rename;
@@ -194,7 +194,7 @@ describe("SessionState disk persistence", () => {
   // the write removes its own temp file and says it was superseded.
   it("a synchronous flush before the debounced rename supersedes it", async () => {
     const logged: string[] = [];
-    const ss = new SessionState(
+    const ss = new SessionState(SINGLE_RUN,
       new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
     );
     const mkdir = fs.promises.mkdir;
@@ -227,7 +227,7 @@ describe("SessionState disk persistence", () => {
   // `saved` after the flush's own line, and the flush's state stands.
   it("a synchronous flush right after the debounced rename lands supersedes it", async () => {
     const logged: string[] = [];
-    const ss = new SessionState(
+    const ss = new SessionState(SINGLE_RUN,
       new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
     );
     const rename = fs.promises.rename;
@@ -262,7 +262,7 @@ describe("SessionState disk persistence", () => {
     const blocked = join(dir, "not-a-folder");
     writeFileSync(blocked, "");
     const logged: string[] = [];
-    const ss = new SessionState(
+    const ss = new SessionState(SINGLE_RUN,
       new FileSessionStorage(
         join(blocked, "session-state.json"),
         systemTimekeeper,
@@ -280,7 +280,7 @@ describe("SessionState disk persistence", () => {
   });
 
   it("survives a daemon restart: a fresh instance reads identical values", () => {
-    const first = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
+    const first = new SessionState(SINGLE_RUN, new FileSessionStorage(file, systemTimekeeper, 0));
     first.set("s1", "theme", "dracula");
     first.set("s1", "displayStyle", "capsule");
     first.set("s2", "toolbar-expanded", "1");
@@ -293,7 +293,7 @@ describe("SessionState disk persistence", () => {
   });
 
   it("clear() persists removal across a restart", () => {
-    const first = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
+    const first = new SessionState(SINGLE_RUN, new FileSessionStorage(file, systemTimekeeper, 0));
     first.set("s1", "toolbar-expanded", "1");
     first.flush();
     first.clear("s1", "toolbar-expanded");
@@ -303,23 +303,10 @@ describe("SessionState disk persistence", () => {
     expect(reborn.get("s1", "toolbar-expanded")).toBeNull();
   });
 
-  it("prune() drops inactive sessions and persists the bounded set", () => {
-    const first = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    first.set("s1", "theme", "nord");
-    first.set("s2", "theme", "dracula");
-    first.flush();
-    first.prune(new Set(["s1"]));
-    first.flush();
-
-    const reborn = restore();
-    expect(reborn.get("s1", "theme")).toBe("nord");
-    expect(reborn.get("s2", "theme")).toBeNull();
-  });
-
   it("debounces: no write before the window elapses, then one atomic file", async () => {
     jest.useFakeTimers();
     try {
-      const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 500));
+      const ss = new SessionState(SINGLE_RUN, new FileSessionStorage(file, systemTimekeeper, 500));
       ss.set("s1", "theme", "nord");
       ss.set("s1", "style", "muted");
       jest.advanceTimersByTime(499);
@@ -357,7 +344,7 @@ describe("SessionState disk persistence", () => {
   });
 
   it("bounds the store: oldest idle session is evicted past the cap", () => {
-    const ss = new SessionState(undefined, 2);
+    const ss = new SessionState(SINGLE_RUN, undefined, 2);
     ss.set("a", "theme", "1");
     ss.set("b", "theme", "2");
     ss.set("c", "theme", "3"); // pushes "a" out
@@ -367,7 +354,7 @@ describe("SessionState disk persistence", () => {
   });
 
   it("get-promotion protects an actively-read session from eviction", () => {
-    const ss = new SessionState(undefined, 2);
+    const ss = new SessionState(SINGLE_RUN, undefined, 2);
     ss.set("a", "theme", "1");
     ss.set("b", "theme", "2");
     ss.get("a", "theme"); // promote "a" to most-recent
@@ -381,7 +368,7 @@ describe("SessionState disk persistence", () => {
       file,
       JSON.stringify({ a: { t: "1" }, b: { t: "2" }, c: { t: "3" } }),
     );
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0), 2);
+    const ss = new SessionState(SINGLE_RUN, new FileSessionStorage(file, systemTimekeeper, 0), 2);
     ss.flush(); // force the constructor-scheduled write-back
     // Oldest (first-in-file) dropped; the two most-recent survive — and the
     // bound is enforced on disk without any post-restart mutation.
@@ -391,7 +378,7 @@ describe("SessionState disk persistence", () => {
   });
 
   it("clear() of the last key removes the session entirely (no empty husk)", () => {
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
+    const ss = new SessionState(SINGLE_RUN, new FileSessionStorage(file, systemTimekeeper, 0));
     ss.set("s1", "toolbar-expanded", "1");
     ss.clear("s1", "toolbar-expanded");
     ss.flush();
@@ -401,7 +388,7 @@ describe("SessionState disk persistence", () => {
   });
 
   it("clear() promotes a surviving session so it isn't evicted early", () => {
-    const ss = new SessionState(undefined, 2);
+    const ss = new SessionState(SINGLE_RUN, undefined, 2);
     ss.set("a", "theme", "1");
     ss.set("a", "style", "x");
     ss.set("b", "theme", "2"); // order: a, b
@@ -416,7 +403,7 @@ describe("SessionState disk persistence", () => {
     const blocker = join(dir, "blocker");
     writeFileSync(blocker, "");
     const badPath = join(blocker, "session-state.json");
-    const ss = new SessionState(new FileSessionStorage(badPath, systemTimekeeper, 0));
+    const ss = new SessionState(SINGLE_RUN, new FileSessionStorage(badPath, systemTimekeeper, 0));
     ss.set("s1", "theme", "nord");
     ss.flush(); // write fails; snapshot must NOT be dropped
     expect(existsSync(badPath)).toBe(false);
@@ -428,14 +415,14 @@ describe("SessionState disk persistence", () => {
   });
 
   it("writes the state file with owner-only (no group/other) permissions", () => {
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
+    const ss = new SessionState(SINGLE_RUN, new FileSessionStorage(file, systemTimekeeper, 0));
     ss.set("s1", "theme", "nord");
     ss.flush();
     expect(statSync(file).mode & 0o077).toBe(0);
   });
 
   it("a __proto__ sessionId does not pollute Object.prototype and round-trips as data", () => {
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
+    const ss = new SessionState(SINGLE_RUN, new FileSessionStorage(file, systemTimekeeper, 0));
     ss.set("__proto__", "theme", "evil");
     ss.flush();
     // Object.prototype untouched — no pollution.

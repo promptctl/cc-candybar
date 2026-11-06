@@ -39,7 +39,7 @@ import {
   COMPILE_BYTES,
   VIEW_BYTES,
 } from "../src/daemon/cache/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { parseClientHints } from "../src/daemon/protocol";
 import type { ViewFacts } from "../src/daemon/render-payload";
 import { sessionIdOf } from "../src/daemon/session-id";
@@ -114,7 +114,7 @@ function makeCache(
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const sessionState = new SessionState();
+  const sessionState = new SessionState(SINGLE_RUN);
   const reloads = new ReloadSignal();
   // The views' `shell` sources run through their follow, in this owner.
   const runs = new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper });
@@ -1425,7 +1425,7 @@ describe("RenderCache idle sweep", () => {
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
-        sessionState: new SessionState(),
+        sessionState: new SessionState(SINGLE_RUN),
         watchers,
         source: SOURCES_NOTHING,
         // A follow whose dispose the test counts: what a view took of its
@@ -1481,7 +1481,7 @@ describe("RenderCache idle sweep", () => {
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
-        sessionState: new SessionState(),
+        sessionState: new SessionState(SINGLE_RUN),
         watchers,
         source: SOURCES_NOTHING,
         facts: FACTS_NOTHING,
@@ -1524,7 +1524,7 @@ describe("RenderCache idle sweep", () => {
     const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
       logger: () => {},
     });
-    const sessionState = new SessionState();
+    const sessionState = new SessionState(SINGLE_RUN);
     // Each follow names the request's directory, so the record says which
     // request the view follows at. What a follow holds is the facts source's
     // own (test/facts-source.test.ts).
@@ -1625,7 +1625,7 @@ describe("RenderCache frames and pins", () => {
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
-        sessionState: new SessionState(),
+        sessionState: new SessionState(SINGLE_RUN),
         watchers,
         log: (_level, line) => logs.push(line),
         source: SOURCES_NOTHING,
@@ -1746,7 +1746,7 @@ describe("RenderCache frames and pins", () => {
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
-        sessionState: new SessionState(),
+        sessionState: new SessionState(SINGLE_RUN),
         watchers,
         log: (_level, line) => logs.push(line),
         facts: FACTS_NOTHING,
@@ -1818,7 +1818,7 @@ describe("RenderCache frames and pins", () => {
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
         gates: bareGates(),
-        sessionState: new SessionState(),
+        sessionState: new SessionState(SINGLE_RUN),
         watchers,
         log: () => {},
         facts: FACTS_NOTHING,
