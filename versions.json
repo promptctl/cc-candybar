@@ -2,52 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-621",
-      "ref": "refs/pull/621/merge",
-      "sha": "553b5fa96406c469e6301eaeaab7e943181098fd",
-      "timestamp": "2026-11-06T04:27:34.557Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "8bb9728f028615d94483db40d614a14926ef1468",
+      "timestamp": "2026-11-06T04:38:33.421Z",
       "commits": [
         {
-          "sha": "553b5fa96406c469e6301eaeaab7e943181098fd",
+          "sha": "8bb9728f028615d94483db40d614a14926ef1468",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T04:26:38Z",
-          "message": "Merge f1362386456dd14ee16cfa837159658a8f08b794 into 72f2e1a2b5bd38d26643de974db14a16ce60000a\n"
+          "timestamp": "2026-11-05T21:35:48-07:00",
+          "message": "feat(apply): a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l) (#621)\n\n* feat(apply): a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l)\n\nA handler describes what it asks of the world (a program, a line typed\ninto its pane, the update's act) as an Effect and awaits no child. The\narm table answers `{ answer, effects }`; `apply` performs the effects\nin order after the arm and puts each outcome back through the new\neffect-done arm, which holds a failed one for the session's bar in a\nturn of its own. One `apply` log line per click, menu-idle and\neffect-done event names the verb, the effects and the revision.\n\ntypeSlash takes a TmuxHint: the pane's absence is refused at the click,\nthe pane's own refusals are the effect's failure. A rate-limited click\nlaunch is a failed outcome shown in the bar, no longer a silent ack.\n\nTests: the click helper drives Apply and installs a store view that\nthrows on a write made with no turn held; cases that parked a pbcopy to\nhold the turn park a doctor gather instead.\n\n* test(apply): the apply-update case holds its own turns for the holder; doctor-menu reads the latest doctor line, since the apply line now follows every click (candybar-gather-renderer-76bb.1dh.g2l)\n\n* fix(apply): a refused dispatch still performs what its landed steps described; a failed effect's line is a warning; one event-line builder (candybar-gather-renderer-76bb.1dh.g2l)\n\nReview, high pass. The turn hands its described effects to the arm once it\nhas committed, and a click's refusal is the arm's answer as data, so the\nperformer runs a landed step's launch while the wire reads the refusal by its\nclass as before. The effect-done line's level follows the outcome. The\nlogfmt event line has one home. The e2e second apply-update reads the\nrefusal held on the bar, where it was the click's rejection.\n\n* fix(apply): a session's effects run in the order their turns committed; the click's apply line names its outcome (candybar-gather-renderer-76bb.1dh.g2l)\n\nReview, medium pass. Performers of one session run one at a time behind\neach other, so a performer that reads before it acts sees what the session's\nearlier effects left; another session's run beside them. A refused click's\napply line says outcome=refused with the refusal's words, where it read as\napplied. The probe's table entry is the function itself.\n\n* fix(apply): a step's effects are its own until it returns; an event with no effects takes no place in the session's order (candybar-gather-renderer-76bb.1dh.g2l)\n\nReview, second high pass. The leaf runner holds a step's effects until the\nstep returns, so one that throws after describing describes nothing. An\nevent that described nothing performs nothing and takes no place in the\nsession's effect order, where the effect-done events of that order are\napplied from inside it."
         },
         {
-          "sha": "f1362386456dd14ee16cfa837159658a8f08b794",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T21:12:42-07:00",
-          "message": "fix(apply): a step's effects are its own until it returns; an event with no effects takes no place in the session's order (candybar-gather-renderer-76bb.1dh.g2l)\n\nReview, second high pass. The leaf runner holds a step's effects until the\nstep returns, so one that throws after describing describes nothing. An\nevent that described nothing performs nothing and takes no place in the\nsession's effect order, where the effect-done events of that order are\napplied from inside it.\n"
-        },
-        {
-          "sha": "503e97dc9ea6933d77cf7d14d50aa31112eda117",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:53:28-07:00",
-          "message": "fix(apply): a session's effects run in the order their turns committed; the click's apply line names its outcome (candybar-gather-renderer-76bb.1dh.g2l)\n\nReview, medium pass. Performers of one session run one at a time behind\neach other, so a performer that reads before it acts sees what the session's\nearlier effects left; another session's run beside them. A refused click's\napply line says outcome=refused with the refusal's words, where it read as\napplied. The probe's table entry is the function itself.\n"
-        },
-        {
-          "sha": "a6cc65227a12ad53d0d32035ee24c99aaf973405",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:34:51-07:00",
-          "message": "fix(apply): a refused dispatch still performs what its landed steps described; a failed effect's line is a warning; one event-line builder (candybar-gather-renderer-76bb.1dh.g2l)\n\nReview, high pass. The turn hands its described effects to the arm once it\nhas committed, and a click's refusal is the arm's answer as data, so the\nperformer runs a landed step's launch while the wire reads the refusal by its\nclass as before. The effect-done line's level follows the outcome. The\nlogfmt event line has one home. The e2e second apply-update reads the\nrefusal held on the bar, where it was the click's rejection.\n"
-        },
-        {
-          "sha": "27b6567872b3e93570f6a6f4ab4d696ebc6ab719",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:53:03-07:00",
-          "message": "test(apply): the apply-update case holds its own turns for the holder; doctor-menu reads the latest doctor line, since the apply line now follows every click (candybar-gather-renderer-76bb.1dh.g2l)\n"
-        },
-        {
-          "sha": "b16c9a25be45001dad712e914150b47826102a40",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T19:48:47-07:00",
-          "message": "feat(apply): a click's launches are effects, performed after its turn and reported as effect-done (candybar-gather-renderer-76bb.1dh.g2l)\n\nA handler describes what it asks of the world (a program, a line typed\ninto its pane, the update's act) as an Effect and awaits no child. The\narm table answers `{ answer, effects }`; `apply` performs the effects\nin order after the arm and puts each outcome back through the new\neffect-done arm, which holds a failed one for the session's bar in a\nturn of its own. One `apply` log line per click, menu-idle and\neffect-done event names the verb, the effects and the revision.\n\ntypeSlash takes a TmuxHint: the pane's absence is refused at the click,\nthe pane's own refusals are the effect's failure. A rate-limited click\nlaunch is a failed outcome shown in the bar, no longer a silent ack.\n\nTests: the click helper drives Apply and installs a store view that\nthrows on a write made with no turn held; cases that parked a pbcopy to\nhold the turn park a doctor gather instead.\n"
+          "sha": "72f2e1a2b5bd38d26643de974db14a16ce60000a",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T03:50:28Z",
+          "message": "chore(release): set `package.json` to 1.192.0 [skip ci]\n\n## [1.192.0](https://github.com/promptctl/cc-candybar/compare/v1.191.0...v1.192.0) (2026-11-06)\n\n### ⚠ BREAKING CHANGES\n\n* **click:** the load-config click verb and the examples' config\nswitcher are removed; a config linking to the verb fails to load.\n\n* review(high): one report shape for a template's issues; the retired-URL check says what it reads; keep the flag-over-hint coverage\n\n- cross-ref: the three places that reported a template's issue at the helper\n  or the declaration collapse to one local report; the retired-verb loop is\n  one line of it.\n- The retired-verb check reads every string literal, not only a link\n  argument, so its comment and message say 'spells', not 'links to'.\n- scheme.ts states the real one-way-deps reason: the codec imports config\n  modules, so config must not import the codec.\n- Restore the e2e coverage that the deleted pick test carried along:\n  --config outranks the configEnv hint, and an empty flag is no flag.\n- Drop the stale load-config lines in the design docs and a render-cache\n  comment that still named a click as a view mover.\n\n* review(medium): drop the request facts an open failure kept for the removed follow; the design docs say load-config is gone\n\nThe open-failure entry carried the request facts so a click that moved\nthe origin could reopen by them; with the follow gone nothing reads\nthem, so the entry is the error alone. The home spec and the isolation\nsurvey no longer list load-config as work to do.\n\n* test: lower the daemon-boot ratchet to 201, the cases left after the load-config e2e blocks went\n\n### Features\n\n* **click:** remove the load-config verb (candybar-gather-renderer-76bb.f00.bju) ([#620](https://github.com/promptctl/cc-candybar/issues/620)) ([505a8e2](https://github.com/promptctl/cc-candybar/commit/505a8e2d94696c8ff2409af7041987247b684318))\n"
         }
       ]
     },
@@ -99,28 +71,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T21:12:57-07:00",
           "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "505a8e2d94696c8ff2409af7041987247b684318",
-      "timestamp": "2026-11-06T03:42:16.192Z",
-      "commits": [
-        {
-          "sha": "505a8e2d94696c8ff2409af7041987247b684318",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T20:41:13-07:00",
-          "message": "feat(click)!: remove the load-config verb (candybar-gather-renderer-76bb.f00.bju) (#620)\n\n* feat(click)!: remove the load-config verb; a session's config is what its request names (candybar-gather-renderer-76bb.f00.bju)\n\nThe verb that pointed a session at any absolute path goes, with the\nper-session override it wrote, the \"pick\" arm it added to a session's\nconfig target, and the view-follow hook that ran after every click\nbecause a click might have moved the origin. Nothing but a render\nrequest sets a session's origin now, so the render, every durable click\nand the lane meter read the recorded origin directly.\n\nA config that still writes a `cc-candybar://load-config/…` link is\nrefused at load, at the template or the helper that spells it, with a\nmessage naming --config and CC_CANDYBAR_CONFIG as where a session's\nconfig comes from. The scheme string moves to a leaf module so the\nloader can read it without the config layer depending on the click\ncodec.\n\nBREAKING CHANGE: the load-config click verb and the examples' config\nswitcher are removed; a config linking to the verb fails to load.\n\n* review(high): one report shape for a template's issues; the retired-URL check says what it reads; keep the flag-over-hint coverage\n\n- cross-ref: the three places that reported a template's issue at the helper\n  or the declaration collapse to one local report; the retired-verb loop is\n  one line of it.\n- The retired-verb check reads every string literal, not only a link\n  argument, so its comment and message say 'spells', not 'links to'.\n- scheme.ts states the real one-way-deps reason: the codec imports config\n  modules, so config must not import the codec.\n- Restore the e2e coverage that the deleted pick test carried along:\n  --config outranks the configEnv hint, and an empty flag is no flag.\n- Drop the stale load-config lines in the design docs and a render-cache\n  comment that still named a click as a view mover.\n\n* review(medium): drop the request facts an open failure kept for the removed follow; the design docs say load-config is gone\n\nThe open-failure entry carried the request facts so a click that moved\nthe origin could reopen by them; with the follow gone nothing reads\nthem, so the entry is the error alone. The home spec and the isolation\nsurvey no longer list load-config as work to do.\n\n* test: lower the daemon-boot ratchet to 201, the cases left after the load-config e2e blocks went"
-        },
-        {
-          "sha": "ef736330044ce69f7e59e3ef737437bd9b8164f0",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T03:05:11Z",
-          "message": "chore(release): set `package.json` to 1.191.0 [skip ci]\n\n## [1.191.0](https://github.com/promptctl/cc-candybar/compare/v1.190.0...v1.191.0) (2026-11-06)\n\n### Features\n\n* **tmux-status:** the renderer names itself on every session whose row it draws (candybar-gather-renderer-76bb.b2l.rwj) ([#619](https://github.com/promptctl/cc-candybar/issues/619)) ([bfb8918](https://github.com/promptctl/cc-candybar/commit/bfb89187e23eda03a7d719a5fba64875b44a3355))\n"
         }
       ]
     },
