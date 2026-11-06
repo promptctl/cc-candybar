@@ -3,7 +3,8 @@
 // (docs/design/gather-and-renderer.md §14): a header naming its format's version,
 // the session and the home its payloads were composed against, then the
 // documents the session's view took, the requests it was drawn by and the
-// draws of their answers, each with its instant. The session's recorder
+// draws of their answers, each with its instant and the session's draw state
+// it read. The session's recorder
 // (src/daemon/session-recorder.ts) writes it and this unit reads it back.
 // Everything past this unit holds a `Recording` and asks nothing of its shape
 // again: a malformed or partial line throws naming its line number, as
@@ -13,8 +14,11 @@
 // (model, cost, context window), the client's hints and whose home `~` names
 // are not in the document, and a replay without them cannot draw what the
 // live bar drew. Draw lines are there because an answer is drawn after its
-// request's wait, from what the view took during it. The facts arm reads only
-// the documents, so the seam stays facts-only.
+// request's wait, from what the view took during it. A draw line carries what
+// the session's clicks and menus left for that draw, because a replay that
+// opened a session that never clicked would draw every pick absent and every
+// menu closed. The facts arm reads only the documents, so the seam stays
+// facts-only.
 //
 // [LAW:one-way-deps] Pure over text and values: no file, no clock. Where the
 // text comes from is the caller's edge.
@@ -37,6 +41,7 @@ import { parseSessionId, type SessionId } from "../daemon/session-id";
 import { parseClientHints } from "../daemon/protocol";
 import type { ViewFacts } from "../daemon/render-payload";
 import { REFRESH_LANES, type RefreshLane } from "../daemon/refresh-faults";
+import type { HistoryDepth } from "../daemon/settings-history";
 
 // One pushed document and the instant its stamp was taken at: what the player
 // replays, and what the recorder writes.
@@ -52,11 +57,25 @@ export interface RequestLine {
   readonly request: ViewFacts;
 }
 
+// What a session's clicks and menus left for one draw, beside its view: every
+// value the session store holds for it and the store's revision for it (a
+// frame keeps the last frame's memory only while the revision holds), the
+// depths of its settings history and its back history, and when its menus'
+// idle period began, which the draw counts the closing flash from.
+export interface DrawState {
+  readonly values: Readonly<Record<string, string>>;
+  readonly revision: number;
+  readonly history: HistoryDepth;
+  readonly back: number;
+  readonly idleSince: Instant | undefined;
+}
+
 // One answer drawn, once its request's wait was over, from the document the
 // line before it holds: the instant of the request it answers, which is the
-// instant it is drawn at.
+// instant it is drawn at, and the session's draw state it read.
 export interface DrawLine {
   readonly request: Instant;
+  readonly state: DrawState;
 }
 
 // The request a draw's view was declared with, restated ahead of the draw
@@ -110,7 +129,7 @@ export interface Recording {
 // request, declared and draw lines, which are the renderer's request path and
 // not the facts protocol. The documents in it carry their own facts version,
 // which each document's parse refuses, so a change of either moves one number.
-export const RECORDING_VERSION = 2;
+export const RECORDING_VERSION = 3;
 
 // A recording of another format: refused whole, never read line by line
 // against this build's. The version is a value, so the edge that names the
@@ -190,6 +209,49 @@ export function parseSessionFacts(json: unknown, where: string): SessionFacts {
     diagnostics: json.diagnostics.map((d, i) =>
       parseDiagnostic(d, `${where} diagnostics[${i}]`),
     ),
+  };
+}
+
+function parseCount(json: unknown, where: string, field: string): number {
+  if (typeof json !== "number" || !Number.isInteger(json) || json < 0) {
+    throw new FactParseError(where, `has no count \`${field}\``);
+  }
+  return json;
+}
+
+// A draw's state as the recorder wrote it: an idle period that had not begun
+// is `null` in the file, the one spelling JSON has for it.
+function parseDrawState(json: unknown, where: string): DrawState {
+  if (!isPlainObject(json)) {
+    throw new FactParseError(where, "has no `state` object");
+  }
+  const { values, history } = json;
+  if (
+    !isPlainObject(values) ||
+    !Object.values(values).every((v) => typeof v === "string")
+  ) {
+    throw new FactParseError(where, "has no `state.values` of strings by key");
+  }
+  if (!isPlainObject(history)) {
+    throw new FactParseError(where, "has no `state.history` object");
+  }
+  return {
+    values: values as Record<string, string>,
+    revision: parseCount(json.revision, where, "state.revision"),
+    history: {
+      undo: parseCount(history.undo, where, "state.history.undo"),
+      redo: parseCount(history.redo, where, "state.history.redo"),
+      sinceEdit: parseCount(
+        history.sinceEdit,
+        where,
+        "state.history.sinceEdit",
+      ),
+    },
+    back: parseCount(json.back, where, "state.back"),
+    idleSince:
+      json.idleSince === null
+        ? undefined
+        : parseInstant(json.idleSince, where, "state.idleSince"),
   };
 }
 
@@ -325,7 +387,7 @@ export function parseRecording(text: string): Recording {
       }
       undrawn.set(request, waiting - 1);
       draws++;
-      lines.push({ kind, request });
+      lines.push({ kind, request, state: parseDrawState(json.state, where) });
       continue;
     }
     if (kind !== "facts") {
@@ -383,7 +445,11 @@ export function formatLine(line: RecordingLine): string {
       : line.kind === "facts"
         ? { kind: line.kind, at: line.at, facts: line.facts }
         : line.kind === "draw"
-          ? { kind: line.kind, request: line.request }
+          ? {
+              kind: line.kind,
+              request: line.request,
+              state: { ...line.state, idleSince: line.state.idleSince ?? null },
+            }
           : {
               kind: line.kind,
               ...(line.kind === "request" && { at: line.at }),

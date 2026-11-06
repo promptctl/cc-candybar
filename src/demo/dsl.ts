@@ -49,6 +49,7 @@ import { debug, setDebug } from "../utils/logger.js";
 import {
   heldArrival,
   loadDemo,
+  NEVER_CLICKED,
   playDemo,
   playOf,
   readRecording,
@@ -159,7 +160,11 @@ function liveArm(): Arm {
   const arrives = (i: number) =>
     ({ kind: "request", offsetMs: i * FRAME_INTERVAL_MS, request }) as const;
   const answered = (i: number) =>
-    ({ kind: "draw", requestOffsetMs: i * FRAME_INTERVAL_MS }) as const;
+    ({
+      kind: "draw",
+      requestOffsetMs: i * FRAME_INTERVAL_MS,
+      state: NEVER_CLICKED,
+    }) as const;
   return {
     world: machine,
     facts: inProcessFacts({ providers, update: () => updateFact.get() }),

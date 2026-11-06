@@ -93,6 +93,30 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     jest.advanceTimersByTime(s * 1000);
   };
 
+  test("a frame is handed the idle period as it stood before the frame, and says what it was handed", () => {
+    const menu = { rows: [{ kind: "menu" }] } as unknown as Frame;
+    const draw = (idleSince: Instant | undefined) => ({
+      frame: menu,
+      handed: idleSince,
+    });
+    // A menu's first frame begins the period, after it is drawn: it was
+    // handed none, and says so.
+    const first = idle.drawn("s", at(now), 30, draw);
+    expect(first.handed).toBeUndefined();
+    expect(first.idleSince).toBeUndefined();
+    expect(idle.since("s", at(now))).toBe(1000);
+    advance(5);
+    const later = idle.drawn("s", at(now), 30, draw);
+    expect(later.handed).toBe(1000);
+    expect(later.idleSince).toBe(1000);
+    // While a click is in flight no close is due: none is handed.
+    idle.clickArrived("s");
+    const pending = idle.drawn("s", at(now), 30, draw);
+    expect(pending.handed).toBeUndefined();
+    expect(pending.idleSince).toBeUndefined();
+    idle.clickSettled("s");
+  });
+
   test("a drawn menu closes a timeout after the first frame that drew it", () => {
     // Nothing drawn yet: a frame drawing a menu now has only begun it.
     expect(idle.since("s", at(now))).toBeUndefined();

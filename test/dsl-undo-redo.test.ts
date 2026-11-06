@@ -492,6 +492,7 @@ describe("settings history: a step lands whole, and records only what landed", (
       },
       clear: (sid: string, key: string) => inner.clear(sid, key),
       revision: (sid: string) => inner.revision(sid),
+      values: (sid: string) => inner.values(sid),
     };
     const history = new SettingsHistory(throwing, () => {});
     const journal = history.begin();

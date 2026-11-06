@@ -46,6 +46,7 @@ export function closingView(
   return {
     get: (sessionId, key) => store.get(sessionId, key),
     revision: (sessionId) => store.revision(sessionId),
+    values: (sessionId) => store.values(sessionId),
     set: (sessionId, key, value) => setBatch(sessionId, [{ key, value }]),
     setBatch,
     // A cleared key reads its default, so it closes what its old value held.
