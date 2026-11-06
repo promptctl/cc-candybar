@@ -41,7 +41,6 @@ import { SETTINGS_NS } from "../../../src/config/reserved-names";
 import {
   VERB_DOCTOR_PROBE,
   VERB_DOCTOR_RUN,
-  VERB_LOAD_CONFIG,
 } from "../../../src/click/wire";
 import {
   PROTOCOL_VERSION,
@@ -152,9 +151,7 @@ test("the doctor's config row says what named the session's file", async () => {
     mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
   );
   const named = path.join(projectDir, "named.json5");
-  const picked = path.join(projectDir, "picked.json5");
   writeFileSync(named, "{}");
-  writeFileSync(picked, "{}");
 
   const daemon = startDaemon(env);
   try {
@@ -188,14 +185,6 @@ test("the doctor's config row says what named the session's file", async () => {
     );
     expect(await row("source-search", {}, [])).toContain(
       squeezed("✓ config — bundled default (no config file loaded)"),
-    );
-
-    await click(
-      daemon,
-      `cc-candybar://${VERB_LOAD_CONFIG}/source-pick/${encodeURIComponent(picked)}`,
-    );
-    expect(await row("source-pick", { configEnv: named }, flag)).toContain(
-      squeezed(`✓ config — ${picked} (load-config pick)`),
     );
   } finally {
     await daemon.stop();

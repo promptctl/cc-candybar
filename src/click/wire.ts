@@ -37,16 +37,7 @@ import {
   MENU_NS,
   MENU_PAGE_NS,
 } from "../config/reserved-names.js";
-
-// [LAW:one-source-of-truth] The scheme string lives here, with the codec that
-// emits it; install/ (Launch Services registration) imports it.
-export const URL_SCHEME = "cc-candybar";
-
-// The app Launch Services starts for the scheme: its bundle, binary and
-// process all carry this name. Beside the scheme because it is the same fact,
-// which app a click reaches, and a reader of it (the bench) wants nothing of
-// the installer.
-export const APP_NAME = "CCCandybarURLHandler";
+import { URL_SCHEME } from "./scheme.js";
 
 // [LAW:one-source-of-truth] The verb vocabulary. The daemon's VERBS registry
 // keys off these and every emitter builds effects with them, so the emitted
@@ -63,11 +54,6 @@ export const VERB_STEP_STATE = "step-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
 export const VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
-// [LAW:effects-at-boundaries] A daemon-global config override: the verb writes
-// the override path (or clears it with an empty value); the render pipeline
-// reads it at the cache-lookup boundary. Clicking a different config is a
-// side-effect isolated to the verb handler; the renderer only sees the result.
-export const VERB_LOAD_CONFIG = "load-config";
 // [LAW:one-source-of-truth] `persist`'s twin of set-state/step-state: writes
 // land in the session's config FILE (candybar-config-dqe — the one durable
 // store), spliced in place so comments survive, and reach the bar through
@@ -259,7 +245,6 @@ const SAYS = {
   [VERB_COPY]: ([text]) => [`copy ${saidCopy(text!)}`],
   [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
   [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
-  [VERB_LOAD_CONFIG]: ([, path]) => [`load config ${path}`],
   [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
   [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key!, by!)}`],
   [VERB_SAVE]: () => ["save settings"],

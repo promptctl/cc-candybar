@@ -17,7 +17,8 @@ import type {
   PermanentOutcome,
 } from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
-import { APP_NAME, parseHandlerUrl, URL_SCHEME } from "../click/wire";
+import { parseHandlerUrl } from "../click/wire";
+import { APP_NAME, URL_SCHEME } from "../click/scheme";
 import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
 import { shellWord, singleQuoted } from "../shell-word";

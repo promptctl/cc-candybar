@@ -14,7 +14,7 @@ Today `CC_CANDYBAR_SOCKET` isolates only the socket and lease. `XDG_STATE_HOME` 
 
 ## Design
 
-**No absolute path is stored.** Undo history holds paths relative to the state root, full stop. So do `render-origin` and `config-override`. Whole-file snapshots are fine, unless they contain an absolute path, which gets fixed the same way.
+**No absolute path is stored.** Undo history holds paths relative to the state root, full stop. So does `render-origin`. Whole-file snapshots are fine, unless they contain an absolute path, which gets fixed the same way.
 
 Today `settings-history.json` holds absolute paths, so undo in an isolated renderer given a copy could write the real config. With relative paths, that can't be expressed.
 
@@ -30,7 +30,7 @@ Today `settings-history.json` holds absolute paths, so undo in an isolated rende
 
 Not done. A future session should have a subagent list:
 
-- Every path stored in state, history, `render-origin`, `config-override`, doctor stores and repo-config books, each marked absolute or relative.
+- Every path stored in state, history, `render-origin`, doctor stores and repo-config books, each marked absolute or relative.
 - Every read of `configDir()`, `stateDir()`, `homedir()` and `XDG_*`, confirming each follows the values.
 - Everything else a renderer could reach outside its roots through a stored value.
 

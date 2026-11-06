@@ -893,7 +893,7 @@ function makeCache(): {
 
 describe("a durable click lands in the file the next reload reads", () => {
   // The origin's `configFile` is the explicit path draw-bar.ts composed for the
-  // session (load-config pick > `--config` > `configEnv` hint). It is the sole
+  // session (`--config` > `configEnv` hint). It is the sole
   // candidate: the click lands there — creating the file when it is `missing`
   // — and never falls through to the project file or the XDG tail.
   test("an origin with an explicit path writes that path, even before it exists", async () => {

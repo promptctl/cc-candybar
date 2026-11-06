@@ -75,18 +75,16 @@ function setup() {
     log: (_level, msg) => logged.push(msg),
     monotonic: () => systemTimekeeper.monotonic(),
   });
-  const followed: string[] = [];
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
     journalTurns: turns,
-    views: { follow: (sid) => followed.push(sid) },
     log: (_level, msg) => logged.push(msg),
   };
   // A click writing `theme`, parked on `parked` in a launch before it writes
   // `style`.
   const click = (theme: string, style: string, parked: Promise<unknown>) =>
     parkedClick(ctx, theme, style, parked);
-  return { sessionState, ctx, turns, logged, click, followed };
+  return { sessionState, ctx, turns, logged, click };
 }
 
 // A click reaches its turn some microtasks after it is sent, under real timers
@@ -258,7 +256,7 @@ test("a verb stamps its session's landing, though its handler threw", async () =
 
 describe("close", () => {
   test("a click in flight stays undoable as one step, its verb logged, and is not committed again", async () => {
-    const { sessionState, ctx, turns, logged, click, followed } = setup();
+    const { sessionState, ctx, turns, logged, click } = setup();
     const held = gate();
     const cut = click("nord", "plain", held.wait);
     await drain();
@@ -268,17 +266,15 @@ describe("close", () => {
     held.open();
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
     expect(sessionState.get(SID, "endcaps")).toBeNull();
-    expect(followed).toEqual([]);
     expect(undoDepth(ctx)).toBe(1);
     ctx.history.undo(SID);
     expect(sessionState.get(SID, "theme")).toBeNull();
   });
 
-  test("a click that lands normally is followed, and its commit is no cut-off", async () => {
-    const { ctx, turns, logged, click, followed } = setup();
+  test("a click that lands normally commits with no cut-off", async () => {
+    const { ctx, turns, logged, click } = setup();
     await click("nord", "plain", Promise.resolve());
     turns.close();
-    expect(followed).toEqual([SID]);
     expect(logged.filter((l) => l.includes("cut off"))).toEqual([]);
     expect(undoDepth(ctx)).toBe(1);
   });

@@ -14,7 +14,7 @@ import type {
   OneShotLauncher,
 } from "../src/proc/launch";
 import type { World } from "../src/host";
-import { URL_SCHEME } from "../src/click/wire";
+import { URL_SCHEME } from "../src/click/scheme";
 
 describe("assembling the URL handler app", () => {
   let home: string;

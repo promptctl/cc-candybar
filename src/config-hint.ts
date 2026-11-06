@@ -11,9 +11,8 @@ import { explicitConfigPath } from "./utils/user-path";
 // (brandon-config-5g8 measured exactly that: an override set on the client
 // never reached a daemon that was already running, so a rejected config
 // rendered byte-identically to none). So the client reports it as a hint,
-// `requestedConfigTarget` composes it beneath `--config`, and a load-config
-// pick joins over both in `sessionRenderOrigin` — the daemon reads no
-// `CC_CANDYBAR_CONFIG` of its own.
+// and `requestedConfigTarget` composes it beneath `--config` — the daemon
+// reads no `CC_CANDYBAR_CONFIG` of its own.
 //
 // [LAW:one-source-of-truth] The variable name is mirrored by the Rust client
 // (rust-client/src/main.rs, CONFIG_ENV) and diffed by scripts/check-protocol.mjs,
@@ -44,11 +43,11 @@ export type RequestedTarget =
   | { readonly source: "search"; readonly path?: undefined }
   | { readonly source: "argument" | "environment"; readonly path: string };
 
-// What a session's config turned out to be: a request's target, a load-config
-// pick over it, or a recorded path whose source this build cannot read.
+// What a session's config turned out to be: a request's target, or a recorded
+// path whose source this build cannot read.
 export type ConfigTarget =
   | RequestedTarget
-  | { readonly source: "pick" | "unknown"; readonly path: string };
+  | { readonly source: "unknown"; readonly path: string };
 
 // [LAW:single-enforcer] The one precedence of the two spellings a request
 // carries, for a render and a CLI run alike, so the bar and a CLI cannot rank
@@ -92,8 +91,7 @@ export interface RenderOrigin {
   readonly target: ConfigTarget;
 }
 
-// The origin a request names, before the session's load-config pick joins it.
-// Only this is ever recorded: a pick is a session fact of its own.
+// The origin a request names, which is what a session records.
 export interface RequestedOrigin extends RenderOrigin {
   readonly target: RequestedTarget;
 }

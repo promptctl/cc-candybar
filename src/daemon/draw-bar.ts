@@ -30,7 +30,6 @@ import {
   type SessionView,
 } from "./cache/render";
 import { watchFault } from "./cache/watchers";
-import { sessionRenderOrigin } from "./verbs";
 import { encodeRenderOrigin } from "./foundations/render-origin";
 import {
   SESSION_CLIENT_HINTS_KEY,
@@ -314,7 +313,7 @@ export function setUpRender(
   at: Instant,
   facts: RequestFacts,
 ): RenderSetup {
-  const { sessionState, renderCache } = parts;
+  const { renderCache } = parts;
   // [LAW:effects-at-boundaries] Read here, on arrival, because a payload does
   // no I/O and a frame draws what the request stored.
   const dir = arrived.hookData.workspace?.current_dir ?? arrived.cwd;
@@ -326,15 +325,13 @@ export function setUpRender(
         path.isAbsolute(dir) && { location: checkoutLocation(dir) }),
     },
   };
-  const sessionId = req.sessionId;
   const hintsError = requestFacts(req, at, facts);
   noteFacts(facts, { encoding: req.encoding });
-  // [LAW:one-source-of-truth] The explicit config path has three
-  // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
-  // over the `--config` flag over the client's `CC_CANDYBAR_CONFIG` hint
-  // (checkRenderRequest). All three are client facts; the daemon's own env is
+  // [LAW:one-source-of-truth] The explicit config path has two spellings and
+  // ONE precedence: the `--config` flag over the client's `CC_CANDYBAR_CONFIG`
+  // hint (checkRenderRequest). Both are client facts; the daemon's own env is
   // never consulted (brandon-config-5g8).
-  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
+  const origin = req.requested;
   // [LAW:no-ambient-temporal-coupling] Held, not fetched: `state`, and the
   // session's `view` of it, are what this render resolves its payload from and
   // draws with after the payload await below. An eviction, a reload, or the
@@ -870,9 +867,8 @@ function recordRequest(parts: DaemonParts, req: CheckedRenderRequest): void {
     sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
   }
   // [LAW:one-source-of-truth] The config inputs this request named, so a
-  // durable click on this session resolves the same chain (under the
-  // session's load-config pick, verbs/index.ts sessionOrigin) and writes the
-  // file the next reload reads — never a path re-derived from the daemon's
+  // durable click on this session resolves the same chain (verbs/index.ts
+  // sessionOrigin) and writes the file the next reload reads — never a path re-derived from the daemon's
   // own cwd.
   const origin = encodeRenderOrigin(req.requested);
   if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
@@ -917,7 +913,7 @@ function arrived(
   lanes: LaneSwitches,
 ): void {
   const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.noted(laneSessionOf(parts, req), lanes);
+  laneSetups.noted(laneSessionOf(req), lanes);
   tmuxStatusLines.observe(
     req.hookData.session_id,
     req.hints.tmux,
@@ -927,16 +923,11 @@ function arrived(
 
 // [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
 // request `req` reported, and the config inputs it renders from now.
-export function laneSessionOf(
-  parts: DaemonParts,
-  req: CheckedRenderRequest,
-): LaneSession {
-  const { sessionState } = parts;
-  const sessionId = req.hookData.session_id;
+export function laneSessionOf(req: CheckedRenderRequest): LaneSession {
   return {
-    sessionId,
+    sessionId: req.hookData.session_id,
     hints: req.hints,
-    origin: sessionRenderOrigin(req.requested, sessionState, sessionId),
+    origin: req.requested,
     transcript: req.hookData.transcript_path,
     answered: answeredOf(req.hookData),
   };
@@ -959,7 +950,7 @@ export function laneClicked(
   const latest = frameFeeds.latest(sessionId);
   laneSetups.clicked(
     sessionId,
-    latest === null ? null : laneSessionOf(parts, latest),
+    latest === null ? null : laneSessionOf(latest),
     before,
     after,
   );

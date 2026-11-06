@@ -137,8 +137,8 @@ export interface ReaderRenderRequest extends RenderRequest {
 //     (or the client is too old to report one; both read the same way: no
 //     override from the client, the precedence chain applies). Present, it is
 //     the absolute path the client resolved the variable to against its own
-//     cwd (detectConfigEnv, src/config-hint.ts); it ranks beneath a load-config
-//     pick and `--config`, and is never read from the daemon's own env —
+//     cwd (detectConfigEnv, src/config-hint.ts); it ranks beneath `--config`,
+//     and is never read from the daemon's own env —
 //     the override that ticket brandon-config-5g8 measured going nowhere.
 //   • `claudeConfigDir` absent — the client's Claude Code runs with no
 //     CLAUDE_CONFIG_DIR (or the client is too old to say; both mean the

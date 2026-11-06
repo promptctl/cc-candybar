@@ -89,6 +89,7 @@ import {
   type SegmentPresence,
 } from "./plugin-scope.js";
 import {
+  retiredLinkVerbMessage,
   retiredReadHint,
   retiredVariableMessage,
 } from "./retired-variables.js";
@@ -99,6 +100,7 @@ import { authoredRules, instantReadOf, projectionsOf } from "./projections.js";
 import {
   declaredVariables,
   templateActionRefs,
+  templateLinkVerbs,
   templateReads,
   refResolves,
   templateScopeOf,
@@ -1157,6 +1159,33 @@ function checkTemplateRefs(
     ctx.issues.push({
       path: declPath,
       message: `Template references unknown variable ".${ref}"${hint}`,
+      line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
+    });
+  }
+  // [LAW:no-silent-failure] A `link` literal naming a verb no click runs is
+  // the file's error at load, not the bar's at the click, so the author reads
+  // where what it did now lives (RETIRED_LINK_VERBS) — at the helper that
+  // spells it, as an unknown variable is.
+  for (const { verb, via } of templateLinkVerbs(template, scope.helpers)) {
+    const retired = retiredLinkVerbMessage(verb);
+    if (retired === undefined) continue;
+    if (via !== null) {
+      checkHelperIssue(
+        ctx,
+        via,
+        retired,
+        helperKeyPath(
+          via,
+          opts?.segCtx === undefined
+            ? undefined
+            : { name: opts.segCtx, partials: opts.partials },
+        ),
+      );
+      continue;
+    }
+    ctx.issues.push({
+      path: declPath,
+      message: retired,
       line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
     });
   }
