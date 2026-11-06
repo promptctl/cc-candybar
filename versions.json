@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-648",
+      "ref": "refs/pull/648/merge",
+      "sha": "be0779b4c9827832f185ee5eaefcae0d2b2e0c96",
+      "timestamp": "2026-11-06T20:03:05.303Z",
+      "commits": [
+        {
+          "sha": "be0779b4c9827832f185ee5eaefcae0d2b2e0c96",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T20:02:07Z",
+          "message": "Merge 8ef3b63a57847539cc03700f493345d29c22e4aa into 1d331bc7612571c272bd1699765d216731683eca\n"
+        },
+        {
+          "sha": "8ef3b63a57847539cc03700f493345d29c22e4aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:50:06-07:00",
+          "message": "docs(menus): the settings-menu width script and its table go (brandon-menus-sjhy.bc0)\n\nThe table answered a design-time question, whether the proposed menu rows\nfit at 80 columns, and that menu is now built: the script's model of\nproposed rows measures what can simply be rendered. Fitting 80 columns is\nno invariant the menu keeps (the armed-reset row was 93 cells), and\nnothing ran the script, which is how it broke at import unnoticed.\nRepaired, it would be a second map of the menu that only a human redraws.\n\nThe autocompact drawing UI-ELEMENTS credited to the script is asserted in\ntest/autocompact.test.ts, so the doc points there.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-647",
       "ref": "refs/pull/647/merge",
       "sha": "2bda02f51ee1004375a75ddf4daaffee6148f6d2",
@@ -92,28 +114,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T12:51:37-07:00",
           "message": "fix(facts): a replay draws the lane feeds and diagnostics the live draw was handed, and the frames a lane drew (candybar-gather-renderer-76bb.6pj.0se)\n\nA replay drew every frame with every lane idle, no open viewer, and only\nthe request answers, so a recording of a session with a lane following or\nthe warnings viewer open replayed a bar the user never saw.\n\n- A draw line is one draw of the view, an answer or a lane's frame: it\n  carries the instant it was drawn at and what it was handed (who it drew\n  for, each lane's feed, the diagnostics list). A lane's frames write the\n  view's frame memory and the session's effect memory, so the recorder\n  notes each one, to every recording of the session, and the replay draws\n  them in the file's order at their exact instants. RECORDING_VERSION 6.\n- The daemon and the demo draw a view through one function (draw-view),\n  which derives every draw projection from what the draw was handed and\n  stands the open viewer in for the bar. The demo's own drawDsl call goes.\n- A recording that holds only lane frames is kept and replays; `record`\n  reports answers and lane frames.\n- The seam test's live side is the daemon's draw throughout, and a new case\n  replays a standing warning, a following lane, its toggles and the open\n  viewer, compared whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-648",
-      "ref": "refs/pull/648/merge",
-      "sha": "dc7a370dc965a464316e0ff1bbb12ea605db1b1e",
-      "timestamp": "2026-11-06T19:51:09.065Z",
-      "commits": [
-        {
-          "sha": "dc7a370dc965a464316e0ff1bbb12ea605db1b1e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:50:21-07:00",
-          "message": "Merge b4267ba4ae18666301bfb598e3e009d5ed7455c4 into 2bb7660eaf484d4c41e6cdc671e6415f0cccc8fa\n"
-        },
-        {
-          "sha": "b4267ba4ae18666301bfb598e3e009d5ed7455c4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T12:50:06-07:00",
-          "message": "docs(menus): the settings-menu width script and its table go (brandon-menus-sjhy.bc0)\n\nThe table answered a design-time question, whether the proposed menu rows\nfit at 80 columns, and that menu is now built: the script's model of\nproposed rows measures what can simply be rendered. Fitting 80 columns is\nno invariant the menu keeps (the armed-reset row was 93 cells), and\nnothing ran the script, which is how it broke at import unnoticed.\nRepaired, it would be a second map of the menu that only a human redraws.\n\nThe autocompact drawing UI-ELEMENTS credited to the script is asserted in\ntest/autocompact.test.ts, so the doc points there.\n"
         }
       ]
     },
