@@ -19,7 +19,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
+import { testVerbContext, effectsOf, clickUrl, TEST_STORED_ROOT } from "./helpers/click";
 import { VERB_SET_STATE, VERB_SLASH, effectsUrl } from "../src/click/wire";
 import { SESSION_CLIENT_HINTS_KEY, SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
@@ -220,7 +220,7 @@ function runtime(tmux: TmuxHint | null) {
   sessionState.set(
     "s1",
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }),
+    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }, TEST_STORED_ROOT),
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore(systemTimekeeper);
@@ -364,7 +364,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   sessionState.set(
     "s1",
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }),
+    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }, TEST_STORED_ROOT),
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore(systemTimekeeper);

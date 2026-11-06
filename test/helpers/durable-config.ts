@@ -16,7 +16,12 @@
 import { requestedConfigTarget } from "../../src/config-hint";
 import { hostOf } from "./host";
 import type { Host } from "../../src/host";
-import { HOME_ENV, NAME_ENV, homeOf, type RendererHome } from "../../src/daemon/home";
+import {
+  HOME_ENV,
+  NAME_ENV,
+  homeOf,
+  type RendererHome,
+} from "../../src/daemon/home";
 import {
   mkdirSync,
   mkdtempSync,
@@ -31,10 +36,15 @@ import type { SessionStateRW } from "../../src/daemon/session-state";
 import {
   SettingsHistory,
   fileHistoryStorage,
+  type HistoryStorage,
   type SessionHistory,
   type Step,
 } from "../../src/daemon/settings-history";
-import { configDir, settingsHistoryPath } from "../../src/daemon/paths";
+import {
+  configDir,
+  settingsHistoryPath,
+  storedRoot,
+} from "../../src/daemon/paths";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 
@@ -73,7 +83,6 @@ export interface DurableConfig {
   dispose(): void;
 }
 
-
 export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   const root = mkdtempSync(join(tmpdir(), prefix));
   const host = hostOf({
@@ -82,6 +91,16 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     [NAME_ENV]: "durable",
   });
   const home = homeOf(host);
+  // Anything the storage logs is a history the daemon would drop or fail to
+  // keep, so it fails the test rather than reading as empty stacks.
+  const historyStorage = (): HistoryStorage =>
+    fileHistoryStorage(
+      settingsHistoryPath(home),
+      storedRoot(home),
+      (level, message) => {
+        throw new Error(`settings history ${level}: ${message}`);
+      },
+    );
   const configPath = join(configDir(home), "config.json5");
   mkdirSync(dirname(configPath), { recursive: true });
   const readOrNull = (file: string): string | null => {
@@ -103,33 +122,28 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     write: (text) => writeFileSync(configPath, text),
     text: readText,
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
-    // The history file itself is created by the first step, so before one an
-    // absent file and an absent entry both read as the empty stack.
+    // The history as the next daemon loads it. The file itself is created by
+    // the first step, so before one an absent file and an absent entry both
+    // read as the empty stack.
     history: (sessionId = "s1") =>
-      (
-        JSON.parse(readOrNull(settingsHistoryPath(home)) ?? "{}") as Record<
-          string,
-          SessionHistory
-        >
-      )[sessionId] ?? { past: [], future: [] },
+      historyStorage().load()[sessionId] ?? { past: [], future: [] },
     fileStep: (before, after, file = configPath) => [
       { kind: "file", file, before, after },
     ],
     historyFor: (sessionState) =>
-      new SettingsHistory(
-        sessionState,
-        () => {},
-        fileHistoryStorage(settingsHistoryPath(home), () => {}),
-      ),
+      new SettingsHistory(sessionState, () => {}, historyStorage()),
     seedOrigin: (sessionState, sessionId, configFile) =>
       sessionState.set(
         sessionId,
         SESSION_RENDER_ORIGIN_KEY,
-        encodeRenderOrigin({
-          projectDir: root,
-          cwd: root,
-          target: requestedConfigTarget(configFile, undefined),
-        }),
+        encodeRenderOrigin(
+          {
+            projectDir: root,
+            cwd: root,
+            target: requestedConfigTarget(configFile, undefined),
+          },
+          storedRoot(home),
+        ),
       ),
     dispose: () => {
       rmSync(root, { recursive: true, force: true });

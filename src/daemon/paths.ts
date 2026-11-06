@@ -53,6 +53,14 @@ export function configDir(home: RendererHome): string {
     : path.join(home.root, HOME_CONFIG_DIR);
 }
 
+// [LAW:one-source-of-truth] The directory a stored home path is relative to
+// (stored-path.ts): a named home's root, which holds its whole tree; main's
+// config directory, the one place a file its clicks write lies. Main's XDG
+// tree has no root to move with, and its state and cache hold no stored path.
+export function storedRoot(home: RendererHome): string {
+  return home.kind === "main" ? configDir(home) : home.root;
+}
+
 // [LAW:one-source-of-truth] The socket IS the renderer's identity on the wire:
 // its file is the name's (home.ts), in the per-uid runtime directory.
 export function socketPath(home: RendererHome): string {
@@ -269,6 +277,7 @@ export interface DaemonPaths {
   readonly log: string;
   readonly sessionState: string;
   readonly settingsHistory: string;
+  readonly storedRoot: string;
   readonly watchProbe: string;
   readonly spawnBackoff: string;
 }
@@ -281,6 +290,7 @@ export function daemonPaths(home: RendererHome): DaemonPaths {
     log: logPath(home),
     sessionState: sessionStatePath(home),
     settingsHistory: settingsHistoryPath(home),
+    storedRoot: storedRoot(home),
     watchProbe: watchProbeDir(home),
     spawnBackoff: spawnBackoffPath(home),
   };

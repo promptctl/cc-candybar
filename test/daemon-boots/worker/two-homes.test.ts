@@ -1,9 +1,10 @@
-// [LAW:verifiable-goals] The home lane's acceptance test, in its first form:
-// two renderers under two named homes, sharing one runtime directory, each
-// serving its own socket, given the same config text. Each draws one bar and
-// takes one durable write, and neither leaves a trace of the other: nothing
-// under A's root names B's root, nor the reverse, and the file each wrote is
-// its own home's config.
+// [LAW:verifiable-goals] The home lane's acceptance test: two renderers under
+// two named homes, sharing one runtime directory, each serving its own socket,
+// given the same config text. Each draws one bar and takes one durable write,
+// one naming its config file and one finding it, and no file under either
+// root names either root, so neither leaves a trace of the other and a tree
+// copied under a third root is a renderer of its own: its undo writes its own
+// config.
 
 import fs from "node:fs";
 import net from "node:net";
@@ -12,13 +13,14 @@ import path from "node:path";
 
 import { HOME_ENV, NAME_ENV, RUNTIME_DIR_ENV, homeOf, type RendererHome } from "../../../src/daemon/home";
 import { configDir, socketPath } from "../../../src/daemon/paths";
+import { VERB_UNDO, effectsUrl } from "../../../src/click/wire";
 import { handleConnection } from "../../../src/daemon/connection";
 import type { DaemonLog } from "../../../src/daemon/log";
 import type { Daemon } from "../../../src/daemon/daemon";
 import { textOf } from "../../../src/render/frame";
 import { linkUrls } from "../../helpers/frame";
 import { effectsOf } from "../../helpers/click";
-import { click, render } from "../../helpers/daemon-e2e";
+import { click, configFlag, render } from "../../helpers/daemon-e2e";
 import { hostOf } from "../../helpers/host";
 import { NO_TMUX_AT_EXIT, buildDaemon } from "../../helpers/in-worker-daemon";
 
@@ -42,19 +44,23 @@ interface Renderer {
   readonly server: net.Server;
 }
 
-// Every file under `root`, read whole.
-function filesUnder(root: string): Array<{ file: string; text: string }> {
+// Every file under `root` but the log, read whole. The log is the renderer's
+// diagnostic output: it names the paths it acted on by design, and nothing
+// reads it back, so it cannot carry a home's root into a renderer's work.
+function storedUnder(root: string): Array<{ file: string; text: string }> {
   return fs
     .readdirSync(root, { recursive: true, withFileTypes: true })
     .filter((e) => e.isFile())
-    .map((e) => {
-      const file = path.join(e.parentPath, e.name);
-      return { file, text: fs.readFileSync(file, "utf8") };
-    });
+    .map((e) => path.join(e.parentPath, e.name))
+    .filter((file) => path.relative(root, file) !== path.join("state", "daemon.log"))
+    .map((file) => ({ file, text: fs.readFileSync(file, "utf8") }));
 }
 
-test("two renderers under two homes serve their own sockets and leave no trace of each other", async () => {
-  // One short temporary root for both homes and the runtime directory they
+const configOf = (home: RendererHome): string =>
+  path.join(configDir(home), "config.json5");
+
+test("two renderers under two homes leave no trace of each other or of their own roots, and a copied home undoes into its own config", async () => {
+  // One short temporary root for every home and the runtime directory they
   // share, so the socket paths stay under the platform's limit.
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-2h-"));
   const runtime = path.join(root, "run");
@@ -62,8 +68,8 @@ test("two renderers under two homes serve their own sockets and leave no trace o
   const projectDir = path.join(root, "project");
   fs.mkdirSync(projectDir);
 
-  const start = async (name: string): Promise<Renderer> => {
-    const home = homeOf(
+  const homeNamed = (name: string): RendererHome =>
+    homeOf(
       hostOf({
         ...process.env,
         [HOME_ENV]: path.join(root, name),
@@ -71,8 +77,10 @@ test("two renderers under two homes serve their own sockets and leave no trace o
         [RUNTIME_DIR_ENV]: runtime,
       }),
     );
-    fs.mkdirSync(configDir(home), { recursive: true });
-    fs.writeFileSync(path.join(configDir(home), "config.json5"), CONFIG);
+  const rootOf = (home: RendererHome): string => (home.kind === "named" ? home.root : "");
+
+  const running: Renderer[] = [];
+  const start = async (home: RendererHome): Promise<Renderer> => {
     const { daemon, daemonLog } = buildDaemon({ home });
     const server = net.createServer((sock) => handleConnection(daemon, sock));
     await new Promise<void>((resolve, reject) => {
@@ -82,49 +90,76 @@ test("two renderers under two homes serve their own sockets and leave no trace o
         resolve();
       });
     });
-    return { home, daemon, daemonLog, server };
+    const r = { home, daemon, daemonLog, server };
+    running.push(r);
+    return r;
+  };
+  // Closing lands every debounced write, so the tree holds all it will.
+  const stop = async (r: Renderer): Promise<void> => {
+    running.splice(running.indexOf(r), 1);
+    await r.daemon.close(NO_TMUX_AT_EXIT);
+    await new Promise<void>((resolve) => r.server.close(() => resolve()));
+    await r.daemonLog.drained();
+    r.daemonLog.dispose();
   };
 
-  const a = await start("alpha");
-  const b = await start("beta");
   try {
+    const homes = [homeNamed("alpha"), homeNamed("beta")] as const;
+    for (const home of homes) {
+      fs.mkdirSync(configDir(home), { recursive: true });
+      fs.writeFileSync(configOf(home), CONFIG);
+    }
+    const [a, b] = [await start(homes[0]), await start(homes[1])];
     expect(socketPath(a.home)).toBe(path.join(runtime, "alpha.sock"));
     expect(socketPath(b.home)).toBe(path.join(runtime, "beta.sock"));
 
-    for (const r of [a, b]) {
-      const sid = `two-homes-${r.home.name}`;
-      const bar = await render(r.home, sid, projectDir);
+    // Alpha names its config file, so its origin holds a file in its home;
+    // beta's is found by the search.
+    const sidOf = (r: Renderer): string => `two-homes-${r.home.name}`;
+    for (const [r, args] of [
+      [a, configFlag(configOf(a.home))],
+      [b, []],
+    ] as const) {
+      const bar = await render(r.home, sidOf(r), projectDir, {}, [...args]);
       expect(textOf(bar)).toContain("[pad]");
       const url = linkUrls(bar).find((u) =>
         effectsOf(u).some((e) => e.verb === "persist" || e.verb === "set-config"),
       );
       if (url === undefined) throw new Error(`no persist link in:\n${textOf(bar)}`);
       await click(r.home, url);
-      const written = fs.readFileSync(path.join(configDir(r.home), "config.json5"), "utf8");
-      expect(written).toMatch(/padding:\s*4/);
+      expect(fs.readFileSync(configOf(r.home), "utf8")).toMatch(/padding:\s*4/);
     }
+    await stop(a);
+    await stop(b);
 
-    // Neither tree names the other's root, and each wrote only its own file.
-    const rootOf = (r: Renderer): string => (r.home.kind === "named" ? r.home.root : "");
-    for (const [mine, other] of [
-      [a, b],
-      [b, a],
-    ] as const) {
-      const files = filesUnder(rootOf(mine));
-      expect(files.length).toBeGreaterThan(0);
-      const naming = files.filter((f) => f.text.includes(rootOf(other)));
+    // No stored file names a root, the other's or its own.
+    for (const home of homes) {
+      const files = storedUnder(rootOf(home));
+      expect(files.map((f) => path.relative(rootOf(home), f.file))).toEqual(
+        expect.arrayContaining([
+          path.join("state", "session-state.json"),
+          path.join("state", "settings-history.json"),
+        ]),
+      );
+      const naming = files.filter((f) => homes.some((h) => f.text.includes(rootOf(h))));
       expect(naming.map((f) => f.file)).toEqual([]);
     }
-    expect(fs.readFileSync(path.join(configDir(a.home), "config.json5"), "utf8")).toBe(
-      fs.readFileSync(path.join(configDir(b.home), "config.json5"), "utf8"),
+    expect(fs.readFileSync(configOf(a.home), "utf8")).toBe(
+      fs.readFileSync(configOf(b.home), "utf8"),
     );
+
+    // Alpha's tree, copied under a third root, is a renderer of its own: an
+    // undo of alpha's session there rewrites the copy's config, and alpha's
+    // stays as it was.
+    const alphaText = fs.readFileSync(configOf(a.home), "utf8");
+    const gammaHome = homeNamed("gamma");
+    fs.cpSync(rootOf(a.home), rootOf(gammaHome), { recursive: true });
+    const c = await start(gammaHome);
+    await click(c.home, effectsUrl([{ verb: VERB_UNDO, args: [sidOf(a)] }]));
+    expect(fs.readFileSync(configOf(c.home), "utf8")).toBe(CONFIG);
+    expect(fs.readFileSync(configOf(a.home), "utf8")).toBe(alphaText);
   } finally {
-    for (const r of [a, b]) {
-      await r.daemon.close(NO_TMUX_AT_EXIT);
-      await new Promise<void>((resolve) => r.server.close(() => resolve()));
-      await r.daemonLog.drained();
-      r.daemonLog.dispose();
-    }
+    for (const r of [...running]) await stop(r);
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

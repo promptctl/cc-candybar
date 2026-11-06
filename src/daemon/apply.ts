@@ -193,7 +193,7 @@ export const ARMS: ApplyArms<Event> = {
       "request",
       turnWaits(facts),
       async () => {
-        recordRequest(verbCtx.sessionState, req);
+        recordRequest(verbCtx.sessionState, req, verbCtx.storedRoot);
         return verbCtx.sessionState.revision(req.sessionId);
       },
     );
@@ -279,19 +279,26 @@ export const ARMS: ApplyArms<Event> = {
 // checkpoint. The client itself is not recorded: which client drew a
 // session's bar is RenderSightings' fact (src/daemon/render-sightings.ts),
 // held in memory, and two clients drawing one session would otherwise
-// rewrite this persisted record on every request. The config inputs the
+// rewrite this persisted record on every request. Nor is the config the
+// client's environment named: the origin is the one record of the config a
+// request named, home-relative when it lies in the home, which a copy in the
+// hints would spell absolute. The config inputs the
 // request named, so a durable click on this session resolves the same chain
 // (verbs/index.ts sessionOrigin) and writes the file the next reload reads,
 // never a path re-derived from the daemon's own cwd. Compared before writing:
 // every write persists and fires the session's MobX atom, so an unchanged
 // request writes nothing and invalidates no state-driven computed.
-function recordRequest(state: SessionStateRW, req: CheckedRenderRequest): void {
-  const { client: _client, ...recorded } = req.hints;
+function recordRequest(
+  state: SessionStateRW,
+  req: CheckedRenderRequest,
+  storedRoot: string,
+): void {
+  const { client: _client, configEnv: _configEnv, ...recorded } = req.hints;
   const said = [
     { key: SESSION_CLIENT_HINTS_KEY, value: JSON.stringify(recorded) },
     {
       key: SESSION_RENDER_ORIGIN_KEY,
-      value: encodeRenderOrigin(req.requested),
+      value: encodeRenderOrigin(req.requested, storedRoot),
     },
   ];
   state.setBatch(

@@ -307,18 +307,76 @@ describe("the savepoint under the history's bounds", () => {
 describe("the savepoint survives a restart", () => {
   test("it is saved with the history and read back with it, and cancels there", () => {
     const historyFile = path.join(dir, "history.json");
-    const first = rig(fileHistoryStorage(historyFile, () => {}));
+    const first = rig(fileHistoryStorage(historyFile, dir, () => {}));
     first.edit();
     first.toggle("arrange");
     first.edit();
     const second = new SettingsHistory(
       new SessionState(),
       () => {},
-      fileHistoryStorage(historyFile, () => {}),
+      fileHistoryStorage(historyFile, dir, () => {}),
     );
     expect(second.depth(SID)).toEqual({ undo: 2, redo: 0, sinceEdit: 1 });
     second.rewind(SID);
     expect(readConfigText(file)).toBe("v1");
+  });
+
+  test("a file in the root is saved relative to it, and read back under the root it is loaded against", () => {
+    const historyFile = path.join(dir, "history.json");
+    rig(fileHistoryStorage(historyFile, dir, () => {})).edit();
+    const saved = JSON.parse(fs.readFileSync(historyFile, "utf8"));
+    expect(saved[SID].past[0][0].file).toEqual({ kind: "home", path: "config.json5" });
+    const moved = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-moved-"));
+    try {
+      const loaded = fileHistoryStorage(historyFile, moved, () => {}).load();
+      expect(loaded[SID]!.past[0]![0]).toMatchObject({ file: path.join(moved, "config.json5") });
+    } finally {
+      fs.rmSync(moved, { recursive: true, force: true });
+    }
+  });
+
+  test("an older build's history, which stored every file as a bare absolute path, loads with its steps and savepoint", () => {
+    const historyFile = path.join(dir, "history.json");
+    const change = (f: string) => ({ kind: "file", file: f, before: "v0", after: "v1" });
+    fs.writeFileSync(
+      historyFile,
+      JSON.stringify({
+        [SID]: {
+          past: [[change(file)], [change("/c.json5")]],
+          future: [],
+          savepoint: { at: 1, net: [change(file)], below: [] },
+        },
+      }),
+    );
+    const storage = fileHistoryStorage(historyFile, dir, (level, m) => {
+      throw new Error(`${level}: ${m}`);
+    });
+    expect(storage.load()).toEqual({
+      [SID]: {
+        past: [[change(file)], [change("/c.json5")]],
+        future: [],
+        savepoint: { at: 1, net: [change(file)], below: [] },
+      },
+    });
+  });
+
+  test("a file under the root stored absolute is refused, naming the session, the step and the path", () => {
+    const historyFile = path.join(dir, "history.json");
+    fs.writeFileSync(
+      historyFile,
+      JSON.stringify({
+        [SID]: {
+          past: [[{ kind: "file", file: { kind: "world", path: file }, before: "v0", after: "v1" }]],
+          future: [],
+        },
+      }),
+    );
+    const logs: string[] = [];
+    const storage = fileHistoryStorage(historyFile, dir, (_level, m) => logs.push(m));
+    expect(storage.load()).toEqual({});
+    expect(logs).toEqual([
+      `settings-history load: session ${SID}'s undo step 1: stored world path ${file} lies under the home's root ${dir}; a home's file is stored relative to it; starting empty`,
+    ]);
   });
 
   test("a savepoint of the wrong shape is a wrong-shaped file, dropped whole", () => {
@@ -328,7 +386,7 @@ describe("the savepoint survives a restart", () => {
       JSON.stringify({ [SID]: { past: [], future: [], savepoint: 3 } }),
     );
     const logs: string[] = [];
-    const storage = fileHistoryStorage(historyFile, (_level, m) => logs.push(m));
+    const storage = fileHistoryStorage(historyFile, dir, (_level, m) => logs.push(m));
     expect(storage.load()).toEqual({});
     expect(logs.join("\n")).toMatch(/unexpected shape/);
   });
@@ -344,20 +402,23 @@ describe("the savepoint survives a restart", () => {
       before: null,
       after: "vivid",
     });
-    const file = { kind: "file", file: "/c.json5", before: "a", after: "b" };
+    // A file outside the root, as the history spells it on disk and as the
+    // load reads it back.
+    const stored = { kind: "file", file: { kind: "world", path: "/c.json5" }, before: "a", after: "b" };
+    const file = { ...stored, file: "/c.json5" };
     fs.writeFileSync(
       historyFile,
       JSON.stringify({
         [SID]: {
-          past: [[change("look")], [change("style"), change("progression")], [file]],
+          past: [[change("look")], [change("style"), change("progression")], [stored]],
           future: [[change("look")]],
-          savepoint: { at: 2, net: [change("look"), file], below: [[change("look")]] },
+          savepoint: { at: 2, net: [change("look"), stored], below: [[change("look")]] },
         },
-        other: { past: [[file]], future: [] },
+        other: { past: [[stored]], future: [] },
       }),
     );
     const logs: string[] = [];
-    const storage = fileHistoryStorage(historyFile, (_level, m) => logs.push(m));
+    const storage = fileHistoryStorage(historyFile, dir, (_level, m) => logs.push(m));
     expect(storage.load()).toEqual({
       [SID]: {
         past: [[change("style")], [file]],
@@ -385,7 +446,7 @@ describe("the savepoint survives a restart", () => {
     const history = new SettingsHistory(
       new SessionState(),
       () => {},
-      fileHistoryStorage(historyFile, () => {}),
+      fileHistoryStorage(historyFile, dir, () => {}),
     );
     expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
   });

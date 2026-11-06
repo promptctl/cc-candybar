@@ -679,6 +679,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     gates,
     sessionState,
     stateDir: paths.state,
+    storedRoot: paths.storedRoot,
     locations: locs,
     journalTurns,
     clickLanded: (sessionId: string) => menuIdle.clicked(sessionId, instant()),

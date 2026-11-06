@@ -202,6 +202,9 @@ export interface DaemonContext {
   readonly launcher: Launcher;
   // The state directory whose answers book a click reads and records in.
   readonly stateDir: string;
+  // The directory a stored home path is relative to (paths.ts storedRoot):
+  // what the session's recorded origin is read back against.
+  readonly storedRoot: string;
   // Where the user's config and installed plugins live: a click's write
   // resolves its home under them.
   readonly locations: Locations;
@@ -367,6 +370,10 @@ const inTurn = (handler: VerbHandler): Verb => ({
 
 import type { ClickAsker, JournalTurn, JournalTurns } from "../journal-turns";
 import { BadVerbArgs, DaemonClosing, decodeWire } from "../verb-error";
+import {
+  StoredPathRefused,
+  resolveStoredPath,
+} from "../foundations/stored-path";
 import {
   parseSessionId,
   type ParsedSessionId,
@@ -822,8 +829,9 @@ function recordedTarget(
 
 // [LAW:parse-dont-validate] The one boundary that lifts the stored string
 // back into a RenderOrigin; a wrong shape is a loud BadVerbArgs, never a
-// guessed path.
-export function parseRenderOrigin(raw: string): RenderOrigin {
+// guessed path. A file is a StoredPath resolved against the home's root
+// (stored-path.ts), which reads an older build's bare string too.
+export function parseRenderOrigin(raw: string, root: string): RenderOrigin {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -840,11 +848,18 @@ export function parseRenderOrigin(raw: string): RenderOrigin {
   if (
     typeof projectDir !== "string" ||
     typeof cwd !== "string" ||
-    (configFile !== null && typeof configFile !== "string")
+    configFile === undefined
   ) {
     throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
   }
-  return { projectDir, cwd, target: recordedTarget(source, configFile) };
+  let file: string | null;
+  try {
+    file = configFile === null ? null : resolveStoredPath(root, configFile);
+  } catch (e) {
+    if (!(e instanceof StoredPathRefused)) throw e;
+    throw new BadVerbArgs(`render origin: ${e.message}`);
+  }
+  return { projectDir, cwd, target: recordedTarget(source, file) };
 }
 
 // [LAW:no-silent-failure] A session that has never rendered has no origin
@@ -867,7 +882,7 @@ function recordedOrigin(
   sid: string,
 ): RenderOrigin | null {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
-  return raw === null ? null : parseRenderOrigin(raw);
+  return raw === null ? null : parseRenderOrigin(raw, ctx.storedRoot);
 }
 
 // [LAW:no-ambient-temporal-coupling] A history step that rewrote the file this
