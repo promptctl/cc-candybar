@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-644",
+      "ref": "refs/pull/644/merge",
+      "sha": "8225d23301b556b8a965e78e51df8a0c2d91e5ce",
+      "timestamp": "2026-11-06T19:03:52.402Z",
+      "commits": [
+        {
+          "sha": "8225d23301b556b8a965e78e51df8a0c2d91e5ce",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:02:43Z",
+          "message": "Merge b24b153f1428f7814bce48354042f139f9a11069 into 0af5d1f4ce463b0bebbbe6a4b6107d2943900c54\n"
+        },
+        {
+          "sha": "b24b153f1428f7814bce48354042f139f9a11069",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T12:02:30-07:00",
+          "message": "fix(doctor): a lost link's build row compares builds by value and shows only for a link that opened (candybar-gather-renderer-76bb.b2l.mxk)\n\n- otherBuild decides on the version and the full digest, not on the labels,\n  and hands the two labels back as data; the verdict owns the sentence.\n- A link that never opened was lost before any daemon saw it, so its verdict\n  carries no build row.\n"
+        },
+        {
+          "sha": "83471562779455f776edad21e6f6e92daac2e865",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:58:01-07:00",
+          "message": "fix(links): a probe is a link kind, never an effect; a link lost at another build's daemon says so (candybar-gather-renderer-76bb.b2l.mxk)\n\n- The probe leaves the leaf table, so a dispatch carrying it is refused as an\n  unknown effect verb, as the minter's comment says it is.\n- probeLink spells the nonce with encodeURIComponent, the codec the probe\n  verb's one-argument read reverses.\n- The lost verdict names a daemon of another build: a link this build mints\n  may be one it does not read, so a healthy handler is not blamed for it.\n- Comments that said the diagnosis asks about the scheme now say the link.\n"
+        },
+        {
+          "sha": "99e6c09a5cd435b41007097aec7517ac28d39720",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:48:22-07:00",
+          "message": "feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-643",
       "ref": "refs/pull/643/merge",
       "sha": "25c74bf163772684754f869bf732df3bd92bfe73",
@@ -38,35 +74,6 @@
       ]
     },
     {
-      "version": "pr-644",
-      "ref": "refs/pull/644/merge",
-      "sha": "868c47c04475c50e0da7adbd628c8eae84f52ad8",
-      "timestamp": "2026-11-06T18:59:32.748Z",
-      "commits": [
-        {
-          "sha": "868c47c04475c50e0da7adbd628c8eae84f52ad8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:58:18Z",
-          "message": "Merge 83471562779455f776edad21e6f6e92daac2e865 into 0af5d1f4ce463b0bebbbe6a4b6107d2943900c54\n"
-        },
-        {
-          "sha": "83471562779455f776edad21e6f6e92daac2e865",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:58:01-07:00",
-          "message": "fix(links): a probe is a link kind, never an effect; a link lost at another build's daemon says so (candybar-gather-renderer-76bb.b2l.mxk)\n\n- The probe leaves the leaf table, so a dispatch carrying it is refused as an\n  unknown effect verb, as the minter's comment says it is.\n- probeLink spells the nonce with encodeURIComponent, the codec the probe\n  verb's one-argument read reverses.\n- The lost verdict names a daemon of another build: a link this build mints\n  may be one it does not read, so a healthy handler is not blamed for it.\n- Comments that said the diagnosis asks about the scheme now say the link.\n"
-        },
-        {
-          "sha": "99e6c09a5cd435b41007097aec7517ac28d39720",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:48:22-07:00",
-          "message": "feat(links): the doctor probe is minted by the minter as the probe link kind, and Launch Services is asked about the link it opened (candybar-gather-renderer-76bb.b2l.mxk)\n\nThe probe link is cc-candybar://to/<name>/probe/<nonce>, built by probeLink\nbeside effectsUrl, so the doctor no longer assembles a verb and a tail itself.\nThe verb is `probe`, as spec section 18 names it. The doctor's lost-link\ndiagnosis asks NSWorkspace which app opens that same link rather than a\nhand-spelled cc-candybar://probe.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-645",
       "ref": "refs/pull/645/merge",
       "sha": "2c1fe72c0e52d9f50fac3949c5edc3f4022e0086",
@@ -85,49 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T11:56:58-07:00",
           "message": "feat(band): a switched-off band lane holds no follower process (candybar-animation-wbxz.w33)\n\nThe band mod stops its follow child on the daemon's SWITCHED_OFF answer\ninstead of keeping it alive to re-ask every 5s, and turning band (A) off\nuninstalls the mod so sessions started afterwards never load it. An\nuninstall of a mod that is not installed is the state off asks for, so it\nis said rather than thrown.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-633",
-      "ref": "refs/pull/633/merge",
-      "sha": "bc260c643b1b44fd4a26d71f5a9e2605490df7bf",
-      "timestamp": "2026-11-06T18:55:40.210Z",
-      "commits": [
-        {
-          "sha": "bc260c643b1b44fd4a26d71f5a9e2605490df7bf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:54:46Z",
-          "message": "Merge 0964b204fc4c45f3f4a8f7dbbf591f51dc127700 into 0af5d1f4ce463b0bebbbe6a4b6107d2943900c54\n"
-        },
-        {
-          "sha": "0964b204fc4c45f3f4a8f7dbbf591f51dc127700",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:54:26-07:00",
-          "message": "fix(doctor): a gather that reads the whole session record is refused, so only keys read by name are stamped (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "ca14207605ca5eac57c8a0025903c45c428d033a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:50:06-07:00",
-          "message": "test(doctor): the round trip's click names its renderer, as every link now does (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "fa622242c209ba8aa2d2d2d8e44922feca536c37",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:46:53-07:00",
-          "message": "test(apply): a dispatch's refused step and its failed launch are two held failures, proven on the click path (candybar-gather-renderer-76bb.1dh.c3l)\n"
-        },
-        {
-          "sha": "d116ce8e6121e22321b8884565b6dd6747c79b70",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T08:41:12-07:00",
-          "message": "feat(apply): no turn awaits a launch; a doctor step is an effect gathered in no turn; each click failure is its own held message (candybar-gather-renderer-76bb.1dh.c3l)\n"
         }
       ]
     },

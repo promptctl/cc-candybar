@@ -56837,6 +56837,11 @@ function handlerAppProblems(opener) {
     `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
   ];
 }
+function otherBuildProblems(builds) {
+  return builds === null ? [] : [
+    `the daemon (${builds.theirs}) is another build than this client (${builds.mine}), so it may not read the link this build sends`
+  ];
+}
 var urlHandler = {
   name: "urlHandler",
   label: "URL handler",
@@ -56860,12 +56865,12 @@ var urlHandler = {
       case "lost":
         return problemsVerdict([
           ...handlerAppProblems(urlHandler2.opener),
-          // A daemon of another build may not know the link this build sends,
-          // so a healthy handler's link is lost there too.
-          ...urlHandler2.otherBuild === null ? [] : [
-            `${urlHandler2.otherBuild}, so it may not read the link this build sends`
-          ],
-          urlHandler2.unopened === null ? "a cc-candybar:// link was opened and did not arrive at the daemon" : `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
+          ...urlHandler2.unopened === null ? [
+            ...otherBuildProblems(urlHandler2.otherBuild),
+            "a cc-candybar:// link was opened and did not arrive at the daemon"
+          ] : [
+            `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
+          ]
         ]);
     }
   }
