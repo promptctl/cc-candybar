@@ -117,7 +117,7 @@ var require_events = __commonJS({
       EventEmitter3.init.call(this);
     }
     module.exports = EventEmitter3;
-    module.exports.once = once3;
+    module.exports.once = once2;
     EventEmitter3.EventEmitter = EventEmitter3;
     EventEmitter3.prototype._events = void 0;
     EventEmitter3.prototype._eventsCount = 0;
@@ -262,7 +262,7 @@ var require_events = __commonJS({
       state.wrapFn = wrapped;
       return wrapped;
     }
-    EventEmitter3.prototype.once = function once4(type3, listener) {
+    EventEmitter3.prototype.once = function once3(type3, listener) {
       checkListener(listener);
       this.on(type3, _onceWrap(this, type3, listener));
       return this;
@@ -411,7 +411,7 @@ var require_events = __commonJS({
       }
       return ret;
     }
-    function once3(emitter2, name) {
+    function once2(emitter2, name) {
       return new Promise(function(resolve, reject2) {
         function errorListener(err) {
           emitter2.removeListener(name, resolver);
@@ -4635,8 +4635,8 @@ var require_lib = __commonJS({
       const more = guard2 ? altsSource(alts, extglob, nodot, tail, false) : body;
       if (more === body)
         return "(?:" + body + ")" + (type3 === 42 ? "*" : "+");
-      const once3 = "(?:" + body + ")(?:" + more + ")*";
-      return type3 === 42 ? "(?:" + once3 + ")?" : once3;
+      const once2 = "(?:" + body + ")(?:" + more + ")*";
+      return type3 === 42 ? "(?:" + once2 + ")?" : once2;
     };
     var compile = (pattern2, extglob, nodot, tail, segStart) => {
       const length = pattern2.length;
@@ -9262,7 +9262,7 @@ var require_end_of_stream = __commonJS({
     var process = (init_process(), __toCommonJS(process_exports));
     var { AbortError, codes } = require_errors2();
     var { ERR_INVALID_ARG_TYPE, ERR_STREAM_PREMATURE_CLOSE } = codes;
-    var { kEmptyObject, once: once3 } = require_util3();
+    var { kEmptyObject, once: once2 } = require_util3();
     var { validateAbortSignal, validateFunction, validateObject, validateBoolean: validateBoolean2 } = require_validators2();
     var { Promise: Promise2, PromisePrototypeThen, SymbolDispose } = require_primordials();
     var {
@@ -9299,7 +9299,7 @@ var require_end_of_stream = __commonJS({
       }
       validateFunction(callback, "callback");
       validateAbortSignal(options.signal, "options.signal");
-      callback = once3(callback);
+      callback = once2(callback);
       if (isReadableStream(stream) || isWritableStream(stream)) {
         return eosWeb(stream, options, callback);
       }
@@ -9438,7 +9438,7 @@ var require_end_of_stream = __commonJS({
           addAbortListener = addAbortListener || require_util3().addAbortListener;
           const disposable = addAbortListener(options.signal, abort);
           const originalCallback = callback;
-          callback = once3((...args) => {
+          callback = once2((...args) => {
             disposable[SymbolDispose]();
             originalCallback.apply(stream, args);
           });
@@ -9465,7 +9465,7 @@ var require_end_of_stream = __commonJS({
           addAbortListener = addAbortListener || require_util3().addAbortListener;
           const disposable = addAbortListener(options.signal, abort);
           const originalCallback = callback;
-          callback = once3((...args) => {
+          callback = once2((...args) => {
             disposable[SymbolDispose]();
             originalCallback.apply(stream, args);
           });
@@ -12682,7 +12682,7 @@ var require_pipeline = __commonJS({
     var process = (init_process(), __toCommonJS(process_exports));
     var { ArrayIsArray, Promise: Promise2, SymbolAsyncIterator, SymbolDispose } = require_primordials();
     var eos = require_end_of_stream();
-    var { once: once3 } = require_util3();
+    var { once: once2 } = require_util3();
     var destroyImpl = require_destroy();
     var Duplex = require_duplex();
     var {
@@ -12834,7 +12834,7 @@ var require_pipeline = __commonJS({
       }
     }
     function pipeline(...streams) {
-      return pipelineImpl(streams, once3(popCallback(streams)));
+      return pipelineImpl(streams, once2(popCallback(streams)));
     }
     function pipelineImpl(streams, callback, opts) {
       if (streams.length === 1 && ArrayIsArray(streams[0])) {
@@ -65043,6 +65043,19 @@ var SessionState = class {
 // src/daemon/foundations/stored-path.ts
 init_globals();
 var import_node_path18 = __toESM(require_path_browserify(), 1);
+function oneReading(root) {
+  const read2 = /* @__PURE__ */ new Map();
+  return {
+    dir: root.dir,
+    onDisk: (dir) => {
+      const known = read2.get(dir);
+      if (known !== void 0) return known;
+      const spelled2 = root.onDisk(dir);
+      read2.set(dir, spelled2);
+      return spelled2;
+    }
+  };
+}
 function homeRelative(root, file) {
   return underRoot(root.dir, file) ?? namedThrough(root, file);
 }
@@ -65072,7 +65085,7 @@ function resolveStoredPath(root, raw) {
         `an older build's stored path ${JSON.stringify(raw)} is not absolute`
       );
     }
-    return resolveStoredPath(root, storedPathOf(root, raw));
+    return homeSpelling(root, raw);
   }
   if (raw === null || typeof raw !== "object") {
     throw new StoredPathRefused(
@@ -65100,12 +65113,12 @@ function resolveStoredPath(root, raw) {
         `stored world path ${JSON.stringify(p2)} is not absolute`
       );
     }
-    if (homeRelative(root, p2) !== null) {
+    if (underRoot(root.dir, p2) !== null) {
       throw new StoredPathRefused(
         `stored world path ${p2} lies under the home's root ${root.dir}; a home's file is stored relative to it`
       );
     }
-    return p2;
+    return homeSpelling(root, p2);
   }
   throw new StoredPathRefused(
     `stored path has no kind of home or world: ${JSON.stringify(raw)}`
@@ -65527,17 +65540,6 @@ function withoutRetiredKeys(history, retired) {
     }
   };
 }
-function once2(f) {
-  const seen = /* @__PURE__ */ new Map();
-  return (a) => {
-    const key = JSON.stringify(a);
-    const hit = seen.get(key);
-    if (hit !== void 0) return hit;
-    const b = f(a);
-    seen.set(key, b);
-    return b;
-  };
-}
 function mapFiles(history, respell) {
   const step4 = (s, where) => s.map(
     (c) => c.kind === "file" ? { ...c, file: respell(c.file, where) } : c
@@ -65585,9 +65587,7 @@ function fileHistoryStorage(file, root, logger) {
         );
         return {};
       }
-      const resolve = once2(
-        (stored) => resolveStoredPath(root, stored)
-      );
+      const asked2 = oneReading(root);
       let resolved;
       try {
         resolved = Object.entries(parsed2).map(
@@ -65595,7 +65595,7 @@ function fileHistoryStorage(file, root, logger) {
             sid,
             mapFiles(history, (stored, where) => {
               try {
-                return resolve(stored);
+                return resolveStoredPath(asked2, stored);
               } catch (e) {
                 if (!(e instanceof StoredPathRefused)) throw e;
                 throw new StoredPathRefused(
@@ -65626,11 +65626,11 @@ function fileHistoryStorage(file, root, logger) {
       return state;
     },
     save: (state) => {
-      const store = once2((f) => storedPathOf(root, f));
+      const asked2 = oneReading(root);
       const stored = Object.fromEntries(
         Object.entries(state).map(([sid, history]) => [
           sid,
-          mapFiles(history, store)
+          mapFiles(history, (f) => storedPathOf(asked2, f))
         ])
       );
       try {
@@ -69386,7 +69386,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.198.1";
+var PACKAGE_VERSION = "1.199.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -69515,7 +69515,7 @@ var readStores = (stores) => ({
 });
 function oneAskPerClick(edge) {
   const asked2 = /* @__PURE__ */ new Map();
-  const once3 = (question, ask) => {
+  const once2 = (question, ask) => {
     const key = JSON.stringify(question);
     const answer2 = asked2.get(key) ?? ask();
     asked2.set(key, answer2);
@@ -69523,9 +69523,9 @@ function oneAskPerClick(edge) {
   };
   return {
     ...edge,
-    probeTmux: (hint) => once3(["tmux", hint], () => edge.probeTmux(hint)),
-    remoteLogin: (pid2) => once3(["remote", pid2], () => edge.remoteLogin(pid2)),
-    fontInUse: (terminal, env2, glyphs) => once3(
+    probeTmux: (hint) => once2(["tmux", hint], () => edge.probeTmux(hint)),
+    remoteLogin: (pid2) => once2(["remote", pid2], () => edge.remoteLogin(pid2)),
+    fontInUse: (terminal, env2, glyphs) => once2(
       ["font", terminal, env2, glyphs],
       () => edge.fontInUse(terminal, env2, glyphs)
     )
@@ -77577,17 +77577,6 @@ function describeEffect(effect) {
   return describe4(effect);
 }
 
-// src/daemon/foundations/render-origin.ts
-init_globals();
-function encodeRenderOrigin({ projectDir, cwd: cwd2, target }, root) {
-  return JSON.stringify({
-    projectDir,
-    cwd: cwd2,
-    configFile: target.path === void 0 ? null : storedPathOf(root, target.path),
-    source: target.source
-  });
-}
-
 // src/daemon/apply.ts
 var NO_EFFECTS = [];
 var turnWaits = (facts) => ({
@@ -77615,7 +77604,7 @@ var ARMS = {
       "request",
       turnWaits(facts),
       async () => {
-        recordRequest(verbCtx.sessionState, req, verbCtx.storedRoot);
+        recordRequest(verbCtx.sessionState, req);
         return verbCtx.sessionState.revision(req.sessionId);
       }
     );
@@ -77692,13 +77681,13 @@ var ARMS = {
     return { answer: void 0, effects: NO_EFFECTS, facts };
   }
 };
-function recordRequest(state, req, storedRoot2) {
+function recordRequest(state, req) {
   const { client: _client, configEnv: _configEnv, ...recorded } = req.hints;
   const said = [
     { key: SESSION_CLIENT_HINTS_KEY, value: JSON.stringify(recorded) },
     {
       key: SESSION_RENDER_ORIGIN_KEY,
-      value: encodeRenderOrigin(req.requested, storedRoot2)
+      value: req.originRecord
     }
   ];
   state.setBatch(
@@ -77833,6 +77822,19 @@ function performAll(parts, of, effects) {
 // src/daemon/render-checkpoint.ts
 init_globals();
 var import_node_path37 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/foundations/render-origin.ts
+init_globals();
+function encodeRenderOrigin({ projectDir, cwd: cwd2, target }, root) {
+  return JSON.stringify({
+    projectDir,
+    cwd: cwd2,
+    configFile: target.path === void 0 ? null : storedPathOf(root, target.path),
+    source: target.source
+  });
+}
+
+// src/daemon/render-checkpoint.ts
 function parseRenderArgs(args, cwd2, home) {
   const { tokens } = (0, import_parseargs.parseArgs)({
     args: args.slice(1),
@@ -77914,7 +77916,13 @@ function checkRenderRequest(req, stats, log, home, storedRoot2) {
   }
   const hints = parseClientHints(req);
   const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd, home);
-  const requested = requestedConfigTarget(configFile, hints.configEnv);
+  const asked2 = oneReading(storedRoot2);
+  const target = requestedConfigTarget(configFile, hints.configEnv);
+  const requested = {
+    projectDir: req.hookData.workspace.project_dir,
+    cwd: req.cwd,
+    target: target.source === "search" ? target : { ...target, path: homeSpelling(asked2, target.path) }
+  };
   return {
     ok: true,
     req: {
@@ -77924,14 +77932,8 @@ function checkRenderRequest(req, stats, log, home, storedRoot2) {
       sessionId: sessionId2.id,
       hints,
       rateLimits: rateLimitsSeen(req.hookData),
-      requested: {
-        projectDir: req.hookData.workspace.project_dir,
-        cwd: req.cwd,
-        target: requested.source === "search" ? requested : {
-          ...requested,
-          path: homeSpelling(storedRoot2, requested.path)
-        }
-      },
+      requested,
+      originRecord: encodeRenderOrigin(requested, asked2),
       refusedArgs
     }
   };
@@ -80735,7 +80737,7 @@ var SessionUsageStore = class {
   // others land, so it reads, records and logs once per request.
   request(sessionId2, transcriptPath) {
     let refresh = null;
-    const once3 = () => {
+    const once2 = () => {
       if (refresh !== null) return refresh;
       const stamp2 = statStamp(transcriptPath);
       refresh = {
@@ -80746,7 +80748,7 @@ var SessionUsageStore = class {
     };
     return {
       usage: async (hookData2) => {
-        const record2 = await once3().record;
+        const record2 = await once2().record;
         if (record2.kind === "failed") return record2;
         return ok(
           usageOver(
@@ -80755,14 +80757,14 @@ var SessionUsageStore = class {
           )
         );
       },
-      speed: (nowMs) => this.observed(sessionId2, once3, nowMs),
+      speed: (nowMs) => this.observed(sessionId2, once2, nowMs),
       // [LAW:no-ambient-temporal-coupling] `today` sums the session's own
       // record, so it waits for the request's one refresh of it and for
       // nothing else: the directory set's scan is no part of the request,
       // since the day sums are pending until it lands and land through the
       // observable they are read from.
       today: async () => {
-        await once3().record;
+        await once2().record;
       }
     };
   }
