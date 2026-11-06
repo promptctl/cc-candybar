@@ -4,15 +4,22 @@
     {
       "version": "pr-659",
       "ref": "refs/pull/659/merge",
-      "sha": "e0fd433f28e73c73fb68ee14fcc22613174dbddf",
-      "timestamp": "2026-11-06T22:55:59.951Z",
+      "sha": "10303d8a7cda81a8aba43af8bf775959c51dbc8b",
+      "timestamp": "2026-11-06T22:59:32.039Z",
       "commits": [
         {
-          "sha": "e0fd433f28e73c73fb68ee14fcc22613174dbddf",
+          "sha": "10303d8a7cda81a8aba43af8bf775959c51dbc8b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T15:55:07-07:00",
-          "message": "Merge 56873614f3f25c04f5f9fdb6dec42c91f3577ceb into ff33713e3ee28648caa5b5c8c615a4187cdcc5ba\n"
+          "timestamp": "2026-11-06T22:58:34Z",
+          "message": "Merge 7b226d32a5d050520a5fba12fad6a334eb3d3de8 into ff33713e3ee28648caa5b5c8c615a4187cdcc5ba\n"
+        },
+        {
+          "sha": "7b226d32a5d050520a5fba12fad6a334eb3d3de8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T15:58:21-07:00",
+          "message": "test(error-glyph): the version gate takes the daemon's version, so the pipeline test runs a real stale-client exchange with distinct versions (candybar-testing-ihvy.fvw.b78)\n"
         },
         {
           "sha": "56873614f3f25c04f5f9fdb6dec42c91f3577ceb",
