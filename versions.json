@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "92e444f3bcf390e07f4b9490d78c0f5223c635e5",
+      "timestamp": "2026-11-06T06:56:19.842Z",
+      "commits": [
+        {
+          "sha": "92e444f3bcf390e07f4b9490d78c0f5223c635e5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-05T23:55:12-07:00",
+          "message": "fix(load-gate): the steady phase begins once the daemon has settled, and a wait with no time left takes no loop turn (candybar-gather-renderer-76bb.6pj.09c) (#626)\n\n* fix(load-gate): the steady phase begins once the daemon has settled, a wait with no time left takes no loop turn, and a failed render names what the daemon's log shows over it (candybar-gather-renderer-76bb.6pj.09c)\n\nThe one failed render of run 42154313711 was not a GC pause: the daemon logged a line every 10-34 ms through the episode. It was a saturated loop while the speed lane was still landing for every session, 13 s into a steady phase that had begun before the daemon settled, and the failed request lost its last 54 ms to a 0 ms timer behind the poll phase. The gate now waits for every session's latest render to be answered inside its wait, at both points the steady phase must not inherit a backlog from; waitWithin with no time left aborts in the same turn; each steady failure carries the daemon's lines, longest silence and deadline draws over its round trip, and the facts carry the connect-to-wait spread.\n\n* test(process): a render whose config read outlives the backstop answers its client in the turn the read ends; the memory line and the gate deadline comment say so (candybar-gather-renderer-76bb.6pj.09c)\n\n* fix(wait): a wait with no time left ends once the microtask queue drains, so held values still answer and a failing wait still fails the render; the gate's settle names how unsettled renders ended and stops on a dead daemon (candybar-gather-renderer-76bb.6pj.09c)\n\nThe resume settle counts only renders logged after the collection ends, and a failure's longest silence is bounded by its window's edges, so a pause over the whole window no longer reads as zero. The backstop's and the render wait's comments say a render holding the loop past the backstop answers late in the turn it yields.\n\n* fix(load-gate): a session settles on a render answered with time left and read by its client, read through the one logfmt reader; a failure's log window reaches the end of its round trip (candybar-gather-renderer-76bb.6pj.09c)\n\nA render set up past its deadline can now answer from held values, so answered alone no longer says the backlog drained. The memory line on the backstop states its guarantee only for a render held in a synchronous turn.\n\n* fix(load-gate): a render the backstop answered first never settles a session, and the gate reads its stamped log in one place; the wait's comment and the held-clock memory line say what a wait with no time left does (candybar-gather-renderer-76bb.6pj.09c)"
+        },
+        {
+          "sha": "1df488f24662b4c0e23f92afecd25c719debac6a",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-06T06:41:05Z",
+          "message": "chore(release): set `package.json` to 1.196.0 [skip ci]\n\n## [1.196.0](https://github.com/promptctl/cc-candybar/compare/v1.195.0...v1.196.0) (2026-11-06)\n\n### Features\n\n* **facts:** a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2) ([#624](https://github.com/promptctl/cc-candybar/issues/624)) ([a38c437](https://github.com/promptctl/cc-candybar/commit/a38c437bf19653dbd6f983f06de25bc82f2d4a58))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-628",
       "ref": "refs/pull/628/merge",
       "sha": "e965d95b38d4cb265e5bcaf3358adff96bb97e65",
@@ -70,78 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:37:33-07:00",
           "message": "feat(apply): a request takes its turn; its two writes are one batch in the request arm, and the answered mark is an event (candybar-gather-renderer-76bb.1dh.1ql)\n\nThe request arm records what the client said (client-hints, render-origin)\nas one setBatch inside a journal turn and draws once the turn is over, so a\nrequest that arrives while a click's turn is held draws the click whole,\nnever its first write beside the request's hints. The turn waits behind\nturns alone: a click's head gather holds none. The click error's answered\nmark, the one other request-path write, is an `answered` event whose arm\ntakes a turn; the delivery edge applies it as the performer applies\neffect-done, with a refusal said in the log.\n\nThe render line gains renderer=main, factsSeq, turnWait and revision; the\nrequest's apply line stays null, since the render event is its one record.\nThe daemon's draw is a port on the request arm's parts, so the arm is\ndriven below the daemon. The daemon's adapters gain `sessionWrites`: the\nproduction daemon writes the store, every daemon built in a worker writes\nthrough the write-outside-turn instrument. A run's ending and a lane\nsetup's failure still write the store outside a turn (the next story).\n\nTests: test/request-turn.test.ts races a request against a click whose\ndoctor gathers inside its turn under a held clock, and against one parked\nin its head gather; apply-effects covers the answered mark's turn. The\nboot ratchet forbids a new in-worker case, so the race lives at the root\nover Apply and the real journal turns.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-626",
-      "ref": "refs/pull/626/merge",
-      "sha": "099284d9696926d68b8c088044fe27ec1140f56f",
-      "timestamp": "2026-11-06T06:47:30.704Z",
-      "commits": [
-        {
-          "sha": "099284d9696926d68b8c088044fe27ec1140f56f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T06:46:20Z",
-          "message": "Merge 5fa391d0046435b6f032e13e8a0be9fea6c142f9 into 1df488f24662b4c0e23f92afecd25c719debac6a\n"
-        },
-        {
-          "sha": "5fa391d0046435b6f032e13e8a0be9fea6c142f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:22:15-07:00",
-          "message": "fix(load-gate): a render the backstop answered first never settles a session, and the gate reads its stamped log in one place; the wait's comment and the held-clock memory line say what a wait with no time left does (candybar-gather-renderer-76bb.6pj.09c)\n"
-        },
-        {
-          "sha": "c6bdd4045c9c21b00b932ca921bcd402a8c908ec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:16:28-07:00",
-          "message": "fix(load-gate): a session settles on a render answered with time left and read by its client, read through the one logfmt reader; a failure's log window reaches the end of its round trip (candybar-gather-renderer-76bb.6pj.09c)\n\nA render set up past its deadline can now answer from held values, so answered alone no longer says the backlog drained. The memory line on the backstop states its guarantee only for a render held in a synchronous turn.\n"
-        },
-        {
-          "sha": "da54f19852dccb57b73a5821e222b766ae26f0a2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:10:02-07:00",
-          "message": "fix(wait): a wait with no time left ends once the microtask queue drains, so held values still answer and a failing wait still fails the render; the gate's settle names how unsettled renders ended and stops on a dead daemon (candybar-gather-renderer-76bb.6pj.09c)\n\nThe resume settle counts only renders logged after the collection ends, and a failure's longest silence is bounded by its window's edges, so a pause over the whole window no longer reads as zero. The backstop's and the render wait's comments say a render holding the loop past the backstop answers late in the turn it yields.\n"
-        },
-        {
-          "sha": "5bc9c318532d0b32caea1c3e4a15ebff66c0b951",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:47:20-07:00",
-          "message": "test(process): a render whose config read outlives the backstop answers its client in the turn the read ends; the memory line and the gate deadline comment say so (candybar-gather-renderer-76bb.6pj.09c)\n"
-        },
-        {
-          "sha": "75b749ff09079f3d6523bc5af63cf7453a4c15a6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T22:33:39-07:00",
-          "message": "fix(load-gate): the steady phase begins once the daemon has settled, a wait with no time left takes no loop turn, and a failed render names what the daemon's log shows over it (candybar-gather-renderer-76bb.6pj.09c)\n\nThe one failed render of run 42154313711 was not a GC pause: the daemon logged a line every 10-34 ms through the episode. It was a saturated loop while the speed lane was still landing for every session, 13 s into a steady phase that had begun before the daemon settled, and the failed request lost its last 54 ms to a 0 ms timer behind the poll phase. The gate now waits for every session's latest render to be answered inside its wait, at both points the steady phase must not inherit a backlog from; waitWithin with no time left aborts in the same turn; each steady failure carries the daemon's lines, longest silence and deadline draws over its round trip, and the facts carry the connect-to-wait spread.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "a38c437bf19653dbd6f983f06de25bc82f2d4a58",
-      "timestamp": "2026-11-06T06:31:30.459Z",
-      "commits": [
-        {
-          "sha": "a38c437bf19653dbd6f983f06de25bc82f2d4a58",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-05T23:30:29-07:00",
-          "message": "feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2) (#624)\n\n* feat(facts): a view follows its session through the Facts interface, with an in-process arm, a recording arm and the seam test (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): the recording arm stands where the clock does, the recorder tells the log a line it could not write, the owners are read once per follow, and the draw reads the turn's closure (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): a settle reads the lanes as declared now, a redeclaration is one turn, a cleared fault keeps its line, a recording is one follow's stream, one JSON-object predicate (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): a reopened session replays, a declaration that throws whole is loud, the seam test crosses the recording's text, the parser names the facts field (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): a declaration that throws whole at the opening follow releases the holds it took (candybar-gather-renderer-76bb.6pj.go2)\n\n* test(facts): the seam rig drops the env field main removed (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): the request's deadline is read after its refresh starts, one rule keeps a persisting fault (candybar-gather-renderer-76bb.6pj.go2)\n\n* test(facts): the seam rig builds its paths from the renderer's home (candybar-gather-renderer-76bb.6pj.go2)\n\n* fix(facts): a declaration that throws whole is answered on every lane, so the bar draws its warning (candybar-gather-renderer-76bb.6pj.go2)"
-        },
-        {
-          "sha": "5c5e716e41c8b9ccc7d36b48e3e1265315b579ba",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-06T06:19:42Z",
-          "message": "chore(release): set `package.json` to 1.195.0 [skip ci]\n\n## [1.195.0](https://github.com/promptctl/cc-candybar/compare/v1.194.1...v1.195.0) (2026-11-06)\n\n### Features\n\n* **home:** a renderer's home is one value; two renderers under two homes leave no trace of each other (candybar-gather-renderer-76bb.f00.dmd) ([#625](https://github.com/promptctl/cc-candybar/issues/625)) ([a6c6ada](https://github.com/promptctl/cc-candybar/commit/a6c6adadc4b92f19bca48e7fe1eb518acde6e893))\n"
         }
       ]
     },
