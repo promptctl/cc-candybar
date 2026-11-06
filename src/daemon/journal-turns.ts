@@ -16,10 +16,12 @@
 // `close` ends the turns for good: what is queued is refused as its turn
 // arrives, and what is in flight is committed there and then, so writes already
 // landed stay undoable as one step when the daemon's launches abort under them,
-// and goes no further than its next `landed`. A click's launches are bounded
-// (`clickLaunch`), so a turn comes back unless a child outlives SIGKILL, in
-// uninterruptible sleep: its launch never settles, and `getStats` shows the
-// holder's `heldMs` growing.
+// and goes no further than its next `landed`. A turn's one await is a gather in
+// it (a doctor's probes), whose launches are bounded, so a turn comes back
+// unless a child outlives SIGKILL, in uninterruptible sleep: its launch never
+// settles, and `getStats` shows the holder's `heldMs` growing. What a click
+// launches for its own sake is an effect, performed after its turn
+// (src/daemon/apply.ts), and holds no turn at all.
 
 import { elapsedMs, spanMs, type Monotonic } from "../time.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
@@ -68,11 +70,14 @@ export interface ClickAsker extends TurnAsker {
 
 const DAEMON_WIDE = "journals";
 const GATHERS = "gathers";
+// The order effects of clicks naming no session keep among themselves.
+const CLICKLESS = "clickless";
 
 export class JournalTurns {
   private readonly queue = new KeyedSerialQueue<typeof DAEMON_WIDE>();
   private readonly sessions = new KeyedSerialQueue<string>();
   private readonly gathers = new KeyedSerialQueue<typeof GATHERS>();
+  private readonly effects = new KeyedSerialQueue<string>();
   private open = true;
   private inFlight: InFlight | null = null;
   private holder: { readonly verb: string; readonly since: Monotonic } | null =
@@ -161,6 +166,17 @@ export class JournalTurns {
     } finally {
       this.gathersInFlight--;
     }
+  }
+
+  // [LAW:no-ambient-temporal-coupling] A session's effects run one at a time,
+  // in the order their turns committed, after them: a performer that reads
+  // before it acts (the pane read before a slash is typed) sees what the
+  // session's earlier effects left, as it did when a launch held the turn.
+  // The order is the performer's, not the turn's: the session's next click
+  // takes its turn while the last click's effects still run, and no close
+  // refuses it, since an outcome after close is said in the log.
+  performing<T>(session: string | null, work: () => Promise<T>): Promise<T> {
+    return this.effects.run(session ?? CLICKLESS, work);
   }
 
   getStats(): JournalTurnStats {

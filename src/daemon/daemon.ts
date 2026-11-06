@@ -375,8 +375,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const menuIdle = new MenuIdle({
     clock,
     now: instant,
-    close: (session, idle) =>
-      apply({ kind: "menu-idle", session, idle }, parts),
+    close: async (session, idle) => {
+      await apply({ kind: "menu-idle", session, idle }, parts);
+    },
     failed: (sessionId, error) =>
       log(
         error instanceof DaemonClosing ? "info" : "error",

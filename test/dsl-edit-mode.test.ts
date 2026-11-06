@@ -648,13 +648,13 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
   // under an ungated wrapper row (the door's), so the tail lands outside the
   // gate; edit mode needs `session.id`, which always brings the menu.
   test("`☐ live` under a gated root cannot hide the toggle that brings the names view back", async () => {
-    const { render, click, ctx } = buildEditRuntime(
+    const { render, click, sessionState } = buildEditRuntime(
       BASE.replace(
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ] },",
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
       ),
     );
-    ctx.sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const liveToggle = (rendered: Frame, to: string): string | undefined =>
       ownUrls(rendered).find((u) =>
         effectsOf(u).some(

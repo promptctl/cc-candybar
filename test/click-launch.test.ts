@@ -6,7 +6,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { HOST } from "./helpers/host";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { clickHandoff, clickLaunch } from "../src/daemon/verbs";
+import { clickLaunch } from "../src/daemon/apply";
+import { clickHandoff } from "../src/daemon/verbs";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { systemTimekeeper } from "../src/time";
 
@@ -128,19 +129,18 @@ describe("clickHandoff", () => {
 });
 
 describe("clickLaunch", () => {
-  test("a program that cannot start is a throw naming the spawn's own error", async () => {
-    await expect(
-      clickLaunch(
-        systemLauncher({ inherited: process.env }, systemTimekeeper),
-        {
-          bin: "/nonexistent/cc-candybar-no-such-opener",
-          args: ["https://example.com"],
-          category: "click.open",
-        },
-        "opening https://example.com",
-        () => {},
-      ),
-    ).rejects.toThrow(
+  test("a program that cannot start is a failed outcome naming the spawn's own error", async () => {
+    const outcome = await clickLaunch(
+      systemLauncher({ inherited: process.env }, systemTimekeeper),
+      {
+        bin: "/nonexistent/cc-candybar-no-such-opener",
+        args: ["https://example.com"],
+        category: "click.open",
+      },
+      "opening https://example.com",
+    );
+    expect(outcome.kind).toBe("failed");
+    expect(outcome.said).toMatch(
       /^opening https:\/\/example\.com failed \(.*ENOENT\)$/,
     );
   });

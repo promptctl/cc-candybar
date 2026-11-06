@@ -17,9 +17,12 @@ import {
   noManagedSettings,
 } from "./doctor-facts";
 import { clickOf } from "../../src/click/read";
-import { VERBS } from "../../src/daemon/verbs";
+import { apply, type ClickRefusal } from "../../src/daemon/apply";
+import { clickSessionOf, clickVerb } from "../../src/daemon/verbs";
+import { writesInTurn } from "./writes-in-turn";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
+import { describeEffect } from "../../src/daemon/effect";
 import type { VerbContext } from "../../src/daemon/verbs";
 import type { SessionStateRW } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
@@ -64,23 +67,39 @@ export function recordRender(
 // The history is ephemeral unless the caller hands one in: a test that is not
 // isolated from the real state dir must never write the daemon's history file
 // (test/helpers/durable-config.ts hands in one under its own temp root).
+// The turns are the context's own unless the caller holds them: the writes
+// the instrument below judges are held by whichever turns the click takes.
 export function testVerbContext(
   sessionState: SessionStateRW,
-  history: SettingsHistory = new SettingsHistory(sessionState, () => {}),
+  history?: SettingsHistory,
   config?: DslConfig,
   host: Host = HOST,
+  journalTurns: JournalTurns = new JournalTurns({
+    log: () => {},
+    monotonic: () => systemTimekeeper.monotonic(),
+  }),
 ): VerbContext {
+  // [LAW:nothing-unseen] Every write a click makes crosses the ordering
+  // instrument (test/helpers/writes-in-turn.ts): the context's store, and the
+  // history whose journal writes through it.
+  const inTurn = writesInTurn(sessionState, journalTurns);
   return {
     gates: bareGates(),
     stateDir: stateDir(host), locations: locations(host),
-    sessionState,
-    history,
+    sessionState: inTurn,
+    history: history ?? new SettingsHistory(inTurn, () => {}),
     navigation: new NavigationHistory(),
     asker: { placed: () => {}, gathered: () => {}, waited: () => {}, gone: () => false },
-    journalTurns: new JournalTurns({
-      log: () => {},
-      monotonic: () => systemTimekeeper.monotonic(),
-    }),
+    journalTurns,
+    // [LAW:no-silent-failure] A turn's effects go to the arm that ran it
+    // (`applyClick` below); a test that drives a describing verb around Apply
+    // would drop them, so reaching this one is a test bug.
+    described: (effects) => {
+      if (effects.length === 0) return;
+      throw new Error(
+        `described outside apply: ${effects.map((e) => describeEffect(e)).join(",")}`,
+      );
+    },
     clickLanded: () => {},
     log: () => {},
     launcher: unscriptedLauncher,
@@ -217,10 +236,66 @@ export { effectsOf, type DecodedEffect } from "../../src/click/read";
 // A rendered link as the daemon reads it; a test's links are always links.
 export const linkClick = clickOf;
 
-// Drive a rendered click URL through the real parse → dispatch path.
+// What a click's arm reads (src/daemon/apply.ts): the context handed in, its
+// log, and an idle clock nothing here arms.
+function clickParts(ctx: VerbContext) {
+  const {
+    arrival: _arrival,
+    asker: _asker,
+    described: _described,
+    ...verbCtx
+  } = ctx;
+  return {
+    verbCtx,
+    log: ctx.log,
+    menuIdle: { clickArrived: () => {}, clickSettled: () => {} },
+  };
+}
+
+// A rendered click URL through Apply, as the daemon runs it: answers once its
+// turn has committed, with the handle that settles when its effects have all
+// reported. A verb that refuses the click rejects here, as the daemon's reply
+// would say; `applyClickAnswered` hands the refusal back as the arm answers
+// it, beside the handle, for a test that reads what a refused click still
+// performed.
+export async function applyClick(
+  url: string,
+  ctx: VerbContext,
+): Promise<{ readonly performed: Promise<void> }> {
+  const { answer, performed } = await applyClickAnswered(url, ctx);
+  if (answer !== null) throw answer.error;
+  return { performed };
+}
+
+export async function applyClickAnswered(
+  url: string,
+  ctx: VerbContext,
+): Promise<{
+  readonly answer: ClickRefusal | null;
+  readonly performed: Promise<void>;
+}> {
+  const { verb: name, value } = linkClick(url);
+  const verb = clickVerb(name);
+  if (verb === null) throw new Error(`no handler for verb "${name}"`);
+  // The session the click names, read as the daemon's edge reads it
+  // (src/daemon/reply.ts handleClick).
+  const session = clickSessionOf(name, value);
+  return apply(
+    {
+      kind: "click",
+      verb,
+      value,
+      arrival: ctx.arrival,
+      pending: session?.ok ? session.id : null,
+      asker: ctx.asker,
+    },
+    clickParts(ctx),
+  );
+}
+
+// Drive a rendered click URL through the real path, effects and all: resolves
+// once the click has answered and every effect it described has reported.
 export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
-  const { verb, value } = linkClick(url);
-  const handler = VERBS.get(verb);
-  if (!handler) throw new Error(`no handler for verb "${verb}"`);
-  await handler(value, ctx);
+  const { performed } = await applyClick(url, ctx);
+  await performed;
 }
