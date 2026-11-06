@@ -76889,7 +76889,7 @@ function sessionRecorder(views, log) {
   const open2 = /* @__PURE__ */ new Map();
   let closed = false;
   const detach = (rec) => {
-    for (const watch2 of rec.watching) watch2.dispose();
+    for (const dispose of rec.watching) dispose();
     rec.watching.clear();
   };
   const end = (sessionId2, rec, how) => {
@@ -76914,27 +76914,28 @@ function sessionRecorder(views, log) {
       end(sessionId2, rec, { kind: "failed", error: e });
     }
   };
+  const writeTurn = (sessionId2, rec, view) => {
+    const held = view.source.held();
+    if (rec.turn?.view === view && rec.turn.held === held) return;
+    rec.turn = { view, held };
+    write(sessionId2, rec, { kind: "turn", held, ...view.source.turn() });
+  };
   const attach = (sessionId2, rec) => {
     const view = views.sessionView(sessionId2);
     if (view === null) return;
-    const watch2 = (read2, lineOf) => {
+    const watch2 = (read2, effect) => {
       if (!open2.get(sessionId2)?.has(rec)) return;
-      reaction(
-        read2,
-        (value, _prior, self2) => {
-          rec.watching.add(self2);
-          write(sessionId2, rec, lineOf(value));
-        },
-        { fireImmediately: true }
-      );
+      const dispose = reaction(read2, effect, { fireImmediately: true });
+      if (open2.get(sessionId2)?.has(rec)) rec.watching.add(dispose);
+      else dispose();
     };
     watch2(
       () => view.source.held(),
-      (held) => ({ kind: "turn", held, ...view.source.turn() })
+      () => writeTurn(sessionId2, rec, view)
     );
     watch2(
       () => view.followed.stamped(),
-      (line) => ({ kind: "facts", ...line })
+      (line) => write(sessionId2, rec, { kind: "facts", ...line })
     );
   };
   return {
@@ -76952,7 +76953,8 @@ function sessionRecorder(views, log) {
         sink,
         watching: /* @__PURE__ */ new Set(),
         document: null,
-        declaration: null
+        declaration: null,
+        turn: null
       };
       const recs = open2.get(session) ?? /* @__PURE__ */ new Set();
       open2.set(session, recs.add(rec));
@@ -76978,22 +76980,35 @@ function sessionRecorder(views, log) {
       }
       return { at: line.at, noted };
     },
-    // [LAW:one-source-of-truth] A replay draws from the last document and the
-    // last declaration before the draw line, so those are the ones the draw
-    // read: each offered again here, and written when it is not the last this
-    // recording wrote, as a request's held view the session moved away from
-    // has, the current view at the draw after that, and a follow that stamped
-    // past a held turn's document.
-    drew(sessionId2, { at: request2, noted }, { document, declaration, state, diagnostics }) {
+    // [LAW:one-source-of-truth] A replay draws from the last turn, the last
+    // document and the last declaration before the draw line, so those are
+    // the ones the draw read: each offered again here, and written when it is
+    // not the last this recording wrote. The view a request holds can be one
+    // the session moved away from during its wait, with a hold of its own, so
+    // its turn goes before the draw and the current view's after it: the
+    // lines that follow are the current view's. A follow that stamped past a
+    // held turn's document writes that document again too.
+    drew(sessionId2, { at: request2, noted }, { view, state, diagnostics }) {
+      const current = views.sessionView(sessionId2);
       for (const rec of open2.get(sessionId2) ?? []) {
         if (!noted.has(rec)) continue;
-        const lines2 = [
-          { kind: "facts", ...document },
-          { kind: "declared", request: declaration },
-          { kind: "draw", request: request2, state, diagnostics }
+        const writes = [
+          () => writeTurn(sessionId2, rec, view),
+          () => write(sessionId2, rec, {
+            kind: "facts",
+            ...view.followed.stamped()
+          }),
+          () => write(sessionId2, rec, { kind: "declared", request: view.facts() }),
+          () => write(sessionId2, rec, {
+            kind: "draw",
+            request: request2,
+            state,
+            diagnostics
+          }),
+          ...current === null ? [] : [() => writeTurn(sessionId2, rec, current)]
         ];
-        for (const line of lines2) {
-          if (open2.get(sessionId2)?.has(rec)) write(sessionId2, rec, line);
+        for (const next of writes) {
+          if (open2.get(sessionId2)?.has(rec)) next();
         }
       }
     },
@@ -77035,8 +77050,7 @@ function settleRequest(recorder, view, at) {
 function drawRequest(recorder, view, arrival, draw2) {
   const drawn = draw2();
   recorder.drew(view.sessionId, arrival, {
-    document: view.followed.stamped(),
-    declaration: view.facts(),
+    view,
     state: { ...view.source.state(), idleSince: drawn.idleSince },
     diagnostics: drawn.diagnostics
   });
@@ -77363,12 +77377,13 @@ function drawRender(parts, setup, drawing2) {
     ...launched,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }],
-    // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
-    // drawn from the last one that was, so the bar says it is behind.
+    // [LAW:no-silent-failure] A turn that could not be taken, or taken over a
+    // document that could not be stamped, leaves the bar drawn from older
+    // facts, so the bar says it is behind and why.
     ...failure === null ? [] : [
       {
         kind: "facts",
-        message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure}`
+        message: failure.cause === "inputs" ? `the bar is held on the last turn taken: ${failure.reason}` : `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure.reason}`
       }
     ]
   ];
@@ -83870,7 +83885,7 @@ function sessionSource(deps) {
       held: () => turn.get().failure?.cause === "inputs",
       home: () => turn.get().compose.home,
       hints: () => turn.get().compose.hints,
-      failure: () => turn.get().failure?.reason ?? null,
+      failure: () => turn.get().failure,
       selections: () => turn.get().draw.effective,
       state: () => ({
         values: deps.sessionState.values(sessionId2),
