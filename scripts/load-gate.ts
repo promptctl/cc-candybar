@@ -24,6 +24,15 @@
 //
 // Run: pnpm build && pnpm load-gate [--sessions N] [--seconds S]
 //
+// A climb that fails is read, not guessed at: `--heap-snapshots DIR` has the
+// daemon write its heap at each of the two collections (before and after the
+// steady phase), and `node scripts/heap-analyze.mjs before after` names what
+// grew. Each snapshot pauses the daemon for as long as its heap takes to
+// write, so the renders around it are not a measurement; its buffers stay
+// charged to the daemon from then on, so the charge checks are not one
+// either, and the daemon runs under a raised memory backstop so they do not
+// end the run. The heap checks are the run's verdict.
+//
 // The feed measurement (the frame-feed epic's criterion): the same world with
 // a moving bar and its statusline lane on, measured without a feed (`off`,
 // the baseline) and with one session's feed open (`on`), both at 1 Hz:
@@ -49,7 +58,12 @@ import { DISCLOSURE_CLOSED } from "../src/config/disclosure.js";
 import { tryClickViaDaemon, tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
 import type { FailureOutcome } from "../src/daemon/client-transport.js";
-import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
+import {
+  DEFAULT_RSS_LIMIT_MB,
+  mb,
+  memoryLimitBytes,
+  RSS_LIMIT_ENV,
+} from "../src/daemon/limits.js";
 import { logLines } from "../src/daemon/log.js";
 import { logPath } from "../src/daemon/paths.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
@@ -62,6 +76,7 @@ import type { StatsSnapshot } from "../src/daemon/stats.js";
 import { clickOf } from "../src/click/read.js";
 import { sourceDigest } from "../src/source-digest.js";
 import type { ClaudeHookData } from "../src/utils/claude.js";
+import { heapSnapshot, heapSnapshotArgs } from "./lib/heap-snapshot.js";
 import { percentile } from "./lib/percentile.js";
 import { sessionEnv } from "./lib/session-env.js";
 import { transcriptPath, transcriptTurn } from "./lib/transcript.js";
@@ -84,6 +99,7 @@ const { values } = parseArgs({
     "period-ms": { type: "string", default: "1600" },
     feed: { type: "string" },
     baseline: { type: "string" },
+    "heap-snapshots": { type: "string" },
   },
 });
 const SESSIONS = Number(values.sessions);
@@ -111,6 +127,15 @@ const FEED: FeedWorld =
       : (() => {
           throw new Error(`--feed is off or on: ${values.feed}`);
         })();
+// Where the daemon writes its heap at each collection, or nowhere: the gate
+// as CI runs it.
+const HEAP_SNAPSHOTS: string | null =
+  values["heap-snapshots"] === undefined
+    ? null
+    : path.resolve(values["heap-snapshots"]);
+if (HEAP_SNAPSHOTS !== null) fs.mkdirSync(HEAP_SNAPSHOTS, { recursive: true });
+// How long the daemon is given to write a snapshot of a heap this size.
+const SNAPSHOT_WAIT_MS = 120_000;
 // How long the feed runs before the steady phase, so its first frames (the
 // lane's setup) are not scored.
 const FEED_SETTLE_MS = 3000;
@@ -386,6 +411,11 @@ const env: NodeJS.ProcessEnv = {
   CC_CANDYBAR_REGISTRY_URL: "http://127.0.0.1:1",
   // The daemon ends with the gate, however the gate ends.
   [PARENT_PID_ENV]: String(process.pid),
+  // A snapshot's buffers are charged to the daemon from the moment it writes,
+  // about its heap again, and its backstop would end the run on them.
+  ...(HEAP_SNAPSHOTS === null
+    ? {}
+    : { [RSS_LIMIT_ENV]: String(4 * DEFAULT_RSS_LIMIT_MB) }),
 };
 // The client half of the gate reaches the daemon through the host it is handed:
 // the daemon's own environment, its socket included.
@@ -397,12 +427,23 @@ const host = { env, home: dirs.home, tmp: world.host.tmp };
 const wire = { host, clock: world.clock };
 
 // The daemon as the client spawns it, plus an inspector on a loopback port:
-// the one way to read its live heap is to collect it first.
+// the one way to read its live heap is to collect it first. Asked for
+// snapshots, it writes them itself on the signal.
 const daemon = spawn(
   process.execPath,
-  ["--inspect=127.0.0.1:0", ...daemonArgs(BUNDLE, env)],
+  [
+    "--inspect=127.0.0.1:0",
+    ...(HEAP_SNAPSHOTS === null ? [] : heapSnapshotArgs(HEAP_SNAPSHOTS)),
+    ...daemonArgs(BUNDLE, env),
+  ],
   { env, stdio: ["ignore", "ignore", "pipe"] },
 );
+// [LAW:dataflow-not-control-flow] The snapshot taken at a collection: its path,
+// or none when the gate was not asked for any.
+const snapshotAt = (): Promise<string | null> =>
+  HEAP_SNAPSHOTS === null
+    ? Promise.resolve(null)
+    : heapSnapshot(daemon.pid!, HEAP_SNAPSHOTS, SNAPSHOT_WAIT_MS);
 const inspectorUrl = new Promise<string>((resolve) => {
   // The banner, until its URL is read; nothing after it is kept.
   let banner: string | null = "";
@@ -768,6 +809,7 @@ async function run(): Promise<{
   await warmMenu(sessions[0]!);
   // Before the steady phase, so no scored render waits on the collection.
   const heapBefore = await liveHeap();
+  const snapshotBefore = await snapshotAt();
   // [LAW:no-ambient-temporal-coupling] The sessions tick on through the
   // collection, and the daemon drains what they queued once it ends, so a
   // render asked right after would wait behind that backlog and run out its
@@ -829,6 +871,7 @@ async function run(): Promise<{
   enter("after");
   await Promise.all(inFlight);
   const heapAfter = await liveHeap();
+  const snapshotAfter = await snapshotAt();
   stopSessions();
   await Promise.all(inFlight);
   // The first and last samples each follow a collection.
@@ -1049,6 +1092,8 @@ async function run(): Promise<{
       chargeAfterCollection === null ? null : mb(chargeAfterCollection),
     limitMb: mb(limit),
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
+    // The heap at each collection, and the snapshot written there when asked.
+    heapSnapshots: { before: snapshotBefore, after: snapshotAfter },
     heapUsedMb: samples.map((s) => mb(s.stats.heapUsedBytes)),
     heapTotalMb: samples.map((s) => mb(s.stats.heapTotalBytes)),
     // How long each steady render was queued in the daemon before it began,

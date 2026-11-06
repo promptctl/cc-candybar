@@ -42,6 +42,7 @@ import { parseArgs } from "node:util";
 
 import { startWorld, type Session } from "./bench/world.js";
 import { sleep } from "./bench/measure.js";
+import { heapSnapshot, heapSnapshotArgs } from "./lib/heap-snapshot.js";
 
 const { values } = parseArgs({
   options: {
@@ -101,22 +102,9 @@ function footprint(pid: number): { physFootprintMb: number; table: string } {
   return { physFootprintMb: Number(m[1]) * unit, table };
 }
 
-function endsWithBrace(file: string, size: number): boolean {
-  const fd = fs.openSync(file, "r");
-  try {
-    const tail = Buffer.alloc(Math.min(size, 16));
-    fs.readSync(fd, tail, 0, tail.length, size - tail.length);
-    return tail.toString("utf8").trimEnd().endsWith("}");
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
 const world = await startWorld(
   values.config === undefined ? "{}\n" : fs.readFileSync(values.config, "utf8"),
-  {
-    NODE_OPTIONS: `--heapsnapshot-signal=SIGUSR2 --diagnostic-dir=${OUT}`,
-  },
+  { NODE_OPTIONS: heapSnapshotArgs(OUT).join(" ") },
 );
 try {
   const pid = (await world.stats()).pid;
@@ -150,34 +138,7 @@ try {
     await read(stage);
   }
 
-  process.kill(pid, "SIGUSR2");
-  const deadline = Date.now() + SNAPSHOT_WAIT_MS;
-  // V8 streams the file under its final name, so a file is whole when its
-  // size has stopped moving and it ends with the JSON's closing brace.
-  let snapshot: string | undefined;
-  let lastSize = -1;
-  while (snapshot === undefined) {
-    // Named for the pid that wrote it: the daemon's snapshot, whatever else
-    // the world runs.
-    const found = fs
-      .readdirSync(OUT)
-      .find((f) => f.endsWith(".heapsnapshot") && f.includes(`.${pid}.`));
-    const size = found === undefined ? -1 : fs.statSync(path.join(OUT, found)).size;
-    if (
-      found !== undefined &&
-      size > 0 &&
-      size === lastSize &&
-      endsWithBrace(path.join(OUT, found), size)
-    ) {
-      snapshot = path.join(OUT, found);
-    } else {
-      lastSize = size;
-      if (Date.now() > deadline) {
-        throw new Error(`no whole snapshot in ${OUT} after ${SNAPSHOT_WAIT_MS} ms`);
-      }
-      await sleep(2000);
-    }
-  }
+  const snapshot = await heapSnapshot(pid, OUT, SNAPSHOT_WAIT_MS);
   // V8 collects before it snapshots, so the heap read now is what is live.
   const after = await world.stats();
   const final = {

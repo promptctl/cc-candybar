@@ -30,6 +30,7 @@ import { statStamp } from "./transcript-fs";
 import { quietLogger, type DaemonLogger } from "./logger";
 import { pendingOf, type FailedAt, type Pending } from "./outcome";
 import { ObservableLru } from "./observable-lru";
+import { SingleFlight } from "./single-flight";
 import { valueOf } from "./logfmt";
 import type { Refreshes } from "./refresh-ledger";
 import { elapsedMs, type Timekeeper } from "../time";
@@ -62,6 +63,15 @@ export class TranscriptFold<S> {
   // instance per projection per daemon. Observable, so a view's payload over
   // an answer is recomputed in the turn the answer is stored.
   private readonly sessions: ObservableLru<string, Session<S>>;
+  // [LAW:one-source-of-truth] One fold in flight per session: a request whose
+  // stamp misses while the session's fold is still out joins that fold rather
+  // than starting another over the same bytes, as the usage store's request
+  // refresh does. The read gate bounds how many windows read at once, not how
+  // many folds are asked for, and a cold fold takes a gate slot once per
+  // window; with one fold per request, a population of cold sessions asks for
+  // folds faster than any can finish its windows, no fold lands, the fast path
+  // never engages, and every request keeps its refresh alive in the queue.
+  private readonly flight = new SingleFlight();
 
   constructor(
     private readonly empty: S,
@@ -98,7 +108,18 @@ export class TranscriptFold<S> {
       }
       return this.store(sessionId, folded, { kind: "ok", value: folded.value });
     }
+    return this.flight.run(sessionId, () =>
+      this.fold(sessionId, transcriptPath, prior),
+    );
+  }
 
+  // The session's one fold of what was appended since `prior`, and the store
+  // of what it answered.
+  private async fold(
+    sessionId: string,
+    transcriptPath: string,
+    prior: Folded<S> | undefined,
+  ): Promise<FoldOutcome<S>> {
     const startedAt = this.clock.monotonic();
     const read = await foldAppended(
       transcriptPath,
