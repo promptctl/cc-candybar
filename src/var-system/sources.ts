@@ -44,10 +44,6 @@ import {
 import type { SourceParse } from "./parse.js";
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
-
-// What a registry reads of the session store: a `state` variable's value, and
-// the revision its frames are drawn against.
-type StateReads = Pick<SessionStateReader, "get" | "revision">;
 import { Holds } from "../utils/holds.js";
 import { timeoutSignal } from "../time";
 import {
@@ -60,6 +56,10 @@ import {
   type SourceRead,
   type SourceRuns,
 } from "./source-runs.js";
+
+// What a registry reads of the session store: a `state` variable's value, and
+// the revision its frames are drawn against.
+type StateReads = Pick<SessionStateReader, "get" | "revision">;
 
 export { SHELL_READ_TIMEOUT_MS, type ReadMode } from "./source-runs.js";
 

@@ -47,6 +47,7 @@ import {
 } from "../daemon/render-payload.js";
 import { sessionSource, type SessionSource } from "../daemon/session-source.js";
 import { SessionState } from "../daemon/session-state.js";
+import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
 import { drawDsl } from "../dsl/render.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { World } from "../host.js";
@@ -174,13 +175,22 @@ export function readRecording(path: string): Recording {
 export const NEVER_CLICKED: DrawState = {
   values: {},
   revision: 0,
-  history: { undo: 0, redo: 0, sinceEdit: 0 },
+  history: EMPTY_HISTORY_DEPTH,
   back: 0,
   idleSince: undefined,
 };
 
 // The histories' depths a replay's turn reads, beside its store.
 export type Depths = Pick<DrawState, "history" | "back">;
+
+function sameDepths(a: Depths, b: Depths): boolean {
+  return (
+    a.back === b.back &&
+    a.history.undo === b.history.undo &&
+    a.history.redo === b.history.redo &&
+    a.history.sinceEdit === b.history.sinceEdit
+  );
+}
 
 // [LAW:single-enforcer] A draw's recorded state made the replay's, in one
 // action, so its turn and its `state` variables move together before it
@@ -194,7 +204,7 @@ export function restoreDraw(
 ): void {
   runInAction(() => {
     sessionState.restore(sessionId, state.values, state.revision);
-    depths.set(state);
+    depths.set({ history: state.history, back: state.back });
   });
 }
 
@@ -344,8 +354,12 @@ export async function playDemo({
   // Each request's instant, by its offset: what its answer is drawn at.
   const arrived = new Map<number, Instant>();
   // [LAW:one-source-of-truth] The depths of the draw being drawn, set with the
-  // store by each draw's restore.
-  const depths = observable.box<Depths>(NEVER_CLICKED, { deep: false });
+  // store by each draw's restore. Compared by value, so a draw whose depths
+  // held moves nothing the turn reads, as the daemon's depths do not.
+  const depths = observable.box<Depths>(NEVER_CLICKED, {
+    deep: false,
+    equals: sameDepths,
+  });
   // The session's view of the state, as the daemon opens one per session,
   // declared with the request the first frame draws by.
   const view = openView(state, cwd, opening.request, {

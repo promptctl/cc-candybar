@@ -165,6 +165,43 @@ test("a draw whose state is missing or malformed is refused by its line, naming 
   ).toThrow(/^line 4: has no finite `state.idleSince`/);
 });
 
+test("a draw's state the store could not have held is refused by its line", () => {
+  // The store is at revision 0 exactly while it holds nothing for the
+  // session, and one revision is one state.
+  expect(() =>
+    parseRecording(
+      text(
+        header,
+        facts(0, 1),
+        requested(1),
+        drawn(1, { ...STATE, revision: 0 }),
+      ),
+    ),
+  ).toThrow(/^line 4: has `state.revision` 0 over 2 values/);
+  expect(() =>
+    parseRecording(
+      text(
+        header,
+        facts(0, 1),
+        requested(1),
+        drawn(1, { ...STATE, values: {} }),
+      ),
+    ),
+  ).toThrow(/^line 4: has `state.revision` 7 over 0 values/);
+  expect(() =>
+    parseRecording(
+      text(
+        header,
+        facts(0, 1),
+        requested(1),
+        drawn(1),
+        requested(2),
+        drawn(2, { ...STATE, values: { preset: "dracula" } }),
+      ),
+    ),
+  ).toThrow(/^line 6: reads revision 7 over other values/);
+});
+
 test("a line that is not JSON, or not a line, is refused by its number", () => {
   const good = text(header, facts(0, 1));
   expect(() => parseRecording(`${good}{not json\n`)).toThrow(

@@ -219,6 +219,16 @@ function parseCount(json: unknown, where: string, field: string): number {
   return json;
 }
 
+function sameValues(
+  a: Readonly<Record<string, string>>,
+  b: Readonly<Record<string, string>>,
+): boolean {
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k])
+  );
+}
+
 // A draw's state as the recorder wrote it: an idle period that had not begun
 // is `null` in the file, the one spelling JSON has for it.
 function parseDrawState(json: unknown, where: string): DrawState {
@@ -235,9 +245,19 @@ function parseDrawState(json: unknown, where: string): DrawState {
   if (!isPlainObject(history)) {
     throw new FactParseError(where, "has no `state.history` object");
   }
+  const revision = parseCount(json.revision, where, "state.revision");
+  // [LAW:parse-dont-validate] The store reads revision 0 exactly while it
+  // holds nothing for the session, so a state that says otherwise was never
+  // one it held.
+  if ((revision === 0) !== (Object.keys(values).length === 0)) {
+    throw new FactParseError(
+      where,
+      `has \`state.revision\` ${revision} over ${Object.keys(values).length} values: the store is at revision 0 exactly while it holds none`,
+    );
+  }
   return {
     values: values as Record<string, string>,
-    revision: parseCount(json.revision, where, "state.revision"),
+    revision,
     history: {
       undo: parseCount(history.undo, where, "state.history.undo"),
       redo: parseCount(history.redo, where, "state.history.redo"),
@@ -350,6 +370,10 @@ export function parseRecording(text: string): Recording {
   // The requests not yet drawn, by instant: requests can share one.
   const undrawn = new Map<Instant, number>();
   let draws = 0;
+  // [LAW:parse-dont-validate] The values each revision a draw read held:
+  // one revision is one state (SessionStateReader), which the replay's
+  // restore keeps to, so a revision noted again over other values is refused.
+  const held = new Map<number, Readonly<Record<string, string>>>();
   for (const [i, row] of body.entries()) {
     const where = `line ${i + 2}`;
     const json = objectOf(row, where);
@@ -387,7 +411,16 @@ export function parseRecording(text: string): Recording {
       }
       undrawn.set(request, waiting - 1);
       draws++;
-      lines.push({ kind, request, state: parseDrawState(json.state, where) });
+      const state = parseDrawState(json.state, where);
+      const before = held.get(state.revision) ?? state.values;
+      if (!sameValues(before, state.values)) {
+        throw new FactParseError(
+          where,
+          `reads revision ${state.revision} over other values than a draw before it read there`,
+        );
+      }
+      held.set(state.revision, state.values);
+      lines.push({ kind, request, state });
       continue;
     }
     if (kind !== "facts") {
