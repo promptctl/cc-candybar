@@ -215,7 +215,7 @@ All paths are relative to `/Users/bmf/code/cc-candybar/.claude/worktrees/synthet
 
 **Recommendation: one path.**
 - The page never opens a link. It sends a link id.
-- The daemon resolves that id against the frame it last drew for that surface, as `tmuxStatusLines.linkAt` and `rangeOf` do. A stale click finds nothing.
+- The daemon resolves that id against the frame it last drew for that surface, as `tmuxStatusLines.linkAt` does. A stale click finds nothing.
 - `cc-candybar://` goes to `handleClick`. Anything else goes to `clickLaunch` with `/usr/bin/open`, as in `statusLineClick`.
 - This also keeps signed URLs out of the page.
 - Add `via: "browser"` to `ClickArrival` (`src/doctor/sightings.ts`), and to the `VERB_FACT` table in `src/daemon/server.ts`. Do not route through `replyTo`'s click path unchanged: `clickOutcome` stamps `via: "link"`, which would tell the doctor a URL-handler or terminal link worked when it never ran.

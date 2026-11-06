@@ -6,8 +6,9 @@
 // binding matches on (`#{m:ccb*,#{mouse_status_range}}`).
 export const RANGE_PREFIX = "ccb";
 
-// The links a session's status line keeps ids for: enough for every link a row
-// draws, so a row tmux has not refreshed yet still resolves.
+// The links a session's status line keeps ids for beyond the frame it draws:
+// a link that leaves the row and comes back within this many others keeps its
+// id. A click resolves against the frame the row last drew, never this table.
 export const LINK_IDS_PER_SURFACE = 256;
 
 // [LAW:effects-at-boundaries] What a table mints through: the home's counter,
@@ -22,10 +23,11 @@ export interface LinkIdSource {
 
 // [LAW:one-source-of-truth] One session's status line's ids, keyed by the
 // link's content, so a re-draw of a link reuses its id and an animating row
-// mints nothing. An LRU: a hit moves the link to the newest end, and the
-// least recently drawn goes once the table is over its cap. An evicted id
-// finds nothing, as any stale one does, because the counter never issues it
-// again.
+// mints nothing. An LRU: a hit moves the link to the newest end, and once a
+// frame is drawn the least recently drawn go while the table is over its cap.
+// A link the frame drew is never one of them, so a row of more links than the
+// cap keeps every id it draws. An evicted id finds nothing, as any stale one
+// does, because the counter never issues it again.
 export class LinkIds {
   private readonly ranges = new Map<string, string>();
 
@@ -34,9 +36,26 @@ export class LinkIds {
     private readonly cap: number = LINK_IDS_PER_SURFACE,
   ) {}
 
+  // [LAW:no-ambient-temporal-coupling] One frame drawn through the table:
+  // `draw` names each link's range with `rangeOf`, and eviction waits until
+  // the frame is drawn, so it never takes a link the frame holds.
+  frame<T>(draw: (rangeOf: (url: string) => string | null) => T): T {
+    const drawn = new Set<string>();
+    const drawnAs = draw((url) => {
+      drawn.add(url);
+      return this.rangeOf(url);
+    });
+    for (const oldest of this.ranges.keys()) {
+      if (this.ranges.size <= this.cap || drawn.has(oldest)) break;
+      this.ranges.delete(oldest);
+      this.source.evicted();
+    }
+    return drawnAs;
+  }
+
   // The range id `url` is drawn under, or null while the counter can issue
   // none.
-  rangeOf(url: string): string | null {
+  private rangeOf(url: string): string | null {
     const held = this.ranges.get(url);
     if (held !== undefined) {
       this.ranges.delete(url);
@@ -48,11 +67,6 @@ export class LinkIds {
     if (id === null) return null;
     const range = RANGE_PREFIX + id.toString(36);
     this.ranges.set(url, range);
-    for (const oldest of this.ranges.keys()) {
-      if (this.ranges.size <= this.cap) break;
-      this.ranges.delete(oldest);
-      this.source.evicted();
-    }
     return range;
   }
 }

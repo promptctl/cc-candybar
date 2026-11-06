@@ -121,12 +121,15 @@ function directive({ fg, bg, attrs = [] }: Run): string {
 
 // A linked run is a range whose id names its link, from the session's table
 // (src/tmux-status/link-ids.ts).
-function encode(frame: Frame, ids: LinkIds): TmuxStatusBar {
+function encode(
+  frame: Frame,
+  rangeOf: (url: string) => string | null,
+): TmuxStatusBar {
   const links: Record<string, string> = {};
   const drawn = (run: Run): string => {
     const text = directive(run) + escaped(run.text);
     if (run.link === undefined) return text;
-    const range = ids.rangeOf(run.link);
+    const range = rangeOf(run.link);
     // [LAW:no-silent-failure] No id while the counter is faulted: the run is
     // drawn without a range, so the row goes on drawing, and every bar's ⚠
     // says why its links do not click.
@@ -140,5 +143,7 @@ function encode(frame: Frame, ids: LinkIds): TmuxStatusBar {
 
 // One drawn bar as the rows a status line draws, its ranges named by `ids`.
 export function tmuxStatusFrame(frame: Frame, ids: LinkIds): TmuxStatusBar {
-  return laneEncoded((drawn) => encode(drawn, ids), frame);
+  return ids.frame((rangeOf) =>
+    laneEncoded((drawn) => encode(drawn, rangeOf), frame),
+  );
 }
