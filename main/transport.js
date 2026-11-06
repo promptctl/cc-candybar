@@ -22754,8 +22754,8 @@ var ADDRESS = `${LINK_TO}/`;
 var VERB_DISPATCH = "dispatch";
 var VERB_SET_STATE = "set-state";
 var VERB_STEP_STATE = "step-state";
-var VERB_COPY = "copy";
-var VERB_OPEN_VSCODE = "open-vscode";
+var VERB_COPY = "copy-text";
+var VERB_OPEN_VSCODE = "open-in-vscode";
 var VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
 var VERB_SET_CONFIG = "set-config";
 var VERB_STEP_CONFIG = "step-config";
@@ -22805,8 +22805,8 @@ var SAYS = {
     (key, i) => i % 2 === 0 ? [sayWrite(key, pairs2[i + 1])] : []
   ),
   [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key, by)],
-  [VERB_COPY]: ([text4]) => [`copy ${saidCopy(text4)}`],
-  [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
+  [VERB_COPY]: ([, text4]) => [`copy ${saidCopy(text4)}`],
+  [VERB_OPEN_VSCODE]: ([, target]) => [`open ${target} in vs code`],
   [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
   [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
   [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key, by)}`],
@@ -63385,7 +63385,7 @@ var RAW_DEFAULT_DSL_CONFIG = {
   // `oneArg` owns the single matching decode — so the template never hand-rolls
   // a `urlEncode`, and the path round-trips untouched through one codec.
   //
-  // open* route through the open-vscode verb (`open -a "Visual Studio Code"
+  // open* route through the open-in-vscode verb (`open -a "Visual Studio Code"
   // <path>`), so they pass a bare filesystem path — a directory or a file the
   // editor opens directly — NOT a `vscode://` URL (which `open -a` would treat
   // as a literal filename, not a deep link).
@@ -70787,6 +70787,15 @@ function requireSessionId(value) {
 function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
+function sessionArg(value) {
+  const parts = decodeWire(() => decodeSegments(value));
+  if (parts.length !== 2)
+    throw new BadVerbArgs(
+      `expected a session and one argument, got ${parts.length} segments`
+    );
+  requireSessionId(parts[0]);
+  return parts[1];
+}
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
 function clickFailed(r, what, log) {
   if (r.reason === "rate-limited") {
@@ -70871,7 +70880,7 @@ function launch(ctx, spec, what) {
   ctx.effect({ kind: "launch", spec, what });
 }
 var copy = (value, ctx) => {
-  pbcopy(oneArg(value), ctx);
+  pbcopy(sessionArg(value), ctx);
 };
 var DRAWERS = /* @__PURE__ */ new Set([
   "request",
@@ -70899,7 +70908,7 @@ var openVscode = (value, ctx) => {
     ctx,
     {
       bin: "/usr/bin/open",
-      args: ["-a", "Visual Studio Code", oneArg(value)],
+      args: ["-a", "Visual Studio Code", sessionArg(value)],
       category: "click.open"
     },
     'open -a "Visual Studio Code"'
@@ -71816,6 +71825,7 @@ var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_REPO_CONFIG, repoConfig],
   [VERB_COPY_DIAGNOSTIC, copyDiagnostic]
 ]);
+var LEAF_VERB_NAMES = new Set(LEAF_VERBS.keys());
 var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
   VERB_SET_STATE,
   VERB_STEP_STATE,
@@ -71834,32 +71844,9 @@ var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
-  VERB_COPY_DIAGNOSTIC
-]);
-var SESSION_FIRST_VERBS = /* @__PURE__ */ new Set([
-  VERB_SET_STATE,
-  VERB_STEP_STATE,
-  VERB_SET_CONFIG,
-  VERB_STEP_CONFIG,
-  VERB_RESET_CONFIG,
-  VERB_SAVE,
-  VERB_SAVE_PRESET,
-  VERB_SAVE_THEME_DEFAULT,
-  VERB_DELETE_PRESET,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_UNDO,
-  VERB_REDO,
-  VERB_BACK,
-  VERB_REWIND,
-  VERB_TOOLBAR_TOGGLE,
-  VERB_APPLY_UPDATE,
-  VERB_DOCTOR_RUN,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
-  VERB_SLASH,
-  VERB_RUN,
-  VERB_REPO_CONFIG,
-  VERB_COPY_DIAGNOSTIC
+  VERB_COPY_DIAGNOSTIC,
+  VERB_COPY,
+  VERB_OPEN_VSCODE
 ]);
 function clickSessionOf(verb, value) {
   return sessionOfEffects(
@@ -71867,7 +71854,7 @@ function clickSessionOf(verb, value) {
   );
 }
 function sessionOfEffects(effects) {
-  const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
+  const bearing = effects.find((e) => LEAF_VERB_NAMES.has(e.verb));
   const sid = bearing === void 0 ? "" : decodeWire(() => decodeFirstSegment(bearing.value));
   return sid === "" ? null : parseSessionId(sid);
 }
@@ -72044,12 +72031,23 @@ function drawnClickOf(url) {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
   const { verb, value } = link;
+  const known = verb === VERB_DISPATCH ? LEAF_VERB_NAMES : VERBS;
   try {
-    const effects = verb === VERB_DISPATCH ? parseEffects(value).map((e) => ({
-      verb: e.verb,
-      args: decodeArgs(e.verb, e.value)
-    })) : [{ verb, args: decodeArgs(verb, value) }];
-    return { ok: true, effects };
+    const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+    const unknown = raw.find((e) => !known.has(e.verb));
+    if (unknown !== void 0) {
+      return {
+        ok: false,
+        problem: `the daemon has no verb "${unknown.verb}": ${url}`
+      };
+    }
+    return {
+      ok: true,
+      effects: raw.map((e) => ({
+        verb: e.verb,
+        args: decodeArgs(e.verb, e.value)
+      }))
+    };
   } catch (error) {
     return {
       ok: false,
@@ -73181,7 +73179,7 @@ function realize(c, display, boundValue, store2, sessionId2, signer) {
         effects: [
           {
             verb: VERB_COPY,
-            args: [evalTemplate(c.text, buildScope(store2))]
+            args: [sessionId2, evalTemplate(c.text, buildScope(store2))]
           }
         ],
         active: false
@@ -73191,7 +73189,7 @@ function realize(c, display, boundValue, store2, sessionId2, signer) {
         effects: [
           {
             verb: VERB_OPEN_VSCODE,
-            args: [evalTemplate(c.target, buildScope(store2))]
+            args: [sessionId2, evalTemplate(c.target, buildScope(store2))]
           }
         ],
         active: false
@@ -88028,7 +88026,7 @@ async function click2(url, size) {
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
-    const refused3 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
+    const refused3 = copiesOnly ? await copy2(effects.map(({ args: [, text4] }) => text4).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
     return { ...await render2(size), refused: refused3 };
   }
   let refused2 = null;
