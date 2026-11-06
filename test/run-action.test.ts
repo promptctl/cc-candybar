@@ -720,6 +720,18 @@ describe("a click on a run link", () => {
     );
   });
 
+  test("a refused link's line names its action decoded, as the config would name it", async () => {
+    const r = rig();
+    const { view, link } = await drawnLink(r);
+    const name = "plugins.p.gö";
+    await expect(
+      clickUrl(relink({ ...link, name }), clickContext(r, view)),
+    ).rejects.toThrow(BadVerbArgs);
+    expect(r.lines).toContainEqual(
+      expect.stringContaining(`run refused sid=${link.sid} action=${name} reason=`),
+    );
+  });
+
   test("a dispatch's run step naming another session is refused and counted; its own session's step runs", async () => {
     const r = rig();
     const { view, link } = await drawnLink(r);

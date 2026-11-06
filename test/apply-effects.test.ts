@@ -11,6 +11,7 @@ import {
   VERB_APPLY_UPDATE,
   VERB_COPY,
   VERB_COPY_DIAGNOSTIC,
+  VERB_TOOLBAR_TOGGLE,
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
@@ -164,6 +165,41 @@ describe("a dispatch acts on the session its click is in", () => {
     expect(lastClickError(r.sessionState, "s2")).toBeNull();
     await performed;
     expect(r.started().map((s) => s.stdin)).toEqual(["mine"]);
+  });
+
+  test("a copy of empty text copies it: an empty last segment is still the argument", async () => {
+    const r = rig();
+    r.spawner.program(program(PBCOPY), exits(0));
+    const { answer, performed } = await applyClickAnswered(dispatch(`${VERB_COPY}/${encodeSegments([SID, ""])}`), r.ctx);
+    expect(answer).toBeNull();
+    await performed;
+    expect(r.started().map((s) => s.stdin)).toEqual([""]);
+  });
+
+  test("a tail on a verb that takes its session alone is refused, never dropped unread", async () => {
+    const r = rig();
+    const { answer } = await applyClickAnswered(
+      dispatch(`${VERB_TOOLBAR_TOGGLE}/${encodeSegments([SID, "junk"])}`),
+      r.ctx,
+    );
+    expect(answer?.error).toBeInstanceOf(BadVerbArgs);
+    expect(lastClickError(r.sessionState, SID)?.text).toBe(
+      `${VERB_TOOLBAR_TOGGLE}: takes its session alone, got 1 more segments`,
+    );
+    expect(r.sessionState.get(SID, "toolbar-expanded")).toBeNull();
+  });
+
+  test("when the click's own session is refused, every step is refused for that, and nothing launches", async () => {
+    const r = rig();
+    r.spawner.program(program(PBCOPY), exits(0));
+    const url = dispatch(`${VERB_COPY}/%/x`, `${VERB_COPY}/${encodeSegments([SID, "mine"])}`);
+    const { answer, performed } = await applyClickAnswered(url, r.ctx);
+    expect(answer?.error).toBeInstanceOf(BadVerbArgs);
+    expect((answer?.error as Error).message).toContain(
+      `${VERB_COPY}: its click's own session is refused, so no step of it runs`,
+    );
+    await performed;
+    expect(r.started()).toEqual([]);
   });
 
   test("a later step's malformed session is that step's refusal; the click still lands its first", async () => {

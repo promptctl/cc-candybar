@@ -100,8 +100,6 @@ import {
 import { decodeLayoutOp } from "../../config/layout-ops";
 import { presetNames, presetRoot } from "../../config/presets";
 import {
-  decodeSegments,
-  splitVerb,
   batchAdjacentWrites,
   parseEffects,
   type ParsedEffect,
@@ -351,9 +349,9 @@ export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
 export type ClickContext = Journaled<VerbContext>;
 
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
-// session its click is in, already parsed, the encoded tail of arguments after
-// it, and the daemon's verb context, so a verb that names no session cannot
-// join the leaf table; it returns
+// session its click is in, already parsed, the decoded arguments after it, and
+// the daemon's verb context, so a verb that names no session cannot join the
+// leaf table; it returns
 // nothing (clicks have no payload), and synchronously: it runs in its turn,
 // and what it would wait on it describes as an effect. `undefined`, not
 // `void`, so an async handler, whose promise `void` would accept, fails to
@@ -364,7 +362,7 @@ export type ClickContext = Journaled<VerbContext>;
 // throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
 export type VerbHandler = (
   sid: SessionId,
-  args: string,
+  args: readonly string[],
   ctx: ClickContext,
 ) => undefined;
 
@@ -374,6 +372,8 @@ import {
   ClickAbandoned,
   DaemonClosing,
   decodeWire,
+  parseWire,
+  type WireParse,
 } from "../verb-error";
 import {
   StoredPathRefused,
@@ -399,13 +399,26 @@ function oneArg(value: string): string {
 
 // The argument of a verb that carries `[sessionId, argument]` (copy, open): each
 // is encoded whole, so a copied text's own "/" is data, never a separator.
-function soleArg(args: string): string {
-  const parts = decodeWire(() => decodeSegments(args));
-  if (parts.length !== 1)
+function soleArg(args: readonly string[]): string {
+  if (args.length !== 1)
     throw new BadVerbArgs(
-      `expected a session and one argument, got ${parts.length + 1} segments`,
+      `expected a session and one argument, got ${args.length + 1} segments`,
     );
-  return parts[0]!;
+  return args[0]!;
+}
+
+// [LAW:no-silent-failure] A verb that takes its session alone refuses a tail,
+// never acting on the session and dropping the rest unread.
+function sessionAlone(
+  handler: (sid: SessionId, ctx: ClickContext) => undefined,
+): VerbHandler {
+  return (sid, args, ctx) => {
+    if (args.length > 0)
+      throw new BadVerbArgs(
+        `takes its session alone, got ${args.length} more segments`,
+      );
+    return handler(sid, ctx);
+  };
 }
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────
@@ -560,7 +573,7 @@ function requireDrawer(by: string): Drawing["by"] {
 // (the message fixed since, or the session never drawn here) is refused,
 // never a clipboard silently left as it was.
 const copyDiagnostic: VerbHandler = (sid, args, ctx) => {
-  const [by = "", key = ""] = decodeWire(() => decodeSegments(args));
+  const [by = "", key = ""] = args;
   const text = ctx.diagnosticCopy(sid, requireDrawer(by), key);
   if (text === undefined)
     throw new BadVerbArgs(
@@ -584,11 +597,11 @@ const openVscode: VerbHandler = (_sid, args, ctx) => {
 // [LAW:one-source-of-truth] SessionState is the canonical store for
 // toolbar-expanded state (eir merge). Toggle via set/clear; the file-backed
 // storage owned by the daemon process persists the change automatically.
-const toolbarToggle: VerbHandler = (sessionId, _args, ctx) => {
+const toolbarToggle: VerbHandler = sessionAlone((sessionId, ctx) => {
   const expanded = ctx.navigating.get(sessionId, "toolbar-expanded");
   if (expanded) ctx.navigating.clear(sessionId, "toolbar-expanded");
   else ctx.navigating.set(sessionId, "toolbar-expanded", "1");
-};
+});
 
 // [LAW:single-enforcer] One verb writes SessionState — for every key the
 // session's gate holds, for every pair in a batch. That gate
@@ -619,18 +632,14 @@ const toolbarToggle: VerbHandler = (sessionId, _args, ctx) => {
 // partial application would leave the UI in a state no author wrote.
 //
 // Value shape (the raw tail after the verb): the percent-encoded segment run
-//   <sessionId>/<k1>/<v1>[/<k2>/<v2>/...]. decodeSegments splits on `/` and
+//   <sessionId>/<k1>/<v1>[/<k2>/<v2>/...]. The click reader splits on `/` and
 //   decodes each segment — a CODEC property: a `/` inside a segment rides as
 //   `%2F` and is never read as a separator, so the wire itself is slash-safe.
 //   This is NOT an end-to-end "slash-bearing state keys are supported" claim:
 //   the loader and the state-validator factories reject slash-bearing keys and
 //   option values upstream, so a slash never reaches here in practice. The N=1
 //   form is the degenerate single-pair case — the parser walks pairs uniformly.
-const setState: VerbHandler = (sid, args, ctx) => {
-  // [LAW:single-enforcer] Decode the whole encoded tail at this boundary: the
-  // (key,value) pairs after the session. A malformed escape in any segment is
-  // bad input, not a handler failure (decodeWire).
-  const rest = decodeWire(() => decodeSegments(args));
+const setState: VerbHandler = (sid, rest, ctx) => {
   const gate = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
   if (rest.length === 0)
     throw new BadVerbArgs(
@@ -717,7 +726,7 @@ function stepWithin(
 // route the result through its gate so the one range gate owns the [min,max]
 // clamp and the canonical decimal form that persists.
 const stepState: VerbHandler = (sid, args, ctx) => {
-  const [key = "", byRaw = ""] = decodeWire(() => decodeSegments(args));
+  const [key = "", byRaw = ""] = args;
   if (!key) {
     throw new BadVerbArgs(
       "step-state: <key> is required (shape: <sessionId>/<key>/<by>)",
@@ -963,7 +972,7 @@ function editStore(ctx: ClickContext, sid: string): EditStore {
 // BAD_REQUEST — the config-file twin of `set-state`'s gate (configGate),
 // derived from the SAME action table.
 const setConfig: VerbHandler = (sid, args, ctx) => {
-  const [key = "", incoming = ""] = decodeWire(() => decodeSegments(args));
+  const [key = "", incoming = ""] = args;
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const gate = ctx.gates.config.gateFor(config);
@@ -993,7 +1002,7 @@ const setConfig: VerbHandler = (sid, args, ctx) => {
 // when it declares none, what the bar renders there — configKeySeed), wrapped
 // and re-validated through the SAME range gate, then written durably.
 const stepConfig: VerbHandler = (sid, args, ctx) => {
-  const [key = "", byRaw = ""] = decodeWire(() => decodeSegments(args));
+  const [key = "", byRaw = ""] = args;
   if (!key) {
     throw new BadVerbArgs(
       "step-config: <key> is required (shape: <sessionId>/<key>/<by>)",
@@ -1055,7 +1064,7 @@ const stepConfig: VerbHandler = (sid, args, ctx) => {
 // [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
 // session pick (the session's stateGate): a value the gate no longer admits is
 // refused loudly here, never written to the file.
-const save: VerbHandler = (sid, _args, ctx) => {
+const save: VerbHandler = sessionAlone((sid, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const pick = (key: string) => ctx.sessionState.get(sid, key);
@@ -1091,7 +1100,7 @@ const save: VerbHandler = (sid, _args, ctx) => {
       ...placements.map(placementLog),
     ].join(" ")} → ${home.path} (session=${sid})`,
   );
-};
+});
 
 // [LAW:single-enforcer] A placement's value re-crosses the gate its control's
 // click passed, as a display setting's does.
@@ -1118,7 +1127,7 @@ function gatePlacements(
 // session — the preset the pick names exists before the pick does.
 // [LAW:single-enforcer] Each pinned value re-crosses the session gate that
 // admitted it, as a save's do.
-const savePreset: VerbHandler = (sid, _args, ctx) => {
+const savePreset: VerbHandler = sessionAlone((sid, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const snapshot = presetSnapshot(config, (key) =>
@@ -1152,7 +1161,7 @@ const savePreset: VerbHandler = (sid, _args, ctx) => {
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${home.path} (session=${sid})`,
   );
-};
+});
 
 // Save the look the session draws as the active theme's default
 // (candybar-theme-colours-6fq5.ix8): `themeDefaults.<theme>` in the session's
@@ -1165,7 +1174,7 @@ const savePreset: VerbHandler = (sid, _args, ctx) => {
 // [LAW:no-silent-failure] A theme chosen by a rule has no name until a render
 // evaluates it, and a theme's default is keyed by name: refused, naming the
 // rule, never a guess at what it would have rendered.
-const saveThemeDefault: VerbHandler = (sid, _args, ctx) => {
+const saveThemeDefault: VerbHandler = sessionAlone((sid, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const save = themeDefaultSave(config, (key) =>
@@ -1191,13 +1200,13 @@ const saveThemeDefault: VerbHandler = (sid, _args, ctx) => {
     "info",
     `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${home.path} (session=${sid})`,
   );
-};
+});
 
 // Delete a preset the session's config file authors. A session that was in
 // it returns to the file's default arrangement; any other session in it
 // falls to the floor, as it would for a name deleted by hand.
 const deletePreset: VerbHandler = (sid, args, ctx) => {
-  const [name = ""] = decodeWire(() => decodeSegments(args));
+  const [name = ""] = args;
   if (!name) {
     throw new BadVerbArgs(
       "delete-preset: <name> is required (shape: <sessionId>/<name>)",
@@ -1224,7 +1233,7 @@ const deletePreset: VerbHandler = (sid, args, ctx) => {
 // file is written and reloaded before the picks are released, so no render in
 // between draws a pick's absence over a file that still holds the value.
 const resetConfig: VerbHandler = (sid, args, ctx) => {
-  const keys = decodeWire(() => decodeSegments(args));
+  const keys = args;
   const origin = sessionOrigin(ctx, sid);
   const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
   const unknown =
@@ -1301,7 +1310,7 @@ function endedSessionKeys(
 // shape, and the store proves the KEY is a preset-root target — a globals
 // or segment-palette key smuggled through this verb is refused there.
 const applyLayoutOp: VerbHandler = (sid, args, ctx) => {
-  const [key = "", opToken = ""] = decodeWire(() => decodeSegments(args));
+  const [key = "", opToken = ""] = args;
   const origin = sessionOrigin(ctx, sid);
   const before = ctx.configFor(origin);
   const gate = ctx.gates.config.gateFor(before);
@@ -1344,7 +1353,7 @@ const applyLayoutOp: VerbHandler = (sid, args, ctx) => {
 // moves and what it restores; this handler is plumbing between the wire and
 // it. [LAW:no-silent-failure] An empty stack and a stale target are loud
 // BAD_REQUESTs, surfaced as a transient click.error.
-const undo: VerbHandler = (sid, _args, ctx) => {
+const undo: VerbHandler = sessionAlone((sid, ctx) => {
   // The click's own earlier changes are a step of their own first, so one
   // click behaves exactly as the same clicks made one at a time.
   ctx.journal.commit();
@@ -1352,11 +1361,11 @@ const undo: VerbHandler = (sid, _args, ctx) => {
   ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step);
   ctx.log("info", `undo: restored ${describeStep(step)} (session=${sid})`);
-};
+});
 
 // [LAW:single-enforcer] Back restores through the click's settings view, never
 // a navigation journal, so going back is not itself a step it could return to.
-const back: VerbHandler = (sid, _args, ctx) => {
+const back: VerbHandler = sessionAlone((sid, ctx) => {
   const { step, discarded } = ctx.navigation.back(
     sid,
     ctx.sessionState,
@@ -1364,7 +1373,7 @@ const back: VerbHandler = (sid, _args, ctx) => {
   );
   const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
-};
+});
 
 // [LAW:single-enforcer] Cancel for edit mode. The history owns what changed
 // since edit mode opened and how to put it back (SettingsHistory.rewind); this
@@ -1372,7 +1381,7 @@ const back: VerbHandler = (sid, _args, ctx) => {
 // [LAW:no-silent-failure] A session with no savepoint is a loud BAD_REQUEST
 // with nothing written; a target changed since is one too, raised after every
 // other target was put back, naming the target it kept.
-const rewind: VerbHandler = (sid, _args, ctx) => {
+const rewind: VerbHandler = sessionAlone((sid, ctx) => {
   // The click's own earlier changes are a step of their own first, as undo's.
   ctx.journal.commit();
   // Said first: a stale target throws after the rest were put back.
@@ -1383,24 +1392,24 @@ const rewind: VerbHandler = (sid, _args, ctx) => {
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
   );
-};
+});
 
 // undo's mirror — steps the same history forward one click.
-const redo: VerbHandler = (sid, _args, ctx) => {
+const redo: VerbHandler = sessionAlone((sid, ctx) => {
   ctx.journal.commit();
   const step = ctx.history.redo(sid);
   ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step);
   ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
-};
+});
 
 // [LAW:effects-at-boundaries] The update notice's `[rebuild]` / `[upgrade]`
 // click (brandon-build-notice-5d6). The wire carries only the session id (for
 // click.error surfacing); the daemon's update watch decides what to run from
 // its own provenance, so no command or version ever arrives from a URL.
-const applyUpdate: VerbHandler = (_sid, _args, ctx) => {
+const applyUpdate: VerbHandler = sessionAlone((_sid, ctx) => {
   ctx.effect({ kind: "apply-update" });
-};
+});
 
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
 
@@ -1749,9 +1758,9 @@ function landStep<K extends DoctorStep["kind"]>(
   land(ctx, sid, step, facts);
 }
 
-const doctorRun: VerbHandler = (sid, _args, ctx) => {
+const doctorRun: VerbHandler = sessionAlone((sid, ctx) => {
   describeDoctor(ctx, sid, { kind: "run" });
-};
+});
 
 // A probe link `cc-candybar doctor` opened, delivered by the URL handler: its
 // arrival is the whole effect, read back by the CLI from the daemon's stats.
@@ -1775,7 +1784,7 @@ const probe = (
 };
 
 const doctorFix: VerbHandler = (sid, args, ctx) => {
-  const [checkName = ""] = decodeWire(() => decodeSegments(args));
+  const [checkName = ""] = args;
   const check = checkByName(checkName);
   if (check === undefined) {
     throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
@@ -1787,7 +1796,7 @@ const doctorFix: VerbHandler = (sid, args, ctx) => {
 // only what moved inputs changed (`oneAskPerClick`), since a refused spawn
 // would read as a different terminal than the one marked.
 const doctorMark: VerbHandler = (sid, args, ctx) => {
-  const [checkName = "", mark = ""] = decodeWire(() => decodeSegments(args));
+  const [checkName = "", mark = ""] = args;
   const check = checkByName(checkName);
   if (check === undefined) {
     throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
@@ -1807,7 +1816,7 @@ const doctorMark: VerbHandler = (sid, args, ctx) => {
 // the SlashLine typed, so the URL chooses among the config's lines and can
 // add none. The pane is the one the session's last render reported.
 const slash: VerbHandler = (sid, args, ctx) => {
-  const [line = ""] = decodeWire(() => decodeSegments(args));
+  const [line = ""] = args;
   const declared = Object.values(
     ctx.configFor(sessionOrigin(ctx, sid)).actions,
   ).filter((a): a is SlashAction => "slash" in a);
@@ -1900,11 +1909,7 @@ function runOf(
 }
 
 const run: VerbHandler = (sid, args, ctx) => {
-  const request = runOf(
-    sid,
-    decodeWire(() => decodeSegments(args)),
-    ctx,
-  );
+  const request = runOf(sid, args, ctx);
   ctx.effect({ kind: "run", id: ctx.runs.superseded(request), run: request });
 };
 
@@ -1916,9 +1921,7 @@ const run: VerbHandler = (sid, args, ctx) => {
 // bar reloads; the clicking session's reloads before the click answers, as
 // save's does.
 const repoConfig: VerbHandler = (sid, args, ctx) => {
-  const [dir = "", answer = "", mac = ""] = decodeWire(() =>
-    decodeSegments(args),
-  );
+  const [dir = "", answer = "", mac = ""] = args;
   // Signed, so it is an answer the bar offered.
   const answered = answer as RepoAnswer;
   if (!ctx.links.signer.verify(repoAnswerFields(sid, dir, answered), mac)) {
@@ -1991,15 +1994,14 @@ export const LEAF_VERB_NAMES: ReadonlySet<string> = new Set(LEAF_VERBS.keys());
 
 // [LAW:single-enforcer] A leaf effect as its click reads it, once: its
 // handler, the session its first segment names as it crosses the one
-// session-id checkpoint, and the encoded tail after it. Only the session's own
-// segment is decoded here, and reading never throws: a step's malformed
-// session or argument is that step's error to hold on the bar, after the
-// click has found its session.
+// session-id checkpoint, and the segments after it, each decoded alone. Reading
+// never throws: a step's malformed session or argument is that step's error to
+// hold on the bar, after the click has found its session.
 interface LeafEffect {
   readonly verb: string;
   readonly leaf: VerbHandler;
   readonly session: ParsedSessionId;
-  readonly args: string;
+  readonly args: WireParse<readonly string[]>;
 }
 
 // An effect a dispatch carries: a leaf, or a verb the leaf table lacks, which
@@ -2008,20 +2010,25 @@ type ReadEffect =
   | LeafEffect
   | { readonly verb: string; readonly leaf: undefined };
 
+// Split before decoding, so a segment's own escaped "/" stays data and an
+// empty last argument (a copy of "") is still an argument.
 function readLeaf(verb: string, leaf: VerbHandler, value: string): LeafEffect {
-  const { verb: head, value: args } = splitVerb(value);
-  return { verb, leaf, session: readSession(head), args };
+  const [head = "", ...tail] = value.split("/");
+  return {
+    verb,
+    leaf,
+    session: readSession(head),
+    args: parseWire(() => tail.map(decodeURIComponent)),
+  };
 }
 
 // [LAW:parse-dont-validate] A malformed escape is the session's failed parse,
 // as any other bad id is, so perform refuses that one step.
 function readSession(head: string): ParsedSessionId {
-  try {
-    return parseSessionId(decodeWire(() => decodeURIComponent(head)));
-  } catch (e) {
-    if (!(e instanceof BadVerbArgs)) throw e;
-    return { ok: false, problem: `has ${e.message}` };
-  }
+  const decoded = parseWire(() => decodeURIComponent(head));
+  return decoded.ok
+    ? parseSessionId(decoded.value)
+    : { ok: false, problem: `has ${decoded.problem}` };
 }
 
 function readEffect({ verb, value }: ParsedEffect): ReadEffect {
@@ -2070,11 +2077,16 @@ function perform(
   const described: Effect[] = [];
   try {
     if (!session.ok) throw new BadVerbArgs(`session id ${session.problem}`);
-    if (!click?.ok || click.id !== session.id)
+    if (!click?.ok)
+      throw new BadVerbArgs(
+        "its click's own session is refused, so no step of it runs",
+      );
+    if (click.id !== session.id)
       throw new BadVerbArgs(
         `names session ${session.id}, not the session its click is in`,
       );
-    leaf(session.id, args, {
+    if (!args.ok) throw new BadVerbArgs(args.problem);
+    leaf(session.id, args.value, {
       ...ctx,
       effect: (effect) => void described.push(effect),
     });
@@ -2082,7 +2094,7 @@ function perform(
     if (e instanceof BadVerbArgs) {
       REFUSAL_OWNERS.get(verb)?.(ctx, {
         sid: session.ok ? session.id : "-",
-        args,
+        args: args.ok ? args.value : [],
         reason: e.message,
       });
     }
@@ -2094,18 +2106,18 @@ function perform(
 // The leaf verbs whose refused links an owner counts, beside the bar's hold
 // every refused step gets. Any web page can open a run link, so the run
 // stats count each one refused before anything ran; the action is named as
-// the link spells it.
+// the config names it, decoded.
 const REFUSAL_OWNERS: ReadonlyMap<
   string,
   (
     ctx: ClickContext,
-    refusal: { sid: string; args: string; reason: string },
+    refusal: { sid: string; args: readonly string[]; reason: string },
   ) => void
 > = new Map([
   [
     VERB_RUN,
-    (ctx, { sid, args, reason }) =>
-      ctx.runs.refused(sid, splitVerb(args).verb || "-", reason),
+    (ctx, { sid, args: [action], reason }) =>
+      ctx.runs.refused(sid, action || "-", reason),
   ],
 ]);
 

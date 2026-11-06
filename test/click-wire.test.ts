@@ -453,8 +453,8 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     expect(effectsOf(at(VERB_SET_STATE, "s1/theme/nord"))).toEqual([
       { verb: "set-state", args: ["s1", "theme", "nord"] },
     ]);
-    // A verb that takes the session alone splits it off the same way: the
-    // daemon reads session "a" from `a/b`, never a session "a/b".
+    // A verb that takes the session alone splits the same way: session "a",
+    // and a tail its handler refuses, never a session "a/b".
     expect(effectsOf(at(VERB_DOCTOR_RUN, "a/b"))).toEqual([
       { verb: VERB_DOCTOR_RUN, args: ["a", "b"] },
     ]);
