@@ -1,3 +1,9 @@
+## [1.205.1](https://github.com/promptctl/cc-candybar/compare/v1.205.0...v1.205.1) (2026-11-06)
+
+### Bug Fixes
+
+* **click:** copy and open clicks name their session, so a menu's idle clock counts them (brandon-menus-sjhy.182) ([#650](https://github.com/promptctl/cc-candybar/issues/650)) ([242a73c](https://github.com/promptctl/cc-candybar/commit/242a73c2288bc60ae5b871e410be3d5c45b88c48))
+
 ## [1.205.0](https://github.com/promptctl/cc-candybar/compare/v1.204.0...v1.205.0) (2026-11-06)
 
 ### Features
