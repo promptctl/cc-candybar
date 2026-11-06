@@ -4,15 +4,22 @@
     {
       "version": "pr-641",
       "ref": "refs/pull/641/merge",
-      "sha": "4d397eea80b291a9d52791f044d90916b0b0908b",
-      "timestamp": "2026-11-06T13:33:16.604Z",
+      "sha": "1ea65a770c1df46f64404dde6f517e9bd0faa716",
+      "timestamp": "2026-11-06T13:52:23.162Z",
       "commits": [
         {
-          "sha": "4d397eea80b291a9d52791f044d90916b0b0908b",
+          "sha": "1ea65a770c1df46f64404dde6f517e9bd0faa716",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T13:32:14Z",
-          "message": "Merge 21ef6731edbd3287e879720407dd36f5ae5cdbe9 into 6861a4a6e8abdea9bde9ed0653074ae3491eebf6\n"
+          "timestamp": "2026-11-06T13:51:16Z",
+          "message": "Merge 1fb6f8323eaef728215dfadde35dc7ccd82f0a31 into 6861a4a6e8abdea9bde9ed0653074ae3491eebf6\n"
+        },
+        {
+          "sha": "1fb6f8323eaef728215dfadde35dc7ccd82f0a31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T06:51:02-07:00",
+          "message": "fix(facts): a replay opens its view where the session's opened; a run's lane keeps its reading while its value holds; each declared run holds its own entry (candybar-gather-renderer-76bb.6pj.d8n)\n\nReview (high) findings on #641:\n- The recording proves the session's directory from its opening request,\n  and the demo's replay opens its view there, so a shell source's digest\n  matches wherever the demo runs.\n- A run's lane hands out one reading while its entry holds one value\n  (computed, structural), so a restamp for another fact republishes\n  nothing and a JSON source's torn-write settle is not restarted.\n- Each run declaration holds its run in a Holds of its own, closed by its\n  release or the follow's dispose: no whole-set re-declaration per change,\n  and no dispose order that throws.\n- The recording arm finds a coming run by each digest's last document.\n- Dead DEPTH_FUNCTIONS export and stale directory-scope comments removed.\n"
         },
         {
           "sha": "21ef6731edbd3287e879720407dd36f5ae5cdbe9",

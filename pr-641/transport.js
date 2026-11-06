@@ -51691,10 +51691,6 @@ var CLOCK_FUNCTIONS = new Set(
 function engineClockFunctions(extra) {
   return /* @__PURE__ */ new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
 }
-var DEPTH_BINDINGS = { readableOn: readableOnFunc };
-var DEPTH_FUNCTIONS = new Set(
-  Object.keys(DEPTH_BINDINGS)
-);
 function createCcCandybarEngine(opts) {
   const { drawnAt, extraFuncs } = opts;
   const depth = () => ({ depth: drawnAt() });
@@ -51725,12 +51721,8 @@ function createCcCandybarEngine(opts) {
       ...sprigDicts(),
       ...SPRIG_DATE_FUNCS,
       ...richTextFuncs(depth),
-      ...Object.fromEntries(
-        Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
-          name,
-          bind(depth)
-        ])
-      ),
+      // rich-js's one DrawnAt-reading binding, over richTextFuncs' own.
+      readableOn: readableOnFunc(depth),
       // [LAW:single-enforcer] Every function that reads the time, built over
       // the one Clock.
       ...clockFuncs([...CLOCK_FACTORIES, ...opts.clockFuncs ?? []]),
@@ -54039,9 +54031,8 @@ var SourceRegistry = class _SourceRegistry {
   // ─── The view's source ────────────────────────────────────────────────────
   // [LAW:single-enforcer] What this registry's inputs, and the depth, are
   // derived from: bound once by the view that owns the registry, whose source
-  // reads its payload as it stands. A directory binds none: it reads no
-  // payload and no depth — a source whose key reads one is a view's
-  // (src/dsl/variable-scope.ts).
+  // reads its payload as it stands. A directory binds none: it declares only
+  // values that read no payload and no depth (src/dsl/variable-scope.ts).
   bindInputs(source) {
     runInAction(() => this.inputs.set(source));
   }
@@ -83493,14 +83484,18 @@ function assembleFacts(prior, session, readings, update, at) {
 // src/daemon/facts-source.ts
 function runLaneOver(identity2, document, missing) {
   const digest2 = digestOf3(identity2);
-  const run3 = () => document().runs[digest2];
-  return {
-    digest: digest2,
-    current: () => {
-      const fact = run3();
+  const run3 = computed(() => document().runs[digest2]);
+  const current = computed(
+    () => {
+      const fact = run3.get();
       return fact === void 0 ? missing(digest2) : unstamped(fact.reading);
     },
-    fault: () => run3()?.fault ?? null
+    { equals: compareStructural }
+  );
+  return {
+    digest: digest2,
+    current: () => current.get(),
+    fault: () => run3.get()?.fault ?? null
   };
 }
 function stamped(prior, moved, at, session) {
@@ -83529,22 +83524,7 @@ function inProcessFacts({
     follow(facts, declaration) {
       const session = facts.sessionId;
       const holds2 = new Holds();
-      const declaredRuns = observable.map(
-        void 0,
-        { deep: false }
-      );
-      const runHolds = new Holds();
-      const runLanes = observable.map(void 0, {
-        deep: false
-      });
-      const declareRuns = () => {
-        const { result } = runHolds.declare(
-          () => [...declaredRuns].map(
-            ([digest2, identity2]) => [digest2, runs.declare(runHolds, identity2)]
-          )
-        );
-        runInAction(() => runLanes.replace(result));
-      };
+      const declaredRuns = observable.map(void 0, { deep: false });
       const sid = JSON.stringify(session);
       const lanesFor = (facts2, { sources }) => {
         try {
@@ -83596,13 +83576,15 @@ function inProcessFacts({
         () => ({
           ...readingsOf(inputs.get()),
           runs: new Map(
-            [...runLanes].map(([digest2, lane]) => [
-              digest2,
-              {
-                reading: lane.current(),
-                fault: lane.fault()
-              }
-            ])
+            [...declaredRuns].map(
+              ([digest2, { lane }]) => [
+                digest2,
+                {
+                  reading: lane.current(),
+                  fault: lane.fault()
+                }
+              ]
+            )
           )
         })
       );
@@ -83659,11 +83641,12 @@ function inProcessFacts({
           declare: (callerHolds, identity2) => {
             const digest2 = digestOf3(identity2);
             callerHolds.take(`facts.run:${digest2}`, () => {
-              runInAction(() => declaredRuns.set(digest2, identity2));
-              declareRuns();
+              const held = new Holds();
+              const lane = runs.declare(held, identity2);
+              runInAction(() => declaredRuns.set(digest2, { lane, held }));
               return () => {
                 runInAction(() => declaredRuns.delete(digest2));
-                declareRuns();
+                held.close();
               };
             });
             return runLaneOver(
@@ -83691,7 +83674,7 @@ function inProcessFacts({
         },
         dispose: () => {
           stop2();
-          runHolds.close();
+          for (const { held } of declaredRuns.values()) held.close();
           holds2.close();
         }
       };
