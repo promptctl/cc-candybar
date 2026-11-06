@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-617",
+      "ref": "refs/pull/617/merge",
+      "sha": "321ce95c31309848d517a5b1923c0c96be2cd5b5",
+      "timestamp": "2026-11-06T06:13:12.742Z",
+      "commits": [
+        {
+          "sha": "321ce95c31309848d517a5b1923c0c96be2cd5b5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T06:12:11Z",
+          "message": "Merge 00d8b307696a501044bbc09164375c7c9d61e174 into a6c6adadc4b92f19bca48e7fe1eb518acde6e893\n"
+        },
+        {
+          "sha": "00d8b307696a501044bbc09164375c7c9d61e174",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:16:04-07:00",
+          "message": "test(facts): name the doctor's closure tests for what they protect (candybar-gather-renderer-76bb.6pj.xb3)\n"
+        },
+        {
+          "sha": "065c652f19ff8a54edaca23ff27ab83b581a012f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:12:58-07:00",
+          "message": "fix(facts): the wait's comment names every session; the doctor's namespace-read test returns (candybar-gather-renderer-76bb.6pj.xb3)\n"
+        },
+        {
+          "sha": "d48e3e7fb420783f42021fd9aff68ce257eebce7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-03T10:07:10-07:00",
+          "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "a6c6adadc4b92f19bca48e7fe1eb518acde6e893",
@@ -56,42 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-05T22:33:39-07:00",
           "message": "fix(load-gate): the steady phase begins once the daemon has settled, a wait with no time left takes no loop turn, and a failed render names what the daemon's log shows over it (candybar-gather-renderer-76bb.6pj.09c)\n\nThe one failed render of run 42154313711 was not a GC pause: the daemon logged a line every 10-34 ms through the episode. It was a saturated loop while the speed lane was still landing for every session, 13 s into a steady phase that had begun before the daemon settled, and the failed request lost its last 54 ms to a 0 ms timer behind the poll phase. The gate now waits for every session's latest render to be answered inside its wait, at both points the steady phase must not inherit a backlog from; waitWithin with no time left aborts in the same turn; each steady failure carries the daemon's lines, longest silence and deadline draws over its round trip, and the facts carry the connect-to-wait spread.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-617",
-      "ref": "refs/pull/617/merge",
-      "sha": "d0cb8cd2dcc8216cce23633f18967fa00868376a",
-      "timestamp": "2026-11-06T06:04:43.943Z",
-      "commits": [
-        {
-          "sha": "d0cb8cd2dcc8216cce23633f18967fa00868376a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T06:03:52Z",
-          "message": "Merge 7435e3513f93b98926bb95081684cdfba3caf11e into 0577540acfe6b769c9a94c7e1e7ee9a4d0a0ee48\n"
-        },
-        {
-          "sha": "7435e3513f93b98926bb95081684cdfba3caf11e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:16:04-07:00",
-          "message": "test(facts): name the doctor's closure tests for what they protect (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "af7f56968fa80d1b21aebb0230c5159807cf3a72",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:12:58-07:00",
-          "message": "fix(facts): the wait's comment names every session; the doctor's namespace-read test returns (candybar-gather-renderer-76bb.6pj.xb3)\n"
-        },
-        {
-          "sha": "8933d2fb5d2ea9f60835948c4b46d4e8d5083039",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-03T10:07:10-07:00",
-          "message": "chore(facts): delete the wants closure (candybar-gather-renderer-76bb.6pj.xb3)\n\nThe facts document is total, so the question \"which fields does this config\nread\" has no caller with a reason. Every session now gathers every built-in:\ngit runs one constant option set (forge lookup included), every declared\nplugin source is held, and burn, block and autocompact's context cap are always\ncomposed. A view's declaration depends on the request alone, so a preset pick\nmoves no hold.\n\nDeleted: the wants function, the needed-prefix builders, the sources-read walk,\nthe closure parameter through declare/refresh/read/project, the PR reads gate,\nthe git options derived from the closure, `Gathered`, `declaredSources`, and the\nview's preset reaction. The doctor's data-needs walk stays and now owns its own\nper-segment path closure, since it answers what a config would read.\n\nThe bar is byte-identical; the payload golden gains the keys that were gated\n(block, burn, metrics, activity, tmux and the like on presets that did not read\nthem). Tests that asserted gating are deleted; the fold-edge cases they covered\n(partials, helpers handed a dict) move to the doctor's path closure.\n"
         }
       ]
     },
