@@ -23,6 +23,7 @@ import {
 import { memoryLimitBytes } from "../../src/daemon/limits";
 import { fileStorage } from "../../src/daemon/file-storage";
 import { DaemonLog } from "../../src/daemon/log";
+import { homeOf, type RendererHome } from "../../src/daemon/home";
 import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
 import { PROTOCOL_VERSION, sendOne, type Request } from "../../src/daemon/protocol";
@@ -50,8 +51,7 @@ function ledgerPath(): string {
 }
 const TEST_FILE = process.env[TEST_FILE_ENV] ?? null;
 
-export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage" | "paths">> & {
-  readonly paths?: DaemonPaths;
+export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage">> & {
   readonly storage?: (log: DaemonLogger) => Partial<DaemonStorage>;
 };
 
@@ -75,8 +75,9 @@ export function bundleAt(
 export interface BuiltDaemon {
   readonly daemon: Daemon;
   readonly daemonLog: DaemonLog;
-  // Where the daemon was aimed, which the env no longer says once a case passes
-  // its own.
+  // The home the daemon was built under, which the env no longer says once a
+  // case passes its own, and the paths derived from it.
+  readonly home: RendererHome;
   readonly paths: DaemonPaths;
 }
 
@@ -91,8 +92,10 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   // [LAW:nothing-unseen] Every daemon built in a worker comes through here, so the
   // judge sees each one by the file that built it, as it sees a real daemon.
   recordDaemonStart({ ledger: LEDGER, file: TEST_FILE, route: "harness" });
-  // The env a case placed names where the daemon lives, read once here.
-  const paths = overrides.paths ?? daemonPaths(HOST);
+  // The home the case's env names, or the one it hands in, read once here;
+  // every path the daemon and its adapters write derives from it.
+  const home = overrides.home ?? homeOf(HOST);
+  const paths = daemonPaths(home);
   fs.mkdirSync(paths.state, { recursive: true });
   const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
   try {
@@ -112,14 +115,14 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
         throw new Error(`a daemon under test asked to exit ${code}`);
       },
       ...overrides,
-      paths,
+      home,
       daemonLog,
       storage: (log) => ({
         ...fileStorage(paths, log, systemTimekeeper),
         ...overrides.storage?.(log),
       }),
     });
-    return { daemon, daemonLog, paths };
+    return { daemon, daemonLog, home, paths };
   } catch (e) {
     // A log this call opened is the call's to end when no daemon takes it up.
     if (overrides.daemonLog === undefined) daemonLog.dispose();

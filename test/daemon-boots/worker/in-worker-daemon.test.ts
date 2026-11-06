@@ -1,8 +1,10 @@
+import { configDir as homeConfigDir } from "../../../src/daemon/paths";
 // [LAW:verifiable-goals] The harness a daemon-backed test stands on: a daemon in
 // this jest worker, reached through the e2e helpers over the connection a socket
 // gets, stopped with nothing of it left serving, and started again over the same
 // state. Its cases hold what a migrated file would otherwise find out by failing.
 
+import { homeOf } from "../../../src/daemon/home";
 import {
   mkdirSync,
   mkdtempSync,
@@ -18,7 +20,7 @@ import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/click-error";
 import { systemTimekeeper } from "../../../src/time";
 import { logLines } from "../../../src/daemon/log";
-import { logPath } from "../../../src/daemon/paths";
+import { logPath, configDir } from "../../../src/daemon/paths";
 import {
   encodeFrame,
   makeFrameReader,
@@ -64,7 +66,7 @@ describe("a daemon in this worker", () => {
     const prepared = prepareIsolatedDaemonEnv("ccb-in-worker");
     ({ env, removeTmpDirs } = prepared);
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-in-worker-"));
-    const configDir = path.join(env.XDG_CONFIG_HOME!, "cc-candybar");
+    const configDir = homeConfigDir(homeOf(hostOf(env)));
     mkdirSync(configDir, { recursive: true });
     userConfig = path.join(configDir, "config.json5");
     writeFileSync(userConfig, CONFIG);
@@ -206,7 +208,7 @@ describe("a daemon in this worker", () => {
     const stateHome = process.env.XDG_STATE_HOME;
     daemon = startDaemon(env);
     expect(process.env.XDG_STATE_HOME).toBe(env.XDG_STATE_HOME);
-    expect(daemon.log).toBe(logPath(hostOf(env)));
+    expect(daemon.log).toBe(logPath(homeOf(hostOf(env))));
     await render(daemon, sid, projectDir);
 
     const subscriber = daemon.connect();

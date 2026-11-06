@@ -103,18 +103,18 @@ function reportLine({ check, verdict }: CheckReport): string {
 // state, keeps the outcome, and releases the sources the state started. A
 // load that failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(
-  { host, launcher, clock }: World,
+  { host, home, launcher, clock }: World,
   origin: RenderOrigin,
 ): ConfigLoad {
   const deps = {
     clock,
     runs: new SourceRuns({ launcher, clock }),
-    locations: locations(host),
+    locations: locations(host, home),
     sessionState: new SessionState(),
     storage: UNOWNED_STORAGE,
-    signer: linkSignerFromKeyFile(linkKeyFile(stateDir(host))),
+    signer: linkSignerFromKeyFile(linkKeyFile(stateDir(home))),
     gates: daemonGates(),
-    stateDir: stateDir(host),
+    stateDir: stateDir(home),
   };
   const loaded = loadFromDisk(
     origin.projectDir,

@@ -1,3 +1,4 @@
+import { configDir as homeConfigDir } from "../../../src/daemon/paths";
 import type { Frame } from "../../../src/render/frame";
 import { hostOf } from "../../helpers/host";
 // [LAW:verifiable-goals] A cloned repository's cc-candybar config runs only
@@ -22,7 +23,7 @@ import {
   type IsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
 import { VERB_REPO_CONFIG } from "../../../src/click/wire";
-import { logPath } from "../../../src/daemon/paths";
+import { logPath, configDir } from "../../../src/daemon/paths";
 import { repoConfigs, repoConfigsPath } from "../../../src/daemon/repo-configs";
 import { stateDir } from "../../../src/daemon/paths";
 import {
@@ -98,7 +99,7 @@ describe("a repository's config waits for the user's one answer", () => {
 
   beforeEach(() => {
     isolated = prepareIsolatedDaemonEnv("cc-candybar-repo-e2e");
-    const configDir = path.join(isolated.env.XDG_CONFIG_HOME!, "cc-candybar");
+    const configDir = homeConfigDir(isolated.home);
     fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(
       path.join(configDir, "config.json5"),
@@ -140,7 +141,7 @@ describe("a repository's config waits for the user's one answer", () => {
     await until(
       () =>
         fs
-          .readFileSync(logPath(hostOf(isolated.env)), "utf8")
+          .readFileSync(logPath(isolated.home), "utf8")
           .split("\n")
           .some((l) => l.includes("config loaded ") && l.includes(loadedLine)),
       "the config loaded event naming the waiting repository",
@@ -152,7 +153,7 @@ describe("a repository's config waits for the user's one answer", () => {
     expect(forged).not.toBe(approve);
     const refused = await sendClick(daemon, forged);
     expect(refused.ok).toBe(false);
-    expect(fs.existsSync(repoConfigsPath(stateDir(hostOf(isolated.env))))).toBe(false);
+    expect(fs.existsSync(repoConfigsPath(stateDir(isolated.home)))).toBe(false);
     expect(fs.existsSync(marker)).toBe(false);
   });
 
@@ -266,7 +267,7 @@ describe("a repository's config waits for the user's one answer", () => {
     );
     // An answer kept under the worktree's own path, before answers were kept
     // by repository: it disagrees with the repository's, so it asks.
-    repoConfigs(stateDir(hostOf(isolated.env))).update(() => ({
+    repoConfigs(stateDir(isolated.home)).update(() => ({
       [project]: "declined",
       [wt]: "approved",
     }));
@@ -296,13 +297,13 @@ describe("a repository's config waits for the user's one answer", () => {
       await until(
         () =>
           fs
-            .readFileSync(logPath(hostOf(isolated.env)), "utf8")
+            .readFileSync(logPath(isolated.home), "utf8")
             .includes(
               `repo-config: ${project} approved superseded=${wt} absent=- unchecked=- `,
             ),
         "the repo-config event naming the superseded worktree entry",
       );
-      expect(repoConfigs(stateDir(hostOf(isolated.env))).read()).toEqual({
+      expect(repoConfigs(stateDir(isolated.home)).read()).toEqual({
         kind: "ok",
         value: { [project]: "approved" },
       });

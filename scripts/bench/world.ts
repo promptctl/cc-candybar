@@ -17,6 +17,7 @@
 
 import { spawn } from "node:child_process";
 import { processWorld } from "../../src/host.js";
+import { homeOf } from "../../src/daemon/home.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -199,8 +200,9 @@ export async function startWorld(
   const machine = processWorld();
   const host = { env, home: dirs.home, tmp: machine.host.tmp };
   // What its clients ask the daemon with: this world's host, the machine's clock.
-  const client = { host, clock: machine.clock };
-  const log = logPath(host);
+  const home = homeOf(host);
+  const client = { host, home, clock: machine.clock };
+  const log = logPath(home);
 
   // The shipped daemon's own argv, heap cap included. A process group of its
   // own, so the whole daemon is signalled and not only its first process.

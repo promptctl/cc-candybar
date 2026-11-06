@@ -8,7 +8,6 @@ import {
   type TokenBreakdown,
 } from "../../segments/session";
 import type { Host } from "../../host";
-import { cacheDir } from "../paths";
 import { PricingService } from "../../segments/pricing";
 import {
   getClaudePaths,
@@ -459,9 +458,10 @@ export class SessionUsageStore {
   // the record (session, speed, today) share it, so it records and logs once.
   private readonly requestFlight = new SingleFlight();
   private readonly staleAgeMs: number;
-  // The machine the store reads: where transcripts live, and where the
-  // pricing table is cached.
+  // The machine the store reads: where transcripts live.
   private readonly host: Host;
+  // The home's cache directory, where the day's scan is folded.
+  private readonly cacheDir: string;
   private readonly log: DaemonLogger;
   private readonly renderTally: IngestTally = { hits: 0, misses: 0 };
   private readonly ledger: RefreshLedger;
@@ -478,6 +478,7 @@ export class SessionUsageStore {
 
   constructor(opts: {
     host: Host;
+    cacheDir: string;
     // [LAW:effects-at-boundaries] The daemon's clock: the sweep and the scans'
     // periods, and the instants the store stamps, ages and cuts off by.
     clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "every">;
@@ -491,6 +492,7 @@ export class SessionUsageStore {
     ledger?: RefreshLedger;
   }) {
     this.host = opts.host;
+    this.cacheDir = opts.cacheDir;
     this.clock = opts.clock;
     this.log = opts.logger ?? quietLogger;
     this.ledger = opts.ledger ?? new RefreshLedger(this.log);
@@ -968,8 +970,7 @@ export class SessionUsageStore {
         filePath,
         priorFold,
         EMPTY_FILE_FOLD,
-        (state, entries) =>
-          foldFile(state, entries, cacheDir(this.host), this.clock),
+        (state, entries) => foldFile(state, entries, this.cacheDir, this.clock),
       );
       if (read.kind === "failed") return read;
       if (read.kind === "absent") {

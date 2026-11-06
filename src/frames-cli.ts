@@ -138,7 +138,7 @@ export async function runFrames(
 
   const subscribe = (id: string): void => {
     follower?.close();
-    follower = followFrames(world, socketPath(world.host), id, lane, {
+    follower = followFrames(world, socketPath(world.home), id, lane, {
       frame: (resp) =>
         tell({ kind: "frame" }, () => emit(`${JSON.stringify(resp)}\n`)),
       off: (resp) =>

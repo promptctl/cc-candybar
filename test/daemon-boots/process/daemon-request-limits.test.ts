@@ -35,7 +35,7 @@ jest.setTimeout(TEST_TIMEOUT_MS);
 // slow a compile is on this machine. The render's event says the client read
 // another reply, and the hold it drew under is released when it ends.
 test("a render that outlives its request timeout writes timedOut=Y", async () => {
-  const { sockPath, env, removeTmpDirs } = prepareIsolatedDaemonEnv(
+  const { sockPath, home, env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-request-limits",
   );
   const projectDir = mkdtempSync(
@@ -52,7 +52,7 @@ test("a render that outlives its request timeout writes timedOut=Y", async () =>
     // answered request, so the budget here is the test's own timeout. The
     // event's `took` below is what says the render outlived the backstop.
     const answered = sendDaemonRequest(
-      sockPath,
+      home,
       {
         v: PROTOCOL_VERSION,
         kind: "render",
@@ -102,7 +102,7 @@ test("a render that outlives its request timeout writes timedOut=Y", async () =>
       REQUEST_TIMEOUT_MS,
     );
     await expect(
-      sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" }),
+      sendDaemonRequest(home, { v: PROTOCOL_VERSION, kind: "stats" }),
     ).resolves.toMatchObject({ ok: true, stats: { renderCache: { held: 0 } } });
   } finally {
     await killAndWait(daemon);

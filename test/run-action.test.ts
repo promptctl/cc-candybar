@@ -6,6 +6,7 @@
 // cache over the payload providers, declared by `declareLanes`, drawn from
 // `sessionSource`.
 
+import { homeOf } from "../src/daemon/home";
 import { linkUrls } from "./helpers/frame";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
@@ -58,7 +59,7 @@ import { viewFacts } from "./helpers/view-facts";
 import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { textOf } from "../src/render/frame";
-import { stateDir } from "../src/daemon/paths";
+import { stateDir, cacheDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
@@ -197,6 +198,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     clock: systemTimekeeper,
     launcher: processLauncher,
     host: HOST,
+    cacheDir: cacheDir(homeOf(HOST)),
     watchers,
     fileEvents: new FileEventDelivery({
       clock: systemTimekeeper,
@@ -210,7 +212,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   const cache = new RenderCache<SessionSource>(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
+      stateDir: stateDir(WORLD.home),
       locations: locs(),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState,
@@ -398,7 +400,7 @@ describe("a run's declaration", () => {
     const r = rig();
     const loaded = loadFromDisk(dir, dir, config(["mine"]), {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
+      stateDir: stateDir(WORLD.home),
       locations: locs(),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
@@ -428,7 +430,7 @@ describe("a run's declaration", () => {
     );
     const loaded = loadFromDisk(dir, dir, file, {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
+      stateDir: stateDir(WORLD.home),
       locations: locs(),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState: r.sessionState,

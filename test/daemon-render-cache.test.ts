@@ -5,8 +5,9 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
+import { homeOf } from "../src/daemon/home";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { HOST, WORLD, hostOf, worldOf } from "./helpers/host";
+import { HOST, WORLD, hostOf, worldOf, MAIN_ENV } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import {
   chmodSync,
@@ -118,8 +119,8 @@ function makeCache(
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -161,7 +162,7 @@ describe("RenderCache", () => {
   let xdgIsolateDir: string;
   beforeAll(() => {
     xdgIsolateDir = mkdtempSync(join(tmpdir(), "cc-candybar-cache-xdg-"));
-    host = hostOf({ ...HOST.env, XDG_CONFIG_HOME: xdgIsolateDir });
+    host = hostOf({ ...MAIN_ENV, XDG_CONFIG_HOME: xdgIsolateDir });
     world = worldOf(host);
   });
   afterAll(() => {
@@ -1031,9 +1032,9 @@ describe("RenderCache", () => {
     try {
       const dirs = watchers.watchedDirs();
       expect(dirs).toContain(
-        realpathSync.native(repoConfigsDir(stateDir(host))),
+        realpathSync.native(repoConfigsDir(stateDir(homeOf(host)))),
       );
-      expect(dirs).not.toContain(realpathSync.native(stateDir(host)));
+      expect(dirs).not.toContain(realpathSync.native(stateDir(homeOf(host))));
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -1104,7 +1105,7 @@ describe("RenderCache", () => {
         [realpathSync.native(dir)]: "declined",
       });
       await reloads.after(entry, () =>
-        writeFileSync(repoConfigsPath(stateDir(host)), declined),
+        writeFileSync(repoConfigsPath(stateDir(homeOf(host))), declined),
       );
       expect(entry.configLayers).toEqual([]);
       expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
@@ -1413,8 +1414,8 @@ describe("RenderCache idle sweep", () => {
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1471,8 +1472,8 @@ describe("RenderCache idle sweep", () => {
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1533,8 +1534,8 @@ describe("RenderCache idle sweep", () => {
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1643,8 +1644,8 @@ describe("RenderCache frames and pins", () => {
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1766,8 +1767,8 @@ describe("RenderCache frames and pins", () => {
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1840,8 +1841,8 @@ describe("RenderCache frames and pins", () => {
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,

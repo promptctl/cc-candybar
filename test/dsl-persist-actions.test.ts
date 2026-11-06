@@ -170,7 +170,7 @@ describe("persistValueText", () => {
           above: [],
           repo: null,
           cwd: null,
-          locs: locations(durable.host),
+          locs: locations(durable.host, durable.home),
         },
         [["palette", "nord"]],
       ),
@@ -870,8 +870,8 @@ function makeCache(): {
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(durable.host),
-      locations: locations(durable.host),
+      stateDir: stateDir(durable.home),
+      locations: locations(durable.host, durable.home),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,

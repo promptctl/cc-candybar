@@ -1,3 +1,4 @@
+import { homeOf } from "../src/daemon/home";
 import fs from "node:fs";
 import { HOST, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -61,8 +62,8 @@ function rig() {
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,

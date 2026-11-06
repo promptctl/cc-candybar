@@ -6,6 +6,7 @@
 // Every sample is checked against what the fixture holds, so a read that
 // returned early, empty or stale is a failure and not a fast sample.
 
+import { cacheDir } from "../../../src/daemon/paths";
 import path from "node:path";
 import { processWorld } from "../../../src/host.js";
 
@@ -133,6 +134,7 @@ const coldFold = ([
       const ms = await repeat(plan.samples, async () => {
         const store = new SessionUsageStore({
           host: processWorld().host,
+          cacheDir: cacheDir(processWorld().home),
           clock: processWorld().clock,
           sweepIntervalMs: 0,
         });
@@ -167,6 +169,7 @@ const warmFold = (
       writeTranscript(transcript, SESSION, root, WARM_TURNS);
       const store = new SessionUsageStore({
         host: processWorld().host,
+        cacheDir: cacheDir(processWorld().home),
         clock: processWorld().clock,
         sweepIntervalMs: 0,
       });

@@ -1,5 +1,5 @@
 import { drawPayload } from "./helpers/draw-payload";
-import { HOST, locs } from "./helpers/host";
+import { HOST, locs, WORLD } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
@@ -83,7 +83,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
+      stateDir: stateDir(WORLD.home),
       locations: locs(),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,

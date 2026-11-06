@@ -42,6 +42,8 @@ export function createPayloadProviders(opts: {
   readonly launcher: Launcher;
   // The machine the providers read: where transcripts and settings live.
   readonly host: Host;
+  // The home's cache directory, where the usage store folds its scans.
+  readonly cacheDir: string;
   readonly watchers: WatcherRegistry;
   // Whether the OS is delivering file events: the caller's one owner, which
   // only the daemon starts.
@@ -65,6 +67,7 @@ export function createPayloadProviders(opts: {
     }),
     usageStore: new SessionUsageStore({
       host: opts.host,
+      cacheDir: opts.cacheDir,
       clock,
       logger,
       ledger,

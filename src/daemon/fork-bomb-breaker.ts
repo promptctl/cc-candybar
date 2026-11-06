@@ -33,9 +33,9 @@ import type { World } from "../host";
 // than an isolated (test/dev) instance, not a smaller version of the same one:
 // it is already bounded to exactly one by bind()'s kernel-enforced exclusion on
 // the canonical socket path, so no ceiling can ever be its failure mode — only
-// isolation (an explicit CC_CANDYBAR_SOCKET override) creates the "many
+// isolation (any socket but the canonical one: a named home's) creates the "many
 // coexisting instances" population this breaker exists to bound. Classifying by
-// "is CC_CANDYBAR_SOCKET set" keeps the two populations from ever counting
+// "is the socket the canonical one" keeps the two populations from ever counting
 // against each other: the production daemon is exempt (and so always boots,
 // however many isolated instances are registered), and isolated instances
 // compete only with each other over the shared ceiling.
@@ -286,10 +286,15 @@ export function realBreakerDeps(
   { host, launcher }: World,
   myStartTime: string | null,
   registryDir: string,
+  // Whether this daemon's socket is any but the canonical one, which its bind
+  // bounds to one daemon: a named home's, the legacy override's or a test
+  // runtime directory's socket is the population this breaker counts. The
+  // shell that knows the socket says so; the breaker ticket deletes the flag.
+  isolated: boolean,
   overrides: Partial<BreakerDeps> = {},
 ): BreakerDeps {
   return {
-    isolated: Boolean(host.env["CC_CANDYBAR_SOCKET"]),
+    isolated,
     registryDir,
     ceiling: daemonCeiling(host.env),
     pid: process.pid,

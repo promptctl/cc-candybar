@@ -11,6 +11,9 @@
 // per-segment), so the menu here is the user's own: one `{ persist, from }`
 // action over the segment key, the same seam any config can author.
 
+import { hostOf } from "../../helpers/host";
+import { configDir } from "../../../src/daemon/paths";
+import { homeOf } from "../../../src/daemon/home";
 import { readFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -44,11 +47,7 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
       path.join(os.tmpdir(), "cc-candybar-seg-palette-e2e-project-"),
     );
     // The user's own file — the one durable clicks write.
-    const userConfigPath = path.join(
-      env.XDG_CONFIG_HOME!,
-      "cc-candybar",
-      "config.json5",
-    );
+    const userConfigPath = path.join(configDir(homeOf(hostOf(env))), "config.json5");
     mkdirSync(path.dirname(userConfigPath), { recursive: true });
     const control = {
       template: '🎨 directory {{ menu "applyDirectoryPalette" "▸" "▾" }}',

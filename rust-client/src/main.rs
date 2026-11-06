@@ -37,6 +37,7 @@ use std::os::unix::io::FromRawFd;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
+use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -51,6 +52,9 @@ const FRAME_HEADER_BYTES: usize = 4;
 
 fn main() {
     let argv: Vec<String> = env::args().collect();
+    // The home is read first, so a misconfigured one is refused before anything
+    // else runs, and the refusal is this process's, on stderr.
+    let _ = home();
 
     if let Some(run) = native_subcommand(&argv) {
         run(&argv[2..]);
@@ -712,32 +716,175 @@ fn tmux_hint(
     }
 }
 
+// --- the renderer's home --------------------------------------------------
+//
+// [LAW:one-source-of-truth] Mirrors src/daemon/home.ts and src/daemon/paths.ts,
+// diffed by scripts/check-protocol.mjs: a session started with the home's two
+// variables reaches the renderer they name, and derives its socket, state and
+// cache by the daemon's own rules, so it spawns the daemon beside the right
+// lease. The main home is today's layout: the socket under the per-uid /tmp
+// directory (tmux's /tmp/tmux-<uid> model; the uid is kernel identity), state
+// and cache under the XDG roots. A named home has `state/` and `cache/`
+// beneath its root and its socket beside main's, named by its name.
+const HOME_ENV: &str = "CC_CANDYBAR_HOME";
+const NAME_ENV: &str = "CC_CANDYBAR_NAME";
+// The per-uid directory's override, for tests, so a worker's sockets never
+// meet the machine's.
+const RUNTIME_DIR_ENV: &str = "CC_CANDYBAR_RUNTIME_DIR";
+const MAIN_SOCKET_FILE: &str = "socket";
+const NAMED_SOCKET_SUFFIX: &str = ".sock";
+const HOME_STATE_DIR: &str = "state";
+const HOME_CACHE_DIR: &str = "cache";
+const RENDERER_NAME_MAX: usize = 32;
+const MAIN_NAME: &str = "main";
+
+enum Home {
+    Main {
+        runtime: PathBuf,
+        // CC_CANDYBAR_SOCKET, honoured for one release as the daemon honours it.
+        legacy_socket: Option<PathBuf>,
+    },
+    Named {
+        name: String,
+        root: PathBuf,
+        runtime: PathBuf,
+    },
+}
+
+// Set and non-empty, else absent: an empty variable reads as unset, as every
+// XDG variable does, which is how a renderer states one of these as "not this
+// arm" on a child it starts.
+fn env_non_empty(name: &str) -> Option<String> {
+    env::var(name).ok().filter(|v| !v.is_empty())
+}
+
+fn uid_runtime_dir() -> PathBuf {
+    let uid = unsafe { libc::getuid() };
+    PathBuf::from(format!("/tmp/cc-candybar-{uid}"))
+}
+
+// [LAW:parse-dont-validate] The grammar the daemon's parser applies, so a name
+// the daemon would refuse is refused here, where the user looks, instead of by
+// a detached daemon with no log to refuse into. The accept/reject vectors in
+// the test module below are diffed against the daemon's by check-protocol.
+fn parse_renderer_name(raw: &str) -> Result<String, String> {
+    let mut chars = raw.chars();
+    let first_ok = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
+    let rest_ok = chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if !first_ok || !rest_ok {
+        return Err(format!(
+            "{NAME_ENV} must be lowercase letters, digits and dashes, starting with a letter or digit, got {raw:?}"
+        ));
+    }
+    if raw.len() > RENDERER_NAME_MAX {
+        return Err(format!(
+            "{NAME_ENV} must be at most {RENDERER_NAME_MAX} characters, got {}: {raw:?}",
+            raw.len()
+        ));
+    }
+    if raw == MAIN_NAME {
+        return Err(format!(
+            "{NAME_ENV} may not be {MAIN_NAME:?}: that is the main renderer's name, which is what an unset {HOME_ENV} and {NAME_ENV} mean"
+        ));
+    }
+    Ok(raw.to_string())
+}
+
+// Both set is a named home; neither is main; one without the other, a
+// relative root, or the socket override beside a named home is refused,
+// naming the variable, before any path is derived.
+fn parse_home(
+    root: Option<String>,
+    name: Option<String>,
+    legacy_socket: Option<String>,
+    runtime: PathBuf,
+) -> Result<Home, String> {
+    match (root, name) {
+        (Some(root), Some(name)) => {
+            if !Path::new(&root).is_absolute() {
+                return Err(format!("{HOME_ENV} must be an absolute path, got {root:?}"));
+            }
+            if legacy_socket.is_some() {
+                return Err(format!(
+                    "CC_CANDYBAR_SOCKET is set beside {HOME_ENV} and {NAME_ENV}: a named renderer's socket is its name's, so unset it"
+                ));
+            }
+            Ok(Home::Named {
+                name: parse_renderer_name(&name)?,
+                root: PathBuf::from(root),
+                runtime,
+            })
+        }
+        (Some(_), None) => Err(format!(
+            "{HOME_ENV} is set without {NAME_ENV}: a renderer's home is both, or neither for the main renderer"
+        )),
+        (None, Some(_)) => Err(format!(
+            "{NAME_ENV} is set without {HOME_ENV}: a renderer's home is both, or neither for the main renderer"
+        )),
+        (None, None) => Ok(Home::Main {
+            runtime,
+            legacy_socket: legacy_socket.map(PathBuf::from),
+        }),
+    }
+}
+
+// [LAW:effects-at-boundaries] The process's one read of its home, at the top
+// of `main`: a misconfigured home refuses the client before it dials or spawns
+// anything, and the refusal is on stderr, where the daemon it would have spawned
+// could never put one. Immutable once read.
+static HOME: OnceLock<Home> = OnceLock::new();
+
+fn home() -> &'static Home {
+    HOME.get_or_init(|| {
+        let runtime = env_non_empty(RUNTIME_DIR_ENV)
+            .map(PathBuf::from)
+            .unwrap_or_else(uid_runtime_dir);
+        match parse_home(
+            env_non_empty(HOME_ENV),
+            env_non_empty(NAME_ENV),
+            env_non_empty("CC_CANDYBAR_SOCKET"),
+            runtime,
+        ) {
+            Ok(home) => home,
+            Err(msg) => {
+                eprintln!("cc-candybar: {msg}");
+                std::process::exit(1);
+            }
+        }
+    })
+}
+
 // Path families — must agree with src/daemon/paths.ts or the client can't
 // find the daemon's socket.
-//
-// The socket path is independent of XDG_STATE_HOME (see socket_path()).
-// State files (spawn.lock) and caches (last-render) still use XDG roots.
 
-// [LAW:one-source-of-truth] Mirrors tmux's /tmp/tmux-<uid>/default model.
-// UID is kernel identity — not overridable by any env var. CC_CANDYBAR_SOCKET
-// is the only explicit override for intentional multi-instance use.
 fn socket_path() -> PathBuf {
-    if let Some(s) = env::var_os("CC_CANDYBAR_SOCKET").filter(|s| !s.is_empty()) {
-        return PathBuf::from(s);
+    match home() {
+        Home::Main {
+            runtime,
+            legacy_socket,
+        } => legacy_socket
+            .clone()
+            .unwrap_or_else(|| runtime.join(MAIN_SOCKET_FILE)),
+        Home::Named { name, runtime, .. } => runtime.join(format!("{name}{NAMED_SOCKET_SUFFIX}")),
     }
-    let uid = unsafe { libc::getuid() };
-    PathBuf::from(format!("/tmp/cc-candybar-{uid}/socket"))
 }
 
 fn state_dir() -> PathBuf {
-    if let Some(xdg) = env::var_os("XDG_STATE_HOME").filter(|s| !s.is_empty()) {
-        return Path::new(&xdg).join("cc-candybar");
+    match home() {
+        Home::Main { .. } => {
+            if let Some(xdg) = env::var_os("XDG_STATE_HOME").filter(|s| !s.is_empty()) {
+                return Path::new(&xdg).join("cc-candybar");
+            }
+            let home = env::var_os("HOME").unwrap_or_else(|| OsString::from("/"));
+            Path::new(&home)
+                .join(".local")
+                .join("state")
+                .join("cc-candybar")
+        }
+        Home::Named { root, .. } => root.join(HOME_STATE_DIR),
     }
-    let home = env::var_os("HOME").unwrap_or_else(|| OsString::from("/"));
-    Path::new(&home)
-        .join(".local")
-        .join("state")
-        .join("cc-candybar")
 }
 
 // --- per-session last-render cache ---------------------------------------
@@ -760,11 +907,16 @@ fn last_render_dir() -> PathBuf {
 }
 
 fn cache_dir() -> PathBuf {
-    if let Some(xdg) = env::var_os("XDG_CACHE_HOME").filter(|s| !s.is_empty()) {
-        return Path::new(&xdg).join("cc-candybar");
+    match home() {
+        Home::Main { .. } => {
+            if let Some(xdg) = env::var_os("XDG_CACHE_HOME").filter(|s| !s.is_empty()) {
+                return Path::new(&xdg).join("cc-candybar");
+            }
+            let home = env::var_os("HOME").unwrap_or_else(|| OsString::from("/"));
+            Path::new(&home).join(".cache").join("cc-candybar")
+        }
+        Home::Named { root, .. } => root.join(HOME_CACHE_DIR),
     }
-    let home = env::var_os("HOME").unwrap_or_else(|| OsString::from("/"));
-    Path::new(&home).join(".cache").join("cc-candybar")
 }
 
 // Allow only [a-zA-Z0-9_-]. Claude session IDs are UUIDs, so this is the
@@ -1218,6 +1370,73 @@ fn spawn_daemon_detached() {
 mod tests {
     use super::*;
     use std::io;
+
+    // The renderer name grammar's vectors, the same lists as
+    // test/renderer-home.test.ts (diffed by scripts/check-protocol.mjs): each
+    // side drives its own parser from its own list.
+    const NAME_ACCEPT: &[&str] = &[
+        "a",
+        "0",
+        "w1",
+        "dev-bar",
+        "a-",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ];
+    const NAME_REJECT: &[&str] = &[
+        "",
+        "main",
+        "A",
+        "Dev",
+        "-a",
+        "a_b",
+        "a.b",
+        "a b",
+        " a",
+        "é",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ];
+
+    #[test]
+    fn renderer_name_grammar() {
+        for name in NAME_ACCEPT {
+            assert_eq!(parse_renderer_name(name).as_deref(), Ok(*name), "{name:?}");
+        }
+        for name in NAME_REJECT {
+            assert!(parse_renderer_name(name).is_err(), "{name:?} was accepted");
+        }
+    }
+
+    // The home's parse, as `root|name|socket=outcome`: an empty field is the
+    // variable unset or empty, which read alike. Same list as the daemon's.
+    const HOME_CASES: &[&str] = &[
+        "/r|n|=named",
+        "||=main",
+        "||/s=main",
+        "/r||=refused",
+        "|n|=refused",
+        "/r|n|/s=refused",
+        "r|n|=refused",
+        "/r|main|=refused",
+    ];
+
+    #[test]
+    fn home_parse_cases() {
+        for case in HOME_CASES {
+            let (inputs, outcome) = case.split_once('=').unwrap();
+            let mut fields = inputs.split('|');
+            let field = |f: Option<&str>| f.filter(|v| !v.is_empty()).map(String::from);
+            let root = field(fields.next());
+            let name = field(fields.next());
+            let socket = field(fields.next());
+            let parsed = parse_home(root, name, socket, PathBuf::from("/run"));
+            let got = match parsed {
+                Ok(Home::Main { .. }) => "main",
+                Ok(Home::Named { .. }) => "named",
+                Err(_) => "refused",
+            };
+            assert_eq!(got, outcome, "{case:?}");
+        }
+    }
 
     // The same table as test/term-extent.test.ts: both runtimes must read
     // the same COLUMNS/LINES value from the same shell, or neither.

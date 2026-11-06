@@ -70,11 +70,11 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 // simulated one, under the node shims) once.
 const WORLD = processWorld();
 const HOST = WORLD.host;
-const paths = daemonPaths(HOST);
+const paths = daemonPaths(WORLD.home);
 const pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
   gates: daemonGates(),
-  paths,
+  home: WORLD.home,
   host: HOST,
   bundle: {
     entryUrl: "file:///app/dist/index.mjs",

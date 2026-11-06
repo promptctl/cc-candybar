@@ -26,7 +26,7 @@ The client makes a relative path in a hint absolute against its own cwd. The dae
 
 ## Identity and lifetime
 
-There is one daemon per user, guarded by a pid file in the state directory. The socket path comes from the UID under /tmp, not from the state directory, so overriding XDG_STATE_HOME does not isolate the socket. A separate env override isolates it for tests and dev.
+A renderer has one identity, its home: a name and a root, parsed from two environment variables once at the process edge and carried as a value, from which every path it reads or writes derives. The main renderer's home is today's XDG layout, so an installed user sees no change; any other home is a directory with state, config and cache beneath it. A named home's socket is not under its root: it sits beside main's in the per-uid /tmp directory, named by the name, because a link carries a name and nothing else and the URL handler must reach the socket from the name alone. That directory has one override, for tests, so a worker's sockets never meet the machine's; the breaker's registry ignores it on purpose, because counting through every isolation is what the registry is for. The children a renderer starts are handed the home's inputs whole, the variables that don't apply stated empty, so a shell's own values never reach them and a child parses the identical home. The old socket override is read for one release and warned on at boot.
 
 Restarts are normal, and every cache rebuilds cold. There is no idle or age shutdown, because either one would interrupt an active session. The only hard limit is the memory backstop (daemon-memory.md). The daemon also ends itself when the bundle it runs from changes or disappears, so a rebuild takes effect without a manual restart.
 

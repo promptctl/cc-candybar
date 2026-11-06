@@ -75,7 +75,7 @@ export function dslConfigCandidatePaths(
       ...CONFIG_EXTENSIONS.map((ext) =>
         path.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`),
       ),
-      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`),
+      ...CONFIG_EXTENSIONS.map((ext) => `${userConfigBase(locs)}.${ext}`),
     ]),
   ];
 }
@@ -88,8 +88,8 @@ const REPO_CONFIG_BASE = ".cc-candybar";
 // tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
 // (defaulting to `~/.config/cc-candybar/config`). The candidate enumerator
 // appends each accepted extension; `userHome` appends the documented one.
-function xdgConfigBase(locs: Locations): string {
-  return path.join(locs.configHome, "cc-candybar", "config");
+function userConfigBase(locs: Locations): string {
+  return path.join(locs.configDir, "config");
 }
 
 /**
@@ -269,7 +269,7 @@ export function resolveDslConfig(
 // repository can supply.
 function isUserFile(locs: Locations, candidate: string): boolean {
   return CONFIG_EXTENSIONS.some(
-    (e) => candidate === `${xdgConfigBase(locs)}.${e}`,
+    (e) => candidate === `${userConfigBase(locs)}.${e}`,
   );
 }
 
@@ -296,7 +296,7 @@ export function repoProject(
 function userHome(locs: Locations, layers: readonly ConfigLayer[]): string {
   return (
     layers.find((l) => isUserFile(locs, l.path))?.path ??
-    `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`
+    `${userConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`
   );
 }
 

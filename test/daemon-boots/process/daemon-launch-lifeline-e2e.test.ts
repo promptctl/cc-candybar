@@ -52,7 +52,7 @@ describe("a launch child in flight dies with the daemon that launched it", () =>
     try {
       const daemon = await spawnDaemonWithEnv(prepared.env);
       try {
-        await sendDaemonRequest(prepared.sockPath, {
+        await sendDaemonRequest(prepared.home, {
           v: PROTOCOL_VERSION,
           kind: "render",
           ...renderBody("lifeline-e2e", projectDir, {}, [

@@ -3,8 +3,9 @@
 // and a durable click writes the user's file, refusing a change a project
 // layer would hide.
 
+import { homeOf } from "../src/daemon/home";
 import fs from "node:fs";
-import { hostOf, worldOf } from "./helpers/host";
+import { hostOf, worldOf, MAIN_ENV } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import { locations } from "../src/daemon/paths";
 import os from "node:os";
@@ -47,7 +48,7 @@ beforeEach(() => {
   answerRepo(project);
   userFile = path.join(dir, "xdg", "cc-candybar", "config.json5");
   projectFile = path.join(project, ".cc-candybar.json5");
-  host = hostOf({ ...process.env, XDG_CONFIG_HOME: path.join(dir, "xdg") });
+  host = hostOf({ ...MAIN_ENV, XDG_CONFIG_HOME: path.join(dir, "xdg") });
   world = worldOf(host);
   fs.writeFileSync(
     userFile,
@@ -68,7 +69,7 @@ const noRecord = { record: () => {}, logger: () => {} };
 
 // The home a click in the project writes, under the answers the bar reads.
 const projectHome = () =>
-  durableConfig(locations(host), repoConfigs(stateDir(host)).read(), project, project);
+  durableConfig(locations(host, homeOf(host)), repoConfigs(stateDir(homeOf(host))).read(), project, project);
 
 test("a project file that places one segment renders over the user's whole config", async () => {
   // `mine` is declared only by the user's file: the project file loads only
@@ -102,7 +103,7 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectHome();
-  expect(home).toEqual({ path: userFile, above: [{ path: projectFile, scope: "repo" }], repo: project, cwd: project, locs: locations(host) });
+  expect(home).toEqual({ path: userFile, above: [{ path: projectFile, scope: "repo" }], repo: project, cwd: project, locs: locations(host, homeOf(host)) });
   writeValues(noRecord, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -152,7 +153,7 @@ test("the user's file is a layer even when the session's cwd is its directory", 
   const local = path.join(xdgDir, ".cc-candybar.json5");
   fs.writeFileSync(local, `{}`);
   answerRepo(xdgDir);
-  const resolved = resolveDslConfig(locations(host), repoConfigs(stateDir(host)).read(), undefined, xdgDir);
+  const resolved = resolveDslConfig(locations(host, homeOf(host)), repoConfigs(stateDir(homeOf(host))).read(), undefined, xdgDir);
   expect(resolved.kind === "chain" && resolved.layers).toEqual([
     { path: userFile, scope: "plugins" },
     { path: local, scope: "repo" },
@@ -421,7 +422,7 @@ describe("a project layer inserting into the user's row", () => {
   // The bar's own load of the chain: what it draws, and what it dropped.
   const barLoad = () => {
     const warnings: string[] = [];
-    const loaded = loadConfigChain(locations(host), 
+    const loaded = loadConfigChain(locations(host, homeOf(host)), 
       [homeLayer(userFile), { path: projectFile, scope: "repo" }],
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },

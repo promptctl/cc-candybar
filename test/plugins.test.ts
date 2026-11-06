@@ -3,8 +3,9 @@
 // and the loaded config's live variable store (what the daemon renders from).
 // brandon-plugins-ktag.8fv.
 
+import { homeOf } from "../src/daemon/home";
 import { drawPayload } from "./helpers/draw-payload";
-import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
+import { HOST, MAIN_ENV, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -63,7 +64,7 @@ afterEach(() => {
 // This worker's environment with `set` laid over it, as the machine the test
 // that follows runs on. Nothing is written to `process.env`.
 function runOn(set: Record<string, string>): void {
-  host = hostOf({ ...HOST.env, ...set });
+  host = hostOf({ ...MAIN_ENV, ...set });
   world = worldOf(host);
 }
 
@@ -588,8 +589,8 @@ test("the daemon's load records the plugins it merged and dropped", () => {
   );
   const loaded = loadFromDisk(dir, dir, good, {
     clock: systemTimekeeper,
-    stateDir: stateDir(host),
-    locations: locations(host),
+    stateDir: stateDir(homeOf(host)),
+    locations: locations(host, homeOf(host)),
     runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
     storage: NO_PLUGIN_STORAGE,
     signer: TEST_SIGNER,
@@ -649,8 +650,8 @@ describe("a plugin's own variables", () => {
     expect(warnings).toEqual([]);
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -698,8 +699,8 @@ describe("a plugin's own variables", () => {
     expect(rendered).toContain("hello, world 7 ran open=no");
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -757,8 +758,8 @@ describe("a plugin's own variables", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -777,8 +778,8 @@ describe("a plugin's own variables", () => {
   test("none declared counts zero", () => {
     const loaded = loadFromDisk(dir, dir, config(), {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -828,7 +829,7 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [],
-      { repo: repoGateAt(stateDir(host), projectDir).plugins },
+      { repo: repoGateAt(stateDir(homeOf(host)), projectDir).plugins },
       projectDir,
       [],
       instantOf(new Date()),
@@ -930,8 +931,8 @@ describe("an installed plugin", () => {
       placing("plugins.lit.ticket"),
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -990,8 +991,8 @@ describe("an installed plugin", () => {
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1073,8 +1074,8 @@ describe("an installed plugin", () => {
     const load = (): string => {
       const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1618,8 +1619,8 @@ describe("an installed plugin", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -1657,8 +1658,8 @@ describe("an installed plugin", () => {
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        stateDir: stateDir(homeOf(host)),
+        locations: locations(host, homeOf(host)),
         runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
@@ -1763,8 +1764,8 @@ describe("an installed plugin", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -1845,8 +1846,8 @@ describe("an installed plugin", () => {
     const p = placing("plugins.lit.s");
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
@@ -1869,7 +1870,7 @@ describe("plugin roots", () => {
       XDG_DATA_HOME: "/home/u/.local/share",
       XDG_DATA_DIRS: "/usr/share:/home/u/.local/share:/opt/share",
     });
-    expect(pluginRoots(locations(host), null)).toEqual([
+    expect(pluginRoots(locations(host, homeOf(host)), null)).toEqual([
       { dir: "/opt/share/cc-candybar/plugins", scope: "plugins" },
       { dir: "/usr/share/cc-candybar/plugins", scope: "plugins" },
       { dir: "/home/u/.local/share/cc-candybar/plugins", scope: "plugins" },
@@ -1884,7 +1885,7 @@ describe("plugin roots", () => {
     });
     expect(
       pluginRoots(
-        locations(host),
+        locations(host, homeOf(host)),
         "/w/repo" as Parameters<typeof pluginRoots>[1],
       ),
     ).toEqual([
@@ -2008,8 +2009,8 @@ describe("a repo's plugin beside an installed one of its name", () => {
     );
     const loaded = loadFromDisk(repo, repo, undefined, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,

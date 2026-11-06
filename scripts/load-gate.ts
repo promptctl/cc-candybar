@@ -35,6 +35,7 @@
 
 import { spawn } from "node:child_process";
 import { processWorld } from "../src/host.js";
+import { homeOf } from "../src/daemon/home.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -394,7 +395,8 @@ const env: NodeJS.ProcessEnv = {
 const world = processWorld();
 const host = { env, home: dirs.home, tmp: world.host.tmp };
 // What its clients ask the daemon with: this world's host, the machine's clock.
-const wire = { host, clock: world.clock };
+const home = homeOf(host);
+const wire = { host, home, clock: world.clock };
 
 // The daemon as the client spawns it, plus an inspector on a loopback port:
 // the one way to read its live heap is to collect it first.
@@ -1090,7 +1092,7 @@ async function run(): Promise<{
 // The feed's summary line in `state`, once the daemon has written it.
 async function feedSummary(state: "closed"): Promise<string> {
   for (const giveUp = Date.now() + 10_000; Date.now() < giveUp; ) {
-    const line = logLines(logPath(host)).find(
+    const line = logLines(logPath(home)).find(
       (l) => l.includes("] feed sid=") && l.includes(` ${state} `),
     );
     if (line !== undefined) return line;
@@ -1125,7 +1127,7 @@ function feedPaceCheck(summary: string): Check {
 // order, through one writer, so the window's last events have landed once any
 // line after the window has.
 async function daemonEvents(since: number, until: number): Promise<string[]> {
-  const log = logPath(host);
+  const log = logPath(home);
   const stamped = (): Array<{ at: number; line: string }> =>
     logLines(log).map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
   let all = stamped();
@@ -1233,7 +1235,7 @@ try {
     // the daemon's state (its log) is the diagnosis.
     remove(dirs.checkouts);
     remove(dirs.claude);
-    console.error(`kept ${root} (daemon log: ${logPath(host)})`);
+    console.error(`kept ${root} (daemon log: ${logPath(home)})`);
   }
 }
 process.exit(passed ? 0 : 1);

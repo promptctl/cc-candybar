@@ -5,8 +5,10 @@
 // daemon's own is exercised — a project config found first, a user config
 // unread behind it, and a declaration the project config never uses.
 
+import { configDir } from "../../../src/daemon/paths";
+import { homeOf } from "../../../src/daemon/home";
 import { cellLen } from "@promptctl/rich-js";
-import { HOST, WORLD } from "../../helpers/host";
+import { HOST, WORLD, hostOf } from "../../helpers/host";
 
 import { textOf, type Frame } from "../../../src/render/frame";
 import { linkUrls } from "../../helpers/frame";
@@ -90,11 +92,7 @@ test("the doctor's config row reports the session's own config load", async () =
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
-  const userConfig = path.join(
-    env.XDG_CONFIG_HOME!,
-    "cc-candybar",
-    "config.json5",
-  );
+  const userConfig = path.join(configDir(homeOf(hostOf(env))), "config.json5");
   mkdirSync(path.dirname(userConfig), { recursive: true });
   writeFileSync(userConfig, "{}");
   const projectDir = realpathSync(
@@ -317,7 +315,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
 // the link to the forwarder app, which would deliver it to the user's own
 // daemon — replaced by the frame that app writes.
 test("the CLI's probe reads its own link back from the daemon it was delivered to", async () => {
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+  const { env, home, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
   // The env it places names this socket, which is where the CLI's send looks.

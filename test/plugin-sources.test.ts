@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { homeOf } from "../src/daemon/home";
 import { reaction, runInAction } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
@@ -54,7 +55,7 @@ import { textOf, ansiOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
-import { locations, stateDir } from "../src/daemon/paths";
+import { locations, stateDir, cacheDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
@@ -155,6 +156,7 @@ function rig(): Rig {
     clock: systemTimekeeper,
     launcher: world.launcher,
     host,
+    cacheDir: cacheDir(homeOf(host)),
     watchers,
     fileEvents: new FileEventDelivery({
       clock: systemTimekeeper,
@@ -170,8 +172,8 @@ function rig(): Rig {
   const cache = new RenderCache<SessionSource>(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState,
       watchers,
@@ -299,8 +301,8 @@ describe("a source's declaration", () => {
     const p = listing(`{ status: ${SOURCE} }`);
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -394,8 +396,8 @@ describe("a source's declaration", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -429,8 +431,8 @@ describe("a source's declaration", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -556,8 +558,8 @@ describe("a source's declaration", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      stateDir: stateDir(homeOf(host)),
+      locations: locations(host, homeOf(host)),
       runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,

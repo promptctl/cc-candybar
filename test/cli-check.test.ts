@@ -14,7 +14,7 @@
 // fields).
 
 import fs from "node:fs";
-import { HOST, hostOf, worldOf } from "./helpers/host";
+import { HOST, MAIN_ENV, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
@@ -49,7 +49,7 @@ afterAll(() => {
 // verdict. $CC_CANDYBAR_CONFIG is pinned too because one test sets it. The
 // machine is the worker's own environment with `set` laid over it (undefined
 // removes a variable); nothing is written to `process.env`.
-let host: Host = HOST;
+let host: Host = hostOf(MAIN_ENV);
 let world: World;
 function runOn(set: Record<string, string | undefined>): void {
   const env = { ...host.env, ...set };
@@ -58,7 +58,7 @@ function runOn(set: Record<string, string | undefined>): void {
   world = worldOf(host);
 }
 beforeEach(() => {
-  host = HOST;
+  host = hostOf(MAIN_ENV);
   runOn({ CC_CANDYBAR_CONFIG: undefined, XDG_CONFIG_HOME: path.join(dir, "xdg-empty") });
 });
 

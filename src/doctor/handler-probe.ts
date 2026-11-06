@@ -68,7 +68,7 @@ export interface DaemonView {
 export interface HandlerProbeEdge {
   readonly platform: NodeJS.Platform;
   // The socket this process reaches its daemon on, and the one the handler
-  // app delivers to. They differ under `CC_CANDYBAR_SOCKET`.
+  // app delivers to, which is main's: they differ for a named home.
   readonly sockets: { readonly own: string; readonly handler: string };
   readonly nonce: () => string;
   readonly daemon: () => Promise<Asked<DaemonView>>;
@@ -128,7 +128,7 @@ export async function probeUrlHandler(
   if (edge.sockets.own !== edge.sockets.handler) {
     return {
       kind: "unprobed",
-      reason: `this shell's daemon is at ${edge.sockets.own} (CC_CANDYBAR_SOCKET); the URL handler delivers links to ${edge.sockets.handler}`,
+      reason: `this shell's daemon is at ${edge.sockets.own}; the URL handler delivers links to ${edge.sockets.handler}`,
     };
   }
   // The link is delivered to the daemon, so one that cannot be asked can
@@ -218,10 +218,10 @@ export function productionHandlerProbeEdge(
   launcher: OneShotLauncher,
   world: ClientWorld,
 ): HandlerProbeEdge {
-  const { host, clock } = world;
+  const { home, clock } = world;
   return {
     platform: process.platform,
-    sockets: { own: socketPath(host), handler: defaultSocketPath() },
+    sockets: { own: socketPath(home), handler: defaultSocketPath() },
     monotonic: () => clock.monotonic(),
     nonce: randomUUID,
     daemon: () => daemonView(world),

@@ -40,6 +40,8 @@ import { withStamp } from "../../scripts/version-stamp.cjs";
 import { textOf, type Frame } from "../../src/render/frame";
 import { frameRequest, sendClick } from "./daemon-e2e";
 import type { DaemonTarget } from "./daemon-wire";
+import { homeOf } from "../../src/daemon/home";
+import { hostOf } from "./host";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
 import {
   describeLink as describeWith,
@@ -111,7 +113,7 @@ const spawnedBarDaemon: StartBarDaemon = async (env) => {
     [PARENT_PID_ENV]: String(process.pid),
     NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
   });
-  return { target: env.CC_CANDYBAR_SOCKET!, stop: () => daemon.killTree() };
+  return { target: homeOf(hostOf(env)), stop: () => daemon.killTree() };
 };
 
 export { hookData };

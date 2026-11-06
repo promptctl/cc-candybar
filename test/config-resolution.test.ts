@@ -17,8 +17,9 @@ import {
   writeFileSync,
   mkdirSync,
 } from "node:fs";
+import { homeOf } from "../src/daemon/home";
 import { locations, type Locations } from "../src/daemon/paths";
-import { hostOf } from "./helpers/host";
+import { MAIN_ENV, hostOf } from "./helpers/host";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -63,10 +64,12 @@ function mkdir(): { dir: string; cleanup: () => void } {
 
 // Isolate every test from the user's real XDG home + env var: the locations a
 // test resolves under are parsed from an environment it states, never from the
-// worker's own.
+// worker's own. These cases are about the main layout, so the environment is
+// the worker's as a main home reads it.
 function isolated(xdgHome: string, extra: NodeJS.ProcessEnv = {}): Locations {
-  const { XDG_CONFIG_HOME: _x, CC_CANDYBAR_CONFIG: _c, ...rest } = process.env;
-  return locations(hostOf({ ...rest, XDG_CONFIG_HOME: xdgHome, ...extra }));
+  const { XDG_CONFIG_HOME: _x, CC_CANDYBAR_CONFIG: _c, ...rest } = MAIN_ENV;
+  const host = hostOf({ ...rest, XDG_CONFIG_HOME: xdgHome, ...extra });
+  return locations(host, homeOf(host));
 }
 
 const VALID_CFG = JSON.stringify({

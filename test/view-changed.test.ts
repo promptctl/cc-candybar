@@ -5,7 +5,7 @@
 // nothing, so a still source under a fast period wakes no feed.
 
 import fs from "node:fs";
-import { HOST, locs } from "./helpers/host";
+import { HOST, locs, WORLD } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
 import path from "node:path";
@@ -83,7 +83,7 @@ function setUp() {
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
+      stateDir: stateDir(WORLD.home),
       locations: locs(),
       runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,

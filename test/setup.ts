@@ -1,6 +1,7 @@
 import path from "node:path";
 import { createRequire } from "node:module";
 
+import { HOME_ENV, NAME_ENV, RUNTIME_DIR_ENV } from "../src/daemon/home";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog";
 import { jestTmpDir } from "./helpers/jest-tmp";
 
@@ -23,14 +24,18 @@ const stamp = createRequire(__filename)(
 ) as { withStamp(nodeOptions: string | undefined): string };
 process.env.NODE_OPTIONS = stamp.withStamp(process.env.NODE_OPTIONS);
 
-// [LAW:single-enforcer] Guard every Jest worker from accidentally touching the
-// live daemon's socket at /tmp/cc-candybar-<uid>/socket. setupFiles re-runs in
-// a fresh module context per test file, so randomUUID() gives a path unique per
-// test file — not just per worker process (process.pid would be shared across
-// every file that worker runs sequentially). Individual tests that need a live
-// socket override this explicitly (withTempState, CC_CANDYBAR_SOCKET in
-// subprocess env, etc.).
-process.env.CC_CANDYBAR_SOCKET = path.join(jestTmpDir("socket"), "socket");
+// [LAW:single-enforcer] Every Jest worker is a renderer home of its own
+// (src/daemon/home.ts), so nothing it builds or spawns reads or writes the
+// machine's: its state, config and cache are under a root of its own, and its
+// sockets bind in a runtime directory of its own, never beside the live bar's
+// at /tmp/cc-candybar-<uid>. setupFiles re-runs in a fresh module context per
+// test file, so randomUUID() gives directories unique per test file — not just
+// per worker process (process.pid would be shared across every file that
+// worker runs sequentially). A test that needs a home apart from the worker's
+// builds one with the same three variables (prepareIsolatedDaemonEnv).
+process.env[HOME_ENV] = jestTmpDir("home");
+process.env[NAME_ENV] = "jest";
+process.env[RUNTIME_DIR_ENV] = jestTmpDir("run");
 
 // [LAW:single-enforcer] No test daemon ever asks npm what the latest release
 // is: the tsx-harness daemons run `src/index.ts`, whose entry resolves to a
@@ -62,15 +67,13 @@ const noPlugins = jestTmpDir("data");
 process.env.XDG_DATA_HOME = noPlugins;
 process.env.XDG_DATA_DIRS = noPlugins;
 
-// [LAW:single-enforcer] No test load finds the host's own config: the XDG
-// location is the lowest layer of every chain (src/config/loader/discovery.ts),
-// so a host config would join every test's — and an invalid one fail it. A
-// test exercising that location points it at its own.
+// [LAW:single-enforcer] The worker's named home reads none of these, but a test
+// of the main layout builds a main home over this environment less the home's
+// variables (`MAIN_ENV`, test/helpers/host.ts), and that home must not land on
+// the host's: its config would join every such test's chain (the XDG location
+// is the lowest layer, src/config/loader/discovery.ts), its state holds the
+// host's answers for repository configs and its link key, and its cache the
+// host's usage scans.
 process.env.XDG_CONFIG_HOME = jestTmpDir("config");
-
-// [LAW:single-enforcer] No test reads the host's answers for repository
-// configs, or its link key (src/daemon/repo-configs.ts, link-key.ts): both
-// live in the state directory, so a repository the host approved would load
-// in a test that means to see it wait. A test answering for a repository
-// writes into this one (test/helpers/repo-approval.ts).
 process.env.XDG_STATE_HOME = jestTmpDir("state");
+process.env.XDG_CACHE_HOME = jestTmpDir("cache");

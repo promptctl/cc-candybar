@@ -3,7 +3,7 @@
 // read, at the draw in progress; anything else is cached.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { HOST, locs } from "./helpers/host";
+import { HOST, locs, WORLD } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 import { projectionsOf } from "../src/config/loader/projections";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -200,7 +200,7 @@ test("the config load line names the load's projections", () => {
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
     fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
-    const loaded = loadFromDisk(dir, dir, file, { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }), storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    const loaded = loadFromDisk(dir, dir, file, { clock: systemTimekeeper, stateDir: stateDir(WORLD.home), locations: locs(), env: HOST.env, runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }), storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();

@@ -310,7 +310,7 @@ export function runPlugin(argv: readonly string[], world: World): number {
     const installed = withRepo(world, source, (repo) =>
       installFromRepo(
         repo,
-        userPluginRoot(locations(world.host)),
+        userPluginRoot(locations(world.host, world.home)),
         from,
         world.host.home,
       ),

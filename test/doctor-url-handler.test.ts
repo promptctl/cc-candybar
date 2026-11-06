@@ -278,7 +278,7 @@ describe("probeUrlHandler", () => {
     expect(await probeUrlHandler(edge)).toEqual({
       kind: "unprobed",
       reason:
-        "this shell's daemon is at /tmp/dev/s (CC_CANDYBAR_SOCKET); the URL handler delivers links to /tmp/cc-candybar-501/socket",
+        "this shell's daemon is at /tmp/dev/s; the URL handler delivers links to /tmp/cc-candybar-501/socket",
     });
     expect(calls).toEqual([]);
   });

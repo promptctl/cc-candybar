@@ -156,7 +156,7 @@ export const STAGES: readonly Benchmark[] = [
       try {
         const ms = await repeat(plan.samples, () => {
           loadConfigChain(
-            locations(processWorld().host),
+            locations(processWorld().host, processWorld().home),
             [],
             DEFAULT_DSL_CONFIG,
             { warned: () => {} },

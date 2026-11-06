@@ -24,7 +24,7 @@
 
 import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { daemonGates } from "../daemon/update-keys.js";
-import { locations, stateDir } from "../daemon/paths.js";
+import { cacheDir, locations, stateDir } from "../daemon/paths.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
@@ -117,6 +117,7 @@ const watchers = new WatcherRegistry({ clock: world.clock, logger: log });
 const providers = createPayloadProviders({
   launcher: world.launcher,
   host,
+  cacheDir: cacheDir(world.home),
   watchers,
   // The demo holds no folder and watches nothing.
   fileEvents: NO_FILE_EVENTS,
@@ -133,8 +134,8 @@ const sessionState = new SessionState();
 // earns are reported whether or not it goes on to load, as the daemon's strip
 // and `cc-candybar check` report them.
 function loadState(): DslRenderState {
-  const locs = locations(host);
-  const repos = repoGateAt(stateDir(host), cwd);
+  const locs = locations(host, world.home);
+  const repos = repoGateAt(stateDir(world.home), cwd);
   // The file it was given is named explicitly: no repository supplies it.
   const chain = {
     layers: [homeLayer(configPath)],
@@ -158,9 +159,9 @@ function loadState(): DslRenderState {
       locations: locs,
       sessionState,
       storage: UNOWNED_STORAGE,
-      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(host))),
+      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(world.home))),
       gates: daemonGates(),
-      stateDir: stateDir(host),
+      stateDir: stateDir(world.home),
     },
   );
   if (loaded.warning !== null) warn(loaded.warning);

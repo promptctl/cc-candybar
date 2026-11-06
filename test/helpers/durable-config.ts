@@ -6,15 +6,17 @@
 // stands those three up under one temp root and tears them down together,
 // so no suite re-spells the origin key or the history path.
 //
-// [LAW:single-enforcer] Every env var that steers where a durable write lands
-// is isolated in the fixture's `host`, which a test hands to what it drives:
-// the XDG pair derive the history path and the first-ever-write fallback. (A
-// developer's own CC_CANDYBAR_CONFIG cannot leak in: the daemon reads none —
-// it is a client hint, composed into the render origin, brandon-config-5g8.)
+// [LAW:single-enforcer] Everything that steers where a durable write lands is
+// the fixture's renderer home, under its own root: the history path and the
+// first-ever-write fallback both derive from it, and a test hands the home and
+// its host to what it drives. (A developer's own CC_CANDYBAR_CONFIG cannot leak
+// in: the daemon reads none — it is a client hint, composed into the render
+// origin, brandon-config-5g8.)
 
 import { requestedConfigTarget } from "../../src/config-hint";
-import { HOST, hostOf } from "./host";
+import { hostOf } from "./host";
 import type { Host } from "../../src/host";
+import { HOME_ENV, NAME_ENV, homeOf, type RendererHome } from "../../src/daemon/home";
 import {
   mkdirSync,
   mkdtempSync,
@@ -32,13 +34,15 @@ import {
   type SessionHistory,
   type Step,
 } from "../../src/daemon/settings-history";
-import { settingsHistoryPath } from "../../src/daemon/paths";
+import { configDir, settingsHistoryPath } from "../../src/daemon/paths";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 
 export interface DurableConfig {
-  /** The machine the fixture's files are under: its XDG pair names them. */
+  /** The host whose environment names the fixture's home. */
   readonly host: Host;
+  /** The renderer home the fixture's files are under. */
+  readonly home: RendererHome;
   /** The session's projectDir AND cwd — the temp root. */
   readonly projectDir: string;
   /** The user's XDG `config.json5` — the file every durable write lands in. */
@@ -74,10 +78,11 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   const root = mkdtempSync(join(tmpdir(), prefix));
   const host = hostOf({
     ...process.env,
-    XDG_STATE_HOME: join(root, "state"),
-    XDG_CONFIG_HOME: join(root, "xdg-config"),
+    [HOME_ENV]: join(root, "home"),
+    [NAME_ENV]: "durable",
   });
-  const configPath = join(root, "xdg-config", "cc-candybar", "config.json5");
+  const home = homeOf(host);
+  const configPath = join(configDir(home), "config.json5");
   mkdirSync(dirname(configPath), { recursive: true });
   const readOrNull = (file: string): string | null => {
     try {
@@ -90,10 +95,11 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   const readText = (): string | null => readOrNull(configPath);
   return {
     host,
+    home,
     projectDir: root,
     configPath,
     projectPath: join(root, ".cc-candybar.json5"),
-    historyPath: settingsHistoryPath(host),
+    historyPath: settingsHistoryPath(home),
     write: (text) => writeFileSync(configPath, text),
     text: readText,
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
@@ -101,7 +107,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     // absent file and an absent entry both read as the empty stack.
     history: (sessionId = "s1") =>
       (
-        JSON.parse(readOrNull(settingsHistoryPath(host)) ?? "{}") as Record<
+        JSON.parse(readOrNull(settingsHistoryPath(home)) ?? "{}") as Record<
           string,
           SessionHistory
         >
@@ -113,7 +119,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
       new SettingsHistory(
         sessionState,
         () => {},
-        fileHistoryStorage(settingsHistoryPath(host), () => {}),
+        fileHistoryStorage(settingsHistoryPath(home), () => {}),
       ),
     seedOrigin: (sessionState, sessionId, configFile) =>
       sessionState.set(

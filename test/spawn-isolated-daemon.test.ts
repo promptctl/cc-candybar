@@ -11,8 +11,9 @@
 // child's exit, and the budget-expiry arm is the one that excludes it. Asserting
 // which arm spoke is therefore a claim about the mechanism, not about a clock.
 
+import { HOME_ENV, NAME_ENV, homeOf } from "../src/daemon/home";
 import fs from "node:fs";
-import { HOST, hostOf } from "./helpers/host";
+import { hostOf } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 
@@ -24,26 +25,27 @@ import {
 
 const LOG_LINE = "2026-09-12T00:00:00.000Z [error] refusing to boot: nope";
 const STDERR_LINE = "Error: died before it had a log";
-const SOCK = "/tmp/ccb-x/cc-candybar/socket";
+const SOCK = "/tmp/ccb-x/run/test.sock";
 
-// An env whose logPath(HOST) names a real file, so the projection under test reads
-// the daemon's own words the way it does in production.
-function envWithLog(): NodeJS.ProcessEnv {
+// An env naming a home whose log is a real file, so the projection under test
+// reads the daemon's own words the way it does in production.
+function envWithLog(): { env: NodeJS.ProcessEnv; root: string } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-rf-"));
-  const env: NodeJS.ProcessEnv = { XDG_STATE_HOME: root };
-  const file = logPath(hostOf(env));
+  const env: NodeJS.ProcessEnv = { [HOME_ENV]: root, [NAME_ENV]: "rf" };
+  const file = logPath(homeOf(hostOf(env)));
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${LOG_LINE}\n`);
-  return env;
+  return { env, root };
 }
 
 describe("readinessFailure — what the socket did, what our process did", () => {
   let env: NodeJS.ProcessEnv;
+  let root: string;
   beforeAll(() => {
-    env = envWithLog();
+    ({ env, root } = envWithLog());
   });
   afterAll(() => {
-    fs.rmSync(env.XDG_STATE_HOME!, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
   });
 
   const message = (readiness: ReadinessFailure): string =>
@@ -91,7 +93,7 @@ describe("readinessFailure — what the socket did, what our process did", () =>
     for (const phase of phases) {
       for (const exit of exits) {
         const m = message({ phase, exit });
-        expect(m).toContain(logPath(hostOf(env)));
+        expect(m).toContain(logPath(homeOf(hostOf(env))));
         expect(m).toContain(LOG_LINE);
         expect(m).toContain(`stderr:\n${STDERR_LINE}`);
       }

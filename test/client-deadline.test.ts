@@ -10,6 +10,8 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
+import { HOME_ENV, NAME_ENV, RUNTIME_DIR_ENV, homeOf } from "../src/daemon/home";
+import { socketPath } from "../src/daemon/paths";
 import { RENDER_BUDGETS } from "../src/daemon/client";
 import type { RoundTripBudgets } from "../src/daemon/client-transport";
 import {
@@ -28,8 +30,14 @@ async function withStubDaemon<T>(
   seen: (req: Record<string, unknown>) => void,
 ): Promise<T> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-deadline-"));
-  const sockPath = path.join(root, "cc-candybar", "socket");
-  fs.mkdirSync(path.dirname(sockPath), { recursive: true });
+  // A home of the stub's own: the client dials the socket its name derives.
+  const host = hostOf({
+    ...process.env,
+    [HOME_ENV]: path.join(root, "home"),
+    [NAME_ENV]: "deadline",
+    [RUNTIME_DIR_ENV]: root,
+  });
+  const sockPath = socketPath(homeOf(host));
   const server = net.createServer((sock) => {
     sock.on(
       "data",
@@ -45,11 +53,6 @@ async function withStubDaemon<T>(
     );
   });
   await new Promise<void>((resolve) => server.listen(sockPath, resolve));
-  const host = hostOf({
-    ...process.env,
-    XDG_STATE_HOME: root,
-    CC_CANDYBAR_SOCKET: sockPath,
-  });
   try {
     return await run(host);
   } finally {
@@ -66,7 +69,7 @@ async function withStubDaemon<T>(
 // statusline's own are a wire fact, asserted once below.
 const render = (budgets: RoundTripBudgets) => async (host: Host) => {
   const { tryRenderViaDaemon } = await import("../src/daemon/client");
-  return tryRenderViaDaemon({ host, clock: systemTimekeeper }, 
+  return tryRenderViaDaemon({ host, home: homeOf(host), clock: systemTimekeeper },
     {
       session_id: "deadline",
       workspace: { project_dir: "/tmp" },

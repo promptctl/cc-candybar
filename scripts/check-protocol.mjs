@@ -68,6 +68,8 @@ const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_DIAG_TEXT = "src/render/diagnostic-text.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
+const TS_HOME = "src/daemon/home.ts";
+const TS_HOME_TEST = "test/renderer-home.test.ts";
 const TS_ACQUIRE = "src/daemon/acquire.ts";
 const TS_LIMITS_TEST = "test/daemon-limits.test.ts";
 const TS_LIMITS = "src/daemon/limits.ts";
@@ -191,14 +193,19 @@ const CHECKS = [
     ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+):/gm),
     swift: memberSet(SWIFT_HANDLER, /withJSONObject: \[[^\]]+\]/, /"(\w+)":/g),
   },
-  // The default socket path: under /tmp, by uid, as src/daemon/paths.ts
-  // derives it. The app starts with no shell's environment, so it has no
-  // override to honour.
+  // The default socket path: the per-uid /tmp directory (src/daemon/home.ts)
+  // and main's socket file in it. The app starts with no shell's environment,
+  // so it has no home to honour and reaches main.
   {
     label: "the default socket path, as the URL handler derives it",
     ts: markers(
-      TS_PATHS,
-      [/path\.join\("\/tmp", `cc-candybar-\$\{uid\}`, "socket"\)/],
+      TS_HOME,
+      [/path\.join\("\/tmp", `cc-candybar-\$\{uid\}`\)/, /const MAIN_SOCKET_FILE = "socket";/],
+      "/tmp/cc-candybar-<uid>/socket",
+    ),
+    rust: markers(
+      RS_MAIN,
+      [/format!\("\/tmp\/cc-candybar-\{uid\}"\)/, /const MAIN_SOCKET_FILE: &str = "socket";/],
       "/tmp/cc-candybar-<uid>/socket",
     ),
     swift: markers(
@@ -206,6 +213,61 @@ const CHECKS = [
       [/"\/tmp\/cc-candybar-\\\(uid\)\/socket"/],
       "/tmp/cc-candybar-<uid>/socket",
     ),
+  },
+  // The renderer's home (src/daemon/home.ts): a client started with the two
+  // variables derives the socket, state and cache the daemon does.
+  {
+    label: "the home's root variable",
+    ts: lit(TS_HOME, /export const HOME_ENV = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const HOME_ENV: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  {
+    label: "the home's name variable",
+    ts: lit(TS_HOME, /export const NAME_ENV = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const NAME_ENV: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  {
+    label: "the runtime directory's override variable",
+    ts: lit(TS_HOME, /export const RUNTIME_DIR_ENV = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const RUNTIME_DIR_ENV: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  {
+    label: "a named home's socket suffix",
+    ts: lit(TS_HOME, /export const NAMED_SOCKET_SUFFIX = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const NAMED_SOCKET_SUFFIX: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  {
+    label: "a named home's state directory",
+    ts: lit(TS_HOME, /export const HOME_STATE_DIR = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const HOME_STATE_DIR: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  {
+    label: "a named home's cache directory",
+    ts: lit(TS_HOME, /export const HOME_CACHE_DIR = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const HOME_CACHE_DIR: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  {
+    label: "a renderer name's length",
+    ts: num(TS_HOME, /export const RENDERER_NAME_MAX = ([\d\s*]+);/),
+    rust: num(RS_MAIN, /const RENDERER_NAME_MAX: usize = ([\d\s*]+);/),
+  },
+  // The name grammar and the home's parse, spelled in both runtimes: each
+  // side's test drives its own parser from its own list, so the lists are
+  // the mirrored fact.
+  {
+    label: "renderer name grammar: accepted vectors",
+    ts: memberSet(TS_HOME_TEST, /const NAME_ACCEPT[\s\S]*?\];/, /"([^"]*)"/g),
+    rust: memberSet(RS_MAIN, /const NAME_ACCEPT[\s\S]*?\];/, /"([^"]*)"/g),
+  },
+  {
+    label: "renderer name grammar: rejected vectors",
+    ts: memberSet(TS_HOME_TEST, /const NAME_REJECT[\s\S]*?\];/, /"([^"]*)"/g),
+    rust: memberSet(RS_MAIN, /const NAME_REJECT[\s\S]*?\];/, /"([^"]*)"/g),
+  },
+  {
+    label: "the home's parse: its cases",
+    ts: memberSet(TS_HOME_TEST, /const HOME_CASES[\s\S]*?\];/, /"([^"]*)"/g),
+    rust: memberSet(RS_MAIN, /const HOME_CASES[\s\S]*?\];/, /"([^"]*)"/g),
   },
   {
     label: "lane B's name, as the statusline push subscribes",

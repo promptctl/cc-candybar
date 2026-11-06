@@ -5,6 +5,9 @@
 // config that places a segment nothing declares draws everything else it
 // placed, and the one bad placement is its error.
 
+import { hostOf } from "../../helpers/host";
+import { configDir } from "../../../src/daemon/paths";
+import { homeOf } from "../../../src/daemon/home";
 import { textOf } from "../../../src/render/frame";
 import { linkUrls } from "../../helpers/frame";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -39,7 +42,7 @@ describe("a config that cannot be drawn as written", () => {
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-broken-e2e");
     ({ env, removeTmpDirs } = prepared);
-    mkdirSync(path.join(env.XDG_CONFIG_HOME!, "cc-candybar"), {
+    mkdirSync(configDir(homeOf(hostOf(env))), {
       recursive: true,
     });
     projectDir = mkdtempSync(

@@ -5,6 +5,7 @@
 // `shell` variable with a 5 s `ttl` runs once per 5 s however fast the bar is
 // drawn, never once per frame.
 
+import type { RendererHome } from "../../../src/daemon/home";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -31,6 +32,7 @@ const refreshesOf = (r: SourceRecord): number =>
 
 describe("drawing a frame only reads", () => {
   let sockPath: string;
+  let home: RendererHome;
   let removeTmpDirs: () => void;
   let projectDir: string;
   let runs: string;
@@ -38,7 +40,7 @@ describe("drawing a frame only reads", () => {
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-reads-only-e2e");
-    ({ sockPath, removeTmpDirs } = prepared);
+    ({ sockPath, home, removeTmpDirs } = prepared);
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-reads-only-"));
     runs = path.join(projectDir, "runs");
     writeFileSync(runs, "");
@@ -75,7 +77,7 @@ describe("drawing a frame only reads", () => {
   test("a feed's frames between requests refresh no source; a 5 s ttl shell runs once per 5 s", async () => {
     const args = ["cc-candybar", "--config", path.join(projectDir, "bar.json5")];
     const sessionId = "reads-only";
-    await render(sockPath, sessionId, projectDir, {}, args);
+    await render(home, sessionId, projectDir, {}, args);
     const ranAt = (): number =>
       readFileSync(runs, "utf8").split("\n").filter(Boolean).length;
     await until(() => ranAt() >= 1, "the shell's first run");

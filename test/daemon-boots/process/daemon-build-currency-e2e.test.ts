@@ -1,7 +1,9 @@
+import { homeOf } from "../../../src/daemon/home";
 // [LAW:verifiable-goals] The bundle itself: what a build does to a running
 // daemon, and an act that outlives one. The notice's own cases are in
 // test/daemon-build-currency-e2e.test.ts, and take no build.
 
+import type { RendererHome } from "../../../src/daemon/home";
 import fs from "node:fs";
 import { hostOf } from "../../helpers/host";
 import os from "node:os";
@@ -43,7 +45,7 @@ async function viewerClosedOnDisk(
   env: NodeJS.ProcessEnv,
   sid: string,
 ): Promise<void> {
-  const file = sessionStatePath(hostOf(env));
+  const file = sessionStatePath(homeOf(hostOf(env)));
   // Before the first save there is no file; the write is a rename, so a file
   // that is there is whole.
   const closed = (): boolean =>
@@ -61,10 +63,10 @@ const layBundle = (scratch: Scratch): void =>
 async function withBuiltDaemon<T>(
   scratch: Scratch,
   envOverride: NodeJS.ProcessEnv,
-  body: (sockPath: string, daemon: RunningDaemon) => Promise<T>,
+  body: (home: RendererHome, daemon: RunningDaemon) => Promise<T>,
 ): Promise<T> {
   layBundle(scratch);
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-bc");
+  const { env, home, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-bc");
   // The project's config (the collision the bar warns of) is approved.
   answerRepo(scratch.projectDir, "approved", env);
   let daemon: RunningDaemon | undefined;
@@ -73,7 +75,7 @@ async function withBuiltDaemon<T>(
       { ...env, ...envOverride },
       builtBundle(path.join(scratch.root, "dist", "index.mjs")),
     );
-    return await body(sockPath, daemon);
+    return await body(home, daemon);
   } finally {
     if (daemon) await killAndWait(daemon);
     removeTmpDirs();
@@ -176,7 +178,7 @@ describe("a daemon spawned from the built bundle", () => {
       then: string,
       afterGate: (
         successor: RunningDaemon,
-        sock: string,
+        sock: RendererHome,
         sid: string,
         s: Scratch,
       ) => Promise<void>,
@@ -186,7 +188,7 @@ describe("a daemon spawned from the built bundle", () => {
       const stub = standIn(s, then);
       const {
         env: isolated,
-        sockPath,
+        home,
         removeTmpDirs,
       } = prepareIsolatedDaemonEnv("ccb-bc");
       answerRepo(s.projectDir, "approved", isolated);
@@ -197,15 +199,15 @@ describe("a daemon spawned from the built bundle", () => {
       try {
         const starter = await spawnDaemonWithEnv(env, bundle);
         try {
-          const before = noticeOf(await pagesOf(sockPath, sid, s.projectDir))!;
-          await click(sockPath, affordance(before.rendered, "apply-update"));
+          const before = noticeOf(await pagesOf(home, sid, s.projectDir))!;
+          await click(home, affordance(before.rendered, "apply-update"));
           await viewerClosedOnDisk(env, sid);
         } finally {
           await killAndWait(starter, "SIGKILL");
         }
         successor = await spawnDaemonWithEnv(env, bundle);
         const busy = await pagesUntil(
-          sockPath,
+          home,
           sid,
           s.projectDir,
           (pages) => noticeOf(pages)?.text.includes("[rebuilding…]") ?? false,
@@ -219,18 +221,18 @@ describe("a daemon spawned from the built bundle", () => {
         // after its turn (src/daemon/apply.ts), and the watch's refusal is
         // that effect's failure, held for the session's bar.
         await click(
-          sockPath,
+          home,
           effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
         );
         await pagesUntil(
-          sockPath,
+          home,
           sid,
           s.projectDir,
           (pages) => pages.some((p) => /already rebuilding/.test(p.text)),
           "the refused act held on the bar",
         );
         fs.writeFileSync(stub.gate, "");
-        await afterGate(successor, sockPath, sid, s);
+        await afterGate(successor, home, sid, s);
         return { ran: fs.readFileSync(stub.ran, "utf8") };
       } finally {
         if (successor) await killAndWait(successor);

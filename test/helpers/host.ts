@@ -1,4 +1,5 @@
 import os from "node:os";
+import { HOME_ENV, NAME_ENV, homeOf } from "../../src/daemon/home";
 import { locations } from "../../src/daemon/paths";
 import type { Host, World } from "../../src/host";
 import { systemOneShotLauncher } from "../../src/proc/system-launcher";
@@ -15,6 +16,17 @@ export const HOST: Host = {
   tmp: os.tmpdir(),
 };
 
+// The worker's environment as a main home reads it: test setup names the
+// worker a renderer home of its own, and a named home reads no XDG directory,
+// so a test of the main layout that names one over the worker's environment
+// states it over this, else the named home wins and the directory is never
+// read.
+export const MAIN_ENV: NodeJS.ProcessEnv = (({
+  [HOME_ENV]: _home,
+  [NAME_ENV]: _name,
+  ...main
+}) => main)(process.env);
+
 // A host over the environment a test states. Its home and temporary directory
 // are the test's unless it names them.
 export function hostOf(
@@ -24,10 +36,12 @@ export function hostOf(
   return { env, home: rest.home ?? HOST.home, tmp: rest.tmp ?? HOST.tmp };
 }
 
-// A process main's world over `host`: its launcher's children inherit `host.env`.
+// A process main's world over `host`: its renderer home is the one its
+// environment names, and its launcher's children inherit `host.env`.
 export function worldOf(host: Host): World {
   return {
     host,
+    home: homeOf(host),
     launcher: systemOneShotLauncher({ inherited: host.env }, systemTimekeeper),
     clock: systemTimekeeper,
   };
@@ -41,5 +55,6 @@ export const processLauncher = WORLD.launcher;
 // The probe a test that means real processes holds: this worker's own machine.
 export const processProbe = systemProbe(processLauncher);
 
-// Where config and plugins live for this worker's host, read when asked.
-export const locs = () => locations(HOST);
+// Where the worker's home keeps its config, and the host its plugins, read
+// when asked.
+export const locs = () => locations(HOST, WORLD.home);
