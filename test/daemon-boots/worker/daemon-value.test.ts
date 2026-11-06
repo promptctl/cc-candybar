@@ -384,6 +384,12 @@ describe("the daemon is a value", () => {
       () => false,
     );
 
+    // The hook counts only what this case's work made, so a close over an
+    // empty record passes with the close removed: the daemon's timers and the
+    // stub child must be in it before the close.
+    const held = new Set([...live.values()].map(({ message }) => message));
+    expect([...held]).toEqual(expect.arrayContaining(["Timeout", "PROCESSWRAP"]));
+
     const sessionFile = sessionStatePath(homeOf(hostNow()));
     const closing = await daemon.close(NO_TMUX_AT_EXIT);
     open = null;

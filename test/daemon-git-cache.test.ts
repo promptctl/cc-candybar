@@ -234,7 +234,9 @@ afterEach(() => {
       failures.push(failure);
     }
   }
-  if (failures.length > 0) throw failures[0];
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "providers failed to close");
+  }
 });
 
 describe("GitDataProvider", () => {
