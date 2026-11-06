@@ -13,6 +13,8 @@ export interface Program {
 // advances its clock, the real one waits.
 export interface Subject {
   readonly spawner: Spawner;
+  // A realised program writes nothing until every signal it ignores is
+  // ignored, so its first output tells a case that its trap is set.
   readonly realise: (behaviour: Behaviour) => Program;
   // A program that does not exist on the subject's machine.
   readonly missing: Program;
@@ -121,7 +123,7 @@ export function spawnerContract(name: string, make: () => Subject): void {
     });
 
     test("a program that ignores a signal outlives it, and the next one ends it", async () => {
-      // Its line says its trap is set; a signal sent before that would end it.
+      // Its output says its trap is set; a signal sent before that would end it.
       const w = begin({ ...hung(), ignores: ["SIGTERM"], stdout: "trapped" });
       await until("its trap is set", () => w.stdout === "trapped");
       subject!.spawner.signalGroup(w.child.pid!, "SIGTERM");
