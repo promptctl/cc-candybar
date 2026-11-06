@@ -744,7 +744,7 @@ describe("a click on a run link", () => {
     );
     expect(r.runs.stats()).toMatchObject({ started: 1, refused: 1 });
     expect(r.lines).toContainEqual(
-      expect.stringContaining(`run refused sid=s2 action=${link.name} reason=`),
+      expect.stringContaining(`run refused sid=${link.sid} action=${link.name} reason=`),
     );
   });
 

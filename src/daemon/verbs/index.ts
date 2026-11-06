@@ -407,20 +407,6 @@ function soleArg(args: readonly string[]): string {
   return args[0]!;
 }
 
-// [LAW:no-silent-failure] A verb that takes its session alone refuses a tail,
-// never acting on the session and dropping the rest unread.
-function sessionAlone(
-  handler: (sid: SessionId, ctx: ClickContext) => undefined,
-): VerbHandler {
-  return (sid, args, ctx) => {
-    if (args.length > 0)
-      throw new BadVerbArgs(
-        `takes its session alone, got ${args.length} more segments`,
-      );
-    return handler(sid, ctx);
-  };
-}
-
 // ─── Verb handlers ───────────────────────────────────────────────────────────
 
 // How long a program a click launches has before its effect fails, or, for an
@@ -597,11 +583,11 @@ const openVscode: VerbHandler = (_sid, args, ctx) => {
 // [LAW:one-source-of-truth] SessionState is the canonical store for
 // toolbar-expanded state (eir merge). Toggle via set/clear; the file-backed
 // storage owned by the daemon process persists the change automatically.
-const toolbarToggle: VerbHandler = sessionAlone((sessionId, ctx) => {
+const toolbarToggle: VerbHandler = (sessionId, _args, ctx) => {
   const expanded = ctx.navigating.get(sessionId, "toolbar-expanded");
   if (expanded) ctx.navigating.clear(sessionId, "toolbar-expanded");
   else ctx.navigating.set(sessionId, "toolbar-expanded", "1");
-});
+};
 
 // [LAW:single-enforcer] One verb writes SessionState — for every key the
 // session's gate holds, for every pair in a batch. That gate
@@ -1064,7 +1050,7 @@ const stepConfig: VerbHandler = (sid, args, ctx) => {
 // [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
 // session pick (the session's stateGate): a value the gate no longer admits is
 // refused loudly here, never written to the file.
-const save: VerbHandler = sessionAlone((sid, ctx) => {
+const save: VerbHandler = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const pick = (key: string) => ctx.sessionState.get(sid, key);
@@ -1100,7 +1086,7 @@ const save: VerbHandler = sessionAlone((sid, ctx) => {
       ...placements.map(placementLog),
     ].join(" ")} → ${home.path} (session=${sid})`,
   );
-});
+};
 
 // [LAW:single-enforcer] A placement's value re-crosses the gate its control's
 // click passed, as a display setting's does.
@@ -1127,7 +1113,7 @@ function gatePlacements(
 // session — the preset the pick names exists before the pick does.
 // [LAW:single-enforcer] Each pinned value re-crosses the session gate that
 // admitted it, as a save's do.
-const savePreset: VerbHandler = sessionAlone((sid, ctx) => {
+const savePreset: VerbHandler = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const snapshot = presetSnapshot(config, (key) =>
@@ -1161,7 +1147,7 @@ const savePreset: VerbHandler = sessionAlone((sid, ctx) => {
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${home.path} (session=${sid})`,
   );
-});
+};
 
 // Save the look the session draws as the active theme's default
 // (candybar-theme-colours-6fq5.ix8): `themeDefaults.<theme>` in the session's
@@ -1174,7 +1160,7 @@ const savePreset: VerbHandler = sessionAlone((sid, ctx) => {
 // [LAW:no-silent-failure] A theme chosen by a rule has no name until a render
 // evaluates it, and a theme's default is keyed by name: refused, naming the
 // rule, never a guess at what it would have rendered.
-const saveThemeDefault: VerbHandler = sessionAlone((sid, ctx) => {
+const saveThemeDefault: VerbHandler = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const save = themeDefaultSave(config, (key) =>
@@ -1200,7 +1186,7 @@ const saveThemeDefault: VerbHandler = sessionAlone((sid, ctx) => {
     "info",
     `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${home.path} (session=${sid})`,
   );
-});
+};
 
 // Delete a preset the session's config file authors. A session that was in
 // it returns to the file's default arrangement; any other session in it
@@ -1353,7 +1339,7 @@ const applyLayoutOp: VerbHandler = (sid, args, ctx) => {
 // moves and what it restores; this handler is plumbing between the wire and
 // it. [LAW:no-silent-failure] An empty stack and a stale target are loud
 // BAD_REQUESTs, surfaced as a transient click.error.
-const undo: VerbHandler = sessionAlone((sid, ctx) => {
+const undo: VerbHandler = (sid, _args, ctx) => {
   // The click's own earlier changes are a step of their own first, so one
   // click behaves exactly as the same clicks made one at a time.
   ctx.journal.commit();
@@ -1361,11 +1347,11 @@ const undo: VerbHandler = sessionAlone((sid, ctx) => {
   ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step);
   ctx.log("info", `undo: restored ${describeStep(step)} (session=${sid})`);
-});
+};
 
 // [LAW:single-enforcer] Back restores through the click's settings view, never
 // a navigation journal, so going back is not itself a step it could return to.
-const back: VerbHandler = sessionAlone((sid, ctx) => {
+const back: VerbHandler = (sid, _args, ctx) => {
   const { step, discarded } = ctx.navigation.back(
     sid,
     ctx.sessionState,
@@ -1373,7 +1359,7 @@ const back: VerbHandler = sessionAlone((sid, ctx) => {
   );
   const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
-});
+};
 
 // [LAW:single-enforcer] Cancel for edit mode. The history owns what changed
 // since edit mode opened and how to put it back (SettingsHistory.rewind); this
@@ -1381,7 +1367,7 @@ const back: VerbHandler = sessionAlone((sid, ctx) => {
 // [LAW:no-silent-failure] A session with no savepoint is a loud BAD_REQUEST
 // with nothing written; a target changed since is one too, raised after every
 // other target was put back, naming the target it kept.
-const rewind: VerbHandler = sessionAlone((sid, ctx) => {
+const rewind: VerbHandler = (sid, _args, ctx) => {
   // The click's own earlier changes are a step of their own first, as undo's.
   ctx.journal.commit();
   // Said first: a stale target throws after the rest were put back.
@@ -1392,24 +1378,24 @@ const rewind: VerbHandler = sessionAlone((sid, ctx) => {
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
   );
-});
+};
 
 // undo's mirror — steps the same history forward one click.
-const redo: VerbHandler = sessionAlone((sid, ctx) => {
+const redo: VerbHandler = (sid, _args, ctx) => {
   ctx.journal.commit();
   const step = ctx.history.redo(sid);
   ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step);
   ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
-});
+};
 
 // [LAW:effects-at-boundaries] The update notice's `[rebuild]` / `[upgrade]`
 // click (brandon-build-notice-5d6). The wire carries only the session id (for
 // click.error surfacing); the daemon's update watch decides what to run from
 // its own provenance, so no command or version ever arrives from a URL.
-const applyUpdate: VerbHandler = sessionAlone((_sid, ctx) => {
+const applyUpdate: VerbHandler = (_sid, _args, ctx) => {
   ctx.effect({ kind: "apply-update" });
-});
+};
 
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
 
@@ -1758,9 +1744,9 @@ function landStep<K extends DoctorStep["kind"]>(
   land(ctx, sid, step, facts);
 }
 
-const doctorRun: VerbHandler = sessionAlone((sid, ctx) => {
+const doctorRun: VerbHandler = (sid, _args, ctx) => {
   describeDoctor(ctx, sid, { kind: "run" });
-});
+};
 
 // A probe link `cc-candybar doctor` opened, delivered by the URL handler: its
 // arrival is the whole effect, read back by the CLI from the daemon's stats.
@@ -1961,33 +1947,47 @@ const repoConfig: VerbHandler = (sid, args, ctx) => {
 // session it was clicked in, and its handler takes that session parsed, so a
 // verb that names none cannot join this table: it is a link kind beside it, as
 // the probe is.
-const LEAF_VERBS = new Map<string, VerbHandler>([
-  [VERB_COPY, copy],
-  [VERB_OPEN_VSCODE, openVscode],
-  [VERB_SET_STATE, setState],
-  [VERB_STEP_STATE, stepState],
-  [VERB_SET_CONFIG, setConfig],
-  [VERB_STEP_CONFIG, stepConfig],
-  [VERB_RESET_CONFIG, resetConfig],
-  [VERB_SAVE, save],
-  [VERB_SAVE_PRESET, savePreset],
-  [VERB_SAVE_THEME_DEFAULT, saveThemeDefault],
-  [VERB_DELETE_PRESET, deletePreset],
-  [VERB_APPLY_LAYOUT_OP, applyLayoutOp],
-  [VERB_UNDO, undo],
-  [VERB_REDO, redo],
-  [VERB_BACK, back],
-  [VERB_REWIND, rewind],
-  [VERB_TOOLBAR_TOGGLE, toolbarToggle],
-  [VERB_APPLY_UPDATE, applyUpdate],
-  [VERB_DOCTOR_RUN, doctorRun],
-  [VERB_DOCTOR_FIX, doctorFix],
-  [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_SLASH, slash],
-  [VERB_RUN, run],
-  [VERB_REPO_CONFIG, repoConfig],
-  [VERB_COPY_DIAGNOSTIC, copyDiagnostic],
-]);
+//
+// [LAW:no-silent-failure] Each row states how many arguments its verb reads
+// after the session, so a link carrying more is refused, never acted on with
+// the rest dropped unread. A verb whose arguments are a list (pairs, keys)
+// reads any number.
+interface Leaf {
+  readonly handler: VerbHandler;
+  readonly takes: number;
+}
+
+const LEAF_VERBS = new Map<string, Leaf>(
+  (
+    [
+      [VERB_COPY, copy, 1],
+      [VERB_OPEN_VSCODE, openVscode, 1],
+      [VERB_SET_STATE, setState, Infinity],
+      [VERB_STEP_STATE, stepState, 2],
+      [VERB_SET_CONFIG, setConfig, 2],
+      [VERB_STEP_CONFIG, stepConfig, 2],
+      [VERB_RESET_CONFIG, resetConfig, Infinity],
+      [VERB_SAVE, save, 0],
+      [VERB_SAVE_PRESET, savePreset, 0],
+      [VERB_SAVE_THEME_DEFAULT, saveThemeDefault, 0],
+      [VERB_DELETE_PRESET, deletePreset, 1],
+      [VERB_APPLY_LAYOUT_OP, applyLayoutOp, 2],
+      [VERB_UNDO, undo, 0],
+      [VERB_REDO, redo, 0],
+      [VERB_BACK, back, 0],
+      [VERB_REWIND, rewind, 0],
+      [VERB_TOOLBAR_TOGGLE, toolbarToggle, 0],
+      [VERB_APPLY_UPDATE, applyUpdate, 0],
+      [VERB_DOCTOR_RUN, doctorRun, 0],
+      [VERB_DOCTOR_FIX, doctorFix, 1],
+      [VERB_DOCTOR_MARK, doctorMark, 2],
+      [VERB_SLASH, slash, 1],
+      [VERB_RUN, run, 3],
+      [VERB_REPO_CONFIG, repoConfig, 3],
+      [VERB_COPY_DIAGNOSTIC, copyDiagnostic, 2],
+    ] as const
+  ).map(([verb, handler, takes]) => [verb, { handler, takes }]),
+);
 
 // The verbs a dispatch may carry as its effects.
 export const LEAF_VERB_NAMES: ReadonlySet<string> = new Set(LEAF_VERBS.keys());
@@ -1999,7 +1999,7 @@ export const LEAF_VERB_NAMES: ReadonlySet<string> = new Set(LEAF_VERBS.keys());
 // hold on the bar, after the click has found its session.
 interface LeafEffect {
   readonly verb: string;
-  readonly leaf: VerbHandler;
+  readonly leaf: Leaf;
   readonly session: ParsedSessionId;
   readonly args: WireParse<readonly string[]>;
 }
@@ -2012,7 +2012,7 @@ type ReadEffect =
 
 // Split before decoding, so a segment's own escaped "/" stays data and an
 // empty last argument (a copy of "") is still an argument.
-function readLeaf(verb: string, leaf: VerbHandler, value: string): LeafEffect {
+function readLeaf(verb: string, leaf: Leaf, value: string): LeafEffect {
   const [head = "", ...tail] = value.split("/");
   return {
     verb,
@@ -2086,14 +2086,19 @@ function perform(
         `names session ${session.id}, not the session its click is in`,
       );
     if (!args.ok) throw new BadVerbArgs(args.problem);
-    leaf(session.id, args.value, {
+    if (args.value.length > leaf.takes)
+      throw new BadVerbArgs(
+        `reads ${leaf.takes} after its session, and the link carries ${args.value.length}`,
+      );
+    leaf.handler(session.id, args.value, {
       ...ctx,
       effect: (effect) => void described.push(effect),
     });
   } catch (e) {
+    // Counted for the session that clicked, never one a step's link spelled.
     if (e instanceof BadVerbArgs) {
       REFUSAL_OWNERS.get(verb)?.(ctx, {
-        sid: session.ok ? session.id : "-",
+        sid: click?.ok ? click.id : "-",
         args: args.ok ? args.value : [],
         reason: e.message,
       });

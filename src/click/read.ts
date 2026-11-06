@@ -51,10 +51,11 @@ export interface DecodedEffect {
   readonly args: string[];
 }
 
-// [LAW:one-source-of-truth] Decode an effect's value the way the daemon does,
-// from its own leaf table: a leaf verb's value is `/`-separated segments, its
+// [LAW:one-source-of-truth] Split an effect's value as the daemon splits it,
+// by its own leaf table: a leaf verb's value is `/`-separated segments, its
 // click's session first; the probe takes ONE argument, the whole value
-// decoded once.
+// decoded once. What a step's session or arguments then fail is the daemon's
+// to refuse, step by step; this reader says only how the link reads.
 function decodeArgs(verb: string, value: string): string[] {
   return LEAF_VERB_NAMES.has(verb)
     ? decodeSegments(value)
@@ -67,9 +68,9 @@ export type DrawnClick =
 
 // [LAW:parse-dont-validate] A drawn link's click as the daemon splits it, its
 // ordered effects (a link whose verb is not dispatch is the one-effect case),
-// or the reason the daemon refuses it: a config can compute a link at the
-// draw that the parse refuses, or whose value carries a malformed escape, and
-// a frame drawn by an older daemon can name a verb this one has retired.
+// or why it does not read: a config can compute a link at the draw that the
+// parse refuses, or whose value carries a malformed escape, and a frame drawn
+// by an older daemon can name a verb this one has retired.
 export function drawnClickOf(url: string): DrawnClick {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;

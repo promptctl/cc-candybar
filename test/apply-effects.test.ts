@@ -176,17 +176,23 @@ describe("a dispatch acts on the session its click is in", () => {
     expect(r.started().map((s) => s.stdin)).toEqual([""]);
   });
 
-  test("a tail on a verb that takes its session alone is refused, never dropped unread", async () => {
+  test.each([
+    [VERB_TOOLBAR_TOGGLE, ["junk"], 0],
+    [VERB_COPY, ["text", "junk"], 1],
+  ])("a %s link carrying more than its verb reads is refused, never acted on with the rest dropped", async (verb, args, reads) => {
     const r = rig();
-    const { answer } = await applyClickAnswered(
-      dispatch(`${VERB_TOOLBAR_TOGGLE}/${encodeSegments([SID, "junk"])}`),
+    r.spawner.program(program(PBCOPY), exits(0));
+    const { answer, performed } = await applyClickAnswered(
+      dispatch(`${verb}/${encodeSegments([SID, ...args])}`),
       r.ctx,
     );
     expect(answer?.error).toBeInstanceOf(BadVerbArgs);
     expect(lastClickError(r.sessionState, SID)?.text).toBe(
-      `${VERB_TOOLBAR_TOGGLE}: takes its session alone, got 1 more segments`,
+      `${verb}: reads ${reads} after its session, and the link carries ${args.length}`,
     );
+    await performed;
     expect(r.sessionState.get(SID, "toolbar-expanded")).toBeNull();
+    expect(r.started()).toEqual([]);
   });
 
   test("when the click's own session is refused, every step is refused for that, and nothing launches", async () => {
