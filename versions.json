@@ -4,15 +4,22 @@
     {
       "version": "pr-653",
       "ref": "refs/pull/653/merge",
-      "sha": "373d758b49f8234020f5d214a302630b947a6299",
-      "timestamp": "2026-11-06T21:18:51.477Z",
+      "sha": "b08d207a3f6015c47d5dbbfcb9d6f5876656f638",
+      "timestamp": "2026-11-06T21:24:55.654Z",
       "commits": [
         {
-          "sha": "373d758b49f8234020f5d214a302630b947a6299",
+          "sha": "b08d207a3f6015c47d5dbbfcb9d6f5876656f638",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T21:17:52Z",
-          "message": "Merge fdac394d3a969f8ec357dba87763dd9faac34e22 into 3b85a8464e84d21d582e674567b70a353a6c3100\n"
+          "timestamp": "2026-11-06T21:23:58Z",
+          "message": "Merge 9b433658d0305f6643556239c151a44e49e5605a into 3b85a8464e84d21d582e674567b70a353a6c3100\n"
+        },
+        {
+          "sha": "9b433658d0305f6643556239c151a44e49e5605a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T14:23:05-07:00",
+          "message": "fix(test): the exit-code case arms a timeout it never reaches, and each loop run's holder ends with its run (brandon-menus-sjhy.irc)\n\nA fired timeout concludes on the gone group as ok, so a timeout inside the\ncase's life hid a launch that waited for its holder.\n"
         },
         {
           "sha": "fdac394d3a969f8ec357dba87763dd9faac34e22",
