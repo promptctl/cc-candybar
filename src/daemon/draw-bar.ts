@@ -959,6 +959,13 @@ async function drawAnswer(
   // directory's sources that answers a new key — a first value, or a key its
   // fields moved — until its client's deadline. What has not
   // answered by then draws as pending, and lands for the next frame.
+  //
+  // What the arrival starts of the facts is the view's follow's: its record
+  // of the lanes it started reads as far as they have landed at the deadline.
+  // [LAW:no-ambient-temporal-coupling] Started before the clock is read for
+  // the wait, so the synchronous part of each lane's start is setup, spent
+  // from the budget like the rest, and the timer still fires at waitEndsAt.
+  const settling = setup.view.settle(at);
   const waitFrom = clock.monotonic();
   // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
   // reading. Setup has spent part of what the request arrived with, and below
@@ -967,9 +974,6 @@ async function drawAnswer(
   noteFacts(facts, {
     deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
   });
-  // What the arrival starts of the facts is the view's follow's: its record
-  // of the lanes it started reads as far as they have landed at the deadline.
-  const settling = setup.view.settle(at);
   const ended = await waitWithin(
     (signal) =>
       Promise.all([settling.landed, setup.view.registry.inFlight(signal)]),

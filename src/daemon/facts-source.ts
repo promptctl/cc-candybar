@@ -25,6 +25,7 @@ import type { Timekeeper } from "../time";
 import { Holds } from "../utils/holds";
 import { instantAt, type Instant } from "../utils/instant";
 import type { DaemonLogger } from "../utils/logger";
+import { failedWith } from "../utils/outcome";
 import { assembleFacts } from "./facts-assembly";
 import type { PayloadProviders } from "./payload-providers";
 import {
@@ -127,13 +128,6 @@ type Moved =
       readonly update: Fact<UpdateNotice>;
     }
   | { readonly kind: "failed"; readonly reason: string };
-
-// [LAW:one-source-of-truth] A stamp that fails for the reason it already
-// failed for is that stamp: a fault that persists must not mint a new value
-// per owner landing, which would wake every view and log again for a bar that
-// has not changed.
-const failedWith = (prior: Stamped, reason: string): Stamped =>
-  prior.failure === reason ? prior : { ...prior, failure: reason };
 
 // [LAW:single-enforcer] The one stamp of a document, against the one it
 // replaces. The prior value itself is returned when nothing moved (the

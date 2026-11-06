@@ -39,6 +39,7 @@ import {
 import type { SessionStateReader } from "./session-state.js";
 import type { HistoryDepth } from "./settings-history.js";
 import { settingCounts } from "./setting-drafts.js";
+import { failedWith } from "../utils/outcome.js";
 
 // What a session's view draws from: the selections its slots settle and the
 // payload its inputs read, as ViewSource names them, the globals the session's
@@ -85,13 +86,6 @@ type TurnInputs =
       readonly draw: DrawInputs;
     }
   | { readonly kind: "failed"; readonly reason: string };
-
-// [LAW:one-source-of-truth] A turn that fails for the reason it already failed
-// for is that turn: a fault that persists must not mint a new turn per move,
-// which would recompose the payload, wake the view and log again for a bar
-// that has not changed.
-const failedWith = (prior: Turn, reason: string): Turn =>
-  prior.failure === reason ? prior : { ...prior, failure: reason };
 
 // [LAW:single-enforcer] The one taking of a turn, against the turn it
 // replaces. The prior turn itself is returned when nothing it holds moved, so
