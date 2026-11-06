@@ -87,8 +87,8 @@ export function testVerbContext(
   return {
     gates: bareGates(),
     stateDir: stateDir(homeOf(host)), locations: locations(host, homeOf(host)),
-    sessionState,
-    history,
+    sessionState: inTurn,
+    history: history ?? new SettingsHistory(inTurn, () => {}),
     navigation: new NavigationHistory(),
     asker: { placed: () => {}, gathered: () => {}, waited: () => {}, gone: () => false },
     journalTurns,

@@ -999,7 +999,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const sid = "feed-frame-records-nothing";
     const revision = async (): Promise<number> =>
       (await statsOf(daemon.daemon)).sessionState.revision;
-    await render(sockPath, sid, projectDir, {}, args("warned"));
+    await render(home, sid, projectDir, {}, args("warned"));
     const before = await revision();
     const drawnBefore = (await feedStats()).drawn;
     let after = before;
