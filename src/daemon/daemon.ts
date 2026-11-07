@@ -644,7 +644,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
   );
   // [LAW:no-silent-failure] An edit made while file events went unheard is
-  // re-read when they resume, in every entry, and every feed redraws when
+  // re-read when they resume, in every entry, one entry per turn, each
+  // waking its own sessions as its reload lands. Every feed redraws when
   // delivery moves, so its row comes and goes on frames too.
   // [LAW:no-ambient-temporal-coupling] Every directory watch is judged against
   // the disk on the one period the daemon keeps time by: a folder replaced
