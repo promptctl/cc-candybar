@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { stagedPath } from "../utils/atomic-write";
+import { stagedPath } from "../utils/staged-path";
 
 import type { ProcessIdentity } from "./process-fingerprint";
 

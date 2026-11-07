@@ -53,6 +53,7 @@ import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import type { Drawing } from "../config/lanes";
 import { answeredBy, eventHoldAt, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
+import { stagedPath } from "../utils/staged-path";
 import type { SpawnedChild, Spawner } from "./spawner";
 
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
@@ -1398,7 +1399,7 @@ function endJob(
   status: string,
   end: JobEnd,
 ): JobEnding {
-  const staged = `${status}.${process.pid}`;
+  const staged = stagedPath(status);
   try {
     writeFileSync(staged, `${formatJobEnd(end)}\n`);
   } catch (err) {

@@ -11,6 +11,7 @@ import {
   linkSigner,
   type LinkSigner,
 } from "../click/link-signer.js";
+import { stagedPath } from "../utils/staged-path.js";
 
 export function linkKeyFile(dir: string): string {
   return path.join(dir, "link.key");
@@ -59,7 +60,7 @@ function readOrCreate(file: string): LinkSigner {
 // that runs a program.
 function create(file: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const written = `${file}.${process.pid}.${randomBytes(6).toString("hex")}`;
+  const written = stagedPath(file);
   fs.writeFileSync(written, randomBytes(LINK_KEY_BYTES), {
     mode: 0o600,
     flag: "wx",

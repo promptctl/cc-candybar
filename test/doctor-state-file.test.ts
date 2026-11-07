@@ -72,10 +72,13 @@ describe("a doctor state file", () => {
   });
 
   test("a write that fails throws: a fault, never the refusal a file that does not read is", () => {
-    // A directory where the write's tmp goes fails it for every user, root
-    // included, while the file itself is absent and so reads.
-    fs.mkdirSync(`${file}.${process.pid}.tmp`, { recursive: true });
-    expect(() => stateFile(at(), NAME, [], numbers).update((ns) => [...ns, 1])).toThrow(/EISDIR/);
-    expect(fs.existsSync(file)).toBe(false);
+    // A name a filesystem takes (255 bytes is the limit) and whose staged name,
+    // longer by a pid and a UUID, it refuses: the write fails for every user,
+    // root included, while the file itself is absent and so reads.
+    const long = `${"n".repeat(225)}.json`;
+    expect(() => stateFile(at(), long, [], numbers).update((ns) => [...ns, 1])).toThrow(
+      /ENAMETOOLONG/,
+    );
+    expect(fs.readdirSync(at())).toEqual([]);
   });
 });
