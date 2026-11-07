@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-687",
+      "ref": "refs/pull/687/merge",
+      "sha": "07b007872c1ac40ee4ad46f680e3cd2656f881c9",
+      "timestamp": "2026-11-07T11:52:37.743Z",
+      "commits": [
+        {
+          "sha": "07b007872c1ac40ee4ad46f680e3cd2656f881c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:51:23Z",
+          "message": "Merge 3de93d2bf578cd0f66627b716f9bf28649cc29fb into c3eb590e336d3dfbc8184093e0fe9c489121c59e\n"
+        },
+        {
+          "sha": "3de93d2bf578cd0f66627b716f9bf28649cc29fb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:49:14-07:00",
+          "message": "refactor(cache): an entry's origin and its key come from one projection (brandon-unfiled-3248.9cru)\n\nThe type, the key and the entry's copy each spelled what resolution reads\nof an origin. One projection now builds the copy and the key spells it, so\nan input picked into the origin type fails to compile until it is carried,\nand then keys. The key no longer holds raw NUL separators.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "0a397e8f0a33af169491ffa68bc7773e16a96d4f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:34:52-07:00",
+          "message": "refactor(cache): the cache's entry points take a render origin, its watch key is the entry's key (brandon-unfiled-3248.9cru)\n\nA LoadOrigin admits a target with no path, so an origin built by hand\nwithout its path was the search. The entry points take the RenderOrigin\nwhose source says whether a file is named; entries and loads keep the\nsource-free LoadOrigin. The config watch key reuses the cache key rather\nthan spelling the identity again. A test shows projectDir and cwd are\nseparate parts of the key.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "c62ef61a1fa5daf81a38cecb79e8cf8efea9618a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:43:20-07:00",
+          "message": "refactor(cache): the render cache takes a render origin, not three positional strings (brandon-unfiled-3248.9cru)\n\nThe cache's entry points (getOrCreate, hold, holdSession, reload, the\nprivate load, and loadFromDisk) take one LoadOrigin, picked from\nRenderOrigin, so every caller passes the origin it already holds and a\nswapped or missing field is a type error. loadFromDisk is the one place\nthe origin is spelled out into the resolver's arguments. An entry holds\na copy of what resolution reads, never the caller's target source, so\norigins that name one file by different sources share one entry.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-680",
       "ref": "refs/pull/680/merge",
       "sha": "6df745c4dd40d34b6a9f6b07f503a8fbb6136ed9",
@@ -235,35 +271,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:34:34-07:00",
           "message": "fix(git): each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek)\n\nA daemon spawned from an environment carrying GIT_DIR or another of git's\nrepository variables (a hook, vcsh, yadm) passed it to every git read, so\nevery bar showed the spawning shell's repository. The daemon now asks git\nfor those names once at its process edge, before its lease, bounded at 2 s,\nand runs in a world whose environment is the process's without them. An ask\nthat fails keeps the inherited environment and draws a git-env warning on\nevery bar; a git that is not installed names none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-687",
-      "ref": "refs/pull/687/merge",
-      "sha": "dde0925541b018a9f14b21ece8909a40305e8f09",
-      "timestamp": "2026-11-07T11:36:25.446Z",
-      "commits": [
-        {
-          "sha": "dde0925541b018a9f14b21ece8909a40305e8f09",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:35:05Z",
-          "message": "Merge e1482d86851b144b5298783a3700df75db80b599 into 3e574dde3244026257856ed4e675a0275bc287d1\n"
-        },
-        {
-          "sha": "e1482d86851b144b5298783a3700df75db80b599",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:34:52-07:00",
-          "message": "refactor(cache): the cache's entry points take a render origin, its watch key is the entry's key (brandon-unfiled-3248.9cru)\n\nA LoadOrigin admits a target with no path, so an origin built by hand\nwithout its path was the search. The entry points take the RenderOrigin\nwhose source says whether a file is named; entries and loads keep the\nsource-free LoadOrigin. The config watch key reuses the cache key rather\nthan spelling the identity again. A test shows projectDir and cwd are\nseparate parts of the key.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "e46eb934910612bd1d9d72dc62d364fed3f8ee1d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:43:20-07:00",
-          "message": "refactor(cache): the render cache takes a render origin, not three positional strings (brandon-unfiled-3248.9cru)\n\nThe cache's entry points (getOrCreate, hold, holdSession, reload, the\nprivate load, and loadFromDisk) take one LoadOrigin, picked from\nRenderOrigin, so every caller passes the origin it already holds and a\nswapped or missing field is a type error. loadFromDisk is the one place\nthe origin is spelled out into the resolver's arguments. An entry holds\na copy of what resolution reads, never the caller's target source, so\norigins that name one file by different sources share one entry.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
