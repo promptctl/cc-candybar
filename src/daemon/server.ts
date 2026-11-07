@@ -38,6 +38,7 @@ import { bakedDigest } from "./build-currency";
 import { MAIN_NAME } from "./home";
 import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
+import { gitEnvFault, type GitEnvAsk } from "../git-env";
 import type { World } from "../host";
 import type { OneShotLauncher } from "../proc/launch";
 import { runTmuxAtExit } from "../proc/tmux";
@@ -81,6 +82,9 @@ let serving: Daemon | null = null;
 // nowhere below), and the log those paths name. Fixed once by `runDaemon`, before anything that can fail.
 interface DaemonProcess {
   readonly world: World;
+  // What git named, at this process's start, as the variables its world was
+  // cleaned of (src/git-env.ts): fixed for the daemon's life.
+  readonly gitEnv: GitEnvAsk;
   readonly paths: DaemonPaths;
   readonly log: DaemonLog;
 }
@@ -114,9 +118,14 @@ function runningBundle(): RunningBundle {
   };
 }
 
-export function runDaemon(world: World): void {
+export function runDaemon(world: World, gitEnv: GitEnvAsk): void {
   const paths = daemonPaths(world.home);
-  thisProcess = { world, paths, log: new DaemonLog(paths.log, world.clock) };
+  thisProcess = {
+    world,
+    gitEnv,
+    paths,
+    log: new DaemonLog(paths.log, world.clock),
+  };
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
@@ -158,9 +167,11 @@ async function boot(): Promise<void> {
   // registers us, before the bind, before the lease, and before a `daemon up`
   // line could claim a boot that is about to die. Parsed once, threaded into
   // the limits and the boot line.
-  const { world, paths, log: daemonLog } = daemonProcess();
+  const { world, gitEnv, paths, log: daemonLog } = daemonProcess();
   const { host, home } = world;
   const memoryLimit = memoryLimitBytes(host.env);
+  // [LAW:no-silent-failure] Said once in the log; every bar says it too.
+  if (gitEnv.kind === "failed") serverLog("warn", gitEnvFault(gitEnv.reason));
   // [LAW:no-mode-explosion] exception: the socket override is read for one
   // release and said so here; the ticket that retires it deletes this line
   // with the field it reads.
@@ -222,6 +233,7 @@ async function boot(): Promise<void> {
     registryUrl: host.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: world.clock,
     gates: daemonGates(),
+    gitEnv,
     exit: shutdown,
   });
   serving = daemon;

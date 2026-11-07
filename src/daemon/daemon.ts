@@ -93,6 +93,7 @@ import { JournalTurns } from "./journal-turns.js";
 import { MenuIdle } from "./menu-idle.js";
 import { MismatchRuns } from "./mismatch-runs.js";
 import { runsNowIn, type HeldSessionOf } from "./session-pane.js";
+import type { GitEnvAsk } from "../git-env.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -205,6 +206,10 @@ export interface DaemonInputs extends DaemonAdapters {
   // value, built by the root with `daemonGates` (the update notice's links need
   // the keys it holds), so two daemons in one process share none.
   readonly gates: Gates;
+  // What git named, at the process's start, as the variables that locate a
+  // repository, which `host.env` is already without (src/host.ts
+  // daemonWorld): an ask that failed is on every bar this daemon draws.
+  readonly gitEnv: GitEnvAsk;
   // [LAW:single-enforcer] The process's one death funnel: the binary watch and
   // the memory backstop end the daemon here, never on their own.
   readonly exit: (code: number) => void;
@@ -266,6 +271,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     home,
     gates,
     host,
+    gitEnv,
   } = inputs;
   // Derived once, here, from the one home, and handed to everything that reads
   // or writes under it.
@@ -802,6 +808,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     watcherRegistry,
     refreshLedger,
     fileEvents,
+    gitEnv,
     payloadProviders,
     sessionState,
     rendererName: home.name,

@@ -1,5 +1,6 @@
 import type { Timekeeper } from "../time.js";
 import type { FileEventDelivery } from "./cache/file-events";
+import type { GitEnvAsk } from "../git-env";
 import type { RenderCache } from "./cache/render";
 import type { WatcherRegistry } from "./cache/watchers";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
@@ -63,6 +64,9 @@ export interface DaemonParts {
   readonly watcherRegistry: WatcherRegistry;
   readonly refreshLedger: RefreshLedger;
   readonly fileEvents: FileEventDelivery;
+  // Whether git named the variables the daemon's environment was cleaned of:
+  // a failed ask is every bar's ⚠.
+  readonly gitEnv: GitEnvAsk;
   readonly payloadProviders: PayloadProviders;
   // [LAW:single-enforcer] The daemon's one store of session state, which
   // refuses a write made while no journal turn is held: what the request and

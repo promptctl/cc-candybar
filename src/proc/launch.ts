@@ -146,9 +146,12 @@ export const LAUNCH_CATEGORIES = [
   // child; the act's record admits one at a time, so no rate limit.
   "update.apply",
   // `cc-candybar plugin install`'s clone of a plugin's repo
-  // (src/plugin-install.ts): three git calls per install, in the CLI's own
+  // (src/plugin-install.ts): two git calls per install, in the CLI's own
   // process, apart from the daemon's per-render "git".
   "plugin.git",
+  // Which variables git reads as locating a repository (src/git-env.ts):
+  // asked once per daemon life at its boot, and once per plugin install.
+  "git.env",
   // Which panes each watched session's tmux server shows (pane-visibility.ts):
   // one query per server a second, paced by its own clock, so no rate limit.
   "frames.visibility",
