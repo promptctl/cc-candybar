@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-676",
+      "ref": "refs/pull/676/merge",
+      "sha": "5b4d763885d7ac97782b11558a4feb05aa4f7f7b",
+      "timestamp": "2026-11-07T10:33:59.114Z",
+      "commits": [
+        {
+          "sha": "5b4d763885d7ac97782b11558a4feb05aa4f7f7b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:32:43Z",
+          "message": "Merge 95e4f22710983d448e1447b843154b313463eef6 into 215f486db0c68765107dc69e715ccb26c5ac01d3\n"
+        },
+        {
+          "sha": "95e4f22710983d448e1447b843154b313463eef6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:31:13-07:00",
+          "message": "fix(state): only a placement's draft refuses an authored set, and a stored boolean says what it admits (brandon-menus-sjhy.46w)\n\nThe load refused an authored `set` on every reserved namespace, so a config\nwhose button opens its own menu by its `menus.` key stopped loading (the\nundo test's `openMenu` among them). Only a draft's read trusts its gate's\ndomain: a wider gate elsewhere only makes more values held, and a cycle\ntakes a non-member as at rest. The refusal now covers the drafts alone, and\nthe authoring doc quotes its error.\n\n`toolbar-expanded` said it admits \"true or false\" while its verdict holds\nonly the stored \"1\" and \"\", so a stored \"true\" was reported as foreign by a\nmessage that admitted it. It now names the stored spellings, and the\nvalidator's refusal lists the empty false it accepts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "6c115613343d4cb5394566e4f88d453557677aec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:16:47-07:00",
+          "message": "fix(state): a set key is reserved as spelled, and the domain ⚠ says what the bar draws (brandon-menus-sjhy.46w)\n\nThe loader refused an authored `set` whose key only collapsed like one under\na reserved namespace (`edit-mode`, `menus_open`), though a session key is\ncompared as spelled and can never meet a synthesized one. The refusal now\nasks the spelled namespace, the one `isReservedName` already asked.\n\nThe domain warning said the bar draws the key's default, but a stale\nplacement draft falls to the saved value and a stale setting to the file or\npreset. It now says the bar draws as if nothing were picked.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "c0e773c5c5a2ab071bb8acf3ba71ad5fe60c1e21",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:56:27-07:00",
+          "message": "test(lanes): the session-pane draw composes its view with the state gates the daemon hands it (brandon-menus-sjhy.46w)\n\nThe rebase onto main brought in a test that builds a session view without\nthe state gates this branch's view now judges by.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "0922a1a6aff11e4fad0b8a4cd92b9a3fcad68248",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:50:18-07:00",
+          "message": "fix(state): a reserved key has only its control as writer, and a never-rendered session judges nothing (brandon-menus-sjhy.46w)\n\nAnswers /code-review high on 068bb06a (dispositions on PR #676).\n\n- The loader refuses an authored `set` whose key is in a reserved\n  namespace, so a placement draft's gate is its declaration's and its\n  parse at the render cannot refuse what the gate admitted.\n- A session with no recorded render origin has no config: its judged\n  read judges nothing instead of throwing inside a write's closing view.\n- The keyspace epoch is a MobX atom, so a computed judging through a\n  gate re-evaluates on a daemon-wide register or dispose.\n- toolbar-toggle reads toolbar-expanded judged; save-theme-default's\n  release read is raw, as every release read is.\n- The demo and check judge and gate with one Gates each.\n- The cycle, ring and standing-warning comments say what holds.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "7ae7358757c30600f4f0bff8c7f1058852113c6f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:07:39-07:00",
+          "message": "fix(state): a session value its config no longer admits draws the default and warns (brandon-menus-sjhy.46w)\n\nSession state outlives the config that wrote it. A stale value was swallowed\nsilently: the globals resolution dropped it, a placement's bar drew the saved\nvalue while its carousel sat on its first option, and a carousel or cycle\nfolded an author key's stale value to its first member.\n\n- The gate judges a stored value (Gate.verdict): a key one of the config's\n  own `set` actions writes, holding a value its validator refuses or changes,\n  is foreign. A key no `set` writes is the daemon's own and is held.\n- JudgedState (src/daemon/foundations/judged-state.ts) is the branded reader\n  every interpretive reader demands: the registry's `state` variables, step-\n  state (which now steps from the seed instead of clamping), the verbs'\n  settings picks, the closing view's closeNested, and the idle close's\n  openRoots. Back admits a value only if the verdict holds it. Release reads\n  after a reload stay raw.\n- session.foreign (the session view) lists foreign values; the draw stands one\n  amber `domain` warning per key, identified by its key.\n- The ring shows a held non-option between the last and first options; the\n  cycle keeps its rest-first reading, with the reason stated.\n- validateBoolean accepts its own canonical false, \"\".\n- placementSetting drops its fallback for a refused draft.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-684",
       "ref": "refs/pull/684/merge",
       "sha": "d8300cb540df23473ac21862d3f096a09125a76c",
@@ -20,56 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:31:15-07:00",
           "message": "fix(pricing): a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8)\n\nThe pricing held one promise for the daemon's life, so a daemon that\nstarted offline priced by the bundled rates until it was restarted, and\none that fetched kept its table past the disk copy's day.\n\nWhat a load settles is now a Landed table or a Failed load that carries\nthe last table that landed, if any. Each ask starts the one load when\nwhat is held is due, and answers with what is held: the first ask awaits,\nlater asks answer at once while the load lands behind them. A landed\ntable is due a day after it was read; a failed load after a backoff that\ndoubles per failure in a row up to an hour. The disk copy is a candidate\njudged by the same due predicate, so the day ends once. No timer is\narmed: the retry is the next ask after the due moment. A load that\nlanded nothing says so on the owner's log with the retry delay.\n\nThe test moves onto a held clock and drives the retry, the refresh, a\nrefresh that fails, a copy another daemon wrote, and a close mid-refresh.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-676",
-      "ref": "refs/pull/676/merge",
-      "sha": "f96513dc2de84bfbfb0df4000f3cf3d0ddc706a8",
-      "timestamp": "2026-11-07T10:32:51.589Z",
-      "commits": [
-        {
-          "sha": "f96513dc2de84bfbfb0df4000f3cf3d0ddc706a8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:31:31Z",
-          "message": "Merge 212c1935e511b79ca2b57cb682494c4e7a0b4c03 into 215f486db0c68765107dc69e715ccb26c5ac01d3\n"
-        },
-        {
-          "sha": "212c1935e511b79ca2b57cb682494c4e7a0b4c03",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:31:13-07:00",
-          "message": "fix(state): only a placement's draft refuses an authored set, and a stored boolean says what it admits (brandon-menus-sjhy.46w)\n\nThe load refused an authored `set` on every reserved namespace, so a config\nwhose button opens its own menu by its `menus.` key stopped loading (the\nundo test's `openMenu` among them). Only a draft's read trusts its gate's\ndomain: a wider gate elsewhere only makes more values held, and a cycle\ntakes a non-member as at rest. The refusal now covers the drafts alone, and\nthe authoring doc quotes its error.\n\n`toolbar-expanded` said it admits \"true or false\" while its verdict holds\nonly the stored \"1\" and \"\", so a stored \"true\" was reported as foreign by a\nmessage that admitted it. It now names the stored spellings, and the\nvalidator's refusal lists the empty false it accepts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "8a317cdb45d51bdfbdadf65eaa9e628150310556",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:16:47-07:00",
-          "message": "fix(state): a set key is reserved as spelled, and the domain ⚠ says what the bar draws (brandon-menus-sjhy.46w)\n\nThe loader refused an authored `set` whose key only collapsed like one under\na reserved namespace (`edit-mode`, `menus_open`), though a session key is\ncompared as spelled and can never meet a synthesized one. The refusal now\nasks the spelled namespace, the one `isReservedName` already asked.\n\nThe domain warning said the bar draws the key's default, but a stale\nplacement draft falls to the saved value and a stale setting to the file or\npreset. It now says the bar draws as if nothing were picked.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "5627645ffc3a6143723f1b290c8b909ba84d0704",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:56:27-07:00",
-          "message": "test(lanes): the session-pane draw composes its view with the state gates the daemon hands it (brandon-menus-sjhy.46w)\n\nThe rebase onto main brought in a test that builds a session view without\nthe state gates this branch's view now judges by.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "e090e7473717a5ef608ce61455f4845b60423413",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:50:18-07:00",
-          "message": "fix(state): a reserved key has only its control as writer, and a never-rendered session judges nothing (brandon-menus-sjhy.46w)\n\nAnswers /code-review high on 068bb06a (dispositions on PR #676).\n\n- The loader refuses an authored `set` whose key is in a reserved\n  namespace, so a placement draft's gate is its declaration's and its\n  parse at the render cannot refuse what the gate admitted.\n- A session with no recorded render origin has no config: its judged\n  read judges nothing instead of throwing inside a write's closing view.\n- The keyspace epoch is a MobX atom, so a computed judging through a\n  gate re-evaluates on a daemon-wide register or dispose.\n- toolbar-toggle reads toolbar-expanded judged; save-theme-default's\n  release read is raw, as every release read is.\n- The demo and check judge and gate with one Gates each.\n- The cycle, ring and standing-warning comments say what holds.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "cb4dcf335431b902029ec749088188c9035311a6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:07:39-07:00",
-          "message": "fix(state): a session value its config no longer admits draws the default and warns (brandon-menus-sjhy.46w)\n\nSession state outlives the config that wrote it. A stale value was swallowed\nsilently: the globals resolution dropped it, a placement's bar drew the saved\nvalue while its carousel sat on its first option, and a carousel or cycle\nfolded an author key's stale value to its first member.\n\n- The gate judges a stored value (Gate.verdict): a key one of the config's\n  own `set` actions writes, holding a value its validator refuses or changes,\n  is foreign. A key no `set` writes is the daemon's own and is held.\n- JudgedState (src/daemon/foundations/judged-state.ts) is the branded reader\n  every interpretive reader demands: the registry's `state` variables, step-\n  state (which now steps from the seed instead of clamping), the verbs'\n  settings picks, the closing view's closeNested, and the idle close's\n  openRoots. Back admits a value only if the verdict holds it. Release reads\n  after a reload stay raw.\n- session.foreign (the session view) lists foreign values; the draw stands one\n  amber `domain` warning per key, identified by its key.\n- The ring shows a held non-option between the last and first options; the\n  cycle keeps its rest-first reading, with the reason stated.\n- validateBoolean accepts its own canonical false, \"\".\n- placementSetting drops its fallback for a refused draft.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
