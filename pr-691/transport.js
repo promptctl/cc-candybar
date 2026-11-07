@@ -67620,6 +67620,14 @@ function applyClaudeCodeReserve(rawCols) {
 
 // src/daemon/cache/today-facts.ts
 init_globals();
+
+// src/segments/session.ts
+init_globals();
+function totalTokens(breakdown) {
+  return breakdown.input + breakdown.output + breakdown.cacheCreation + breakdown.cacheRead;
+}
+
+// src/daemon/cache/today-facts.ts
 var EMPTY_DAY = {
   cost: 0,
   input: 0,
@@ -67650,7 +67658,7 @@ function projectToday(facts, at) {
   if (own2 !== void 0) addDay(total, own2);
   return ok({
     cost: total.cost,
-    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
+    tokens: totalTokens(total),
     tokenBreakdown: {
       input: total.input,
       output: total.output,
@@ -69951,7 +69959,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.3";
+var PACKAGE_VERSION = "1.210.4";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -79262,7 +79270,10 @@ var stay = (resp) => ({
   exitAfterFlush: null,
   delivered: NOTHING_DELIVERED
 });
-var replied = (reply) => ({ kind: "reply", ...reply });
+var replied = (reply) => ({
+  kind: "reply",
+  ...reply
+});
 var REPLY_KINDS = {
   render: true,
   "pane-session": true,
@@ -81281,24 +81292,26 @@ var PRICING_PERIOD = {
 };
 var PRICING_RETRY_CEILING_MS = 60 * 60 * 1e3;
 var lastLanded = (held) => held === null ? null : held.kind === "landed" ? held : held.last;
-var tableOf = (held) => lastLanded(held)?.table ?? OFFLINE_PRICING_DATA;
 var later = (a, b) => a === null ? b : b === null ? a : a.at >= b.at ? a : b;
 var failuresOf = (held) => held.kind === "landed" ? 0 : held.failures;
 var standsMs = (failures) => backedOffMs(PRICING_PERIOD, failures, PRICING_RETRY_CEILING_MS);
 var due = (held, now2) => held.at + standsMs(failuresOf(held)) <= now2;
 function livePricing(owner) {
   const held = observable.box(null, { deep: false });
+  const landed = computed(() => lastLanded(held.get()), {
+    equals: (a, b) => a?.at === b?.at
+  });
   let loading = null;
   const sayNotLoaded = changeLogger(owner.log);
   return {
-    table: () => tableOf(held.get()),
+    // The bundled rates price until a table lands.
+    table: () => landed.get()?.table ?? OFFLINE_PRICING_DATA,
     ask: () => {
       const prev = held.get();
       const owed = prev === null || due(prev, owner.clock.now());
       if (!owed || owner.closing.aborted) return;
-      loading ??= loadHeld(owner, prev, sayNotLoaded).then((settled4) => {
+      loading ??= loadHeld(owner, prev, sayNotLoaded).then((settled4) => runInAction(() => held.set(settled4))).finally(() => {
         loading = null;
-        runInAction(() => held.set(settled4));
       });
     }
   };
@@ -81556,8 +81569,12 @@ var SingleFlight = class {
 var SPEED_RING_CAPACITY = 64;
 function speedSampleOf(breakdown, atMs) {
   const input = breakdown.input + breakdown.cacheCreation + breakdown.cacheRead;
-  const output = breakdown.output;
-  return { input, output, total: input + output, atMs };
+  return {
+    input,
+    output: breakdown.output,
+    total: totalTokens(breakdown),
+    atMs
+  };
 }
 var DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1e3;
 var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
@@ -81646,7 +81663,7 @@ function sessionInfoOf(record2, table) {
     cost,
     calculatedCost: cost,
     officialCost: null,
-    tokens: tokenBreakdown.input + tokenBreakdown.output + tokenBreakdown.cacheCreation + tokenBreakdown.cacheRead,
+    tokens: totalTokens(tokenBreakdown),
     tokenBreakdown
   };
 }
@@ -82413,10 +82430,10 @@ var ContextProvider = class {
   // or a native window whose percentages are still null pre-first-call). No
   // auto-compact buffer: that was a hardcoded guess at Claude's threshold and
   // a soft second source; the native remaining_percentage is authoritative.
-  ratioPercentages(totalTokens, contextLimit) {
+  ratioPercentages(totalTokens2, contextLimit) {
     const percentage = Math.min(
       100,
-      Math.max(0, Math.round(totalTokens / contextLimit * 100))
+      Math.max(0, Math.round(totalTokens2 / contextLimit * 100))
     );
     return { percentage, contextLeftPercentage: Math.max(0, 100 - percentage) };
   }
@@ -82434,13 +82451,13 @@ var ContextProvider = class {
     }
     const currentUsage = cw.current_usage;
     const contextLimit = cw.context_window_size;
-    const totalTokens = (currentUsage.input_tokens || 0) + (currentUsage.cache_creation_input_tokens || 0) + (currentUsage.cache_read_input_tokens || 0);
+    const totalTokens2 = (currentUsage.input_tokens || 0) + (currentUsage.cache_creation_input_tokens || 0) + (currentUsage.cache_read_input_tokens || 0);
     debug(
-      `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens} (limit: ${contextLimit})`
+      `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens2} (limit: ${contextLimit})`
     );
-    const ratio = this.ratioPercentages(totalTokens, contextLimit);
+    const ratio = this.ratioPercentages(totalTokens2, contextLimit);
     return {
-      totalTokens,
+      totalTokens: totalTokens2,
       maxTokens: contextLimit,
       percentage: cw.used_percentage != null ? Math.round(cw.used_percentage) : ratio.percentage,
       contextLeftPercentage: cw.remaining_percentage != null ? Math.round(cw.remaining_percentage) : ratio.contextLeftPercentage
@@ -82486,18 +82503,18 @@ var ContextProvider = class {
     if (read2.kind === "failed") {
       return failed(`context transcript: ${read2.reason}`, read2.failedAt);
     }
-    const totalTokens = read2.value;
-    if (totalTokens === void 0) {
+    const totalTokens2 = read2.value;
+    if (totalTokens2 === void 0) {
       debug("No main chain entries with usage data found");
       return ABSENT2;
     }
     debug(
-      `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`
+      `Most recent main chain context: ${totalTokens2} tokens (limit: ${contextLimit})`
     );
     return ok({
-      totalTokens,
+      totalTokens: totalTokens2,
       maxTokens: contextLimit,
-      ...this.ratioPercentages(totalTokens, contextLimit)
+      ...this.ratioPercentages(totalTokens2, contextLimit)
     });
   }
 };
