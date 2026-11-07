@@ -31,6 +31,7 @@ const CLOCK_PROPERTIES = [
   { object: "performance", property: "now", message: CLOCK_MESSAGE },
   { object: "process", property: "hrtime", message: CLOCK_MESSAGE },
   { object: "process", property: "uptime", message: CLOCK_MESSAGE },
+  { object: "os", property: "uptime", message: CLOCK_MESSAGE },
   { object: "AbortSignal", property: "timeout", message: CLOCK_MESSAGE },
 ];
 // [LAW:single-enforcer] A signal sent to a pid or its group, or signal 0 asking

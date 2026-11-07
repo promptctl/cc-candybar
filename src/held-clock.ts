@@ -65,6 +65,9 @@ export function heldClock(start: Date): HeldClock {
     // Whole milliseconds, as `Date.now()` reads them.
     now: () => Math.trunc(start.getTime() + elapsed),
     monotonic: () => elapsed as Monotonic,
+    // A boot stands still while the clock moves on, and the machine a held
+    // clock stands for booted before any moment it is set to.
+    bootTime: () => 0,
     after: (ms, fire) => arm(ms, fire),
     every: (ms, fire) => arm(Math.max(1, ms), fire, Math.max(1, ms)),
     defer: (fire) => arm(0, fire),

@@ -17,7 +17,6 @@
 
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import {
@@ -202,10 +201,6 @@ function removeAct(dir: string, act: number): void {
   fs.rmSync(leaving, { recursive: true, force: true });
 }
 
-// When this boot began, by the wall clock the record's start is written in.
-const bootedAt = (clock: Pick<Timekeeper, "now">): number =>
-  clock.now() - os.uptime() * 1000;
-
 // Whether the job's group is the one the record names. A job started before
 // this boot is gone, whatever holds its pid now. A live leader whose start
 // time differs is someone else's. A live group whose leader has gone, or whose
@@ -272,7 +267,7 @@ export function makeActReader(
   dir: string,
   read: (pid: number) => Promise<StartTimeRead>,
   jobs: Pick<Launcher, "jobGroupAlive">,
-  clock: Pick<Timekeeper, "now">,
+  clock: Pick<Timekeeper, "bootTime">,
 ): ActReader {
   let known: Known | null = null;
 
@@ -284,7 +279,9 @@ export function makeActReader(
     if (known === null || !sameJob(known.record, record)) {
       known = {
         record,
-        ours: await isRecordedJob(record, read, jobs, bootedAt(clock)),
+        // [LAW:one-source-of-truth] The boot is read off the clock the
+        // record's start was written by, never beside it.
+        ours: await isRecordedJob(record, read, jobs, clock.bootTime()),
         final: null,
       };
     }

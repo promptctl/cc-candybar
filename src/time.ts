@@ -1,3 +1,4 @@
+import os from "node:os";
 import { clearImmediate, setImmediate } from "node:timers";
 
 // [LAW:effects-at-boundaries] Time as an input: what the wall and the monotonic
@@ -21,6 +22,10 @@ export interface Timekeeper {
   now(): number;
   // Milliseconds since an arbitrary start that never steps back, for spans.
   monotonic(): Monotonic;
+  // When this boot began, in the wall time `now` reads. Read off the same
+  // clock as `now`, so a wall time stamped before it is from an earlier boot
+  // whichever clock the reader runs on.
+  bootTime(): number;
   // Runs `fire` on a later turn, once `ms` have passed, unless what it returns
   // clears it first. Never before it returns: its callers arm it before they
   // are ready to be fired at.
@@ -57,6 +62,7 @@ export function elapsedMs(
 export const systemTimekeeper: Timekeeper = {
   now: () => Date.now(),
   monotonic: () => performance.now() as Monotonic,
+  bootTime: () => Date.now() - os.uptime() * 1000,
   after: (ms, fire, options) => {
     const timer = setTimeout(fire, ms);
     if (options?.unref) {
