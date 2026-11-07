@@ -4,39 +4,39 @@
     {
       "version": "pr-668",
       "ref": "refs/pull/668/merge",
-      "sha": "226fad12428d0b94155621f00860e75944b4e17b",
-      "timestamp": "2026-11-07T05:37:56.205Z",
+      "sha": "4072a07e913377a00d463c920f16cb1b91e6c3e6",
+      "timestamp": "2026-11-07T05:38:46.283Z",
       "commits": [
         {
-          "sha": "226fad12428d0b94155621f00860e75944b4e17b",
+          "sha": "4072a07e913377a00d463c920f16cb1b91e6c3e6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:36:59Z",
-          "message": "Merge 244cdbe074fcfcbf9e257b44b794d1552a31d95a into fc49ff5db45144707ebd065b13c507d038867cde\n"
+          "timestamp": "2026-11-07T05:37:49Z",
+          "message": "Merge efdf9557cb3f7b02cd4d04ef27593804f90a6683 into fc49ff5db45144707ebd065b13c507d038867cde\n"
         },
         {
-          "sha": "244cdbe074fcfcbf9e257b44b794d1552a31d95a",
+          "sha": "efdf9557cb3f7b02cd4d04ef27593804f90a6683",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T22:36:45-07:00",
           "message": "refactor(click): an unknown verb's refusal has its own constructor beside a step's (brandon-menus-sjhy.3c7)\n"
         },
         {
-          "sha": "a344d08c90b33ee29fed7ab2184adb0f55961441",
+          "sha": "e2aaa78d98e6fcddf8435647f0a256c882f30c68",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T19:27:36-07:00",
           "message": "fix(site): a copy-only click starts its clipboard write before the render it awaits (brandon-menus-sjhy.3c7)\n\nA browser copies only while the click's gesture is live, and the spread\nawaited the render first. The fold's and the session read's comments say\nwhere a step is now refused, and the driven-bar hold names what its steps\ndo once each.\n"
         },
         {
-          "sha": "03a3ef50349a5fcd807c45b658f2f86de18963c3",
+          "sha": "58a7b748e2d7af46db185b8ed5925b4b7bf52cb7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T19:19:57-07:00",
           "message": "fix(click): a refused step and a handler's refusal are one Refusal, and a click is read once per reader (brandon-menus-sjhy.3c7)\n\nThe step's run takes only a step its read lets run, so the fold hands a\nrefused step's refusal straight to its owner. effectsOf throws a value\nthat does not decode with its link again, and spells the unknown verb and\nthe non-dispatch link as the daemon and drawnClickOf do. The driven-bar\nhold takes the click its caller already read.\n"
         },
         {
-          "sha": "f93228c810eabf24a9995a9f42a04d04a8818b34",
+          "sha": "0b50628cab5134e15175296f8065caf53baf3007",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T18:57:41-07:00",
