@@ -22774,6 +22774,10 @@ var VERB_DOCTOR_RUN = "doctor-run";
 var VERB_DOCTOR_FIX = "doctor-fix";
 var VERB_DOCTOR_MARK = "doctor-mark";
 var VERB_PROBE = "probe";
+var LINK_VERBS = [VERB_DISPATCH, VERB_PROBE];
+function isLinkVerb(verb) {
+  return LINK_VERBS.includes(verb);
+}
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
@@ -22909,10 +22913,14 @@ function parseHandlerUrl(rawUrl) {
     return { ok: false, problem: error.message };
   }
 }
-function spellsUnaddressedLink(text4) {
-  if (!isBarLink(text4)) return false;
+function deadLinkOf(text4) {
+  if (!isBarLink(text4)) return null;
   const head = text4.slice(LINK_PREFIX.length).split("%")[0];
-  return !head.startsWith(ADDRESS) && !ADDRESS.startsWith(head);
+  if (!head.startsWith(ADDRESS)) {
+    return ADDRESS.startsWith(head) ? null : "in a grammar older than names, which names no renderer";
+  }
+  const [, , verb, ...tail] = head.split("/");
+  return verb === void 0 || tail.length === 0 || isLinkVerb(verb) ? null : `naming the verb "${verb}", which a link never names: a link names ${LINK_VERBS.join(" or ")}`;
 }
 function verbOf(rest2, to) {
   const slash2 = rest2.indexOf("/");
@@ -46314,14 +46322,15 @@ function templateActionRefs(template, helpers) {
   }
   return [...refs.values()];
 }
-function templateUnaddressedLinks(template, helpers) {
+function templateDeadLinks(template, helpers) {
   const refs = /* @__PURE__ */ new Map();
   for (const { code, via } of callGraph(template, helpers)) {
     for (const s of code.matchAll(STRING_LITERAL_RE)) {
       const literal = s[0].slice(1, -1);
-      if (!spellsUnaddressedLink(literal)) continue;
+      const problem = deadLinkOf(literal);
+      if (problem === null) continue;
       const key = `${literal}\0${via ?? "\0"}`;
-      if (!refs.has(key)) refs.set(key, { literal, via });
+      if (!refs.has(key)) refs.set(key, { literal, problem, via });
     }
   }
   return [...refs.values()];
@@ -61207,12 +61216,12 @@ function checkTemplateRefs(ctx, declPath, template, scope, opts) {
     const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
     report2(`Template references unknown variable ".${ref}"${hint}`, via);
   }
-  for (const { literal, via } of templateUnaddressedLinks(
+  for (const { literal, problem, via } of templateDeadLinks(
     template,
     scope.helpers
   )) {
     report2(
-      `Template spells a link in a grammar older than names, which names no renderer: "${literal}". Bind an action instead ({{ action "name" \u2026 }}): its link names the renderer that draws it`,
+      `Template spells a link ${problem}: "${literal}". Bind an action instead ({{ action "name" \u2026 }}): the bar draws its link`,
       via
     );
   }
@@ -69510,7 +69519,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.5";
+var PACKAGE_VERSION = "1.208.6";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71841,26 +71850,20 @@ function readProbe(value) {
   const nonce = parseProbeNonce(decoded.value);
   return nonce === null ? { ok: false, problem: "the value is not a probe nonce" } : { ok: true, value: nonce };
 }
-var CLICK_READERS = /* @__PURE__ */ new Map([
-  [
-    VERB_DISPATCH,
-    (value) => {
-      const effects = batchAdjacentWrites(parseEffects(value)).map(readEffect);
-      const read2 = {
-        kind: VERB_DISPATCH,
-        effects,
-        session: sessionOf(effects)
-      };
-      return read2;
-    }
-  ],
-  [
-    VERB_PROBE,
-    (value) => ({ kind: VERB_PROBE, nonce: readProbe(value) })
-  ]
-]);
+var CLICK_READERS = {
+  [VERB_DISPATCH]: (value) => {
+    const effects = batchAdjacentWrites(parseEffects(value)).map(readEffect);
+    const read2 = {
+      kind: VERB_DISPATCH,
+      effects,
+      session: sessionOf(effects)
+    };
+    return read2;
+  },
+  [VERB_PROBE]: (value) => ({ kind: VERB_PROBE, nonce: readProbe(value) })
+};
 function readClick(verb, value) {
-  return CLICK_READERS.get(verb)?.(value) ?? null;
+  return isLinkVerb(verb) ? CLICK_READERS[verb](value) : null;
 }
 function clickSession(click2) {
   return click2.kind === VERB_DISPATCH && click2.session?.ok ? click2.session.id : null;
@@ -72009,6 +72012,8 @@ function runClick(click2, ctx) {
       return dispatch(click2, ctx);
     case VERB_PROBE:
       return probe2(click2.nonce, ctx);
+    default:
+      return click2;
   }
 }
 function closeIdleMenus(sid, idle, ctx) {
@@ -76564,6 +76569,8 @@ var FrameFeeds = class {
     const feed2 = this.feeds.get(sessionId2);
     if (feed2 === void 0) return;
     feed2.woke[cause]++;
+    if (feed2.phase.kind !== "drawing")
+      feed2.wokeSince ??= this.deps.clock.monotonic();
     if (!this.hasten(feed2)) feed2.coalesced++;
   }
   // Wake, for `cause`, every watched session whose latest request `match`
@@ -76656,6 +76663,9 @@ var FrameFeeds = class {
       evaluated: 0,
       cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
+      wokeSince: null,
+      wakeToFrameLast: null,
+      wakeToFrameMax: 0,
       coalesced: 0,
       summarizedAt: now2,
       refreshesAtOpen: this.deps.refreshes()
@@ -76700,6 +76710,8 @@ var FrameFeeds = class {
   // one frame to the next. Its moment on the monotonic clock is that instant's.
   draw(feed2, due) {
     feed2.phase = { kind: "drawing" };
+    const woke = feed2.wokeSince;
+    feed2.wokeSince = null;
     const started2 = this.deps.clock.monotonic();
     const wall = this.deps.instant();
     const at = Math.min(
@@ -76708,7 +76720,7 @@ var FrameFeeds = class {
     );
     const moment2 = started2 + (at - wall) * 1e3;
     try {
-      this.step(feed2, started2, moment2, at);
+      this.step(feed2, woke, started2, moment2, at);
     } catch (error) {
       feed2.lastStart = moment2;
       this.deps.log(
@@ -76719,7 +76731,7 @@ var FrameFeeds = class {
       this.schedule(feed2, null, at);
     }
   }
-  step(feed2, started2, moment2, at) {
+  step(feed2, woke, started2, moment2, at) {
     const frame2 = this.deps.render(
       feed2.sessionId,
       paceOf(this.spacingOf(feed2)),
@@ -76732,6 +76744,10 @@ var FrameFeeds = class {
     }
     feed2.lastStart = moment2;
     const finished = this.deps.clock.monotonic();
+    if (woke !== null) {
+      feed2.wakeToFrameLast = finished - woke;
+      feed2.wakeToFrameMax = Math.max(feed2.wakeToFrameMax, finished - woke);
+    }
     this.drawn++;
     feed2.drawn++;
     feed2.drawMs += finished - started2;
@@ -76900,7 +76916,7 @@ var FrameFeeds = class {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
+      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} wakeToFrame=${feed2.wakeToFrameLast === null ? "-" : `last:${feed2.wakeToFrameLast.toFixed(1)}ms,max:${feed2.wakeToFrameMax.toFixed(1)}ms`} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
     );
     feed2.summarizedAt = now2;
   }
