@@ -28,6 +28,7 @@ import {
   type LaunchOpts,
   type Launcher,
 } from "../proc/launch";
+import { stagedPath } from "../utils/staged-path";
 import { readTailSync } from "../utils/transcript-fs";
 import type { StartTimeRead } from "./process-fingerprint";
 import type { Timekeeper } from "../time.js";
@@ -449,10 +450,10 @@ export function spendLook(
     now,
     longestMs,
   );
-  // Staged at a name of this process's own, so two daemons' looks never write
-  // one file. Not flushed: a crash ends the act's group with the boot it ran
-  // in, and its spend with it.
-  const staged = `${file}.${process.pid}.tmp`;
+  // [LAW:one-type-per-behavior] Staged where every write stages, so two
+  // daemons' looks never write one file. Not flushed: a crash ends the act's
+  // group with the boot it ran in, and its spend with it.
+  const staged = stagedPath(file);
   try {
     fs.writeFileSync(staged, JSON.stringify(awake));
     fs.renameSync(staged, file);
