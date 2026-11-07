@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-678",
+      "ref": "refs/pull/678/merge",
+      "sha": "360484557a95981521a2642a0a61451587e1fc0d",
+      "timestamp": "2026-11-07T10:09:18.746Z",
+      "commits": [
+        {
+          "sha": "360484557a95981521a2642a0a61451587e1fc0d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:08:23Z",
+          "message": "Merge 69a58d367bb714fd89d42441540d83d5576e8281 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
+        },
+        {
+          "sha": "69a58d367bb714fd89d42441540d83d5576e8281",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:08:02-07:00",
+          "message": "fix(state): every staged write names a staging of its own (brandon-unfiled-3248.wkh1)\n\nHigh review of #678. The staged name adds a random part beside the pid, so\ntwo writes never share one whatever they share (a process, a pid namespace),\nand it lives in a module of its own that every stage-then-publish site uses:\nwriteAtomic, the session state file, the socket lease, the fork-bomb\nregistry, the link key, the pricing cache and a job's end status. A failed\nflush removes its staged file. The cross-process test's children wait on a\npipe the test holds, name a failed spawn, and the reader no longer spins.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "addbedc036ff4484d1f2ef4845a257c47aae91b9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:40:04-07:00",
+          "message": "fix(state): concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1)\n\nTwo processes sharing a state directory both staged a write at\n`<file>.tmp`, so one's rename published or moved the other's bytes and\nthe other's rename failed ENOENT. Every staged name now carries the\nwriting process's pid, spelled once by `stagedPath` in\nsrc/utils/atomic-write.ts: writeAtomic, both session-state-file stages\nand the socket lease use it. The fork-bomb breaker stages by an\ninjected identity's pid and is left as it is.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-674",
       "ref": "refs/pull/674/merge",
       "sha": "15163aa69cfa7f833ef81bcd41cc2636c1fbce9a",
@@ -201,28 +230,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:51:44-07:00",
           "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr)\n\nsession-pane-draw, the facts-seam test's live session and frame-feed's\nfailed-open case take a whole, uncast DaemonParts from test/helpers/daemon-parts.ts.\nThe render cache's composition, the frame feed's wiring and the teardown move\ninto daemon.ts functions that createDaemon and the builder both call, so the\nbuilder closes everything the daemon closes, and its store is held by the\njournal turns.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-678",
-      "ref": "refs/pull/678/merge",
-      "sha": "e3f95026a8bca9990f708ef11b262e90e56f73c5",
-      "timestamp": "2026-11-07T09:41:38.409Z",
-      "commits": [
-        {
-          "sha": "e3f95026a8bca9990f708ef11b262e90e56f73c5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:40:32-07:00",
-          "message": "Merge addbedc036ff4484d1f2ef4845a257c47aae91b9 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
-        },
-        {
-          "sha": "addbedc036ff4484d1f2ef4845a257c47aae91b9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:40:04-07:00",
-          "message": "fix(state): concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1)\n\nTwo processes sharing a state directory both staged a write at\n`<file>.tmp`, so one's rename published or moved the other's bytes and\nthe other's rename failed ENOENT. Every staged name now carries the\nwriting process's pid, spelled once by `stagedPath` in\nsrc/utils/atomic-write.ts: writeAtomic, both session-state-file stages\nand the socket lease use it. The fork-bomb breaker stages by an\ninjected identity's pid and is left as it is.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
