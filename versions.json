@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-677",
+      "ref": "refs/pull/677/merge",
+      "sha": "d2d523a584ba99ab266e1574d376f9fcbeb2ac89",
+      "timestamp": "2026-11-07T09:39:36.873Z",
+      "commits": [
+        {
+          "sha": "d2d523a584ba99ab266e1574d376f9fcbeb2ac89",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:38:30-07:00",
+          "message": "Merge 448d6853cf15e8b65396f82b69cd5a8e45158357 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
+        },
+        {
+          "sha": "448d6853cf15e8b65396f82b69cd5a8e45158357",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:37:49-07:00",
+          "message": "fix(cache): a catch-up reloads one entry per turn, so requests are answered between entries (candybar-animation-wbxz.v24)\n\nWhen file events resumed after a stall, or the repo answers moved, the\nrender cache reloaded every entry in one synchronous turn. A reload that\nkeeps its state still resolves, validates and keys the whole chain, so\n105 entries held the live daemon's loop for 1.7s on a calm machine and\n11s on a loaded one, and every client waiting behind it hung up (the\nEPIPE bursts in daemon.log).\n\nThe walk now takes one due entry per turn of the loop. Any reload clears\nits entry's due mark, a drop clears a dropped entry's, a reload that\nthrows ends only its own turn, and close cancels the armed turn. The\nrender cache's stats count the entries still due.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-674",
       "ref": "refs/pull/674/merge",
       "sha": "19373cd432ac56705dc114c1102996e698d78e25",
