@@ -72276,7 +72276,7 @@ function sessionPaneOf(hints, sessionId2, heldSession) {
       why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}. A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`
     };
   return held.sessionId === sessionId2 ? { kind: "runs", tmux: tmux3 } : {
-    kind: "left",
+    kind: "mismatched",
     tmux: tmux3,
     why: `the Claude Code that ran its statusline (pid ${parentPid}) holds session ${held.sessionId}`
   };
@@ -72291,7 +72291,7 @@ function runsNowIn(where, heldSession) {
   };
   return (req) => inTmux(req.hints.tmux) && samePane(req.hints.tmux, where) && sessionPaneOf(req.hints, req.sessionId, once2).kind === "runs";
 }
-var paneFact = (pane) => pane.kind !== "runs" ? `unconfirmed: ${pane.why}` : pane.tmux === null ? "outside" : "runs";
+var paneFact = (pane) => pane.kind !== "runs" ? `${pane.kind}: ${pane.why}` : pane.tmux === null ? "outside" : "runs";
 function sessionPaneError(pane, lanes) {
   const on2 = LANE_NAMES.filter(
     (lane) => lanes[lane] && LANES[lane].showsPaneSession
@@ -85084,10 +85084,10 @@ var TmuxStatusLines = class {
   // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
   // arrival, a click's commit — never at a draw: a session whose switch is on
   // is held in the pane its Claude Code's record confirms it runs in (`pane`),
-  // and one switched off, or confirmed outside tmux, is not. An unconfirmed
-  // request says nothing of where its session runs, so a session held already
-  // stays where it is. A daemon restart picks each session up at its next
-  // request.
+  // and one switched off, or confirmed outside tmux, is not. A request not
+  // confirmed places its session nowhere, so a session held already stays
+  // where it is until the session its pane confirms takes the pane. A daemon
+  // restart picks each session up at its next request.
   observe(sessionId2, pane, on2) {
     if (this.closed) return;
     const held = this.held.get(sessionId2);

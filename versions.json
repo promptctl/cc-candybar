@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-669",
+      "ref": "refs/pull/669/merge",
+      "sha": "d8f157c93db49101ae8f8ae0cbe435159099238b",
+      "timestamp": "2026-11-07T05:36:28.653Z",
+      "commits": [
+        {
+          "sha": "d8f157c93db49101ae8f8ae0cbe435159099238b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:35:35Z",
+          "message": "Merge f3362bc18f077f47df02e0aee252757b163aafb4 into fc49ff5db45144707ebd065b13c507d038867cde\n"
+        },
+        {
+          "sha": "f3362bc18f077f47df02e0aee252757b163aafb4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T22:35:16-07:00",
+          "message": "fix(lanes): a stamp whose Claude Code holds another session is mismatched, either side of the rewrite, and its render line says so (candybar-gather-renderer-76bb.1dh.jw7)\n"
+        },
+        {
+          "sha": "76972919abe9a32955039b19dc6bc0eb5e750ce1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:26:25-07:00",
+          "message": "fix(lanes): a cleared session's straggling tick has left its pane, and draws no ⚠ (candybar-gather-renderer-76bb.1dh.jw7)\n\nA request whose Claude Code's record holds another session is stamped\nleft, not unconfirmed: that Claude Code is alive and has moved on, so\nthe tick names nothing to fix. Only an unread record, or a client too old\nto name its parent, still draws the session-pane ⚠. The render line keeps\nthe why for both.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-668",
       "ref": "refs/pull/668/merge",
       "sha": "d3bbc9a6bc27cc450b728998451902a2a5eb79e1",
@@ -34,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T18:57:41-07:00",
           "message": "fix(click): a drawn link reads as the daemon's one read, step by step, and one gate holds back a driven bar's machine click (brandon-menus-sjhy.3c7)\n\nThe dispatch read stamps each step once: one that runs carries its leaf,\nsession and arguments; one refused carries the daemon's text for why and the\narguments that decoded. The fold is the one reader of step outcomes and the\none caller of the refusal owners. drawnClickOf and describeLink read through\nreadClick, so adjacent writes read as the batch that lands and a malformed\nstep as its own refusal beside the steps that run; effectsOf stays the wire\ncodec's inverse. The harness and the site hold a click back by one gate that\ncounts only steps that run, naming refused steps beside them.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-669",
-      "ref": "refs/pull/669/merge",
-      "sha": "084fd3e90e025514eae37d12defc6a85f9ca18b3",
-      "timestamp": "2026-11-07T02:27:50.969Z",
-      "commits": [
-        {
-          "sha": "084fd3e90e025514eae37d12defc6a85f9ca18b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:27:01-07:00",
-          "message": "Merge 76972919abe9a32955039b19dc6bc0eb5e750ce1 into fc49ff5db45144707ebd065b13c507d038867cde\n"
-        },
-        {
-          "sha": "76972919abe9a32955039b19dc6bc0eb5e750ce1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:26:25-07:00",
-          "message": "fix(lanes): a cleared session's straggling tick has left its pane, and draws no ⚠ (candybar-gather-renderer-76bb.1dh.jw7)\n\nA request whose Claude Code's record holds another session is stamped\nleft, not unconfirmed: that Claude Code is alive and has moved on, so\nthe tick names nothing to fix. Only an unread record, or a client too old\nto name its parent, still draws the session-pane ⚠. The render line keeps\nthe why for both.\n"
         }
       ]
     },
