@@ -69515,7 +69515,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.5";
+var PACKAGE_VERSION = "1.208.6";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -76746,7 +76746,7 @@ var FrameFeeds = class {
       feed2.phase = { kind: "waiting" };
       return;
     }
-    feed2.phase = { kind: "pushing", woke: false };
+    feed2.phase = { kind: "pushing" };
     feed2.lastStart = moment2;
     const finished = this.deps.clock.monotonic();
     if (woke !== null) {
@@ -76774,18 +76774,22 @@ var FrameFeeds = class {
   // frame took to draw comes off the wait and the rate holds whatever a render
   // costs. A frame step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
-  // next change is Infinity, an unseen bar's spacing is the still period, and
-  // a frame woken after its render read its values is followed a spacing on.
+  // next change is Infinity, and an unseen bar's spacing is the still period.
+  // A wake while the frame went out has already set the timer, and the frame
+  // never sets it later than that.
   schedule(feed2, frame2, at) {
     const { moving, still } = this.deps.periods;
-    const woken = feed2.phase.kind === "pushing" && feed2.phase.woke ? this.spacingOf(feed2) : Infinity;
     const until2 = ((frame2?.bar.nextChange ?? Infinity) - at) * 1e3;
     const shownPeriod = Math.min(Math.max(until2, moving), still);
     const shown = this.shown(feed2);
     if (shownPeriod < still && shown) feed2.moving++;
     if (shownPeriod < still && !shown) feed2.unseen++;
-    const period = Math.min(shown ? shownPeriod : still, woken);
-    this.arm(feed2, at + period / 1e3, this.deps.instant());
+    const period = shown ? shownPeriod : still;
+    const due = at + period / 1e3;
+    const wall = this.deps.instant();
+    const dueMoment = this.deps.clock.monotonic() + Math.max(0, (due - wall) * 1e3);
+    if (feed2.phase.kind === "due" && feed2.phase.at <= dueMoment) return;
+    this.arm(feed2, due, wall);
   }
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
   // moving period while its bar is on a screen, the still period while it is
@@ -76802,15 +76806,10 @@ var FrameFeeds = class {
   // [LAW:no-ambient-temporal-coupling] A frame renders in one synchronous
   // turn and opens nothing, so a wake while it renders is the render's own,
   // and the frame reads what that moved: it is coalesced into that frame. A
-  // wake after the render read its values marks the frame, whose schedule
-  // brings the next forward.
+  // wake after the render read its values is the next frame's.
   hasten(feed2) {
     const { phase } = feed2;
     if (phase.kind === "rendering") return false;
-    if (phase.kind === "pushing") {
-      phase.woke = true;
-      return true;
-    }
     const now2 = this.deps.clock.monotonic();
     const at = Math.max(now2, feed2.lastStart + this.spacingOf(feed2));
     if (phase.kind === "due" && phase.at <= at) return false;
