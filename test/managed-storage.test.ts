@@ -50,19 +50,20 @@ const rigs: Rig[] = [];
 // The disk, with the identity a folder reads as replaced by `identityOf`'s:
 // a folder made again, or one that cannot be read, without a second disk.
 // The registry and its owners read the one filesystem, so all of them see it.
-const identityBy =
-  (identityOf: (folder: string) => FolderIdentity | "gone"): Filesystem => ({
-    ...systemFilesystem,
-    statSync: (p) => {
-      const identity = identityOf(p);
-      if (identity === "gone")
-        throw Object.assign(
-          new Error(`ENOENT: no such file or directory, stat '${p}'`),
-          { code: "ENOENT", path: p },
-        );
-      return { ...systemFilesystem.statSync(p), ...identity };
-    },
-  });
+const identityBy = (
+  identityOf: (folder: string) => FolderIdentity | "gone",
+): Filesystem => ({
+  ...systemFilesystem,
+  statSync: (p) => {
+    const identity = identityOf(p);
+    if (identity === "gone")
+      throw Object.assign(
+        new Error(`ENOENT: no such file or directory, stat '${p}'`),
+        { code: "ENOENT", path: p },
+      );
+    return { ...systemFilesystem.statSync(p), ...identity };
+  },
+});
 
 // The daemon wires the registry's `judge()` to the delivery owner's period,
 // in an order nothing owns: the registry's listener can come before the
@@ -731,6 +732,22 @@ describe("ManagedStorage when its folder's watch or stat recovers", () => {
       () => JSON.stringify(lane.current()) === JSON.stringify(ok(value)),
       `the lane reading ${value}`,
     );
+  // The disk, with the storage folder's stat failing while `stat.failing`
+  // says so, with `code`.
+  const failingStat = (code: string, message: string) => {
+    const stat = { failing: false };
+    const filesystem: Filesystem = {
+      ...systemFilesystem,
+      statSync: (p) => {
+        if (stat.failing && p.endsWith(path.join("plug", "session")))
+          throw Object.assign(new Error(`${code}: ${message}, stat '${p}'`), {
+            code,
+          });
+        return systemFilesystem.statSync(p);
+      },
+    };
+    return { stat, filesystem };
+  };
 
   test("a refused watch is the fault until a period's reopen listens; then the file lands, one clear logged, in the same generation", async () => {
     const refuse = new Set<string>();
@@ -784,14 +801,21 @@ describe("ManagedStorage when its folder's watch or stat recovers", () => {
   });
 
   test.each(["before", "after"] as const)(
-    "a watch that errors after every reopen is one fault, logged and counted once, with the registry's period listener added %s the owner's",
+    "a watch that errors after every reopen is one fault, logged, counted and read once, with the registry's period listener added %s the owner's",
     async (judgeSubscribed) => {
       const watches = fakeWatches();
       const r = rig({ judgeSubscribed });
       const key = r.storage.keyFor(r.folder);
       r.storage.watch(key);
+      r.write(A, '"a"');
+      const lane = r.storage.declare(new Holds(), key, A);
+      await answered(lane);
+      const before = reads(r).length;
       watches.at(-1)!.emitter.emit("error", EIO());
-      await until(() => r.storage.stats().faults.error === 1, "the fault");
+      await until(() => lane.current().kind === "failed", "the fault");
+      await quiet();
+      // The fault's start re-reads the held file once, and no period after.
+      expect(reads(r)).toHaveLength(before + 1);
       for (let i = 0; i < 3; i++) {
         period(r);
         // The reopened handle errors inside the reopen's debounce window.
@@ -799,6 +823,7 @@ describe("ManagedStorage when its folder's watch or stat recovers", () => {
         await quiet();
       }
       expect(watches).toHaveLength(4);
+      expect(reads(r)).toHaveLength(before + 1);
       expect(faultLines(r)).toHaveLength(1);
       expect(clearedLines(r)).toEqual([]);
       expect(r.storage.stats().faults).toEqual({
@@ -850,17 +875,7 @@ describe("ManagedStorage when its folder's watch or stat recovers", () => {
   });
 
   test("a stat that fails is the fault until a period's stat succeeds, counted once, in the same generation", async () => {
-    let failing = false;
-    const stand: Filesystem = {
-      ...systemFilesystem,
-      statSync: (p) => {
-        if (failing && p.endsWith(path.join("plug", "session")))
-          throw Object.assign(new Error(`EIO: i/o error, stat '${p}'`), {
-            code: "EIO",
-          });
-        return systemFilesystem.statSync(p);
-      },
-    };
+    const { stat, filesystem: stand } = failingStat("EIO", "i/o error");
     fakeWatches();
     const r = rig({ filesystem: stand });
     const key = r.storage.keyFor(r.folder);
@@ -868,7 +883,7 @@ describe("ManagedStorage when its folder's watch or stat recovers", () => {
     r.write(A, '"a"');
     const lane = r.storage.declare(new Holds(), key, A);
     await answered(lane);
-    failing = true;
+    stat.failing = true;
     period(r);
     await until(() => lane.current().kind === "failed", "the stat's fault");
     const fault = lane.current();
@@ -879,7 +894,7 @@ describe("ManagedStorage when its folder's watch or stat recovers", () => {
     await quiet();
     expect(r.storage.stats().faults.error).toBe(1);
     r.write(A, '"after"');
-    failing = false;
+    stat.failing = false;
     period(r);
     await reading(lane, "after");
     expect(r.storage.stats().faults).toEqual({
@@ -891,6 +906,60 @@ describe("ManagedStorage when its folder's watch or stat recovers", () => {
       expect.stringMatching(/ generation=0 cause=error$/),
     ]);
     expect(r.storage.keyFor(r.folder)).toEqual(key);
+  });
+
+  // A folder's stat failing between the load's key request and the build's
+  // watch is the plugin's fault, never the build's: one plugin's folder must
+  // not take down the bar.
+  test("a stat that fails when the watch opens is the generation's fault, not a throw, and clears when a period's stat succeeds", async () => {
+    const { stat, filesystem: stand } = failingStat(
+      "EACCES",
+      "permission denied",
+    );
+    fakeWatches();
+    const r = rig({ filesystem: stand });
+    const key = r.storage.keyFor(r.folder);
+    r.write(A, '"a"');
+    stat.failing = true;
+    expect(() => r.storage.watch(key)).not.toThrow();
+    const lane = r.storage.declare(new Holds(), key, A);
+    const fault = await answered(lane);
+    expect(fault.kind === "failed" && fault.reason).toContain(
+      "stat failed: EACCES",
+    );
+    stat.failing = false;
+    period(r);
+    await reading(lane, "a");
+    expect(r.storage.stats().faults).toEqual({
+      unusable: 0,
+      refused: 0,
+      error: 1,
+    });
+    expect(clearedLines(r)).toEqual([
+      expect.stringMatching(/ generation=0 cause=error$/),
+    ]);
+  });
+
+  test("a watch error and a failed stat in one window are one fault, logged and counted once, the deafness first", async () => {
+    const { stat, filesystem: stand } = failingStat(
+      "EACCES",
+      "permission denied",
+    );
+    const watches = fakeWatches();
+    const r = rig({ filesystem: stand });
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    await answered(lane);
+    stat.failing = true;
+    watches[0]!.emitter.emit("error", EIO());
+    await until(() => lane.current().kind === "failed", "the fault");
+    await quiet();
+    expect(faultLines(r)).toEqual([
+      expect.stringMatching(/ cause=error reason="watching \S+ failed — EIO/),
+    ]);
+    expect(r.storage.stats().faults.error).toBe(1);
   });
 
   test("a lost generation whose watch errors reads the deafness, and the path again once a period reopens the watch", async () => {
