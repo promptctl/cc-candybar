@@ -78104,11 +78104,7 @@ function lanesAt(parts, origin, sessionId2) {
 function switchesAt(parts, origin, sessionId2, tmux3) {
   var _stack = [];
   try {
-    const hold2 = __using(_stack, parts.renderCache.hold(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path
-    ));
+    const hold2 = __using(_stack, parts.renderCache.hold(origin));
     return laneSwitches(sessionGlobals2(parts, sessionId2, hold2.state), tmux3);
   } catch (_) {
     var _error = _, _hasError = true;
@@ -78152,12 +78148,7 @@ function setUpRender(parts, arrived2, at, facts) {
   const hintsError = requestFacts(req, at, facts, parts.rendererName);
   noteFacts(facts, { encoding: req.encoding });
   const origin = req.requested;
-  const hold2 = renderCache.holdSession(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-    req
-  );
+  const hold2 = renderCache.holdSession(origin, req);
   return setUpDraw(hold2, req, hintsError, at, facts);
 }
 function setUpFrame(parts, sessionId2, at, facts) {
@@ -83541,13 +83532,16 @@ var causeField = (cause) => {
 };
 function configLoadedLine(entry, cause, settled4) {
   const dirs = (ds) => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled4} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.origin.projectDir)} cwd=${valueOf(entry.origin.cwd)} cause=${valueOf(causeField(cause))} state=${settled4} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
 }
-function cacheKey(projectDir, cwd2, configFile) {
-  return projectDir + "\0" + cwd2 + "\0" + (configFile ?? "");
+function loadOriginOf({ projectDir, cwd: cwd2, target }) {
+  return { projectDir, cwd: cwd2, target: { path: target.path } };
+}
+function cacheKey(origin) {
+  return JSON.stringify(loadOriginOf(origin));
 }
 function authoredRoots(config2, raw) {
   return new Set(
@@ -83561,16 +83555,16 @@ function watchTargetsFor(filesystem, entry, locs) {
   const roots = [
     .../* @__PURE__ */ new Set([
       ...entry.state.plugins.roots,
-      import_node_path45.default.join(entry.projectDir, REPO_PLUGIN_DIR)
+      import_node_path45.default.join(entry.origin.projectDir, REPO_PLUGIN_DIR)
     ])
   ];
   return watchTargetsOf(filesystem, {
     named: [
       ...dslConfigCandidatePaths(
         locs,
-        entry.projectDir,
-        entry.cwd,
-        entry.configFile
+        entry.origin.projectDir,
+        entry.origin.cwd,
+        entry.origin.target.path
       ),
       ...roots,
       ...loaded.map((d) => d.path),
@@ -83796,14 +83790,14 @@ function loadChain(frame2, cwd2, chain2, deps, served = null) {
   const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
   return settle2(frame2, chain2, resolved.warnings, attempt4, deps.clock);
 }
-function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
+function loadFromDisk({ projectDir, cwd: cwd2, target }, deps, served = null) {
   const started2 = deps.clock.monotonic();
   const resolution = resolveDslConfig(
     deps.locations,
     repoConfigs(deps.stateDir).read(),
     projectDir,
     cwd2,
-    configFile
+    target.path
   );
   const { repos } = resolution;
   const chain2 = {
@@ -83994,27 +83988,25 @@ var RenderCache = class {
   // same fields and a renderable state. The renderer reads the data; no
   // special-case branches between "first load", "reload",
   // "reload-after-error".
-  getOrCreate(projectDir, cwd2, configFile) {
-    const key = cacheKey(projectDir, cwd2, configFile);
+  getOrCreate(origin) {
+    const key = cacheKey(origin);
     const existing = this.entries.get(key);
     if (existing) {
       this.entries.delete(key);
       this.entries.set(key, existing);
       return existing;
     }
-    const loaded = this.load(projectDir, cwd2, configFile, null);
+    const loaded = this.load(origin, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     const entry = {
-      projectDir,
-      cwd: cwd2,
-      configFile,
+      origin: loadOriginOf(origin),
       configLayers: [],
       configHome: "",
       repos: loaded.repos,
       lastError: loaded.error,
       lastWarning: loaded.warning,
-      state: loaded.state ?? fallbackState(cwd2, loaded.repos.plugins, this.deps),
+      state: loaded.state ?? fallbackState(origin.cwd, loaded.repos.plugins, this.deps),
       watch: null
     };
     this.serve(entry.state);
@@ -84022,7 +84014,7 @@ var RenderCache = class {
     this.fit(entry);
     this.log(
       "info",
-      `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
+      `render-cache entry projectDir=${origin.projectDir} cwd=${origin.cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
     );
     this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
@@ -84035,8 +84027,8 @@ var RenderCache = class {
   // released, so the render finishes on the state it resolved its payload
   // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
   // every exit, a throw included.
-  hold(projectDir, cwd2, configFile) {
-    const entry = this.getOrCreate(projectDir, cwd2, configFile);
+  hold(origin) {
+    const entry = this.getOrCreate(origin);
     return this.holdState(entry, entry.state);
   }
   // The hold on `entry`'s state that `hold` and `holdView` hand out.
@@ -84064,8 +84056,8 @@ var RenderCache = class {
   // [LAW:single-enforcer] `facts` is the request the render is drawn for: the
   // view is declared with it here, opened (openView) or kept (`requested`),
   // so no view is drawn declared for another request.
-  holdSession(projectDir, cwd2, configFile, facts) {
-    const held = this.hold(projectDir, cwd2, configFile);
+  holdSession(origin, facts) {
+    const held = this.hold(origin);
     let view;
     let lease;
     try {
@@ -84159,7 +84151,7 @@ var RenderCache = class {
     const { sessionId: sessionId2 } = facts;
     let view;
     try {
-      view = openView(state, entry.cwd, facts, {
+      view = openView(state, entry.origin.cwd, facts, {
         facts: this.deps.facts,
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),
@@ -84174,7 +84166,7 @@ var RenderCache = class {
     this.placeView(sessionId2, view);
     this.log(
       "info",
-      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
+      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.origin.cwd} views=${this.views.size}`
     );
     return view;
   }
@@ -84263,9 +84255,9 @@ var RenderCache = class {
   // config watch firing after the close.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  load(projectDir, cwd2, configFile, served) {
+  load(origin, served) {
     if (this.closed) throw new Error("render cache used after close");
-    return loadFromDisk(projectDir, cwd2, configFile, this.deps, served);
+    return loadFromDisk(origin, this.deps, served);
   }
   // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
   // goes, the map stops serving it, and its state is retired.
@@ -84390,8 +84382,8 @@ var RenderCache = class {
   // config until the reload has landed (a save releasing the picks the file
   // now holds, a doctor verdict on the files as they are). The watcher still
   // fires after a write, and its reload of the same bytes keeps the state.
-  reload(projectDir, cwd2, configFile, cause) {
-    this.reloadInto(this.getOrCreate(projectDir, cwd2, configFile), cause);
+  reload(origin, cause) {
+    this.reloadInto(this.getOrCreate(origin), cause);
   }
   // Re-populate `entry` from the current state of disk, for `cause`.
   //
@@ -84411,12 +84403,7 @@ var RenderCache = class {
   reloadInto(entry, cause) {
     const sessions = this.sessionsOn(entry);
     const served = entry.state;
-    const loaded = this.load(
-      entry.projectDir,
-      entry.cwd,
-      entry.configFile,
-      served
-    );
+    const loaded = this.load(entry.origin, served);
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null)
@@ -84460,7 +84447,7 @@ var RenderCache = class {
       this.deps.locations
     );
     const { targets, unresolved } = paths2;
-    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${paths2.key}`;
+    const key = `config:${cacheKey(entry.origin)}:${paths2.key}`;
     const { watch: watch2, move } = this.deps.watchers.follow(
       entry.watch?.held ?? null,
       { ...paths2, key },
@@ -84470,12 +84457,12 @@ var RenderCache = class {
     if (move === "kept") return;
     this.log(
       "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch2.handle.deaf.length}`
+      `config watch bound projectDir=${entry.origin.projectDir} cwd=${entry.origin.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch2.handle.deaf.length}`
     );
     for (const { path: at, reason } of unresolved)
       this.log(
         "warn",
-        `config watch unresolved projectDir=${entry.projectDir} path=${at} reason=${reason}`
+        `config watch unresolved projectDir=${entry.origin.projectDir} path=${at} reason=${reason}`
       );
   }
   get size() {
@@ -87441,9 +87428,8 @@ function createDaemon(inputs) {
     doctor: inputs.doctorEdge(
       launcher,
       (origin) => {
-        const at = [origin.projectDir, origin.cwd, origin.target.path];
-        renderCache.reload(...at, { kind: "doctor" });
-        const entry = renderCache.getOrCreate(...at);
+        renderCache.reload(origin, { kind: "doctor" });
+        const entry = renderCache.getOrCreate(origin);
         return {
           layers: entry.configLayers,
           error: entry.lastError,
@@ -87839,23 +87825,10 @@ function verbsOverParts(parts) {
     serving: () => parts().limits.serving(),
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
-    configFor: (origin) => parts().renderCache.getOrCreate(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path
-    ).state.config,
-    reloadConfig: (origin) => parts().renderCache.reload(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path,
-      { kind: "write" }
-    ),
+    configFor: (origin) => parts().renderCache.getOrCreate(origin).state.config,
+    reloadConfig: (origin) => parts().renderCache.reload(origin, { kind: "write" }),
     // The storage keys of the same entry `configFor` reads the config of.
-    sourcesFor: (origin) => parts().renderCache.getOrCreate(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path
-    ).state.sources,
+    sourcesFor: (origin) => parts().renderCache.getOrCreate(origin).state.sources,
     lanes: {
       of: (origin, sessionId2) => lanesAt(parts(), origin, sessionId2),
       clicked: (sessionId2, before, after) => laneClicked(parts(), sessionId2, before, after),
