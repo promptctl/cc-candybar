@@ -1,3 +1,9 @@
+## [1.208.3](https://github.com/promptctl/cc-candybar/compare/v1.208.2...v1.208.3) (2026-11-07)
+
+### Bug Fixes
+
+* **lanes:** a restart refuses a Claude Code that now holds another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix) ([#660](https://github.com/promptctl/cc-candybar/issues/660)) ([873a8e0](https://github.com/promptctl/cc-candybar/commit/873a8e0e0be2d843b7d0b4c308831e2d20b5bde1))
+
 ## [1.208.2](https://github.com/promptctl/cc-candybar/compare/v1.208.1...v1.208.2) (2026-11-06)
 
 ### Bug Fixes
