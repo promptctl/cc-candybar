@@ -72295,6 +72295,7 @@ var import_node_path37 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/session-pane.ts
 init_globals();
+var claudeKey = (claude) => `${claude.pid}\0${claude.configDir ?? ""}`;
 function sessionPaneOf(hints, sessionId2, heldSession) {
   const tmux3 = inTmux(hints.tmux) ? hints.tmux : null;
   const { parentPid } = hints;
@@ -72323,7 +72324,7 @@ function sessionPaneOf(hints, sessionId2, heldSession) {
 function runsNowIn(where, heldSession) {
   const reads = /* @__PURE__ */ new Map();
   const once2 = (pid2, configDir2) => {
-    const key = `${pid2}\0${configDir2 ?? ""}`;
+    const key = claudeKey({ pid: pid2, configDir: configDir2 });
     const read2 = reads.get(key) ?? heldSession(pid2, configDir2);
     reads.set(key, read2);
     return read2;
@@ -72335,7 +72336,7 @@ function sessionPaneError(pane, lanes, lasted) {
   const on2 = LANE_NAMES.filter(
     (lane) => lanes[lane] && LANES[lane].showsPaneSession
   );
-  const why2 = pane.kind === "unconfirmed" ? `this one is not known to be it: ${pane.why}` : pane.kind === "mismatched" && lasted(pane.claude) ? `this one is not it: ${pane.why}, for longer than a \`/clear\` or \`/resume\` takes to rewrite it` : null;
+  const why2 = pane.kind === "unconfirmed" ? `this one is not known to be it: ${pane.why}` : pane.kind === "mismatched" && lasted ? `this one is not it: ${pane.why}, for longer than a \`/clear\` or \`/resume\` takes to rewrite it` : null;
   return why2 === null || pane.tmux === null || on2.length === 0 ? null : `The ${on2.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and ${why2}`;
 }
 
@@ -77735,7 +77736,7 @@ function drawRender(parts, setup, drawing2) {
       sessionPaneError(
         req.pane,
         lanes,
-        (claude) => mismatchRuns.lasted(sessionId2, claude)
+        mismatchRuns.lasted(req.sessionId, req.pane)
       )
     ),
     sourced("load", entry.lastError),
@@ -78050,13 +78051,13 @@ function describeEffect(effect) {
 // src/daemon/mismatch-runs.ts
 init_globals();
 var MISMATCH_RACE_S = 10;
-var MISMATCH_RUNS_KEPT = 64;
-var processKey = (claude) => `${claude.pid}@${claude.configDir ?? ""}`;
+var MISMATCH_PROCESSES_KEPT = 64;
+var MISMATCH_RUNS_KEPT = 4;
 var raceOver = (since, at) => spanMs(since, at) > MISMATCH_RACE_S * 1e3;
-function keepNewest(map, key, value) {
+function keepNewest(map, kept, key, value) {
   map.delete(key);
   map.set(key, value);
-  if (map.size > MISMATCH_RUNS_KEPT) map.delete(map.keys().next().value);
+  if (map.size > kept) map.delete(map.keys().next().value);
 }
 var MismatchRuns = class {
   // [LAW:single-enforcer] Written by the request arm in its turn, so the
@@ -78074,7 +78075,7 @@ var MismatchRuns = class {
   // ticks opened, and its first tick of a session dates the rewrite. So a
   // mismatched tick holding that session within the race of it is the race,
   // whichever side of the new session's first tick the straggler lands, and
-  // opens no run. A tick no readable Claude Code ran is no evidence about any
+  // its session is in no run. A tick no readable Claude Code ran is no evidence about any
   // record.
   record(sessionId2, pane, at) {
     if (this.turns.inTurn() === null)
@@ -78083,8 +78084,9 @@ var MismatchRuns = class {
       );
     switch (pane.kind) {
       case "runs": {
-        const was = this.processes.get(processKey(pane.claude))?.confirmed;
-        keepNewest(this.processes, processKey(pane.claude), {
+        const key = claudeKey(pane.claude);
+        const was = this.processes.get(key)?.confirmed;
+        keepNewest(this.processes, MISMATCH_PROCESSES_KEPT, key, {
           confirmed: was?.sessionId === sessionId2 ? was : { sessionId: sessionId2, since: at },
           runs: /* @__PURE__ */ new Map()
         });
@@ -78093,31 +78095,37 @@ var MismatchRuns = class {
       case "unconfirmed":
         return null;
       case "mismatched": {
-        const key = processKey(pane.claude);
+        const key = claudeKey(pane.claude);
         const ticks = this.processes.get(key) ?? {
           confirmed: null,
           runs: /* @__PURE__ */ new Map()
         };
-        keepNewest(this.processes, key, ticks);
+        keepNewest(this.processes, MISMATCH_PROCESSES_KEPT, key, ticks);
         const rewrite = ticks.confirmed;
-        if (rewrite?.sessionId === pane.held && !raceOver(rewrite.since, at))
-          return ticks.runs.get(sessionId2) ?? null;
-        const since = ticks.runs.get(sessionId2)?.since ?? at;
+        if (rewrite?.sessionId === pane.held && !raceOver(rewrite.since, at)) {
+          ticks.runs.delete(sessionId2);
+          return null;
+        }
+        const since = Math.min(
+          ticks.runs.get(sessionId2)?.since ?? at,
+          at
+        );
         const run3 = { since, lasted: raceOver(since, at) };
-        keepNewest(ticks.runs, sessionId2, run3);
+        keepNewest(ticks.runs, MISMATCH_RUNS_KEPT, sessionId2, run3);
         return run3;
       }
     }
   }
-  // The run of `sessionId` that `claude`'s ticks are in.
-  of(sessionId2, claude) {
-    return this.processes.get(processKey(claude))?.runs.get(sessionId2) ?? null;
+  // The run of `sessionId` that the Claude Code `pane` names has its ticks
+  // in: the same pair a request is recorded under.
+  of(sessionId2, pane) {
+    return pane.kind === "unconfirmed" ? null : this.processes.get(claudeKey(pane.claude))?.runs.get(sessionId2) ?? null;
   }
   // Whether the session's mismatch has outlasted the race, as the requests
-  // `claude` ran left it: what a draw shows, never measured on the draw's
-  // clock.
-  lasted(sessionId2, claude) {
-    return this.of(sessionId2, claude)?.lasted ?? false;
+  // its Claude Code ran left it: what a draw shows, never measured on the
+  // draw's clock.
+  lasted(sessionId2, pane) {
+    return this.of(sessionId2, pane)?.lasted ?? false;
   }
 };
 var mismatchFact = (run3, at) => run3 === null ? "-" : `${run3.lasted ? "lasted " : ""}${spanMs(run3.since, at)}ms`;
