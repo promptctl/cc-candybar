@@ -2,60 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-662",
-      "ref": "refs/pull/662/merge",
-      "sha": "6baeed589d4b8a036fc885f18b56c9a06ef9d868",
-      "timestamp": "2026-11-07T00:22:43.494Z",
-      "commits": [
-        {
-          "sha": "6baeed589d4b8a036fc885f18b56c9a06ef9d868",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:21:56Z",
-          "message": "Merge 8fffc18f4e787072f8bab4f25cbb9a25d842b69b into 71d231b7b17cb286ba143c6b7c09d3046d2af023\n"
-        },
-        {
-          "sha": "8fffc18f4e787072f8bab4f25cbb9a25d842b69b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:20:15-07:00",
-          "message": "fix(recording): a facts line can be written only through the document path that writes its state ahead; a failing state write is tested (candybar-gather-renderer-76bb.6pj.09q)\n"
-        },
-        {
-          "sha": "23a6664292bee7c314181fd9976e55787d524be0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:15:53-07:00",
-          "message": "fix(recording): a state write that ends the recording offers no document after it; tests prove the old run shows until the new one lands (candybar-gather-renderer-76bb.6pj.09q)\n"
-        },
-        {
-          "sha": "b28d0c317ea963bd9cce22d5e877fb4ba4444275",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:08:39-07:00",
-          "message": "fix(recording): a click's state crosses the recording ahead of the document it keyed, so a replay keeps the old run's value until the new one lands (candybar-gather-renderer-76bb.6pj.09q)\n\nA recording now writes a state line whenever the session's clicks' state moved\nbefore a document; the replay restores it there instead of only at the next\ndraw. RECORDING_VERSION 6 -> 7.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "71d231b7b17cb286ba143c6b7c09d3046d2af023",
-      "timestamp": "2026-11-07T00:14:02.643Z",
+      "sha": "52d7647ba197e389f78b91829e5591180ad2f2a3",
+      "timestamp": "2026-11-07T00:28:27.130Z",
       "commits": [
         {
-          "sha": "71d231b7b17cb286ba143c6b7c09d3046d2af023",
+          "sha": "52d7647ba197e389f78b91829e5591180ad2f2a3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:13:15-07:00",
-          "message": "fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62) (#661)\n\n* fix(testing): every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62)\n\nA real-daemon case spent a pool slot wait (20 s), readiness (12 s) and its\nown waits inside one Jest timeout (30 s), each sized alone, so their sum\ncould pass it and Jest's anonymous timeout fired first. The test\nenvironment now keeps the running hook's or test's deadline, computed as\njest-circus arms its timer, and every budgeted wait (the pool, readiness,\nuntil, throughout, sendDaemonRequest) is bounded by the smaller of its own\nbudget and that time, less a margin derived from the longest step a wait\ntakes between deadline checks. The process tier's copies of the 30 s go.\n\n* fix(testing): a wait's sub-steps share its one deadline, and every request failure names its bound (brandon-menus-sjhy.r62)\n\nFrom the high review pass: the pool's start-time read and a request's\nconnect each spent time the wait had not charged; a cut render stated an\nuncut deadline to the daemon; untilHeard ran past its case; a test whose\nbefore-hook failed left its case's deadline set.\n\n* fix(testing): untilHeard ends at a deadline, the pool reads its case after its own start time, and the rest of a case is a bound (brandon-menus-sjhy.r62)\n\nFrom the medium review pass. A cut wait names the margin it keeps, and a\nrequest whose deadline the daemon is told is sent under that same bound.\n\n* fix(testing): a wait keeps its deadline on the case's clock, so faking the sandbox's clock freezes none (brandon-menus-sjhy.r62)\n\nFrom the second high review pass. untilHeard keeps its 48 rounds, ended\nearly only by the case; a bound says what set it, so a pool wait the case\ncut no longer blames the machine; render failures name their last bound."
+          "timestamp": "2026-11-06T17:27:33-07:00",
+          "message": "fix(recording): a click's state crosses the recording ahead of the document it keyed (candybar-gather-renderer-76bb.6pj.09q) (#662)\n\n* fix(recording): a click's state crosses the recording ahead of the document it keyed, so a replay keeps the old run's value until the new one lands (candybar-gather-renderer-76bb.6pj.09q)\n\nA recording now writes a state line whenever the session's clicks' state moved\nbefore a document; the replay restores it there instead of only at the next\ndraw. RECORDING_VERSION 6 -> 7.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(recording): a state write that ends the recording offers no document after it; tests prove the old run shows until the new one lands (candybar-gather-renderer-76bb.6pj.09q)\n\n* fix(recording): a facts line can be written only through the document path that writes its state ahead; a failing state write is tested (candybar-gather-renderer-76bb.6pj.09q)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         },
         {
-          "sha": "43914609cbef3cd0bb0f7de0964d65ebd7265c59",
+          "sha": "ed6349b7dbfc3931ddf5f7cf34225682a1d5bdf8",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T00:03:48Z",
-          "message": "chore(release): set `package.json` to 1.208.3 [skip ci]\n\n## [1.208.3](https://github.com/promptctl/cc-candybar/compare/v1.208.2...v1.208.3) (2026-11-07)\n\n### Bug Fixes\n\n* **lanes:** a restart refuses a Claude Code that now holds another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix) ([#660](https://github.com/promptctl/cc-candybar/issues/660)) ([873a8e0](https://github.com/promptctl/cc-candybar/commit/873a8e0e0be2d843b7d0b4c308831e2d20b5bde1))\n"
+          "timestamp": "2026-11-07T00:25:02Z",
+          "message": "chore(release): set `package.json` to 1.208.4 [skip ci]\n\n## [1.208.4](https://github.com/promptctl/cc-candybar/compare/v1.208.3...v1.208.4) (2026-11-07)\n\n### Bug Fixes\n\n* **testing:** every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62) ([#661](https://github.com/promptctl/cc-candybar/issues/661)) ([71d231b](https://github.com/promptctl/cc-candybar/commit/71d231b7b17cb286ba143c6b7c09d3046d2af023))\n"
         }
       ]
     },

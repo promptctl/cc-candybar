@@ -69515,7 +69515,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.3";
+var PACKAGE_VERSION = "1.208.4";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -77087,8 +77087,16 @@ function resolvePath2(obj, dotPath) {
 }
 
 // src/facts/recording.ts
-var RECORDING_VERSION = 6;
+function sameClickState(a, b) {
+  const depths = Object.keys(a.history);
+  return a.revision === b.revision && a.back === b.back && depths.every((k) => a.history[k] === b.history[k]) && sameValues(a.values, b.values);
+}
+var RECORDING_VERSION = 7;
 var LANES2 = new Set(REFRESH_LANES);
+function sameValues(a, b) {
+  const keys2 = Object.keys(a);
+  return keys2.length === Object.keys(b).length && keys2.every((k) => a[k] === b[k]);
+}
 function requestFields(request2) {
   return {
     hookData: request2.hookData,
@@ -77109,7 +77117,7 @@ function formatLine(line) {
     feeds: line.feeds,
     state: { ...line.state, idleSince: line.state.idleSince ?? null },
     diagnostics: line.diagnostics
-  } : line.kind === "turn" ? {
+  } : line.kind === "state" ? { kind: line.kind, state: line.state } : line.kind === "turn" ? {
     kind: line.kind,
     held: line.held,
     at: line.document.at,
@@ -77140,19 +77148,32 @@ function sessionRecorder(views, log) {
     detach(rec);
     rec.sink.end(how);
   };
-  const write = (sessionId2, rec, line) => {
-    if (line.kind === "facts" && line.facts === rec.document) return;
+  const put = (sessionId2, rec, line) => {
     if (line.kind === "declared" && line.request === rec.declaration) return;
     try {
       rec.sink.write(line);
       if (line.kind === "facts") rec.document = line.facts;
       if (line.kind === "turn") rec.document = line.document.facts;
+      if (line.kind === "state" || line.kind === "draw" || line.kind === "turn") {
+        rec.state = line.state;
+      }
       if (line.kind === "request" || line.kind === "declared" || line.kind === "turn") {
         rec.declaration = line.request;
       }
     } catch (e) {
       log("error", `recording sid=${JSON.stringify(sessionId2)}: ${inspect(e)}`);
       end(sessionId2, rec, { kind: "failed", error: e });
+    }
+  };
+  const write = (sessionId2, rec, line) => put(sessionId2, rec, line);
+  const writeDocument = (sessionId2, rec, view, line) => {
+    if (line.facts === rec.document) return;
+    const state = view.source.state();
+    if (rec.state === null || !sameClickState(rec.state, state)) {
+      write(sessionId2, rec, { kind: "state", state });
+    }
+    if (open2.get(sessionId2)?.has(rec)) {
+      put(sessionId2, rec, { kind: "facts", ...line });
     }
   };
   const writeTurn = (sessionId2, rec, view) => {
@@ -77166,7 +77187,7 @@ function sessionRecorder(views, log) {
     const draw2 = { at, drawing: drawing2, feeds, state, diagnostics };
     const writes = [
       () => writeTurn(sessionId2, rec, view),
-      () => write(sessionId2, rec, { kind: "facts", ...view.followed.stamped() }),
+      () => writeDocument(sessionId2, rec, view, view.followed.stamped()),
       () => write(sessionId2, rec, { kind: "declared", request: view.facts() }),
       () => write(sessionId2, rec, { kind: "draw", ...draw2 }),
       ...current === null ? [] : [() => writeTurn(sessionId2, rec, current)]
@@ -77190,7 +77211,7 @@ function sessionRecorder(views, log) {
     );
     watch2(
       () => view.followed.stamped(),
-      (line) => write(sessionId2, rec, { kind: "facts", ...line })
+      (line) => writeDocument(sessionId2, rec, view, line)
     );
   };
   return {
@@ -77209,6 +77230,7 @@ function sessionRecorder(views, log) {
         watching: /* @__PURE__ */ new Set(),
         document: null,
         declaration: null,
+        state: null,
         turn: null
       };
       const recs = open2.get(session) ?? /* @__PURE__ */ new Set();
