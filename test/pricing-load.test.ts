@@ -3,18 +3,27 @@ import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 
+import { reaction } from "mobx";
+
+import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import {
-  costOf,
   livePricing,
   offlinePricing,
+  priceOf,
   PRICING_PERIOD,
   PRICING_RETRY_CEILING_MS,
   type PriceTable,
 } from "../src/segments/pricing";
+import type { TokenBreakdown } from "../src/segments/session";
+import type { ClaudeHookData } from "../src/utils/claude";
+import { Holds } from "../src/utils/holds";
+import { instantOf, type Instant } from "../src/utils/instant";
 import { backedOffMs } from "../src/utils/period";
 import type { DaemonLogger } from "../src/utils/logger";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
+import { HOST } from "./helpers/host";
 import { jestTmpDir } from "./helpers/jest-tmp";
+import { todayInfo, todayNow } from "./helpers/today";
 import { throughout, until } from "./helpers/until";
 
 // The one seam is the network: each `get` is recorded with its options, and
@@ -80,6 +89,18 @@ const NEXT_RATES: PriceTable = {
     cache_write_1h: 10,
   },
 };
+// A later day's table: the first's model at ten times its rates.
+const RAISED_RATES: PriceTable = {
+  "model-x": {
+    name: "X",
+    input: 10,
+    output: 20,
+    cache_read: 30,
+    cache_write_5m: 40,
+    cache_write_1h: 50,
+  },
+};
+const BUNDLED = offlinePricing().table();
 const warnings: string[] = [];
 const log: DaemonLogger = (_level, message) => void warnings.push(message);
 // The n-th fetch has been asked for.
@@ -92,6 +113,9 @@ const diskCopy = () =>
   JSON.parse(
     fs.readFileSync(path.join(cacheRoot, "usage", "pricing.json"), "utf8"),
   ) as { data: PriceTable; timestamp: number };
+// The table `pricing` reads has `model` in it: a load has settled on it.
+const holding = (pricing: { table(): PriceTable }, model: string) =>
+  until(() => model in pricing.table(), `the table with ${model} held`);
 
 let cacheRoot: string;
 let closing: AbortController;
@@ -122,30 +146,53 @@ afterEach(() => {
 // A first load that lands RATES, so the case starts from a held table.
 async function loaded() {
   const pricing = live();
-  const first = pricing.table();
+  pricing.ask();
   await asking(1);
   asked[0]!.answer(RATES);
-  expect(await first).toEqual(RATES);
+  await holding(pricing, "model-x");
   return pricing;
 }
 
 describe("a daemon's pricing", () => {
-  test("every entry that asks while the table is out shares one fetch", async () => {
+  test("however many ask while the table is out, one fetch starts, and the bundled rates price until it lands", async () => {
     const pricing = live();
-    const tables = [pricing.table(), pricing.table(), pricing.table()];
+    pricing.ask();
+    pricing.ask();
+    pricing.ask();
     await asking();
+    expect(pricing.table()).toBe(BUNDLED);
     asked[0]!.answer(RATES);
 
-    const [first, ...rest] = await Promise.all(tables);
-    expect(first).toEqual(RATES);
-    for (const table of rest) expect(table).toBe(first);
+    await holding(pricing, "model-x");
+    expect(pricing.table()).toEqual(RATES);
     expect(asked).toHaveLength(1);
+  });
+
+  test("a derivation over the table is recomputed in the turn one lands", async () => {
+    const pricing = live();
+    const seen: PriceTable[] = [];
+    const stop = reaction(
+      () => pricing.table(),
+      (table) => seen.push(table),
+    );
+    try {
+      pricing.ask();
+      await asking();
+      asked[0]!.answer(RATES);
+      await until(() => seen.length === 1, "the reaction ran");
+      expect(seen[0]).toEqual(RATES);
+    } finally {
+      stop();
+    }
   });
 
   test("the day's copy on disk is read by the next daemon, which fetches nothing", async () => {
     await loaded();
 
-    expect(await live().table()).toEqual(RATES);
+    const next = live();
+    next.ask();
+    await holding(next, "model-x");
+    expect(next.table()).toEqual(RATES);
     expect(asked).toHaveLength(1);
   });
 
@@ -157,10 +204,12 @@ describe("a daemon's pricing", () => {
       JSON.stringify({ data: { "model-x": partial }, timestamp: clock.now() }),
     );
 
-    const table = live().table();
+    const pricing = live();
+    pricing.ask();
     await asking();
     asked[0]!.answer(RATES);
-    expect(await table).toEqual(RATES);
+    await holding(pricing, "model-x");
+    expect(pricing.table()).toEqual(RATES);
   });
 
   test("a copy that cannot be written still prices by the fetched table, and says so", async () => {
@@ -170,11 +219,13 @@ describe("a daemon's pricing", () => {
     fs.mkdirSync(usage);
     fs.chmodSync(usage, 0o500);
 
-    const table = live().table();
+    const pricing = live();
+    pricing.ask();
     await asking();
     asked[0]!.answer(RATES);
 
-    expect(await table).toEqual(RATES);
+    await holding(pricing, "model-x");
+    expect(pricing.table()).toEqual(RATES);
     expect(warnings).toEqual([
       expect.stringContaining("pricing disk cache not written"),
     ]);
@@ -182,13 +233,17 @@ describe("a daemon's pricing", () => {
 
   test("its request holds no pooled connection, and the owner's close ends a load in flight on the bundled rates", async () => {
     const pricing = live();
-    const table = pricing.table();
+    pricing.ask();
     await asking();
     expect(asked[0]!.options.agent).toBe(false);
 
     closing.abort();
 
-    expect(await table).toEqual(await offlinePricing().table());
+    await throughout(
+      () => pricing.table() === BUNDLED,
+      "the bundled rates stand",
+      200,
+    );
     expect(fs.existsSync(path.join(cacheRoot, "usage", "pricing.json"))).toBe(
       false,
     );
@@ -197,7 +252,10 @@ describe("a daemon's pricing", () => {
   test("a load that throws prices by the bundled rates, and says so", async () => {
     getThrows = new Error("bad options");
 
-    expect(await live().table()).toEqual(await offlinePricing().table());
+    const pricing = live();
+    pricing.ask();
+    await until(() => warnings.length === 2, "the failed load said");
+    expect(pricing.table()).toBe(BUNDLED);
     expect(warnings).toEqual([
       "pricing load threw: Error: bad options",
       expect.stringContaining(
@@ -209,30 +267,33 @@ describe("a daemon's pricing", () => {
   test("after the owner's close, no load starts", async () => {
     closing.abort();
 
-    expect(await live().table()).toEqual(await offlinePricing().table());
-    expect(asked).toHaveLength(0);
+    const pricing = live();
+    pricing.ask();
+    expect(pricing.table()).toBe(BUNDLED);
+    await noFetchPast(0);
   });
 
   test("a load that landed nothing is tried again after a backoff that doubles per failure, and the table that then lands prices", async () => {
-    const bundled = await offlinePricing().table();
     const pricing = live();
-    const first = pricing.table();
+    pricing.ask();
     await asking(1);
     asked[0]!.fail();
-    expect(await first).toEqual(bundled);
+    await until(() => warnings.length === 1, "the first failure said");
+    expect(pricing.table()).toBe(BUNDLED);
     expect(warnings).toEqual([
       `pricing table not loaded: priced by the bundled rates; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
     ]);
 
     // Before the backoff is up, an ask starts nothing.
     clock.advance(PRICING_PERIOD.failedMs - 1);
-    expect(await pricing.table()).toEqual(bundled);
+    pricing.ask();
+    expect(pricing.table()).toBe(BUNDLED);
     await noFetchPast(1);
 
-    // At the backoff, the ask is answered by what is held and the retry
-    // starts behind it.
+    // At the backoff, the retry starts; the bundled rates price meanwhile.
     clock.advance(1);
-    expect(await pricing.table()).toEqual(bundled);
+    pricing.ask();
+    expect(pricing.table()).toBe(BUNDLED);
     await asking(2);
     asked[1]!.fail();
     await until(() => warnings.length === 2, "the second failure said");
@@ -242,18 +303,17 @@ describe("a daemon's pricing", () => {
 
     // The second backoff is twice the first.
     clock.advance(PRICING_PERIOD.failedMs);
-    expect(await pricing.table()).toEqual(bundled);
+    pricing.ask();
+    expect(pricing.table()).toBe(BUNDLED);
     await noFetchPast(2);
     clock.advance(PRICING_PERIOD.failedMs);
-    expect(await pricing.table()).toEqual(bundled);
+    pricing.ask();
+    expect(pricing.table()).toBe(BUNDLED);
     await asking(3);
 
     asked[2]!.answer(RATES);
-    await until(
-      async () => "model-x" in (await pricing.table()),
-      "the fetched table held",
-    );
-    expect(await pricing.table()).toEqual(RATES);
+    await holding(pricing, "model-x");
+    expect(pricing.table()).toEqual(RATES);
     expect(diskCopy()).toEqual({ data: RATES, timestamp: clock.now() });
   });
 
@@ -261,24 +321,24 @@ describe("a daemon's pricing", () => {
     const pricing = await loaded();
 
     clock.advance(PRICING_PERIOD.okMs - 1);
-    expect(await pricing.table()).toEqual(RATES);
+    pricing.ask();
+    expect(pricing.table()).toEqual(RATES);
     await noFetchPast(1);
 
     // The day is up: the old table answers, and one fetch starts behind it,
     // however many ask while it is out.
     clock.advance(1);
-    expect(await pricing.table()).toEqual(RATES);
+    pricing.ask();
+    expect(pricing.table()).toEqual(RATES);
     await asking(2);
-    expect(await pricing.table()).toEqual(RATES);
-    expect(await pricing.table()).toEqual(RATES);
+    pricing.ask();
+    pricing.ask();
+    expect(pricing.table()).toEqual(RATES);
     await noFetchPast(2);
 
     asked[1]!.answer(NEXT_RATES);
-    await until(
-      async () => "model-y" in (await pricing.table()),
-      "the next day's table held",
-    );
-    expect(await pricing.table()).toEqual(NEXT_RATES);
+    await holding(pricing, "model-y");
+    expect(pricing.table()).toEqual(NEXT_RATES);
     expect(diskCopy()).toEqual({ data: NEXT_RATES, timestamp: clock.now() });
     expect(warnings).toEqual([]);
   });
@@ -287,17 +347,18 @@ describe("a daemon's pricing", () => {
     const pricing = await loaded();
 
     clock.advance(PRICING_PERIOD.okMs);
-    expect(await pricing.table()).toEqual(RATES);
+    pricing.ask();
     await asking(2);
     asked[1]!.fail();
     await until(() => warnings.length === 1, "the failed refresh said");
     expect(warnings[0]).toBe(
       `pricing table not loaded: priced by the last table; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
     );
-    expect(await pricing.table()).toEqual(RATES);
+    expect(pricing.table()).toEqual(RATES);
 
     clock.advance(PRICING_PERIOD.failedMs);
-    expect(await pricing.table()).toEqual(RATES);
+    pricing.ask();
+    expect(pricing.table()).toEqual(RATES);
     await asking(3);
   });
 
@@ -310,11 +371,9 @@ describe("a daemon's pricing", () => {
       JSON.stringify({ data: NEXT_RATES, timestamp: clock.now() }),
     );
 
-    expect(await pricing.table()).toEqual(RATES);
-    await until(
-      async () => "model-y" in (await pricing.table()),
-      "the copy on disk held",
-    );
+    pricing.ask();
+    expect(pricing.table()).toEqual(RATES);
+    await holding(pricing, "model-y");
     expect(asked).toHaveLength(1);
   });
 
@@ -323,14 +382,15 @@ describe("a daemon's pricing", () => {
     const written = diskCopy();
 
     clock.advance(PRICING_PERIOD.okMs);
-    expect(await pricing.table()).toEqual(RATES);
+    pricing.ask();
     await asking(2);
     closing.abort();
 
-    expect(await pricing.table()).toEqual(RATES);
+    expect(pricing.table()).toEqual(RATES);
     expect(diskCopy()).toEqual(written);
     clock.advance(PRICING_PERIOD.failedMs);
-    expect(await pricing.table()).toEqual(RATES);
+    pricing.ask();
+    expect(pricing.table()).toEqual(RATES);
     await noFetchPast(2);
     expect(warnings).toEqual([]);
   });
@@ -346,27 +406,26 @@ describe("a daemon's pricing", () => {
     );
 
     const pricing = live();
-    const first = pricing.table();
+    pricing.ask();
     await asking(1);
     asked[0]!.fail();
-    expect(await first).toEqual(RATES);
+    await holding(pricing, "model-x");
+    expect(pricing.table()).toEqual(RATES);
     expect(warnings).toEqual([
       `pricing table not loaded: priced by the last table; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
     ]);
 
     clock.advance(PRICING_PERIOD.failedMs);
-    expect(await pricing.table()).toEqual(RATES);
+    pricing.ask();
+    expect(pricing.table()).toEqual(RATES);
     await asking(2);
     asked[1]!.answer(NEXT_RATES);
-    await until(
-      async () => "model-y" in (await pricing.table()),
-      "the fetched table held",
-    );
+    await holding(pricing, "model-y");
   });
 
   test("a machine with no network says each backoff once, and falls silent at the ceiling", async () => {
     const pricing = live();
-    void pricing.table();
+    pricing.ask();
     // The backoff grows for eight failures and stands at the ceiling from the
     // eighth on.
     for (let n = 1; n <= 8; n++) {
@@ -374,7 +433,15 @@ describe("a daemon's pricing", () => {
       asked[n - 1]!.fail();
       await until(() => warnings.length === n, `failure ${n} said`);
       clock.advance(backedOffMs(PRICING_PERIOD, n, PRICING_RETRY_CEILING_MS));
-      void pricing.table();
+      // The failure settles a turn after it is said, and an ask before that
+      // finds the load still out; ask until the retry has started.
+      await until(
+        () => {
+          pricing.ask();
+          return asked.length > n;
+        },
+        `load ${n + 1} started`,
+      );
     }
     expect(warnings[7]).toBe(
       `pricing table not loaded: priced by the bundled rates; the next ask after ${PRICING_RETRY_CEILING_MS}ms tries again`,
@@ -402,11 +469,11 @@ describe("a daemon's pricing", () => {
     );
 
     const pricing = live();
-    const first = pricing.table();
+    pricing.ask();
     await asking(1);
     closing.abort();
-    expect(await first).toEqual(RATES);
-    expect(await pricing.table()).toEqual(RATES);
+    await holding(pricing, "model-x");
+    expect(pricing.table()).toEqual(RATES);
     expect(warnings).toEqual([]);
   });
 
@@ -422,11 +489,15 @@ describe("a daemon's pricing", () => {
     );
 
     clock.advance(PRICING_PERIOD.okMs);
-    expect(await pricing.table()).toEqual(RATES);
+    pricing.ask();
     await asking(2);
     asked[1]!.fail();
     await until(() => warnings.length === 1, "the failed refresh said");
-    expect(await pricing.table()).toEqual(RATES);
+    await throughout(
+      () => "model-x" in pricing.table(),
+      "the held table stands",
+      200,
+    );
   });
 
   test("a copy stamped ahead of the clock is no copy: the table is fetched and the copy rewritten", async () => {
@@ -439,20 +510,125 @@ describe("a daemon's pricing", () => {
       }),
     );
 
-    const table = live().table();
+    const pricing = live();
+    pricing.ask();
     await asking(1);
     asked[0]!.answer(NEXT_RATES);
-    expect(await table).toEqual(NEXT_RATES);
+    await holding(pricing, "model-y");
     expect(diskCopy()).toEqual({ data: NEXT_RATES, timestamp: clock.now() });
   });
 
-  test("an entry's cost is its usage at its model's rates", () => {
-    const entry = {
-      message: {
-        model: "model-x",
-        usage: { input_tokens: 1_000_000, output_tokens: 500_000 },
-      },
+  test("a model's tokens cost its rates in the table", () => {
+    const tokens: TokenBreakdown = {
+      input: 1_000_000,
+      output: 500_000,
+      cacheCreation: 0,
+      cacheRead: 0,
     };
-    expect(costOf(RATES, entry as never)).toBe(1 + 1);
+    expect(priceOf(RATES, "model-x", tokens)).toBe(1 + 1);
+  });
+});
+
+// One transcript line of `model-x` usage with no cost of its own, dated `at`.
+function unpricedLine(tag: string, at: number): string {
+  return (
+    JSON.stringify({
+      timestamp: new Date(at).toISOString(),
+      requestId: `req-${tag}`,
+      message: {
+        id: `msg-${tag}`,
+        model: "model-x",
+        usage: { input_tokens: 1_000_000, output_tokens: 0 },
+      },
+    }) + "\n"
+  );
+}
+const MILLION_IN: TokenBreakdown = {
+  input: 1_000_000,
+  output: 0,
+  cacheCreation: 0,
+  cacheRead: 0,
+};
+
+describe("a daemon that folded entries before its table landed", () => {
+  let holds: Holds;
+  beforeEach(() => {
+    holds = new Holds();
+  });
+  afterEach(() => {
+    holds.close();
+  });
+
+  // The session's cost and the day `at` falls in as the draw reads them, with
+  // no refresh.
+  function drawn(store: SessionUsageStore, hd: ClaudeHookData, at: Instant) {
+    const session = store.usageOf(hd.session_id, hd);
+    const today = todayNow(store, holds, hd, cacheRoot, at);
+    return {
+      session: session.kind === "ok" ? session.value.session.cost : session,
+      today: today.kind === "ok" ? today.value.cost : today,
+    };
+  }
+
+  test("prices them by the table when it lands, with no byte read again, and again when the day's table lands", async () => {
+    // Two entries of a model the bundled rates do not name, folded while the
+    // first fetch is out: each is priced as the default model until a table
+    // lands, which is distinct from every table a fetch answers here.
+    const at = instantOf(new Date(clock.now()));
+    const transcript = path.join(cacheRoot, "transcripts", "S.jsonl");
+    fs.mkdirSync(path.dirname(transcript), { recursive: true });
+    fs.writeFileSync(
+      transcript,
+      unpricedLine("a", clock.now()) + unpricedLine("b", clock.now()),
+    );
+    const hd = {
+      session_id: "S",
+      transcript_path: transcript,
+    } as ClaudeHookData;
+    const pricing = live();
+    const store = new SessionUsageStore({
+      host: HOST,
+      pricing,
+      clock,
+      sweepIntervalMs: 0,
+    });
+    try {
+      const bundledPrice = 2 * priceOf(BUNDLED, "model-x", MILLION_IN);
+      const first = await store.getUsageInfo("S", hd);
+      expect(first).toMatchObject({
+        value: { session: { cost: bundledPrice } },
+      });
+      await asking(1);
+      const today = await todayInfo(store, holds, hd, cacheRoot, at);
+      expect(today).toMatchObject({
+        kind: "ok",
+        value: { cost: bundledPrice },
+      });
+      expect(drawn(store, hd, at)).toEqual({
+        session: bundledPrice,
+        today: bundledPrice,
+      });
+      const { misses } = store.getStats();
+
+      // The table lands. Nothing is written to the transcript, nothing is
+      // refreshed: the draw reads the landed table's price.
+      asked[0]!.answer(RATES);
+      await holding(pricing, "model-x");
+      expect(drawn(store, hd, at)).toEqual({ session: 2, today: 2 });
+
+      // The day is up: the next request asks, the table that lands prices.
+      clock.advance(PRICING_PERIOD.okMs);
+      await store.getUsageInfo("S", hd);
+      await asking(2);
+      asked[1]!.answer(RAISED_RATES);
+      await until(
+        () => pricing.table()["model-x"]?.input === 10,
+        "the raised table held",
+      );
+      expect(drawn(store, hd, at)).toEqual({ session: 20, today: 20 });
+      expect(store.getStats().misses).toBe(misses);
+    } finally {
+      store.close();
+    }
   });
 });
