@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-681",
+      "ref": "refs/pull/681/merge",
+      "sha": "d221f7f628d32d4fb3967eb9f97f8fbe30dba5d5",
+      "timestamp": "2026-11-07T10:00:30.866Z",
+      "commits": [
+        {
+          "sha": "d221f7f628d32d4fb3967eb9f97f8fbe30dba5d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:59:40-07:00",
+          "message": "Merge 5c47720458329bdb78d7fb4bfc7dfeee05a6de9d into caff813e34090cb361f74867fbc7e70dd4c11663\n"
+        },
+        {
+          "sha": "5c47720458329bdb78d7fb4bfc7dfeee05a6de9d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:58:53-07:00",
+          "message": "fix(colour): the door's ✖ keeps its truecolor contrast at lower depths, never lifted to the quiet floor (brandon-unfiled-3248.692p)\n\nkeptOn floored its lower-depth contrast at the quiet floor for a reason\nthat no longer holds: grounds are named shades, not repaired ones. The\nfloor only acted on the accepted farthest-red case, where it let rounding\npick a non-red that clears 3:1. The floor is now min(text floor, held),\nand the comment states the reasons that hold of named grounds.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-680",
       "ref": "refs/pull/680/merge",
       "sha": "212637ede9f0198abfecf8cf4fb5c0dcb71272e6",
