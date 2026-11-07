@@ -22947,115 +22947,6 @@ init_os();
 
 // src/daemon/process-fingerprint.ts
 init_globals();
-var START_TOKEN = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [ 123]\d \d\d:\d\d:\d\d \d{4}$/;
-var parseStartToken = (v) => typeof v === "string" && START_TOKEN.test(v) ? v : void 0;
-var START_TIME_READ_BUDGET_MS = 2e3;
-async function readStartTime(pid2, launch2) {
-  return startTimeOf(await launch2(startTimeLaunch(pid2)));
-}
-var startTimeLaunch = (pid2, budgetMs = START_TIME_READ_BUDGET_MS) => ({
-  bin: "ps",
-  args: ["-o", "lstart=", "-p", String(pid2)],
-  category: "process-fingerprint",
-  timeoutMs: budgetMs,
-  // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-  // deterministic across daemons — the writer and reader must render the same
-  // process identically for opaque string equality to be sound. LC_ALL=C fixes
-  // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-  // can't make one live process render two different start-time strings.
-  envOverlay: { LC_ALL: "C", TZ: "UTC" }
-});
-function processIdentityOf(pid2, read2) {
-  if (read2.kind === "unavailable")
-    return { pid: pid2, startTime: null, why: read2.detail };
-  const startTime = parseStartToken(read2.token);
-  return startTime === void 0 ? {
-    pid: pid2,
-    startTime: null,
-    why: `ps printed ${JSON.stringify(read2.token)}, not a start in the form \`ps -o lstart=\` prints`
-  } : { pid: pid2, startTime };
-}
-function startTimeOf(res) {
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
-function systemProbe(launcher) {
-  return {
-    alive: (pid2) => {
-      try {
-        process_default.kill(pid2, 0);
-        return true;
-      } catch (e) {
-        return e.code === "EPERM";
-      }
-    },
-    startTime: (pid2) => readStartTime(pid2, launcher.launch)
-  };
-}
-
-// src/dial/system-dialer.ts
-init_globals();
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse("net.connect");
-var createServer = refuse("net.createServer");
-var createConnection = refuse("net.createConnection");
-var get = refuse("https.get");
-var request = refuse("https.request");
-var createInterface = refuse("readline.createInterface");
-var createRequire = refuse("module.createRequire");
-var json = refuse("stream/consumers.json");
-var text = refuse("stream/consumers.text");
-var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
-
-// src/dial/system-dialer.ts
-var UNREACHABLE = /* @__PURE__ */ new Set(["ECONNREFUSED", "ENOENT", "ENOTSOCK"]);
-var failureOf = (err) => ({
-  cause: UNREACHABLE.has(err.code ?? "") ? "unreachable" : "io_error",
-  message: err.message
-});
-var systemDialer = {
-  dial(sockPath) {
-    const sock = unavailable_default.createConnection({ path: sockPath });
-    let settledYet = false;
-    const settled4 = new Promise((resolve) => {
-      const onError = (err) => {
-        sock.off("connect", onConnect);
-        settledYet = true;
-        resolve({ ok: false, failure: failureOf(err) });
-      };
-      const onConnect = () => {
-        sock.off("error", onError);
-        settledYet = true;
-        resolve({ ok: true, conn: sock });
-      };
-      sock.once("error", onError);
-      sock.once("connect", onConnect);
-    });
-    return {
-      settled: settled4,
-      abandon: () => {
-        if (settledYet) return;
-        sock.removeAllListeners();
-        sock.destroy();
-      }
-    };
-  }
-};
-
-// src/proc/system-launcher.ts
-init_globals();
 
 // src/proc/launch.ts
 init_globals();
@@ -23950,6 +23841,116 @@ function launcherWithState(owner, clock, spawner) {
   return { launcher, state };
 }
 
+// src/daemon/process-fingerprint.ts
+var START_TOKEN = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [ 123]\d \d\d:\d\d:\d\d \d{4}$/;
+var parseStartToken = (v) => typeof v === "string" && START_TOKEN.test(v) ? v : void 0;
+var START_TIME_READ_BUDGET_MS = 2e3;
+async function readStartTime(pid2, launch2) {
+  return startTimeOf(await launch2(startTimeLaunch(pid2)));
+}
+var startTimeLaunch = (pid2, budgetMs = START_TIME_READ_BUDGET_MS) => ({
+  bin: "ps",
+  args: ["-o", "lstart=", "-p", String(pid2)],
+  category: "process-fingerprint",
+  timeoutMs: budgetMs,
+  // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+  // deterministic across daemons — the writer and reader must render the same
+  // process identically for opaque string equality to be sound. LC_ALL=C fixes
+  // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+  // can't make one live process render two different start-time strings.
+  envOverlay: { LC_ALL: "C", TZ: "UTC" }
+});
+function processIdentityOf(pid2, read2) {
+  if (read2.kind === "unavailable")
+    return { pid: pid2, startTime: null, why: read2.detail };
+  const startTime = parseStartToken(read2.token);
+  return startTime === void 0 ? {
+    pid: pid2,
+    startTime: null,
+    why: `ps printed ${JSON.stringify(read2.token)}, not a start in the form \`ps -o lstart=\` prints`
+  } : { pid: pid2, startTime };
+}
+function startTimeOf(res) {
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  return { kind: "unavailable", detail: `ps ${whyFailed(res)}` };
+}
+function systemProbe(launcher) {
+  return {
+    alive: (pid2) => {
+      try {
+        process_default.kill(pid2, 0);
+        return true;
+      } catch (e) {
+        return e.code === "EPERM";
+      }
+    },
+    startTime: (pid2) => readStartTime(pid2, launcher.launch)
+  };
+}
+
+// src/dial/system-dialer.ts
+init_globals();
+
+// site/shims/unavailable.ts
+init_globals();
+var refuse = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
+};
+var connect = refuse("net.connect");
+var createServer = refuse("net.createServer");
+var createConnection = refuse("net.createConnection");
+var get = refuse("https.get");
+var request = refuse("https.request");
+var createInterface = refuse("readline.createInterface");
+var createRequire = refuse("module.createRequire");
+var json = refuse("stream/consumers.json");
+var text = refuse("stream/consumers.text");
+var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
+
+// src/dial/system-dialer.ts
+var UNREACHABLE = /* @__PURE__ */ new Set(["ECONNREFUSED", "ENOENT", "ENOTSOCK"]);
+var failureOf = (err) => ({
+  cause: UNREACHABLE.has(err.code ?? "") ? "unreachable" : "io_error",
+  message: err.message
+});
+var systemDialer = {
+  dial(sockPath) {
+    const sock = unavailable_default.createConnection({ path: sockPath });
+    let settledYet = false;
+    const settled4 = new Promise((resolve) => {
+      const onError = (err) => {
+        sock.off("connect", onConnect);
+        settledYet = true;
+        resolve({ ok: false, failure: failureOf(err) });
+      };
+      const onConnect = () => {
+        sock.off("error", onError);
+        settledYet = true;
+        resolve({ ok: true, conn: sock });
+      };
+      sock.once("error", onError);
+      sock.once("connect", onConnect);
+    });
+    return {
+      settled: settled4,
+      abandon: () => {
+        if (settledYet) return;
+        sock.removeAllListeners();
+        sock.destroy();
+      }
+    };
+  }
+};
+
+// src/proc/system-launcher.ts
+init_globals();
+
 // src/proc/spawner.ts
 init_globals();
 
@@ -24076,7 +24077,6 @@ var systemLauncher = (owner, clock) => createLauncher(owner, clock, systemSpawne
 var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock, systemSpawner);
 
 // src/host.ts
-var PARENT_START_READ_BUDGET_MS = 50;
 function processWorld() {
   const clock = systemTimekeeper;
   const launcher = systemOneShotLauncher({ inherited: process_default.env }, clock);
@@ -24091,15 +24091,14 @@ function processWorld() {
     launcher,
     clock,
     dialer: systemDialer,
-    // [LAW:no-silent-failure] Bounded like a connect, so a slow `ps` costs
-    // a tick no more than a slow daemon would: one that runs out reads as a
-    // start not known, which the daemon says (src/daemon/session-pane.ts).
-    parent: () => processIdentityOf(
+    // [LAW:no-silent-failure] Bounded by its caller, so a slow `ps` costs a
+    // tick no more than a slow daemon would: one that runs out reads as a
+    // start not known, with why, which the daemon says
+    // (src/daemon/session-pane.ts).
+    parent: (budgetMs) => processIdentityOf(
       process_default.ppid,
       startTimeOf(
-        launcher.launchSync(
-          startTimeLaunch(process_default.ppid, PARENT_START_READ_BUDGET_MS)
-        )
+        launcher.launchSync(startTimeLaunch(process_default.ppid, budgetMs))
       )
     )
   };

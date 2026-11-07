@@ -4,15 +4,22 @@
     {
       "version": "pr-673",
       "ref": "refs/pull/673/merge",
-      "sha": "01922c090ac4bc6ee83cd3bf4fce527c55a559e5",
-      "timestamp": "2026-11-07T08:02:38.082Z",
+      "sha": "89312bf85282e0878741af871c1e172e578eb90d",
+      "timestamp": "2026-11-07T08:16:59.351Z",
       "commits": [
         {
-          "sha": "01922c090ac4bc6ee83cd3bf4fce527c55a559e5",
+          "sha": "89312bf85282e0878741af871c1e172e578eb90d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T08:01:39Z",
-          "message": "Merge a7a1ac3b39dd95de56da6b81b57e5ea20544c9a8 into 1bd51ef3f44ff8c49821b7b309e85764c97b024e\n"
+          "timestamp": "2026-11-07T08:16:04Z",
+          "message": "Merge 4f1629b100c99b6003bd77e57fe986202bd17171 into 1bd51ef3f44ff8c49821b7b309e85764c97b024e\n"
+        },
+        {
+          "sha": "4f1629b100c99b6003bd77e57fe986202bd17171",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:15:54-07:00",
+          "message": "fix(lanes): a process that reads its parent once reads it with a daemon read's budget; an unread start says the launcher's why (candybar-gather-renderer-76bb.1dh.ycm)\n"
         },
         {
           "sha": "a7a1ac3b39dd95de56da6b81b57e5ea20544c9a8",
