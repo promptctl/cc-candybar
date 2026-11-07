@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-667",
+      "ref": "refs/pull/667/merge",
+      "sha": "358a74fa4d3641b0ac9035ebbb6d718823780ece",
+      "timestamp": "2026-11-07T01:10:36.543Z",
+      "commits": [
+        {
+          "sha": "358a74fa4d3641b0ac9035ebbb6d718823780ece",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:09:42-07:00",
+          "message": "Merge 95ebf21b18416f95c3beaf5c7d72629f37117670 into aa9da2bd2f5cf3f7d2d4a21a63a06bbd69ac00b8\n"
+        },
+        {
+          "sha": "95ebf21b18416f95c3beaf5c7d72629f37117670",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:33:52-07:00",
+          "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-665",
       "ref": "refs/pull/665/merge",
       "sha": "dcd00bc68cc2836d53b3be207a9f42eaffe0bcc9",
