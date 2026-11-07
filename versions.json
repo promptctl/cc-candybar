@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-696",
+      "ref": "refs/pull/696/merge",
+      "sha": "e21638dc4d8daf4698e15a5a2529ab14d5c75f0c",
+      "timestamp": "2026-11-07T12:37:11.078Z",
+      "commits": [
+        {
+          "sha": "e21638dc4d8daf4698e15a5a2529ab14d5c75f0c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:35:59-07:00",
+          "message": "Merge a7575bc22b7a78bb9b0c343039d5df8d1db68ff4 into b21e989ab734befd8acc182d17139d743372d040\n"
+        },
+        {
+          "sha": "a7575bc22b7a78bb9b0c343039d5df8d1db68ff4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:35:05-07:00",
+          "message": "fix(colour)!: the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g)\n\nAt ansi the open settings door's ✖ was drawn silver, yellow, purple or\nblack: the red was chosen as truecolor measures it, and keptOn's repair\nsearched the depth's table by contrast alone. The choice now measures\nevery candidate and the ground as the render's depth draws them, and\nthe candidates are per depth: the theme's named reds in truecolor and\nat 256 colours, the terminal's red and bright red (SGR 31/91) at ansi.\nkeptOn has no job left and is deleted.\n\nBREAKING CHANGE: the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-693",
       "ref": "refs/pull/693/merge",
       "sha": "064cd754df8ebfda3b155bd60bca657c6d11d68f",
