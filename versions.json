@@ -4,15 +4,22 @@
     {
       "version": "pr-669",
       "ref": "refs/pull/669/merge",
-      "sha": "b08c707be97e846cace8d6197df7673e45d21b39",
-      "timestamp": "2026-11-07T05:42:07.938Z",
+      "sha": "f829a137d812b0f785c1f0e1fd1ed12fa23477ab",
+      "timestamp": "2026-11-07T05:43:39.669Z",
       "commits": [
         {
-          "sha": "b08c707be97e846cace8d6197df7673e45d21b39",
+          "sha": "f829a137d812b0f785c1f0e1fd1ed12fa23477ab",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:38:43Z",
-          "message": "Merge db2d5a78ce5c3d08d51d6d95ed586a1c1c82890d into fc49ff5db45144707ebd065b13c507d038867cde\n"
+          "timestamp": "2026-11-07T05:41:56Z",
+          "message": "Merge 308a82ded6a075fcbd8b322e6474fbbd79ca4a48 into fc49ff5db45144707ebd065b13c507d038867cde\n"
+        },
+        {
+          "sha": "308a82ded6a075fcbd8b322e6474fbbd79ca4a48",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T22:41:45-07:00",
+          "message": "test(lanes): the mismatched stamp in the hold test names the session its record holds (candybar-gather-renderer-76bb.1dh.jw7)\n"
         },
         {
           "sha": "db2d5a78ce5c3d08d51d6d95ed586a1c1c82890d",
