@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-666",
+      "ref": "refs/pull/666/merge",
+      "sha": "dd67de88c40b686988cc331dd3eaf05700be0ecd",
+      "timestamp": "2026-11-07T01:40:28.044Z",
+      "commits": [
+        {
+          "sha": "dd67de88c40b686988cc331dd3eaf05700be0ecd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:39:34Z",
+          "message": "Merge 45bd3ce5384e2f822a7503fe92176ead7b1b8fa9 into 6d361f430dc9f1a6399706bec94946f0bc8b68f3\n"
+        },
+        {
+          "sha": "45bd3ce5384e2f822a7503fe92176ead7b1b8fa9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:13:34-07:00",
+          "message": "refactor(feed): arm is the one rule that a timer is never set later than it falls due (candybar-gather-renderer-76bb.6pj.1s0)\n"
+        },
+        {
+          "sha": "5ce3153e923db45c5e901d15331fbf473cc5f38b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:09:56-07:00",
+          "message": "fix(feed): a wake while a frame goes out arms the timer through hasten, and the frame's schedule never sets it later (candybar-gather-renderer-76bb.6pj.1s0)\n\nReview (high): one way to bring a frame forward; the pushing phase is readonly;\na wake that moved nothing is coalesced. Adds the refused-lane-mid-push test.\n"
+        },
+        {
+          "sha": "a3e1f9fd48dc9197635cb51d62936104ea864c41",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:04:13-07:00",
+          "message": "fix(feed): a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0)\n\nThe feed's phase splits drawing into rendering, whose wakes the frame\nreads, and pushing, whose wakes mark the frame so its schedule draws the\nnext a spacing on. No sink wakes synchronously today; a lane refused\nmid-push did, and waited out the still period untimed.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-663",
       "ref": "refs/pull/663/merge",
       "sha": "2453e090acafbce82702d62e23153a237c1c1178",
@@ -77,42 +113,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:33:52-07:00",
           "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-666",
-      "ref": "refs/pull/666/merge",
-      "sha": "dbb3e233d32982c917b1769c5ca3c89223ecde8d",
-      "timestamp": "2026-11-07T01:32:07.971Z",
-      "commits": [
-        {
-          "sha": "dbb3e233d32982c917b1769c5ca3c89223ecde8d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:31:14Z",
-          "message": "Merge 7d465df26bb9d028ceec8da6ad583042aff16cb3 into 1806d3735da43b2aaeceb9ca12a48cce517d6201\n"
-        },
-        {
-          "sha": "7d465df26bb9d028ceec8da6ad583042aff16cb3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:13:34-07:00",
-          "message": "refactor(feed): arm is the one rule that a timer is never set later than it falls due (candybar-gather-renderer-76bb.6pj.1s0)\n"
-        },
-        {
-          "sha": "307b40a12f8fa295bf80140fe27047dd0df6bd09",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:09:56-07:00",
-          "message": "fix(feed): a wake while a frame goes out arms the timer through hasten, and the frame's schedule never sets it later (candybar-gather-renderer-76bb.6pj.1s0)\n\nReview (high): one way to bring a frame forward; the pushing phase is readonly;\na wake that moved nothing is coalesced. Adds the refused-lane-mid-push test.\n"
-        },
-        {
-          "sha": "8a92d94de6a03f5e48ab240c15b4382db9c111bf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:04:13-07:00",
-          "message": "fix(feed): a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0)\n\nThe feed's phase splits drawing into rendering, whose wakes the frame\nreads, and pushing, whose wakes mark the frame so its schedule draws the\nnext a spacing on. No sink wakes synchronously today; a lane refused\nmid-push did, and waited out the still period untimed.\n"
         }
       ]
     },
