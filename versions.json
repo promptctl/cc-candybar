@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-688",
+      "ref": "refs/pull/688/merge",
+      "sha": "164b9d631e18ed8f3bac5e0e559eee84873f4bf1",
+      "timestamp": "2026-11-07T11:01:18.713Z",
+      "commits": [
+        {
+          "sha": "164b9d631e18ed8f3bac5e0e559eee84873f4bf1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:00:22-07:00",
+          "message": "Merge 544aac91d39631dba9e6011a37420c607bfa5bb8 into ffb0376812d7b52ce21a6cb5f0ef4d76eaf9e832\n"
+        },
+        {
+          "sha": "544aac91d39631dba9e6011a37420c607bfa5bb8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:00:01-07:00",
+          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-684",
       "ref": "refs/pull/684/merge",
       "sha": "d446ef402d51816b0edc54ce5417d055d9dd2216",
