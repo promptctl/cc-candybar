@@ -58,6 +58,7 @@ import {
 } from "../config/lanes";
 import type { HistoryDepth } from "../daemon/settings-history";
 import {
+  DIAGNOSTIC_LEVELS,
   diagnosticSpan,
   type DiagnosticLevel,
   type DiagnosticLine,
@@ -383,40 +384,26 @@ function parseDrawState(json: unknown, where: string): DrawState {
   };
 }
 
-// Every level a message counts at. [LAW:types-are-the-program] Keyed by the
-// type, so a level added there is a compile error until it is read here.
-const LEVELS = { error: true, warning: true } satisfies Record<
-  DiagnosticLevel,
-  true
->;
-
-// [LAW:parse-dont-validate] A severity is data — the level it counts at, the
-// glyph that leads it and its colours — read back as the draw wrote it, so a
-// replayed message wears the same glyph and colours and counts at the same
-// level.
+// [LAW:parse-dont-validate] A severity is data — the level it counts at and
+// the glyph that leads it — read back as the draw wrote it, so a replayed
+// message wears the same glyph and counts at the same level. Its colours are
+// its level's, so a recording's `colors` (an older one wrote them) is not read.
+// [LAW:single-enforcer] A level is one the level table has.
 function parseSeverity(json: unknown, where: string): DiagnosticSeverity {
   if (!isPlainObject(json)) {
     throw new FactParseError(where, "is not an object");
   }
-  const { level, glyph, colors } = json;
-  if (typeof level !== "string" || !Object.hasOwn(LEVELS, level)) {
-    throw new FactParseError(where, "has no `level` that is error or warning");
+  const { level, glyph } = json;
+  if (typeof level !== "string" || !Object.hasOwn(DIAGNOSTIC_LEVELS, level)) {
+    throw new FactParseError(
+      where,
+      `has no \`level\` that is one of ${Object.keys(DIAGNOSTIC_LEVELS).join(", ")}`,
+    );
   }
   if (typeof glyph !== "string" || glyph === "") {
     throw new FactParseError(where, "has no `glyph`");
   }
-  if (
-    !isPlainObject(colors) ||
-    typeof colors.fg !== "string" ||
-    typeof colors.bg !== "string"
-  ) {
-    throw new FactParseError(where, "has no `colors` with `fg` and `bg`");
-  }
-  return {
-    level: level as DiagnosticLevel,
-    glyph,
-    colors: { fg: colors.fg, bg: colors.bg },
-  };
+  return { level: level as DiagnosticLevel, glyph };
 }
 
 function parseText(json: unknown, where: string, field: string): string {

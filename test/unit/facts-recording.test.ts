@@ -24,6 +24,8 @@ import { instantOf, type Instant } from "../../src/utils/instant";
 import { ok } from "../../src/utils/outcome";
 import {
   collectDiagnostics,
+  diagnosticSpan,
+  UPDATE_SEVERITY,
   type DiagnosticList,
 } from "../../src/render/diagnostics";
 import { pendingFacts } from "../helpers/facts";
@@ -116,7 +118,16 @@ const DIAGNOSTICS: DiagnosticList = collectDiagnostics(
   SESSION,
   "request",
   [{ about: "load", text: "the config failed to load", copy: "fix it" }],
-  [],
+  // An info message, so every level a draw lists round-trips.
+  [
+    {
+      severity: UPDATE_SEVERITY,
+      about: "update\0x",
+      message: "Newer release: 9.9.9.",
+      copy: "Newer release: 9.9.9.",
+      lines: [[diagnosticSpan("Newer release: 9.9.9.", null)]],
+    },
+  ],
   [{ about: "facts", text: "the bar is drawn from older facts", copy: "x" }],
 );
 // What each lane's feed was doing: the pane lane followed by one subscriber,
@@ -297,13 +308,6 @@ test("a draw carries the diagnostics it built, read back as data, and refused by
   );
   expect(() =>
     parseRecording(
-      drawWith([{ ...message, severity: { level: "error", glyph: "!" } }]),
-    ),
-  ).toThrow(
-    /^line 4 diagnostics\[0\] severity: has no `colors` with `fg` and `bg`/,
-  );
-  expect(() =>
-    parseRecording(
       drawWith([
         {
           ...message,
@@ -312,7 +316,7 @@ test("a draw carries the diagnostics it built, read back as data, and refused by
       ]),
     ),
   ).toThrow(
-    /^line 4 diagnostics\[0\] severity: has no `level` that is error or warning/,
+    /^line 4 diagnostics\[0\] severity: has no `level` that is one of error, warning, info/,
   );
   expect(() => parseRecording(drawWith([{ ...message, lines: [] }]))).toThrow(
     /^line 4 diagnostics\[0\]: has no `lines`/,

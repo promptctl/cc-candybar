@@ -508,7 +508,8 @@ export function drawRender(
   const clickHolds = clickErrorsAt(sessionState, sessionId, at, drawing.by);
   // [LAW:one-source-of-truth] The daemon-wide update notice, read for
   // THIS session: what it dismissed and whether its config allows the
-  // notice — both values, folded by the notice into zero or one message.
+  // notice — both values, folded by the notice into zero or one offer and
+  // zero or one failure.
   const updates = updateWatch.notice({
     to: links.to,
     sessionId,
@@ -609,16 +610,21 @@ export function drawRender(
     sessionId,
     drawing.by,
     errors,
-    [...updates, ...questions],
-    // A standing warning is one per kind whose words change as it does (a
-    // pipe event's counts), so its kind alone is what it is about: a viewer
-    // open on it stays open. A render warning is about its words.
+    [...updates.offer, ...questions],
     [
-      ...standing.map((w) => ({ about: w.kind, message: w.message })),
-      ...renderWarnings
-        .ofSession(sessionId, drawing.by, scope)
-        .map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message })),
-    ].map((w) => ({ about: w.about, text: w.message, copy: w.message })),
+      // [LAW:no-silent-failure] A failed update act is a warning of its own.
+      ...updates.failure,
+      // A standing warning is one per kind whose words change as it does (a
+      // pipe event's counts), so its kind alone is what it is about: a viewer
+      // open on it stays open. A render warning is about its words.
+      ...[
+        ...standing.map((w) => ({ about: w.kind, message: w.message })),
+        ...renderWarnings.ofSession(sessionId, drawing.by, scope).map((w) => ({
+          about: `${w.kind}\0${w.message}`,
+          message: w.message,
+        })),
+      ].map((w) => ({ about: w.about, text: w.message, copy: w.message })),
+    ],
   );
   const document = view.source.facts();
   // [LAW:one-source-of-truth] What this draw is handed beside its view: the
@@ -755,7 +761,7 @@ export function drawRender(
     clickError: clickHolds.map(({ hold }) => hold).join(",") || "-",
     // The launcher's pipe event as this frame showed it: `-` for not at all.
     pipeEvent: pipeWarning?.hold ?? "-",
-    upd: String(updates.length),
+    upd: String(updates.offer.length),
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,

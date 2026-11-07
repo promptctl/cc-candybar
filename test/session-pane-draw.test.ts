@@ -215,7 +215,7 @@ function daemonDraw() {
     fileEvents: NO_FILE_EVENTS,
     renderWarnings: new RenderWarningRecords(),
     effectSessions: new EffectSessions<RenderedLine>(),
-    updateWatch: { notice: () => [], error: () => null },
+    updateWatch: { notice: () => ({ offer: [], failure: [] }), error: () => null },
     linkIds: { error: () => null },
     launcher: { launcherWarnings: () => [], answeredPipeEvent: () => {} },
     verbCtx,

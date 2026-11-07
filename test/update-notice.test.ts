@@ -142,14 +142,15 @@ describe("identity and facts", () => {
 });
 
 describe("updateNotice", () => {
+  const NONE = { offer: [], failure: [] };
   test("nothing newer, a disabled config, or a matching dismissal: no channel", () => {
-    expect(updateNotice(null, { kind: "idle" }, ctx())).toEqual([]);
+    expect(updateNotice(null, { kind: "idle" }, ctx())).toEqual(NONE);
     expect(
       updateNotice(SOURCE, { kind: "idle" }, ctx({ enabled: false })),
-    ).toEqual([]);
+    ).toEqual(NONE);
     expect(
       updateNotice(SOURCE, { kind: "idle" }, ctx({ dismissed: NEWER.digest })),
-    ).toEqual([]);
+    ).toEqual(NONE);
   });
 
   test("a dismissal of something else has lapsed: the notice is back", () => {
@@ -158,12 +159,12 @@ describe("updateNotice", () => {
         SOURCE,
         { kind: "idle" },
         ctx({ dismissed: "older-digest" }),
-      ),
+      ).offer,
     ).toHaveLength(1);
   });
 
   test("one sentence naming newer and running, then act / dismiss / disable, each its own click", () => {
-    const [ch] = updateNotice(SOURCE, { kind: "idle" }, ctx());
+    const [ch] = updateNotice(SOURCE, { kind: "idle" }, ctx()).offer;
     expect(ch!.severity).toBe(UPDATE_SEVERITY);
     expect(ch!.message).toBe(
       "Newer source: 9.9.9 [abcdef0]. You're on 1.0.0 [0123456].",
@@ -191,14 +192,14 @@ describe("updateNotice", () => {
   });
 
   test("a release reads the same way with its own words", () => {
-    const [ch] = updateNotice(RELEASE, { kind: "idle" }, ctx());
+    const [ch] = updateNotice(RELEASE, { kind: "idle" }, ctx()).offer;
     expect(ch!.message).toBe("Newer release: 99.0.0. You're on 1.2.3.");
     expect(ch!.lines[0][1]!.text).toBe("[upgrade]");
     expect(clicksOf(ch!.lines[0][2]!.link)[0]!.args[2]).toBe("99.0.0");
   });
 
   test("while the act runs its affordance is a busy label with no apply click", () => {
-    const [ch] = updateNotice(SOURCE, { kind: "running", act: 1 }, ctx());
+    const [ch] = updateNotice(SOURCE, { kind: "running", act: 1 }, ctx()).offer;
     expect(ch!.lines[0][1]!.text).toBe("[rebuilding…]");
     const verbs = ch!.lines
       .flat()
@@ -213,32 +214,46 @@ describe("updateNotice", () => {
     reason: "non-zero (exit 1): boom",
   };
 
-  test("a failed act adds a second line naming the failure, and offers the act again", () => {
-    const [ch] = updateNotice(SOURCE, FAILED, ctx());
-    expect(ch!.lines).toHaveLength(2);
-    expect(ch!.lines[1]![0]!.text).toBe(
-      "rebuild failed: non-zero (exit 1): boom",
-    );
+  test("a failed act is a warning of its own naming the failure, and the offer stands with its act again", () => {
+    const { offer, failure } = updateNotice(SOURCE, FAILED, ctx());
+    const [ch] = offer;
+    expect(ch!.lines).toHaveLength(1);
     expect(ch!.lines[0][1]!.text).toBe("[rebuild]");
     expect(ch!.message).toBe(
-      "Newer source: 9.9.9 [abcdef0]. You're on 1.0.0 [0123456].\nrebuild failed: non-zero (exit 1): boom",
+      "Newer source: 9.9.9 [abcdef0]. You're on 1.0.0 [0123456].",
     );
+    expect(failure.map((f) => f.text)).toEqual([
+      "rebuild failed: non-zero (exit 1): boom",
+    ]);
+    // Listed, it is a warning, and it comes before the offer.
+    const list = collectDiagnostics(MAIN_NAME, "s", "request", [], offer, failure);
+    expect(list.map((m) => [m.severity.level, m.message])).toEqual([
+      ["warning", "rebuild failed: non-zero (exit 1): boom"],
+      ["info", ch!.message],
+    ]);
   });
 
-  test("a failure names the attempt it came from: a different newer thing shows no failure line", () => {
+  test("a failure names the attempt it came from: a different newer thing shows no failure", () => {
     const newerStill: Update = {
       ...SOURCE,
       newer: { version: "9.9.10", digest: "fedcba9876543210".repeat(4) },
     };
-    const [ch] = updateNotice(newerStill, FAILED, ctx());
-    expect(ch!.lines).toHaveLength(1);
-    expect(ch!.message).toBe(
+    const { offer, failure } = updateNotice(newerStill, FAILED, ctx());
+    expect(offer[0]!.message).toBe(
       "Newer source: 9.9.10 [fedcba9]. You're on 1.0.0 [0123456].",
     );
+    expect(failure).toEqual([]);
+  });
+
+  test("a dismissed or disabled offer shows its failure no more than itself", () => {
+    expect(
+      updateNotice(SOURCE, FAILED, ctx({ dismissed: NEWER.digest })),
+    ).toEqual(NONE);
+    expect(updateNotice(SOURCE, FAILED, ctx({ enabled: false }))).toEqual(NONE);
   });
 
   test("drawn: the row reads as the sentence and its three clicks, each linked to its own effect", () => {
-    const [message] = updateNotice(SOURCE, { kind: "idle" }, ctx());
+    const [message] = updateNotice(SOURCE, { kind: "idle" }, ctx()).offer;
     const list = collectDiagnostics(MAIN_NAME, "s", "request", [], [message!], []);
     const [, ...rows] = viewerRows(
       list,
