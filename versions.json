@@ -4,39 +4,39 @@
     {
       "version": "pr-670",
       "ref": "refs/pull/670/merge",
-      "sha": "480b52abf5dc1caaf1503f0c39bce4c963179a18",
-      "timestamp": "2026-11-07T06:34:39.443Z",
+      "sha": "724340268b48309eff836e1bf30ea31fe89b0290",
+      "timestamp": "2026-11-07T06:41:51.444Z",
       "commits": [
         {
-          "sha": "480b52abf5dc1caaf1503f0c39bce4c963179a18",
+          "sha": "724340268b48309eff836e1bf30ea31fe89b0290",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T06:33:41Z",
-          "message": "Merge 4c6635b0537de7a9cdee7c15895e90afe0e5b3f5 into 984751dd6be809899d57b70e17cf917289e3d76a\n"
+          "timestamp": "2026-11-07T06:40:53Z",
+          "message": "Merge 12bf50ae44d875cdd0a178ee892bd7ac5c56c3cb into 984751dd6be809899d57b70e17cf917289e3d76a\n"
         },
         {
-          "sha": "4c6635b0537de7a9cdee7c15895e90afe0e5b3f5",
+          "sha": "12bf50ae44d875cdd0a178ee892bd7ac5c56c3cb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T23:33:09-07:00",
           "message": "fix(lanes): a draw asks for the run under the pair its request was recorded by; an in-race tick ends its session's run (candybar-gather-renderer-76bb.1dh.2d2)\n"
         },
         {
-          "sha": "4763e1a3ccd49666da2005f2c810fbc262441547",
+          "sha": "d92931360e59c5d7d4951feeee380f4d8579a12d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T23:24:50-07:00",
           "message": "fix(lanes): mismatch runs are kept by the Claude Code whose ticks open and end them, from the request's arrival (candybar-gather-renderer-76bb.1dh.2d2)\n"
         },
         {
-          "sha": "06771a30cee7ab99726be7f346992cf426536020",
+          "sha": "e6061b2c98ba31232f9f23e3b65b292c9714f68c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T23:19:05-07:00",
           "message": "fix(lanes): a straggler after the new session's first confirmed tick is the race; runs are measured on the monotonic clock (candybar-gather-renderer-76bb.1dh.2d2)\n\nThe mismatched stamp names the session the record holds, and a Claude\nCode's first confirmed tick of a session dates the rewrite, so a straggler\nholding it within the race opens no run a later /resume could inherit.\n"
         },
         {
-          "sha": "16d8c48bcf8d9ffc70dee45109914b4c0aab9f1e",
+          "sha": "dff57be51af649c46ab460ae4b823e2f47645f1a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T23:08:44-07:00",
