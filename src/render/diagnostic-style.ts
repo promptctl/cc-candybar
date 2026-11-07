@@ -1,5 +1,5 @@
-// The cc-candybar diagnostic visual identity: the colours of every error and
-// warning surface we draw (the client's permanent-failure glyph and the
+// The cc-candybar diagnostic visual identity: the colours of every error,
+// warning and informational surface we draw (the client's permanent-failure glyph and the
 // daemon's diagnostics indicator and viewer).
 //
 // [LAW:one-source-of-truth] This leaf module is the single TS definition of
@@ -28,6 +28,12 @@ export const DIAGNOSTIC_ERROR_COLORS: DiagnosticColors = {
 export const DIAGNOSTIC_WARNING_COLORS: DiagnosticColors = {
   fg: "#000000",
   bg: "#dca028",
+};
+// Blue, the conventional informational colour, distinct from red and amber
+// down to 16 colours; white on it reads at about 5.3:1.
+export const DIAGNOSTIC_INFO_COLORS: DiagnosticColors = {
+  fg: "#ffffff",
+  bg: "#2f6db5",
 };
 export const ANSI_RESET = "\x1b[0m";
 
