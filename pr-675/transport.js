@@ -85992,8 +85992,10 @@ var LANE_SETUP = {
       };
     },
     // The installed mod draws nothing while the lane is off: the daemon
-    // refuses its subscriber, and it hands the band on.
-    off: async () => done("nothing to stop: the band mod draws nothing while the lane is off")
+    // refuses its subscriber, which ends its child, and it hands the band on.
+    // It stays installed, because the switch is a directory's config while
+    // the install is every session's under the Claude config dir.
+    off: async () => done("nothing to stop: the band mod ends its child once the lane is off")
   },
   statusline: {
     on: async (run3, host, edge) => {
