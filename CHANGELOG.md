@@ -1,3 +1,9 @@
+## [1.210.5](https://github.com/promptctl/cc-candybar/compare/v1.210.4...v1.210.5) (2026-11-07)
+
+### Bug Fixes
+
+* **daemon:** a connection's state is one value, and past waiting it reads no more frames ([#689](https://github.com/promptctl/cc-candybar/issues/689)) ([b21e989](https://github.com/promptctl/cc-candybar/commit/b21e989ab734befd8acc182d17139d743372d040))
+
 ## [1.210.4](https://github.com/promptctl/cc-candybar/compare/v1.210.3...v1.210.4) (2026-11-07)
 
 ### Bug Fixes
