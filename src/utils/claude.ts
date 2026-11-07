@@ -213,7 +213,7 @@ export async function findAgentTranscripts(
 // breaks typecheck. A proper fix tightens that boundary to take
 // `PrunedRaw` directly and is out of scope for the CI-fix branch.
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
-type UsageCounts = {
+export type UsageCounts = {
   input_tokens?: number;
   output_tokens?: number;
   cache_creation_input_tokens?: number;
