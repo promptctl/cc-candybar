@@ -1,3 +1,9 @@
+## [1.208.12](https://github.com/promptctl/cc-candybar/compare/v1.208.11...v1.208.12) (2026-11-07)
+
+### Bug Fixes
+
+* **lanes:** a session record an exited Claude Code left under a reused pid is not the live process's (candybar-gather-renderer-76bb.1dh.ycm) ([#673](https://github.com/promptctl/cc-candybar/issues/673)) ([583ae6d](https://github.com/promptctl/cc-candybar/commit/583ae6d50351c0a6103cc959b6994201e0ad538f))
+
 ## [1.208.11](https://github.com/promptctl/cc-candybar/compare/v1.208.10...v1.208.11) (2026-11-07)
 
 ### Bug Fixes
