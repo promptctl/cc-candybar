@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1806d3735da43b2aaeceb9ca12a48cce517d6201",
+      "timestamp": "2026-11-07T01:25:23.244Z",
+      "commits": [
+        {
+          "sha": "1806d3735da43b2aaeceb9ca12a48cce517d6201",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:24:21-07:00",
+          "message": "fix(click): a click is read once at the daemon's edge, and its event carries that read (brandon-menus-sjhy.ovq) (#665)\n\n* fix(click): a click is read once at the daemon's edge, and its event carries that read (brandon-menus-sjhy.ovq)\n\nThe edge read a click to find its session, then the verb's run read the raw\nvalue again, and the journal, the landing stamp and the fold took their\nsession from that second read. Now `readClick` reads a link once, at the\nedge, into a branded Click whose dispatch session is taken from its effects\nin the read. The click event carries that Click, and `runClick` runs from it,\nso the session the reply facts record, the one the journal and landing use,\nand the steps the fold performs are one value.\n\nThe click table holds what a link can name: dispatch, and the doctor's\nprobe, whose nonce is now parsed at the edge too. A link naming a leaf verb\nitself, which nothing draws, is an unknown click verb refused at the edge.\nfoldEffects is the one leaf runner. VERBS, VERB_NAMES, ClickVerb, clickVerb,\nclickSessionOf and decodeWire are gone, and the drawn-link reader refuses a\nlink that names anything but dispatch.\n\nTests click as the bar does. The helpers that split a drawn link and ran\neach effect as its own click (one turn and undo step per effect, no\nbatching) run the whole link, and hand-built single-verb clicks go through\na one-effect dispatch link (test/helpers/click.ts clickEffect, effectLink).\n\n* fix(click): the loader refuses a link literal naming a verb no link names, and the link verbs are one list the click table keys off (brandon-menus-sjhy.ovq)\n\nReview (high) on #665: an addressed literal naming a leaf verb loaded and then\nclicked nothing; the click readers and their run arms now both answer to the\nwire's LINK_VERBS at compile time; tests cover a session-less dispatch and a\nlone % in a leaf's arguments; stale symbol names in design docs.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* fix(click): a link may name range beside the click verbs, and the click reads carry one brand (brandon-menus-sjhy.ovq)\n\nReview (medium) on #665: the loader no longer refuses a status-line range\nliteral, which the daemon runs; the readers return unbranded reads the\ncompiler checks, branded once in readClick; stale verb-table comments.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
+        },
+        {
+          "sha": "aa9da2bd2f5cf3f7d2d4a21a63a06bbd69ac00b8",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-07T01:05:04Z",
+          "message": "chore(release): set `package.json` to 1.208.6 [skip ci]\n\n## [1.208.6](https://github.com/promptctl/cc-candybar/compare/v1.208.5...v1.208.6) (2026-11-07)\n\n### Bug Fixes\n\n* **feed:** the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv) ([#664](https://github.com/promptctl/cc-candybar/issues/664)) ([536561c](https://github.com/promptctl/cc-candybar/commit/536561c3a05d572669c0b7bd7a2830dd6ab3bcc6))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-663",
       "ref": "refs/pull/663/merge",
       "sha": "c8a6c3c6f2f1a28f14d65140733341441adfbf8e",
@@ -106,28 +128,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:33:52-07:00",
           "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "536561c3a05d572669c0b7bd7a2830dd6ab3bcc6",
-      "timestamp": "2026-11-07T00:58:10.721Z",
-      "commits": [
-        {
-          "sha": "536561c3a05d572669c0b7bd7a2830dd6ab3bcc6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:57:16-07:00",
-          "message": "fix(feed): the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv) (#664)\n\n* fix(feed): the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv)\n\n* fix(feed): the feed times each wake to the frame that answers it, on its own clock (candybar-gather-renderer-76bb.6pj.qbv)\n\n* fix(feed): every draw answers its wake, timed to the frame drawn (candybar-gather-renderer-76bb.6pj.qbv)"
-        },
-        {
-          "sha": "1c67112e8a6fe0cfc8d98ccf9ca7846a4a44830b",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T00:34:57Z",
-          "message": "chore(release): set `package.json` to 1.208.5 [skip ci]\n\n## [1.208.5](https://github.com/promptctl/cc-candybar/compare/v1.208.4...v1.208.5) (2026-11-07)\n\n### Bug Fixes\n\n* **recording:** a click's state crosses the recording ahead of the document it keyed (candybar-gather-renderer-76bb.6pj.09q) ([#662](https://github.com/promptctl/cc-candybar/issues/662)) ([52d7647](https://github.com/promptctl/cc-candybar/commit/52d7647ba197e389f78b91829e5591180ad2f2a3))\n"
         }
       ]
     },
