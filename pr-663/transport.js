@@ -69530,7 +69530,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.7";
+var PACKAGE_VERSION = "1.208.8";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -76617,7 +76617,7 @@ var FrameFeeds = class {
     const feed2 = this.feeds.get(sessionId2);
     if (feed2 === void 0) return;
     feed2.woke[cause]++;
-    if (feed2.phase.kind !== "drawing")
+    if (feed2.phase.kind !== "rendering")
       feed2.wokeSince ??= this.deps.clock.monotonic();
     if (!this.hasten(feed2)) feed2.coalesced++;
   }
@@ -76757,7 +76757,7 @@ var FrameFeeds = class {
   // ever drawn further ahead of the wall than that, so nothing carries from
   // one frame to the next. Its moment on the monotonic clock is that instant's.
   draw(feed2, due) {
-    feed2.phase = { kind: "drawing" };
+    feed2.phase = { kind: "rendering" };
     const woke = feed2.wokeSince;
     feed2.wokeSince = null;
     const started2 = this.deps.clock.monotonic();
@@ -76790,6 +76790,7 @@ var FrameFeeds = class {
       feed2.phase = { kind: "waiting" };
       return;
     }
+    feed2.phase = { kind: "pushing" };
     feed2.lastStart = moment2;
     const finished = this.deps.clock.monotonic();
     if (woke !== null) {
@@ -76818,6 +76819,7 @@ var FrameFeeds = class {
   // costs. A frame step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
   // next change is Infinity, and an unseen bar's spacing is the still period.
+  // A wake while the frame went out may already have set the timer sooner.
   schedule(feed2, frame2, at) {
     const { moving, still } = this.deps.periods;
     const until2 = ((frame2?.bar.nextChange ?? Infinity) - at) * 1e3;
@@ -76840,27 +76842,31 @@ var FrameFeeds = class {
   // never later than it already falls due. Answers whether it moved anything:
   // a wake that did not was coalesced into a frame already due. Spaced on the
   // monotonic clock, so a wall clock stepped back cannot stall a wake.
-  // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
-  // turn and opens nothing, so a wake while it draws is the draw's own, and
-  // the frame reads what that moved: it is coalesced into that frame.
+  // [LAW:no-ambient-temporal-coupling] A frame renders in one synchronous
+  // turn and opens nothing, so a wake while it renders is the render's own,
+  // and the frame reads what that moved: it is coalesced into that frame. A
+  // wake after the render read its values is the next frame's.
   hasten(feed2) {
     const { phase } = feed2;
-    if (phase.kind === "drawing") return false;
+    if (phase.kind === "rendering") return false;
     const now2 = this.deps.clock.monotonic();
     const at = Math.max(now2, feed2.lastStart + this.spacingOf(feed2));
-    if (phase.kind === "due" && phase.at <= at) return false;
     const wall = this.deps.instant();
-    this.arm(feed2, wall + (at - now2) / 1e3, wall);
-    return true;
+    return this.arm(feed2, wall + (at - now2) / 1e3, wall);
   }
   // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
   // the wall instant `due`, in a later turn than the caller's however soon
   // that is. Its wait is measured from `wall`, the caller's own reading, so
   // the instant a caller set is never rebuilt from a second, truncated one;
-  // its monotonic due time is what a wake compares against.
+  // its monotonic due time is what a later caller compares against.
+  // [LAW:single-enforcer] The one rule that a timer is never set later than
+  // it already falls due. Answers whether it moved the timer.
   arm(feed2, due, wall) {
     const delay = Math.max(0, (due - wall) * 1e3);
-    this.setTimer(feed2, due, this.deps.clock.monotonic() + delay, delay);
+    const dueMoment = this.deps.clock.monotonic() + delay;
+    if (feed2.phase.kind === "due" && feed2.phase.at <= dueMoment) return false;
+    this.setTimer(feed2, due, dueMoment, delay);
+    return true;
   }
   setTimer(feed2, due, dueMoment, delay) {
     if (feed2.phase.kind === "due") feed2.phase.clear();

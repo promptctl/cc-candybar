@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-663",
+      "ref": "refs/pull/663/merge",
+      "sha": "7ec2fee248cbf38cfa1ba39393e445a0e438e5fc",
+      "timestamp": "2026-11-07T02:01:16.984Z",
+      "commits": [
+        {
+          "sha": "7ec2fee248cbf38cfa1ba39393e445a0e438e5fc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:00:16Z",
+          "message": "Merge deabe8f78e05032c2ca371d15b8ffd987c9cb27a into 30386afe1d6f69b407d95bb4159aebbc3d9217d6\n"
+        },
+        {
+          "sha": "deabe8f78e05032c2ca371d15b8ffd987c9cb27a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:23:15-07:00",
+          "message": "docs(lanes): rewrap the click's comment (candybar-gather-renderer-76bb.1dh.aom)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "c5de1bde3e56821fb6a84846871e57f7118a1d3f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:22:14-07:00",
+          "message": "fix(lanes): a torn record's re-read reports what it found, and an unread parent's warning names the wrapper fix (candybar-gather-renderer-76bb.1dh.aom)\n\nSecond high review of #663.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "90b1fb895758107fa420819bc89f0da66b16e682",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:12:47-07:00",
+          "message": "fix(lanes): a stamp says where its session runs, outside tmux included, and a lookup reads each record once (candybar-gather-renderer-76bb.1dh.aom)\n\nMedium review of #663:\n- The record is read for every request, so a session its Claude Code holds outside tmux releases the pane it was held in; an unconfirmed one releases nothing.\n- One lookup reads each record once, however many of its sessions it weighs.\n- A click's commit judges by the record as it reads then.\n- The bar pane's waiting line says what it waits for, and where a rendered statusline says why it isn't the pane's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "efe44e29c95242ff6324ab1ba0c71e63314cd7d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:48:59-07:00",
+          "message": "fix(lanes): a pane's session is read from its Claude Code's record at the asking, and a request not known to run in a pane releases nothing (candybar-gather-renderer-76bb.1dh.aom)\n\nHigh review of #663:\n- The takeover check and the pane-session reply read the record when they ask, so a stamp from before a /clear no longer answers for the pane.\n- A request whose parent is not the pane's Claude Code is no evidence about where its session runs: a held session stays where it is.\n- A record that fails to parse is read once more: Claude Code rewrites it in place.\n- One record reader: the lane edge is handed the daemon's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "65e7aee5a0f31976307eb5d41d38d1828d3ec531",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:25:22-07:00",
+          "message": "fix(lanes): a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom)\n\nEvery process in a tmux pane inherits TMUX and TMUX_PANE, so a one-shot\n`cc-candybar` run from Claude Code's Bash tool, under any session id, became\n\"the pane's session\": the status line released the pane to it and a bar pane\nfollowed it.\n\nThe client now reports its parent pid (for a statusline, Claude Code itself,\nmeasured on 2.1.299). The render checkpoint reads that process's own record,\n`<config dir>/sessions/<pid>.json`, the one the restart already reads, and\nstamps the request with the pane its session runs in: outside, runs, or\nunconfirmed with why. The status line's holds and the pane-session reply read\nonly that stamp, so namesPane is gone. Every render event records it as\n`pane=`, and while the status line or a bar pane is on, an unconfirmed session's\nbar carries a ⚠ that says why.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-668",
       "ref": "refs/pull/668/merge",
       "sha": "0105f8154c2d88966e17e3b3d633a855a56e3234",
@@ -78,56 +128,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-07T01:36:40Z",
           "message": "chore(release): set `package.json` to 1.208.7 [skip ci]\n\n## [1.208.7](https://github.com/promptctl/cc-candybar/compare/v1.208.6...v1.208.7) (2026-11-07)\n\n### Bug Fixes\n\n* **click:** a click is read once at the daemon's edge, and its event carries that read (brandon-menus-sjhy.ovq) ([#665](https://github.com/promptctl/cc-candybar/issues/665)) ([1806d37](https://github.com/promptctl/cc-candybar/commit/1806d3735da43b2aaeceb9ca12a48cce517d6201))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-663",
-      "ref": "refs/pull/663/merge",
-      "sha": "2453e090acafbce82702d62e23153a237c1c1178",
-      "timestamp": "2026-11-07T01:38:48.700Z",
-      "commits": [
-        {
-          "sha": "2453e090acafbce82702d62e23153a237c1c1178",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:37:58Z",
-          "message": "Merge 686f153f1bff4a0503002740f8dc4fa61c0b3e19 into 6d361f430dc9f1a6399706bec94946f0bc8b68f3\n"
-        },
-        {
-          "sha": "686f153f1bff4a0503002740f8dc4fa61c0b3e19",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:23:15-07:00",
-          "message": "docs(lanes): rewrap the click's comment (candybar-gather-renderer-76bb.1dh.aom)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "99394eb581ae06f95781e7bb9efb44755b73582a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:22:14-07:00",
-          "message": "fix(lanes): a torn record's re-read reports what it found, and an unread parent's warning names the wrapper fix (candybar-gather-renderer-76bb.1dh.aom)\n\nSecond high review of #663.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "07b9542c7ab4f8428e10ebebcb789a1a3b473e99",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:12:47-07:00",
-          "message": "fix(lanes): a stamp says where its session runs, outside tmux included, and a lookup reads each record once (candybar-gather-renderer-76bb.1dh.aom)\n\nMedium review of #663:\n- The record is read for every request, so a session its Claude Code holds outside tmux releases the pane it was held in; an unconfirmed one releases nothing.\n- One lookup reads each record once, however many of its sessions it weighs.\n- A click's commit judges by the record as it reads then.\n- The bar pane's waiting line says what it waits for, and where a rendered statusline says why it isn't the pane's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "80a68d5db866ed20ca7b364ac62f0f1a43518a7c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:48:59-07:00",
-          "message": "fix(lanes): a pane's session is read from its Claude Code's record at the asking, and a request not known to run in a pane releases nothing (candybar-gather-renderer-76bb.1dh.aom)\n\nHigh review of #663:\n- The takeover check and the pane-session reply read the record when they ask, so a stamp from before a /clear no longer answers for the pane.\n- A request whose parent is not the pane's Claude Code is no evidence about where its session runs: a held session stays where it is.\n- A record that fails to parse is read once more: Claude Code rewrites it in place.\n- One record reader: the lane edge is handed the daemon's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "dc4be69f8e66cf46087ea31548d17bf5a8cf253d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:25:22-07:00",
-          "message": "fix(lanes): a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom)\n\nEvery process in a tmux pane inherits TMUX and TMUX_PANE, so a one-shot\n`cc-candybar` run from Claude Code's Bash tool, under any session id, became\n\"the pane's session\": the status line released the pane to it and a bar pane\nfollowed it.\n\nThe client now reports its parent pid (for a statusline, Claude Code itself,\nmeasured on 2.1.299). The render checkpoint reads that process's own record,\n`<config dir>/sessions/<pid>.json`, the one the restart already reads, and\nstamps the request with the pane its session runs in: outside, runs, or\nunconfirmed with why. The status line's holds and the pane-session reply read\nonly that stamp, so namesPane is gone. Every render event records it as\n`pane=`, and while the status line or a bar pane is on, an unconfirmed session's\nbar carries a ⚠ that says why.\n"
         }
       ]
     },
