@@ -1139,4 +1139,19 @@ describe("spendLook: one look written for the daemons after it", () => {
       lastSeen: 2_000,
     });
   });
+
+  test.each([
+    ["a negative spend", '{"spentMs":-1e15,"lastSeen":0}'],
+    ["an infinite spend", '{"spentMs":1e999,"lastSeen":0}'],
+  ])("%s is no act's spend: it restarts and says so", (_name, text) => {
+    const dir = actsDir(scratch, "/some/bundle/index.mjs");
+    const file = path.join(dir, "3", "awake.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+
+    expect(() => spendLook(dir, facts({ act: 3, alive: true }), 2_000, 10_000)).toThrow(
+      /not an act's spend: .*; its spend restarts/,
+    );
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({ spentMs: 2_000, lastSeen: 2_000 });
+  });
 });

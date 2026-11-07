@@ -421,7 +421,12 @@ function readAwake(file: string): SpendRead {
   const { spentMs, lastSeen } = (parsed ?? {}) as Partial<
     Record<keyof ActAwake, unknown>
   >;
-  return typeof spentMs === "number" && typeof lastSeen === "number"
+  // A negative or infinite spend would end a healthy build at once or never.
+  return typeof spentMs === "number" &&
+    typeof lastSeen === "number" &&
+    spentMs >= 0 &&
+    Number.isFinite(spentMs) &&
+    Number.isFinite(lastSeen)
     ? { ok: true, awake: { spentMs, lastSeen } }
     : { ok: false, reason: `not an act's spend: ${text}` };
 }
@@ -459,8 +464,8 @@ export function spendLook(
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
-  // [LAW:no-silent-failure] A spend this version can't read is replaced by one
-  // counted from this look, then reported. Read as spent, it ends a build
+  // [LAW:no-silent-failure] A spend this version can't read is replaced by the
+  // spend of an act no daemon has watched, then reported. Read as spent, it ends a build
   // mid-write; left in place, nothing repairs it, and the act runs unbounded
   // while it holds every restart.
   if (!read.ok) throw new Error(`${file}: ${read.reason}; its spend restarts`);

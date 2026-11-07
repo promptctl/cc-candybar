@@ -1,7 +1,7 @@
 // [LAW:behavior-not-structure] The update act's budget is spent in observed
 // time (brandon-unfiled-3248.9eu3): each look at the act alive counts the span
-// since the look before it, up to a cap, so a machine asleep mid-act spends
-// almost none of it, and a wall clock set back spends nothing.
+// since the look before it when the loop could have run that span, so a machine
+// asleep mid-act spends none of it, and a wall clock set back spends nothing.
 
 import {
   observe,
@@ -21,7 +21,7 @@ const HOUR = 60 * 60 * 1000;
 const LONGEST = 10_000;
 
 describe("observe: one look at an act alive", () => {
-  test("an act no daemon has looked at has spent nothing, as of its start", () => {
+  test("an act no daemon has looked at counts from its start: a first look 2 s in has spent 2 s", () => {
     expect(observe(unwatched(RECORD), STARTED + 2_000, LONGEST)).toEqual({
       spentMs: 2_000,
       lastSeen: STARTED + 2_000,
