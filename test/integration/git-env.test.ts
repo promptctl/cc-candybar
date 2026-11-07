@@ -4,17 +4,19 @@
 // names (src/host.ts daemonEnv), and every git read inherits it.
 //
 // [LAW:behavior-not-structure] Real git in two real repos, read through the
-// GitService a daemon holds.
+// GitService a daemon holds. [LAW:effects-at-boundaries] An adapter case: what
+// it proves is real git's own behaviour (it honours GIT_DIR over its cwd, and
+// names it when asked), which a scripted git could only restate.
 
 import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { askGitEnv } from "../src/git-env";
-import { daemonEnv } from "../src/host";
-import { GitService } from "../src/segments/git";
-import { HOST, hostOf, worldOf } from "./helpers/host";
+import { askGitEnv } from "../../src/git-env";
+import { daemonEnv } from "../../src/host";
+import { GitService } from "../../src/segments/git";
+import { HOST, hostOf, worldOf } from "../helpers/host";
 
 function run(cmd: string, cwd: string): void {
   execSync(cmd, { cwd, stdio: "pipe" });
