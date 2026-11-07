@@ -742,6 +742,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           warning: entry.lastWarning,
           unused: entry.state.unused,
           config: entry.state.config,
+          repos: entry.repos,
         };
       },
       host,

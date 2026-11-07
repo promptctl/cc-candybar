@@ -187,14 +187,29 @@ export function repoUnreadNotice(gate: RepoGate): string | null {
 
 // What a verdict outside the bar (`check`, the demo) says of each repository
 // it did not run. The bar asks instead.
+// [LAW:one-source-of-truth] One wording, split by what each line asks of the
+// user, so the doctor reads these sentences rather than a copy of them.
 export function repoGateLines(gate: RepoGate): readonly string[] {
   const unread = repoUnreadNotice(gate);
   return [
     ...(unread === null ? [] : [unread]),
-    ...gate.awaiting.map(
-      (d) =>
-        `awaiting approval: ${d} — its cc-candybar config runs once it is approved in the bar`,
-    ),
+    ...repoAwaitingLines(gate),
+    ...repoSettledLines(gate),
+  ];
+}
+
+// The repositories that still ask for an answer.
+export function repoAwaitingLines(gate: RepoGate): readonly string[] {
+  return gate.awaiting.map(
+    (d) =>
+      `awaiting approval: ${d} — its cc-candybar config runs once it is approved in the bar`,
+  );
+}
+
+// What the user's answers, or the repository's proof, already settled: no
+// fix is owed, and only reversing the user's own answer would change it.
+export function repoSettledLines(gate: RepoGate): readonly string[] {
+  return [
     ...gate.declined.map(
       (d) => `declined: ${d} — its cc-candybar config does not run`,
     ),

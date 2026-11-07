@@ -43,6 +43,7 @@ import {
   healthyDaemonEdge,
   healthyDataEdge,
   noManagedSettings,
+  NO_REPOS,
 } from "./helpers/doctor-facts";
 import { heldClock } from "./helpers/held-clock";
 import { plusMs } from "../src/time";
@@ -61,6 +62,7 @@ const LOAD = {
   error: null,
   warning: null,
   unused: [],
+  repos: NO_REPOS,
   config: EMPTY_DEFAULT,
 } as unknown as Load;
 

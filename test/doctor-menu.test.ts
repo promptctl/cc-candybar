@@ -10,7 +10,7 @@ import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { RenderSightings } from "../src/daemon/render-sightings";
 import type { ServingDaemon } from "../src/daemon/limits";
-import { emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient, renderSaid } from "./helpers/doctor-facts";
+import { NO_REPOS, emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient, renderSaid } from "./helpers/doctor-facts";
 import type { ClientHint } from "../src/client-hint";
 import {
   BUNDLED_GLYPHS,
@@ -78,6 +78,7 @@ const CLEAN_LOAD: LoadOutcome = {
   error: null,
   warning: null,
   unused: [],
+  repos: NO_REPOS,
 };
 
 // The session's terminal, as its client reported it, and the font the edge

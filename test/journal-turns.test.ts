@@ -34,7 +34,7 @@ import { instantOf } from "../src/utils/instant";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { DoctorBusy } from "../src/doctor/busy";
 import type { DoctorEdge } from "../src/doctor/edge";
-import { emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_INSTALL_EDGE } from "./helpers/doctor-facts";
+import { NO_REPOS, emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_INSTALL_EDGE } from "./helpers/doctor-facts";
 import { applyClick, clickUrl, recordRender, testVerbContext, clicking, effectLink } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
@@ -54,7 +54,7 @@ const edge = (over: Partial<DoctorEdge>): DoctorEdge =>
     ...healthyDaemonEdge(),
     ...healthyDataEdge(),
     ...noManagedSettings(),
-    loadConfig: () => ({ layers: [], error: null, warning: null, unused: [], config: EMPTY_DEFAULT }),
+    loadConfig: () => ({ layers: [], error: null, warning: null, unused: [], repos: NO_REPOS, config: EMPTY_DEFAULT }),
     probeTmux: async () => ({ kind: "failed", reason: "no tmux" }),
     ...over,
   }) as DoctorEdge;

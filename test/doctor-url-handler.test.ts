@@ -43,6 +43,7 @@ import {
   HEALTHY_INSTALL_EDGE,
   healthyClient,
   renderSaid,
+  NO_REPOS,
 } from "./helpers/doctor-facts";
 
 const probe = checkByName("urlHandler")!.probe;
@@ -465,6 +466,7 @@ describe("the daemon's side of the round trip", () => {
           error: null,
           warning: null,
           unused: [],
+          repos: NO_REPOS,
           config: DEFAULT_DSL_CONFIG,
         }),
       },

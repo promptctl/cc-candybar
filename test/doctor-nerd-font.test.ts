@@ -36,7 +36,7 @@ import {
   nerdFontFields,
 } from "../src/doctor/report";
 import { parseMarkBook, withMark } from "../src/doctor/mark-book";
-import { EMPTY_STORES, HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, CARRIED, NAMED, STILL, sightedIn } from "./helpers/doctor-facts";
+import { EMPTY_STORES, NO_REPOS, HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, CARRIED, NAMED, STILL, sightedIn } from "./helpers/doctor-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -495,7 +495,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
         asked.push(args);
         return COVERED;
       },
-      loadConfig: () => ({ layers: [], error: null, warning: null, unused: [], config }),
+      loadConfig: () => ({ layers: [], error: null, warning: null, unused: [], repos: NO_REPOS, config }),
     };
     return { e, asked, pids };
   };

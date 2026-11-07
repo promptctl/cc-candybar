@@ -16,6 +16,11 @@
 import { TMUX_ENV, type TmuxHint } from "../tmux-hint.js";
 import { CONFIG_ENV, chainName, type ConfigTarget } from "../config-hint.js";
 import { LANE_NAMES } from "../config/lanes.js";
+import {
+  repoAwaitingLines,
+  repoSettledLines,
+  type RepoGate,
+} from "../config/loader/repo-gate.js";
 import type { ClientKind } from "../client-hint.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { Asked, Outcome } from "../utils/outcome.js";
@@ -98,11 +103,13 @@ export type TmuxFacts =
 // nothing to analyse (the bar is rendering an older config, or the bundled
 // default, under it), and one that loaded has no error. `layers` are the
 // files merged, lowest first — none is the bundled default. `warnings` are
-// the advisories the load earned on the way, in either arm.
+// the advisories the load earned on the way, in either arm. `repos` is what
+// the load's repository gate ruled of each repository's config it reached.
 export type ConfigFacts = {
   readonly layers: readonly string[];
   readonly target: ConfigTarget;
   readonly warnings: readonly string[];
+  readonly repos: RepoGate;
 } & (
   | { readonly kind: "failed"; readonly error: string }
   | {
@@ -827,16 +834,33 @@ function configProblems(config: ConfigFacts): readonly string[] {
 // search could not check, a variable that failed to declare), and everything
 // the files declare is used. A threshold whose knobs do not ascend is a load error, so it is the first of
 // those. Either verdict names the file or chain it judged and what named it.
+// A repository the load left out is named on the row. One awaiting an answer
+// is a problem, which either answer clears. A declined one is the user's own
+// answer, so it rides the verdict's text and never fails the row: only
+// reversing that answer would clear it, and the doctor would become a prompt
+// to un-decline. An unproven worktree goes with it, since its directory's own
+// standing is on a line of its own. A book that cannot be read is already the
+// load's own advisory, as the bar's strip shows it.
+// [LAW:dataflow-not-control-flow] The gate is always folded in: an empty one
+// adds nothing.
 const config: Check = {
   name: "config",
   label: "config",
   takesMark: false,
   probe: ({ config }) => {
     const judged = judgedConfig(config);
-    const verdict = problemsVerdict(configProblems(config));
-    return verdict.ok
-      ? { ok: true, note: judged }
-      : { ...verdict, reason: `${judged}: ${verdict.reason}` };
+    const [reason, ...more] = [
+      ...configProblems(config),
+      ...repoAwaitingLines(config.repos),
+    ];
+    const settled = repoSettledLines(config.repos);
+    return reason === undefined
+      ? { ok: true, note: [judged, ...settled].join("; ") }
+      : {
+          ok: false,
+          reason: `${judged}: ${reason}`,
+          more: [...more, ...settled],
+        };
   },
 };
 

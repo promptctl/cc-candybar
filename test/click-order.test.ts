@@ -34,6 +34,7 @@ import {
   healthyDataEdge,
   HEALTHY_INSTALL_EDGE,
   noManagedSettings,
+  NO_REPOS,
 } from "./helpers/doctor-facts";
 import { applyClick, applyClickAnswered, clickUrl, recordRender, testVerbContext, runLink, effectLink } from "./helpers/click";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
@@ -49,7 +50,7 @@ const NONCE = "01234567-89ab-cdef-0123-456789abcdef";
 const A = "session-a";
 const B = "session-b";
 type Load = ReturnType<DoctorEdge["loadConfig"]>;
-const LOAD = { layers: [], error: null, warning: null, unused: [], config: EMPTY_DEFAULT } as unknown as Load;
+const LOAD = { layers: [], error: null, warning: null, unused: [], repos: NO_REPOS, config: EMPTY_DEFAULT } as unknown as Load;
 // As production: a reload that fails keeps the config it had.
 const FAILED_LOAD = { ...LOAD, error: "the file changed" } as Load;
 
