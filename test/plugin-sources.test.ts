@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { originAt } from "./helpers/render-origin";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import { homeOf } from "../src/daemon/home";
 import { reaction, runInAction } from "mobx";
@@ -250,7 +251,7 @@ function viewOf(
   configFile: string,
   sid = "s1",
 ): SessionView<SessionSource> {
-  const held = r.cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
+  const held = r.cache.holdSession(originAt(dir, configFile), viewFacts(dir, sid));
   cleanups.push(() => held[Symbol.dispose]());
   return held.view;
 }
@@ -309,7 +310,7 @@ describe("a source's declaration", () => {
   test("the built arm loads, lowered to a session document in the plugin folder's managed storage", () => {
     const r = rig();
     const p = listing(`{ status: ${SOURCE} }`);
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -403,7 +404,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -437,7 +438,7 @@ describe("a source's declaration", () => {
          segments: { mine: { template: "x{{ .plugins.p.status.home }}" } },
          root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -563,7 +564,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -890,9 +891,7 @@ describe("a session's facts document", () => {
   test("stops with the view: once its state is released and the cache closed, its document hears no more", () => {
     const r = rig();
     const hold = r.cache.holdSession(
-      dir,
-      dir,
-      config(["mine"]),
+      originAt(dir, config(["mine"])),
       viewFacts(dir, "s1"),
     );
     const view = hold.view;
@@ -919,7 +918,7 @@ describe("a storage folder's watch", () => {
     viewOf(r, file, "s0");
     const opened = r.counters.watchersOpened;
     for (let i = 1; i <= 5; i++) {
-      const held = r.cache.holdSession(dir, dir, file, viewFacts(dir, `s${i}`));
+      const held = r.cache.holdSession(originAt(dir, file), viewFacts(dir, `s${i}`));
       await answered(held.view);
       held[Symbol.dispose]();
     }
@@ -934,7 +933,7 @@ describe("a storage folder's watch", () => {
     const file = config(["plugins.p.gated"]);
     const view = viewOf(r, file);
     await answered(view);
-    const entry = r.cache.getOrCreate(dir, dir, file);
+    const entry = r.cache.getOrCreate(originAt(dir, file));
     const opened = r.counters.watchersOpened;
     const closed = r.counters.watchersClosed;
     // An edit that changes what the config loads, so the reload builds a
@@ -954,10 +953,10 @@ describe("a storage folder's watch", () => {
   test("removing the session folder, and nothing else, reloads the config, recreates the folder, and the next write shows", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
-    const held = r.cache.holdSession(dir, dir, file, viewFacts(dir, "s1"));
+    const held = r.cache.holdSession(originAt(dir, file), viewFacts(dir, "s1"));
     await answered(held.view);
     held[Symbol.dispose]();
-    const entry = r.cache.getOrCreate(dir, dir, file);
+    const entry = r.cache.getOrCreate(originAt(dir, file));
     const storage = storageOf();
     const before = entry.state.sources.get(STATUS)!;
     await r.reloads.afterRemoving(entry, storage, () => fs.mkdirSync(storage));
@@ -986,7 +985,7 @@ describe("a storage folder's watch", () => {
       "the first write",
     );
     const opened = r.counters.watchersOpened;
-    const key = r.cache.getOrCreate(dir, dir, file).state.sources.get(STATUS);
+    const key = r.cache.getOrCreate(originAt(dir, file)).state.sources.get(STATUS);
     const touches: Array<() => void> = [
       () => fs.chmodSync(storage, 0o700),
       () => fs.utimesSync(storage, new Date(), new Date()),
@@ -1012,7 +1011,7 @@ describe("a storage folder's watch", () => {
     );
     expect(r.counters.watchersOpened).toBe(opened);
     expect(
-      r.cache.getOrCreate(dir, dir, file).state.sources.get(STATUS),
+      r.cache.getOrCreate(originAt(dir, file)).state.sources.get(STATUS),
     ).toEqual(key);
     expect(r.providers.managedStorage.stats().lost).toBe(0);
     expect(draw(view).errors).toEqual([]);
@@ -1040,11 +1039,11 @@ describe("an installed plugin's storage", () => {
       "config.json5",
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const held = r.cache.holdSession(dir, dir, file, viewFacts(dir, "s1"));
+    const held = r.cache.holdSession(originAt(dir, file), viewFacts(dir, "s1"));
     held[Symbol.dispose]();
     // The state holds the folder its config declares, read by a view or not.
     expect(r.providers.managedStorage.stats().folders).toBe(1);
-    const entry = r.cache.getOrCreate(dir, dir, file);
+    const entry = r.cache.getOrCreate(originAt(dir, file));
     const folder = path.join(root(), "p");
     await r.reloads.afterRemoving(entry, folder, () => plugin("", folder));
     expect(
@@ -1077,7 +1076,7 @@ describe("an installed plugin's storage", () => {
       path.join(dev, "plugin.json5"),
       path.join(repo, REPO_PLUGIN_DIR, "p", "plugin.json5"),
     );
-    const entry = r.cache.getOrCreate(dir, dir, file);
+    const entry = r.cache.getOrCreate(originAt(dir, file));
     const installed = path.join(fs.realpathSync(root()), "p", "session");
     expect(installFromRepo(repo, root(), "repo", host.home)).toEqual([
       { path: path.join(root(), "p", "plugin.json5"), placed: "replaced" },

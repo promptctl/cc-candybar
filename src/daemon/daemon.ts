@@ -534,9 +534,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     doctor: inputs.doctorEdge(
       launcher,
       (origin) => {
-        const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
-        renderCache.reload(...at, { kind: "doctor" });
-        const entry = renderCache.getOrCreate(...at);
+        renderCache.reload(origin, { kind: "doctor" });
+        const entry = renderCache.getOrCreate(origin);
         return {
           layers: entry.configLayers,
           error: entry.lastError,
@@ -1122,26 +1121,12 @@ export function verbsOverParts(
     serving: () => parts().limits.serving(),
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
-    configFor: (origin) =>
-      parts().renderCache.getOrCreate(
-        origin.projectDir,
-        origin.cwd,
-        origin.target.path,
-      ).state.config,
+    configFor: (origin) => parts().renderCache.getOrCreate(origin).state.config,
     reloadConfig: (origin) =>
-      parts().renderCache.reload(
-        origin.projectDir,
-        origin.cwd,
-        origin.target.path,
-        { kind: "write" },
-      ),
+      parts().renderCache.reload(origin, { kind: "write" }),
     // The storage keys of the same entry `configFor` reads the config of.
     sourcesFor: (origin) =>
-      parts().renderCache.getOrCreate(
-        origin.projectDir,
-        origin.cwd,
-        origin.target.path,
-      ).state.sources,
+      parts().renderCache.getOrCreate(origin).state.sources,
     lanes: {
       of: (origin, sessionId) => lanesAt(parts(), origin, sessionId),
       clicked: (sessionId, before, after) =>

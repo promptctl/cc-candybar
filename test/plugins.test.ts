@@ -1,3 +1,4 @@
+import { originAt } from "./helpers/render-origin";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING, factsRunning } from "./helpers/facts";
 // [LAW:behavior-not-structure] A plugin, end to end, as the two programs that
@@ -588,7 +589,7 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     good,
     `{ plugins: ["./deploy/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
   );
-  const loaded = loadFromDisk(dir, dir, good, {
+  const loaded = loadFromDisk(originAt(dir, good), {
     clock: systemTimekeeper,
     stateDir: stateDir(homeOf(host)),
     locations: locations(host, homeOf(host)),
@@ -648,7 +649,7 @@ describe("a plugin's own variables", () => {
     );
     expect(rendered).toContain("no data here");
     expect(warnings).toEqual([]);
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -696,7 +697,7 @@ describe("a plugin's own variables", () => {
     );
     expect(warnings).toEqual([]);
     expect(rendered).toContain("hello, world 7 ran open=no");
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -754,7 +755,7 @@ describe("a plugin's own variables", () => {
       p,
       `{ plugins: ["./hello/plugin.json5", "./d/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.hello.s"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -773,7 +774,7 @@ describe("a plugin's own variables", () => {
   });
 
   test("none declared counts zero", () => {
-    const loaded = loadFromDisk(dir, dir, config(), {
+    const loaded = loadFromDisk(originAt(dir, config()), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -922,9 +923,10 @@ describe("an installed plugin", () => {
       "gitdir: ../../../.git/worktrees/w\n",
     );
     const loaded = loadFromDisk(
-      path.join(dir, "main"),
-      path.join(dir, "main/.claude/worktrees/w"),
-      placing("plugins.lit.ticket"),
+      {
+        ...originAt(path.join(dir, "main"), placing("plugins.lit.ticket")),
+        cwd: path.join(dir, "main/.claude/worktrees/w"),
+      },
       {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
@@ -1006,7 +1008,9 @@ describe("an installed plugin", () => {
         path.join(main, ".claude/worktrees/w"),
         path.join(main, "src"),
       ];
-      const states = cwds.map((cwd) => cache.getOrCreate(main, cwd, p).state);
+      const states = cwds.map(
+        (cwd) => cache.getOrCreate({ ...originAt(main, p), cwd }).state,
+      );
       expect(
         states.map((s) => s.config.variables["plugins.lit.data"]),
       ).toMatchObject([
@@ -1018,7 +1022,10 @@ describe("an installed plugin", () => {
       const drawn = await Promise.all(
         cwds.map(async (cwd, i) => {
           // Each through a session's view of its entry, as the daemon draws.
-          using held = cache.holdSession(main, cwd, p, viewFacts(cwd, `s${i}`));
+          using held = cache.holdSession(
+            { ...originAt(main, p), cwd },
+            viewFacts(cwd, `s${i}`),
+          );
           const s = held.state;
           expect(s).toBe(states[i]);
           expect(await held.view.registry.settled(5000)).toEqual([]);
@@ -1068,7 +1075,8 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "outer/inner"), { recursive: true });
     const p = placing("plugins.lit.ticket");
     const load = (): string => {
-      const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, {
+      const inner = { ...originAt(dir, p), cwd: path.join(dir, "outer/inner") };
+      const loaded = loadFromDisk(inner, {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
         locations: locations(host, homeOf(host)),
@@ -1612,7 +1620,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -1671,7 +1679,7 @@ describe("an installed plugin", () => {
         "config.json5",
         `{ segments: { s: { template: "{{ .plugins.lit.nope }}" } }, root: { h: ["s"] } }`,
       );
-      const entry = cache.getOrCreate(repo, repo, p);
+      const entry = cache.getOrCreate(originAt(repo, p));
       expect(entry.lastError).not.toBeNull();
       expect(entry.state.plugins.roots).toContain(
         path.join(repo, ".cc-candybar", "plugins"),
@@ -1754,7 +1762,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -1835,7 +1843,7 @@ describe("an installed plugin", () => {
       `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`,
     );
     const p = placing("plugins.lit.s");
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),
@@ -1997,7 +2005,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
     expect(rendered.indexOf("user-phase")).toBeLessThan(
       rendered.indexOf("repo-ticket"),
     );
-    const loaded = loadFromDisk(repo, repo, undefined, {
+    const loaded = loadFromDisk(originAt(repo), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
       locations: locations(host, homeOf(host)),

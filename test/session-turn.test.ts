@@ -9,6 +9,7 @@
 // own composition (test/helpers/session-rig.ts) and read the way a draw reads
 // it; what moves is an owner, a pick, a request or the update fact.
 
+import { originAt } from "./helpers/render-origin";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -162,7 +163,7 @@ describe("a view that fails to open", () => {
     fs.writeFileSync(configFile, "{}");
 
     expect(() =>
-      rig.cache.holdSession(dir, dir, configFile, requestOf(dir)),
+      rig.cache.holdSession(originAt(dir, configFile), requestOf(dir)),
     ).toThrow(/no update fact/);
     const declaredAtOpen = declarations;
 
@@ -203,7 +204,7 @@ describe("what wakes a view", () => {
     const { rig, changed } = await woken();
     const settled = changed.length;
     const request = requestOf(dir);
-    rig.cache.holdSession(dir, dir, path.join(dir, "config.json5"), {
+    rig.cache.holdSession(originAt(dir, path.join(dir, "config.json5")), {
       ...request,
       hints: { ...request.hints, termCols: 77 },
     })[Symbol.dispose]();

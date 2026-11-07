@@ -1,3 +1,4 @@
+import { originAt } from "./helpers/render-origin";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import { homeOf } from "../src/daemon/home";
 import { FACTS_NOTHING } from "./helpers/facts";
@@ -86,14 +87,14 @@ function rig() {
   cleanups.push(() => cache.close());
   const file = path.join(dir, "config.json5");
   const write = (text: string): void => fs.writeFileSync(file, text);
-  const entry = () => cache.getOrCreate(dir, dir, file);
+  const entry = () => cache.getOrCreate(originAt(dir, file));
   const reload = (): Settled => {
-    cache.reload(dir, dir, file, { kind: "write" });
+    cache.reload(originAt(dir, file), { kind: "write" });
     return loads.at(-1)!;
   };
   const reopened = () => lines.filter((l) => / by=reload /.test(l)).length;
   const open = (sid: string) =>
-    cache.holdSession(dir, dir, file, viewFacts(dir, sid))[Symbol.dispose]();
+    cache.holdSession(originAt(dir, file), viewFacts(dir, sid))[Symbol.dispose]();
   return { cache, lines, loads, causes, write, entry, reload, reopened, open };
 }
 
@@ -207,10 +208,10 @@ test("a catch-up reloads every entry under events-resumed: the one edited while 
   r.write(CONFIG);
   r.open("s1");
   r.cache
-    .holdSession(other, other, otherFile, viewFacts(other, "s2"))
+    .holdSession(originAt(other, otherFile), viewFacts(other, "s2"))
     [Symbol.dispose]();
   const edited = r.entry().state;
-  const kept = r.cache.getOrCreate(other, other, otherFile).state;
+  const kept = r.cache.getOrCreate(originAt(other, otherFile)).state;
   r.write(CONFIG.replace(`"one"`, `"two"`));
   const since = Date.parse("2026-10-27T04:00:00.000Z");
   const before = r.loads.length;
@@ -222,6 +223,6 @@ test("a catch-up reloads every entry under events-resumed: the one edited while 
   expect(r.loads.slice(before).sort()).toEqual(["built", "kept"]);
   expect(r.entry().state).not.toBe(edited);
   expect(JSON.stringify(r.entry().state.config)).toContain(`"two"`);
-  expect(r.cache.getOrCreate(other, other, otherFile).state).toBe(kept);
+  expect(r.cache.getOrCreate(originAt(other, otherFile)).state).toBe(kept);
   expect(r.reopened()).toBe(1);
 });

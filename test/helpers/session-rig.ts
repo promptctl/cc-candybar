@@ -4,6 +4,7 @@
 // [LAW:one-source-of-truth] The golden over the payload's composition and the
 // tests of the turn a view draws from open their views through this one rig.
 
+import { originAt } from "./render-origin";
 import { systemFilesystem } from "../../src/disk/system-filesystem";
 import type { SessionRequest } from "../../src/facts/recording";
 import fs from "node:fs";
@@ -227,7 +228,7 @@ export async function openSettled(
   const configFile = path.join(dir, "config.json5");
   fs.writeFileSync(configFile, "{}");
   const request = requestOf(dir);
-  const held = rig.cache.holdSession(dir, dir, configFile, request);
+  const held = rig.cache.holdSession(originAt(dir, configFile), request);
   cleanups.push(() => held[Symbol.dispose]());
   const { view } = held;
   await view.settle(AT).landed;

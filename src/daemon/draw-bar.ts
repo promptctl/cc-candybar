@@ -260,11 +260,7 @@ function switchesAt(
   sessionId: string,
   tmux: boolean,
 ): LaneSwitches {
-  using hold = parts.renderCache.hold(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-  );
+  using hold = parts.renderCache.hold(origin);
   return laneSwitches(sessionGlobals(parts, sessionId, hold.state), tmux);
 }
 
@@ -364,12 +360,7 @@ export function setUpRender(
   // (brandon-unfiled-3248.6rc). The setup owns the hold from here: a throw
   // before it is returned releases it, and the setup releases it on every exit
   // of the render that disposes it.
-  const hold = renderCache.holdSession(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-    req,
-  );
+  const hold = renderCache.holdSession(origin, req);
   return setUpDraw(hold, req, hintsError, at, facts);
 }
 

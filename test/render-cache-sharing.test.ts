@@ -1,3 +1,4 @@
+import { originAt } from "./helpers/render-origin";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING } from "./helpers/facts";
 import { drawPayload } from "./helpers/draw-payload";
@@ -211,7 +212,7 @@ describe("entries share a compile exactly when their configs compile alike", () 
     const states = ["a", "b", "c"].map((d) => {
       const cwd = path.join(dir, d);
       fs.mkdirSync(cwd);
-      return cache.getOrCreate(cwd, cwd, cfg).state;
+      return cache.getOrCreate(originAt(cwd, cfg)).state;
     });
     expect(new Set(states.map((s) => s.compiled)).size).toBe(1);
     expect(cache.stats).toMatchObject({
@@ -239,15 +240,15 @@ describe("entries share a compile exactly when their configs compile alike", () 
     const dirs = ["a", "b", "c"].map((d) => path.join(dir, d));
     for (const d of dirs) {
       fs.mkdirSync(d);
-      cache.getOrCreate(d, d, cfg);
+      cache.getOrCreate(originAt(d, cfg));
     }
     const built = () =>
       lines.filter((l) => l.startsWith("render-cache compile built ")).length;
     expect(built()).toBe(1);
     fs.writeFileSync(cfg, carouselConfig("other", "beta"));
-    for (const d of dirs) cache.reload(d, d, cfg, { kind: "write" });
+    for (const d of dirs) cache.reload(originAt(d, cfg), { kind: "write" });
     expect(built()).toBe(2);
-    const states = dirs.map((d) => cache.getOrCreate(d, d, cfg).state);
+    const states = dirs.map((d) => cache.getOrCreate(originAt(d, cfg)).state);
     expect(new Set(states.map((s) => s.compiled)).size).toBe(1);
     expect(cache.stats).toMatchObject({ size: 3, compiles: 1 });
     for (const s of states) expect(nextOf(render(s))).toBe("alpha");
@@ -261,8 +262,8 @@ describe("entries share a compile exactly when their configs compile alike", () 
     const { cache, sessionState } = makeCache(64 * COMPILE_BYTES);
     const one = file("one.json5", carouselConfig("mode", "alpha"));
     const two = file("two.json5", carouselConfig("other", "beta"));
-    const a = cache.getOrCreate(dir, dir, one).state;
-    const b = cache.getOrCreate(dir, dir, two).state;
+    const a = cache.getOrCreate(originAt(dir, one)).state;
+    const b = cache.getOrCreate(originAt(dir, two)).state;
     expect(a.compiled).not.toBe(b.compiled);
     expect(cache.stats.compiles).toBe(2);
     expect(nextOf(render(a))).toBe("beta");
@@ -279,7 +280,7 @@ test("a load that fails after compiling leaves no compile behind", () => {
     "clash.json5",
     `{ actions: { step: { set: "k", min: 0, max: 3, by: 1 }, flip: { set: "k", cycle: ["x", "y"] } } }`,
   );
-  const entry = cache.getOrCreate(dir, dir, clash);
+  const entry = cache.getOrCreate(originAt(dir, clash));
   expect(entry.lastError).toMatch(/key "k" is an integer spec/);
   // The entry draws the bundled default: its compile is the only one held.
   expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
@@ -290,7 +291,7 @@ describe("the cache is bounded by bytes", () => {
     const { cache, lines } = makeCache(2 * ENTRY_BYTES + COMPILE_BYTES);
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
     const at = (d: string) =>
-      cache.getOrCreate(path.join(dir, d), path.join(dir, d), cfg);
+      cache.getOrCreate(originAt(path.join(dir, d), cfg));
     const [, b, c] = ["a", "b", "c"].map((d) => at(d).state);
     expect(cache.stats).toMatchObject({ size: 2, compiles: 1 });
     expect(cache.stats.accountedBytes).toBeLessThanOrEqual(
@@ -315,7 +316,7 @@ describe("the cache is bounded by bytes", () => {
     const { cache, lines } = makeCache(64 * COMPILE_BYTES, 2);
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
     const at = (d: string) =>
-      cache.getOrCreate(path.join(dir, d), path.join(dir, d), cfg);
+      cache.getOrCreate(originAt(path.join(dir, d), cfg));
     const [, b, c] = ["a", "b", "c"].map((d) => at(d).state);
     expect(cache.stats.size).toBe(2);
     expect(cache.stats.accountedBytes).toBeLessThan(cache.stats.budgetBytes);
@@ -329,7 +330,7 @@ describe("the cache is bounded by bytes", () => {
   test("a budget no entry fits still serves the newest", () => {
     const { cache } = makeCache(0);
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
-    const state = cache.getOrCreate(dir, dir, cfg).state;
+    const state = cache.getOrCreate(originAt(dir, cfg)).state;
     expect(cache.stats.size).toBe(1);
     expect(nextOf(render(state))).toBe("beta");
   });
@@ -345,11 +346,11 @@ describe("the cache is bounded by bytes", () => {
     fs.mkdirSync(b);
     const cfgA = file("a.json5", carouselConfig("mode", "alpha"));
     const cfgB = file("b.json5", carouselConfig("mode", "alpha"));
-    cache.getOrCreate(a, a, cfgA);
-    cache.getOrCreate(b, b, cfgB);
+    cache.getOrCreate(originAt(a, cfgA));
+    cache.getOrCreate(originAt(b, cfgB));
     expect(cache.stats).toMatchObject({ size: 2, compiles: 1 });
     fs.writeFileSync(cfgB, carouselConfig("other", "beta"));
-    cache.reload(b, b, cfgB, { kind: "write" });
+    cache.reload(originAt(b, cfgB), { kind: "write" });
     // `b` moved onto a compile of its own; `a`, least recently used, left.
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
     expect(cache.stats.accountedBytes).toBeLessThanOrEqual(
@@ -358,7 +359,7 @@ describe("the cache is bounded by bytes", () => {
     expect(
       lines.filter((l) => l.startsWith("config disposed reason=evict")),
     ).toHaveLength(1);
-    expect(nextOf(render(cache.getOrCreate(b, b, cfgB).state))).toBe("alpha");
+    expect(nextOf(render(cache.getOrCreate(originAt(b, cfgB)).state))).toBe("alpha");
   });
 
   test("a compile leaves with the last state carrying it, held or not", () => {
@@ -366,13 +367,13 @@ describe("the cache is bounded by bytes", () => {
     const one = file("one.json5", carouselConfig("mode", "alpha"));
     const two = file("two.json5", carouselConfig("other", "beta"));
     const three = file("three.json5", carouselConfig("third", "alpha"));
-    cache.getOrCreate(dir, dir, one);
-    cache.getOrCreate(dir, dir, two);
+    cache.getOrCreate(originAt(dir, one));
+    cache.getOrCreate(originAt(dir, two));
     // `one`'s entry was evicted unheld: its compile left with it.
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
     {
-      using held = cache.hold(dir, dir, two);
-      cache.getOrCreate(dir, dir, three);
+      using held = cache.hold(originAt(dir, two));
+      cache.getOrCreate(originAt(dir, three));
       // `two`'s state is retired but a render draws with it: its compile stays.
       expect(cache.stats).toMatchObject({ size: 1, compiles: 2, retired: 1 });
       expect(nextOf(render(held.state))).toBe("alpha");
@@ -464,12 +465,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const entry = (i: number) => {
     const cwd = path.join(dir, `c${i}`);
     fs.mkdirSync(cwd);
-    using held = cache.holdSession(
-      cwd,
-      cwd,
-      undefined,
-      viewFacts(cwd, `e${i}`),
-    );
+    using held = cache.holdSession(originAt(cwd), viewFacts(cwd, `e${i}`));
     drawn(held.view);
     return held.state;
   };
@@ -486,9 +482,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const shared = keep[0]!;
   const view = (i: number): SessionView => {
     using held = cache.holdSession(
-      dir + "/c0",
-      dir + "/c0",
-      undefined,
+      originAt(dir + "/c0"),
       viewFacts(dir + "/c0", `v${i}`),
     );
     expect(held.state).toBe(shared);
@@ -509,9 +503,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const walked = async (i: number): Promise<SessionView> => {
     const sid = `w${i}`;
     using held = cache.holdSession(
-      dir + "/c0",
-      dir + "/c0",
-      undefined,
+      originAt(dir + "/c0"),
       viewFacts(dir + "/c0", sid),
     );
     recordRender(sessionState, sid);
