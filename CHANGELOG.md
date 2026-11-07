@@ -1,3 +1,10 @@
+## [1.210.4](https://github.com/promptctl/cc-candybar/compare/v1.210.3...v1.210.4) (2026-11-07)
+
+### Bug Fixes
+
+* **update-act:** an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3) ([#680](https://github.com/promptctl/cc-candybar/issues/680)) ([fa8e87c](https://github.com/promptctl/cc-candybar/commit/fa8e87c85367b73007971b034e493d8b29912a51))
+* **watchers:** a storage folder's fault clears when its watch or stat recovers (brandon-unfiled-3248.tvhj) ([#685](https://github.com/promptctl/cc-candybar/issues/685)) ([7b4203a](https://github.com/promptctl/cc-candybar/commit/7b4203a84d6fa6c8c96ff5a612bc0d128bb97b40))
+
 ## [1.210.3](https://github.com/promptctl/cc-candybar/compare/v1.210.2...v1.210.3) (2026-11-07)
 
 ### Bug Fixes
