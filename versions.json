@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-679",
+      "ref": "refs/pull/679/merge",
+      "sha": "b26d6f73ab6755d8e3a5c984786d20d4c94a0e06",
+      "timestamp": "2026-11-07T11:31:15.355Z",
+      "commits": [
+        {
+          "sha": "b26d6f73ab6755d8e3a5c984786d20d4c94a0e06",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:29:24Z",
+          "message": "Merge 6cc452bca351498254c0b46340f04305c5e6ac7b into 3e574dde3244026257856ed4e675a0275bc287d1\n"
+        },
+        {
+          "sha": "6cc452bca351498254c0b46340f04305c5e6ac7b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:13:32-07:00",
+          "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-680",
       "ref": "refs/pull/680/merge",
       "sha": "281c81a82f55482f7e456079860cfe2bafe84685",
@@ -106,28 +128,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-07T11:15:43Z",
           "message": "chore(release): set `package.json` to 1.210.2 [skip ci]\n\n## [1.210.2](https://github.com/promptctl/cc-candybar/compare/v1.210.1...v1.210.2) (2026-11-07)\n\n### Bug Fixes\n\n* **state:** concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1) ([#678](https://github.com/promptctl/cc-candybar/issues/678)) ([3bc07ed](https://github.com/promptctl/cc-candybar/commit/3bc07edfbe9d321a6fea2f6a74c80414ed0ef5e7))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-679",
-      "ref": "refs/pull/679/merge",
-      "sha": "7af80aebeea86d6643dfca0b08a55824084e6fb1",
-      "timestamp": "2026-11-07T11:23:02.090Z",
-      "commits": [
-        {
-          "sha": "7af80aebeea86d6643dfca0b08a55824084e6fb1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:21:30Z",
-          "message": "Merge d89d14e1a5f583b45dd6eefb73dfb7957b5632c0 into f92fb0e65423da82e8e6030b5d393e6c9369d852\n"
-        },
-        {
-          "sha": "d89d14e1a5f583b45dd6eefb73dfb7957b5632c0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:13:32-07:00",
-          "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
