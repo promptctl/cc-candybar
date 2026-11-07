@@ -1099,8 +1099,7 @@ function originCtx(
     // is its cache entry's, and a click that must not act on the old config
     // reloads that entry from the file it just wrote.
     configFor: (origin) =>
-      cache.getOrCreate(origin).state
-        .config,
+      cache.getOrCreate(origin).state.config,
     reloadConfig: (origin) =>
       cache.reload(origin, { kind: "write" }),
   };

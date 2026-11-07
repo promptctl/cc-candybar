@@ -288,22 +288,39 @@ describe("RenderCache", () => {
     }
   });
 
-  test("cache identity is (projectDir, cwd, configFile)", () => {
+  test("cache identity is (projectDir, cwd, the named path)", () => {
     const { cache, cleanups } = makeCache();
     try {
-      // Same (projectDir, cwd, configFile=undefined) → same entry.
+      // Same (projectDir, cwd, no named path) → same entry.
       const a = cache.getOrCreate(originAt("/x"));
       const b = cache.getOrCreate(originAt("/x"));
       expect(a).toBe(b);
       expect(cache.size).toBe(1);
 
-      // Distinct configFile values produce distinct entries — the CLI
+      // Distinct named paths produce distinct entries — the CLI
       // override is a real input to config resolution and must be part
       // of the cache key.
       const c = cache.getOrCreate(originAt("/x", "/tmp/alt.json5"));
       const d = cache.getOrCreate(originAt("/x", "/tmp/other.json5"));
       expect(c).not.toBe(a);
       expect(d).not.toBe(c);
+      expect(cache.size).toBe(3);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // A session in a subdirectory of its project resolves cwd layers its
+  // project root does not, so projectDir and cwd are separate parts of the key.
+  test("projectDir and cwd are separate parts of cache identity", () => {
+    const { cache, cleanups } = makeCache();
+    try {
+      const root = cache.getOrCreate(originAt("/x"));
+      const sub = cache.getOrCreate({ ...originAt("/x"), cwd: "/x/sub" });
+      const swapped = cache.getOrCreate({ ...originAt("/x"), projectDir: "/x/sub" });
+      expect(cache.getOrCreate({ ...originAt("/x/sub"), projectDir: "/x" })).toBe(sub);
+      expect(sub).not.toBe(root);
+      expect(swapped).not.toBe(sub);
       expect(cache.size).toBe(3);
     } finally {
       for (const fn of cleanups) fn();

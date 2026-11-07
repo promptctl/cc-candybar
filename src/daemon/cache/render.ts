@@ -618,8 +618,9 @@ export interface RenderCacheStats {
 
 // [LAW:types-are-the-program] What config resolution reads of a render origin:
 // where the session runs and the file its target names, never what named it.
-// Every `RenderOrigin` is one, so a caller passes its origin as it holds it,
-// and a swapped or missing field is a type error rather than another path.
+// It is what an entry keeps and a load reads. The cache's entry points take
+// the whole `RenderOrigin`, whose source says whether a file is named, so an
+// origin built without its path is a type error rather than the search.
 // [LAW:one-source-of-truth] Picked from `RenderOrigin`, so a resolution input
 // added there is one field here.
 export type LoadOrigin = Pick<RenderOrigin, "projectDir" | "cwd"> & {
@@ -1128,8 +1129,6 @@ export function loadChain(
 // the state it built is never constructed-then-discarded and the no-file
 // default is built once, not twice; `cc-candybar doctor`, which has no cache,
 // reads the outcome and disposes the state it was handed.
-// [LAW:single-enforcer] The one place an origin is spelled out into the
-// resolver's arguments.
 export function loadFromDisk(
   { projectDir, cwd, target }: LoadOrigin,
   deps: StateDeps,
@@ -1575,7 +1574,7 @@ export class RenderCache<
   // same fields and a renderable state. The renderer reads the data; no
   // special-case branches between "first load", "reload",
   // "reload-after-error".
-  getOrCreate(origin: LoadOrigin): CacheEntry {
+  getOrCreate(origin: RenderOrigin): CacheEntry {
     const key = cacheKey(origin);
     const existing = this.entries.get(key);
     if (existing) {
@@ -1640,7 +1639,7 @@ export class RenderCache<
   // released, so the render finishes on the state it resolved its payload
   // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
   // every exit, a throw included.
-  hold(origin: LoadOrigin): Hold {
+  hold(origin: RenderOrigin): Hold {
     const entry = this.getOrCreate(origin);
     return this.holdState(entry, entry.state);
   }
@@ -1673,7 +1672,7 @@ export class RenderCache<
   // [LAW:single-enforcer] `facts` is the request the render is drawn for: the
   // view is declared with it here, opened (openView) or kept (`requested`),
   // so no view is drawn declared for another request.
-  holdSession(origin: LoadOrigin, facts: F): SessionHold<S, F> {
+  holdSession(origin: RenderOrigin, facts: F): SessionHold<S, F> {
     const held = this.hold(origin);
     let view: SessionView<S, F>;
     let lease: ViewHold;
@@ -2107,7 +2106,7 @@ export class RenderCache<
   // config until the reload has landed (a save releasing the picks the file
   // now holds, a doctor verdict on the files as they are). The watcher still
   // fires after a write, and its reload of the same bytes keeps the state.
-  reload(origin: LoadOrigin, cause: ExplicitLoad): void {
+  reload(origin: RenderOrigin, cause: ExplicitLoad): void {
     this.reloadInto(this.getOrCreate(origin), cause);
   }
 
@@ -2185,8 +2184,7 @@ export class RenderCache<
     const { targets, unresolved } = paths;
     // [LAW:one-source-of-truth] The key names the target set and the folders
     // it binds, so the registry's `follow` rebinds exactly when either moved.
-    const { projectDir, cwd, target } = entry.origin;
-    const key = `config:${projectDir}:${cwd}:${target.path ?? ""}:${paths.key}`;
+    const key = `config:${cacheKey(entry.origin)}:${paths.key}`;
     // [LAW:single-enforcer] One reload dispatcher per cache entry: any
     // change the entry's watch hears re-resolves its whole chain (so a
     // higher-precedence file appearing supersedes a lower one) and reloads.
@@ -2207,12 +2205,12 @@ export class RenderCache<
     // entry now hears: a change that fires nothing is read against this line.
     this.log(
       "info",
-      `config watch bound projectDir=${projectDir} cwd=${cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch.handle.deaf.length}`,
+      `config watch bound projectDir=${entry.origin.projectDir} cwd=${entry.origin.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch.handle.deaf.length}`,
     );
     for (const { path: at, reason } of unresolved)
       this.log(
         "warn",
-        `config watch unresolved projectDir=${projectDir} path=${at} reason=${reason}`,
+        `config watch unresolved projectDir=${entry.origin.projectDir} path=${at} reason=${reason}`,
       );
   }
 
