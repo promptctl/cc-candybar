@@ -111,6 +111,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -552,7 +553,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   const sessionState = new SessionState(SINGLE_RUN);
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, {
     links: TEST_LINKS,
     cwd: process.cwd(),
@@ -887,7 +888,7 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      sessionState,
+      readAsWritten(sessionState),
     );
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
@@ -949,7 +950,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      sessionState,
+      readAsWritten(sessionState),
     );
     try {
       const compiled = registerDslConfig(config, registry, {

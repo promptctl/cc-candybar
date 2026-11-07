@@ -608,6 +608,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           source: sessionSource({
             providers: payloadProviders,
             sessionState,
+            stateGates: gates.state,
             history: (sessionId) => settingsHistory.depth(sessionId),
             // Measured against the gate of the config the view draws with.
             navigation: (sessionId, config) =>

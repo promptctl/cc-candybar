@@ -73,13 +73,16 @@ describe("state-validators contract", () => {
     }
   });
 
-  test("toolbar-expanded validator rejects the empty string (no silent guess)", () => {
-    // [LAW:no-silent-failure] Empty value on the wire is structurally
-    // ambiguous (did the operator mean "0", or did they forget to provide
-    // a value?). Accepting it would be a silent semantic guess; the
-    // validator rejects it explicitly so the operator sees the malformed
-    // input rather than a quietly-applied default.
-    const result = bare().validate("toolbar-expanded", "");
+  test("toolbar-expanded validator accepts its own stored false, and nothing else empty-shaped", () => {
+    // [LAW:types-are-the-program] A stored value reads back held only if its
+    // validator accepts its own output unchanged (Gate.verdict): "" is this
+    // validator's canonical false, so it is accepted as itself and stores
+    // what "0" and "false" store — no state the wire could not already reach.
+    expect(bare().validate("toolbar-expanded", "")).toEqual({
+      ok: true,
+      value: "",
+    });
+    const result = bare().validate("toolbar-expanded", " ");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/expected boolean-ish/);
   });

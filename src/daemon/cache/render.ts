@@ -96,6 +96,7 @@ import {
 import { ownedBy, pluginNs } from "../../config/loader/plugin-scope.js";
 import { projectionsOf } from "../../config/loader/projections.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
+import { judged } from "../foundations/judged-state.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
 // (projectDir, cwd) tuple: the parsed config, the variable store +
@@ -929,11 +930,13 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // the historical behavior when omitted.
   // [LAW:no-silent-failure] A directory declares no `shell` or `file` source:
   // each is a session view's, run by the facts arm it follows.
+  // [LAW:single-enforcer] Judged by this config's gate, fetched at each read:
+  // a value a session holds from an older config reads as absent.
   const registry = new SourceRegistry(
     NO_RUNS,
     store,
     config.globals.default_empty_value ?? "",
-    deps.sessionState,
+    judged(deps.sessionState, () => deps.gates.state.gateFor(config)),
   );
 
   let registration: Registration;

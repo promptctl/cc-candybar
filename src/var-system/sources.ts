@@ -44,7 +44,7 @@ import {
 } from "../utils/outcome.js";
 import type { SourceParse } from "./parse.js";
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
-import type { SessionStateReader } from "../daemon/session-state.js";
+import type { JudgedState } from "../daemon/foundations/judged-state.js";
 import { Holds } from "../utils/holds.js";
 import { timeoutSignal } from "../time";
 import {
@@ -60,7 +60,11 @@ import {
 
 // What a registry reads of the session store: a `state` variable's value, and
 // the revision its frames are drawn against.
-type StateReads = Pick<SessionStateReader, "get" | "revision">;
+// [LAW:types-are-the-program] Judged by the config the registry renders
+// (src/daemon/foundations/judged-state.ts): a `state` variable reads a value
+// written under an older config as absent — its default — so a control and
+// the bar never draw a value its gate would refuse.
+type StateReads = JudgedState;
 
 export { SHELL_READ_TIMEOUT_MS, type ReadMode } from "./source-runs.js";
 

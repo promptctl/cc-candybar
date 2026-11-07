@@ -17,6 +17,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const AT = 1_800_000_000 as Instant;
 
@@ -36,7 +37,7 @@ function frameOf(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   const compiled = registerDslConfig(config, registry, {
     links: TEST_LINKS,
     cwd: "/tmp",

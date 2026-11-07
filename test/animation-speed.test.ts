@@ -27,6 +27,7 @@ import {
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // A whole multiple of the ten-second cycles below, so `frames` reads its
 // first frame at at(0).
@@ -191,7 +192,7 @@ describe("a template's frames run at the session's animation speed; realtimeFram
     seconds: readonly number[],
   ): string => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
     const compiled = registerDslConfig(CONFIG, registry, {
       links: TEST_LINKS,
       cwd: "/tmp",

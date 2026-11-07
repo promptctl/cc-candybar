@@ -109,7 +109,10 @@ describe("one config's own contributions", () => {
   });
 
   test("a built-in key re-claimed, an empty key and a slash-bearing key are refused", () => {
-    const ks = keyspace({ theme: (raw) => ({ ok: true, value: raw }) }, "state");
+    const ks = keyspace(
+      { theme: { validate: (raw) => ({ ok: true, value: raw }), admits: "a theme" } },
+      "state",
+    );
     expect(() =>
       ks.gateFor(declares({ key: "theme", spec: { kind: "int" } })),
     ).toThrow(/"theme" is a built-in state key/);
@@ -185,7 +188,10 @@ describe("a daemon-wide key", () => {
   });
 
   test("a registration that cannot gate throws and leaves the keyspace as it was", () => {
-    const ks = keyspace({ theme: (raw) => ({ ok: true, value: raw }) }, "state");
+    const ks = keyspace(
+      { theme: { validate: (raw) => ({ ok: true, value: raw }), admits: "a theme" } },
+      "state",
+    );
     const bare = declares();
     const dispose = ks.register("mode", ["red"]);
     expect(() => ks.register("theme", ["x"])).toThrow(/built-in state key/);

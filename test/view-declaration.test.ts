@@ -297,6 +297,7 @@ function gitCache() {
       source: sessionSource({
         providers: providers as never,
         sessionState,
+        stateGates: bareGates().state,
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),

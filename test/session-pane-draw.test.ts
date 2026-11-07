@@ -145,6 +145,7 @@ function daemonDraw() {
   const source = sessionSource({
     providers,
     sessionState,
+    stateGates: gates.state,
     history: () => NEVER_CLICKED.history,
     navigation: () => NEVER_CLICKED.back,
   });

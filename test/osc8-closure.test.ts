@@ -32,6 +32,7 @@ import { osc8Sequences } from "@promptctl/rich-js";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -70,7 +71,7 @@ function render(src: string, opts: BuildLineOptions): Frame {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
   return drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), opts).frame;
 }

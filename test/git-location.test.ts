@@ -19,6 +19,7 @@ import { VariableStore } from "../src/var-system/store";
 import { TEST_LINKS } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, stdio: "pipe" });
@@ -67,7 +68,7 @@ function drawAll(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   const sink = new Map<string, readonly RichText[]>();
   try {
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });

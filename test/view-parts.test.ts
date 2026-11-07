@@ -23,6 +23,7 @@ import { recordRender, testVerbContext } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { textOf, type Frame } from "../src/render/frame";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -38,7 +39,7 @@ const B = instantOf(new Date(2026, 5, 4, 12, 34, 57));
 // A view of `config`: its store and registry, and the compile it draws with.
 function viewOf(config: ValidatedConfig, sessionState = new SessionState(SINGLE_RUN)) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
   const errors: string[] = [];
   const warnings: RenderWarning[] = [];

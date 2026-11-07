@@ -85,16 +85,19 @@ export function requireSwatchable(
 // rounds of a multiply–xorshift mix) picks one of the `count - 1` others. The
 // render passes its own instant, so every render offers a fresh pick and a
 // render at a given instant offers the same one. With one option there is no
-// other, and the pick is that option. Exported for unit testing.
+// other, and the pick is that option. With no option at the centre (the key
+// holds none of them: carousel.ts ringAround), every option is another, and
+// the pick is any of the `count`. Exported for unit testing.
 export function randomOther(
   seed: number,
   count: number,
-  centre: number,
+  centre: number | undefined,
 ): number {
   let h = Math.imul(seed ^ (seed >>> 16), 0x45d9f3b);
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
   h ^= h >>> 16;
-  return (centre + 1 + ((h >>> 0) % Math.max(count - 1, 1))) % count;
+  const others = centre === undefined ? count : Math.max(count - 1, 1);
+  return ((centre ?? -1) + 1 + ((h >>> 0) % others)) % count;
 }
 
 /** The palette `option` — by default the one in force — would put in force. */
@@ -171,17 +174,17 @@ export function swatchesFuncs(
         // step through the ring a carousel over the same key turns, and ? to
         // another option at random.
         const steps = (): readonly PickerStep[] => {
-          const at = ringAround(
+          const ring = ringAround(
             options,
             readVar(renderBinding(runtime, "swatches").store, apply.stateVar),
           );
           return [
-            { glyph: CAROUSEL_PREV, option: options[at(-1)]! },
+            { glyph: CAROUSEL_PREV, option: options[ring.prev]! },
             {
               glyph: SWATCHES_RANDOM,
-              option: options[randomOther(clock().getTime(), count, at(0))]!,
+              option: options[randomOther(clock().getTime(), count, ring.at)]!,
             },
-            { glyph: CAROUSEL_NEXT, option: options[at(1)]! },
+            { glyph: CAROUSEL_NEXT, option: options[ring.next]! },
           ];
         };
         const [line] = renderPicker(

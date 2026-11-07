@@ -55,8 +55,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   test("direct SessionState.set is visible on next render", () => {
     const { sessionState, render } = cascadeBar();
     expect(render()).toContain("theme=(unset)");
-    sessionState.set(SESSION_ID, "theme", "ocean");
-    expect(render()).toContain("theme=ocean");
+    sessionState.set(SESSION_ID, "theme", "dracula");
+    expect(render()).toContain("theme=dracula");
   });
 
   test("set-state theme write changes the rendered COLORS on next render (k5a.4)", async () => {

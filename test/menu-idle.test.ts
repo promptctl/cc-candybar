@@ -24,6 +24,7 @@ import {
   EDIT_MODE_ARRANGE,
 } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
+import type { DslConfig } from "../src/config/dsl-types";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import {
   CLOSING_FLASH_SECONDS,
@@ -406,6 +407,46 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     await closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held("groups.more")).toBe(DISCLOSURE_CLOSED);
     expect(menuRows(rt.draw(instantOf(new Date())))).toBe(0);
+  });
+
+  describe("an accordion whose key holds a member an older config declared", () => {
+    // `details` is open by default on the shared key, with `inner` inside it.
+    // The stale member is foreign to this config, so which menu is open is
+    // read as the bar draws it: `details`, by default.
+    const ACCORDION = `{ root: { v: [
+      { h: ['directory', 'model'] },
+      { h: [
+        { kind: 'group', name: 'details', label: 'session details', key: 'drawer', open: true, children: [
+          { seg: 'model', id: 'model-details' },
+          { kind: 'group', name: 'inner', label: 'inner', children: [{ seg: 'directory', id: 'directory-inner' }] },
+        ] },
+        { kind: 'group', name: 'links', label: 'links', key: 'drawer', children: [{ seg: 'model', id: 'model-links' }] },
+      ] },
+    ] } }`;
+    const keysOf = (config: DslConfig) => {
+      const { menus } = disclosureNest(config);
+      return {
+        drawer: menus.find((d) => d.member === "details")!.key,
+        inner: menus.find((d) => d.member === "inner")!,
+      };
+    };
+
+    test("the idle close shuts the group open by default", async () => {
+      const rt = idleBar(ACCORDION);
+      const { drawer } = keysOf(rt.config);
+      rt.ctx.sessionState.set(SID, drawer, "oldgroup");
+      await closeIdleMenus(SID, IDLE, rt.ctx);
+      expect(rt.held(drawer)).toBe(DISCLOSURE_CLOSED);
+    });
+
+    test("opening a sibling closes what was open inside the default", async () => {
+      const rt = idleBar(ACCORDION);
+      const { drawer, inner } = keysOf(rt.config);
+      rt.ctx.sessionState.set(SID, drawer, "oldgroup");
+      rt.ctx.sessionState.set(SID, inner.key, inner.member);
+      await rt.clickWriting(drawer, "links");
+      expect(rt.held(inner.key)).toBe(DISCLOSURE_CLOSED);
+    });
   });
 
   test("with nothing open it writes nothing, and says so", async () => {

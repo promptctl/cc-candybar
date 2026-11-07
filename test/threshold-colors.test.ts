@@ -40,6 +40,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
 const PALETTES = ["textual-dark", "textual-light"] as const;
@@ -220,7 +221,7 @@ function renderOne(
     : narrowed.segments;
   const one = { ...narrowed, segments };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   try {
     const compiled = registerDslConfig(one, registry, { links: TEST_LINKS, cwd: process.cwd() });
     return drawPayload(

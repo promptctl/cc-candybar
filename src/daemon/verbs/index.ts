@@ -28,6 +28,7 @@ import {
 } from "../../proc/launch";
 import type { Locations } from "../paths";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
+import { judged, type JudgedState } from "../foundations/judged-state";
 import { holdClickError } from "../click-error";
 import type { Instant } from "../../utils/instant";
 import { sleep } from "../../time";
@@ -572,8 +573,14 @@ const openVscode: VerbHandler = (_sid, [target = ""], ctx) => {
 // [LAW:one-source-of-truth] SessionState is the canonical store for
 // toolbar-expanded state (eir merge). Toggle via set/clear; the file-backed
 // storage owned by the daemon process persists the change automatically.
+// [LAW:single-enforcer] Whether it is expanded is an interpretation of the
+// stored value, so it reads as the bar draws it: a value the config refuses
+// is collapsed here as it is there, and the first click expands.
 const toolbarToggle: VerbHandler = (sessionId, _args, ctx) => {
-  const expanded = ctx.navigating.get(sessionId, "toolbar-expanded");
+  const expanded = judgedReads(ctx, ctx.navigating).get(
+    sessionId,
+    "toolbar-expanded",
+  );
   if (expanded) ctx.navigating.clear(sessionId, "toolbar-expanded");
   else ctx.navigating.set(sessionId, "toolbar-expanded", "1");
 };
@@ -725,24 +732,24 @@ const stepState: VerbHandler = (sid, args, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const stored = ctx.sessionState.get(sid, key);
-  const clamped =
-    stored && STEP_INT_RE.test(stored)
-      ? clampTo(params, parseInt(stored, 10))
-      : stepFrom(
-          "step-state",
-          key,
-          params,
-          stateKeySeed(config, (k) => ctx.sessionState.get(sid, k), key),
-        );
-  const next = stepWithin(clamped, by, params.min, params.max);
+  // [LAW:single-enforcer] Read as the bar draws it: a held range value is an
+  // in-range integer by the gate's own verdict, and a foreign one — a value
+  // an older config's range admitted — steps from the seed the bar draws,
+  // never from a clamp of a value it does not.
+  const pick = judgedPick(ctx, sid);
+  const stored = pick(key);
+  const from =
+    stored === null
+      ? stepFrom("step-state", key, params, stateKeySeed(config, pick, key))
+      : parseInt(stored, 10);
+  const next = stepWithin(from, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
   ctx.navigating.set(sid, key, result.value);
   ctx.log(
     "info",
-    `step-state: ${key} ${clamped}→${result.value} (by ${by}, session=${sid})`,
+    `step-state: ${key} ${from}→${result.value} (by ${by}, session=${sid})`,
   );
 };
 
@@ -761,7 +768,7 @@ function refuseDisorderedPicks(
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx, sid),
-    (k) => ctx.sessionState.get(sid, k),
+    judgedPick(ctx, sid),
     picks,
   );
   if (problems.length > 0) {
@@ -890,6 +897,29 @@ function sessionConfig(ctx: Unbound, sid: string): DslConfig {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
 
+// [LAW:single-enforcer] A session's state as the config it renders reads it
+// (src/daemon/foundations/judged-state.ts): what a verb that interprets a
+// stored value reads. Raw reads stay where the stored bytes are the subject —
+// a read choosing what a write releases runs against the reloaded config,
+// under which the value it releases is foreign by definition.
+// A session that has never rendered has no config, so nothing of it is
+// judged: its writes close what they close by the stored values, as its nest
+// (`nestOf`) already reads it.
+function judgedReads(ctx: Unbound, store: SessionStateReader): JudgedState {
+  return judged(store, (sid) => {
+    const origin = recordedOrigin(ctx, sid);
+    return origin === null
+      ? null
+      : ctx.gates.state.gateFor(ctx.configFor(origin));
+  });
+}
+
+// The pick a verb's settings helpers take, judged.
+function judgedPick(ctx: Unbound, sid: string): (key: string) => string | null {
+  const reads = judgedReads(ctx, ctx.sessionState);
+  return (key) => reads.get(sid, key);
+}
+
 // A session's lane switches as a click found them, and their read over the
 // config it renders with now. Null for a session that has never rendered,
 // which has no config to switch them.
@@ -959,11 +989,7 @@ const setConfig: VerbHandler = (sid, args, ctx) => {
   const result = gate.validate(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
   const home = originHome(ctx, origin);
-  const landing = durableLanding(
-    config,
-    (k) => ctx.sessionState.get(sid, k),
-    key,
-  );
+  const landing = durableLanding(config, judgedPick(ctx, sid), key);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
   ctx.log(
@@ -1000,11 +1026,7 @@ const stepConfig: VerbHandler = (sid, args, ctx) => {
     );
   }
   const home = originHome(ctx, origin);
-  const landing = durableLanding(
-    config,
-    (k) => ctx.sessionState.get(sid, k),
-    key,
-  );
+  const landing = durableLanding(config, judgedPick(ctx, sid), key);
   const stored = readValue(home.path, landing.key);
   const current =
     typeof stored === "number"
@@ -1042,7 +1064,7 @@ const stepConfig: VerbHandler = (sid, args, ctx) => {
 const save: VerbHandler = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
-  const pick = (key: string) => ctx.sessionState.get(sid, key);
+  const pick = judgedPick(ctx, sid);
   const drafts = settingDrafts(config, pick);
   const placements = placementDrafts(config, pick);
   // Nothing unsaved is the save's own postcondition already holding — a second
@@ -1105,9 +1127,7 @@ function gatePlacements(
 const savePreset: VerbHandler = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
-  const snapshot = presetSnapshot(config, (key) =>
-    ctx.sessionState.get(sid, key),
-  );
+  const snapshot = presetSnapshot(config, judgedPick(ctx, sid));
   const gate = ctx.gates.state.gateFor(config);
   const picks = snapshot.picks.map((d): readonly [keyof Globals, string] => {
     const result = gate.validate(d.sessionKey, d.value);
@@ -1152,9 +1172,7 @@ const savePreset: VerbHandler = (sid, _args, ctx) => {
 const saveThemeDefault: VerbHandler = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
-  const save = themeDefaultSave(config, (key) =>
-    ctx.sessionState.get(sid, key),
-  );
+  const save = themeDefaultSave(config, judgedPick(ctx, sid));
   if (save.kind === "rule") {
     throw new BadVerbArgs(
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default — pick one in the menu first",
@@ -1163,9 +1181,13 @@ const saveThemeDefault: VerbHandler = (sid, _args, ctx) => {
   const home = originHome(ctx, origin);
   writeThemeDefault(editStore(ctx, sid), home, save.theme, save.look);
   ctx.reloadConfig(origin);
-  const pick = (key: string) => ctx.sessionState.get(sid, key);
+  // [LAW:single-enforcer] A read choosing what a write releases stays raw
+  // (judgedReads): each settings row's parse is what refuses a pick the
+  // reloaded config no longer admits, so it is no draft and is released.
   const drafted = new Set(
-    settingDrafts(ctx.configFor(origin), pick).map((d) => d.sessionKey),
+    settingDrafts(ctx.configFor(origin), (key) =>
+      ctx.sessionState.get(sid, key),
+    ).map((d) => d.sessionKey),
   );
   const released = THEME_DEFAULT_FIELDS.map(
     (f) => SETTINGS[f].sessionKey,
@@ -1192,6 +1214,8 @@ const deletePreset: VerbHandler = (sid, args, ctx) => {
   deletePresetFromFile(editStore(ctx, sid), home, name);
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
+  // Raw: the reload made the deleted name foreign, so a judged read would
+  // never find the pick this click exists to release.
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
   ctx.log("info", `delete-preset: ${name} ← ${home.path} (session=${sid})`);
 };
@@ -1309,6 +1333,8 @@ const applyLayoutOp: VerbHandler = (sid, args, ctx) => {
   // its undo brings the placement and its drafts back.
   ctx.reloadConfig(origin);
   // The session state the edit discards — the fact its log line carries.
+  // Raw: under the reloaded config a removed placement's member is foreign,
+  // so a judged read would keep exactly what this click releases.
   const released = endedSessionKeys(
     endedPlacements(before, ctx.configFor(origin)),
     ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
@@ -2378,6 +2404,7 @@ function journaled<C extends DaemonContext>(
   const closing = (store: SessionStateRW): SessionStateRW =>
     closingView(
       store,
+      (reads) => judgedReads(ctx, reads),
       (sid) => nestOf(ctx, sid),
       (line) => ctx.log("info", line),
     );
@@ -2488,9 +2515,10 @@ export function closeIdleMenus(
         return;
       }
       idle.closed();
-      const roots = openRoots(nestOf(c, sid), (key) =>
-        c.navigating.get(sid, key),
-      );
+      // Judged: a member written under an older config is no open menu, on
+      // the bar or here.
+      const open = judgedReads(c, c.navigating);
+      const roots = openRoots(nestOf(c, sid), (key) => open.get(sid, key));
       c.navigating.setBatch(
         sid,
         roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),

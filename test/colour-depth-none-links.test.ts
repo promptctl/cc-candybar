@@ -35,6 +35,7 @@ import {
 } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const SGR = /\x1b\[[0-9;]*m/g;
 
@@ -47,7 +48,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
   );
   const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   recordRender(sessionState, "s1");
   try {
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });

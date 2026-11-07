@@ -27,6 +27,7 @@ import { resolvedStyle } from "../src/render/rich-theme";
 import { swatch, SWATCH_GLYPH } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const OPTS = {
   endcaps: "plain" as const,
@@ -58,7 +59,7 @@ function rig(template: string) {
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   const sink = new Map<string, readonly RichText[]>();
   const rendered = drawPayload(

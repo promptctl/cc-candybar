@@ -61,6 +61,7 @@ import { VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
@@ -186,7 +187,7 @@ function build(src: string, withDefault = false) {
   );
   const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   const palette = getThemePalette(THEME);
   const sink = new Map<string, readonly RichText[]>();

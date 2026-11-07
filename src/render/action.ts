@@ -778,11 +778,18 @@ export function linkOver(
   return linked;
 }
 
-// [LAW:one-source-of-truth] THE "unknown current counts as the first member"
-// rule — the one resolution both the display selection and the successor write
-// fold over. Members are ordered default-state-first, so an unset/foreign value
-// renders the first display and clicks to the second member (an accordion
-// sibling's path "counts as closed", a never-written toggle "counts as off").
+// [LAW:one-source-of-truth] The one resolution both the display selection and
+// the successor write fold over. A cycle's list is the states of one thing,
+// its resting state first — closed, for a disclosure or an accordion sibling —
+// so a value that is none of its members means that thing is at rest: another
+// sibling's name on a shared key means this one is closed, and an unread key
+// reads "". It shows the first member's display and clicks to the second. (A
+// ring's options are peers with no resting state, so it shows such a value as
+// itself instead: render/carousel.ts ringAround.) A `set` cycle's session
+// value outside the key's domain never reaches here, since the session's
+// read refused it (src/daemon/foundations/judged-state.ts). A `persist`
+// cycle reads a config field, which no verdict judges, so it can: this rule
+// is what it shows then, its resting member.
 function cycleIndex(
   c: Extract<CompiledActionDecl, { kind: "set-cycle" | "persist-cycle" }>,
   store: VariableStore,

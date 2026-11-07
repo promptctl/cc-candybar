@@ -38,6 +38,7 @@ import { DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { drawView, type Handed } from "../daemon/draw-view.js";
 import type { RendererAddress } from "../daemon/home.js";
 import { daemonGates } from "../daemon/update-keys.js";
+import type { Gates } from "../daemon/foundations/gates.js";
 import { locations } from "../daemon/paths.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
@@ -65,6 +66,9 @@ import type { DaemonLogger } from "../utils/logger.js";
 export interface DemoState extends Disposable {
   readonly state: DslRenderState;
   readonly sessionState: SessionState;
+  // The keyspaces its load and its views gate and judge by: one, as the
+  // daemon holds one, so the drawn values and the ⚠ list agree.
+  readonly gates: Gates;
 }
 
 // What a load reads: the machine, whose clock is the one the frames are drawn
@@ -95,6 +99,7 @@ export function loadDemo({
 }: DemoLoad): DemoState {
   // The session's store, which each draw's state restores before it draws.
   const sessionState = new SessionState(SINGLE_RUN);
+  const gates = daemonGates();
   const locs = locations(world.host, world.home);
   const repos = repoGateAt(stateDir, cwd);
   // [LAW:single-enforcer] The daemon's own load and settle: the advisories
@@ -119,7 +124,7 @@ export function loadDemo({
       sessionState,
       storage: UNOWNED_STORAGE,
       links,
-      gates: daemonGates(),
+      gates,
       stateDir,
     },
   );
@@ -138,7 +143,7 @@ export function loadDemo({
     dispose();
     throw e;
   }
-  return { state, sessionState, [Symbol.dispose]: dispose };
+  return { state, sessionState, gates, [Symbol.dispose]: dispose };
 }
 
 // A recording file the demo could not read as one: refused naming the file,
@@ -342,7 +347,7 @@ export const heldArrival =
 // as it stands then, at its instant; a turn is taken over its line's inputs
 // and then held or not.
 export async function playDemo({
-  loaded: { state, sessionState },
+  loaded: { state, sessionState, gates },
   facts,
   home,
   log,
@@ -399,6 +404,7 @@ export async function playDemo({
       source: sessionSource({
         providers: { home, log },
         sessionState,
+        stateGates: gates.state,
         history: turnInput(() => depths.get().history),
         navigation: turnInput(() => depths.get().back),
       }),

@@ -37,6 +37,7 @@ import {
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
@@ -84,7 +85,7 @@ function renderer(
   compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg), TEST_LINKS),
 ) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(session));
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const opts = {
     endcaps: "powerline" as const,

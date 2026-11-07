@@ -46,6 +46,7 @@ import {
 } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -224,7 +225,7 @@ describe("a global the menu has never seen gets its control from the generator",
     );
     const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
     const render = () =>
       drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame;

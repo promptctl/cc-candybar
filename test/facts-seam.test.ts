@@ -341,6 +341,7 @@ function rig(
   const source = sessionSource({
     providers,
     sessionState,
+    stateGates: bareGates().state,
     history: () => depths.get().history,
     navigation: () => {
       const reason = turnThrows.get();

@@ -48,6 +48,7 @@ import {
   settled,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const FIVE_HOURS_MIN = 5 * 60;
 const NOW_MS = 1_700_000_000_000; // fixed instant; NOW_MS / 1000 is whole seconds
@@ -196,7 +197,7 @@ function renderBurnrate(
   // SessionState is required to declare it (matching every other
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
   // and burnrate's own `when` renders an unrelated ⚠ error cell.
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   try {
     const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });
     return drawPayload(

@@ -16,6 +16,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const SESSION = "s1";
 
@@ -68,7 +69,7 @@ function renderPair(
     sessionState.set(SESSION, key, value);
   }
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const sink = new Map<string, readonly RichText[]>();
   try {
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });

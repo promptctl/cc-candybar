@@ -44,6 +44,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const SIZING: CellSizing = {
   justify: "left",
@@ -406,7 +407,7 @@ describe("a fill segment fills wherever the walk places it", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(SINGLE_RUN),
+      readAsWritten(new SessionState(SINGLE_RUN)),
     );
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
     const errors: string[] = [];

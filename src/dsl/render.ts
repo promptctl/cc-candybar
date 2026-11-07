@@ -843,7 +843,9 @@ export function compileDslConfig(
   // through its draft variable (SegmentNode.drafts), whose default IS the
   // value filled here — so the render shows a session's unsaved pick the
   // moment it lands, and the file's value while there is none. A pick the
-  // declaration no longer admits parses to nothing and reads as no pick.
+  // declaration no longer admits is foreign to the config's gate, so the
+  // draft variable reads its default, the file's value, and the session's
+  // view reports it.
   const resolvedSettings = (node: SegmentNode): PlacementSettings => {
     // [LAW:no-defensive-null-guards] cross-ref proved every placed segment
     // is declared.

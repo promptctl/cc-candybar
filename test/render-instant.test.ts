@@ -16,6 +16,7 @@ import { instantOf, type Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -53,7 +54,7 @@ function renderer(): {
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   const compiled = registerDslConfig(CONFIG, registry, { links: TEST_LINKS, cwd: "/tmp" });
   return {
     render: (at) =>
@@ -132,7 +133,7 @@ describe("a stored instant is read against the frame's instant", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(SINGLE_RUN),
+      readAsWritten(new SessionState(SINGLE_RUN)),
     );
     try {
       const compiled = registerDslConfig(BUNDLED, registry, { links: TEST_LINKS, cwd: "/tmp" });
@@ -162,7 +163,7 @@ describe("a stored instant is read against the frame's instant", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(SINGLE_RUN),
+      readAsWritten(new SessionState(SINGLE_RUN)),
     );
     try {
       const compiled = registerDslConfig(BUNDLED, registry, { links: TEST_LINKS, cwd: "/tmp" });

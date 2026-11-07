@@ -25,6 +25,7 @@ import { decideEffectName, type EffectName } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
@@ -73,7 +74,7 @@ interface Frame {
 // drawn until it reloads.
 function renderer(cfg: ValidatedConfig, session = new SessionState(SINGLE_RUN)) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(session));
   const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

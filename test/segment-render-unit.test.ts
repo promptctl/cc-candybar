@@ -28,6 +28,7 @@ import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { POWERLINE } from "./helpers/powerline";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -53,7 +54,7 @@ function render(src: string, hookData: Record<string, unknown>): Frame {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
   return drawPayload(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS).frame;
 }

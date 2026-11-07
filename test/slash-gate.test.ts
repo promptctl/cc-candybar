@@ -42,6 +42,7 @@ import {
   requestPayload,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const SID = "slash-gate";
 const OPTS = {
@@ -101,7 +102,7 @@ async function bar(
 
   const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
   const render = (): Frame =>
     drawPayload(

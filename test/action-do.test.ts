@@ -24,6 +24,7 @@ import {
 } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -53,7 +54,7 @@ function runtime(src: string) {
   const cfg = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   recordRender(sessionState, "s1");
   return {
