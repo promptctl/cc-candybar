@@ -28,7 +28,7 @@ const homeWith = (text: string): ConfigHome => {
     repo: null,
     cwd: null,
     locs: locs(),
-    reads: systemFilesystem,
+    disk: systemFilesystem,
     memo: new InstalledLayerMemo(),
   };
 };

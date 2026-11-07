@@ -335,6 +335,15 @@ describe("the book in the state directory", () => {
     });
   });
 
+  test("is read while the folder is a regular file, which holds no book", () => {
+    file(loose, { [project]: "approved" });
+    disk.write(path.dirname(repoConfigsPath(state)), "not a folder");
+    expect(readRepoAnswers(disk, state)).toEqual({
+      kind: "ok",
+      value: { [project]: "approved" },
+    });
+  });
+
   test("a folder book a stat cannot see past is read, and its failure named", () => {
     file(loose, { [project]: "approved" });
     file(repoConfigsPath(state), { [project]: "declined" });

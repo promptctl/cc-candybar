@@ -118,7 +118,7 @@ test("a durable click writes the user's file, never the project's", () => {
     repo: project,
     cwd: project,
     locs: locations(host, homeOf(host)),
-    reads: systemFilesystem,
+    disk: systemFilesystem,
     memo: new InstalledLayerMemo(),
   });
   writeValues(noRecord, home, [["palette", "nord"]]);

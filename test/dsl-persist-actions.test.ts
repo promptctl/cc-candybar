@@ -171,7 +171,7 @@ describe("persistValueText", () => {
           repo: null,
           cwd: null,
           locs: locations(durable.host, durable.home),
-          reads: systemFilesystem,
+          disk: systemFilesystem,
           memo: new InstalledLayerMemo(),
         },
         [["palette", "nord"]],

@@ -26,10 +26,10 @@
 
 import { BadVerbArgs } from "./verb-error";
 import JSON5 from "json5";
-import { writeAtomic } from "../utils/atomic-write.js";
+import { writeAtomicOn } from "../utils/atomic-write.js";
 import { resolvedTarget } from "../utils/link-chain.js";
 import { systemFilesystem } from "../disk/system-filesystem.js";
-import type { FilesystemReads } from "../disk/filesystem.js";
+import type { Filesystem, FilesystemReads } from "../disk/filesystem.js";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
@@ -125,14 +125,15 @@ export function persistValueText(key: string, raw: string): string {
 // ─── The file ────────────────────────────────────────────────────────────────
 
 /** The file's text, or null when it does not exist. */
-// [LAW:effects-at-boundaries] exception: the system disk, the one
-// writeConfigText writes, so undo reads back what it wrote.
+// [LAW:effects-at-boundaries] exception: undo reads and writes the system
+// disk, a pair of its own, until the settings history takes a disk.
 export function readConfigText(file: string): string | null {
   return textOn(systemFilesystem, file);
 }
 
-// [LAW:one-source-of-truth] A click reads its home on the disk its proof
-// loads, so the text it splices and the chain it judges are one disk's.
+// [LAW:one-source-of-truth] A click reads, proves and writes its home on the
+// home's one disk, so the text it splices, the chain it judges and the file it
+// writes are one disk's.
 function textOn(reads: FilesystemReads, file: string): string | null {
   try {
     return reads.readFileSync(file);
@@ -153,12 +154,21 @@ export function writeConfigText(
   text: string | null,
   logger: DaemonLogger,
 ): void {
+  writeOn(systemFilesystem, file, text, logger);
+}
+
+function writeOn(
+  disk: Filesystem,
+  file: string,
+  text: string | null,
+  logger: DaemonLogger,
+): void {
   try {
     if (text === null) {
-      systemFilesystem.rmSync(resolvedTarget(systemFilesystem, file));
+      disk.rmSync(resolvedTarget(disk, file));
       return;
     }
-    writeAtomic(file, text);
+    writeAtomicOn(disk, file, text);
   } catch (e) {
     const message = `config write failed (${file}): ${(e as Error).message}`;
     logger("error", message);
@@ -476,7 +486,7 @@ function commit(
   const was: Was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse(home, was, will);
-  writeConfigText(home.path, after, store.logger);
+  writeOn(home.disk, home.path, after, store.logger);
   store.record(home.path, before, after);
 }
 
@@ -544,7 +554,7 @@ function loadedOrNull(
 // layer whatever it holds.
 function chainOver(home: ConfigHome, text: string | null): LoadedChain {
   return loadConfigChain(
-    text === null ? home.reads : withText(home.reads, home.path, text),
+    text === null ? home.disk : withText(home.disk, home.path, text),
     home.memo,
     home.locs,
     text !== null ? [homeLayer(home.path), ...home.above] : home.above,
@@ -648,7 +658,7 @@ export function readValue(
   key: string,
 ): string | number | boolean | undefined {
   const target = requireValueTarget(key);
-  const doc = docOf(textOn(home.reads, home.path) ?? "");
+  const doc = docOf(textOn(home.disk, home.path) ?? "");
   const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
   return node !== undefined && "value" in node ? node.value : undefined;
 }
@@ -682,7 +692,7 @@ export function writeDrafts(
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
   placements: readonly PlacementValue[],
 ): void {
-  const before = textOn(home.reads, home.path);
+  const before = textOn(home.disk, home.path);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
@@ -786,7 +796,7 @@ export function deleteValues(
   keys: readonly string[],
 ): void {
   const targets = keys.map(requireTarget);
-  const before = textOn(home.reads, home.path);
+  const before = textOn(home.disk, home.path);
   if (before === null) return;
   const after = targets.reduce(
     (text, target) => deleteAtPath(text, resetPathOf(docOf(text), target)),
@@ -817,7 +827,7 @@ function freePresetName(doc: Node | null, home: ConfigHome): string {
       // all) — the editor refuses files the loader renders.
       ...home.above.flatMap((l) =>
         Object.keys(
-          (JSON5.parse(home.reads.readFileSync(l.path)) as { presets?: object })
+          (JSON5.parse(home.disk.readFileSync(l.path)) as { presets?: object })
             .presets ?? {},
         ),
       ),
@@ -846,7 +856,7 @@ export function writePreset(
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
-  const before = textOn(home.reads, home.path);
+  const before = textOn(home.disk, home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc, home);
   const own: ConfigPath = ["presets", name];
@@ -905,7 +915,7 @@ export function writeThemeDefault(
   theme: string,
   look: Readonly<Record<ThemeDefaultField, string>>,
 ): void {
-  const before = textOn(home.reads, home.path);
+  const before = textOn(home.disk, home.path);
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme],
@@ -934,7 +944,7 @@ export function deletePreset(
     );
   }
   const own: ConfigPath = ["presets", name];
-  const before = textOn(home.reads, home.path);
+  const before = textOn(home.disk, home.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
@@ -974,7 +984,7 @@ export function applyLayoutOp(
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = textOn(home.reads, home.path);
+  const before = textOn(home.disk, home.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const placement = homeOnly(home, () =>
     layoutPlacementOf(docOf(before ?? ""), target.preset, subject),
