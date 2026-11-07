@@ -4,46 +4,46 @@
     {
       "version": "pr-663",
       "ref": "refs/pull/663/merge",
-      "sha": "89b2ede975f3fe26c75535d127169cb786f4d7f0",
-      "timestamp": "2026-11-07T01:35:55.875Z",
+      "sha": "2453e090acafbce82702d62e23153a237c1c1178",
+      "timestamp": "2026-11-07T01:38:48.700Z",
       "commits": [
         {
-          "sha": "89b2ede975f3fe26c75535d127169cb786f4d7f0",
+          "sha": "2453e090acafbce82702d62e23153a237c1c1178",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:35:03Z",
-          "message": "Merge 4160d7a4a9c71720081b955440f0ff2a5e1d85ae into 1806d3735da43b2aaeceb9ca12a48cce517d6201\n"
+          "timestamp": "2026-11-07T01:37:58Z",
+          "message": "Merge 686f153f1bff4a0503002740f8dc4fa61c0b3e19 into 6d361f430dc9f1a6399706bec94946f0bc8b68f3\n"
         },
         {
-          "sha": "4160d7a4a9c71720081b955440f0ff2a5e1d85ae",
+          "sha": "686f153f1bff4a0503002740f8dc4fa61c0b3e19",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T18:23:15-07:00",
           "message": "docs(lanes): rewrap the click's comment (candybar-gather-renderer-76bb.1dh.aom)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         },
         {
-          "sha": "90f5eb216949ab0b93278d04d938b08d7045c6df",
+          "sha": "99394eb581ae06f95781e7bb9efb44755b73582a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T18:22:14-07:00",
           "message": "fix(lanes): a torn record's re-read reports what it found, and an unread parent's warning names the wrapper fix (candybar-gather-renderer-76bb.1dh.aom)\n\nSecond high review of #663.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         },
         {
-          "sha": "a738e4624153482fe84baffd2db02ecfddb2cf15",
+          "sha": "07b9542c7ab4f8428e10ebebcb789a1a3b473e99",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T18:12:47-07:00",
           "message": "fix(lanes): a stamp says where its session runs, outside tmux included, and a lookup reads each record once (candybar-gather-renderer-76bb.1dh.aom)\n\nMedium review of #663:\n- The record is read for every request, so a session its Claude Code holds outside tmux releases the pane it was held in; an unconfirmed one releases nothing.\n- One lookup reads each record once, however many of its sessions it weighs.\n- A click's commit judges by the record as it reads then.\n- The bar pane's waiting line says what it waits for, and where a rendered statusline says why it isn't the pane's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         },
         {
-          "sha": "15c4277c46e65b0ee1febbae2c59add2f96f6368",
+          "sha": "80a68d5db866ed20ca7b364ac62f0f1a43518a7c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:48:59-07:00",
           "message": "fix(lanes): a pane's session is read from its Claude Code's record at the asking, and a request not known to run in a pane releases nothing (candybar-gather-renderer-76bb.1dh.aom)\n\nHigh review of #663:\n- The takeover check and the pane-session reply read the record when they ask, so a stamp from before a /clear no longer answers for the pane.\n- A request whose parent is not the pane's Claude Code is no evidence about where its session runs: a held session stays where it is.\n- A record that fails to parse is read once more: Claude Code rewrites it in place.\n- One record reader: the lane edge is handed the daemon's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         },
         {
-          "sha": "804559a313580423a9763e193f5e521bc564e56f",
+          "sha": "dc4be69f8e66cf46087ea31548d17bf5a8cf253d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:25:22-07:00",
