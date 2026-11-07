@@ -138,10 +138,10 @@ describe("sessionPaneError", () => {
   const unconfirmed = sessionPaneOf(hints({ parentPid: 999 }), "test-1", records({}).of);
 
   test("says why while a lane that shows the pane's session is on", () => {
-    expect(sessionPaneError(unconfirmed, lanes("tmuxStatus"), () => false)).toBe(
+    expect(sessionPaneError(unconfirmed, lanes("tmuxStatus"), false)).toBe(
       `The tmux status line of pane %7 shows the session the pane's Claude Code holds, and this one is not known to be it: the process that ran its statusline (pid 999) is no Claude Code whose session can be read: it keeps no session record for 999${WRAPPED}`,
     );
-    expect(sessionPaneError(unconfirmed, lanes("pane", "tmuxStatus"), () => false)).toMatch(
+    expect(sessionPaneError(unconfirmed, lanes("pane", "tmuxStatus"), false)).toMatch(
       /^The 🧪 tmux pane \(C\) and tmux status line of pane %7 /,
     );
   });
@@ -149,26 +149,26 @@ describe("sessionPaneError", () => {
   test("says nothing of a /clear's straggler or forerunner inside the race, whose render line still says why", () => {
     for (const [sessionId, held] of [["before", "after"], ["after", "before"]] as const) {
       const mismatched = tick(sessionId, held);
-      expect(sessionPaneError(mismatched, lanes("pane", "tmuxStatus"), () => false)).toBeNull();
+      expect(sessionPaneError(mismatched, lanes("pane", "tmuxStatus"), false)).toBeNull();
       expect(paneFact(mismatched)).toBe(`mismatched: the Claude Code that ran its statusline (pid ${CLAUDE}) holds session ${held}`);
     }
   });
 
   test("names the session the record holds once its mismatch has lasted past the race", () => {
     const mismatched = tick("new", "old");
-    expect(sessionPaneError(mismatched, lanes("pane"), () => true)).toBe(
+    expect(sessionPaneError(mismatched, lanes("pane"), true)).toBe(
       `The 🧪 tmux pane (C) of pane %7 shows the session the pane's Claude Code holds, and this one is not it: the Claude Code that ran its statusline (pid ${CLAUDE}) holds session old, for longer than a \`/clear\` or \`/resume\` takes to rewrite it`,
     );
-    expect(sessionPaneError(mismatched, lanes("band", "statusline"), () => true)).toBeNull();
-    expect(sessionPaneError({ ...mismatched, tmux: null }, lanes("pane"), () => true)).toBeNull();
+    expect(sessionPaneError(mismatched, lanes("band", "statusline"), true)).toBeNull();
+    expect(sessionPaneError({ ...mismatched, tmux: null }, lanes("pane"), true)).toBeNull();
   });
 
   test("says nothing while no such lane is on, or of a session that runs in its pane", () => {
-    expect(sessionPaneError(unconfirmed, lanes(), () => false)).toBeNull();
-    expect(sessionPaneError(unconfirmed, lanes("band", "statusline"), () => false)).toBeNull();
+    expect(sessionPaneError(unconfirmed, lanes(), false)).toBeNull();
+    expect(sessionPaneError(unconfirmed, lanes("band", "statusline"), false)).toBeNull();
     const runs = tick("s1", "s1");
-    expect(sessionPaneError(runs, lanes("pane", "tmuxStatus"), () => false)).toBeNull();
-    expect(sessionPaneError({ ...runs, tmux: null }, lanes("pane", "tmuxStatus"), () => false)).toBeNull();
-    expect(sessionPaneError({ kind: "unconfirmed", tmux: null, why: "w" }, lanes("pane", "tmuxStatus"), () => false)).toBeNull();
+    expect(sessionPaneError(runs, lanes("pane", "tmuxStatus"), false)).toBeNull();
+    expect(sessionPaneError({ ...runs, tmux: null }, lanes("pane", "tmuxStatus"), false)).toBeNull();
+    expect(sessionPaneError({ kind: "unconfirmed", tmux: null, why: "w" }, lanes("pane", "tmuxStatus"), false)).toBeNull();
   });
 });

@@ -538,8 +538,10 @@ export function drawRender(
     // stamp's words move.
     sourced(
       "session-pane",
-      sessionPaneError(req.pane, lanes, (claude) =>
-        mismatchRuns.lasted(sessionId, claude),
+      sessionPaneError(
+        req.pane,
+        lanes,
+        mismatchRuns.lasted(req.sessionId, req.pane),
       ),
     ),
     sourced("load", entry.lastError),

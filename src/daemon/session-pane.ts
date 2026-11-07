@@ -27,6 +27,11 @@ export interface ClaudeProcess {
   readonly configDir: string | undefined;
 }
 
+// [LAW:one-source-of-truth] A Claude Code as a map key: what tells one
+// process's record from another's.
+export const claudeKey = (claude: ClaudeProcess): string =>
+  `${claude.pid}\0${claude.configDir ?? ""}`;
+
 // [LAW:types-are-the-program] Where a request's session runs, as the render
 // checkpoint stamps it: confirmed by the record of the Claude Code that ran its
 // client (`claude`), in the tmux pane the client names or outside tmux (`tmux`
@@ -109,7 +114,7 @@ export function runsNowIn(
 }) => boolean {
   const reads = new Map<string, HeldSession>();
   const once: HeldSessionOf = (pid, configDir) => {
-    const key = `${pid}\0${configDir ?? ""}`;
+    const key = claudeKey({ pid, configDir });
     const read = reads.get(key) ?? heldSession(pid, configDir);
     reads.set(key, read);
     return read;
@@ -136,7 +141,7 @@ export const paneFact = (pane: SessionPane): string =>
 export function sessionPaneError(
   pane: SessionPane,
   lanes: LaneSwitches,
-  lasted: (claude: ClaudeProcess) => boolean,
+  lasted: boolean,
 ): string | null {
   const on = LANE_NAMES.filter(
     (lane) => lanes[lane] && LANES[lane].showsPaneSession,
@@ -144,7 +149,7 @@ export function sessionPaneError(
   const why =
     pane.kind === "unconfirmed"
       ? `this one is not known to be it: ${pane.why}`
-      : pane.kind === "mismatched" && lasted(pane.claude)
+      : pane.kind === "mismatched" && lasted
         ? `this one is not it: ${pane.why}, for longer than a \`/clear\` or \`/resume\` takes to rewrite it`
         : null;
   return why === null || pane.tmux === null || on.length === 0

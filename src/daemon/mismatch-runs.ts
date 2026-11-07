@@ -10,17 +10,20 @@
 // ended it.
 
 import { spanMs, type Monotonic } from "../time.js";
-import type { ClaudeProcess, SessionPane } from "./session-pane.js";
+import { claudeKey, type SessionPane } from "./session-pane.js";
 import type { TurnHolder } from "./session-state.js";
 
 // Seconds a mismatched stamp can be the rewrite race: a cleared session's
 // straggling tick has been seen to follow its record's rewrite by about one.
 export const MISMATCH_RACE_S = 10;
 
-// The newest Claude Codes kept, and the newest runs each keeps: a Claude Code
-// that exits is never heard from again, so the longest silent is evicted
-// past this many.
-export const MISMATCH_RUNS_KEPT = 64;
+// The newest Claude Codes kept: one that exits is never heard from again, so
+// the longest silent is evicted past this many.
+export const MISMATCH_PROCESSES_KEPT = 64;
+
+// The newest runs one Claude Code keeps: its ticks name the session it runs
+// and the ones its record moved on from, a few at most.
+export const MISMATCH_RUNS_KEPT = 4;
 
 // [LAW:types-are-the-program] A session's run, in the Claude Code whose ticks
 // opened it: when, and whether one has arrived past the race since.
@@ -40,17 +43,19 @@ interface ProcessTicks {
   readonly runs: Map<string, MismatchRun>;
 }
 
-const processKey = (claude: ClaudeProcess): string =>
-  `${claude.pid}@${claude.configDir ?? ""}`;
-
 const raceOver = (since: Monotonic, at: Monotonic): boolean =>
   spanMs(since, at) > MISMATCH_RACE_S * 1000;
 
-// Move-to-end, so the newest entry is the last dropped.
-function keepNewest<V>(map: Map<string, V>, key: string, value: V): void {
+// Move-to-end, so the newest entry is the last dropped past `kept`.
+function keepNewest<V>(
+  map: Map<string, V>,
+  kept: number,
+  key: string,
+  value: V,
+): void {
   map.delete(key);
   map.set(key, value);
-  if (map.size > MISMATCH_RUNS_KEPT) map.delete(map.keys().next().value!);
+  if (map.size > kept) map.delete(map.keys().next().value!);
 }
 
 export class MismatchRuns {
@@ -68,7 +73,7 @@ export class MismatchRuns {
   // ticks opened, and its first tick of a session dates the rewrite. So a
   // mismatched tick holding that session within the race of it is the race,
   // whichever side of the new session's first tick the straggler lands, and
-  // opens no run. A tick no readable Claude Code ran is no evidence about any
+  // its session is in no run. A tick no readable Claude Code ran is no evidence about any
   // record.
   record(
     sessionId: string,
@@ -81,8 +86,9 @@ export class MismatchRuns {
       );
     switch (pane.kind) {
       case "runs": {
-        const was = this.processes.get(processKey(pane.claude))?.confirmed;
-        keepNewest(this.processes, processKey(pane.claude), {
+        const key = claudeKey(pane.claude);
+        const was = this.processes.get(key)?.confirmed;
+        keepNewest(this.processes, MISMATCH_PROCESSES_KEPT, key, {
           confirmed:
             was?.sessionId === sessionId ? was : { sessionId, since: at },
           runs: new Map(),
@@ -92,33 +98,44 @@ export class MismatchRuns {
       case "unconfirmed":
         return null;
       case "mismatched": {
-        const key = processKey(pane.claude);
+        const key = claudeKey(pane.claude);
         const ticks = this.processes.get(key) ?? {
           confirmed: null,
           runs: new Map<string, MismatchRun>(),
         };
-        keepNewest(this.processes, key, ticks);
+        keepNewest(this.processes, MISMATCH_PROCESSES_KEPT, key, ticks);
         const rewrite = ticks.confirmed;
-        if (rewrite?.sessionId === pane.held && !raceOver(rewrite.since, at))
-          return ticks.runs.get(sessionId) ?? null;
-        const since = ticks.runs.get(sessionId)?.since ?? at;
+        if (rewrite?.sessionId === pane.held && !raceOver(rewrite.since, at)) {
+          ticks.runs.delete(sessionId);
+          return null;
+        }
+        // Requests are applied in the order their turns run, which can differ
+        // from the order they arrived in: a run starts at the earliest.
+        const since = Math.min(
+          ticks.runs.get(sessionId)?.since ?? at,
+          at,
+        ) as Monotonic;
         const run = { since, lasted: raceOver(since, at) };
-        keepNewest(ticks.runs, sessionId, run);
+        keepNewest(ticks.runs, MISMATCH_RUNS_KEPT, sessionId, run);
         return run;
       }
     }
   }
 
-  // The run of `sessionId` that `claude`'s ticks are in.
-  of(sessionId: string, claude: ClaudeProcess): MismatchRun | null {
-    return this.processes.get(processKey(claude))?.runs.get(sessionId) ?? null;
+  // The run of `sessionId` that the Claude Code `pane` names has its ticks
+  // in: the same pair a request is recorded under.
+  of(sessionId: string, pane: SessionPane): MismatchRun | null {
+    return pane.kind === "unconfirmed"
+      ? null
+      : (this.processes.get(claudeKey(pane.claude))?.runs.get(sessionId) ??
+          null);
   }
 
   // Whether the session's mismatch has outlasted the race, as the requests
-  // `claude` ran left it: what a draw shows, never measured on the draw's
-  // clock.
-  lasted(sessionId: string, claude: ClaudeProcess): boolean {
-    return this.of(sessionId, claude)?.lasted ?? false;
+  // its Claude Code ran left it: what a draw shows, never measured on the
+  // draw's clock.
+  lasted(sessionId: string, pane: SessionPane): boolean {
+    return this.of(sessionId, pane)?.lasted ?? false;
   }
 }
 
