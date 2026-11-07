@@ -953,12 +953,14 @@ export class GitService {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // [LAW:single-enforcer] A session's repository comes from its directory
-  // alone. git honours `GIT_DIR`, `GIT_WORK_TREE` and the rest of
+  // [LAW:single-enforcer] In the daemon, a session's repository comes from its
+  // directory alone. git honours `GIT_DIR`, `GIT_WORK_TREE` and the rest of
   // `git rev-parse --local-env-vars` over its cwd, and `execGitAsync` passes
-  // the daemon's environment, which is whichever shell spawned it; so the
-  // daemon drops those variables from its environment once, at its boot
-  // (src/host.ts daemonWorld), and every read here inherits that.
+  // the launcher's environment, which in the daemon is whichever shell spawned
+  // it; so the daemon drops those variables from its environment once, at its
+  // boot (src/host.ts daemonWorld), and every read it makes here inherits
+  // that. A one-shot command (check, the demo) runs in the shell that invoked
+  // it, whose environment is its own to honour.
   //
   // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed

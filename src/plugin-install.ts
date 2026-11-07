@@ -114,7 +114,7 @@ function cloneRepo(
       );
     return run.stdout;
   };
-  // Overlay: terminal prompts off, and the variables that locate a repository
+  // Overlay: terminal prompts off, and the variables local to a repository
   // (named by the tool itself, src/git-env.ts) unset.
   // [LAW:no-silent-failure] An ask that failed is the install's error: a
   // clone under a hook's GIT_DIR would act on the hook's repository.

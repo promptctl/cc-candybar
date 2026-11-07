@@ -818,7 +818,7 @@ interface ConfigWatchWarning {
   readonly message: string;
 }
 
-// git could not name the variables that locate a repository, so the daemon's
+// git could not name the variables local to one repository, so the daemon's
 // git reads run in the spawning shell's environment (src/git-env.ts).
 interface GitEnvWarning {
   readonly kind: "git-env";

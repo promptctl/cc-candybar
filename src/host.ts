@@ -61,15 +61,23 @@ export function processWorld(): World {
 }
 
 // [LAW:single-enforcer] The daemon's world: the process environment less the
-// variables git reads as locating a repository, as git named them at boot
+// variables git holds local to one repository, as git named them at boot
 // (src/git-env.ts). The daemon's environment is whichever shell spawned it, so
 // a `GIT_DIR` there (a hook, vcsh, yadm) would point every session's git reads
 // at that shell's repository. Its host and its launcher hold the same copy, so
 // the daemon and every child it launches see one environment. An ask that
 // failed has nothing to drop by: the environment is kept as inherited, and the
 // daemon says so on every bar.
-export function daemonWorld(gitEnv: GitEnvAsk): World {
-  return worldOver(daemonEnv(process.env, gitEnv));
+// [LAW:types-are-the-program] The world and the ask it was cleaned by are one
+// value, so a daemon cannot be handed an environment its warning does not
+// describe.
+export interface DaemonWorld {
+  readonly world: World;
+  readonly gitEnv: GitEnvAsk;
+}
+
+export function daemonWorld(gitEnv: GitEnvAsk): DaemonWorld {
+  return { world: worldOver(daemonEnv(process.env, gitEnv)), gitEnv };
 }
 
 // `env` less each variable git named, and nothing else changed: a failed ask
