@@ -1042,14 +1042,14 @@ describe("the update watch: an act's budget is the time it was watched running",
     expect(b.logged.filter((l) => /timed out/.test(l))).toEqual([]);
   });
 
-  test("an act asleep overnight through forty dark wakes is not ended at any of them", async () => {
+  test("an act asleep a weekend through two hundred and forty dark wakes is not ended at any of them", async () => {
     const b = bench();
     b.daemon();
     await b.settled();
     await b.awake(3 * POLL);
 
     // Each wake runs the loop for one look before the machine sleeps again.
-    for (let wake = 0; wake < 40; wake++) {
+    for (let wake = 0; wake < 240; wake++) {
       b.clock.burn(15 * MINUTE);
       await b.awake(POLL);
     }
@@ -1058,15 +1058,20 @@ describe("the update watch: an act's budget is the time it was watched running",
     expect(b.logged.filter((l) => /timed out/.test(l))).toEqual([]);
   });
 
-  test("a spend the watch can't read is shown as an error, not taken as spent", async () => {
+  test("a spend the watch can't read is shown and restarts at that look, so the act is still bounded", async () => {
     const b = bench();
-    fs.writeFileSync(path.join(b.dir, "1", "awake.json"), "{}");
+    const awakeFile = path.join(b.dir, "1", "awake.json");
+    fs.writeFileSync(awakeFile, "{}");
     const watch = b.daemon();
     await b.settled();
-    await b.awake(3 * POLL);
 
+    expect(watch.error()).toMatch(/awake\.json: not an act's spend: \{\}; its spend restarts/);
     expect(b.verdict()).toBeNull();
-    expect(watch.error()).toMatch(/awake\.json: not an act's spend: \{\}/);
+
+    await b.awake(10 * MINUTE - POLL);
+    expect(b.verdict()).toBeNull();
+    await b.awake(3 * POLL);
+    expect(b.verdict()).toEqual({ kind: "timeout" });
   });
 
   test("a wedged act on an awake machine is ended with a timeout verdict after ten minutes of looks", async () => {

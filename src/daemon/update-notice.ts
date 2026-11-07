@@ -333,10 +333,11 @@ const ACT_TIMEOUT_MS = 10 * 60 * 1000;
 // How often the act's record is looked at for an end: the notice's busy label
 // and the restart after a success trail an end by at most this.
 const ACT_POLL_MS = 2_000;
-// The most one look spends of the budget. A look trails the one before it by
-// the poll and the turn it waited behind; a gap many polls long is a machine
-// that was not running the loop, and a sleep's dark wakes each spend this.
-const LOOK_CAP_MS = 5 * ACT_POLL_MS;
+// The longest span one look spends of the budget. A look trails the one before
+// it by the poll and the turn it waited behind; a gap many polls long is a
+// machine that was not running the loop, and spends nothing, however many dark
+// wakes a sleep has.
+const LONGEST_LOOK_MS = 5 * ACT_POLL_MS;
 
 function describeBuild(b: BuildCurrency): [LogLevel, string] {
   switch (b.kind) {
@@ -523,7 +524,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // the act's files by every daemon that looks.
   function endIfOverdue(facts: ActFacts | null): void {
     if (!facts?.alive) return;
-    const spent = spendLook(actsDir, facts, clock.now(), LOOK_CAP_MS);
+    const spent = spendLook(actsDir, facts, clock.now(), LONGEST_LOOK_MS);
     if (spent === null || spent.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir, facts, launcher);
     const why = stands ? "timed out" : "outlived its verdict";

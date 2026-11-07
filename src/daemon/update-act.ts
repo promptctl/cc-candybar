@@ -70,18 +70,22 @@ export const unwatched = (record: ActRecord): ActAwake => ({
 });
 
 // [LAW:dataflow-not-control-flow] One more look at the act running, at `now`:
-// the span since the last look, whichever daemon took it, up to `capMs`, and
-// nothing for a clock set back. Daemons looking in turn sum to the time the act
-// was watched, not a multiple of it, and a sleep of any length between two
-// looks spends at most the cap.
+// the span since the last look, whichever daemon took it, when the loop could
+// have run that span, which is one of at most `longestMs`. A longer gap is a
+// machine that was not running the loop (asleep, or a dark wake's first look),
+// and a clock set back spans nothing: both count 0. Daemons looking in turn
+// sum to the time the act was watched, not a multiple of it.
 export const observe = (
   awake: ActAwake,
   now: number,
-  capMs: number,
-): ActAwake => ({
-  spentMs: awake.spentMs + Math.min(Math.max(now - awake.lastSeen, 0), capMs),
-  lastSeen: now,
-});
+  longestMs: number,
+): ActAwake => {
+  const span = now - awake.lastSeen;
+  return {
+    spentMs: awake.spentMs + (span >= 0 && span <= longestMs ? span : 0),
+    lastSeen: now,
+  };
+};
 
 // [LAW:types-are-the-program] The act as every daemon sees it. `succeeded`
 // is its own arm, not `idle`, so a daemon watching an act end can tell a
@@ -401,21 +405,27 @@ const CLAIMED_FIRST: Claim = {
   reason: "another act claimed this bundle first",
 };
 
-// [LAW:parse-dont-validate] What the act has spent, or null when no daemon
-// has watched it yet. A spend this version can't read throws, for the watch to
-// show, rather than reading as spent: a missing number compares past any
-// budget, and a build ended for it is torn.
-function readAwake(actDir: string): ActAwake | null {
-  const file = awakeOf(actDir);
+// [LAW:parse-dont-validate] What an act's spend file says: a spend, none yet
+// (no daemon has watched the act), or why this version can't read it.
+type SpendRead =
+  | { readonly ok: true; readonly awake: ActAwake | null }
+  | { readonly ok: false; readonly reason: string };
+
+function readAwake(file: string): SpendRead {
   const text = readActFile(file);
-  if (text === null) return null;
-  const { spentMs, lastSeen } = (JSON.parse(text) ?? {}) as Partial<
+  if (text === null) return { ok: true, awake: null };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    return { ok: false, reason: `${(err as Error).message}: ${text}` };
+  }
+  const { spentMs, lastSeen } = (parsed ?? {}) as Partial<
     Record<keyof ActAwake, unknown>
   >;
-  if (typeof spentMs !== "number" || typeof lastSeen !== "number") {
-    throw new Error(`${file}: not an act's spend: ${text}`);
-  }
-  return { spentMs, lastSeen };
+  return typeof spentMs === "number" && typeof lastSeen === "number"
+    ? { ok: true, awake: { spentMs, lastSeen } }
+    : { ok: false, reason: `not an act's spend: ${text}` };
 }
 
 // [LAW:effects-at-boundaries] Spends one look at an act its reader saw alive
@@ -429,26 +439,33 @@ export function spendLook(
   dir: string,
   facts: ActFacts,
   now: number,
-  capMs: number,
+  longestMs: number,
 ): ActAwake | null {
   const actDir = path.join(dir, String(facts.act));
+  const file = awakeOf(actDir);
+  const read = readAwake(file);
   const awake = observe(
-    readAwake(actDir) ?? unwatched(facts.record),
+    (read.ok ? read.awake : null) ?? unwatched(facts.record),
     now,
-    capMs,
+    longestMs,
   );
   // Staged at a name of this process's own, so two daemons' looks never write
   // one file. Not flushed: a crash ends the act's group with the boot it ran
   // in, and its spend with it.
-  const file = awakeOf(actDir);
   const staged = `${file}.${process.pid}.tmp`;
   try {
     fs.writeFileSync(staged, JSON.stringify(awake));
     fs.renameSync(staged, file);
   } catch (err) {
+    fs.rmSync(staged, { force: true });
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
+  // [LAW:no-silent-failure] A spend this version can't read is replaced by one
+  // counted from this look, then reported. Read as spent, it ends a build
+  // mid-write; left in place, nothing repairs it, and the act runs unbounded
+  // while it holds every restart.
+  if (!read.ok) throw new Error(`${file}: ${read.reason}; its spend restarts`);
   return awake;
 }
 
