@@ -289,6 +289,20 @@ describe("a catch-up walks the entries one per turn", () => {
     expect(r.cache.stats.due).toBe(0);
   });
 
+  test("an entry drawn during the walk is the next one reloaded", () => {
+    fakeWatches();
+    const clock = heldClock(new Date());
+    const r = rig({ clock });
+    const a = r.project("a");
+    const b = r.project("b");
+    const c = r.project("c");
+    const from = r.reloaded.length;
+    r.cache.reloadEvery(resumed);
+    clock.defer(() => r.cache.getOrCreate(a, a, path.join(a, "config.json5")));
+    clock.advance(0);
+    expect(walked(r, from)).toEqual([c, a, b]);
+  });
+
   test("an entry evicted before its turn is not reloaded, and leaves the count at once", () => {
     fakeWatches();
     const clock = heldClock(new Date());
@@ -369,11 +383,11 @@ describe("a catch-up walks the entries one per turn", () => {
     clock.advance(0);
     expect(walked(r, from)).toEqual([b, a]);
     expect(r.cache.stats.due).toBe(0);
-    expect(
-      r.lines.filter((l) => l.startsWith("catch-up reload threw ")),
-    ).toEqual([
-      `catch-up reload threw dir=${b} cause=events-resumed: observer failed`,
-    ]);
+    const threw = r.lines.filter((l) => l.startsWith("catch-up reload threw "));
+    expect(threw).toHaveLength(1);
+    expect(threw[0]).toContain(
+      `catch-up reload threw dir=${b} cause=events-resumed: Error: observer failed`,
+    );
     failing = null;
     r.cache.reloadEvery(resumed);
     clock.advance(0);

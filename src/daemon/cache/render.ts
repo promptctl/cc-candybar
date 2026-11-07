@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { inspect } from "node:util";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import { chainName } from "../../config-hint.js";
 import type { RichText } from "@promptctl/rich-js";
@@ -1516,9 +1517,9 @@ export class RenderCache<
   private stopSweep: (() => void) | null = null;
   private closed = false;
   // [LAW:one-source-of-truth] The entries an every-entry reload asked for that
-  // have not re-read the disk since, in the order they are walked. Keyed by
-  // the entry itself, so an entry evicted and opened again is a new one,
-  // whose own first load read the disk after the span.
+  // have not re-read the disk since. Keyed by the entry itself, so an entry
+  // evicted and opened again is a new one, whose own first load read the disk
+  // after the span.
   private readonly due = new Set<CacheEntry>();
   // What cancels the one turn armed to reload the next due entry, while one
   // is. The turn carries the cause of the latest every-entry reload.
@@ -2235,46 +2236,45 @@ export class RenderCache<
   // [LAW:no-ambient-temporal-coupling] One entry per turn of the loop. A
   // reload that keeps its state still resolves, validates and keys the whole
   // chain, so a walk over every entry in one turn holds the loop for seconds,
-  // and every client waiting behind it hangs up. Most recently used first,
-  // so the bar someone is looking at is re-read on the first turn, not the
-  // last. [LAW:one-source-of-truth] A later batch re-walks every entry for
-  // its own cause: one re-read of the disk as it is now answers both.
+  // and every client waiting behind it hangs up. [LAW:one-source-of-truth] A
+  // later batch re-walks every entry for its own cause: one re-read of the
+  // disk as it is now answers both.
   reloadEvery(cause: EveryEntryLoad): void {
+    for (const entry of this.entries.values()) this.due.add(entry);
     this.walk?.();
-    this.due.clear();
-    for (const entry of [...this.entries.values()].reverse())
-      this.due.add(entry);
+    this.walk = null;
     this.armWalk(cause);
   }
 
-  // [LAW:single-enforcer] The one place a walk turn is armed: one at a time
-  // (every caller cleared the last), and one whenever an entry is due.
+  // [LAW:single-enforcer] The one place a walk turn is armed: none while one
+  // is armed, so a batch started from inside a turn leaves one walker, and
+  // one whenever an entry is due.
   private armWalk(cause: EveryEntryLoad): void {
-    this.walk =
-      this.due.size === 0
-        ? null
-        : this.deps.clock.defer(() => this.walkOne(cause));
+    if (this.walk !== null || this.due.size === 0) return;
+    this.walk = this.deps.clock.defer(() => this.walkOne(cause));
   }
 
-  // The turn takes the next due entry. Nothing is due when every entry left
-  // since the turn was armed: dropped, or re-read by its own reload.
+  // The turn takes the most recently used due entry, read off the map as it
+  // is now, so a bar someone draws during the walk is re-read on the next
+  // turn, not where it stood when the batch began. Nothing is due when every
+  // entry left since the turn was armed: dropped, or re-read by its own
+  // reload.
   // [LAW:no-silent-failure] The turn runs outside any watcher's callback, so
   // it is its own error boundary, as the watcher registry is for a reload a
   // watch drives: a reload that throws is logged and ends only its own turn,
   // where uncaught it would end the daemon.
   private walkOne(cause: EveryEntryLoad): void {
-    const next = this.due.values().next();
-    if (next.done) {
-      this.walk = null;
-      return;
-    }
-    const entry = next.value;
+    this.walk = null;
+    let next: CacheEntry | null = null;
+    for (const entry of this.entries.values())
+      if (this.due.has(entry)) next = entry;
+    if (next === null) return;
     try {
-      this.reloadInto(entry, cause);
+      this.reloadInto(next, cause);
     } catch (e) {
       this.log(
         "error",
-        `catch-up reload threw dir=${entry.projectDir} cause=${cause.kind}: ${(e as Error).message}`,
+        `catch-up reload threw dir=${next.projectDir} cause=${cause.kind}: ${inspect(e)}`,
       );
     }
     this.armWalk(cause);
