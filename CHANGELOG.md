@@ -1,3 +1,9 @@
+## [1.210.3](https://github.com/promptctl/cc-candybar/compare/v1.210.2...v1.210.3) (2026-11-07)
+
+### Bug Fixes
+
+* **pricing:** a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8) ([#684](https://github.com/promptctl/cc-candybar/issues/684)) ([3e574dd](https://github.com/promptctl/cc-candybar/commit/3e574dde3244026257856ed4e675a0275bc287d1))
+
 ## [1.210.2](https://github.com/promptctl/cc-candybar/compare/v1.210.1...v1.210.2) (2026-11-07)
 
 ### Bug Fixes
