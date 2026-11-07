@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-675",
+      "ref": "refs/pull/675/merge",
+      "sha": "026f70f6a512e7901b37e63d86843eadc7591960",
+      "timestamp": "2026-11-07T09:00:26.139Z",
+      "commits": [
+        {
+          "sha": "026f70f6a512e7901b37e63d86843eadc7591960",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T08:59:30Z",
+          "message": "Merge 33b0fa130ecbe82f5c693e49ecf6b62fc2d0f59e into f584545e1238fd69bdf373b0895cd40c18ab62a2\n"
+        },
+        {
+          "sha": "33b0fa130ecbe82f5c693e49ecf6b62fc2d0f59e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:59:12-07:00",
+          "message": "test(lanes): each pane-draw case that draws no ⚠ shows the lane could draw one (candybar-gather-renderer-76bb.1dh.trm)\n\nMedium review of #675:\n- The confirmed case draws the ⚠ for a session no Claude Code ran in\n  the same daemon, and the straggler case draws it once the old\n  session's own run outlasts the race, so neither absence can come\n  from a lane that is off or a dead lookup.\n- The parts carry the journal turns the store is held by, the verb\n  context logs into the tick's error check, and the argv is configFlag.\n- The messages are asserted by pane, pid, record path and held session.\n\nKept as is: one rig per case (a shared rig couples the cases' clocks;\neach runs well inside its timeout), and failing on warn lines (the only\nones are the stand-in pane's tmux refresh failing to spawn tmux). The\nshared draw-parts helper is .5hr.\n"
+        },
+        {
+          "sha": "d53301a2cd8b6afaf4ad94e622ea7e3f06227720",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:51:58-07:00",
+          "message": "test(lanes): the pane-draw ticks take the daemon's reply, and a /clear's stragglers cross the race (candybar-gather-renderer-76bb.1dh.trm)\n\nHigh review of #675:\n- The straggler case could not fail: its ticks never crossed the race, so\n  a broken rewrite-race exemption passed. Its stragglers now land at 1s,\n  race-1s and race+2s after the new session's first tick.\n- Each tick goes through replyTo, with the home as the daemon passes it\n  and a deadline already due, instead of a hand copy of its render arm.\n- The session store is held by the journal turns; teardown closes the\n  host service, the turns and the store, as the daemon's does.\n- A tick that logs an error fails.\n- The messages are asserted by the facts that tell the stamps apart;\n  their wording is the unit test's.\n\nBreaking the exemption, the draw's run lookup, or its lasted check each\nfails a case. The shared in-worker draw-parts helper is .5hr.\n"
+        },
+        {
+          "sha": "64e0c157d136ae82bd6f95ac71fc30be2c8a7412",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:39:09-07:00",
+          "message": "test(lanes): a session's drawn bar carries its session-pane ⚠, through the draw a request takes (candybar-gather-renderer-76bb.1dh.trm)\n\nThe checkpoint stamps each tick from its Claude Code's record on the disk,\nthe request arm records the mismatch run in its turn, and the daemon's draw\nlists the ⚠; the list is read from the session's recording. An unconfirmed\nstamp and a lasted mismatch each list the session-pane message; a confirmed\ntick, a mismatch inside the race and a /clear straggler list none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-645",
       "ref": "refs/pull/645/merge",
       "sha": "01d78e64d1db5918be425ac71eea69bc809bce8b",
@@ -20,35 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T01:54:12-07:00",
           "message": "feat(band): a switched-off band lane holds no follower process (candybar-animation-wbxz.w33)\n\nThe mod ends its follow child on the daemon's SWITCHED_OFF answer instead\nof leaving it to reconnect every 5s for the life of the session. A child\nthat ended on its own lets go of the session's slot, and the mod follows\nagain at the next prompt, start or /clear, so a lane switched back on by\nany route draws again. Band off uninstalls nothing: the switch is a\ndirectory's config, while the install covers every session under the\nClaude config dir.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-675",
-      "ref": "refs/pull/675/merge",
-      "sha": "393b8409167a124e8008716484e1d8a32a1cb65e",
-      "timestamp": "2026-11-07T08:53:23.965Z",
-      "commits": [
-        {
-          "sha": "393b8409167a124e8008716484e1d8a32a1cb65e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T08:52:34Z",
-          "message": "Merge d53301a2cd8b6afaf4ad94e622ea7e3f06227720 into f584545e1238fd69bdf373b0895cd40c18ab62a2\n"
-        },
-        {
-          "sha": "d53301a2cd8b6afaf4ad94e622ea7e3f06227720",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:51:58-07:00",
-          "message": "test(lanes): the pane-draw ticks take the daemon's reply, and a /clear's stragglers cross the race (candybar-gather-renderer-76bb.1dh.trm)\n\nHigh review of #675:\n- The straggler case could not fail: its ticks never crossed the race, so\n  a broken rewrite-race exemption passed. Its stragglers now land at 1s,\n  race-1s and race+2s after the new session's first tick.\n- Each tick goes through replyTo, with the home as the daemon passes it\n  and a deadline already due, instead of a hand copy of its render arm.\n- The session store is held by the journal turns; teardown closes the\n  host service, the turns and the store, as the daemon's does.\n- A tick that logs an error fails.\n- The messages are asserted by the facts that tell the stamps apart;\n  their wording is the unit test's.\n\nBreaking the exemption, the draw's run lookup, or its lasted check each\nfails a case. The shared in-worker draw-parts helper is .5hr.\n"
-        },
-        {
-          "sha": "64e0c157d136ae82bd6f95ac71fc30be2c8a7412",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:39:09-07:00",
-          "message": "test(lanes): a session's drawn bar carries its session-pane ⚠, through the draw a request takes (candybar-gather-renderer-76bb.1dh.trm)\n\nThe checkpoint stamps each tick from its Claude Code's record on the disk,\nthe request arm records the mismatch run in its turn, and the daemon's draw\nlists the ⚠; the list is read from the session's recording. An unconfirmed\nstamp and a lasted mismatch each list the session-pane message; a confirmed\ntick, a mismatch inside the race and a /clear straggler list none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
