@@ -24027,7 +24027,8 @@ function processWorld() {
   const host = {
     env: process_default.env,
     home: os_default.homedir(),
-    tmp: os_default.tmpdir()
+    tmp: os_default.tmpdir(),
+    parentPid: process_default.ppid
   };
   const clock = systemTimekeeper;
   return {
@@ -38247,19 +38248,22 @@ var LANES = {
     switch: { setting: "experimentalBand", on: true, inTmux: false },
     label: "\u{1F9EA} band (A)",
     handsOff: true,
-    rows: null
+    rows: null,
+    showsPaneSession: false
   },
   statusline: {
     switch: { setting: "experimentalStatusline", on: true, inTmux: false },
     label: "\u{1F9EA} statusline (B)",
     handsOff: false,
-    rows: null
+    rows: null,
+    showsPaneSession: false
   },
   pane: {
     switch: { setting: "experimentalPane", on: true, inTmux: false },
     label: "\u{1F9EA} tmux pane (C)",
     handsOff: true,
-    rows: null
+    rows: null,
+    showsPaneSession: true
   },
   tmuxStatus: {
     switch: {
@@ -38270,7 +38274,8 @@ var LANES = {
     label: "tmux status line",
     handsOff: true,
     // tmux draws at most five status rows (`status` takes on, off, 2…5).
-    rows: 5
+    rows: 5,
+    showsPaneSession: true
   }
 };
 var LANE_NAMES = Object.keys(LANES);
@@ -55096,7 +55101,6 @@ var TMUX_ENV = {
 var paneName = (tmux3) => JSON.stringify([tmux3.socket, tmux3.pane]);
 var samePane = (a, b) => paneName(a) === paneName(b);
 var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
-var namesPane = (tmux3, where) => inTmux(tmux3) && samePane(tmux3, where);
 
 // src/config-hint.ts
 init_globals();
@@ -66312,6 +66316,7 @@ var CLIENT_HINT_FIELDS = Object.keys({
   configEnv: true,
   claudeConfigDir: true,
   terminalEnv: true,
+  parentPid: true,
   client: true
 });
 function parseClientHints(req) {
@@ -66322,6 +66327,7 @@ function parseClientHints(req) {
   const configEnv = sanitizeAbsolutePath(req.configEnv);
   const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
   const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
+  const parentPid = sanitizePid(req.parentPid);
   const client = sanitizeClient(req.client);
   return {
     ...termCols !== void 0 && { termCols },
@@ -66331,6 +66337,7 @@ function parseClientHints(req) {
     ...configEnv !== void 0 && { configEnv },
     ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
     ...terminalEnv !== void 0 && { terminalEnv },
+    ...parentPid !== void 0 && { parentPid },
     ...client !== void 0 && { client }
   };
 }
@@ -66388,6 +66395,9 @@ function sanitizeTermExtent(v) {
 }
 function sanitizeSsh(v) {
   return typeof v === "boolean" ? v : void 0;
+}
+function sanitizePid(v) {
+  return Number.isSafeInteger(v) && v > 0 ? v : void 0;
 }
 var URL_FRAME_VERSION = 1;
 var EARLIER_URL_FRAME_VERSIONS = [];
@@ -69520,7 +69530,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.8";
+var PACKAGE_VERSION = "1.208.9";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71845,20 +71855,28 @@ function readEffect({ verb, value }) {
 function sessionOf(effects) {
   return effects.find((e) => e.leaf !== void 0)?.session ?? null;
 }
-function stepProblem(verb, leaf, reason) {
-  return leaf === void 0 ? `unknown effect verb "${verb}"` : `${verb}: ${reason}`;
+function stepProblem(verb, reason) {
+  return `${verb}: ${reason}`;
 }
-function refused({ verb, leaf }, args, reason) {
-  return {
-    ok: false,
-    verb,
-    args,
-    reason,
-    problem: stepProblem(verb, leaf, reason)
-  };
+function unknownVerb(verb) {
+  return `unknown effect verb "${verb}"`;
+}
+function stepRefusal(verb, reason) {
+  return { kind: "refused", reason, problem: stepProblem(verb, reason) };
+}
+function refused({ verb }, args, reason) {
+  return { ok: false, verb, args, refusal: stepRefusal(verb, reason) };
 }
 function readStep(effect, click2) {
-  if (effect.leaf === void 0) return refused(effect, [], "no such verb");
+  if (effect.leaf === void 0) {
+    const problem = unknownVerb(effect.verb);
+    return {
+      ok: false,
+      verb: effect.verb,
+      args: [],
+      refusal: { kind: "refused", reason: problem, problem }
+    };
+  }
   const { verb, leaf, session, args } = effect;
   const decoded = args.ok ? args.value : [];
   if (!session.ok) {
@@ -71914,9 +71932,6 @@ function clickSession(click2) {
   return click2.kind === VERB_DISPATCH && click2.session?.ok ? click2.session.id : null;
 }
 function perform(step4, ctx) {
-  if (!step4.ok) {
-    return { kind: "refused", reason: step4.reason, problem: step4.problem };
-  }
   const described = [];
   try {
     step4.leaf.handler(step4.sid, step4.args, {
@@ -71925,8 +71940,7 @@ function perform(step4, ctx) {
     });
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e);
-    const problem = stepProblem(step4.verb, step4.leaf, reason);
-    return e instanceof BadVerbArgs ? { kind: "refused", reason, problem } : { kind: "failed", problem };
+    return e instanceof BadVerbArgs ? stepRefusal(step4.verb, reason) : { kind: "failed", problem: stepProblem(step4.verb, reason) };
   }
   for (const effect of described) ctx.effect(effect);
   return { kind: "ran" };
@@ -71941,7 +71955,7 @@ function foldEffects(steps2, session, ctx) {
   const errors2 = [];
   let operational = false;
   for (const step4 of steps2) {
-    const outcome = perform(step4, ctx);
+    const outcome = step4.ok ? perform(step4, ctx) : step4.refusal;
     if (outcome.kind === "ran") continue;
     if (outcome.kind === "refused") {
       REFUSAL_OWNERS.get(step4.verb)?.(ctx, {
@@ -72084,26 +72098,27 @@ function linksOf({ rows }) {
     );
   });
 }
+function namesNotDispatch(verb, url) {
+  return `a drawn link names ${VERB_DISPATCH}, and this names "${verb}": ${url}`;
+}
 function drawnClickOf(url) {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
   const click2 = readClick(link.verb, link.value);
   if (click2?.kind !== VERB_DISPATCH) {
-    return {
-      ok: false,
-      problem: `a drawn link names ${VERB_DISPATCH}, and this names "${link.verb}": ${url}`
-    };
+    return { ok: false, problem: namesNotDispatch(link.verb, url) };
   }
   return {
     ok: true,
     steps: click2.steps.map(
-      (step4) => step4.ok ? { ok: true, verb: step4.verb, args: [step4.sid, ...step4.args] } : { ok: false, verb: step4.verb, problem: step4.problem }
+      (step4) => step4.ok ? { ok: true, verb: step4.verb, args: [step4.sid, ...step4.args] } : { ok: false, verb: step4.verb, problem: step4.refusal.problem }
     )
   };
 }
 function describeLink(link, sessionId2) {
-  if (!isBarLink(link.url)) return `opens ${link.url}`;
-  const click2 = drawnClickOf(link.url);
+  return isBarLink(link.url) ? describeClick(drawnClickOf(link.url), sessionId2) : `opens ${link.url}`;
+}
+function describeClick(click2, sessionId2) {
   if (!click2.ok) return `refused: ${click2.problem}`;
   return click2.steps.map(
     (step4) => step4.ok ? [
@@ -72119,13 +72134,12 @@ var HOST_VERBS = /* @__PURE__ */ new Map([
   [VERB_APPLY_UPDATE, "rebuilds cc-candybar"],
   [VERB_RUN, "runs a program the config declares"]
 ]);
-function notSentOnDrivenBar(link, sessionId2) {
-  const click2 = drawnClickOf(link.url);
+function notSentOnDrivenBar(click2, sessionId2) {
   const acts = (click2.ok ? click2.steps : []).flatMap((step4) => {
     const does = step4.ok ? HOST_VERBS.get(step4.verb) : void 0;
     return does === void 0 ? [] : [does];
   });
-  return acts.length === 0 ? null : `not sent: on a real machine this ${acts.join(", ")}: ${describeLink(link, sessionId2)}`;
+  return acts.length === 0 ? null : `not sent: on a real machine this ${acts.join(", ")}: ${describeClick(click2, sessionId2)}`;
 }
 
 // src/daemon/daemon.ts
@@ -72275,6 +72289,48 @@ var Runs = class {
 // src/daemon/draw-bar.ts
 init_globals();
 var import_node_path37 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/session-pane.ts
+init_globals();
+function sessionPaneOf(hints, sessionId2, heldSession) {
+  const tmux3 = inTmux(hints.tmux) ? hints.tmux : null;
+  const { parentPid } = hints;
+  if (parentPid === void 0)
+    return {
+      kind: "unconfirmed",
+      tmux: tmux3,
+      why: "its client is too old to say which process ran it (reinstall it with `cc-candybar install`)"
+    };
+  const held = heldSession(parentPid, hints.claudeConfigDir);
+  if (held.kind === "unread")
+    return {
+      kind: "unconfirmed",
+      tmux: tmux3,
+      why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}. A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`
+    };
+  return held.sessionId === sessionId2 ? { kind: "runs", tmux: tmux3 } : {
+    kind: "unconfirmed",
+    tmux: tmux3,
+    why: `the Claude Code that ran its statusline (pid ${parentPid}) holds session ${held.sessionId}`
+  };
+}
+function runsNowIn(where, heldSession) {
+  const reads = /* @__PURE__ */ new Map();
+  const once2 = (pid2, configDir2) => {
+    const key = `${pid2}\0${configDir2 ?? ""}`;
+    const read2 = reads.get(key) ?? heldSession(pid2, configDir2);
+    reads.set(key, read2);
+    return read2;
+  };
+  return (req) => inTmux(req.hints.tmux) && samePane(req.hints.tmux, where) && sessionPaneOf(req.hints, req.sessionId, once2).kind === "runs";
+}
+var paneFact = (pane) => pane.kind === "unconfirmed" ? `unconfirmed: ${pane.why}` : pane.tmux === null ? "outside" : "runs";
+function sessionPaneError(pane, lanes) {
+  const on2 = LANE_NAMES.filter(
+    (lane) => lanes[lane] && LANES[lane].showsPaneSession
+  );
+  return pane.kind !== "unconfirmed" || pane.tmux === null || on2.length === 0 ? null : `The ${on2.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and this one is not known to be it: ${pane.why}`;
+}
 
 // src/daemon/update-keys.ts
 init_globals();
@@ -77554,6 +77610,10 @@ function requestFacts(req, at, facts, renderer) {
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
+    // Whether the session runs in the tmux pane its client names, as the
+    // checkpoint stamped it: the status line and a bar pane follow only one
+    // that does.
+    pane: paneFact(req.pane),
     // What the sighting recorded of the rate-limit windows — the fact the
     // doctor's segment-data check reads (RenderSightings).
     rateLimits: req.rateLimits
@@ -77660,6 +77720,7 @@ function drawRender(parts, setup, drawing2) {
   const errors2 = [
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
+    said(sessionPaneError(req.pane, lanes)),
     sourced("load", entry.lastError),
     sourced("update-act", updateWatch.error()),
     // [LAW:no-silent-failure] The home's link-id counter, faulted: no tmux
@@ -77845,7 +77906,7 @@ function requestArrived(parts, req) {
     req.sessionId,
     inTmux(req.hints.tmux)
   );
-  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
+  tmuxStatusLines.observe(req.sessionId, req.pane, lanes.tmuxStatus);
   return laneSetups.noted(req.sessionId, lanes);
 }
 function drawForAnswer(parts, setup, arrival) {
@@ -77869,7 +77930,11 @@ function laneClicked(parts, sessionId2, before, after) {
   const { frameFeeds, laneSetups, tmuxStatusLines } = parts;
   const latest = frameFeeds.latest(sessionId2);
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
-    tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
+    tmuxStatusLines.observe(
+      sessionId2,
+      sessionPaneOf(latest.hints, sessionId2, parts.heldSession),
+      after.tmuxStatus
+    );
   return laneSetups.clicked(sessionId2, before, after);
 }
 async function drawAnswer(parts, req, at, waitEndsAt, facts) {
@@ -78337,7 +78402,7 @@ function parseRenderEncoding(raw) {
     problem: `request 'encoding' is not one of ${RENDER_ENCODINGS.join(", ")}: ${JSON.stringify(raw)}`
   };
 }
-function checkRenderRequest(req, stats, log, home, storedRoot2) {
+function checkRenderRequest(req, stats, log, home, storedRoot2, heldSession) {
   const { report: report2 } = validateHookData(req.hookData);
   const wireProblems = [];
   for (const path47 of report2.missingRequired) {
@@ -78397,7 +78462,10 @@ function checkRenderRequest(req, stats, log, home, storedRoot2) {
       rateLimits: rateLimitsSeen(req.hookData),
       requested,
       originRecord: encodeRenderOrigin(requested, asked2),
-      refusedArgs
+      refusedArgs,
+      // [LAW:effects-at-boundaries] Read once, as the request arrives: what
+      // holds a pane for a session is that request's arrival.
+      pane: sessionPaneOf(hints, sessionId2.id, heldSession)
     }
   };
 }
@@ -78726,7 +78794,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     return stay({
       ok: true,
       paneSession: frameFeeds.newestWhere(
-        ({ hints: { tmux: tmux3 } }) => namesPane(tmux3, { socket, pane })
+        runsNowIn({ socket, pane }, parts.heldSession)
       )
     });
   }
@@ -78777,7 +78845,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       stats,
       parts.log,
       parts.home,
-      parts.storedRoot
+      parts.storedRoot,
+      parts.heldSession
     );
     const sighted = (req2, frame2) => renderSightings.see(
       req2.sessionId,
@@ -85046,14 +85115,16 @@ var TmuxStatusLines = class {
   writes = 0;
   failedWrites = 0;
   // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
-  // arrival with its own hints, a click's commit with its session's latest —
-  // never at a draw: a session whose switch is on and that reported a tmux
-  // pane is held, any other is not. A daemon restart picks each session up at
-  // its next request.
-  observe(sessionId2, tmux3, on2) {
+  // arrival, a click's commit — never at a draw: a session whose switch is on
+  // is held in the pane its Claude Code's record confirms it runs in (`pane`),
+  // and one switched off, or confirmed outside tmux, is not. An unconfirmed
+  // request says nothing of where its session runs, so a session held already
+  // stays where it is. A daemon restart picks each session up at its next
+  // request.
+  observe(sessionId2, pane, on2) {
     if (this.closed) return;
     const held = this.held.get(sessionId2);
-    const where = on2 && tmux3 !== null && tmux3 !== void 0 ? tmux3 : null;
+    const where = !on2 ? null : pane.kind === "runs" ? pane.tmux : held ?? null;
     if (held !== void 0 && (where === null || !samePane(held, where)))
       this.release(held, "switched off or moved");
     if (where === null || this.held.has(sessionId2)) return;
@@ -86532,13 +86603,14 @@ function createDaemon(inputs) {
     log,
     clock
   });
+  const heldSession = inputs.heldSession(host.home);
   const laneSetups = new LaneSetups({
     edge: inputs.laneEdge(
       launcher,
       (sessionId2) => frameFeeds.following(sessionId2),
       closing.signal,
       probe3,
-      host.home
+      heldSession
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -86564,7 +86636,7 @@ function createDaemon(inputs) {
       run: (socket, args) => runTmuxAsync(launcher, { socket }, "tmux-status", args)
     },
     subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
-    sessionInPane: (where) => frameFeeds.newestWhere(({ hints: { tmux: tmux3 } }) => namesPane(tmux3, where)),
+    sessionInPane: (where) => frameFeeds.newestWhere(runsNowIn(where, heldSession)),
     // Run by tmux under its server's environment, so the renderer's home is
     // stated whole on the command, every variable of it.
     handler: [
@@ -86811,6 +86883,7 @@ function createDaemon(inputs) {
     home: host.home,
     storedRoot: paths2.storedRoot,
     tmp: host.tmp,
+    heldSession,
     launcher,
     log,
     clock,
@@ -87622,29 +87695,48 @@ async function paneClaude(launcher, hint) {
   };
 }
 function heldSessionIn(file) {
+  const first2 = recordIn(file);
+  return first2.torn ? recordIn(file).held : first2.held;
+}
+function recordIn(file) {
   let text4;
   try {
     text4 = fs_default.readFileSync(file, "utf8");
   } catch (e) {
-    return e.code === "ENOENT" ? {
-      kind: "unread",
-      why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`
-    } : { kind: "unread", why: e.message };
+    return {
+      torn: false,
+      held: e.code === "ENOENT" ? {
+        kind: "unread",
+        why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`
+      } : { kind: "unread", why: e.message }
+    };
   }
   let record2;
   try {
     record2 = JSON.parse(text4);
   } catch (e) {
     return {
-      kind: "unread",
-      why: `its session record ${file} is not JSON (${e.message})`
+      torn: true,
+      held: {
+        kind: "unread",
+        why: `its session record ${file} is not JSON (${e.message})`
+      }
     };
   }
   const sessionId2 = typeof record2 === "object" && record2 !== null && "sessionId" in record2 ? record2.sessionId : void 0;
-  return typeof sessionId2 === "string" && sessionId2 !== "" ? { kind: "holds", sessionId: sessionId2 } : { kind: "unread", why: `its session record ${file} names no session` };
+  return {
+    torn: false,
+    held: typeof sessionId2 === "string" && sessionId2 !== "" ? { kind: "holds", sessionId: sessionId2 } : {
+      kind: "unread",
+      why: `its session record ${file} names no session`
+    }
+  };
 }
+var heldSessionUnder = (home) => (pid2, configDir2) => heldSessionIn(
+  import_node_path52.default.join(claudeConfigDir(configDir2, home), "sessions", `${pid2}.json`)
+);
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing, clock, probe3, home) {
+function productionLaneEdge(launcher, following, closing, clock, probe3, heldSession) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
     claudeInput: productionClaudeInputEdge(launcher),
@@ -87693,9 +87785,7 @@ function productionLaneEdge(launcher, following, closing, clock, probe3, home) {
     fileExists: (file) => fs_default.existsSync(file),
     presence,
     paneClaude: (hint) => paneClaude(launcher, hint),
-    heldSession: (pid2, configDir2) => heldSessionIn(
-      import_node_path52.default.join(claudeConfigDir(configDir2, home), "sessions", `${pid2}.json`)
-    ),
+    heldSession,
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the
     // shell's once the shell holds its terminal again: until it has reaped
     // Claude Code and taken the foreground back, tmux reads the directory of
@@ -87877,7 +87967,15 @@ function productionAdapters(paths2, daemonLog, machine) {
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe3, home) => productionLaneEdge(launcher, following, closing, machine, probe3, home),
+    laneEdge: (launcher, following, closing, probe3, heldSession) => productionLaneEdge(
+      launcher,
+      following,
+      closing,
+      machine,
+      probe3,
+      heldSession
+    ),
+    heldSession: heldSessionUnder,
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
@@ -88364,7 +88462,7 @@ async function click(url, size) {
   if (steps2.length > 0 && copies.length === steps2.length) {
     return { ...await render2(size), refused: await copy2(copies.join("\n")) };
   }
-  const held = notSentOnDrivenBar({ text: "", url }, sessionId);
+  const held = notSentOnDrivenBar(drawn, sessionId);
   if (held !== null) return { ...await render2(size), refused: held };
   let refused3 = null;
   try {

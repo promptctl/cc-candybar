@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-668",
+      "ref": "refs/pull/668/merge",
+      "sha": "4f0a1df09c5f55baabe25c5c4247f3ca29ea36b1",
+      "timestamp": "2026-11-07T02:21:23.716Z",
+      "commits": [
+        {
+          "sha": "4f0a1df09c5f55baabe25c5c4247f3ca29ea36b1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:20:29Z",
+          "message": "Merge 03a3ef50349a5fcd807c45b658f2f86de18963c3 into fc49ff5db45144707ebd065b13c507d038867cde\n"
+        },
+        {
+          "sha": "03a3ef50349a5fcd807c45b658f2f86de18963c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:19:57-07:00",
+          "message": "fix(click): a refused step and a handler's refusal are one Refusal, and a click is read once per reader (brandon-menus-sjhy.3c7)\n\nThe step's run takes only a step its read lets run, so the fold hands a\nrefused step's refusal straight to its owner. effectsOf throws a value\nthat does not decode with its link again, and spells the unknown verb and\nthe non-dispatch link as the daemon and drawnClickOf do. The driven-bar\nhold takes the click its caller already read.\n"
+        },
+        {
+          "sha": "f93228c810eabf24a9995a9f42a04d04a8818b34",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:57:41-07:00",
+          "message": "fix(click): a drawn link reads as the daemon's one read, step by step, and one gate holds back a driven bar's machine click (brandon-menus-sjhy.3c7)\n\nThe dispatch read stamps each step once: one that runs carries its leaf,\nsession and arguments; one refused carries the daemon's text for why and the\narguments that decoded. The fold is the one reader of step outcomes and the\none caller of the refusal owners. drawnClickOf and describeLink read through\nreadClick, so adjacent writes read as the batch that lands and a malformed\nstep as its own refusal beside the steps that run; effectsOf stays the wire\ncodec's inverse. The harness and the site hold a click back by one gate that\ncounts only steps that run, naming refused steps beside them.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "e91dc65779794fd06d6ce4db8ec43c25efb26e07",
@@ -20,28 +49,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-07T01:56:23Z",
           "message": "chore(release): set `package.json` to 1.208.8 [skip ci]\n\n## [1.208.8](https://github.com/promptctl/cc-candybar/compare/v1.208.7...v1.208.8) (2026-11-07)\n\n### Bug Fixes\n\n* **feed:** a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0) ([#666](https://github.com/promptctl/cc-candybar/issues/666)) ([fff2581](https://github.com/promptctl/cc-candybar/commit/fff258104584a230d2eb90386e7f1e306eed5c5a))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-668",
-      "ref": "refs/pull/668/merge",
-      "sha": "0105f8154c2d88966e17e3b3d633a855a56e3234",
-      "timestamp": "2026-11-07T01:59:00.663Z",
-      "commits": [
-        {
-          "sha": "0105f8154c2d88966e17e3b3d633a855a56e3234",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:58:14-07:00",
-          "message": "Merge f93228c810eabf24a9995a9f42a04d04a8818b34 into 30386afe1d6f69b407d95bb4159aebbc3d9217d6\n"
-        },
-        {
-          "sha": "f93228c810eabf24a9995a9f42a04d04a8818b34",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:57:41-07:00",
-          "message": "fix(click): a drawn link reads as the daemon's one read, step by step, and one gate holds back a driven bar's machine click (brandon-menus-sjhy.3c7)\n\nThe dispatch read stamps each step once: one that runs carries its leaf,\nsession and arguments; one refused carries the daemon's text for why and the\narguments that decoded. The fold is the one reader of step outcomes and the\none caller of the refusal owners. drawnClickOf and describeLink read through\nreadClick, so adjacent writes read as the batch that lands and a malformed\nstep as its own refusal beside the steps that run; effectsOf stays the wire\ncodec's inverse. The harness and the site hold a click back by one gate that\ncounts only steps that run, naming refused steps beside them.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         }
       ]
     },
