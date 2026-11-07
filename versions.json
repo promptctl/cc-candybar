@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-664",
-      "ref": "refs/pull/664/merge",
-      "sha": "5729c5eeaa1a155f22215898cd40f32f47f4356e",
-      "timestamp": "2026-11-07T00:51:17.304Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "536561c3a05d572669c0b7bd7a2830dd6ab3bcc6",
+      "timestamp": "2026-11-07T00:58:10.721Z",
       "commits": [
         {
-          "sha": "5729c5eeaa1a155f22215898cd40f32f47f4356e",
+          "sha": "536561c3a05d572669c0b7bd7a2830dd6ab3bcc6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:50:17-07:00",
-          "message": "Merge 2ed699d39e31fdc2bd71eee54e7b78e25b2b84e7 into 1c67112e8a6fe0cfc8d98ccf9ca7846a4a44830b\n"
+          "timestamp": "2026-11-06T17:57:16-07:00",
+          "message": "fix(feed): the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv) (#664)\n\n* fix(feed): the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv)\n\n* fix(feed): the feed times each wake to the frame that answers it, on its own clock (candybar-gather-renderer-76bb.6pj.qbv)\n\n* fix(feed): every draw answers its wake, timed to the frame drawn (candybar-gather-renderer-76bb.6pj.qbv)"
         },
         {
-          "sha": "2ed699d39e31fdc2bd71eee54e7b78e25b2b84e7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:42:33-07:00",
-          "message": "fix(feed): every draw answers its wake, timed to the frame drawn (candybar-gather-renderer-76bb.6pj.qbv)\n"
-        },
-        {
-          "sha": "2b2b8aeed9a3b45b412f5cc7713bbbdfce5ba244",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:38:48-07:00",
-          "message": "fix(feed): the feed times each wake to the frame that answers it, on its own clock (candybar-gather-renderer-76bb.6pj.qbv)\n"
-        },
-        {
-          "sha": "6fdd708367c21098fbbd90ffaea54898192145bd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:33:02-07:00",
-          "message": "fix(feed): the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv)\n"
+          "sha": "1c67112e8a6fe0cfc8d98ccf9ca7846a4a44830b",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-07T00:34:57Z",
+          "message": "chore(release): set `package.json` to 1.208.5 [skip ci]\n\n## [1.208.5](https://github.com/promptctl/cc-candybar/compare/v1.208.4...v1.208.5) (2026-11-07)\n\n### Bug Fixes\n\n* **recording:** a click's state crosses the recording ahead of the document it keyed (candybar-gather-renderer-76bb.6pj.09q) ([#662](https://github.com/promptctl/cc-candybar/issues/662)) ([52d7647](https://github.com/promptctl/cc-candybar/commit/52d7647ba197e389f78b91829e5591180ad2f2a3))\n"
         }
       ]
     },
@@ -85,28 +71,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:44:10-07:00",
           "message": "fix(click): a click is read once at the daemon's edge, and its event carries that read (brandon-menus-sjhy.ovq)\n\nThe edge read a click to find its session, then the verb's run read the raw\nvalue again, and the journal, the landing stamp and the fold took their\nsession from that second read. Now `readClick` reads a link once, at the\nedge, into a branded Click whose dispatch session is taken from its effects\nin the read. The click event carries that Click, and `runClick` runs from it,\nso the session the reply facts record, the one the journal and landing use,\nand the steps the fold performs are one value.\n\nThe click table holds what a link can name: dispatch, and the doctor's\nprobe, whose nonce is now parsed at the edge too. A link naming a leaf verb\nitself, which nothing draws, is an unknown click verb refused at the edge.\nfoldEffects is the one leaf runner. VERBS, VERB_NAMES, ClickVerb, clickVerb,\nclickSessionOf and decodeWire are gone, and the drawn-link reader refuses a\nlink that names anything but dispatch.\n\nTests click as the bar does. The helpers that split a drawn link and ran\neach effect as its own click (one turn and undo step per effect, no\nbatching) run the whole link, and hand-built single-verb clicks go through\na one-effect dispatch link (test/helpers/click.ts clickEffect, effectLink).\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "52d7647ba197e389f78b91829e5591180ad2f2a3",
-      "timestamp": "2026-11-07T00:28:27.130Z",
-      "commits": [
-        {
-          "sha": "52d7647ba197e389f78b91829e5591180ad2f2a3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:27:33-07:00",
-          "message": "fix(recording): a click's state crosses the recording ahead of the document it keyed (candybar-gather-renderer-76bb.6pj.09q) (#662)\n\n* fix(recording): a click's state crosses the recording ahead of the document it keyed, so a replay keeps the old run's value until the new one lands (candybar-gather-renderer-76bb.6pj.09q)\n\nA recording now writes a state line whenever the session's clicks' state moved\nbefore a document; the replay restores it there instead of only at the next\ndraw. RECORDING_VERSION 6 -> 7.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(recording): a state write that ends the recording offers no document after it; tests prove the old run shows until the new one lands (candybar-gather-renderer-76bb.6pj.09q)\n\n* fix(recording): a facts line can be written only through the document path that writes its state ahead; a failing state write is tested (candybar-gather-renderer-76bb.6pj.09q)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        },
-        {
-          "sha": "ed6349b7dbfc3931ddf5f7cf34225682a1d5bdf8",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T00:25:02Z",
-          "message": "chore(release): set `package.json` to 1.208.4 [skip ci]\n\n## [1.208.4](https://github.com/promptctl/cc-candybar/compare/v1.208.3...v1.208.4) (2026-11-07)\n\n### Bug Fixes\n\n* **testing:** every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62) ([#661](https://github.com/promptctl/cc-candybar/issues/661)) ([71d231b](https://github.com/promptctl/cc-candybar/commit/71d231b7b17cb286ba143c6b7c09d3046d2af023))\n"
         }
       ]
     },
