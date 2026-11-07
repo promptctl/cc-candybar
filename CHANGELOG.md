@@ -1,3 +1,9 @@
+## [1.208.5](https://github.com/promptctl/cc-candybar/compare/v1.208.4...v1.208.5) (2026-11-07)
+
+### Bug Fixes
+
+* **recording:** a click's state crosses the recording ahead of the document it keyed (candybar-gather-renderer-76bb.6pj.09q) ([#662](https://github.com/promptctl/cc-candybar/issues/662)) ([52d7647](https://github.com/promptctl/cc-candybar/commit/52d7647ba197e389f78b91829e5591180ad2f2a3))
+
 ## [1.208.4](https://github.com/promptctl/cc-candybar/compare/v1.208.3...v1.208.4) (2026-11-07)
 
 ### Bug Fixes
