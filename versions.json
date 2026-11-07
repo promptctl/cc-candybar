@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-678",
+      "ref": "refs/pull/678/merge",
+      "sha": "607162b4541831022e837231098d7d6fa9388bd2",
+      "timestamp": "2026-11-07T10:27:10.568Z",
+      "commits": [
+        {
+          "sha": "607162b4541831022e837231098d7d6fa9388bd2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:25:38Z",
+          "message": "Merge 4ebec8cd99703f75802b334ac8cdfd5108e776a1 into 1f5014d66591bcdbb9dac6e5fb1aa8619e0bf5fd\n"
+        },
+        {
+          "sha": "4ebec8cd99703f75802b334ac8cdfd5108e776a1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:16:16-07:00",
+          "message": "test(state): the cross-process writers are waited on by name and never outlive the case (brandon-unfiled-3248.wkh1)\n\nMedium review of #678. The wait for both writers to exit goes through the\nshared poll helper and names each child's state, the sampling stops with the\ncase, and the case kills both children on the way out. A child's exit code\nis what judges it, with its stderr carried for the reason. stagedPath's\nmarker says it is this runtime's one spelling.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "bce395abfcb96a7c28a8d1b23e8bf0f8d3080158",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:08:02-07:00",
+          "message": "fix(state): every staged write names a staging of its own (brandon-unfiled-3248.wkh1)\n\nHigh review of #678. The staged name adds a random part beside the pid, so\ntwo writes never share one whatever they share (a process, a pid namespace),\nand it lives in a module of its own that every stage-then-publish site uses:\nwriteAtomic, the session state file, the socket lease, the fork-bomb\nregistry, the link key, the pricing cache and a job's end status. A failed\nflush removes its staged file. The cross-process test's children wait on a\npipe the test holds, name a failed spawn, and the reader no longer spins.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "a10183068c6c9f2cf2afdfef6cf56125a98aece2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:40:04-07:00",
+          "message": "fix(state): concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1)\n\nTwo processes sharing a state directory both staged a write at\n`<file>.tmp`, so one's rename published or moved the other's bytes and\nthe other's rename failed ENOENT. Every staged name now carries the\nwriting process's pid, spelled once by `stagedPath` in\nsrc/utils/atomic-write.ts: writeAtomic, both session-state-file stages\nand the socket lease use it. The fork-bomb breaker stages by an\ninjected identity's pid and is left as it is.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-683",
       "ref": "refs/pull/683/merge",
       "sha": "c58308a733ebb147cef7dd8d321c3aadad4d72fc",
@@ -156,42 +192,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:07:39-07:00",
           "message": "fix(state): a session value its config no longer admits draws the default and warns (brandon-menus-sjhy.46w)\n\nSession state outlives the config that wrote it. A stale value was swallowed\nsilently: the globals resolution dropped it, a placement's bar drew the saved\nvalue while its carousel sat on its first option, and a carousel or cycle\nfolded an author key's stale value to its first member.\n\n- The gate judges a stored value (Gate.verdict): a key one of the config's\n  own `set` actions writes, holding a value its validator refuses or changes,\n  is foreign. A key no `set` writes is the daemon's own and is held.\n- JudgedState (src/daemon/foundations/judged-state.ts) is the branded reader\n  every interpretive reader demands: the registry's `state` variables, step-\n  state (which now steps from the seed instead of clamping), the verbs'\n  settings picks, the closing view's closeNested, and the idle close's\n  openRoots. Back admits a value only if the verdict holds it. Release reads\n  after a reload stay raw.\n- session.foreign (the session view) lists foreign values; the draw stands one\n  amber `domain` warning per key, identified by its key.\n- The ring shows a held non-option between the last and first options; the\n  cycle keeps its rest-first reading, with the reason stated.\n- validateBoolean accepts its own canonical false, \"\".\n- placementSetting drops its fallback for a refused draft.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-678",
-      "ref": "refs/pull/678/merge",
-      "sha": "4c3717be2d7d00d13cc9b5b353cf20cc059899d1",
-      "timestamp": "2026-11-07T10:17:27.223Z",
-      "commits": [
-        {
-          "sha": "4c3717be2d7d00d13cc9b5b353cf20cc059899d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:16:40Z",
-          "message": "Merge fe4711c3a53476edd6bb4f6bfa82c0ad8fe5fac2 into 2e9ea2dce98b1908a16f3ffa2128310350ebc817\n"
-        },
-        {
-          "sha": "fe4711c3a53476edd6bb4f6bfa82c0ad8fe5fac2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:16:16-07:00",
-          "message": "test(state): the cross-process writers are waited on by name and never outlive the case (brandon-unfiled-3248.wkh1)\n\nMedium review of #678. The wait for both writers to exit goes through the\nshared poll helper and names each child's state, the sampling stops with the\ncase, and the case kills both children on the way out. A child's exit code\nis what judges it, with its stderr carried for the reason. stagedPath's\nmarker says it is this runtime's one spelling.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "69a58d367bb714fd89d42441540d83d5576e8281",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:08:02-07:00",
-          "message": "fix(state): every staged write names a staging of its own (brandon-unfiled-3248.wkh1)\n\nHigh review of #678. The staged name adds a random part beside the pid, so\ntwo writes never share one whatever they share (a process, a pid namespace),\nand it lives in a module of its own that every stage-then-publish site uses:\nwriteAtomic, the session state file, the socket lease, the fork-bomb\nregistry, the link key, the pricing cache and a job's end status. A failed\nflush removes its staged file. The cross-process test's children wait on a\npipe the test holds, name a failed spawn, and the reader no longer spins.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "addbedc036ff4484d1f2ef4845a257c47aae91b9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:40:04-07:00",
-          "message": "fix(state): concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1)\n\nTwo processes sharing a state directory both staged a write at\n`<file>.tmp`, so one's rename published or moved the other's bytes and\nthe other's rename failed ENOENT. Every staged name now carries the\nwriting process's pid, spelled once by `stagedPath` in\nsrc/utils/atomic-write.ts: writeAtomic, both session-state-file stages\nand the socket lease use it. The fork-bomb breaker stages by an\ninjected identity's pid and is left as it is.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
