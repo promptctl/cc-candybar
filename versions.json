@@ -4,32 +4,32 @@
     {
       "version": "pr-680",
       "ref": "refs/pull/680/merge",
-      "sha": "cfc3783a194551ec01d78eb9b377d14869968ae2",
-      "timestamp": "2026-11-07T10:27:25.867Z",
+      "sha": "39690637a7845f042cbb14f5b8587a8d9274659b",
+      "timestamp": "2026-11-07T10:28:30.016Z",
       "commits": [
         {
-          "sha": "cfc3783a194551ec01d78eb9b377d14869968ae2",
+          "sha": "39690637a7845f042cbb14f5b8587a8d9274659b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:25:47Z",
-          "message": "Merge a287815082f0ad238c0aa8c6f5aacc8dcd02c019 into 1f5014d66591bcdbb9dac6e5fb1aa8619e0bf5fd\n"
+          "timestamp": "2026-11-07T10:26:00Z",
+          "message": "Merge 3b55367aa1bd4f969c02da4fc771b790f07cdfd5 into 1f5014d66591bcdbb9dac6e5fb1aa8619e0bf5fd\n"
         },
         {
-          "sha": "a287815082f0ad238c0aa8c6f5aacc8dcd02c019",
+          "sha": "3b55367aa1bd4f969c02da4fc771b790f07cdfd5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:25:17-07:00",
           "message": "fix(update-act): a look stages its spend in the act's own directory, never making one (brandon-unfiled-3248.9eu3)\n\nwriteAtomic made the act's directory when a newer claim had pruned it,\nflushed every 2 s look on the render loop, and staged at a name shared by\nevery daemon. A look now stages at a pid-named file inside the act and\nrenames it, unflushed: an act gone under the look spends nothing. The\nconcurrent-writer safety no longer waits on writeAtomic's staging change.\nReverts a formatter reflow of test/update-act.test.ts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
-          "sha": "12eb650a9cee5ae0a196513bc4839615f241aa09",
+          "sha": "4824eefc1d8660864937919308eb5856ae57d0f6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:09:19-07:00",
           "message": "fix(update-act): a look spends at most five polls, and a spend it can't read is an error (brandon-unfiled-3248.9eu3)\n\nA dark wake mid-sleep spent the 60 s cap, so forty of them overnight ended\nthe act and could tear the bundle; the cap now follows the poll interval,\nin the watch that owns both. awake.json is parsed: a missing number read\nas NaN, compared past the budget and ended a running build. Corrects the\nrace comment: concurrent looks lose nothing.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
-          "sha": "87d211a918f2138408bb7b7974565298f42f147e",
+          "sha": "7f38e18a21d5cbd521cb7c060472d9cde6fb200b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:56:43-07:00",
