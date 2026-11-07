@@ -234,7 +234,8 @@ async function click(url: string, size: Size) {
     step.ok && step.verb === VERB_COPY ? [step.args[1]!] : [],
   );
   if (steps.length > 0 && copies.length === steps.length) {
-    return { ...(await render(size)), refused: await copy(copies.join("\n")) };
+    const copied = copy(copies.join("\n"));
+    return { ...(await render(size)), refused: await copied };
   }
   const held = notSentOnDrivenBar(drawn, sessionId);
   if (held !== null) return { ...(await render(size)), refused: held };

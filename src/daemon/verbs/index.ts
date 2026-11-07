@@ -2003,7 +2003,7 @@ function readLeaf(verb: string, leaf: Leaf, value: string): LeafEffect {
 }
 
 // [LAW:parse-dont-validate] A malformed escape is the session's failed parse,
-// as any other bad id is, so perform refuses that one step.
+// as any other bad id is, so its read refuses that one step.
 function readSession(head: string): ParsedSessionId {
   const decoded = parseWire(() => decodeURIComponent(head));
   return decoded.ok
@@ -2241,18 +2241,19 @@ const REFUSAL_OWNERS: ReadonlyMap<
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
-// dispatcher folds the list, running EVERY effect through the leaf table, after
+// dispatcher folds the list of steps its read judged, after
 // batchAdjacentWrites has joined each run of adjacent set-state (or
 // reset-config) effects into the one batch that lands whole. The
 // effect count is data — N=1 and N=100 walk the identical loop, no plain-vs-
-// compound branch. [LAW:no-silent-failure] Every effect runs even if an
+// compound branch. [LAW:no-silent-failure] Every step runs even if an
 // earlier one failed; failures accumulate in `errors`. An unknown or
-// non-leaf (e.g. nested `dispatch`) verb is a miss in LEAF_VERBS — reported,
-// never executed.
+// non-leaf (e.g. nested `dispatch`) verb is a miss in LEAF_VERBS — refused at
+// its read, reported, never executed.
 //
 // [LAW:types-are-the-program] The aggregate PRESERVES the dispatcher's
-// input-vs-operational error classification: a leaf throws BadVerbArgs for bad
-// input (→ BAD_REQUEST) and a plain Error for an operational failure (a store
+// input-vs-operational error classification: a step refused at its read, or
+// whose leaf throws BadVerbArgs, is bad input (→ BAD_REQUEST), and a leaf's
+// plain Error is an operational failure (a store
 // that refused the write → RENDER_FAILED). If ANY step failed operationally,
 // the whole click failed operationally (plain Error); only when every failure
 // is an input error does the aggregate stay BadVerbArgs. An unknown verb is

@@ -165,8 +165,8 @@ export const HOST_VERBS: ReadonlyMap<string, string> = new Map([
 // [LAW:single-enforcer] Why a bar driven anywhere but a real session does not
 // send `click`, or null to send it: a step it runs acts on the machine. A
 // refused step acts on nothing, so it never holds a click back: the daemon
-// refuses it, as it refuses a real click. The reason names what each such
-// step does, then the whole click, its refused steps included.
+// refuses it, as it refuses a real click. The reason names, once each, what
+// such steps do, then the whole click, its refused steps included.
 export function notSentOnDrivenBar(
   click: DrawnClick,
   sessionId: string,
@@ -177,5 +177,5 @@ export function notSentOnDrivenBar(
   });
   return acts.length === 0
     ? null
-    : `not sent: on a real machine this ${acts.join(", ")}: ${describeClick(click, sessionId)}`;
+    : `not sent: on a real machine this ${[...new Set(acts)].join(", ")}: ${describeClick(click, sessionId)}`;
 }

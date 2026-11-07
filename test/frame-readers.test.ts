@@ -199,6 +199,16 @@ describe("describeLink", () => {
 });
 
 describe("notSentOnDrivenBar", () => {
+  test("a click with two steps that act alike names what they do once", () => {
+    const url = effectsUrl(MAIN_NAME, [
+      { verb: VERB_COPY, args: ["s", "x"] },
+      { verb: VERB_COPY, args: ["s", "y"] },
+    ]);
+    expect(notSentOnDrivenBar(drawnClickOf(url), "s")).toBe(
+      `not sent: on a real machine this copies to the clipboard: ${VERB_COPY} <session> x ; ${VERB_COPY} <session> y`,
+    );
+  });
+
   test("a click with a step that acts on the machine is held back, naming its refused steps too", () => {
     const url = `${effectsUrl(MAIN_NAME, [{ verb: VERB_COPY, args: ["s", "x"] }])}&e=bogus`;
     expect(notSentOnDrivenBar(drawnClickOf(url), "s")).toBe(
