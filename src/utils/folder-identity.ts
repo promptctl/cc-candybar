@@ -45,7 +45,8 @@ export const identityKey = (identity: FolderIdentity | "gone"): string =>
 // (`unreadable`, a permission, a symlink loop, a mount's fault). A watch names
 // a directory, it does not judge it, so [LAW:no-silent-failure] the failure is
 // spelled, never thrown; a storage owner that must judge its folder takes
-// `statIdentity`'s throw instead.
+// `statIdentity`'s throw instead, and reports its message as the folder's
+// fault.
 export type Bound = FolderIdentity | "gone" | { readonly unreadable: string };
 
 export const boundOf = (filesystem: Filesystem, folder: string): Bound => {

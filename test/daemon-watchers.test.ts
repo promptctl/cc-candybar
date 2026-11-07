@@ -327,10 +327,12 @@ describe("WatcherRegistry", () => {
   });
 
   // A stand-in for the OS's side of a watch the test drives: every directory
-  // opens, and every handle fs.watch opens is recorded with the directory, the
-  // listener the registry gave it, and whether it was closed. No real
-  // directory can be made to report or fail on demand.
+  // opens, except one `refuse` names (with the reason it gives), and every
+  // handle fs.watch opens is recorded with the directory, the listener the
+  // registry gave it, and whether it was closed. No real directory can be made
+  // to report or fail on demand.
   function standIn() {
+    const refuse = new Map<string, string>();
     type Opened = {
       dir: string;
       closed: boolean;
@@ -343,6 +345,8 @@ describe("WatcherRegistry", () => {
       _opts: unknown,
       listener: Opened["listener"],
     ) => {
+      const refusal = refuse.get(dir);
+      if (refusal !== undefined) throw new Error(refusal);
       const record = { dir, closed: false, listener } as Opened;
       record.handle = Object.assign(new EventEmitter(), {
         close: () => void (record.closed = true),
@@ -357,6 +361,7 @@ describe("WatcherRegistry", () => {
     return {
       opened,
       opensOf,
+      refuse,
       restore: () => {
         watch.mockRestore();
         opendir.mockRestore();
@@ -708,6 +713,51 @@ describe("WatcherRegistry", () => {
         watchErrors: 1,
         dirWatchesOpened: 3,
         dirWatchesClosed: 1,
+      });
+      reg.closeAll();
+    } finally {
+      fake.restore();
+    }
+  });
+
+  // The registry's period retries a deaf directory, and the OS can answer it
+  // with another deafness: an error followed by a refusal (fd exhaustion), or
+  // a refusal whose reason changes. Every slot hears each change once.
+  test("a deaf directory whose reopen is deaf another way tells every slot a failed window; the same deafness tells nothing", async () => {
+    const fake = standIn();
+    try {
+      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+        logger: () => {},
+      });
+      const seen: Invalidation[] = [];
+      const other: Invalidation[] = [];
+      reg.acquire("k", { dirs: [{ path: "/w" }] }, (inv) => seen.push(inv));
+      reg.acquire("other", { dirs: [{ path: "/w" }] }, (inv) =>
+        other.push(inv),
+      );
+      fake.opensOf("/w")[0]!.handle.emit("error", new Error("EIO: i/o error"));
+      await until(
+        () => seen.length === 1 && other.length === 1,
+        "the error's window",
+      );
+      fake.refuse.set("/w", "EMFILE: too many open files");
+      reg.judge();
+      await until(
+        () => seen.length === 2 && other.length === 2,
+        "the refusal's window",
+      );
+      const refused = { kind: "failed", reason: "/w: EMFILE: too many open files" };
+      expect(seen[1]).toEqual(refused);
+      expect(other[1]).toEqual(refused);
+      reg.judge();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(seen).toHaveLength(2);
+      fake.refuse.set("/w", "ENOSPC: no space left on device");
+      reg.judge();
+      await until(() => seen.length === 3, "the changed refusal's window");
+      expect(seen[2]).toEqual({
+        kind: "failed",
+        reason: "/w: ENOSPC: no space left on device",
       });
       reg.closeAll();
     } finally {
