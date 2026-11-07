@@ -55,7 +55,7 @@ import { isBarLink } from "../click/scheme.js";
 import { parseHandlerUrl, VERB_RANGE } from "../click/wire.js";
 import { instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
-import { runsIn } from "./session-pane.js";
+import { runsNowIn } from "./session-pane.js";
 import {
   noteFacts,
   requestEvent,
@@ -350,8 +350,8 @@ export async function replyTo(
       });
     return stay({
       ok: true,
-      paneSession: frameFeeds.newestWhere((req) =>
-        runsIn(req.pane, { socket, pane }),
+      paneSession: frameFeeds.newestWhere(
+        runsNowIn({ socket, pane }, parts.heldSession),
       ),
     });
   }

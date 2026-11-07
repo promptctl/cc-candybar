@@ -2,14 +2,14 @@
 // a setup waiting on a process or a subscriber does not outlive its close, and
 // no signal is sent from a daemon that is gone.
 
-import { productionLaneEdge } from "../src/daemon/lane-edge";
+import { heldSessionUnder, productionLaneEdge } from "../src/daemon/lane-edge";
 import { processProbe } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
 
 describe("the lane edge after its daemon closes", () => {
   const edgeOver = (closing: AbortController) =>
-    productionLaneEdge(unscriptedLauncher, () => new Set(), closing.signal, systemTimekeeper, processProbe, "/nonexistent-home");
+    productionLaneEdge(unscriptedLauncher, () => new Set(), closing.signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"));
 
   test("a wait for a subscriber ends at once, before its deadline", async () => {
     const closing = new AbortController();

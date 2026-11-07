@@ -459,7 +459,7 @@ export interface SubscribeRequest {
 
 // Which session a tmux pane runs: the session of the daemon's newest render
 // request whose session runs in that pane, as Claude Code's own record of its
-// process confirmed it (src/daemon/session-pane.ts). A tmux bar pane
+// process says at the asking (src/daemon/session-pane.ts). A tmux bar pane
 // (lane C) knows the pane it draws beside, not the session in it, which
 // changes on a /clear; it asks again to follow.
 export interface PaneSessionRequest {

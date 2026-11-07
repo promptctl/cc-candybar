@@ -265,9 +265,9 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   // Taken by another session (a `/clear`: the pane's Claude Code now holds
   // it), the pane is released at the next answer from its server; the click
   // only remembers it. A client run in the pane under any session its Claude
-  // Code does not hold (candybar-gather-renderer-76bb.1dh.aom) takes nothing:
-  // the one release names the session that did take it, and each render
-  // event says why it did or did not.
+  // Code does not hold (candybar-gather-renderer-76bb.1dh.aom) takes nothing
+  // and releases nothing: the one release names the session that did take
+  // it, and each render event says why it did or did not.
   test("a click that leaves the status line's switch alone re-takes no status line released since", async () => {
     const sid = "lane-taken";
     await renderIn(sid);
@@ -302,8 +302,17 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
         `unconfirmed: the Claude Code that ran its statusline (pid ${pane.parentPid}) holds session ${sid}`,
       ),
     );
-    claudeHolds(pane.claudeConfigDir!, pane.parentPid!, "lane-taker");
+    // Run from that shell under the pane's own session, a client says
+    // nothing of where the session runs: its hold stays, as the one release
+    // below says.
+    await render(daemon, sid, projectDir, { ...pane, parentPid: shell }, args());
+    await render(daemon, sid, projectDir, pane, args());
+    // The next session's first request can arrive before its Claude Code
+    // rewrites the record (a `/clear`): the pane follows it once the record
+    // names it, with no request since.
     await render(daemon, "lane-taker", projectDir, pane, args());
+    expect(await paneSession()).toEqual({ ok: true, paneSession: sid });
+    claudeHolds(pane.claudeConfigDir!, pane.parentPid!, "lane-taker");
     expect(await paneSession()).toEqual({ ok: true, paneSession: "lane-taker" });
     await until(
       () => statusLines(sid, "released").length > 0,

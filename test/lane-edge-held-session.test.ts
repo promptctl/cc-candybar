@@ -6,10 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { heldSessionIn, productionLaneEdge } from "../src/daemon/lane-edge";
-import { processProbe } from "./helpers/host";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
-import { systemTimekeeper } from "../src/time";
+import { heldSessionIn, heldSessionUnder } from "../src/daemon/lane-edge";
 
 const SID = "3819990b-dd3f-4b32-ab79-c817debfc940";
 
@@ -44,10 +41,10 @@ describe("a Claude Code process's session record", () => {
   // The client names Claude Code's configuration directory only when
   // CLAUDE_CONFIG_DIR set one; otherwise it is the user's ~/.claude.
   test("is read for the pid under the client's configuration directory, else under the user's home", () => {
-    const edge = productionLaneEdge(unscriptedLauncher, () => new Set(), new AbortController().signal, systemTimekeeper, processProbe, dir);
+    const heldSession = heldSessionUnder(dir);
     write(path.join(dir, ".claude", "sessions", "4242.json"), JSON.stringify({ sessionId: "default-dir" }));
     write(path.join(dir, "zai", "sessions", "4242.json"), JSON.stringify({ sessionId: "named-dir" }));
-    expect(edge.heldSession(4242, undefined)).toEqual({ kind: "holds", sessionId: "default-dir" });
-    expect(edge.heldSession(4242, path.join(dir, "zai"))).toEqual({ kind: "holds", sessionId: "named-dir" });
+    expect(heldSession(4242, undefined)).toEqual({ kind: "holds", sessionId: "default-dir" });
+    expect(heldSession(4242, path.join(dir, "zai"))).toEqual({ kind: "holds", sessionId: "named-dir" });
   });
 });

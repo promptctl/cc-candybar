@@ -71,11 +71,16 @@ export function sessionPaneOf(
 export const runningPane = (pane: SessionPane): TmuxHint | null =>
   pane.kind === "runs" ? pane.tmux : null;
 
-// Whether `pane` says its session runs in the pane `where`.
-export const runsIn = (
-  pane: SessionPane,
-  where: Pick<TmuxHint, "socket" | "pane">,
-): boolean => pane.kind === "runs" && samePane(pane.tmux, where);
+// [LAW:one-source-of-truth] Whether `req`'s session runs in the pane `where`
+// now, by its Claude Code's record as it reads at this call: the stamp `req`
+// arrived with is the record as it read then, which a `/clear` rewrites under
+// the same process, so a lookup of a pane's session never answers from it.
+export const runsNowIn =
+  (where: Pick<TmuxHint, "socket" | "pane">, heldSession: HeldSessionOf) =>
+  (req: { readonly hints: ClientHints; readonly sessionId: string }): boolean =>
+    inTmux(req.hints.tmux) &&
+    samePane(req.hints.tmux, where) &&
+    sessionPaneOf(req.hints, req.sessionId, heldSession).kind === "runs";
 
 // [LAW:nothing-unseen] The stamp as the render event's `pane` field.
 export const paneFact = (pane: SessionPane): string =>

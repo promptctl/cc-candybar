@@ -91,7 +91,7 @@ import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
 import { MenuIdle } from "./menu-idle.js";
-import { runsIn, type HeldSessionOf } from "./session-pane.js";
+import { runsNowIn, type HeldSessionOf } from "./session-pane.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -152,8 +152,7 @@ export interface DaemonAdapters {
     following: (sessionId: string) => ReadonlySet<Lane>,
     closing: AbortSignal,
     probe: ProcessProbe,
-    // The user's home (`Host`).
-    home: string,
+    heldSession: HeldSessionOf,
   ) => LaneEdge;
   // The session a Claude Code process holds, by the records Claude Code keeps
   // under the user's home (`home`) or the directory a session names.
@@ -436,6 +435,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
     clock,
   });
+  // [LAW:one-source-of-truth] The one reader of which session a Claude Code
+  // process holds: the render checkpoint's stamp, a pane's lookup and a
+  // restart's check before its kill all ask it.
+  const heldSession = inputs.heldSession(host.home);
   // [LAW:single-enforcer] The one owner of what turning an animation lane on or
   // off takes (src/daemon/lane-setup.ts), told the switches each of a session's
   // clicks moved, and each request's arrival for the setups owed to it.
@@ -445,7 +448,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       (sessionId) => frameFeeds.following(sessionId),
       closing.signal,
       probe,
-      host.home,
+      heldSession,
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -476,7 +479,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
     subscribe: (sessionId, sub) => frameFeeds.subscribe(sessionId, sub),
     sessionInPane: (where) =>
-      frameFeeds.newestWhere(({ pane }) => runsIn(pane, where)),
+      frameFeeds.newestWhere(runsNowIn(where, heldSession)),
     // Run by tmux under its server's environment, so the renderer's home is
     // stated whole on the command, every variable of it.
     handler: [
@@ -780,7 +783,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     home: host.home,
     storedRoot: paths.storedRoot,
     tmp: host.tmp,
-    heldSession: inputs.heldSession(host.home),
+    heldSession,
     launcher,
     log,
     clock,

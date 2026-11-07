@@ -275,11 +275,19 @@ export function heldSessionIn(file: string): HeldSession {
   let record: unknown;
   try {
     record = JSON.parse(text);
-  } catch (e) {
-    return {
-      kind: "unread",
-      why: `its session record ${file} is not JSON (${(e as Error).message})`,
-    };
+  } catch {
+    // [LAW:no-silent-failure] Claude Code rewrites its record in place (the
+    // file keeps the birth time of its process), so a read can land between
+    // the truncate and the write: a record that does not parse is read once
+    // more before it is called unreadable.
+    try {
+      record = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch (e) {
+      return {
+        kind: "unread",
+        why: `its session record ${file} is not JSON (${(e as Error).message})`,
+      };
+    }
   }
   const sessionId =
     typeof record === "object" && record !== null && "sessionId" in record
@@ -305,15 +313,14 @@ const FOLLOW_POLL_MS = 200;
 // `following` is the daemon's FrameFeeds' answer: the lanes whose subscribers
 // follow a session's frames now. `closing` ends what is no launch, as the
 // daemon's launcher ends what is: a poll's wait, and the one signal sent
-// directly. `home` is the user's, where Claude Code's configuration directory
-// is when a client names none.
+// directly. `heldSession` is the daemon's one reader of a process's record.
 export function productionLaneEdge(
   launcher: Launcher,
   following: (sessionId: string) => ReadonlySet<Lane>,
   closing: AbortSignal,
   clock: Timekeeper,
   probe: Pick<ProcessProbe, "alive">,
-  home: string,
+  heldSession: HeldSessionOf,
 ): LaneEdge {
   const wait = (ms: number): Promise<void> => sleep(clock, ms, closing);
   return {
@@ -369,7 +376,7 @@ export function productionLaneEdge(
     fileExists: (file) => fs.existsSync(file),
     presence,
     paneClaude: (hint) => paneClaude(launcher, hint),
-    heldSession: heldSessionUnder(home),
+    heldSession,
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the
     // shell's once the shell holds its terminal again: until it has reaped
     // Claude Code and taken the foreground back, tmux reads the directory of

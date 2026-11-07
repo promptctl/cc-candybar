@@ -411,6 +411,23 @@ describe("TmuxStatusLines", () => {
     );
   });
 
+  // A client in the pane under the session's own id, run from its shell, is
+  // not known to run there: it says nothing of where the session runs.
+  test("a request not known to run in a pane leaves its session's hold where it is, and a switch off still releases it", async () => {
+    const h = harness();
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    h.owner.observe("s1", null, true);
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    expect(h.unsubscribed).toEqual([]);
+    h.owner.observe("s1", null, false);
+    await h.owner.settled();
+    expect(h.unsubscribed).toEqual(["s1"]);
+    expect(h.logs).toContain(
+      'tmux-status: released sid="s1" pane=%1 — switched off or moved',
+    );
+  });
+
   test("a pane another session now renders from is released", async () => {
     const h = harness();
     h.hold("s1", "%1");

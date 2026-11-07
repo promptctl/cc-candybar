@@ -8,7 +8,7 @@ import type { ClientHints } from "../../src/daemon/protocol";
 import {
   paneFact,
   runningPane,
-  runsIn,
+  runsNowIn,
   sessionPaneError,
   sessionPaneOf,
   type HeldSession,
@@ -52,9 +52,6 @@ describe("sessionPaneOf", () => {
     expect(pane).toEqual({ kind: "runs", tmux: TMUX });
     expect(paneFact(pane)).toBe("runs");
     expect(runningPane(pane)).toBe(TMUX);
-    expect(runsIn(pane, { socket: TMUX.socket, pane: "%7" })).toBe(true);
-    expect(runsIn(pane, { socket: TMUX.socket, pane: "%8" })).toBe(false);
-    expect(runsIn(pane, { socket: "/tmp/other", pane: "%7" })).toBe(false);
   });
 
   test("the record is read in the configuration directory the client names", () => {
@@ -73,7 +70,6 @@ describe("sessionPaneOf", () => {
       why: `the Claude Code that ran its statusline (pid ${CLAUDE}) holds session real`,
     });
     expect(runningPane(pane)).toBeNull();
-    expect(runsIn(pane, TMUX)).toBe(false);
   });
 
   test("a client whose parent keeps no record, as a shell in the pane, is not the pane's", () => {
@@ -101,6 +97,26 @@ describe("sessionPaneOf", () => {
       expect(paneFact(pane)).toBe("outside");
       expect(runningPane(pane)).toBeNull();
     }
+    expect(asked).toEqual([]);
+  });
+});
+
+describe("runsNowIn", () => {
+  test("reads the record at the lookup, so a request that arrived before its /clear's rewrite runs in its pane once the record names it", () => {
+    const held: Record<string, HeldSession> = { [`${CLAUDE}@default`]: holds("before") };
+    const { of } = records(held);
+    const req = { hints: hints({}), sessionId: "after" };
+    expect(sessionPaneOf(req.hints, req.sessionId, of).kind).toBe("unconfirmed");
+    held[`${CLAUDE}@default`] = holds("after");
+    expect(runsNowIn(TMUX, of)(req)).toBe(true);
+    expect(runsNowIn(TMUX, of)({ ...req, sessionId: "before" })).toBe(false);
+  });
+
+  test("a request naming another pane, or none, runs in none of this one's, and no record is read for it", () => {
+    const { of, asked } = records({ [`${CLAUDE}@default`]: holds("s1") });
+    expect(runsNowIn({ socket: TMUX.socket, pane: "%8" }, of)({ hints: hints({}), sessionId: "s1" })).toBe(false);
+    expect(runsNowIn({ socket: "/tmp/other", pane: "%7" }, of)({ hints: hints({}), sessionId: "s1" })).toBe(false);
+    expect(runsNowIn(TMUX, of)({ hints: hints({ tmux: null }), sessionId: "s1" })).toBe(false);
     expect(asked).toEqual([]);
   });
 });
