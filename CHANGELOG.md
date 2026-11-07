@@ -1,3 +1,12 @@
+## [1.210.1](https://github.com/promptctl/cc-candybar/compare/v1.210.0...v1.210.1) (2026-11-07)
+
+### Bug Fixes
+
+* **colour:** the door's ✖ keeps the contrast its red has on its ground at lower depths, never lifted to the quiet floor (brandon-unfiled-3248.692p) ([#681](https://github.com/promptctl/cc-candybar/issues/681)) ([215f486](https://github.com/promptctl/cc-candybar/commit/215f486db0c68765107dc69e715ccb26c5ac01d3))
+* **demo:** `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a) ([#682](https://github.com/promptctl/cc-candybar/issues/682)) ([219fb6b](https://github.com/promptctl/cc-candybar/commit/219fb6b570c49d5b4a42a1ad8fdf84727f5b387a))
+* **doctor:** the config row names a repository config the load left out ([#683](https://github.com/promptctl/cc-candybar/issues/683)) ([2a63ae5](https://github.com/promptctl/cc-candybar/commit/2a63ae55593d80d6590080431d83cf19e539622e))
+* **state:** a session value its config no longer admits draws the default and warns (brandon-menus-sjhy.46w) ([#676](https://github.com/promptctl/cc-candybar/issues/676)) ([ffb0376](https://github.com/promptctl/cc-candybar/commit/ffb0376812d7b52ce21a6cb5f0ef4d76eaf9e832))
+
 ## [1.210.0](https://github.com/promptctl/cc-candybar/compare/v1.209.0...v1.210.0) (2026-11-07)
 
 ### Features
