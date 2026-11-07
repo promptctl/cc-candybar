@@ -138,7 +138,7 @@ export function uidRuntimeDir(): string {
 // [LAW:parse-dont-validate] The override is refused relative for the reason a
 // relative root is: the daemon is spawned with no cwd, so a relative directory
 // names a different socket in every process that derives it.
-export function runtimeDir(host: Host): string {
+export function runtimeDir(host: Pick<Host, "env" | "tmp">): string {
   const override = xdgEnv(host.env, RUNTIME_DIR_ENV);
   if (override === undefined) return uidRuntimeDir();
   if (!path.isAbsolute(override)) {
@@ -152,7 +152,7 @@ export function runtimeDir(host: Host): string {
 // [LAW:parse-dont-validate] The one place the two variables are read. Both set
 // is a named home; neither is main; one without the other is refused here,
 // before any path is derived, naming the missing one.
-export function homeOf(host: Host): RendererHome {
+export function homeOf(host: Pick<Host, "env" | "home" | "tmp">): RendererHome {
   const { env } = host;
   const root = xdgEnv(env, HOME_ENV);
   const name = xdgEnv(env, NAME_ENV);

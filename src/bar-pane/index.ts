@@ -283,7 +283,9 @@ async function drawBarPane(
         follow(found.value);
         status =
           found.value === null
-            ? `waiting for pane ${pane}'s statusline to render on ${socketPath(world.home)}`
+            ? // [LAW:no-silent-failure] A statusline that rendered but is not
+              // known to be the pane's Claude Code's says why in its own bar.
+              `waiting for pane ${pane}'s Claude Code to render its statusline on ${socketPath(world.home)} (one that rendered but is not known to be it says why in its bar's ⚠)`
             : `waiting for pane ${pane}'s bar`;
       } else {
         if (found.kind === "transient") {

@@ -37,25 +37,30 @@ export const IN_TMUX = 'ne .tmux.pane ""';
 // client reports in a tmux pane: the tmux status line belongs to that pane, so
 // a session outside tmux ignores the setting, which other sessions share, and
 // draws in Claude Code's statusline. `rows` is the most rows the lane's
-// surface shows, or null when only the terminal bounds it.
+// surface shows, or null when only the terminal bounds it. `showsPaneSession`
+// is whether the lane shows the bar of the session its pane's Claude Code
+// holds, rather than of the session that set it up (src/daemon/session-pane.ts).
 export const LANES = {
   band: {
     switch: { setting: "experimentalBand", on: true, inTmux: false },
     label: "🧪 band (A)",
     handsOff: true,
     rows: null,
+    showsPaneSession: false,
   },
   statusline: {
     switch: { setting: "experimentalStatusline", on: true, inTmux: false },
     label: "🧪 statusline (B)",
     handsOff: false,
     rows: null,
+    showsPaneSession: false,
   },
   pane: {
     switch: { setting: "experimentalPane", on: true, inTmux: false },
     label: "🧪 tmux pane (C)",
     handsOff: true,
     rows: null,
+    showsPaneSession: true,
   },
   tmuxStatus: {
     switch: {
@@ -67,6 +72,7 @@ export const LANES = {
     handsOff: true,
     // tmux draws at most five status rows (`status` takes on, off, 2…5).
     rows: 5,
+    showsPaneSession: true,
   },
 } as const;
 

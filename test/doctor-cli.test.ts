@@ -99,9 +99,8 @@ const NO_HANDLER: HandlerProbeEdge = {
 const settingsPath = (): string => path.join(dir, "settings.json");
 // Ghostty outside tmux too (EDGE's tmux client is Ghostty inside it).
 const inDir = (env: Record<string, string>) => ({
-  TERM_PROGRAM: "ghostty",
-  ...env,
-  CLAUDE_CONFIG_DIR: dir,
+  env: { TERM_PROGRAM: "ghostty", ...env, CLAUDE_CONFIG_DIR: dir },
+  parentPid: process.pid,
 });
 
 describe("doctorPlan", () => {

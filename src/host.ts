@@ -8,7 +8,7 @@ import { systemTimekeeper, type Timekeeper } from "./time.js";
 
 // [LAW:effects-at-boundaries] What a process knows of the machine it runs on,
 // read once by its main and handed down as a value: the environment, the home
-// directory and the temporary directory. In-process code reads `home` and `tmp`
+// directory, the temporary directory and the process that ran it. In-process code reads `home` and `tmp`
 // from here and never from `env`, so the two cannot disagree inside src; `env`
 // keeps both for the children that inherit it. A test builds one by hand
 // instead of writing `process.env`.
@@ -16,6 +16,8 @@ export interface Host {
   readonly env: Readonly<NodeJS.ProcessEnv>;
   readonly home: string;
   readonly tmp: string;
+  // The pid of the process that ran this one: Claude Code, for a statusline.
+  readonly parentPid: number;
 }
 
 // What a process main hands every subcommand it runs: the machine's facts, the
@@ -44,6 +46,7 @@ export function processWorld(): World {
     env: process.env,
     home: os.homedir(),
     tmp: os.tmpdir(),
+    parentPid: process.ppid,
   };
   const clock = systemTimekeeper;
   return {

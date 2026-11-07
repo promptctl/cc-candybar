@@ -12,6 +12,7 @@ import {
 } from "./cache/file-events";
 import type { LauncherWarning, PipeEvent } from "../proc/launch";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
+import { paneFact, sessionPaneError, sessionPaneOf } from "./session-pane.js";
 import { UPDATE_DISMISSED_KEY } from "./update-keys";
 import { type RenderOrigin } from "../config-hint";
 import {
@@ -318,6 +319,10 @@ function requestFacts(
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
+    // Whether the session runs in the tmux pane its client names, as the
+    // checkpoint stamped it: the status line and a bar pane follow only one
+    // that does.
+    pane: paneFact(req.pane),
     // What the sighting recorded of the rate-limit windows — the fact the
     // doctor's segment-data check reads (RenderSightings).
     rateLimits: req.rateLimits,
@@ -528,6 +533,7 @@ export function drawRender(
   const errors: SourcedText[] = [
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
+    said(sessionPaneError(req.pane, lanes)),
     sourced("load", entry.lastError),
     sourced("update-act", updateWatch.error()),
     // [LAW:no-silent-failure] The home's link-id counter, faulted: no tmux
@@ -850,7 +856,7 @@ export function requestArrived(
     req.sessionId,
     inTmux(req.hints.tmux),
   );
-  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
+  tmuxStatusLines.observe(req.sessionId, req.pane, lanes.tmuxStatus);
   return laneSetups.noted(req.sessionId, lanes);
 }
 
@@ -883,9 +889,9 @@ export function laneSessionOf(req: CheckedRenderRequest): LaneSession {
 // `before` and left them at `after`: each lane it moved is set up for the
 // session as its latest request reported it, or owed to its first request;
 // and a tmux status line switch it moved is followed in the pane that request
-// reported. A click that left that switch alone holds nothing: the pane is
-// only remembered, and `answered` may have released it to the session that
-// took it since.
+// names, if its Claude Code's record holds the session at the commit. A click
+// that left that switch alone holds nothing: the pane is only remembered, and
+// `answered` may have released it to the session that took it since.
 export function laneClicked(
   parts: DaemonParts,
   sessionId: string,
@@ -895,7 +901,13 @@ export function laneClicked(
   const { frameFeeds, laneSetups, tmuxStatusLines } = parts;
   const latest = frameFeeds.latest(sessionId);
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
-    tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
+    // [LAW:one-source-of-truth] Judged by the record as it reads at the
+    // click's commit, as a request is at its arrival.
+    tmuxStatusLines.observe(
+      sessionId,
+      sessionPaneOf(latest.hints, sessionId, parts.heldSession),
+      after.tmuxStatus,
+    );
   return laneSetups.clicked(sessionId, before, after);
 }
 

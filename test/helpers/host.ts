@@ -15,6 +15,7 @@ export const HOST: Host = {
   env: process.env,
   home: os.homedir(),
   tmp: os.tmpdir(),
+  parentPid: process.ppid,
 };
 
 // The worker's environment as a main home reads it: test setup names the
@@ -34,7 +35,12 @@ export function hostOf(
   env: NodeJS.ProcessEnv,
   rest: Partial<Pick<Host, "home" | "tmp">> = {},
 ): Host {
-  return { env, home: rest.home ?? HOST.home, tmp: rest.tmp ?? HOST.tmp };
+  return {
+    env,
+    home: rest.home ?? HOST.home,
+    tmp: rest.tmp ?? HOST.tmp,
+    parentPid: HOST.parentPid,
+  };
 }
 
 // A process main's world over `host`: its renderer home is the one its

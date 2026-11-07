@@ -55,7 +55,7 @@ import { isBarLink } from "../click/scheme.js";
 import { parseHandlerUrl, VERB_RANGE } from "../click/wire.js";
 import { instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
-import { namesPane } from "../tmux-hint.js";
+import { runsNowIn } from "./session-pane.js";
 import {
   noteFacts,
   requestEvent,
@@ -350,8 +350,8 @@ export async function replyTo(
       });
     return stay({
       ok: true,
-      paneSession: frameFeeds.newestWhere(({ hints: { tmux } }) =>
-        namesPane(tmux, { socket, pane }),
+      paneSession: frameFeeds.newestWhere(
+        runsNowIn({ socket, pane }, parts.heldSession),
       ),
     });
   }
@@ -420,6 +420,7 @@ export async function replyTo(
       parts.log,
       parts.home,
       parts.storedRoot,
+      parts.heldSession,
     );
     // [LAW:single-enforcer] A render REQUEST is a client sighting — the
     // frames a feed draws from a session's data are not, so this is the one

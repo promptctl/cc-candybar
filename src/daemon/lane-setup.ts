@@ -41,6 +41,7 @@ import {
 import { failed, type EffectOutcome } from "./effect-outcome.js";
 import type { SessionFacts } from "./session-env.js";
 import type { ClientHints } from "./protocol.js";
+import type { HeldSessionOf } from "./session-pane.js";
 import type { RenderOrigin } from "../config-hint.js";
 import { samePane, type TmuxHint } from "../tmux-hint.js";
 import {
@@ -109,12 +110,6 @@ export interface PaneClaude {
   readonly attached: boolean;
 }
 
-// [LAW:no-silent-failure] A process's session as its own record says it, or
-// why the record says none: never read as the session a restart expects.
-export type HeldSession =
-  | { readonly kind: "holds"; readonly sessionId: string }
-  | { readonly kind: "unread"; readonly why: string };
-
 export interface LaneEdge {
   readonly claudeInput: ClaudeInputEdge;
   // The bar panes the daemon opened for `tmux.pane`.
@@ -158,14 +153,8 @@ export interface LaneEdge {
   ) => Promise<
     { readonly ok: true } | { readonly ok: false; readonly reason: string }
   >;
-  // The session Claude Code's process `pid` holds now, by the record it keeps
-  // of itself under its configuration directory (`configDir`, as the
-  // process's environment names it; the default when it names none): a
-  // `/clear` or `/resume` rewrites it, though the process stays one.
-  readonly heldSession: (
-    pid: number,
-    configDir: string | undefined,
-  ) => HeldSession;
+  // The session Claude Code's process `pid` holds now (session-pane.ts).
+  readonly heldSession: HeldSessionOf;
   // Send `pid` SIGTERM.
   readonly terminate: (pid: number) => void;
   // Resolves true once `pid` has exited, false if it is still running after

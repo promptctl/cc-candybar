@@ -26,6 +26,11 @@ import {
   parseClientDeadline,
   type ClientDeadline,
 } from "./request-deadline.js";
+import {
+  sessionPaneOf,
+  type HeldSessionOf,
+  type SessionPane,
+} from "./session-pane.js";
 
 // [LAW:single-enforcer][LAW:no-silent-failure] Parse render-path args with
 // the standard util at the trust boundary. `--config <path>` is the sole
@@ -111,8 +116,8 @@ function parseRenderEncoding(
 // client hints, parsed, and its args are parsed into `requested` — the config
 // inputs it named, its explicit path the `--config` flag over the client's
 // `CC_CANDYBAR_CONFIG` hint — and `refusedArgs`, `rateLimits` is
-// what its hookData says of the rate-limit windows, and `deadline` is when its
-// client hangs up. Raw `req.*` hint fields and `req.args` are not read past
+// what its hookData says of the rate-limit windows, `pane` is the tmux pane its
+// session runs in, and `deadline` is when its client hangs up. Raw `req.*` hint fields and `req.args` are not read past
 // the checkpoint. `encoding` is how its answer is spelled. Only
 // checkRenderRequest makes one.
 declare const CHECKED: unique symbol;
@@ -129,6 +134,7 @@ export type CheckedRenderRequest = Omit<
   // `requested` as the session's state records it (render-origin.ts).
   readonly originRecord: string;
   readonly refusedArgs: readonly RefusedArg[];
+  readonly pane: SessionPane;
   readonly [CHECKED]: true;
 };
 
@@ -140,6 +146,7 @@ export function checkRenderRequest(
   log: DaemonLogger,
   home: string,
   storedRoot: StoredRoot,
+  heldSession: HeldSessionOf,
 ): { ok: true; req: CheckedRenderRequest } | { ok: false; problems: string[] } {
   // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
   // The validator reports missing/wrong-typed required fields and unknown
@@ -245,6 +252,9 @@ export function checkRenderRequest(
       requested,
       originRecord: encodeRenderOrigin(requested, asked),
       refusedArgs,
+      // [LAW:effects-at-boundaries] Read once, as the request arrives: what
+      // holds a pane for a session is that request's arrival.
+      pane: sessionPaneOf(hints, sessionId.id, heldSession),
     } as CheckedRenderRequest,
   };
 }

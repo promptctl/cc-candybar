@@ -80,8 +80,8 @@ export function tryRenderViaDaemon(
   );
 }
 
-// The session that last rendered from a tmux pane (PaneSessionRequest), or
-// null when the daemon holds no request from it.
+// The session a tmux pane runs (PaneSessionRequest), or null when the daemon
+// holds no request that runs in it.
 export function trySessionInPane(
   world: ClientWorld,
   socket: string,

@@ -37,6 +37,7 @@ import type { TmuxRun } from "../proc/tmux.js";
 import { samePane, type TmuxHint } from "../tmux-hint.js";
 import type { StatusLines } from "./pane-visibility.js";
 import type { Subscriber } from "./frame-feed.js";
+import type { SessionPane } from "./session-pane.js";
 import { decodeSegments, VERB_RANGE } from "../click/wire.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { TmuxStatusBar } from "../tmux-status/frames.js";
@@ -399,8 +400,9 @@ export interface TmuxStatusDeps {
     sessionId: string,
     sub: Subscriber<"tmuxStatus">,
   ) => () => void;
-  // The session whose statusline last rendered from `pane`, as the daemon
-  // holds it — a /clear or a new Claude Code in the pane takes it over.
+  // The session `pane` runs, by the record of the Claude Code that ran a
+  // request naming it, read at the asking — a /clear or a new Claude Code in
+  // the pane takes it over.
   readonly sessionInPane: (
     where: Pick<TmuxHint, "socket" | "pane">,
   ) => string | null;
@@ -491,18 +493,20 @@ export class TmuxStatusLines {
   constructor(private readonly deps: TmuxStatusDeps) {}
 
   // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
-  // arrival with its own hints, a click's commit with its session's latest —
-  // never at a draw: a session whose switch is on and that reported a tmux
-  // pane is held, any other is not. A daemon restart picks each session up at
-  // its next request.
-  observe(
-    sessionId: string,
-    tmux: TmuxHint | null | undefined,
-    on: boolean,
-  ): void {
+  // arrival, a click's commit — never at a draw: a session whose switch is on
+  // is held in the pane its Claude Code's record confirms it runs in (`pane`),
+  // and one switched off, or confirmed outside tmux, is not. An unconfirmed
+  // request says nothing of where its session runs, so a session held already
+  // stays where it is. A daemon restart picks each session up at its next
+  // request.
+  observe(sessionId: string, pane: SessionPane, on: boolean): void {
     if (this.closed) return;
     const held = this.held.get(sessionId);
-    const where = on && tmux !== null && tmux !== undefined ? tmux : null;
+    const where = !on
+      ? null
+      : pane.kind === "runs"
+        ? pane.tmux
+        : (held ?? null);
     if (held !== undefined && (where === null || !samePane(held, where)))
       this.release(held, "switched off or moved");
     if (where === null || this.held.has(sessionId)) return;

@@ -30,6 +30,7 @@ import { linkKeyFile, linkSignerFromKeyFile } from "../../../src/daemon/link-key
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import { PROTOCOL_VERSION, type ClientHints } from "../../../src/daemon/protocol";
+import { claudeHolds } from "../../helpers/claude-record";
 import { click, render, sendClick } from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
@@ -85,10 +86,19 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     path.join(projectDir, "lanes.json5"),
   ];
   // Each session in a tmux server of its own, so no other test's session
-  // takes its pane.
-  const inTmux = (sid: string): ClientHints => ({
-    tmux: { socket: `/tmp/lane-e2e-${sid}`, pane: "%7", truecolor: null },
-  });
+  // takes its pane, run by a Claude Code of its own that holds it.
+  const claudes = new Map<string, number>();
+  const inTmux = (sid: string): ClientHints => {
+    const claudeConfigDir = path.join(projectDir, ".claude");
+    const parentPid = claudes.get(sid) ?? 4000 + claudes.size;
+    claudes.set(sid, parentPid);
+    claudeHolds(claudeConfigDir, parentPid, sid);
+    return {
+      tmux: { socket: `/tmp/lane-e2e-${sid}`, pane: "%7", truecolor: null },
+      parentPid,
+      claudeConfigDir,
+    };
+  };
   const renderIn = (sid: string, dir = projectDir): Promise<Frame> =>
     render(daemon, sid, dir, inTmux(sid), args());
   // A lane's switch, moved: on is the value that turns it on, off the
@@ -252,8 +262,12 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     expect(statusLines(sid, "released")).toHaveLength(1);
   });
 
-  // Taken by another session's request, the pane is released at the next
-  // answer from its server; the click only remembers it.
+  // Taken by another session (a `/clear`: the pane's Claude Code now holds
+  // it), the pane is released at the next answer from its server; the click
+  // only remembers it. A client run in the pane under any session its Claude
+  // Code does not hold (candybar-gather-renderer-76bb.1dh.aom) takes nothing
+  // and releases nothing: the one release names the session that did take
+  // it, and each render event says why it did or did not.
   test("a click that leaves the status line's switch alone re-takes no status line released since", async () => {
     const sid = "lane-taken";
     await renderIn(sid);
@@ -262,7 +276,44 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       () => statusLines(sid, "holding").length > 0,
       "the status line's hold",
     );
-    await render(daemon, "lane-taker", projectDir, inTmux(sid), args());
+    const pane = inTmux(sid);
+    const where = { socket: pane.tmux!.socket, pane: pane.tmux!.pane };
+    const paneSession = () =>
+      sendDaemonRequest(daemon, { v: PROTOCOL_VERSION, kind: "pane-session", ...where }, 5000);
+    const paneFactOf = async (of: string): Promise<string> => {
+      const [event] = await renderLines(env, of, 1);
+      return / pane=("[^"]*"|\S+)/.exec(event!)?.[1] ?? "absent";
+    };
+    expect(await paneSession()).toEqual({ ok: true, paneSession: sid });
+    expect(await paneFactOf(sid)).toBe("runs");
+    // Run from the shell Claude Code's Bash tool opens, whose parent keeps
+    // no record, and by Claude Code itself under a session it does not hold.
+    const shell = 3999;
+    await render(daemon, "lane-shell", projectDir, { ...pane, parentPid: shell }, args());
+    await render(daemon, "lane-stranger", projectDir, pane, args());
+    expect(await paneSession()).toEqual({ ok: true, paneSession: sid });
+    expect(await paneFactOf("lane-shell")).toBe(
+      valueOf(
+        `unconfirmed: the process that ran its statusline (pid ${shell}) is no Claude Code whose session can be read: it keeps no session record at ${path.join(pane.claudeConfigDir!, "sessions", `${shell}.json`)} (update Claude Code with \`claude update\`: recent releases keep one). A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`,
+      ),
+    );
+    expect(await paneFactOf("lane-stranger")).toBe(
+      valueOf(
+        `unconfirmed: the Claude Code that ran its statusline (pid ${pane.parentPid}) holds session ${sid}`,
+      ),
+    );
+    // Run from that shell under the pane's own session, a client says
+    // nothing of where the session runs: its hold stays, as the one release
+    // below says.
+    await render(daemon, sid, projectDir, { ...pane, parentPid: shell }, args());
+    await render(daemon, sid, projectDir, pane, args());
+    // The next session's first request can arrive before its Claude Code
+    // rewrites the record (a `/clear`): the pane follows it once the record
+    // names it, with no request since.
+    await render(daemon, "lane-taker", projectDir, pane, args());
+    expect(await paneSession()).toEqual({ ok: true, paneSession: sid });
+    claudeHolds(pane.claudeConfigDir!, pane.parentPid!, "lane-taker");
+    expect(await paneSession()).toEqual({ ok: true, paneSession: "lane-taker" });
     await until(
       () => statusLines(sid, "released").length > 0,
       "the taken pane's release",
