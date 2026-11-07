@@ -38,7 +38,6 @@ import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
 import { effectsOf, runLink } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";

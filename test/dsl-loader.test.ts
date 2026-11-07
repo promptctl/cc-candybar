@@ -1730,7 +1730,7 @@ describe("loadDslConfig — cross-references", () => {
     expectIssue(linked, {
       path: "segments.a.template",
       message:
-        /^Template spells a link in a grammar older than names, which names no renderer: "cc-candybar:\/\/load-config\/%s\/"\. Bind an action instead \(\{\{ action "name" … \}\}\): its link names the renderer that draws it$/,
+        /^Template spells a link in a grammar older than names, which names no renderer: "cc-candybar:\/\/load-config\/%s\/"\. Bind an action instead \(\{\{ action "name" … \}\}\): the bar draws its link$/,
     });
     const viaHelper = `{ helpers: { h: '{{ link "cc-candybar://open-vscode/x/" "pick" }}' }, segments: { a: { template: '{{ template "h" . }}' } }, root: { h: ['a'] } }`;
     expectIssue(viaHelper, { path: "helpers.h", message: '"cc-candybar://open-vscode/x/"' });
@@ -1741,11 +1741,26 @@ describe("loadDslConfig — cross-references", () => {
     expectIssue(bare, { path: "segments.a.template", message: /names no renderer: "cc-candybar:\/\/hello"\./ });
   });
 
-  // A literal that opens the address, or stops before it, can still be joined
-  // into a link that clicks; one that is no bar link is no link at all.
+  // A leaf verb runs only as a dispatch's effect, so an addressed link naming
+  // one, or any verb no link names, clicks nothing.
+  test("a template spelling an addressed link to a verb no link names is refused at load", () => {
+    const leaf = `{ segments: { a: { template: '{{ link (printf "cc-candybar://to/main/copy-text/%s" .session.id) "copy" }}' } }, root: { h: ['a'] } }`;
+    expectIssue(leaf, {
+      path: "segments.a.template",
+      message:
+        /^Template spells a link naming the verb "copy-text", which a link never names: a link names dispatch or probe: "cc-candybar:\/\/to\/main\/copy-text\/%s"\./,
+    });
+    const unknown = `{ segments: { a: { template: '{{ link "cc-candybar://to/main/x/1" "go" }}' } }, root: { h: ['a'] } }`;
+    expectIssue(unknown, { path: "segments.a.template", message: 'naming the verb "x"' });
+  });
+
+  // A literal that opens the address, or stops before it, and names no verb
+  // whole can still be joined into a link that clicks; one that is no bar
+  // link is no link at all.
   test("a template whose literals open an addressed link, or are no link, loads", () => {
     for (const template of [
-      '{{ link "cc-candybar://to/main/x/1" "go" }}',
+      '{{ link "cc-candybar://to/main/dispatch/e=x" "go" }}',
+      '{{ link "cc-candybar://to/main/copy" "go" }}',
       '{{ link (printf "%s/copy/%s" "cc-candybar://to/main" "x") "go" }}',
       '{{ link (printf "cc-candybar://to/%s/copy/%s" "main" "x") "go" }}',
       '{{ link (printf "cc-candybar://%s/copy/%s" "to/main" "x") "go" }}',

@@ -164,6 +164,15 @@ export const VERB_DOCTOR_MARK = "doctor-mark";
 // daemon's arrivals.
 export const VERB_PROBE = "probe";
 
+// [LAW:one-source-of-truth] The verbs a link may name: `dispatch`, which every
+// link the bar draws names and which carries the leaf verbs as its effects,
+// and the doctor's probe. A leaf verb a link names itself clicks nothing.
+export const LINK_VERBS = [VERB_DISPATCH, VERB_PROBE] as const;
+export type LinkVerb = (typeof LINK_VERBS)[number];
+export function isLinkVerb(verb: string): verb is LinkVerb {
+  return (LINK_VERBS as readonly string[]).includes(verb);
+}
+
 // [LAW:effects-at-boundaries] Type a slash command into the session's Claude
 // Code prompt through its tmux pane. Args: `[sessionId, line]` — the line must
 // be one a `slash` action in the session's config declares.
@@ -503,17 +512,27 @@ export function parseHandlerUrl(rawUrl: string): HandlerUrl {
   }
 }
 
-// [LAW:single-enforcer] Whether text a config spells opens a bar link that
-// can never name a renderer, whatever the draw joins to it: its head opens
-// with neither the address nor a start of it (`cc-candybar://`, `…://t`).
+// [LAW:single-enforcer] Why text a config spells opens a bar link no click
+// can run, whatever the draw joins to it, or null: its head opens with
+// neither the address nor a start of it (`cc-candybar://`, `…://t`), or it
+// names a renderer and then, whole, a verb no link may name.
 // Text is read as a head here, not as a whole link, because a literal may be
 // only a link's start, or a printf format whose verbs fill in the rest at the
 // draw, so the head ends at the first `%`; whether a whole link clicks is the
 // parse's to say, at the click.
-export function spellsUnaddressedLink(text: string): boolean {
-  if (!isBarLink(text)) return false;
+export function deadLinkOf(text: string): string | null {
+  if (!isBarLink(text)) return null;
   const head = text.slice(LINK_PREFIX.length).split("%")[0]!;
-  return !head.startsWith(ADDRESS) && !ADDRESS.startsWith(head);
+  if (!head.startsWith(ADDRESS)) {
+    return ADDRESS.startsWith(head)
+      ? null
+      : "in a grammar older than names, which names no renderer";
+  }
+  // `to/<renderer>/<verb>/…`: the verb is spelled whole once its `/` follows.
+  const [, , verb, ...tail] = head.split("/");
+  return verb === undefined || tail.length === 0 || isLinkVerb(verb)
+    ? null
+    : `naming the verb "${verb}", which a link never names: a link names ${LINK_VERBS.join(" or ")}`;
 }
 
 // A `<verb>/<tail>` run as a click addressed to `to`.

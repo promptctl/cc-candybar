@@ -19,6 +19,7 @@ import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys
 import { lastClickError } from "../src/daemon/click-error";
 import {
   VERB_COPY,
+  VERB_DISPATCH,
   VERB_DOCTOR_RUN,
   VERB_SET_STATE,
   VERB_RANGE,
@@ -292,12 +293,14 @@ describe("the click path", () => {
   // [LAW:nothing-unseen] The click line always carries its session, so a
   // missing field never reads as either case.
   test.each([
-    ["names no session", []],
-    ["names one the checkpoint refuses", ["a/b"]],
-  ])("a click that %s records sid=- on its line, never what the link spelled", async (_case, session) => {
+    // A dispatch with no leaf effect has no session to name.
+    ["names no session", addressedLink(MAIN_NAME, VERB_DISPATCH, "")],
+    ["names an empty one", effectLink(VERB_UNDO)],
+    ["names one the checkpoint refuses", effectLink(VERB_UNDO, "a/b")],
+  ])("a click that %s records sid=- on its line, never what the link spelled", async (_case, url) => {
     const { ctx } = setup();
     const { send, clickLine } = parts(ctx);
-    await send(effectLink(VERB_UNDO, ...session));
+    await send(url);
     expect(clickLine()).toMatch(/ sid=- /);
   });
 

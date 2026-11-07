@@ -44,7 +44,6 @@ import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, effectsOf, clickEffect, runLink, clicking } from "./helpers/click";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import type { VerbContext } from "../src/daemon/verbs";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import {

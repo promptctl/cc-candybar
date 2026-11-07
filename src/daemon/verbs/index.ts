@@ -130,7 +130,9 @@ import {
   VERB_RUN,
   VERB_REPO_CONFIG,
   VERB_COPY_DIAGNOSTIC,
+  isLinkVerb,
   type EvaluatedRun,
+  type LinkVerb,
 } from "../../click/wire";
 import type { RendererLinks } from "../../click/renderer-links";
 import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
@@ -2024,7 +2026,9 @@ function sessionOf(effects: readonly ReadEffect[]): ParsedSessionId | null {
 }
 
 // [LAW:types-are-the-program] A probe link carries ONE argument, its nonce: the
-// WHOLE value, decoded once, never split on "/".
+// WHOLE value, decoded once, never split on "/". The link's parse leaves the
+// value encoded, so the decode lives with the reader that knows its shape
+// [LAW:single-enforcer].
 function readProbe(value: string): WireParse<string> {
   const decoded = parseWire(() => decodeURIComponent(value));
   if (!decoded.ok) return decoded;
@@ -2049,37 +2053,36 @@ export type Click = (
   | { readonly kind: typeof VERB_PROBE; readonly nonce: WireParse<string> }
 ) & { readonly __click: true };
 
-// [LAW:types-are-the-program] What a link may name: `dispatch`, which every
-// link the bar draws names, and the doctor's probe. A leaf verb arrives only
-// as a dispatch's effect, so a link naming one is a miss here. `Map`, because
-// the verb is untrusted wire input: a `__proto__` or `constructor` is a miss,
-// never a hit on Object.prototype.
-const CLICK_READERS: ReadonlyMap<string, (value: string) => Click> = new Map<
-  string,
-  (value: string) => Click
->([
-  [
-    VERB_DISPATCH,
-    (value) => {
-      const effects = batchAdjacentWrites(parseEffects(value)).map(readEffect);
-      const read: DispatchClick = {
-        kind: VERB_DISPATCH,
-        effects,
-        session: sessionOf(effects),
-      };
-      return read as Click;
-    },
-  ],
-  [
-    VERB_PROBE,
-    (value) => ({ kind: VERB_PROBE, nonce: readProbe(value) }) as Click,
-  ],
-]);
+type ClickOf<V extends LinkVerb> = Extract<Click, { readonly kind: V }>;
+
+// [LAW:one-source-of-truth] One reader for each verb a link may name, keyed
+// by the wire's list of them, so a link verb with no reader does not compile.
+// A leaf verb arrives only as a dispatch's effect, so a link naming one is a
+// miss here.
+const CLICK_READERS: {
+  readonly [V in LinkVerb]: (value: string) => ClickOf<V>;
+} = {
+  [VERB_DISPATCH]: (value) => {
+    const effects = batchAdjacentWrites(parseEffects(value)).map(readEffect);
+    const read: DispatchClick = {
+      kind: VERB_DISPATCH,
+      effects,
+      session: sessionOf(effects),
+    };
+    return read as ClickOf<typeof VERB_DISPATCH>;
+  },
+  [VERB_PROBE]: (value) =>
+    ({ kind: VERB_PROBE, nonce: readProbe(value) }) as ClickOf<
+      typeof VERB_PROBE
+    >,
+};
 
 // A link's click, or null for a verb no link may name. Reading never throws:
-// a malformed step or nonce is held as data, for the run to refuse.
+// a malformed step or nonce is held as data, for the run to refuse. The verb
+// is untrusted wire input, so it is matched against the list before it keys
+// the table: a `__proto__` is a miss, never a hit on Object.prototype.
 export function readClick(verb: string, value: string): Click | null {
-  return CLICK_READERS.get(verb)?.(value) ?? null;
+  return isLinkVerb(verb) ? CLICK_READERS[verb](value) : null;
 }
 
 // The session a click is in, as its event names it: a dispatch's that passed
@@ -2339,6 +2342,9 @@ export function runClick(click: Click, ctx: VerbContext): void {
       return dispatch(click, ctx);
     case VERB_PROBE:
       return probe(click.nonce, ctx);
+    default:
+      // A link verb with no run arm does not compile.
+      return click satisfies never;
   }
 }
 

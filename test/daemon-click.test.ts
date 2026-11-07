@@ -114,16 +114,18 @@ describe("click protocol", () => {
     // and any other Error to RENDER_FAILED. A lone `%` makes decodeURIComponent
     // throw a raw URIError — without reclassification it would surface as an
     // operational RENDER_FAILED. Pins the single-arg (toolbar-toggle) and multi-seg
-    // (set-state) codecs at their shared decode boundary. The effect is spelled
-    // by hand: the wire's own encoder never writes a lone `%`.
+    // (set-state) codecs at both decodes, the session's and the arguments'. The
+    // effect is spelled by hand: the wire's own encoder never writes a lone `%`.
     const ctx: VerbContext = testVerbContext(new SessionState(SINGLE_RUN));
     for (const verb of [VERB_TOOLBAR_TOGGLE, "set-state"]) {
-      const url = addressedLink(
-        MAIN_NAME,
-        VERB_DISPATCH,
-        `e=${encodeURIComponent(`${verb}/%`)}`,
-      );
-      expect(() => runLink(url, ctx)).toThrow(BadVerbArgs);
+      for (const tail of ["%", "s1/%"]) {
+        const url = addressedLink(
+          MAIN_NAME,
+          VERB_DISPATCH,
+          `e=${encodeURIComponent(`${verb}/${tail}`)}`,
+        );
+        expect(() => runLink(url, ctx)).toThrow(BadVerbArgs);
+      }
     }
   });
 });
