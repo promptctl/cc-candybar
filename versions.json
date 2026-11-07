@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-673",
+      "ref": "refs/pull/673/merge",
+      "sha": "2cf7790afa2901dafe973fcfd658303f2a028113",
+      "timestamp": "2026-11-07T07:39:56.951Z",
+      "commits": [
+        {
+          "sha": "2cf7790afa2901dafe973fcfd658303f2a028113",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T00:38:25-07:00",
+          "message": "Merge dc331e0cf27fe60ab01b75b8d7b97000120a813b into 1bd51ef3f44ff8c49821b7b309e85764c97b024e\n"
+        },
+        {
+          "sha": "dc331e0cf27fe60ab01b75b8d7b97000120a813b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T00:37:53-07:00",
+          "message": "fix(lanes): a session record an exited Claude Code left under a reused pid is not the live process's (candybar-gather-renderer-76bb.1dh.ycm)\n\nThe record reader took sessions/<pid>.json as the live process's without\nchecking that the process wrote it, so a shell or wrapper that reused an\nexited Claude Code's pid read as a Claude Code holding the old session: its\nrequests were stamped mismatched, and a lasting mismatch blamed a Claude Code\nthat no longer exists instead of naming the wrapper fix.\n\nA process is now its pid with its kernel start, the token `ps -o lstart=`\nprints under LC_ALL=C TZ=UTC, which Claude Code writes as its record's\nprocStart (its own pid-reuse check reads the same token). The client reports\nits parent as one value, `parent: {pid, startTime}`, replacing `parentPid`;\nthe reader holds the record to that start, so a record another process left\nreads unread, naming both starts, and the request is unconfirmed with the\nexisting wrapper fix. The mismatch runs key a Claude Code on its start too,\nso a later one under the same pid inherits none of its runs.\n\nThe native client reads its parent's start from the kernel with no spawn and\nrenders the token; a Rust test holds that rendering equal to `ps` on the same\nprocess, now run on macOS in CI as well as Linux. The Node client reads it at\nits edge, only where it reports hints, bounded like a connect.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "1bd51ef3f44ff8c49821b7b309e85764c97b024e",
