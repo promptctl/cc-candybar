@@ -214,7 +214,8 @@ export type DrawnAt =
 // view was declared with; a draw (an answer, or a lane's frame) is drawn at
 // its instant, from the session's state it read and with what it was handed;
 // a document becomes the arm's; a turn is taken over its line's inputs (the
-// clicks' state, the request, the document it reaches) and held or not.
+// clicks' state, the request, the document it reaches) and held or not; a
+// state is the session's clicks' state from there.
 export type DemoStep =
   | {
       readonly kind: "request";
@@ -229,6 +230,7 @@ export type DemoStep =
       readonly handed: Handed;
     }
   | { readonly kind: "document"; readonly reach: () => void }
+  | { readonly kind: "state"; readonly state: ClickState }
   | {
       readonly kind: "turn";
       readonly turn: DemoTurn;
@@ -286,13 +288,15 @@ export function playOf(
                 diagnostics: line.diagnostics,
               },
             }
-          : line.kind === "turn"
-            ? {
-                kind: line.kind,
-                turn: line,
-                reach: () => arm.reach(line.document),
-              }
-            : { kind: "document", reach: () => arm.reach(line) };
+          : line.kind === "state"
+            ? { kind: line.kind, state: line.state }
+            : line.kind === "turn"
+              ? {
+                  kind: line.kind,
+                  turn: line,
+                  reach: () => arm.reach(line.document),
+                }
+              : { kind: "document", reach: () => arm.reach(line) };
   return {
     startMs,
     opening: recording.opening,
@@ -445,6 +449,10 @@ export async function playDemo({
         await view.settle(at).landed;
       } else if (step.kind === "declared") {
         declare(step.request);
+      } else if (step.kind === "state") {
+        // [LAW:one-source-of-truth] The clicks' state moves where the live
+        // session's moved, before the document stamped under it is reached.
+        restoreDraw(sessionState, depths, view.sessionId, step.state);
       } else {
         const at =
           "instant" in step.at ? step.at.instant : answered(step.at.request);

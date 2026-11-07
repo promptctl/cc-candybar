@@ -23,8 +23,11 @@ import { appendFileSync, closeSync, openSync, unlinkSync } from "node:fs";
 import { reaction } from "mobx";
 import {
   formatLine,
+  sameClickState,
+  type ClickState,
   type DrawLine,
   type DrawState,
+  type FactsLine,
   type RecordingLine,
   type RequestLine,
   type SessionRequest,
@@ -48,7 +51,7 @@ import type { SessionSource } from "./session-source.js";
 export interface RecordedView {
   readonly followed: SessionView["followed"];
   readonly facts: () => SessionRequest;
-  readonly source: Pick<SessionSource, "home" | "turn" | "held">;
+  readonly source: Pick<SessionSource, "home" | "turn" | "held" | "state">;
 }
 
 export interface SessionViews {
@@ -118,6 +121,8 @@ interface Open {
   // line.
   document: SessionFacts | null;
   declaration: SessionRequest | null;
+  // The last clicks' state a line this recording wrote carried.
+  state: ClickState | null;
   turn: { readonly view: RecordedView; readonly held: boolean } | null;
 }
 
@@ -143,16 +148,21 @@ export function sessionRecorder(
   };
   // [LAW:single-enforcer] Every line a recording writes goes through here: a
   // write that throws ends that recording with the error, which its sink
-  // reports, and no later line is offered. A document or a declaration that is
-  // already the last of its kind written is not written again: a replay's view
-  // already holds it.
-  const write = (sessionId: string, rec: Open, line: RecordingLine): void => {
-    if (line.kind === "facts" && line.facts === rec.document) return;
+  // reports, and no later line is offered. A declaration that is already the
+  // last one written is not written again: a replay's view already holds it.
+  const put = (sessionId: string, rec: Open, line: RecordingLine): void => {
     if (line.kind === "declared" && line.request === rec.declaration) return;
     try {
       rec.sink.write(line);
       if (line.kind === "facts") rec.document = line.facts;
       if (line.kind === "turn") rec.document = line.document.facts;
+      if (
+        line.kind === "state" ||
+        line.kind === "draw" ||
+        line.kind === "turn"
+      ) {
+        rec.state = line.state;
+      }
       if (
         line.kind === "request" ||
         line.kind === "declared" ||
@@ -163,6 +173,37 @@ export function sessionRecorder(
     } catch (e) {
       log("error", `recording sid=${JSON.stringify(sessionId)}: ${inspect(e)}`);
       end(sessionId, rec, { kind: "failed", error: e });
+    }
+  };
+  // A facts line is offered only through `writeDocument`, which writes the
+  // clicks' state ahead of it.
+  const write = (
+    sessionId: string,
+    rec: Open,
+    line: Exclude<RecordingLine, { kind: "facts" }>,
+  ): void => put(sessionId, rec, line);
+  // [LAW:single-enforcer] Every facts line a recording writes goes through
+  // here: a document already the last written is skipped, and one written
+  // under clicks' state other than the last written goes after a state line.
+  // A click moves the store before the document its keys restamp, so the
+  // state a replay holds when it reaches the document is the one its runs
+  // were declared under. The state is read when the document is written,
+  // which can be after its stamp.
+  const writeDocument = (
+    sessionId: string,
+    rec: Open,
+    view: RecordedView,
+    line: FactsLine,
+  ): void => {
+    if (line.facts === rec.document) return;
+    const state = view.source.state();
+    if (rec.state === null || !sameClickState(rec.state, state)) {
+      write(sessionId, rec, { kind: "state", state });
+    }
+    // A state write that failed ended the recording: its document is not
+    // offered.
+    if (open.get(sessionId)?.has(rec)) {
+      put(sessionId, rec, { kind: "facts", ...line });
     }
   };
   // [LAW:one-source-of-truth] The turn of `view` as it stands, written when
@@ -197,8 +238,7 @@ export function sessionRecorder(
     const draw: DrawLine = { at, drawing, feeds, state, diagnostics };
     const writes: Array<() => void> = [
       () => writeTurn(sessionId, rec, view),
-      () =>
-        write(sessionId, rec, { kind: "facts", ...view.followed.stamped() }),
+      () => writeDocument(sessionId, rec, view, view.followed.stamped()),
       () => write(sessionId, rec, { kind: "declared", request: view.facts() }),
       () => write(sessionId, rec, { kind: "draw", ...draw }),
       ...(current === null ? [] : [() => writeTurn(sessionId, rec, current)]),
@@ -231,10 +271,10 @@ export function sessionRecorder(
       () => writeTurn(sessionId, rec, view),
     );
     // The document the turn line just wrote is the follow's while the turn is
-    // not held: `write` skips a document already the last written.
+    // not held: `writeDocument` skips a document already the last written.
     watch(
       () => view.followed.stamped(),
-      (line) => write(sessionId, rec, { kind: "facts", ...line }),
+      (line) => writeDocument(sessionId, rec, view, line),
     );
   };
   return {
@@ -253,6 +293,7 @@ export function sessionRecorder(
         watching: new Set(),
         document: null,
         declaration: null,
+        state: null,
         turn: null,
       };
       const recs = open.get(session) ?? new Set<Open>();

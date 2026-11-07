@@ -134,6 +134,25 @@ export interface TurnLine extends RecordedTurn {
   readonly held: boolean;
 }
 
+// [LAW:one-source-of-truth] The session's clicks' state from here on, written
+// ahead of a document stamped after a click moved it: the runs a document
+// holds are the ones its state's keys declared, so a replay's state moves
+// before it reaches that document, where the live session's moved.
+export interface StateLine {
+  readonly state: ClickState;
+}
+
+// Whether two clicks' states are one: their values, revision and depths.
+export function sameClickState(a: ClickState, b: ClickState): boolean {
+  const depths = Object.keys(a.history) as Array<keyof HistoryDepth>;
+  return (
+    a.revision === b.revision &&
+    a.back === b.back &&
+    depths.every((k) => a.history[k] === b.history[k]) &&
+    sameValues(a.values, b.values)
+  );
+}
+
 // The request a draw's view was declared with, restated ahead of the draw
 // when it is not the last one the file declared: a request draws the view it
 // holds, which the session may have moved away from, so the view declared
@@ -155,7 +174,8 @@ export type ReplayLine =
   | ({ readonly kind: "request" } & RequestLine)
   | ({ readonly kind: "declared" } & DeclaredLine)
   | ({ readonly kind: "draw" } & DrawLine)
-  | ({ readonly kind: "turn" } & TurnLine);
+  | ({ readonly kind: "turn" } & TurnLine)
+  | ({ readonly kind: "state" } & StateLine);
 
 // [LAW:types-are-the-program] A line of the file, by kind: the header first,
 // then the replay's lines in the order the recorder took them.
@@ -180,11 +200,11 @@ export interface Recording {
 }
 
 // [LAW:one-source-of-truth] The recording's own format: its header and its
-// request, declared, draw and turn lines, which are the renderer's request
+// request, declared, draw, turn and state lines, which are the renderer's request
 // path and not the facts protocol. The documents in it carry their own facts
 // version, which each document's parse refuses, so a change of either moves
 // one number.
-export const RECORDING_VERSION = 6;
+export const RECORDING_VERSION = 7;
 
 // A recording of another format: refused whole, never read line by line
 // against this build's. The version is a value, so the edge that names the
@@ -670,6 +690,12 @@ export function parseRecording(text: string): Recording {
       undrawn.set(at, (undrawn.get(at) ?? 0) + 1);
       continue;
     }
+    if (kind === "state") {
+      const state = parseClickState(json.state, where);
+      oneState(state, where);
+      lines.push({ kind, state });
+      continue;
+    }
     if (kind === "declared") {
       lines.push({ kind, request: parseRequest(json, where, session) });
       continue;
@@ -705,7 +731,7 @@ export function parseRecording(text: string): Recording {
     if (kind !== "facts") {
       throw new FactParseError(
         where,
-        `is of kind ${JSON.stringify(kind)}, not "facts", "request", "declared", "draw" or "turn"`,
+        `is of kind ${JSON.stringify(kind)}, not "facts", "request", "declared", "draw", "turn" or "state"`,
       );
     }
     lines.push({ kind, ...parseFactsLine(json, where, session) });
@@ -764,19 +790,21 @@ export function formatLine(line: RecordingLine): string {
               state: { ...line.state, idleSince: line.state.idleSince ?? null },
               diagnostics: line.diagnostics,
             }
-          : line.kind === "turn"
-            ? {
-                kind: line.kind,
-                held: line.held,
-                at: line.document.at,
-                facts: line.document.facts,
-                ...requestFields(line.request),
-                state: line.state,
-              }
-            : {
-                kind: line.kind,
-                ...(line.kind === "request" && { at: line.at }),
-                ...requestFields(line.request),
-              };
+          : line.kind === "state"
+            ? { kind: line.kind, state: line.state }
+            : line.kind === "turn"
+              ? {
+                  kind: line.kind,
+                  held: line.held,
+                  at: line.document.at,
+                  facts: line.document.facts,
+                  ...requestFields(line.request),
+                  state: line.state,
+                }
+              : {
+                  kind: line.kind,
+                  ...(line.kind === "request" && { at: line.at }),
+                  ...requestFields(line.request),
+                };
   return `${JSON.stringify(json)}\n`;
 }

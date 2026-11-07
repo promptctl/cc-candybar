@@ -18,15 +18,21 @@ import {
 import { sessionIdOf } from "../../src/daemon/session-id";
 import type { Handed } from "../../src/daemon/draw-view";
 import { ANSWERING, UNFOLLOWED_FEEDS } from "../../src/config/lanes";
+import { EMPTY_HISTORY_DEPTH } from "../../src/daemon/settings-history";
 import type { Instant } from "../../src/utils/instant";
 
 const SID = sessionIdOf("rec-session");
 
-// What a draw of a view read of the session's state: passed on whole.
-const state = { revision: 3 } as unknown as DrawState;
+// The session's clicks' state, which a turn is taken over and a draw reads.
+const clicks: ClickState = {
+  values: {},
+  revision: 5,
+  history: EMPTY_HISTORY_DEPTH,
+  back: 0,
+};
 
-// The clicks' state a turn was taken over: passed on whole.
-const clicks = { revision: 5 } as unknown as ClickState;
+// What a draw of a view read of the session's state.
+const state: DrawState = { ...clicks, idleSince: undefined };
 
 // What an answer no lane follows is handed, and a lane's frame.
 const ANSWERED: Handed = {
@@ -36,7 +42,10 @@ const ANSWERED: Handed = {
 };
 const FED: Handed = {
   drawing: { by: "feed", fps: 30 },
-  feeds: { ...UNFOLLOWED_FEEDS, pane: { subscribers: 1, fps: 30, shown: true } },
+  feeds: {
+    ...UNFOLLOWED_FEEDS,
+    pane: { subscribers: 1, fps: 30, shown: true },
+  },
   diagnostics: [],
 };
 
@@ -50,11 +59,13 @@ function view(name = "a") {
   } as unknown as FactsLine);
   let declaration = { name } as unknown as SessionRequest;
   const held = observable.box<FactsLine | null>(null);
+  const store = observable.box(clicks, { deep: false });
   const v = {
     followed: { stamped: () => line.get(), failure: () => null },
     facts: () => declaration,
     source: {
       home: () => "/home/recorded",
+      state: () => store.get(),
       held: () => held.get() !== null,
       turn: () => ({
         document: held.get() ?? line.get(),
@@ -74,6 +85,10 @@ function view(name = "a") {
     move: (seq: number) =>
       runInAction(() =>
         line.set({ at: seq, facts: { seq } } as unknown as FactsLine),
+      ),
+    click: (revision: number) =>
+      runInAction(() =>
+        store.set({ ...clicks, values: { picked: "on" }, revision }),
       ),
     hold: (on: boolean) => runInAction(() => held.set(on ? line.get() : null)),
   };
@@ -122,6 +137,24 @@ test("a recording whose first document fails to write is ended, and its view's n
   v.move(2);
   v.hold(true);
   expect(offered).toEqual(["recording", "turn"]);
+});
+
+test("a recording whose state line fails to write is ended, and the document stamped after the click is offered to no one", () => {
+  const v = view();
+  const recorder = sessionRecorder({ sessionView: () => v }, () => {});
+  const offered: RecordingLine["kind"][] = [];
+  const ended: unknown[] = [];
+  recorder.record(SID, {
+    write: (line) => {
+      offered.push(line.kind);
+      if (line.kind === "state") throw new Error("ENOSPC");
+    },
+    end: (failure) => ended.push(failure),
+  });
+  v.click(6);
+  v.move(2);
+  expect(offered).toEqual(["recording", "turn", "state"]);
+  expect(ended).toEqual([{ kind: "failed", error: new Error("ENOSPC") }]);
 });
 
 test("a recording that fails on the document of the view it moved to is ended, and that view's next document is offered to no one", () => {
@@ -177,6 +210,26 @@ function keepingSink() {
     sink: { write: (line: RecordingLine) => lines.push(line), end: () => {} },
   };
 }
+
+test("a click between documents is written as the session's state ahead of the next document, and a document under the same state carries none", () => {
+  const v = view();
+  const recorder = sessionRecorder({ sessionView: () => v }, () => {});
+  const { lines, sink } = keepingSink();
+  recorder.record(SID, sink);
+  v.click(6);
+  v.move(2);
+  v.move(3);
+  expect(shapeOf(lines.slice(1))).toEqual([
+    "turn 1",
+    "state",
+    "facts 2",
+    "facts 3",
+  ]);
+  expect(lines[2]).toEqual({
+    kind: "state",
+    state: { ...clicks, values: { picked: "on" }, revision: 6 },
+  });
+});
 
 test("a view left in the batch it was entered in writes nothing: its reactions are disposed before their first run", () => {
   const first = view("a");

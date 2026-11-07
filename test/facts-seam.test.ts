@@ -1495,6 +1495,8 @@ test("a recording of a session's facts replays through a second cache into the b
       await settleRequest(replay.recorder, held.view, line.at).landed;
     } else if (line.kind === "declared") {
       held.view.requested(line.request);
+    } else if (line.kind === "state") {
+      restoreDraw(replay.sessionState, replay.depths, SID, line.state);
     } else {
       restoreDraw(replay.sessionState, replay.depths, SID, line.state);
       replayFrames.push(
@@ -1749,6 +1751,56 @@ test("a click on a state variable a source is keyed on, before the recording sta
   expect(replay.started).toEqual([]);
   expect(replay.said).toEqual([]);
   expect(replay.frames.map(textOf)).toEqual(liveFrames.map(textOf));
+});
+
+test("a click that moves a source's state key mid-recording replays the old run's value until the new run lands, as the live bar drew it", async () => {
+  const s = liveSession({ runsMs: 0, stepMs: 100 });
+  const configFile = path.join(s.cwd, "detail.json5");
+  fs.writeFileSync(
+    configFile,
+    JSON.stringify({
+      globals: { experimentalPane: true },
+      variables: {
+        detail: { kind: "state", key: "seam.detail", default: "off" },
+        detailed: {
+          kind: "shell",
+          command: "seam-detail",
+          cache: { key: "{{ .detail }}" },
+        },
+      },
+      segments: {
+        runs: { template: "detail={{ .detail }} run={{ .detailed }}" },
+      },
+      root: { h: ["runs"] },
+    }),
+  );
+  s.launcher.program(shell("seam-detail"), runsFor(2000, exits(0, "old")));
+  await s.requestFrom(s.cwd, configFile);
+  // The click's key runs a command that prints what the old key's did not.
+  s.launcher.program(shell("seam-detail"), runsFor(2000, exits(0, "new")));
+  // The pane lane draws the click's frame at once, with the new run out.
+  cleanups.push(s.follow("pane"));
+  const from = s.drawn.length;
+  const { file } = await recordHeld(s, "moved-key.jsonl", async () => {
+    const frames = [await s.requestFrom(s.cwd, configFile)];
+    pick(s, [{ key: "seam.detail", value: "on" }]);
+    await s.after(500);
+    await s.after(3000);
+    frames.push(await s.requestFrom(s.cwd, configFile));
+    return frames;
+  });
+  const liveFrames = s.drawn.slice(from);
+  const liveText = liveFrames.map(textOf);
+  expect(liveText[0]).toContain("detail=off run=old");
+  expect(liveText.at(-1)).toContain("detail=on run=new");
+  // A frame of the click's, drawn before its run landed, shows the old run.
+  expect(liveText).toContainEqual(
+    expect.stringContaining("detail=on run=old"),
+  );
+  const replay = await replayFile(file, configFile);
+  expect(replay.reads).toEqual([]);
+  expect(replay.started).toEqual([]);
+  expect(replay.frames.map(textOf)).toEqual(liveText);
 });
 
 // A frame compared whole: what it draws, when it next changes, and whether it
