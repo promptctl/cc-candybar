@@ -8,6 +8,7 @@ import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
 import type { ServingDaemon } from "../../src/daemon/limits";
 import { memoryStateFile } from "./state-file";
 import type { ClientHint } from "../../src/client-hint";
+import { NO_REPOS } from "./repo-gate";
 
 // One published install: the daemon's bundle and the native client beside it.
 export const HEALTHY_BUNDLE = "/opt/cc/dist/index.mjs";
@@ -232,6 +233,7 @@ export const HEALTHY_FACTS: DoctorFacts = {
     target: { source: "search" },
     warnings: [],
     unused: [],
+    repos: NO_REPOS,
   },
   sighted: { kind: "recent" },
   ...onOrigin(STILL),

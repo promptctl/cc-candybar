@@ -20,6 +20,8 @@ import type { SettingsSource } from "../../src/claude-settings";
 import type { FrameSighting } from "../../src/daemon/render-sightings";
 import type { SightingScope } from "../../src/doctor/sightings";
 import { HEALTHY_FACTS, drew, onOrigin } from "../helpers/doctor-facts";
+import { NO_REPOS } from "../helpers/repo-gate";
+import { repoUnreadNotice, type RepoGate } from "../../src/config/loader/repo-gate";
 
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
 
@@ -41,6 +43,7 @@ const LOADED: ConfigFacts = {
   target: { source: "search" },
   warnings: [],
   unused: [],
+  repos: NO_REPOS,
 };
 
 // How LOADED reads, in front of whatever the check says of it.
@@ -401,6 +404,7 @@ describe("config probe", () => {
         layers: ["/p/.cc-candybar.json5"],
         target: { source: "search" },
         warnings: ["an advisory"],
+        repos: NO_REPOS,
         error:
           "Invalid config in /p/.cc-candybar.json5 (1 issue):\n  [line 2 • root] root references unknown segment",
       }),
@@ -427,6 +431,7 @@ describe("config probe", () => {
           layers: ["/p/.cc-candybar.json5"],
           target,
           warnings: [],
+          repos: NO_REPOS,
           error: " \n ",
         }),
       ).toEqual({
@@ -436,6 +441,88 @@ describe("config probe", () => {
       });
     },
   );
+
+  // brandon-unfiled-3248.qo8j: a repository's config the load left out is
+  // named on the row. What still asks something of the user fails it; the
+  // user's own settled answer rides its text.
+  describe("a repository the load left out", () => {
+    const gated = (repos: Partial<RepoGate>): RepoGate => ({ ...NO_REPOS, ...repos });
+    const NONE = "bundled default (no config file loaded)";
+    const AWAITING =
+      "awaiting approval: /r — its cc-candybar config runs once it is approved in the bar";
+    const DECLINED = "declined: /r — its cc-candybar config does not run";
+    const UNPROVEN =
+      "not proven a worktree: /w — it answers for itself, because git does not list it";
+
+    test("one awaiting approval fails the row, naming the directory and the approval", () => {
+      expect(
+        config({ ...LOADED, layers: [], repos: gated({ awaiting: ["/r"] }) }),
+      ).toEqual({ ok: false, reason: `${NONE}: ${AWAITING}`, more: [] });
+    });
+
+    test("an awaiting repository follows the load's own problems", () => {
+      expect(
+        config({
+          ...LOADED,
+          warnings: ["an advisory"],
+          repos: gated({ awaiting: ["/r"] }),
+        }),
+      ).toEqual({
+        ok: false,
+        reason: `${JUDGED}: an advisory`,
+        more: [AWAITING],
+      });
+    });
+
+    // The unread notice is the load's own advisory (the bar's strip shows it
+    // from the same load), so the row names it once.
+    test("a book that cannot be read fails the row once, naming the reason", () => {
+      const repos = gated({ unread: "is not an object" });
+      expect(
+        config({
+          ...LOADED,
+          layers: [],
+          warnings: [repoUnreadNotice(repos)!],
+          repos,
+        }),
+      ).toEqual({
+        ok: false,
+        reason: `${NONE}: Repository config answers could not be read: is not an object — no repository's config runs until they can be`,
+        more: [],
+      });
+    });
+
+    test("a declined repository and an unproven worktree leave the row ok, named after the chain", () => {
+      expect(
+        config({
+          ...LOADED,
+          repos: gated({
+            declined: ["/r"],
+            unproven: [{ dir: "/w", reason: "git does not list it" }],
+          }),
+        }),
+      ).toEqual({ ok: true, note: `${JUDGED}; ${DECLINED}; ${UNPROVEN}` });
+    });
+
+    test("a failed load names a declined repository after its first problem, counting it as none", () => {
+      expect(
+        config({
+          kind: "failed",
+          layers: ["/p/.cc-candybar.json5"],
+          target: { source: "search" },
+          warnings: [],
+          error: "Invalid config in /p/.cc-candybar.json5",
+          repos: gated({ awaiting: ["/a"], declined: ["/r"] }),
+        }),
+      ).toEqual({
+        ok: false,
+        reason: `${JUDGED}: Invalid config in /p/.cc-candybar.json5; ${DECLINED}`,
+        more: [
+          "awaiting approval: /a — its cc-candybar config runs once it is approved in the bar",
+        ],
+      });
+    });
+  });
 
   test("config is a CHECKS entry, so the menu and the CLI both run it", () => {
     expect(CHECKS.map((c) => c.name)).toContain("config");

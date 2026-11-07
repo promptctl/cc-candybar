@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
 import { EMPTY_STORES, emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew, sightedIn } from "./helpers/doctor-facts";
+import { NO_REPOS } from "./helpers/repo-gate";
 import type { FrameSighting } from "../src/daemon/render-sightings";
 import fs from "node:fs";
 import os from "node:os";
@@ -39,6 +40,7 @@ const loadsConfig = (config: DslConfig): DoctorEdge["loadConfig"] => () => ({
   error: null,
   warning: null,
   unused: [],
+  repos: NO_REPOS,
   config,
 });
 const NO_TMUX: DoctorEdge = {

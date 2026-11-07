@@ -6,6 +6,7 @@ import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
 import { HOST, hostOf, worldOf, mainEnv } from "./helpers/host";
 import type { World } from "../src/host";
 import { EMPTY_STORES, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL, sightedIn, reportedFrame } from "./helpers/doctor-facts";
+import { NO_REPOS } from "./helpers/repo-gate";
 import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
 import fs from "node:fs";
@@ -76,6 +77,7 @@ const EDGE: DoctorEdge = {
     error: null,
     warning: null,
     unused: [],
+    repos: NO_REPOS,
     config: DEFAULT_DSL_CONFIG,
   }),
 };
@@ -392,6 +394,70 @@ describe("doctorPlan over a real config", () => {
 
   test("no config file anywhere: the bundled default is correct", async () => {
     expect((await plan()).stdout).toBe("✓ config — bundled default (no config file loaded)\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
+  });
+
+  // brandon-unfiled-3248.qo8j: a repository's config the load left out is
+  // named on the row, through the real load and the real answers.
+  describe("a repository config nobody has answered for", () => {
+    let other: string;
+    beforeEach(() => {
+      other = path.join(dir, "other");
+      fs.mkdirSync(other);
+      fs.writeFileSync(path.join(other, ".cc-candybar.json5"), "{}");
+    });
+    const planIn = () =>
+      doctorPlan(REAL, NO_HANDLER, DAEMON, inDir({}), other, () => ({ columns: 120 }));
+    const real = () => fs.realpathSync.native(other);
+
+    test("fails the config row, naming the directory and the approval", async () => {
+      const out = await planIn();
+      expect(out.code).toBe(1);
+      expect(out.stdout).toContain(
+        `✗ config — bundled default (no config file loaded): awaiting approval: ${real()} — its cc-candybar config runs once it is approved in the bar\n`,
+      );
+    });
+
+    test("once declined, the row passes and names it as declined", async () => {
+      answerRepo(other, "declined", world.host.env);
+      expect((await planIn()).stdout).toContain(
+        `✓ config — bundled default (no config file loaded); declined: ${real()} — its cc-candybar config does not run\n`,
+      );
+    });
+
+    // A declined repository rides the row's text whatever its verdict, on the
+    // bar as in the CLI, and is never counted among the row's problems.
+    test("declined beside a failing row rides its first problem and is counted as none", async () => {
+      answerRepo(other, "declined", world.host.env);
+      const user = path.join(dir, "xdg", "cc-candybar", "config.json5");
+      fs.mkdirSync(path.dirname(user), { recursive: true });
+      fs.writeFileSync(user, `{ helpers: { h: "x" } }`);
+      expect((await planIn()).stdout).toContain(
+        `✗ config — ${user} (searched): helper "h" is never called; declined: ${real()} — its cc-candybar config does not run\n✓ install\n`,
+      );
+      const reports = runDoctor({
+        ...(await gatherFacts(
+          REAL,
+          { tmux: null, claudeConfigDir: dir },
+          { projectDir: other, cwd: other, target: { source: "search" } },
+          () => null,
+          { kind: "ok", value: HEALTHY_SERVING },
+          CARRIED,
+          NAMED,
+          { kind: "recent" },
+          sightedIn(other, dir, STILL),
+          { kind: "ok", value: { columns: 148, of: { kind: "command" } } },
+          EMPTY_STORES,
+        )),
+        urlHandler: { kind: "unsupported" },
+        install: HEALTHY_FACTS.install,
+      });
+      const pairs = new Map(
+        doctorReportPairs(reports).map((p) => [p.key, p.value]),
+      );
+      expect(pairs.get(doctorReportKeys("config").reason)).toBe(
+        `${user} (searched): helper "h" is never called; declined: ${real()} — its cc-candybar config does not run`,
+      );
+    });
   });
 
   test("a config using everything it declares is ok", async () => {

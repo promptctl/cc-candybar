@@ -56,6 +56,7 @@ import { readTailSync } from "../utils/transcript-fs.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
 import type { DslConfig } from "../config/dsl-types.js";
+import type { RepoGate } from "../config/loader/repo-gate.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import {
   type Asked,
@@ -284,12 +285,15 @@ export interface DoctorEdge {
 // per line), and — for the config last loaded — what its file left unused.
 // `config` is the config the bar draws from: the one loaded, else what the
 // bar falls back to under the error.
+// [LAW:one-source-of-truth] `repos` is the gate the load ruled: the doctor
+// reads it and never asks the answers again.
 export interface ConfigLoad {
   readonly layers: readonly string[];
   readonly error: string | null;
   readonly warning: string | null;
   readonly unused: readonly UnusedDecl[];
   readonly config: DslConfig;
+  readonly repos: RepoGate;
 }
 
 // `#{client_termfeatures}` lists terminal-features + overrides + terminfo for
@@ -652,6 +656,7 @@ function configFacts(load: ConfigLoad, target: ConfigTarget): ConfigFacts {
     layers: load.layers,
     target,
     warnings: load.warning === null ? [] : load.warning.split("\n"),
+    repos: load.repos,
   };
   return load.error !== null
     ? { ...base, kind: "failed", error: load.error }

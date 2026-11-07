@@ -136,7 +136,11 @@ import {
 } from "../../click/wire";
 import type { RendererLinks } from "../../click/renderer-links";
 import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
-import type { RepoAnswer } from "../../config/loader/repo-gate";
+import {
+  repoGateLines,
+  type RepoAnswer,
+  type RepoGate,
+} from "../../config/loader/repo-gate";
 import type { Runs, RunRequest } from "../runs";
 import type { LaneSetups } from "../lane-setup";
 import type { DeclaredSources } from "../render-payload";
@@ -1480,10 +1484,21 @@ function movedSince(
   // A reload that failed keeps the config it had, so its error is the news.
   return stands.config === stamp.load.config &&
     stands.error === stamp.load.error &&
-    stands.warning === stamp.load.warning
+    stands.warning === stamp.load.warning &&
+    sameGate(stands.repos, stamp.load.repos)
     ? null
     : "config";
 }
+
+// [LAW:one-source-of-truth] The gate as the doctor reads it: every load builds
+// a new one, so it is compared by what its lines say. An answer that moves no
+// layer (an awaiting repository declined) keeps the config as it was, and only
+// the gate tells the report it would write is stale. The lines carry every
+// ruling: each directory reached stands in one list (or the book is unread,
+// which has a line), and every list but the approved one has lines, so no
+// reached directory's standing moves without a line moving.
+const sameGate = (a: RepoGate, b: RepoGate): boolean =>
+  repoGateLines(a).join("\n") === repoGateLines(b).join("\n");
 
 // What the doctor reads of the hints the session's last request recorded.
 function doctorHints(

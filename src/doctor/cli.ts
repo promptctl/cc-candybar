@@ -136,6 +136,7 @@ export function loadConfigOnce(
     warning: loaded.warning,
     unused: state.unused,
     config: state.config,
+    repos: loaded.repos,
   };
 }
 

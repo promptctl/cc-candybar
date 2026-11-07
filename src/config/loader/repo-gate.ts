@@ -185,16 +185,33 @@ export function repoUnreadNotice(gate: RepoGate): string | null {
     : `Repository config answers could not be read: ${gate.unread} — no repository's config runs until they can be`;
 }
 
-// What a verdict outside the bar (`check`, the demo) says of each repository
-// it did not run. The bar asks instead.
+// What a verdict says of each repository a load did not run: `check` and the
+// demo print every line, and the doctor's config row reads them split by what
+// each asks of the user. The bar asks instead.
+// [LAW:one-source-of-truth] One wording, so the doctor reads these sentences
+// rather than a copy of them, and its stale-report check compares them.
 export function repoGateLines(gate: RepoGate): readonly string[] {
   const unread = repoUnreadNotice(gate);
   return [
     ...(unread === null ? [] : [unread]),
-    ...gate.awaiting.map(
-      (d) =>
-        `awaiting approval: ${d} — its cc-candybar config runs once it is approved in the bar`,
-    ),
+    ...repoAwaitingLines(gate),
+    ...repoSettledLines(gate),
+  ];
+}
+
+// The repositories that still ask for an answer.
+export function repoAwaitingLines(gate: RepoGate): readonly string[] {
+  return gate.awaiting.map(
+    (d) =>
+      `awaiting approval: ${d} — its cc-candybar config runs once it is approved in the bar`,
+  );
+}
+
+// What no fix is owed for: a declined repository is the user's own answer,
+// which only reversing it would change, and an unproven worktree says only
+// which key its directory answers under, whose standing has a line of its own.
+export function repoSettledLines(gate: RepoGate): readonly string[] {
+  return [
     ...gate.declined.map(
       (d) => `declined: ${d} — its cc-candybar config does not run`,
     ),
