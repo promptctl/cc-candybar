@@ -804,7 +804,7 @@ describe("a feed's draws and its summary", () => {
   // A frame renders in one synchronous turn, so a wake while it renders is the
   // render's own (a view it reopened), and the frame reads what that moved: it
   // is coalesced into that frame, and the next falls due as the frame set it.
-  test("a wake while a frame is drawn is coalesced into it", () => {
+  test("a wake while a frame renders is coalesced into it", () => {
     const { feeds, note, state, log, clock } = harness({ motion: "still" });
     note("s", "bar");
     state.duringRender = () => feeds.wake("s", "data");

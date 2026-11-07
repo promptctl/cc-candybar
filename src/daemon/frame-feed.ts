@@ -684,8 +684,7 @@ export class FrameFeeds<Req> {
   // costs. A frame step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
   // next change is Infinity, and an unseen bar's spacing is the still period.
-  // A wake while the frame went out has already set the timer, and the frame
-  // never sets it later than that.
+  // A wake while the frame went out may already have set the timer sooner.
   private schedule(feed: Feed, frame: FeedFrame | null, at: Instant): void {
     const { moving, still } = this.deps.periods;
     const until = ((frame?.bar.nextChange ?? Infinity) - at) * 1000;
@@ -694,12 +693,7 @@ export class FrameFeeds<Req> {
     if (shownPeriod < still && shown) feed.moving++;
     if (shownPeriod < still && !shown) feed.unseen++;
     const period = shown ? shownPeriod : still;
-    const due = (at + period / 1000) as Instant;
-    const wall = this.deps.instant();
-    const dueMoment =
-      this.deps.clock.monotonic() + Math.max(0, (due - wall) * 1000);
-    if (feed.phase.kind === "due" && feed.phase.at <= dueMoment) return;
-    this.arm(feed, due, wall);
+    this.arm(feed, (at + period / 1000) as Instant, this.deps.instant());
   }
 
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
@@ -726,20 +720,23 @@ export class FrameFeeds<Req> {
     if (phase.kind === "rendering") return false;
     const now = this.deps.clock.monotonic();
     const at = Math.max(now, feed.lastStart + this.spacingOf(feed));
-    if (phase.kind === "due" && phase.at <= at) return false;
     const wall = this.deps.instant();
-    this.arm(feed, (wall + (at - now) / 1000) as Instant, wall);
-    return true;
+    return this.arm(feed, (wall + (at - now) / 1000) as Instant, wall);
   }
 
   // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
   // the wall instant `due`, in a later turn than the caller's however soon
   // that is. Its wait is measured from `wall`, the caller's own reading, so
   // the instant a caller set is never rebuilt from a second, truncated one;
-  // its monotonic due time is what a wake compares against.
-  private arm(feed: Feed, due: Instant, wall: Instant): void {
+  // its monotonic due time is what a later caller compares against.
+  // [LAW:single-enforcer] The one rule that a timer is never set later than
+  // it already falls due. Answers whether it moved the timer.
+  private arm(feed: Feed, due: Instant, wall: Instant): boolean {
     const delay = Math.max(0, (due - wall) * 1000);
-    this.setTimer(feed, due, this.deps.clock.monotonic() + delay, delay);
+    const dueMoment = this.deps.clock.monotonic() + delay;
+    if (feed.phase.kind === "due" && feed.phase.at <= dueMoment) return false;
+    this.setTimer(feed, due, dueMoment, delay);
+    return true;
   }
 
   private setTimer(
