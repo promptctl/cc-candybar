@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "c3eb590e336d3dfbc8184093e0fe9c489121c59e",
+      "timestamp": "2026-11-07T11:48:28.226Z",
+      "commits": [
+        {
+          "sha": "c3eb590e336d3dfbc8184093e0fe9c489121c59e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:47:29-07:00",
+          "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr) (#679)\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+        },
+        {
+          "sha": "37f5c35ff91a229f08869f5b34660301b699233a",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-07T11:35:57Z",
+          "message": "chore(release): set `package.json` to 1.210.3 [skip ci]\n\n## [1.210.3](https://github.com/promptctl/cc-candybar/compare/v1.210.2...v1.210.3) (2026-11-07)\n\n### Bug Fixes\n\n* **pricing:** a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8) ([#684](https://github.com/promptctl/cc-candybar/issues/684)) ([3e574dd](https://github.com/promptctl/cc-candybar/commit/3e574dde3244026257856ed4e675a0275bc287d1))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-688",
       "ref": "refs/pull/688/merge",
       "sha": "fd8c4723377ee13793440757f395201c88103ee7",
@@ -203,28 +225,6 @@
       ]
     },
     {
-      "version": "pr-679",
-      "ref": "refs/pull/679/merge",
-      "sha": "606c38136ea3d041b0b15ff7258d23b04920b840",
-      "timestamp": "2026-11-07T11:39:03.783Z",
-      "commits": [
-        {
-          "sha": "606c38136ea3d041b0b15ff7258d23b04920b840",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:37:13-07:00",
-          "message": "Merge 283798e10e1ca3cee51a203034f2add6d39e2fb0 into 37f5c35ff91a229f08869f5b34660301b699233a\n"
-        },
-        {
-          "sha": "283798e10e1ca3cee51a203034f2add6d39e2fb0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:13:32-07:00",
-          "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "pr-687",
       "ref": "refs/pull/687/merge",
       "sha": "dde0925541b018a9f14b21ece8909a40305e8f09",
@@ -250,28 +250,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:43:20-07:00",
           "message": "refactor(cache): the render cache takes a render origin, not three positional strings (brandon-unfiled-3248.9cru)\n\nThe cache's entry points (getOrCreate, hold, holdSession, reload, the\nprivate load, and loadFromDisk) take one LoadOrigin, picked from\nRenderOrigin, so every caller passes the origin it already holds and a\nswapped or missing field is a type error. loadFromDisk is the one place\nthe origin is spelled out into the resolver's arguments. An entry holds\na copy of what resolution reads, never the caller's target source, so\norigins that name one file by different sources share one entry.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "3e574dde3244026257856ed4e675a0275bc287d1",
-      "timestamp": "2026-11-07T11:27:46.417Z",
-      "commits": [
-        {
-          "sha": "3e574dde3244026257856ed4e675a0275bc287d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:26:47-07:00",
-          "message": "fix(pricing): a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8) (#684)\n\n* fix(pricing): a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8)\n\nThe pricing held one promise for the daemon's life, so a daemon that\nstarted offline priced by the bundled rates until it was restarted, and\none that fetched kept its table past the disk copy's day.\n\nWhat a load settles is now a Landed table or a Failed load that carries\nthe last table that landed, if any. Each ask starts the one load when\nwhat is held is due, and answers with what is held: the first ask awaits,\nlater asks answer at once while the load lands behind them. A landed\ntable is due a day after it was read; a failed load after a backoff that\ndoubles per failure in a row up to an hour. The disk copy is a candidate\njudged by the same due predicate, so the day ends once. No timer is\narmed: the retry is the next ask after the due moment. A load that\nlanded nothing says so on the owner's log with the retry delay.\n\nThe test moves onto a held clock and drives the retry, the refresh, a\nrefresh that fails, a copy another daemon wrote, and a close mid-refresh.\n\n* fix(pricing): a failed load keeps the last table that landed anywhere, and a close is no failure (candybar-gather-renderer-76bb.1p8)\n\nFrom the high review. A daemon that starts on a day-old disk copy with no network priced by the bundled rates, because the due copy was passed over and the fetch landed nothing: the failed load now keeps the later of the disk copy and the held table, so one rule covers the cold start and the refresh. A load the close ended was recorded as a failure in a row and warned of a retry that could not happen: it now settles nothing and says nothing. A copy stamped ahead of the clock was held past its day for as long as the stamp stood: it is malformed like any other field and the fetch rewrites it. The warning says what the code does, that the next ask after the backoff tries again, since nothing is armed. The architecture memory no longer says the table is loaded once.\n\n* fix(pricing): a failing load says each backoff once, and a close during a first load keeps the disk copy (candybar-gather-renderer-76bb.1p8)\n\nFrom the medium review. A load that landed nothing warned on every retry, so a machine with no network wrote the same line every hour for as long as it stayed offline: the line now goes through the change-only logger and names the backoff rather than the count, so it changes while the backoff grows and falls silent at the ceiling. A close during the first load on a copy past its day returned nothing held and priced the awaiting fold by the bundled rates: the copy stands before anything was held."
-        },
-        {
-          "sha": "f92fb0e65423da82e8e6030b5d393e6c9369d852",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T11:15:43Z",
-          "message": "chore(release): set `package.json` to 1.210.2 [skip ci]\n\n## [1.210.2](https://github.com/promptctl/cc-candybar/compare/v1.210.1...v1.210.2) (2026-11-07)\n\n### Bug Fixes\n\n* **state:** concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1) ([#678](https://github.com/promptctl/cc-candybar/issues/678)) ([3bc07ed](https://github.com/promptctl/cc-candybar/commit/3bc07edfbe9d321a6fea2f6a74c80414ed0ef5e7))\n"
         }
       ]
     },
