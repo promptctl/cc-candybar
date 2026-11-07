@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-685",
+      "ref": "refs/pull/685/merge",
+      "sha": "c4c300fc251e85b28ffb44c6d205283d676a691b",
+      "timestamp": "2026-11-07T11:48:55.608Z",
+      "commits": [
+        {
+          "sha": "c4c300fc251e85b28ffb44c6d205283d676a691b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:48:06Z",
+          "message": "Merge f485e9cc3772cfe63b3f1dd90eff0b13282af019 into c3eb590e336d3dfbc8184093e0fe9c489121c59e\n"
+        },
+        {
+          "sha": "f485e9cc3772cfe63b3f1dd90eff0b13282af019",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:47:50-07:00",
+          "message": "fix(watchers): a key request's stat names the folder its watch opened on (brandon-unfiled-3248.tvhj)\n\nEvery stat of a folder that answers, a key request's included, records the\ncurrent generation's folder. A watch whose opening stat fails takes that\nrecord, so a folder replaced before a stat answers again is found lost, and a\nlater failed mkdir moves the generation instead of returning the watched key.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "78f2638b23c80de6e17e8bc331b7934b0a42ffb4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:37:44-07:00",
+          "message": "fix(watchers): a storage stat failure is one fault wherever it is taken (brandon-unfiled-3248.tvhj)\n\nA key request's failed stat no longer marks the folder unusable: only a\nfailed mkdir waits on a reload. A watch that opened on a folder no stat could\nname takes the first answer, so it is not found lost. A failed window that\ncloses on a listening watch re-reads the folder's held files, which it may\nhave missed. Sources read the fault as last reported, the one the log and the\ncounts hold.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "8d49c3c855b5654d0c04349b76bece094bdb680e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:28:34-07:00",
+          "message": "fix(watchers): one window reports one storage fault and re-reads once (brandon-unfiled-3248.tvhj)\n\nA failed window re-read every held file even when its fault had not moved,\nso a watch that errors after every reopen logged a failed refresh per file on\nevery period. A window now takes the handle's deafness before judging, reports\nonce, and makes one re-read: the files it names, every file on the folder's\nown name or an unnamed event, and every file when the fault moves. A stat that\nfails as the watch opens is the generation's stat failure, never a throw out\nof the build.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "3eba9646bbe0a72527a4b76481a9eb1319e59a91",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:41:20-07:00",
+          "message": "fix(watchers): a storage folder's fault clears when its watch or stat recovers (brandon-unfiled-3248.tvhj)\n\nA refused or erroring watch, and a stat that failed during a judgment, are\nno longer terminal health. Each generation's fault is derived (unusable,\nthen the handle's deafness, then the last stat failure) and logged and\ncounted on a start, change or clear, so the registry's period reopen and the\nowner's period judgment clear it in the same generation. Deafness is\ncompared only when a window closes and at opening, so the result holds in\neither subscription order.\n\nThe registry's reopen now tells a failed window when a deaf directory ends\ndeaf another way (an error then a refusal, a refusal whose reason changes),\nreusing the comparison its refusal log already makes.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c3eb590e336d3dfbc8184093e0fe9c489121c59e",
@@ -185,42 +228,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:34:34-07:00",
           "message": "fix(git): each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek)\n\nA daemon spawned from an environment carrying GIT_DIR or another of git's\nrepository variables (a hook, vcsh, yadm) passed it to every git read, so\nevery bar showed the spawning shell's repository. The daemon now asks git\nfor those names once at its process edge, before its lease, bounded at 2 s,\nand runs in a world whose environment is the process's without them. An ask\nthat fails keeps the inherited environment and draws a git-env warning on\nevery bar; a git that is not installed names none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-685",
-      "ref": "refs/pull/685/merge",
-      "sha": "e4a612737afe2fb4933ac67fdf8a739aa2f60bb1",
-      "timestamp": "2026-11-07T11:39:57.424Z",
-      "commits": [
-        {
-          "sha": "e4a612737afe2fb4933ac67fdf8a739aa2f60bb1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:37:54Z",
-          "message": "Merge 78f2638b23c80de6e17e8bc331b7934b0a42ffb4 into 37f5c35ff91a229f08869f5b34660301b699233a\n"
-        },
-        {
-          "sha": "78f2638b23c80de6e17e8bc331b7934b0a42ffb4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:37:44-07:00",
-          "message": "fix(watchers): a storage stat failure is one fault wherever it is taken (brandon-unfiled-3248.tvhj)\n\nA key request's failed stat no longer marks the folder unusable: only a\nfailed mkdir waits on a reload. A watch that opened on a folder no stat could\nname takes the first answer, so it is not found lost. A failed window that\ncloses on a listening watch re-reads the folder's held files, which it may\nhave missed. Sources read the fault as last reported, the one the log and the\ncounts hold.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "8d49c3c855b5654d0c04349b76bece094bdb680e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:28:34-07:00",
-          "message": "fix(watchers): one window reports one storage fault and re-reads once (brandon-unfiled-3248.tvhj)\n\nA failed window re-read every held file even when its fault had not moved,\nso a watch that errors after every reopen logged a failed refresh per file on\nevery period. A window now takes the handle's deafness before judging, reports\nonce, and makes one re-read: the files it names, every file on the folder's\nown name or an unnamed event, and every file when the fault moves. A stat that\nfails as the watch opens is the generation's stat failure, never a throw out\nof the build.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "3eba9646bbe0a72527a4b76481a9eb1319e59a91",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:41:20-07:00",
-          "message": "fix(watchers): a storage folder's fault clears when its watch or stat recovers (brandon-unfiled-3248.tvhj)\n\nA refused or erroring watch, and a stat that failed during a judgment, are\nno longer terminal health. Each generation's fault is derived (unusable,\nthen the handle's deafness, then the last stat failure) and logged and\ncounted on a start, change or clear, so the registry's period reopen and the\nowner's period judgment clear it in the same generation. Deafness is\ncompared only when a window closes and at opening, so the result holds in\neither subscription order.\n\nThe registry's reopen now tells a failed window when a deaf directory ends\ndeaf another way (an error then a refusal, a refusal whose reason changes),\nreusing the comparison its refusal log already makes.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },

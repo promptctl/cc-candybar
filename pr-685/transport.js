@@ -82979,10 +82979,11 @@ var ManagedStorage = class {
     const stat3 = known.unusable === null ? this.statOf(folder) : { now: "gone" };
     const now2 = "now" in stat3 ? stat3.now : null;
     const moved = known.lost || known.identity !== null && now2 !== null && (now2 === "gone" || !sameIdentity(now2, known.identity));
+    const kept = moved ? null : known.identity;
+    known.identity = now2 === null ? kept : now2 === "gone" ? null : now2;
     if (moved) {
       known.generation++;
       known.lost = false;
-      known.identity = now2 === "gone" ? null : now2;
       this.logger(
         "info",
         `plugin storage generation folder=${valueOf(folder)} generation=${known.generation}`
@@ -83044,7 +83045,8 @@ var ManagedStorage = class {
     }
     const unusable = key.generation === folder.generation ? folder.unusable : null;
     const stat3 = unusable === null ? this.statOf(key.folder) : { now: "gone" };
-    const identity2 = "now" in stat3 ? stat3.now : "unnamed";
+    const recorded = key.generation === folder.generation ? folder.identity : null;
+    const identity2 = "now" in stat3 ? stat3.now : recorded ?? "unnamed";
     if (key.generation === folder.generation) {
       folder.identity = typeof identity2 === "string" ? null : identity2;
     }
@@ -87215,18 +87217,7 @@ function createDaemon(inputs) {
     // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
     // hold them against.
     now: instant,
-    // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it, and each pipe event, is said in daemon.log, and every feed
-    // redraws, so its warning comes on frames too.
-    observeWarnings: (change) => {
-      if (change.kind === "launch-pipes") log("warn", change.text);
-      else
-        log(
-          change.fault === null ? "info" : "warn",
-          change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
-        );
-      frameFeeds.wakeWhere("data", () => true);
-    }
+    observeWarnings: launcherWarningsSaid(log, () => frameFeeds)
   });
   const probe3 = inputs.probe(launcher);
   const storage = inputs.storage(log);
@@ -87284,32 +87275,14 @@ function createDaemon(inputs) {
     logger: log,
     ledger: refreshLedger
   });
-  const {
-    gitProvider: gitService,
-    usageStore,
-    tmuxService,
-    hostService,
-    managedStorage
-  } = payloadProviders;
+  const { managedStorage } = payloadProviders;
   const navigationHistory = new NavigationHistory();
   const effectSessions = new EffectSessions();
-  const menuIdle = new MenuIdle({
-    clock,
-    now: instant,
-    close: async (session, idle) => {
-      await apply({ kind: "menu-idle", session, idle }, parts);
-    },
-    failed: (sessionId2, error) => sayUnapplied(log, "menu-idle", `session=${sessionId2}`, error)
-  });
+  const menuIdle = sessionMenuIdle(() => parts, { clock, now: instant, log });
   const links2 = { to: home.name, signer: inputs.linkSigner };
-  const runs = new Runs({
-    supersede: (storage2, sessionId2) => managedStorage.supersede(storage2, sessionId2),
-    launch: launcher.launch,
-    log,
-    clock
-  });
+  const runs = sessionRuns({ managedStorage, launcher, log, clock });
   const heldSession = inputs.heldSession(host.home);
-  const laneSetups = new LaneSetups({
+  const laneSetups = sessionLaneSetups(() => parts, journalTurns, {
     edge: inputs.laneEdge(
       launcher,
       (sessionId2) => frameFeeds.following(sessionId2),
@@ -87325,35 +87298,14 @@ function createDaemon(inputs) {
       home,
       preload: stableAttachPreload(bundle.path, host)
     },
-    log,
-    // [LAW:one-source-of-truth] The session a setup acts on is its latest
-    // request, the one a click reads too, read as the setup runs.
-    latest: (sessionId2) => {
-      const req = frameFeeds.latest(sessionId2);
-      return req === null ? null : laneSessionOf(req);
-    },
-    // A setup's steps in a pane take the order of what is typed into it, as a
-    // slash click's typing does (src/daemon/apply.ts).
-    paneOrder: (tmux3, work) => journalTurns.performing({ kind: "pane", tmux: tmux3 }, work)
+    log
   });
-  const tmuxStatusLines = new TmuxStatusLines({
-    edge: {
-      run: (socket, args) => runTmuxAsync(launcher, { socket }, "tmux-status", args)
-    },
-    subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
-    sessionInPane: (where) => frameFeeds.newestWhere(runsNowIn(where, heldSession)),
-    // Run by tmux under its server's environment, so the renderer's home is
-    // stated whole on the command, every variable of it.
-    handler: [
-      ...Object.entries(homeEnv(home)).map(([k, v]) => `${k}=${shellWord(v)}`),
-      ...[...bundle.node, bundle.path].map(shellWord),
-      "url-handle"
-    ].join(" "),
+  const tmuxStatusLines = sessionTmuxStatusLines(() => parts, {
+    launcher,
+    heldSession,
+    home,
     owner: paths2.socket,
-    // [LAW:one-source-of-truth] The renderer's name is its home's (docs/design/
-    // gather-and-renderer.md, section 17): a click on a row this renderer
-    // holds is resolved to this renderer's socket from the name alone.
-    name: home.name,
+    bundle,
     signer: inputs.linkSigner,
     log
   });
@@ -87363,167 +87315,54 @@ function createDaemon(inputs) {
     retryMs: FEED_PERIODS.still,
     log
   });
-  const frameFeeds = new FrameFeeds({
+  const paneVisibility = sessionPaneVisibility(() => parts, {
+    launcher,
+    clock,
+    log
+  });
+  const frameFeeds = sessionFrameFeeds(() => parts, {
     render: (sessionId2, fps, at) => renderFrame(parts, sessionId2, fps, at),
-    // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
-    // which fires in a later turn. A click's turn is synchronous, so no frame
-    // reads its writes before its commit.
-    watch: (sessionId2, onChange) => reaction(() => sessionState.revision(sessionId2), onChange),
-    lanes: (sessionId2) => viewLanes(parts, sessionId2),
-    // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
-    // moment the feed stops drawing, so its drawn copies retire with it.
-    pin: (sessionId2) => {
-      const unpin = renderCache.pin(sessionId2);
-      return () => {
-        renderCache.stopDrawing(sessionId2, "feed");
-        unpin();
-      };
-    },
-    shown: (req) => paneVisibility.shown(req.hints.tmux),
-    watching: () => paneVisibility.follow(),
-    refreshes: () => refreshLedger.totals(),
-    periods: FEED_PERIODS,
-    encoders: laneEncoders(linkIds),
+    visibility: paneVisibility,
+    linkIds,
     clock,
     instant,
     log
   });
-  const paneVisibility = new PaneVisibility({
-    clock,
-    listPanes: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
-      "list-panes",
-      "-a",
-      "-F",
-      LIST_PANES_FORMAT
-    ]),
-    listClients: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
-      "list-clients",
-      "-F",
-      LIST_CLIENTS_FORMAT
-    ]),
-    // The servers of the sessions someone is watching.
-    sockets: () => new Set(frameFeeds.watched().flatMap(({ req }) => tmuxServersOf(req))),
-    onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
-    // Only the sessions on a server whose view changed are drawn again.
-    onChange: (sockets) => frameFeeds.wakeWhere(
-      "visibility",
-      (req) => tmuxServersOf(req).some((socket) => sockets.has(socket))
-    ),
-    intervalMs: 1e3,
-    log
-  });
-  function tmuxServersOf({
-    hints: { tmux: tmux3 }
-  }) {
-    return tmux3 === null || tmux3 === void 0 ? [] : [tmux3.socket];
-  }
   const renderWarnings = new RenderWarningRecords();
   const updateFact = newUpdateFact();
-  const { cache: renderCache, recorder } = recordedCache(
-    (recording2) => new RenderCache(
-      {
-        clock,
-        stateDir: paths2.state,
-        locations: locs,
-        sessionState,
-        watchers: watcherRegistry,
-        log,
-        storage: managedStorage,
-        links: links2,
-        gates,
-        // [LAW:single-enforcer] Where every session's facts come from: the
-        // in-process arm over the daemon's own owners, which logs the refreshes
-        // it makes through the one ledger, so a view's payload logs none of them.
-        facts: inProcessFacts({
-          providers: payloadProviders,
-          update: () => updateFact.get(),
-          runs: sourceRuns
-        }),
-        // [LAW:single-enforcer] What every session's view draws from: its payload
-        // derived over its document, its picks and its histories' depths.
-        source: sessionSource({
-          providers: payloadProviders,
-          sessionState,
-          stateGates: gates.state,
-          history: (sessionId2) => settingsHistory.depth(sessionId2),
-          // Measured against the gate of the config the view draws with.
-          navigation: (sessionId2, config2) => navigationHistory.depth(
-            sessionId2,
-            sessionState,
-            gates.state.gateFor(config2)
-          )
-        })
-      },
-      {
-        budgetBytes: () => renderCacheBudget(memoryLimitBytes2),
-        observers: {
-          // [LAW:no-silent-failure] Every config (re)load's outcome lands in
-          // daemon.log with its cause — the operator's only record of why a load
-          // ran, and whether a save was picked up cleanly, kept rendering
-          // last-known-good behind an error, or resolved to a different file.
-          onReload: (entry, sessions, cause, settled4) => {
-            log("info", configLoadedLine(entry, cause, settled4));
-            for (const sessionId2 of sessions)
-              frameFeeds.wake(sessionId2, "reload");
-          },
-          // [LAW:single-enforcer] What a session's view draws from moved: its
-          // feed's next frame is brought forward, whatever moved it: a request's
-          // facts, a refresh landing after its deadline, a source publishing, a
-          // pick. The dump link, which no view holds, wakes the same way.
-          onViewChanged: (sessionId2) => frameFeeds.wake(sessionId2, "data"),
-          ...recording2
-        }
-      }
-    ),
-    log
-  );
-  fileEvents.subscribe((notice) => {
-    switch (notice.kind) {
-      case "period":
-        watcherRegistry.judge();
-        return;
-      case "caught-up":
-        renderCache.reloadEvery({
-          kind: "events-resumed",
-          since: notice.since
-        });
-        frameFeeds.wakeWhere("data", () => true);
-        return;
-      case "moved":
-        frameFeeds.wakeWhere("data", () => true);
-        return;
-    }
-  });
-  const BIN_CHECK_INTERVAL_MS = 60 * 1e3;
-  const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1e3;
-  const binaryWatch = makeBinaryWatch({
+  const { cache: renderCache, recorder } = sessionRenderCache({
     clock,
-    targets: bundle.targets,
-    intervalMs: BIN_CHECK_INTERVAL_MS,
-    filesystem: inputs.filesystem,
-    // The update notice's act rewrites the bundle, and a restart in the middle
-    // would start the next daemon from a half-written one: a restart waits for
-    // it. A success samples again at once; after a failure the next tick does.
-    held: () => updateWatch.running(),
-    exit: () => exit2(0),
-    log
+    stateDir: paths2.state,
+    locations: locs,
+    sessionState,
+    watchers: watcherRegistry,
+    log,
+    links: links2,
+    gates,
+    providers: payloadProviders,
+    updateFact,
+    sourceRuns,
+    history: settingsHistory,
+    navigation: navigationHistory,
+    // [LAW:single-enforcer] What every session's view draws from: its payload
+    // derived over its document, its picks and its histories' depths.
+    source: sessionSource,
+    budgetBytes: () => renderCacheBudget(memoryLimitBytes2),
+    wake: (sessionId2, cause) => frameFeeds.wake(sessionId2, cause)
   });
-  const updateWatch = makeUpdateWatch({
-    fact: updateFact,
+  followFileEvents({ fileEvents, watcherRegistry, renderCache, frameFeeds });
+  const { binaryWatch, updateWatch } = bundleWatches({
     clock,
     launcher,
     probe: probe3,
-    entryUrl: bundle.entryUrl,
-    digest: bundle.digest,
-    // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
-    // this daemon runs from.
-    actsDir: actsDir(paths2.state, bundle.path),
-    intervalMs: BIN_CHECK_INTERVAL_MS,
-    releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
+    filesystem: inputs.filesystem,
+    bundle,
+    stateDir: paths2.state,
     registryUrl,
-    fetchImpl: inputs.fetch,
+    fetch: inputs.fetch,
     gates,
-    onApplied: () => binaryWatch.checkNow(),
+    updateFact,
+    exit: exit2,
     log
   });
   const mismatchRuns = new MismatchRuns(journalTurns);
@@ -87534,11 +87373,9 @@ function createDaemon(inputs) {
     storedRoot: paths2.storedRoot,
     locations: locs,
     journalTurns,
-    clickLanded: (sessionId2) => menuIdle.clicked(sessionId2, instant()),
     log,
     launcher,
     now: instant,
-    applyUpdate: () => updateWatch.act(),
     // The load the session's bar is drawn from: its cache entry's load
     // outcome, and what the config that entry renders left unused.
     // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
@@ -87566,27 +87403,12 @@ function createDaemon(inputs) {
     clients: renderSightings,
     mismatchRuns,
     bundle: bundle.path,
-    serving: () => limits.serving(),
     claudeInput: inputs.claudeInput(launcher),
     history: settingsHistory,
     navigation: navigationHistory,
-    // The config a session's last render resolved from — the same entry the
-    // render drew the bar with, so a save compares against the bar the user saw.
-    configFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.config,
-    reloadConfig: (origin) => renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
-      kind: "write"
-    }),
-    // The storage keys of the same entry `configFor` reads the config of.
-    sourcesFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.sources,
     links: links2,
     runs,
-    lanes: {
-      of: (origin, sessionId2) => lanesAt(parts, origin, sessionId2),
-      clicked: (sessionId2, before, after) => laneClicked(parts, sessionId2, before, after),
-      arrived: (req) => requestArrived(parts, req),
-      setup: (effect) => laneSetups.setup(effect)
-    },
-    diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
+    ...verbsOverParts(() => parts)
   };
   const parts = {
     home: host.home,
@@ -87609,7 +87431,7 @@ function createDaemon(inputs) {
     payloadProviders,
     sessionState,
     rendererName: home.name,
-    draw: (req, at, waitEndsAt, facts) => drawAnswer(parts, req, at, waitEndsAt, facts),
+    draw: partsDraw(() => parts),
     effectSessions,
     menuIdle,
     journalTurns,
@@ -87662,55 +87484,405 @@ function createDaemon(inputs) {
       limits.arm();
     },
     close(atExit) {
-      const teardown = [
-        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
-        // the journal in flight commits what landed; none opens after.
-        ["journalTurns close", () => journalTurns.close()],
-        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts).
-        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
-        // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
-        // is in flight is terminated, whichever owner's work it was, and the
-        // launcher's lifeline goes.
-        ["launches abort", () => closing.abort(new Error("the daemon closed"))],
-        // A lane setup still queued behind the session's earlier effects is
-        // refused, as a queued run is (`runs close`).
-        ["laneSetups close", () => laneSetups.close()],
-        ["frameFeeds close", () => frameFeeds.close()],
-        ["linkIds close", () => linkIds.close()],
-        ["menuIdle dispose", () => menuIdle.dispose()],
-        ["updateWatch close", () => updateWatch.close()],
-        ["binaryWatch close", () => binaryWatch.close()],
-        ["limits disarm", () => limits.disarm()],
-        // Every open recording ends, its file whole, while the views it
-        // follows are still served.
-        ["recorder close", () => recorder.close()],
-        // Before the sources and the storage its states hold.
-        ["renderCache close", () => renderCache.close()],
-        ["gitService close", () => gitService.close()],
-        ["usageStore close", () => usageStore.close()],
-        ["tmuxService close", () => tmuxService.close()],
-        ["hostService close", () => hostService.close()],
-        ["runs close", () => runs.close()],
-        // After the render cache: its states' registries release their holds
-        // first, so this close drops nothing a registry still reads.
-        ["sourceRuns close", () => sourceRuns.close()],
-        ["managedStorage close", () => managedStorage.close()],
-        ["fileEvents close", () => fileEvents.close()],
-        ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => sessionState.close()]
-      ];
-      for (const [step4, run3] of teardown) {
-        try {
-          run3();
-        } catch (e) {
-          log("warn", `${step4} failed: ${e.message}`);
-        }
-      }
+      closeDaemon(
+        { ...parts, journalTurns, sessionState, closing, binaryWatch },
+        atExit
+      );
       closed = true;
       return launcher.settled();
     }
   };
+}
+function sessionRenderCache(deps) {
+  const {
+    budgetBytes,
+    wake,
+    providers,
+    updateFact,
+    sourceRuns,
+    history,
+    navigation,
+    source,
+    ...render3
+  } = deps;
+  const { log, sessionState, gates } = render3;
+  return recordedCache(
+    (recording2) => new RenderCache(
+      {
+        ...render3,
+        storage: providers.managedStorage,
+        // [LAW:single-enforcer] Where every session's facts come from: the
+        // in-process arm over the daemon's own owners, which logs the
+        // refreshes it makes through the one ledger, so a view's payload
+        // logs none of them.
+        facts: inProcessFacts({
+          providers,
+          update: () => updateFact.get(),
+          runs: sourceRuns
+        }),
+        source: source({
+          providers,
+          sessionState,
+          stateGates: gates.state,
+          history: (sessionId2) => history.depth(sessionId2),
+          // Measured against the gate of the config the view draws with.
+          navigation: (sessionId2, config2) => navigation.depth(
+            sessionId2,
+            sessionState,
+            gates.state.gateFor(config2)
+          )
+        })
+      },
+      {
+        budgetBytes,
+        observers: {
+          // [LAW:no-silent-failure] Every config (re)load's outcome lands in
+          // daemon.log with its cause — the operator's only record of why a load
+          // ran, and whether a save was picked up cleanly, kept rendering
+          // last-known-good behind an error, or resolved to a different file.
+          onReload: (entry, sessions, cause, settled4) => {
+            log("info", configLoadedLine(entry, cause, settled4));
+            for (const sessionId2 of sessions) wake(sessionId2, "reload");
+          },
+          // [LAW:single-enforcer] What a session's view draws from moved: its
+          // feed's next frame is brought forward, whatever moved it: a request's
+          // facts, a refresh landing after its deadline, a source publishing, a
+          // pick. The dump link, which no view holds, wakes the same way.
+          onViewChanged: (sessionId2) => wake(sessionId2, "data"),
+          ...recording2
+        }
+      }
+    ),
+    log
+  );
+}
+function sessionFrameFeeds(parts, deps) {
+  const { visibility, linkIds, ...feed2 } = deps;
+  return new FrameFeeds({
+    ...feed2,
+    shown: (req) => visibility.shown(req.hints.tmux),
+    watching: () => visibility.follow(),
+    refreshes: () => parts().refreshLedger.totals(),
+    encoders: laneEncoders(linkIds),
+    // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
+    // which fires in a later turn. A click's turn is synchronous, so no frame
+    // reads its writes before its commit.
+    watch: (sessionId2, onChange) => reaction(() => parts().sessionState.revision(sessionId2), onChange),
+    lanes: (sessionId2) => viewLanes(parts(), sessionId2),
+    // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
+    // moment the feed stops drawing, so its drawn copies retire with it.
+    pin: (sessionId2) => {
+      const { renderCache } = parts();
+      const unpin = renderCache.pin(sessionId2);
+      return () => {
+        renderCache.stopDrawing(sessionId2, "feed");
+        unpin();
+      };
+    },
+    periods: FEED_PERIODS
+  });
+}
+function sessionPaneVisibility(parts, {
+  launcher,
+  clock,
+  log
+}) {
+  return new PaneVisibility({
+    clock,
+    listPanes: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
+      "list-panes",
+      "-a",
+      "-F",
+      LIST_PANES_FORMAT
+    ]),
+    listClients: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
+      "list-clients",
+      "-F",
+      LIST_CLIENTS_FORMAT
+    ]),
+    // The servers of the sessions someone is watching.
+    sockets: () => new Set(
+      parts().frameFeeds.watched().flatMap(({ req }) => tmuxServersOf(req))
+    ),
+    onAnswer: (socket, status) => parts().tmuxStatusLines.answered(socket, status),
+    // Only the sessions on a server whose view changed are drawn again.
+    onChange: (sockets) => parts().frameFeeds.wakeWhere(
+      "visibility",
+      (req) => tmuxServersOf(req).some((socket) => sockets.has(socket))
+    ),
+    intervalMs: 1e3,
+    log
+  });
+}
+function tmuxServersOf({
+  hints: { tmux: tmux3 }
+}) {
+  return tmux3 === null || tmux3 === void 0 ? [] : [tmux3.socket];
+}
+function sessionLaneSetups(parts, journalTurns, deps) {
+  return new LaneSetups({
+    ...deps,
+    // [LAW:one-source-of-truth] The session a setup acts on is its latest
+    // request, the one a click reads too, read as the setup runs.
+    latest: (sessionId2) => {
+      const req = parts().frameFeeds.latest(sessionId2);
+      return req === null ? null : laneSessionOf(req);
+    },
+    // A setup's steps in a pane take the order of what is typed into it, as a
+    // slash click's typing does (src/daemon/apply.ts).
+    paneOrder: (tmux3, work) => journalTurns.performing({ kind: "pane", tmux: tmux3 }, work)
+  });
+}
+function sessionTmuxStatusLines(parts, {
+  launcher,
+  heldSession,
+  home,
+  owner,
+  bundle,
+  signer,
+  log
+}) {
+  return new TmuxStatusLines({
+    edge: {
+      run: (socket, args) => runTmuxAsync(launcher, { socket }, "tmux-status", args)
+    },
+    subscribe: (sessionId2, sub2) => parts().frameFeeds.subscribe(sessionId2, sub2),
+    sessionInPane: (where) => parts().frameFeeds.newestWhere(runsNowIn(where, heldSession)),
+    // Run by tmux under its server's environment, so the renderer's home is
+    // stated whole on the command, every variable of it.
+    handler: [
+      ...Object.entries(homeEnv(home)).map(([k, v]) => `${k}=${shellWord(v)}`),
+      ...[...bundle.node, bundle.path].map(shellWord),
+      "url-handle"
+    ].join(" "),
+    owner,
+    // [LAW:one-source-of-truth] The renderer's name is its home's (docs/design/
+    // gather-and-renderer.md, section 17): a click on a row this renderer
+    // holds is resolved to this renderer's socket from the name alone.
+    name: home.name,
+    signer,
+    log
+  });
+}
+function launcherWarningsSaid(log, frameFeeds) {
+  return (change) => {
+    if (change.kind === "launch-pipes") log("warn", change.text);
+    else
+      log(
+        change.fault === null ? "info" : "warn",
+        change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
+      );
+    frameFeeds().wakeWhere("data", () => true);
+  };
+}
+function followFileEvents({
+  fileEvents,
+  watcherRegistry,
+  renderCache,
+  frameFeeds
+}) {
+  fileEvents.subscribe((notice) => {
+    switch (notice.kind) {
+      case "period":
+        watcherRegistry.judge();
+        return;
+      case "caught-up":
+        renderCache.reloadEvery({
+          kind: "events-resumed",
+          since: notice.since
+        });
+        frameFeeds.wakeWhere("data", () => true);
+        return;
+      case "moved":
+        frameFeeds.wakeWhere("data", () => true);
+        return;
+    }
+  });
+}
+function partsDraw(parts) {
+  return (req, at, waitEndsAt, facts) => drawAnswer(parts(), req, at, waitEndsAt, facts);
+}
+function sessionMenuIdle(parts, {
+  clock,
+  now: now2,
+  log
+}) {
+  return new MenuIdle({
+    clock,
+    now: now2,
+    close: async (session, idle) => {
+      await apply({ kind: "menu-idle", session, idle }, parts());
+    },
+    failed: (sessionId2, error) => sayUnapplied(log, "menu-idle", `session=${sessionId2}`, error)
+  });
+}
+function sessionRuns({
+  managedStorage,
+  launcher,
+  log,
+  clock
+}) {
+  return new Runs({
+    supersede: (storage, sessionId2) => managedStorage.supersede(storage, sessionId2),
+    launch: launcher.launch,
+    log,
+    clock
+  });
+}
+function bundleWatches({
+  clock,
+  launcher,
+  probe: probe3,
+  filesystem,
+  bundle,
+  stateDir: stateDir2,
+  registryUrl,
+  fetch: fetch2,
+  gates,
+  updateFact,
+  exit: exit2,
+  log
+}) {
+  const binaryWatch = makeBinaryWatch({
+    clock,
+    targets: bundle.targets,
+    intervalMs: BIN_CHECK_INTERVAL_MS,
+    filesystem,
+    // The update notice's act rewrites the bundle, and a restart in the middle
+    // would start the next daemon from a half-written one: a restart waits for
+    // it. A success samples again at once; after a failure the next tick does.
+    held: () => updateWatch.running(),
+    exit: () => exit2(0),
+    log
+  });
+  const updateWatch = makeUpdateWatch({
+    fact: updateFact,
+    clock,
+    launcher,
+    probe: probe3,
+    entryUrl: bundle.entryUrl,
+    digest: bundle.digest,
+    // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
+    // this daemon runs from.
+    actsDir: actsDir(stateDir2, bundle.path),
+    intervalMs: BIN_CHECK_INTERVAL_MS,
+    releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
+    registryUrl,
+    fetchImpl: fetch2,
+    gates,
+    onApplied: () => binaryWatch.checkNow(),
+    log
+  });
+  return { binaryWatch, updateWatch };
+}
+function verbsOverParts(parts) {
+  return {
+    clickLanded: (sessionId2) => parts().menuIdle.clicked(sessionId2, parts().verbCtx.now()),
+    applyUpdate: () => parts().updateWatch.act(),
+    serving: () => parts().limits.serving(),
+    // The config a session's last render resolved from — the same entry the
+    // render drew the bar with, so a save compares against the bar the user saw.
+    configFor: (origin) => parts().renderCache.getOrCreate(
+      origin.projectDir,
+      origin.cwd,
+      origin.target.path
+    ).state.config,
+    reloadConfig: (origin) => parts().renderCache.reload(
+      origin.projectDir,
+      origin.cwd,
+      origin.target.path,
+      { kind: "write" }
+    ),
+    // The storage keys of the same entry `configFor` reads the config of.
+    sourcesFor: (origin) => parts().renderCache.getOrCreate(
+      origin.projectDir,
+      origin.cwd,
+      origin.target.path
+    ).state.sources,
+    lanes: {
+      of: (origin, sessionId2) => lanesAt(parts(), origin, sessionId2),
+      clicked: (sessionId2, before, after) => laneClicked(parts(), sessionId2, before, after),
+      arrived: (req) => requestArrived(parts(), req),
+      setup: (effect) => parts().laneSetups.setup(effect)
+    },
+    diagnosticCopy: (sessionId2, by, key) => parts().renderCache.drawnCopy(sessionId2, by, key)
+  };
+}
+var BIN_CHECK_INTERVAL_MS = 60 * 1e3;
+var RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1e3;
+function closeDaemon(owners, atExit) {
+  const {
+    journalTurns,
+    tmuxStatusLines,
+    closing,
+    laneSetups,
+    frameFeeds,
+    linkIds,
+    menuIdle,
+    updateWatch,
+    binaryWatch,
+    limits,
+    recorder,
+    renderCache,
+    payloadProviders: {
+      gitProvider: gitService,
+      usageStore,
+      tmuxService,
+      hostService,
+      managedStorage
+    },
+    runs,
+    sourceRuns,
+    fileEvents,
+    watcherRegistry,
+    sessionState,
+    log
+  } = owners;
+  const teardown = [
+    // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
+    // the journal in flight commits what landed; none opens after.
+    ["journalTurns close", () => journalTurns.close()],
+    // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
+    // back before it goes (src/daemon/tmux-status.ts).
+    ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
+    // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
+    // is in flight is terminated, whichever owner's work it was, and the
+    // launcher's lifeline goes.
+    ["launches abort", () => closing.abort(new Error("the daemon closed"))],
+    // A lane setup still queued behind the session's earlier effects is
+    // refused, as a queued run is (`runs close`).
+    ["laneSetups close", () => laneSetups.close()],
+    ["frameFeeds close", () => frameFeeds.close()],
+    ["linkIds close", () => linkIds.close()],
+    ["menuIdle dispose", () => menuIdle.dispose()],
+    ["updateWatch close", () => updateWatch.close()],
+    ["binaryWatch close", () => binaryWatch.close()],
+    ["limits disarm", () => limits.disarm()],
+    // Every open recording ends, its file whole, while the views it
+    // follows are still served.
+    ["recorder close", () => recorder.close()],
+    // Before the sources and the storage its states hold.
+    ["renderCache close", () => renderCache.close()],
+    ["gitService close", () => gitService.close()],
+    ["usageStore close", () => usageStore.close()],
+    ["tmuxService close", () => tmuxService.close()],
+    ["hostService close", () => hostService.close()],
+    ["runs close", () => runs.close()],
+    // After the render cache: its states' registries release their holds
+    // first, so this close drops nothing a registry still reads.
+    ["sourceRuns close", () => sourceRuns.close()],
+    ["managedStorage close", () => managedStorage.close()],
+    ["fileEvents close", () => fileEvents.close()],
+    ["watcherRegistry close", () => watcherRegistry.closeAll()],
+    ["sessionState close", () => sessionState.close()]
+  ];
+  for (const [step4, run3] of teardown) {
+    try {
+      run3();
+    } catch (e) {
+      log("warn", `${step4} failed: ${e.message}`);
+    }
+  }
 }
 
 // src/daemon/log.ts
