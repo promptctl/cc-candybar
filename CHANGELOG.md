@@ -1,3 +1,9 @@
+## [1.209.0](https://github.com/promptctl/cc-candybar/compare/v1.208.12...v1.209.0) (2026-11-07)
+
+### Features
+
+* **band:** a switched-off band lane holds no follower process (candybar-animation-wbxz.w33) ([#645](https://github.com/promptctl/cc-candybar/issues/645)) ([c8e21dd](https://github.com/promptctl/cc-candybar/commit/c8e21dd0a0271567df669f0c7b81bc241551c07a))
+
 ## [1.208.12](https://github.com/promptctl/cc-candybar/compare/v1.208.11...v1.208.12) (2026-11-07)
 
 ### Bug Fixes
