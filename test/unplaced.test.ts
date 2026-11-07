@@ -5,6 +5,8 @@
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { locs } from "./helpers/host";
+import { filesystemFake } from "../src/disk/filesystem-fake";
+import { heldClock } from "./helpers/held-clock";
 import {
   inheritableSegmentNames,
   homeLayer,
@@ -19,6 +21,17 @@ import { rootNode } from "../src/config/root";
 import { presetRoot } from "../src/config/presets";
 import { EMPTY_DEFAULT, validateConfig } from "./helpers/parse-and-validate";
 import { withoutUnplaced } from "../src/config/loader/unplaced";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
+
+// A disk holding exactly `files`.
+function diskOf(files: Record<string, string>) {
+  const disk = filesystemFake({
+    clock: heldClock(new Date(0)),
+    platform: "darwin",
+  });
+  for (const [at, text] of Object.entries(files)) disk.write(at, text);
+  return disk;
+}
 
 const authored = (source: string) => {
   const raw = parseDslConfig(
@@ -154,12 +167,14 @@ describe("a chain whose merge fails", () => {
   };
   test("is blamed on the error that refused it, not on a lower file's undeclared placement", () => {
     const load = () =>
-      loadConfigChain(locs(), 
+      loadConfigChain(
+        diskOf(FILES),
+        new InstalledLayerMemo(),
+        locs(),
         ["/lower.json5", "/upper.json5"].map(homeLayer),
         DEFAULT_DSL_CONFIG,
         { warned: () => {} },
         { repo: null, cwd: null },
-        (p) => FILES[p]!,
       );
     expect(load).toThrow(ConfigError);
     expect(load).toThrow(/upper\.json5[\s\S]*nope/);
@@ -169,12 +184,14 @@ describe("a chain whose merge fails", () => {
 
 describe("a lower layer's undeclared placement", () => {
   const chain = (files: Record<string, string>) =>
-    loadConfigChain(locs(), 
+    loadConfigChain(
+      diskOf(files),
+      new InstalledLayerMemo(),
+      locs(),
       Object.keys(files).map(homeLayer),
       DEFAULT_DSL_CONFIG,
       { warned: () => {} },
       { repo: null, cwd: null },
-      (p) => files[p]!,
     );
   const LOWER = `{ segments: { a: { template: "a" } }, root: { h: ["a", "gti"] } }`;
 

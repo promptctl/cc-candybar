@@ -36,6 +36,17 @@ export const systemFilesystem: Filesystem = {
   realpathSync: (p) => fs.realpathSync.native(p),
   mkdirSync: (p) => void fs.mkdirSync(p, { recursive: true }),
   opendirSync: (p) => fs.opendirSync(p).closeSync(),
+  readFileSync: (p) => fs.readFileSync(p, "utf8"),
+  readdirSync: (p) =>
+    fs
+      .readdirSync(p, { withFileTypes: true })
+      .map(
+        (entry): DirectoryEntry => ({ name: entry.name, kind: kindOf(entry) }),
+      ),
+  writeFileSync: (p, text, { mode, flush }) =>
+    fs.writeFileSync(p, text, { mode, flush }),
+  renameSync: (from, to) => fs.renameSync(from, to),
+  rmSync: (p) => fs.rmSync(p, { force: true }),
   stat: async (p) => statOf(await fs.promises.stat(p, { bigint: true })),
   readFile: (p) => fs.promises.readFile(p, "utf8"),
   writeFile: (p, text) => fs.promises.writeFile(p, text),

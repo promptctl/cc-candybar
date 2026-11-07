@@ -449,6 +449,7 @@ describe("config-file-store: segment-palette placement", () => {
           repo: null,
           cwd: null,
           locs: locations(durable.host, durable.home),
+          reads: systemFilesystem,
         },
         [["segments.ghost.palette", "nord"]],
       ),
@@ -545,6 +546,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
             repo: null,
             cwd: null,
             locs: locations(durable.host, durable.home),
+            reads: systemFilesystem,
           },
           [["segments.sidebar.palette", "nord"]],
         ),
@@ -583,6 +585,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
         repo: null,
         cwd: null,
         locs: locations(durable.host, durable.home),
+        reads: systemFilesystem,
       },
       [["segments.sidebar.palette", "gruvbox"]],
     );
@@ -620,6 +623,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
         repo: null,
         cwd: null,
         locs: locations(durable.host, durable.home),
+        reads: systemFilesystem,
       },
       [["segments.directory.palette", "nord"]],
     );

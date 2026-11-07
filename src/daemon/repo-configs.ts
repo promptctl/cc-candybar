@@ -1,14 +1,21 @@
-// [LAW:effects-at-boundaries] The user's answers to "run this repository's
-// cc-candybar config?" on disk, and the question the bar asks for each
-// repository awaiting one. The gate itself is pure
-// (src/config/loader/repo-gate.ts); this is where its answers are kept.
+// [LAW:effects-at-boundaries] Recording the user's answers to "run this
+// repository's cc-candybar config?", and the question the bar asks for each
+// repository awaiting one. Where the answers are kept and how a load reads
+// them is Config's (src/config/loader/repo-book.ts); the gate itself is pure
+// (src/config/loader/repo-gate.ts).
 
-import fs from "node:fs";
-import path from "node:path";
+import type { Filesystem, FilesystemReads } from "../disk/filesystem.js";
+import { stateFile, type StateFile } from "../disk/state-file.js";
 import type { SignedFields } from "../click/link-signer.js";
 import type { RendererLinks } from "../click/renderer-links.js";
 import { effectsUrl, VERB_REPO_CONFIG } from "../click/wire.js";
 import { repoProject } from "../config/loader/discovery.js";
+import {
+  bookIsFiled,
+  readRepoAnswers,
+  repoConfigsDir,
+  REPO_CONFIGS_FILE,
+} from "../config/loader/repo-book.js";
 import {
   answerDir,
   gateRepos,
@@ -23,7 +30,6 @@ import { worktreeLink } from "../utils/git-root.js";
 import { ok } from "../utils/outcome.js";
 import { presence, type Unchecked } from "../utils/presence.js";
 import type { Asked } from "../doctor/checks.js";
-import { stateFile, type StateFile } from "../doctor/state-file.js";
 import {
   APPROVAL_SEVERITY,
   diagnosticSpan,
@@ -31,42 +37,31 @@ import {
   type DiagnosticLine,
 } from "../render/diagnostics.js";
 
-const REPO_CONFIGS_FILE = "repo-configs.json";
-// The book's own folder: the daemon watches it so a hand edit (removing an
-// entry to be asked again) reaches every bar, and the state directory itself
-// holds the log, which writes on every request — a watch there wakes on each
-// line.
-const REPO_CONFIGS_DIR = "repo-configs";
-
-// [LAW:one-source-of-truth] One book per user, under the state directory:
-// an answer given in one session holds in every other, and after a restart.
-export function repoConfigsDir(dir: string): string {
-  return path.join(dir, REPO_CONFIGS_DIR);
-}
-
-export function repoConfigsPath(dir: string): string {
-  return path.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
-}
-
-// [LAW:one-source-of-truth] The book in its folder is the answers. One kept
-// directly in the state directory, where the book used to live, is read
-// only while the folder holds none, and the first answer recorded writes it
-// into the folder with that answer: nothing is moved, so no answer is lost
-// to a move, and every reader — the daemon, `check`, the demo — reads the
-// same answers.
-export const repoConfigs = (dir: string): StateFile<RepoConfigBook> => {
+// [LAW:one-source-of-truth] The answers as a store: read as every load reads
+// them, and the first answer recorded while the folder holds no book writes
+// the loose one's answers into the folder with it.
+export const repoConfigs = (
+  disk: Filesystem,
+  dir: string,
+): StateFile<RepoConfigBook> => {
   const book = stateFile(
+    disk,
     repoConfigsDir(dir),
     REPO_CONFIGS_FILE,
     {},
     parseRepoConfigBook,
   );
-  const loose = stateFile(dir, REPO_CONFIGS_FILE, {}, parseRepoConfigBook);
-  const filed = (): boolean => fs.existsSync(repoConfigsPath(dir));
+  const loose = stateFile(
+    disk,
+    dir,
+    REPO_CONFIGS_FILE,
+    {},
+    parseRepoConfigBook,
+  );
   return {
-    read: () => (filed() ? book : loose).read(),
+    read: () => readRepoAnswers(disk, dir),
     update: (next) => {
-      if (filed()) return book.update(next);
+      if (bookIsFiled(disk, dir)) return book.update(next);
       const kept = loose.read();
       if (kept.kind === "failed") return kept;
       return book.update(() => next(kept.value));
@@ -90,21 +85,23 @@ export interface Recorded {
 // `dir` (a linked worktree's own, kept from before answers were kept by
 // repository) goes with it, so a repository holds one answer.
 export function recordAnswer(
-  store: StateFile<RepoConfigBook>,
+  disk: Filesystem,
+  stateDir: string,
   dir: string,
   answer: RepoAnswer,
 ): Asked<Recorded> {
+  const store = repoConfigs(disk, stateDir);
   let recorded: Recorded = { superseded: [], absent: [], unchecked: [] };
   const filed = store.update((book) => {
     const others = Object.keys(book)
       .filter((d) => d !== dir)
-      .map((d) => ({ d, found: presence(d) }));
+      .map((d) => ({ d, found: presence(disk, d) }));
     recorded = {
       superseded: others
         .filter(
           ({ d, found }) =>
             found === "present" &&
-            answerDir({ dir: d, link: worktreeLink(d) }) === dir,
+            answerDir({ dir: d, link: worktreeLink(disk, d) }) === dir,
         )
         .map(({ d }) => d),
       absent: others
@@ -122,8 +119,16 @@ export function recordAnswer(
 // The gate a one-shot load outside the daemon (the demo, the gallery) runs
 // under. It loads the one file it was named, or none, never a searched chain,
 // so of a repository's it runs only the plugins the project at `cwd` ships.
-export function repoGateAt(stateDir: string, cwd: string): RepoGate {
-  return gateRepos(repoConfigs(stateDir).read(), [], repoProject(cwd));
+export function repoGateAt(
+  reads: FilesystemReads,
+  stateDir: string,
+  cwd: string,
+): RepoGate {
+  return gateRepos(
+    readRepoAnswers(reads, stateDir),
+    [],
+    repoProject(reads, cwd),
+  );
 }
 
 // [LAW:single-enforcer] What an answer link signs: the session it was drawn

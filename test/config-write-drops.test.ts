@@ -10,6 +10,7 @@ import path from "node:path";
 
 import { applyLayoutOp, writeValues } from "../src/daemon/config-file-store";
 import type { ConfigHome } from "../src/config/loader/discovery";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 const store = {
   record: () => {},
@@ -20,7 +21,14 @@ let dir: string;
 const homeWith = (text: string): ConfigHome => {
   const file = path.join(dir, "config.json5");
   fs.writeFileSync(file, text);
-  return { path: file, above: [], repo: null, cwd: null, locs: locs() };
+  return {
+    path: file,
+    above: [],
+    repo: null,
+    cwd: null,
+    locs: locs(),
+    reads: systemFilesystem,
+  };
 };
 
 beforeEach(() => {

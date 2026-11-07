@@ -30,11 +30,13 @@ import JSON5 from "json5";
 import { writeAtomic } from "../utils/atomic-write.js";
 import { resolvedTarget } from "../utils/link-chain.js";
 import { systemFilesystem } from "../disk/system-filesystem.js";
+import type { FilesystemReads } from "../disk/filesystem.js";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
 } from "../config/default-dsl-config.js";
 import {
+  InstalledLayerMemo,
   loadConfigChain,
   type ConfigHome,
   type LoadedChain,
@@ -460,12 +462,16 @@ function commit(
   after: string,
   refuse: (home: ConfigHome, was: Was, will: LoadedChain) => void,
 ): void {
-  const will = loadOrRefuse(home, after);
+  // [LAW:one-source-of-truth] One memo for the click's loads: the file as it
+  // will be, and as it was when a refusal reads it.
+  const memo = new InstalledLayerMemo();
+  const will = loadOrRefuse(home, after, memo);
   // [LAW:one-source-of-truth] The file before the click is loaded at most
   // once, and only by a refusal that reads it; every refusal judges against
   // that one load.
   let held: { readonly chain: LoadedChain | null } | undefined;
-  const was: Was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
+  const was: Was = () =>
+    (held ??= { chain: loadedOrNull(home, before, memo) }).chain;
   refuseNewDrops(home, was, will);
   refuse(home, was, will);
   writeConfigText(home.path, after, store.logger);
@@ -522,28 +528,50 @@ function hiddenBy(
 function loadedOrNull(
   home: ConfigHome,
   text: string | null,
+  memo: InstalledLayerMemo,
 ): LoadedChain | null {
   try {
-    return chainOver(home, text);
+    return chainOver(home, text, memo);
   } catch (e) {
     if (e instanceof ConfigError) return null;
     throw e;
   }
 }
 
-// The chain the home's text — or its absence — loads to, read from disk
+// The chain the home's text — or its absence — loads to, read from the disk
 // above it, exactly as resolveDslConfig orders it: an existing file is a
 // layer whatever it holds.
-function chainOver(home: ConfigHome, text: string | null): LoadedChain {
+function chainOver(
+  home: ConfigHome,
+  text: string | null,
+  memo: InstalledLayerMemo,
+): LoadedChain {
   return loadConfigChain(
+    text === null ? home.reads : withText(home.reads, home.path, text),
+    memo,
     home.locs,
     text !== null ? [homeLayer(home.path), ...home.above] : home.above,
     DEFAULT_DSL_CONFIG,
     { warned: () => {} },
     { repo: home.repo, cwd: home.cwd },
-    (p) =>
-      p === home.path && text !== null ? text : fs.readFileSync(p, "utf8"),
   );
+}
+
+// [LAW:effects-at-boundaries] The disk as it reads once `file` holds `text`:
+// the text a write proves before it lands answers that one file, and every
+// other question is the disk's.
+function withText(
+  reads: FilesystemReads,
+  file: string,
+  text: string,
+): FilesystemReads {
+  return {
+    readFileSync: (p) => (p === file ? text : reads.readFileSync(p)),
+    readdirSync: (p) => reads.readdirSync(p),
+    statSync: (p) => reads.statSync(p),
+    lstatSync: (p) => reads.lstatSync(p),
+    realpathSync: (p) => reads.realpathSync(p),
+  };
 }
 
 // The home's own layer merged over the chain's base, and the whole
@@ -578,9 +606,13 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 // The config `text` loads to as the home, or the click's refusal naming why
 // it does not load.
-function loadOrRefuse(home: ConfigHome, text: string): LoadedChain {
+function loadOrRefuse(
+  home: ConfigHome,
+  text: string,
+  memo: InstalledLayerMemo,
+): LoadedChain {
   try {
-    return chainOver(home, text);
+    return chainOver(home, text, memo);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
@@ -959,7 +991,11 @@ export function applyLayoutOp(
     // [LAW:no-ambient-temporal-coupling] Minted over the text this click
     // splices, never a cached render of it: a hand edit, or a click an
     // instant earlier, is in the text before any watcher reloads it.
-    const config = loadOrRefuse(home, authored).config;
+    const config = loadOrRefuse(
+      home,
+      authored,
+      new InstalledLayerMemo(),
+    ).config;
     return presetNames(config.presets).map(
       (preset) => presetRoot(config, preset).node,
     );

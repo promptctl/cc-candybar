@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitService } from "../src/segments/git";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 // [LAW:behavior-not-structure] Real repos + a real `git worktree add`, not a
 // child_process mock. The previous mock targeted `exec`, which the launch
@@ -19,7 +20,7 @@ describe("GitService isWorktree", () => {
   let root: string;
   let mainRepo: string;
   let worktree: string;
-  const gitService = new GitService(processLauncher);
+  const gitService = new GitService(processLauncher, systemFilesystem);
 
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), "candybar-worktree-test-"));

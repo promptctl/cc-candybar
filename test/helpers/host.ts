@@ -2,6 +2,7 @@ import os from "node:os";
 import { HOME_ENV, NAME_ENV, homeOf } from "../../src/daemon/home";
 import { locations } from "../../src/daemon/paths";
 import { systemDialer } from "../../src/dial/system-dialer";
+import { systemFilesystem } from "../../src/disk/system-filesystem";
 import type { Host, World } from "../../src/host";
 import { systemOneShotLauncher } from "../../src/proc/system-launcher";
 import { systemProbe } from "../../src/daemon/process-fingerprint";
@@ -54,6 +55,7 @@ export function worldOf(host: Host): World {
     // A stated identity rather than a read one: no test spawns `ps` to learn
     // which process ran it.
     parent: () => ({ pid: process.ppid, startTime: CLAUDE_START }),
+    filesystem: systemFilesystem,
   };
 }
 

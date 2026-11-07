@@ -60,10 +60,13 @@ import {
   effectsUrl,
   VERB_SET_STATE,
 } from "../../../src/click/wire";
-import { startDaemon, statsOf, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+  startDaemon,
+  statsOf,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { systemFilesystem } from "../../../src/disk/system-filesystem";
 
 jest.setTimeout(30_000);
 

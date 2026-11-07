@@ -71,7 +71,7 @@ export function parsePluginSource(
 // cannot be listed, is an error, never an empty install.
 function repoDefinitions(repo: string, source: string): readonly string[] {
   const root = path.join(repo, REPO_PLUGIN_DIR);
-  const listed = listFolders(root);
+  const listed = listFolders(systemFilesystem, root);
   if ("error" in listed)
     throw new Error(
       `${source}: could not list ${REPO_PLUGIN_DIR}: ${listed.error}`,
@@ -244,6 +244,7 @@ export function installFromRepo(
       return folder;
     });
     const problems = definitionProblems(
+      systemFilesystem,
       // Installed into the user's root, where it becomes `plugins.<name>`.
       staged.map((f) =>
         pluginDefinition(path.join(f, DEFINITION_FILE), "plugins"),

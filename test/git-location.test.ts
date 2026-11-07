@@ -20,6 +20,7 @@ import { TEST_LINKS } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 import { readAsWritten } from "./helpers/judged";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, stdio: "pipe" });
@@ -41,19 +42,46 @@ describe("checkoutLocation", () => {
   afterAll(() => fs.rmSync(tmp, { recursive: true }));
 
   test("main checkout", () => {
-    expect(checkoutLocation(main)).toEqual({ main, worktree: "", subpath: "", noRepo: false });
+    expect(checkoutLocation(systemFilesystem, main)).toEqual({
+      main,
+      worktree: "",
+      subpath: "",
+      noRepo: false,
+    });
   });
   test("main checkout subdirectory", () => {
-    expect(checkoutLocation(path.join(main, "src"))).toEqual({ main, worktree: "", subpath: "/src", noRepo: false });
+    expect(checkoutLocation(systemFilesystem, path.join(main, "src"))).toEqual({
+      main,
+      worktree: "",
+      subpath: "/src",
+      noRepo: false,
+    });
   });
   test("linked worktree, wherever it lives", () => {
-    expect(checkoutLocation(linked)).toEqual({ main, worktree: "my-tree", subpath: "", noRepo: false });
+    expect(checkoutLocation(systemFilesystem, linked)).toEqual({
+      main,
+      worktree: "my-tree",
+      subpath: "",
+      noRepo: false,
+    });
   });
   test("linked worktree subdirectory", () => {
-    expect(checkoutLocation(path.join(linked, "src"))).toEqual({ main, worktree: "my-tree", subpath: "/src", noRepo: false });
+    expect(
+      checkoutLocation(systemFilesystem, path.join(linked, "src")),
+    ).toEqual({
+      main,
+      worktree: "my-tree",
+      subpath: "/src",
+      noRepo: false,
+    });
   });
   test("no repo", () => {
-    expect(checkoutLocation(tmp)).toEqual({ main: "", worktree: "", subpath: "", noRepo: true });
+    expect(checkoutLocation(systemFilesystem, tmp)).toEqual({
+      main: "",
+      worktree: "",
+      subpath: "",
+      noRepo: true,
+    });
   });
 });
 
