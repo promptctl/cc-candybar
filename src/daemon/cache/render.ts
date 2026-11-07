@@ -621,20 +621,27 @@ export interface RenderCacheStats {
 // It is what an entry keeps and a load reads. The cache's entry points take
 // the whole `RenderOrigin`, whose source says whether a file is named, so an
 // origin built without its path is a type error rather than the search.
-// [LAW:one-source-of-truth] Picked from `RenderOrigin`, so a resolution input
-// added there is one field here.
+// [LAW:one-source-of-truth] Picked from `RenderOrigin`, so every origin is one.
+// A resolution input joins by being picked here; the projection below then
+// fails to compile until it carries it, and the key spells it.
 export type LoadOrigin = Pick<RenderOrigin, "projectDir" | "cwd"> & {
   readonly target: Pick<ConfigTarget, "path">;
 };
 
-// [LAW:one-source-of-truth] Cache key includes every input that affects DSL
-// resolution: projectDir, cwd, and the session's explicit config path (if any).
-// `projectDir`/`cwd` are real strings by construction (validated upstream);
-// an absent path collapses → empty in the key, distinct from any real path.
-// The target's source is no part of it: an origin recorded by a build that
-// spelled the source differently still lands on the entry the render drew from.
-function cacheKey({ projectDir, cwd, target }: LoadOrigin): string {
-  return projectDir + "\0" + cwd + "\0" + (target.path ?? "");
+// [LAW:one-source-of-truth] The one projection of an origin onto what
+// resolution reads: what an entry keeps, and what its key spells. A caller's
+// source is no fact about the entry, so the entry never holds it.
+function loadOriginOf({ projectDir, cwd, target }: LoadOrigin): LoadOrigin {
+  return { projectDir, cwd, target: { path: target.path } };
+}
+
+// [LAW:one-source-of-truth] The cache key is the projection spelled, so it
+// holds every input that affects resolution and nothing else. An absent path
+// is no `path` field, distinct from any real path. The target's source is no
+// part of it: an origin recorded by a build that spelled the source
+// differently still lands on the entry the render drew from.
+function cacheKey(origin: LoadOrigin): string {
+  return JSON.stringify(loadOriginOf(origin));
 }
 
 // [LAW:one-source-of-truth] The preset names whose layout the raw file
@@ -1594,13 +1601,7 @@ export class RenderCache<
     // (test/default-dsl-config.test.ts); a throw is a daemon bug and surfaces
     // as the request's failure, never a half-built entry.
     const entry: CacheEntry = {
-      // [LAW:one-source-of-truth] A copy of what resolution reads, never the
-      // caller's value: the first caller's source is no fact about the entry.
-      origin: {
-        projectDir: origin.projectDir,
-        cwd: origin.cwd,
-        target: { path: origin.target.path },
-      },
+      origin: loadOriginOf(origin),
       configLayers: [],
       configHome: "",
       repos: loaded.repos,
