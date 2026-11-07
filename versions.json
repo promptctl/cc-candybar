@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-695",
+      "ref": "refs/pull/695/merge",
+      "sha": "05250a24343cb4fc70d29d4f51172259850bf30a",
+      "timestamp": "2026-11-07T12:26:21.536Z",
+      "commits": [
+        {
+          "sha": "05250a24343cb4fc70d29d4f51172259850bf30a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:25:21-07:00",
+          "message": "Merge 3c8b62cedddf3d1be189dced97140e46aa00d4d1 into e5b0fe5cb0e0b514bcdc61157f7356ddfffc2b6b\n"
+        },
+        {
+          "sha": "3c8b62cedddf3d1be189dced97140e46aa00d4d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:24:50-07:00",
+          "message": "fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (brandon-unfiled-3248.5bfl)\n\nEdit chrome spelled every insert slot, removal, configure entry, draft\nvariable and setting control from one walk counter shared over the preset\ntree, so adding, removing or moving a placement shifted the name of every\ncontrol after it, and an open + library, its page cursor or an open\nconfigure list landed on a neighbour after the reload. Every name is now\nspelled from the placement it serves through chromeIdent, an injective\nbase-36 spelling of the id that is a fixed point of ident, and the counter\nis gone.\n\nThe default-menu bytes snapshot regenerates for the new link names; its\nplain text is unchanged.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-689",
       "ref": "refs/pull/689/merge",
       "sha": "6a8821155d72af86c405ff22320d302062877a31",
