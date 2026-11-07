@@ -23011,6 +23011,7 @@ var inspect = (v) => {
 
 // src/time.ts
 init_globals();
+init_os();
 init_timers();
 function plusMs(from, ms) {
   return from + ms;
@@ -23024,6 +23025,7 @@ function elapsedMs(clock, since) {
 var systemTimekeeper = {
   now: () => Date.now(),
   monotonic: () => performance.now(),
+  bootTime: () => Date.now() - os_default.uptime() * 1e3,
   after: (ms, fire, options) => {
     const timer = setTimeout(fire, ms);
     if (options?.unref) {
@@ -79869,12 +79871,22 @@ var refusedRender = (problems) => ({
 
 // src/daemon/update-act.ts
 init_globals();
-init_os();
 var import_node_path40 = __toESM(require_path_browserify(), 1);
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path40.default.join(stateDir2, "update-act", key);
 }
+var unwatched = (record2) => ({
+  spentMs: 0,
+  lastSeen: record2.started
+});
+var observe = (awake, now2, longestMs) => {
+  const span = now2 - awake.lastSeen;
+  return {
+    spentMs: awake.spentMs + (span >= 0 && span <= longestMs ? span : 0),
+    lastSeen: now2
+  };
+};
 var IDLE = { kind: "idle" };
 function judgeAct(facts) {
   if (facts === null) return IDLE;
@@ -79898,6 +79910,7 @@ var filesOf = (actDir) => ({
   status: import_node_path40.default.join(actDir, "status")
 });
 var recordOf2 = (actDir) => import_node_path40.default.join(actDir, "record.json");
+var awakeOf = (actDir) => import_node_path40.default.join(actDir, "awake.json");
 function actNumbers(dir) {
   let names;
   try {
@@ -79930,19 +79943,22 @@ function removeAct(dir, act) {
   }
   fs_default.rmSync(leaving, { recursive: true, force: true });
 }
-var bootedAt = (clock) => clock.now() - os_default.uptime() * 1e3;
 async function isRecordedJob(record2, read2, jobs, boot) {
   if (record2.started <= boot || !jobs.jobGroupAlive(record2.pid)) return false;
   const leader = await read2(record2.pid);
   return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
 }
-function readRecord(actDir) {
+function readActFile(file) {
   try {
-    return JSON.parse(fs_default.readFileSync(recordOf2(actDir), "utf8"));
+    return fs_default.readFileSync(file, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
   }
+}
+function readRecord(actDir) {
+  const text4 = readActFile(recordOf2(actDir));
+  return text4 === null ? null : JSON.parse(text4);
 }
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
@@ -79954,7 +79970,9 @@ function makeActReader(dir, read2, jobs, clock) {
     if (known === null || !sameJob(known.record, record2)) {
       known = {
         record: record2,
-        ours: await isRecordedJob(record2, read2, jobs, bootedAt(clock)),
+        // [LAW:one-source-of-truth] The boot is read off the clock the
+        // record's start was written by, never beside it.
+        ours: await isRecordedJob(record2, read2, jobs, clock.bootTime()),
         final: null
       };
     }
@@ -80035,6 +80053,39 @@ var CLAIMED_FIRST = {
   ok: false,
   reason: "another act claimed this bundle first"
 };
+function readAwake(file) {
+  const text4 = readActFile(file);
+  if (text4 === null) return { ok: true, awake: null };
+  let parsed2;
+  try {
+    parsed2 = JSON.parse(text4);
+  } catch (err) {
+    return { ok: false, reason: `${err.message}: ${text4}` };
+  }
+  const { spentMs, lastSeen } = parsed2 ?? {};
+  return typeof spentMs === "number" && typeof lastSeen === "number" && spentMs >= 0 && Number.isFinite(spentMs) && Number.isFinite(lastSeen) ? { ok: true, awake: { spentMs, lastSeen } } : { ok: false, reason: `not an act's spend: ${text4}` };
+}
+function spendLook(dir, facts, now2, longestMs) {
+  const actDir = import_node_path40.default.join(dir, String(facts.act));
+  const file = awakeOf(actDir);
+  const read2 = readAwake(file);
+  const awake = observe(
+    (read2.ok ? read2.awake : null) ?? unwatched(facts.record),
+    now2,
+    longestMs
+  );
+  const staged = stagedPath(file);
+  try {
+    fs_default.writeFileSync(staged, JSON.stringify(awake));
+    fs_default.renameSync(staged, file);
+  } catch (err) {
+    fs_default.rmSync(staged, { force: true });
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+  if (!read2.ok) throw new Error(`${file}: ${read2.reason}; its spend restarts`);
+  return awake;
+}
 function endOverdue(dir, facts, jobs) {
   const status = filesOf(import_node_path40.default.join(dir, String(facts.act))).status;
   return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
@@ -80193,6 +80244,7 @@ function releaseReading(release3) {
 }
 var ACT_TIMEOUT_MS = 10 * 60 * 1e3;
 var ACT_POLL_MS = 2e3;
+var LONGEST_LOOK_MS = 5 * ACT_POLL_MS;
 function describeBuild(b) {
   switch (b.kind) {
     case "current":
@@ -80318,7 +80370,9 @@ function makeUpdateWatch(opts) {
     }
   }
   function endIfOverdue(facts) {
-    if (!facts?.alive || clock.now() <= facts.record.deadline) return;
+    if (!facts?.alive) return;
+    const spent = spendLook(actsDir2, facts, clock.now(), LONGEST_LOOK_MS);
+    if (spent === null || spent.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
     const why2 = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
