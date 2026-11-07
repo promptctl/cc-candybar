@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-666",
-      "ref": "refs/pull/666/merge",
-      "sha": "dd67de88c40b686988cc331dd3eaf05700be0ecd",
-      "timestamp": "2026-11-07T01:40:28.044Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "fff258104584a230d2eb90386e7f1e306eed5c5a",
+      "timestamp": "2026-11-07T01:47:36.134Z",
       "commits": [
         {
-          "sha": "dd67de88c40b686988cc331dd3eaf05700be0ecd",
+          "sha": "fff258104584a230d2eb90386e7f1e306eed5c5a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:39:34Z",
-          "message": "Merge 45bd3ce5384e2f822a7503fe92176ead7b1b8fa9 into 6d361f430dc9f1a6399706bec94946f0bc8b68f3\n"
+          "timestamp": "2026-11-06T18:46:27-07:00",
+          "message": "fix(feed): a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0) (#666)\n\n* fix(feed): a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0)\n\nThe feed's phase splits drawing into rendering, whose wakes the frame\nreads, and pushing, whose wakes mark the frame so its schedule draws the\nnext a spacing on. No sink wakes synchronously today; a lane refused\nmid-push did, and waited out the still period untimed.\n\n* fix(feed): a wake while a frame goes out arms the timer through hasten, and the frame's schedule never sets it later (candybar-gather-renderer-76bb.6pj.1s0)\n\nReview (high): one way to bring a frame forward; the pushing phase is readonly;\na wake that moved nothing is coalesced. Adds the refused-lane-mid-push test.\n\n* refactor(feed): arm is the one rule that a timer is never set later than it falls due (candybar-gather-renderer-76bb.6pj.1s0)"
         },
         {
-          "sha": "45bd3ce5384e2f822a7503fe92176ead7b1b8fa9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:13:34-07:00",
-          "message": "refactor(feed): arm is the one rule that a timer is never set later than it falls due (candybar-gather-renderer-76bb.6pj.1s0)\n"
-        },
-        {
-          "sha": "5ce3153e923db45c5e901d15331fbf473cc5f38b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:09:56-07:00",
-          "message": "fix(feed): a wake while a frame goes out arms the timer through hasten, and the frame's schedule never sets it later (candybar-gather-renderer-76bb.6pj.1s0)\n\nReview (high): one way to bring a frame forward; the pushing phase is readonly;\na wake that moved nothing is coalesced. Adds the refused-lane-mid-push test.\n"
-        },
-        {
-          "sha": "a3e1f9fd48dc9197635cb51d62936104ea864c41",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:04:13-07:00",
-          "message": "fix(feed): a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0)\n\nThe feed's phase splits drawing into rendering, whose wakes the frame\nreads, and pushing, whose wakes mark the frame so its schedule draws the\nnext a spacing on. No sink wakes synchronously today; a lane refused\nmid-push did, and waited out the still period untimed.\n"
+          "sha": "6d361f430dc9f1a6399706bec94946f0bc8b68f3",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-07T01:36:40Z",
+          "message": "chore(release): set `package.json` to 1.208.7 [skip ci]\n\n## [1.208.7](https://github.com/promptctl/cc-candybar/compare/v1.208.6...v1.208.7) (2026-11-07)\n\n### Bug Fixes\n\n* **click:** a click is read once at the daemon's edge, and its event carries that read (brandon-menus-sjhy.ovq) ([#665](https://github.com/promptctl/cc-candybar/issues/665)) ([1806d37](https://github.com/promptctl/cc-candybar/commit/1806d3735da43b2aaeceb9ca12a48cce517d6201))\n"
         }
       ]
     },
@@ -113,28 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:33:52-07:00",
           "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "1806d3735da43b2aaeceb9ca12a48cce517d6201",
-      "timestamp": "2026-11-07T01:25:23.244Z",
-      "commits": [
-        {
-          "sha": "1806d3735da43b2aaeceb9ca12a48cce517d6201",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:24:21-07:00",
-          "message": "fix(click): a click is read once at the daemon's edge, and its event carries that read (brandon-menus-sjhy.ovq) (#665)\n\n* fix(click): a click is read once at the daemon's edge, and its event carries that read (brandon-menus-sjhy.ovq)\n\nThe edge read a click to find its session, then the verb's run read the raw\nvalue again, and the journal, the landing stamp and the fold took their\nsession from that second read. Now `readClick` reads a link once, at the\nedge, into a branded Click whose dispatch session is taken from its effects\nin the read. The click event carries that Click, and `runClick` runs from it,\nso the session the reply facts record, the one the journal and landing use,\nand the steps the fold performs are one value.\n\nThe click table holds what a link can name: dispatch, and the doctor's\nprobe, whose nonce is now parsed at the edge too. A link naming a leaf verb\nitself, which nothing draws, is an unknown click verb refused at the edge.\nfoldEffects is the one leaf runner. VERBS, VERB_NAMES, ClickVerb, clickVerb,\nclickSessionOf and decodeWire are gone, and the drawn-link reader refuses a\nlink that names anything but dispatch.\n\nTests click as the bar does. The helpers that split a drawn link and ran\neach effect as its own click (one turn and undo step per effect, no\nbatching) run the whole link, and hand-built single-verb clicks go through\na one-effect dispatch link (test/helpers/click.ts clickEffect, effectLink).\n\n* fix(click): the loader refuses a link literal naming a verb no link names, and the link verbs are one list the click table keys off (brandon-menus-sjhy.ovq)\n\nReview (high) on #665: an addressed literal naming a leaf verb loaded and then\nclicked nothing; the click readers and their run arms now both answer to the\nwire's LINK_VERBS at compile time; tests cover a session-less dispatch and a\nlone % in a leaf's arguments; stale symbol names in design docs.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* fix(click): a link may name range beside the click verbs, and the click reads carry one brand (brandon-menus-sjhy.ovq)\n\nReview (medium) on #665: the loader no longer refuses a status-line range\nliteral, which the daemon runs; the readers return unbranded reads the\ncompiler checks, branded once in readClick; stale verb-table comments.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
-        },
-        {
-          "sha": "aa9da2bd2f5cf3f7d2d4a21a63a06bbd69ac00b8",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T01:05:04Z",
-          "message": "chore(release): set `package.json` to 1.208.6 [skip ci]\n\n## [1.208.6](https://github.com/promptctl/cc-candybar/compare/v1.208.5...v1.208.6) (2026-11-07)\n\n### Bug Fixes\n\n* **feed:** the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv) ([#664](https://github.com/promptctl/cc-candybar/issues/664)) ([536561c](https://github.com/promptctl/cc-candybar/commit/536561c3a05d572669c0b7bd7a2830dd6ab3bcc6))\n"
         }
       ]
     },
