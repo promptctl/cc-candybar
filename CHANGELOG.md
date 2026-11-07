@@ -1,3 +1,9 @@
+## [1.208.6](https://github.com/promptctl/cc-candybar/compare/v1.208.5...v1.208.6) (2026-11-07)
+
+### Bug Fixes
+
+* **feed:** the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv) ([#664](https://github.com/promptctl/cc-candybar/issues/664)) ([536561c](https://github.com/promptctl/cc-candybar/commit/536561c3a05d572669c0b7bd7a2830dd6ab3bcc6))
+
 ## [1.208.5](https://github.com/promptctl/cc-candybar/compare/v1.208.4...v1.208.5) (2026-11-07)
 
 ### Bug Fixes
