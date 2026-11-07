@@ -111,7 +111,7 @@ test("a view reads the PR from its declaration whatever its preset places, and a
       },
     }),
   );
-  const inner = new OneRepo(unscriptedLauncher);
+  const inner = new OneRepo(unscriptedLauncher, systemFilesystem);
   const git = new GitDataProvider({
     clock: systemTimekeeper,
     inner,
@@ -253,7 +253,7 @@ function gitCache() {
     path.join(dir, ".cc-candybar.json5"),
     JSON.stringify({ root: { h: ["gitaculous"] } }),
   );
-  const inner = new OneRepo(unscriptedLauncher);
+  const inner = new OneRepo(unscriptedLauncher, systemFilesystem);
   const git = new GitDataProvider({
     clock: systemTimekeeper,
     inner,

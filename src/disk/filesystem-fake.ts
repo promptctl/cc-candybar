@@ -65,7 +65,6 @@ export interface FilesystemFake extends Filesystem {
   write(at: string, text: string): void;
   mkdir(at: string): void;
   symlink(target: string, at: string): void;
-  rename(from: string, to: string): void;
   remove(at: string): void;
   // Every later operation naming `at` fails with `code`, until it is
   // cleared with `null`.
@@ -343,7 +342,12 @@ export function filesystemFake(opts: {
     return { dir: directoryAt("/" + above.join("/"), syscall), name };
   };
 
-  function writeText(at: string, text: string, syscall: string): void {
+  function writeText(
+    at: string,
+    text: string,
+    syscall: string,
+    mode = 0o644,
+  ): void {
     checkFault(at, syscall);
     const link = linkAt(at, syscall);
     // A write through a link whose target is missing creates the target.
@@ -354,6 +358,7 @@ export function filesystemFake(opts: {
           : "/" + [...parts(at).slice(0, -1), ...names(link.target)].join("/"),
         text,
         syscall,
+        mode,
       );
     let existing: Entry | null = null;
     try {
@@ -369,7 +374,7 @@ export function filesystemFake(opts: {
       return;
     }
     const { dir, name } = slot(at, syscall);
-    attach(dir, name, { kind: "file", text, ...meta(0o100644) });
+    attach(dir, name, { kind: "file", text, ...meta(0o100000 | mode) });
   }
 
   function mkdirp(at: string): void {
@@ -398,6 +403,16 @@ export function filesystemFake(opts: {
     }
   }
 
+  const fileText = (at: string): string => {
+    const entry = walk(at, true, "open");
+    if (entry.kind !== "file") throw failure("EISDIR", "read", at);
+    return entry.text;
+  };
+  const listing = (at: string): readonly DirectoryEntry[] =>
+    [...directoryAt(at, "scandir").children.values()].map(
+      (entry): DirectoryEntry => ({ name: entry.name, kind: entry.kind }),
+    );
+
   return {
     statSync: (at) => statOf(walk(at, true, "stat")),
     lstatSync: (at) => statOf(walk(at, false, "lstat")),
@@ -410,16 +425,39 @@ export function filesystemFake(opts: {
     mkdirSync: mkdirp,
     opendirSync: (at) => void directoryAt(at, "opendir"),
     stat: async (at) => statOf(walk(at, true, "stat")),
-    readFile: async (at) => {
-      const entry = walk(at, true, "open");
-      if (entry.kind !== "file") throw failure("EISDIR", "read", at);
-      return entry.text;
-    },
+    readFile: async (at) => fileText(at),
     writeFile: async (at, text) => writeText(at, text, "open"),
-    readdir: async (at) =>
-      [...directoryAt(at, "scandir").children.values()].map(
-        (entry): DirectoryEntry => ({ name: entry.name, kind: entry.kind }),
-      ),
+    readFileSync: (at) => fileText(at),
+    readdirSync: (at) => listing(at),
+    writeFileSync: (at, text, { mode }) => writeText(at, text, "open", mode),
+    renameSync: (from, to) => {
+      const entry = walk(from, false, "rename");
+      const { dir, name } = slot(to, "rename");
+      // The kernel refuses to move a folder into its own subtree.
+      for (let up: Directory | null = dir; up !== null; up = up.parent)
+        if (up === entry) throw failure("EINVAL", "rename", to);
+      const replaced = dir.children.get(name);
+      if (replaced !== undefined && replaced !== entry) {
+        // The kernel's checks on the destination it replaces.
+        if (entry.kind === "directory" && replaced.kind !== "directory")
+          throw failure("ENOTDIR", "rename", to);
+        if (entry.kind !== "directory" && replaced.kind === "directory")
+          throw failure("EISDIR", "rename", to);
+        if (replaced.kind === "directory" && replaced.children.size > 0)
+          throw failure("ENOTEMPTY", "rename", to);
+        detach(replaced, "remove");
+      }
+      detach(entry, "move");
+      attach(dir, name, entry);
+    },
+    rmSync: (at) => {
+      const entry =
+        linkAt(at, "rm") ?? (exists(at) ? walk(at, false, "rm") : null);
+      if (entry === null) return;
+      if (entry.kind === "directory") throw failure("EISDIR", "rm", at);
+      detach(entry, "remove");
+    },
+    readdir: async (at) => listing(at),
     unlink: async (at) => {
       const entry = walk(at, false, "unlink");
       if (entry.kind === "directory") throw failure("EISDIR", "unlink", at);
@@ -457,26 +495,6 @@ export function filesystemFake(opts: {
       const { dir, name } = slot(at, "symlink");
       if (dir.children.has(name)) throw failure("EEXIST", "symlink", at);
       attach(dir, name, { kind: "symlink", target, ...meta(0o120755) });
-    },
-    rename: (from, to) => {
-      const entry = walk(from, false, "rename");
-      const { dir, name } = slot(to, "rename");
-      // The kernel refuses to move a folder into its own subtree.
-      for (let up: Directory | null = dir; up !== null; up = up.parent)
-        if (up === entry) throw failure("EINVAL", "rename", to);
-      const replaced = dir.children.get(name);
-      if (replaced !== undefined && replaced !== entry) {
-        // The kernel's checks on the destination it replaces.
-        if (entry.kind === "directory" && replaced.kind !== "directory")
-          throw failure("ENOTDIR", "rename", to);
-        if (entry.kind !== "directory" && replaced.kind === "directory")
-          throw failure("EISDIR", "rename", to);
-        if (replaced.kind === "directory" && replaced.children.size > 0)
-          throw failure("ENOTEMPTY", "rename", to);
-        detach(replaced, "remove");
-      }
-      detach(entry, "move");
-      attach(dir, name, entry);
     },
     remove: (at) => detach(walk(at, false, "rm"), "remove"),
     fault: (at, code) =>

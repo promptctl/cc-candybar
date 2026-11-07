@@ -1,6 +1,6 @@
 // Whether a file is there, as one stat finds it.
 
-import fs from "node:fs";
+import type { FilesystemReads } from "../disk/filesystem.js";
 
 // [LAW:types-are-the-program] One stat, carried as the fact it found rather
 // than collapsed to a boolean: `fs.existsSync` answers false to EVERY stat
@@ -13,12 +13,13 @@ export interface Unchecked {
   readonly error: string;
 }
 export type Presence = "present" | "absent" | Unchecked;
-export function presence(path: string): Presence {
+export function presence(reads: FilesystemReads, path: string): Presence {
   try {
-    return fs.statSync(path, { throwIfNoEntry: false }) === undefined
-      ? "absent"
-      : "present";
+    reads.statSync(path);
+    return "present";
   } catch (e) {
-    return { path, error: (e as Error).message };
+    return (e as { code?: string }).code === "ENOENT"
+      ? "absent"
+      : { path, error: (e as Error).message };
   }
 }

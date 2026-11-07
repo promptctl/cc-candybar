@@ -16,7 +16,6 @@
 // daemon offers as a message beside the settings door and `cc-candybar check`
 // fails on.
 
-import fs from "node:fs";
 import path from "node:path";
 import JSON5 from "json5";
 import {
@@ -37,6 +36,7 @@ import {
 import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
 import { resolveUserPath } from "../../utils/user-path.js";
+import type { FilesystemReads } from "../../disk/filesystem.js";
 import { type Checkout } from "../../utils/git-root.js";
 import type { ApprovedRepo } from "./repo-gate.js";
 import {
@@ -166,6 +166,41 @@ export function pluginDefinition(
     : { path: definition, scope, name: undefined };
 }
 
+// [LAW:effects-at-boundaries] A definition with what the disk answered for
+// it: its text and the real path of its folder (where its `run` runs and its
+// storage lives), or why it could not be read. The fold below reads nothing,
+// so one load asks the disk once per definition, and the installed layer's
+// memo is keyed on the very text the merge takes.
+export type DefinitionRead =
+  | { readonly kind: "read"; readonly text: string; readonly dir: string }
+  | { readonly kind: "unreadable"; readonly reason: string };
+export type ReadDefinition = PluginDefinition & {
+  readonly read: DefinitionRead;
+};
+
+export function readDefinitions(
+  reads: FilesystemReads,
+  definitions: readonly PluginDefinition[],
+): readonly ReadDefinition[] {
+  return definitions.map((definition) => {
+    try {
+      return {
+        ...definition,
+        read: {
+          kind: "read",
+          text: reads.readFileSync(definition.path),
+          dir: reads.realpathSync(path.dirname(definition.path)),
+        },
+      };
+    } catch (e) {
+      return {
+        ...definition,
+        read: { kind: "unreadable", reason: (e as Error).message },
+      };
+    }
+  });
+}
+
 // The variable a plugin's data file publishes, read as `.<ns>.data.*`.
 export function pluginDataVar(ns: string): string {
   return `${ns}.data`;
@@ -231,7 +266,7 @@ export function listedPlugins(
  * two copies never merge; within one list a namespace is taken once.
  */
 export function applyPlugins(
-  definitions: readonly PluginDefinition[],
+  definitions: readonly ReadDefinition[],
   ctx: PluginContext,
   base: PluginBase,
   // `replaces`: the layer held declarations under this plugin's namespace.
@@ -242,7 +277,7 @@ export function applyPlugins(
   // result.
   const taken = new Map<string, string>();
   return definitions.reduce<PluginLayer>(
-    (layer, definition) => {
+    (layer, { read, ...definition }) => {
       const file = definition.path;
       const ns =
         definition.name === undefined ? undefined : pluginNs(definition);
@@ -285,12 +320,16 @@ export function applyPlugins(
       taken.set(ns, file);
       const under = withoutPlugin(layer.config, ns);
       const merged = attempt(() => {
-        const source = fs.readFileSync(file, "utf-8");
+        if (read.kind === "unreadable") throw new Error(read.reason);
         const config = mergeWithDefault(
           fragmentOf(
             file,
             definition,
-            { source, json: JSON5.parse(source) as unknown },
+            {
+              source: read.text,
+              json: JSON5.parse(read.text) as unknown,
+              dir: read.dir,
+            },
             ctx,
           ),
           under,
@@ -606,7 +645,16 @@ function settingFor(
 function fragmentOf(
   file: string,
   id: PluginId,
-  { source, json }: { readonly source: string; readonly json: unknown },
+  {
+    source,
+    json,
+    dir,
+  }: {
+    readonly source: string;
+    readonly json: unknown;
+    // The real path of the definition's folder.
+    readonly dir: string;
+  },
   { checkout, home }: PluginContext,
 ): RawDslConfig {
   const ns = pluginNs(id);
@@ -639,7 +687,7 @@ function fragmentOf(
       ? undefined
       : dataPathOf(json.data, file, checkout, home, issues);
   const sources =
-    json.sources === undefined ? {} : sourcesOf(json.sources, file, issues);
+    json.sources === undefined ? {} : sourcesOf(json.sources, dir, issues);
   if (issues.length > 0) return fail();
 
   const ctx: ValidateCtx = {
@@ -717,12 +765,7 @@ function fragmentOf(
     // real path its storage is resolved under.
     actions: prefixed(
       ns,
-      setKeysUnder(
-        ns,
-        validateActions(ctx, json.actions, {
-          dir: fs.realpathSync(path.dirname(file)),
-        }),
-      ),
+      setKeysUnder(ns, validateActions(ctx, json.actions, { dir })),
     ),
   };
   issues.push(...wrongScopeRefs(authored, id));
@@ -1023,7 +1066,8 @@ const BUILT_SOURCE = {
 // linked plugin folder replaced by an install is another folder.
 function sourcesOf(
   sources: unknown,
-  file: string,
+  // The real path of the definition's folder.
+  dir: string,
   issues: ConfigIssue[],
 ): Record<string, SourceVarDecl> {
   if (!isPlainObject(sources)) {
@@ -1033,10 +1077,7 @@ function sourcesOf(
     });
     return {};
   }
-  const storage = path.join(
-    fs.realpathSync(path.dirname(file)),
-    STORAGE_FOLDER,
-  );
+  const storage = path.join(dir, STORAGE_FOLDER);
   const built = JSON.stringify(BUILT_SOURCE);
   const lowered: Record<string, SourceVarDecl> = {};
   for (const [name, source] of Object.entries(sources)) {

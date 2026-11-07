@@ -20,7 +20,6 @@ import {
 } from "../src/daemon/config-file-store";
 import { resolveDslConfig } from "../src/config/loader/discovery";
 import { instantOf } from "../src/utils/instant";
-import { repoConfigs } from "../src/daemon/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 import { answerRepo } from "./helpers/repo-approval";
 import { applyLayoutOp } from "../src/daemon/config-file-store";
@@ -29,6 +28,9 @@ import { fragmentNode } from "../src/config/root";
 import { loadConfigOnce } from "../src/doctor/cli";
 import { textOf, type Frame } from "../src/render/frame";
 import { daemonGates } from "../src/daemon/update-keys";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
+import { readRepoAnswers } from "../src/config/loader/repo-book";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 let dir: string;
 let project: string;
@@ -69,7 +71,13 @@ const noRecord = { record: () => {}, logger: () => {} };
 
 // The home a click in the project writes, under the answers the bar reads.
 const projectHome = () =>
-  durableConfig(locations(host, homeOf(host)), repoConfigs(stateDir(homeOf(host))).read(), project, project);
+  durableConfig(
+    systemFilesystem,
+    locations(host, homeOf(host)),
+    readRepoAnswers(systemFilesystem, stateDir(homeOf(host))),
+    project,
+    project,
+  );
 
 test("a project file that places one segment renders over the user's whole config", async () => {
   // `mine` is declared only by the user's file: the project file loads only
@@ -103,7 +111,14 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectHome();
-  expect(home).toEqual({ path: userFile, above: [{ path: projectFile, scope: "repo" }], repo: project, cwd: project, locs: locations(host, homeOf(host)) });
+  expect(home).toEqual({
+    path: userFile,
+    above: [{ path: projectFile, scope: "repo" }],
+    repo: project,
+    cwd: project,
+    locs: locations(host, homeOf(host)),
+    reads: systemFilesystem,
+  });
   writeValues(noRecord, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -153,7 +168,13 @@ test("the user's file is a layer even when the session's cwd is its directory", 
   const local = path.join(xdgDir, ".cc-candybar.json5");
   fs.writeFileSync(local, `{}`);
   answerRepo(xdgDir, "approved", host.env);
-  const resolved = resolveDslConfig(locations(host, homeOf(host)), repoConfigs(stateDir(homeOf(host))).read(), undefined, xdgDir);
+  const resolved = resolveDslConfig(
+    systemFilesystem,
+    locations(host, homeOf(host)),
+    readRepoAnswers(systemFilesystem, stateDir(homeOf(host))),
+    undefined,
+    xdgDir,
+  );
   expect(resolved.kind === "chain" && resolved.layers).toEqual([
     { path: userFile, scope: "plugins" },
     { path: local, scope: "repo" },
@@ -422,7 +443,10 @@ describe("a project layer inserting into the user's row", () => {
   // The bar's own load of the chain: what it draws, and what it dropped.
   const barLoad = () => {
     const warnings: string[] = [];
-    const loaded = loadConfigChain(locations(host, homeOf(host)), 
+    const loaded = loadConfigChain(
+      systemFilesystem,
+      new InstalledLayerMemo(),
+      locations(host, homeOf(host)),
       [homeLayer(userFile), { path: projectFile, scope: "repo" }],
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },

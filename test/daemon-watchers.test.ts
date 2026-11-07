@@ -791,7 +791,7 @@ describe("WatcherRegistry", () => {
 class StubInner extends GitService {
   public calls = 0;
   constructor(private repo: string) {
-    super(processLauncher);
+    super(processLauncher, systemFilesystem);
   }
   override findGitRoot(): Outcome<string> {
     return ok(this.repo);
@@ -825,7 +825,7 @@ async function hearsRefOnlyMove(
 ): Promise<void> {
   // The real reader: what it stores is what git reads off the repo, so the
   // test can ask whether the value is the ref's after a move.
-  const inner = new GitService(processLauncher);
+  const inner = new GitService(processLauncher, systemFilesystem);
   const svc = new GitDataProvider({
     clock: systemTimekeeper,
     inner,

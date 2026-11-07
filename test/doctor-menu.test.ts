@@ -46,10 +46,11 @@ import { BadVerbArgs } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import type { VerbContext } from "../src/daemon/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
-import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/edge";
+import type { LoadReport, DoctorEdge, DoctorStores } from "../src/doctor/edge";
 import type { TmuxHint } from "../src/tmux-hint";
 import type { TerminalEnvHint } from "../src/terminal-hint";
 import { instantOf } from "../src/utils/instant";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const TAB_KEY = `${SETTINGS_NS}tab`;
@@ -72,7 +73,7 @@ afterEach(() => {
 });
 
 // The load's outcome; the config it carries is the one the runtime renders.
-type LoadOutcome = Omit<ConfigLoad, "config">;
+type LoadOutcome = Omit<LoadReport, "config">;
 const CLEAN_LOAD: LoadOutcome = {
   layers: [],
   error: null,
@@ -564,7 +565,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         // before the filing: the real store's refusal is the click's.
         const marks: DoctorStores["marks"] = {
           read: () => ({ kind: "ok", value: {} }),
-          update: fileMarkBook(dir).update,
+          update: fileMarkBook(systemFilesystem, dir).update,
         };
         const ctx = { ...rt.ctx, doctorStores: { ...rt.ctx.doctorStores, marks } };
         await clickUrl(effectLink(VERB_DOCTOR_MARK, "s1", "nerdFont", "drawn"), ctx);

@@ -684,7 +684,14 @@ async function replayFile(
     drawn.warn(`${level} ${message}`);
   // The load: the config and the plugin are read here, before the instruments.
   using loaded = loadDemo({
-    world: { host, home: homeOf(host), launcher: launcher.launcher, clock, dialer: dialerFake(clock) },
+    world: {
+      host,
+      home: homeOf(host),
+      launcher: launcher.launcher,
+      clock,
+      dialer: dialerFake(clock),
+      filesystem: systemFilesystem,
+    },
     stateDir: stateDir(homeOf(host)),
     links: TEST_LINKS,
     configPath: configFile,

@@ -30,6 +30,7 @@ import { launcherNode } from "../attach-preload.js";
 import { type LaneEdge, type PaneClaude } from "./lane-setup.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type { HeldSession, HeldSessionOf } from "./session-pane.js";
+import type { FilesystemReads } from "../disk/filesystem.js";
 
 const SHELL_BUFFER = "cc-candybar-lane";
 // How often the wait for an exit looks again.
@@ -339,6 +340,7 @@ export function productionLaneEdge(
   clock: Timekeeper,
   probe: Pick<ProcessProbe, "alive">,
   heldSession: HeldSessionOf,
+  filesystem: FilesystemReads,
 ): LaneEdge {
   const wait = (ms: number): Promise<void> => sleep(clock, ms, closing);
   return {
@@ -392,7 +394,7 @@ export function productionLaneEdge(
         }),
       ),
     fileExists: (file) => fs.existsSync(file),
-    presence,
+    presence: (file) => presence(filesystem, file),
     paneClaude: (hint) => paneClaude(launcher, hint),
     heldSession,
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the

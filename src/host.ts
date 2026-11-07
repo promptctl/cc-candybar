@@ -2,6 +2,8 @@ import os from "node:os";
 import { homeOf, type RendererHome } from "./daemon/home.js";
 import type { Dialer } from "./dial/dialer.js";
 import { systemDialer } from "./dial/system-dialer.js";
+import type { Filesystem } from "./disk/filesystem.js";
+import { systemFilesystem } from "./disk/system-filesystem.js";
 import type { OneShotLauncher } from "./proc/launch.js";
 import { systemOneShotLauncher } from "./proc/system-launcher.js";
 import { systemTimekeeper, type Timekeeper } from "./time.js";
@@ -24,14 +26,15 @@ export interface Host {
 // renderer home this process serves or reaches (parsed from the environment
 // once, src/daemon/home.ts), the launcher over them (so a child inherits the
 // same environment the process itself reads), the machine's clock, which
-// real children and real files run on, and the dialer a client reaches its
-// daemon through.
+// real children and real files run on, the dialer a client reaches its
+// daemon through, and the disk it reads and writes.
 export interface World {
   readonly host: Host;
   readonly home: RendererHome;
   readonly launcher: OneShotLauncher;
   readonly clock: Timekeeper;
   readonly dialer: Dialer;
+  readonly filesystem: Filesystem;
 }
 
 // [LAW:single-enforcer] The one place src reads the process's environment, home
@@ -55,6 +58,7 @@ export function processWorld(): World {
     launcher: systemOneShotLauncher({ inherited: process.env }, clock),
     clock,
     dialer: systemDialer,
+    filesystem: systemFilesystem,
   };
 }
 

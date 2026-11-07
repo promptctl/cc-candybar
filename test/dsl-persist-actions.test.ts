@@ -170,6 +170,7 @@ describe("persistValueText", () => {
           repo: null,
           cwd: null,
           locs: locations(durable.host, durable.home),
+          reads: systemFilesystem,
         },
         [["palette", "nord"]],
       ),

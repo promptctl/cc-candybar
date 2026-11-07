@@ -22,6 +22,7 @@ import process from "node:process";
 import { WriteStream } from "node:tty";
 import type { CliPlan } from "../cli-plan.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
+import { InstalledLayerMemo } from "../config/dsl-loader.js";
 import {
   barsOf,
   inScope,
@@ -53,7 +54,7 @@ import {
   installFacts,
   productionEdge,
   sessionWidth,
-  type ConfigLoad,
+  type LoadReport,
   type InstallEdge,
   type DoctorEdge,
 } from "./edge.js";
@@ -102,9 +103,9 @@ function reportLine({ check, verdict }: CheckReport): string {
 // state, keeps the outcome, and releases what the state holds. A
 // load that failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(
-  { host, home, clock }: World,
+  { host, home, clock, filesystem }: World,
   origin: RenderOrigin,
-): ConfigLoad {
+): LoadReport {
   const deps = {
     clock,
     locations: locations(host, home),
@@ -116,6 +117,8 @@ export function loadConfigOnce(
     },
     gates: daemonGates(),
     stateDir: stateDir(home),
+    filesystem,
+    memo: new InstalledLayerMemo(),
   };
   const loaded = loadFromDisk(
     origin.projectDir,
@@ -371,6 +374,7 @@ export async function doctorCommandPlan(
           world.launcher,
           (origin) => loadConfigOnce(world, origin),
           world.host,
+          world.filesystem,
         ),
         productionHandlerProbeEdge(world.launcher, world),
         () => askDaemon(world),

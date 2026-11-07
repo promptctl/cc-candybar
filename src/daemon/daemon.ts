@@ -715,6 +715,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     gates,
     sessionState,
     stateDir: paths.state,
+    filesystem: inputs.filesystem,
     storedRoot: paths.storedRoot,
     locations: locs,
     journalTurns,
