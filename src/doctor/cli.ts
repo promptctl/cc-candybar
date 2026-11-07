@@ -87,12 +87,14 @@ const FIX_HINT = ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 
 const MARK_HINT = `mark them ✓ shapes or ✗ boxes in the bar's doctor, and this command reads your mark: the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor`;
 
 // A failed check's line, then one indented line per further problem it found,
-// then what it asks the user to look at.
+// then what it notes beside them, then what it asks the user to look at.
 function reportLine({ check, verdict }: CheckReport): string {
   return verdict.ok
     ? `✓ ${check.label}${verdict.note === undefined ? "" : ` — ${verdict.note}`}\n`
     : `✗ ${check.label} — ${verdict.reason}${verdict.fix === undefined ? "" : FIX_HINT}\n` +
-        (verdict.more ?? []).map((problem) => `    ${problem}\n`).join("") +
+        [...(verdict.more ?? []), ...(verdict.notes ?? [])]
+          .map((line) => `    ${line}\n`)
+          .join("") +
         (verdict.sighting === undefined
           ? ""
           : `    look: ${verdict.sighting.glyphs} — ${MARK_HINT}\n`);

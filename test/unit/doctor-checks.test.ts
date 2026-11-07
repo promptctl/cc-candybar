@@ -19,7 +19,8 @@ import { frameFields, truecolorEnvFields } from "../../src/doctor/report";
 import type { SettingsSource } from "../../src/claude-settings";
 import type { FrameSighting } from "../../src/daemon/render-sightings";
 import type { SightingScope } from "../../src/doctor/sightings";
-import { HEALTHY_FACTS, NO_REPOS, drew, onOrigin } from "../helpers/doctor-facts";
+import { HEALTHY_FACTS, drew, onOrigin } from "../helpers/doctor-facts";
+import { NO_REPOS } from "../helpers/repo-gate";
 import { repoUnreadNotice, type RepoGate } from "../../src/config/loader/repo-gate";
 
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
@@ -346,6 +347,7 @@ describe("config probe", () => {
       ok: false,
       reason: `${judged}: an advisory`,
       more: [],
+      notes: [],
     });
   });
 
@@ -362,6 +364,7 @@ describe("config probe", () => {
       reason:
         "/gone.json5 ($CC_CANDYBAR_CONFIG): /gone.json5 does not exist",
       more: [],
+      notes: [],
     });
   });
 
@@ -371,6 +374,7 @@ describe("config probe", () => {
       ok: false,
       reason: `${JUDGED}: ${warning}`,
       more: [],
+      notes: [],
     });
   });
 
@@ -393,6 +397,7 @@ describe("config probe", () => {
         'helper "h" is never called',
         'segment "s" is in no preset',
       ],
+      notes: [],
     });
   });
 
@@ -411,6 +416,7 @@ describe("config probe", () => {
       ok: false,
       reason: `${JUDGED}: Invalid config in /p/.cc-candybar.json5 (1 issue):`,
       more: ["[line 2 • root] root references unknown segment", "an advisory"],
+      notes: [],
     });
   });
 
@@ -437,6 +443,7 @@ describe("config probe", () => {
         ok: false,
         reason: `${judged}: the config failed to load`,
         more: [],
+        notes: [],
       });
     },
   );
@@ -456,7 +463,7 @@ describe("config probe", () => {
     test("one awaiting approval fails the row, naming the directory and the approval", () => {
       expect(
         config({ ...LOADED, layers: [], repos: gated({ awaiting: ["/r"] }) }),
-      ).toEqual({ ok: false, reason: `${NONE}: ${AWAITING}`, more: [] });
+      ).toEqual({ ok: false, reason: `${NONE}: ${AWAITING}`, more: [], notes: [] });
     });
 
     test("an awaiting repository follows the load's own problems", () => {
@@ -470,6 +477,7 @@ describe("config probe", () => {
         ok: false,
         reason: `${JUDGED}: an advisory`,
         more: [AWAITING],
+        notes: [],
       });
     });
 
@@ -488,6 +496,7 @@ describe("config probe", () => {
         ok: false,
         reason: `${NONE}: Repository config answers could not be read: is not an object — no repository's config runs until they can be`,
         more: [],
+        notes: [],
       });
     });
 
@@ -503,7 +512,7 @@ describe("config probe", () => {
       ).toEqual({ ok: true, note: `${JUDGED}; ${DECLINED}; ${UNPROVEN}` });
     });
 
-    test("a failed load lists a declined repository after its problems", () => {
+    test("a failed load notes a declined repository beside its problems, counting it as none", () => {
       expect(
         config({
           kind: "failed",
@@ -518,8 +527,8 @@ describe("config probe", () => {
         reason: `${JUDGED}: Invalid config in /p/.cc-candybar.json5`,
         more: [
           "awaiting approval: /a — its cc-candybar config runs once it is approved in the bar",
-          DECLINED,
         ],
+        notes: [DECLINED],
       });
     });
   });

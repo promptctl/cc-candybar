@@ -34,8 +34,8 @@ import {
   healthyDataEdge,
   HEALTHY_INSTALL_EDGE,
   noManagedSettings,
-  NO_REPOS,
 } from "./helpers/doctor-facts";
+import { NO_REPOS } from "./helpers/repo-gate";
 import { applyClick, applyClickAnswered, clickUrl, recordRender, testVerbContext, runLink, effectLink } from "./helpers/click";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -297,6 +297,37 @@ describe("a gather is a snapshot of what it read", () => {
     expect(gathers).toEqual(["holder=null", "holder=null"]);
     expect(reports()).toHaveLength(1);
     expect(reports()[0]).toContain("config=failed(");
+  });
+
+  test("an awaiting repository declined during a gather, the config unchanged, is gathered again and the report says declined", async () => {
+    let answer: "awaiting" | "declined" = "awaiting";
+    // Each load builds a gate of its own, as production does.
+    const { held, gathers, doctor, reports } = setup({
+      loadConfig: () => ({ ...LOAD, repos: { ...NO_REPOS, [answer]: ["/repo"] } }),
+    });
+    const a = await doctor(A);
+    await drain();
+    answer = "declined";
+    held.open();
+    await a.performed;
+    expect(gathers).toEqual(["holder=null", "holder=null"]);
+    expect(reports()).toHaveLength(1);
+    expect(reports()[0]).toContain(" config=ok ");
+    expect(reports()[0]).toContain(" repos=0/1/0 ");
+  });
+
+  test("a gate built again with the same rulings moves nothing: one gather, and its report lands", async () => {
+    const { held, gathers, doctor, reports } = setup({
+      loadConfig: () => ({ ...LOAD, repos: { ...NO_REPOS, awaiting: ["/repo"] } }),
+    });
+    const a = await doctor(A);
+    await drain();
+    held.open();
+    await a.performed;
+    expect(gathers).toEqual(["holder=null"]);
+    expect(reports()).toHaveLength(1);
+    expect(reports()[0]).toContain(" config=failed(1) ");
+    expect(reports()[0]).toContain(" repos=1/0/0 ");
   });
 
   test("a resize during the probes moves nothing the doctor reads: one gather, and its report lands", async () => {

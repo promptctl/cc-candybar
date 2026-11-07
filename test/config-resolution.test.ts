@@ -20,6 +20,7 @@ import {
 import { homeOf } from "../src/daemon/home";
 import { locations, type Locations } from "../src/daemon/paths";
 import { mainEnv, hostOf } from "./helpers/host";
+import { NO_REPOS } from "./helpers/repo-gate";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,17 +39,6 @@ const approving = (...dirs: string[]): RepoAnswers => ({
   kind: "ok",
   value: Object.fromEntries(dirs.map((d) => [realpathSync(d), "approved"])),
 });
-
-// What a session reaching no repository's config contributes, or whose
-// repositories are approved and ship no plugins.
-const NOTHING_GATED = {
-  plugins: null,
-  approved: [],
-  awaiting: [],
-  declined: [],
-  unproven: [],
-  unread: null,
-};
 
 // Root bypasses directory permissions, so the unsearchable-directory fixtures
 // cannot exist for it.
@@ -177,7 +167,7 @@ describe("resolveDslConfig", () => {
         layers: [{ path: jsonPath, scope: "plugins" }],
         home: jsonPath,
         unchecked: [],
-        repos: NOTHING_GATED,
+        repos: NO_REPOS,
       });
     } finally {
       cleanup();
@@ -201,7 +191,7 @@ describe("resolveDslConfig", () => {
         layers: [{ path: json5Path, scope: "plugins" }],
         home: json5Path,
         unchecked: [],
-        repos: NOTHING_GATED,
+        repos: NO_REPOS,
       });
     } finally {
       cleanup();
@@ -235,7 +225,7 @@ describe("resolveDslConfig", () => {
         home: xdgJson5,
         unchecked: [],
         repos: {
-          ...NOTHING_GATED,
+          ...NO_REPOS,
           plugins: repo,
           approved: [realpathSync(proj)],
         },
@@ -264,7 +254,7 @@ describe("resolveDslConfig", () => {
         layers: [],
         home,
         unchecked: [],
-        repos: NOTHING_GATED,
+        repos: NO_REPOS,
       });
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
@@ -293,7 +283,7 @@ describe("resolveDslConfig", () => {
         layers: [{ path: named, scope: "plugins" }],
         home: named,
         unchecked: [],
-        repos: NOTHING_GATED,
+        repos: NO_REPOS,
       });
       expect(durableConfig(L, approving(), dir, dir, named)).toEqual({
         path: named,
@@ -323,7 +313,7 @@ describe("resolveDslConfig", () => {
         kind: "missing",
         path: named,
         home: named,
-        repos: NOTHING_GATED,
+        repos: NO_REPOS,
       });
       expect(configResolutionNotice(resolved)).toBe(
         `Config file not found: ${named} — rendering the bundled default until it appears`,
@@ -363,7 +353,7 @@ describe("resolveDslConfig", () => {
           path: named,
           home: named,
           error: expect.stringContaining("EACCES"),
-          repos: NOTHING_GATED,
+          repos: NO_REPOS,
         });
         expect(configResolutionNotice(resolved)).toMatch(
           /^Config file could not be read: /,
@@ -410,7 +400,7 @@ describe("resolveDslConfig", () => {
               error: expect.stringContaining("EACCES"),
             },
           ],
-          repos: { ...NOTHING_GATED, approved: [realpathSync(cwd)] },
+          repos: { ...NO_REPOS, approved: [realpathSync(cwd)] },
         });
         const notice = configResolutionNotice(resolved);
         expect(notice).toContain("Config location could not be checked");

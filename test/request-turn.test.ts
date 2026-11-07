@@ -43,8 +43,8 @@ import {
   healthyDaemonEdge,
   healthyDataEdge,
   noManagedSettings,
-  NO_REPOS,
 } from "./helpers/doctor-facts";
+import { NO_REPOS } from "./helpers/repo-gate";
 import { heldClock } from "./helpers/held-clock";
 import { plusMs } from "../src/time";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";

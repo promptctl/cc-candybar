@@ -8,17 +8,8 @@ import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
 import type { ServingDaemon } from "../../src/daemon/limits";
 import { memoryStateFile } from "./state-file";
 import type { ClientHint } from "../../src/client-hint";
-import type { RepoGate } from "../../src/config/loader/repo-gate";
+import { NO_REPOS } from "./repo-gate";
 
-// A load that reached no repository's config.
-export const NO_REPOS: RepoGate = {
-  plugins: null,
-  approved: [],
-  awaiting: [],
-  declined: [],
-  unproven: [],
-  unread: null,
-};
 
 // One published install: the daemon's bundle and the native client beside it.
 export const HEALTHY_BUNDLE = "/opt/cc/dist/index.mjs";

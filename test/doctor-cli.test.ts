@@ -5,7 +5,8 @@
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
 import { HOST, hostOf, worldOf, mainEnv } from "./helpers/host";
 import type { World } from "../src/host";
-import { EMPTY_STORES, NO_REPOS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL, sightedIn, reportedFrame } from "./helpers/doctor-facts";
+import { EMPTY_STORES, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL, sightedIn, reportedFrame } from "./helpers/doctor-facts";
+import { NO_REPOS } from "./helpers/repo-gate";
 import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
 import fs from "node:fs";
@@ -420,6 +421,42 @@ describe("doctorPlan over a real config", () => {
       answerRepo(other, "declined", world.host.env);
       expect((await planIn()).stdout).toContain(
         `✓ config — bundled default (no config file loaded); declined: ${real()} — its cc-candybar config does not run\n`,
+      );
+    });
+
+    // The bar's row counts problems only, so a declined repository beside a
+    // failing row adds nothing to its count; the CLI lists it after them.
+    test("declined beside a failing row is listed after its problems and counted as none", async () => {
+      answerRepo(other, "declined", world.host.env);
+      const user = path.join(dir, "xdg", "cc-candybar", "config.json5");
+      fs.mkdirSync(path.dirname(user), { recursive: true });
+      fs.writeFileSync(user, `{ helpers: { h: "x" } }`);
+      expect((await planIn()).stdout).toContain(
+        `✗ config — ${user} (searched): helper "h" is never called\n` +
+          `    declined: ${real()} — its cc-candybar config does not run\n`,
+      );
+      const reports = runDoctor({
+        ...(await gatherFacts(
+          REAL,
+          { tmux: null, claudeConfigDir: dir },
+          { projectDir: other, cwd: other, target: { source: "search" } },
+          () => null,
+          { kind: "ok", value: HEALTHY_SERVING },
+          CARRIED,
+          NAMED,
+          { kind: "recent" },
+          sightedIn(other, dir, STILL),
+          { kind: "ok", value: { columns: 148, of: { kind: "command" } } },
+          EMPTY_STORES,
+        )),
+        urlHandler: { kind: "unsupported" },
+        install: HEALTHY_FACTS.install,
+      });
+      const pairs = new Map(
+        doctorReportPairs(reports).map((p) => [p.key, p.value]),
+      );
+      expect(pairs.get(doctorReportKeys("config").reason)).toBe(
+        `${user} (searched): helper "h" is never called`,
       );
     });
   });

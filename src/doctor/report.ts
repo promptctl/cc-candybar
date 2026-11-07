@@ -69,9 +69,12 @@ export function doctorReportKeys(checkName: string): ReportKeys {
   };
 }
 
-// Which spelling named the config the run judged.
-export function configFields({ target }: ConfigFacts): string {
-  return `configTarget=${target.source}`;
+// [LAW:nothing-unseen] What the config check reasoned over beside the load:
+// which spelling named the config it judged, and how many repositories the
+// gate left out awaiting an answer, declined, and claiming a worktree their
+// repository does not vouch for.
+export function configFields({ target, repos }: ConfigFacts): string {
+  return `configTarget=${target.source} repos=${repos.awaiting.length}/${repos.declined.length}/${repos.unproven.length}`;
 }
 
 // [LAW:nothing-unseen] What the links check reasoned over, as logfmt fields:

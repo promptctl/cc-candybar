@@ -206,8 +206,9 @@ export function repoAwaitingLines(gate: RepoGate): readonly string[] {
   );
 }
 
-// What the user's answers, or the repository's proof, already settled: no
-// fix is owed, and only reversing the user's own answer would change it.
+// What no fix is owed for: a declined repository is the user's own answer,
+// which only reversing it would change, and an unproven worktree says only
+// which key its directory answers under, whose standing has a line of its own.
 export function repoSettledLines(gate: RepoGate): readonly string[] {
   return [
     ...gate.declined.map(
