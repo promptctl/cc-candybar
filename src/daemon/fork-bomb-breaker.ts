@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { stagedPath } from "../utils/staged-path";
 import { ensureOwnedPrivateDir } from "./paths";
 import {
   sameLiveProcess,
@@ -319,7 +320,7 @@ export function realBreakerDeps(
     // `.tmp` file behind (listRegistryFiles only collects `*.json`, so a
     // stray `.tmp` would never be swept).
     writeEntry: (filePath, identity) => {
-      const tmp = `${filePath}.${identity.pid}.tmp`;
+      const tmp = stagedPath(filePath);
       try {
         fs.writeFileSync(tmp, JSON.stringify(identity), { mode: 0o600 });
         fs.renameSync(tmp, filePath);

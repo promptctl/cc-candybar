@@ -3,10 +3,10 @@ import { get } from "node:https";
 import { URL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import type { Timekeeper } from "../time";
 import type { DaemonLogger } from "../utils/logger";
 import type { PrunedRaw } from "../utils/claude.js";
+import { stagedPath } from "../utils/staged-path.js";
 
 // Every model's rates, by model id.
 export type PriceTable = Readonly<Record<string, ModelPricing>>;
@@ -238,7 +238,7 @@ async function readDisk(owner: LiveOwner): Promise<PriceTable | null> {
 // the day's table leave one of their two whole copies.
 async function writeDisk(owner: LiveOwner, table: PriceTable): Promise<void> {
   const file = diskPath(owner.cacheRoot);
-  const staged = `${file}.${process.pid}.${randomUUID()}`;
+  const staged = stagedPath(file);
   try {
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
     await fs.promises.writeFile(

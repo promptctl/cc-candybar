@@ -1,9 +1,12 @@
 import { systemFilesystem } from "../src/disk/system-filesystem";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { writeAtomic } from "../src/utils/atomic-write.js";
 import { linkChain, resolvedTarget } from "../src/utils/link-chain.js";
+import { until } from "./helpers/until";
 
 let dir: string;
 beforeEach(() => {
@@ -133,4 +136,133 @@ test("writeConfigText(null) through a link removes the target, keeps the link", 
   writeConfigText(link, null, () => {});
   expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
   expect(fs.existsSync(path.join(dir, "dotfiles-config.json5"))).toBe(false);
+});
+
+// Two processes write one file when they share a state directory (a daemon
+// and a CLI, a test and the daemon it spawned). Each stages under its own
+// name, so neither renames the other's bytes into place or away.
+describe("writeAtomic across processes", () => {
+  const TSX = path.join(__dirname, "..", "node_modules", ".bin", "tsx");
+  const CHILD = path.join(__dirname, "fixtures", "atomic-write-child.ts");
+  const WRITES = 200;
+  // Large enough that a write is still being staged when the other process
+  // renames, so a shared staging name tears or loses it.
+  const PAD_BYTES = 64 * 1024;
+
+  test("every write stages at a name of its own, carrying the writer's pid", () => {
+    const file = path.join(dir, "state.json");
+    const rename = jest.spyOn(fs, "renameSync");
+    try {
+      writeAtomic(file, "{}");
+      writeAtomic(file, "{}");
+      const staged = rename.mock.calls.map(([from, to]) => {
+        expect(to).toBe(file);
+        return String(from).slice(file.length);
+      });
+      expect(staged).toEqual([
+        expect.stringMatching(new RegExp(`^\\.${process.pid}\\.[0-9a-f-]{36}\\.tmp$`)),
+        expect.stringMatching(new RegExp(`^\\.${process.pid}\\.[0-9a-f-]{36}\\.tmp$`)),
+      ]);
+      expect(staged[0]).not.toBe(staged[1]);
+    } finally {
+      rename.mockRestore();
+    }
+  });
+
+  test("two writers of one file: neither fails, and every read is one complete write", async () => {
+    const file = path.join(dir, "repo-configs.json");
+    writeAtomic(file, JSON.stringify({ child: "seed", i: 0, pad: "" }));
+    let ended = false;
+    const children = ["a", "b"].map((name) => {
+      // The sandbox env, as cli-plan's children get: the worker's own
+      // NODE_OPTIONS is not the one test setup threads through.
+      const child = spawn(TSX, [CHILD, file, name, String(WRITES), String(PAD_BYTES)], {
+        env: process.env,
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.setEncoding("utf8").on("data", (t: string) => (stdout += t));
+      child.stderr.setEncoding("utf8").on("data", (t: string) => (stderr += t));
+      let spawnError = "";
+      const exited = new Promise<{ name: string; code: number | null; failure: string }>(
+        (resolve) => {
+          child.once("error", (e) => {
+            spawnError = String(e);
+            resolve({ name, code: null, failure: spawnError });
+          });
+          // The exit code says whether the child's writes all landed; its
+          // stderr rides along to say why one did not.
+          child.once("close", (code) =>
+            resolve({ name, code, failure: code === 0 ? "" : stderr }),
+          );
+        },
+      );
+      return {
+        child,
+        ready: () => stdout.includes("ready"),
+        state: () => `${name}: ${spawnError || stderr || (stdout ? "ready" : "silent")}`,
+        exited,
+      };
+    });
+    try {
+      await until(
+        () => children.every((c) => c.ready()),
+        () => `both writers ready (${children.map((c) => c.state()).join("; ")})`,
+        20_000,
+      );
+      for (const c of children) c.child.stdin.write("go");
+
+      // Every read while both write, and the one after, parses as a whole
+      // body one writer wrote.
+      const torn: string[] = [];
+      let exits: Awaited<(typeof children)[number]["exited"]>[] | null = null;
+      void Promise.all(children.map((c) => c.exited)).then((all) => (exits = all));
+      const readWhole = () => {
+        const text = fs.readFileSync(file, "utf8");
+        try {
+          const body = JSON.parse(text) as { child: string; pad: string };
+          if (!["seed", "a", "b"].includes(body.child)) torn.push(text.slice(0, 80));
+        } catch {
+          torn.push(`${text.length} bytes: ${text.slice(0, 40)}`);
+        }
+      };
+      const sampling = (async () => {
+        while (exits === null && !ended) {
+          readWhole();
+          // Paced to sample the file through the run without holding a core
+          // the two writers and the suite's other workers need.
+          await sleep(1);
+        }
+      })();
+      await until(
+        () => exits !== null,
+        () => `both writers exited (${children.map((c) => c.state()).join("; ")})`,
+        25_000,
+      );
+      await sampling;
+      readWhole();
+
+      expect(exits).toEqual([
+        { name: "a", code: 0, failure: "" },
+        { name: "b", code: 0, failure: "" },
+      ]);
+      expect(torn).toEqual([]);
+      const last = JSON.parse(fs.readFileSync(file, "utf8")) as {
+        child: string;
+        i: number;
+        pad: string;
+      };
+      expect({ i: last.i, pad: last.pad.length }).toEqual({
+        i: WRITES - 1,
+        pad: PAD_BYTES,
+      });
+      // Nothing staged is left beside the file.
+      expect(fs.readdirSync(dir)).toEqual(["repo-configs.json"]);
+    } finally {
+      ended = true;
+      // Neither child outlives the case, waiting or writing. A worker that
+      // dies first closes their stdin, which ends one still waiting.
+      for (const c of children) c.child.kill();
+    }
+  });
 });

@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import process from "node:process";
+import { stagedPath } from "../utils/staged-path";
 
 import type { ProcessIdentity } from "./process-fingerprint";
 
@@ -172,7 +172,9 @@ export function writeLease(
   leasePath: string,
   record: LeaseRecord,
 ): string | null {
-  const tmp = `${leasePath}.${process.pid}.tmp`;
+  // [LAW:one-type-per-behavior] Staged where every write stages: a name of
+  // this process's own.
+  const tmp = stagedPath(leasePath);
   try {
     fs.writeFileSync(tmp, JSON.stringify(record), { mode: 0o600 });
     fs.renameSync(tmp, leasePath);

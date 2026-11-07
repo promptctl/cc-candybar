@@ -4,6 +4,7 @@ import fs, {
   writeFileSync,
   readFileSync,
   existsSync,
+  readdirSync,
   statSync,
 } from "fs";
 import { join } from "path";
@@ -93,7 +94,7 @@ describe("SessionState disk persistence", () => {
       s1: { theme: "nord" },
     });
     expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(readdirSync(dir)).toEqual(["session-state.json"]);
   });
 
   // The rename that publishes a debounced write runs on the thread pool, so a
@@ -130,7 +131,7 @@ describe("SessionState disk persistence", () => {
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
       s1: { theme: "new" },
     });
-    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(readdirSync(dir)).toEqual(["session-state.json"]);
     expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
     expect(logged.filter((l) => l.includes("superseded"))).toEqual([
       expect.stringContaining("superseded by a flush landed=false"),
@@ -215,7 +216,7 @@ describe("SessionState disk persistence", () => {
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
       s1: { theme: "new" },
     });
-    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(readdirSync(dir)).toEqual(["session-state.json"]);
     expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
     expect(logged.filter((l) => l.includes("superseded"))).toEqual([
       expect.stringContaining("superseded by a flush landed=false"),
@@ -316,7 +317,7 @@ describe("SessionState disk persistence", () => {
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
       await settled(() => existsSync(file));
-      expect(existsSync(`${file}.writing`)).toBe(false);
+      expect(readdirSync(dir)).toEqual(["session-state.json"]);
 
       const reborn = restore();
       expect(reborn.get("s1", "theme")).toBe("nord");
@@ -412,6 +413,24 @@ describe("SessionState disk persistence", () => {
     ss.flush();
     const onDisk = JSON.parse(readFileSync(badPath, "utf8"));
     expect(onDisk.s1.theme).toBe("nord");
+  });
+
+  it("a flush the disk refuses at its rename leaves no staged file", () => {
+    const logged: string[] = [];
+    const ss = new SessionState(SINGLE_RUN,
+      new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
+    );
+    const renameSpy = jest.spyOn(fs, "renameSync").mockImplementation(() => {
+      throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+    });
+    try {
+      ss.set("s1", "theme", "nord");
+      ss.flush();
+    } finally {
+      renameSpy.mockRestore();
+    }
+    expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
+    expect(readdirSync(dir)).toEqual([]);
   });
 
   it("writes the state file with owner-only (no group/other) permissions", () => {

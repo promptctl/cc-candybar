@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { systemFilesystem } from "../disk/system-filesystem.js";
 import { resolvedTarget } from "./link-chain.js";
+import { stagedPath } from "./staged-path.js";
 
 // [LAW:single-enforcer] The one tmp+rename for every file a user may be
 // reading while we write it — the config file, the settings history, and Claude
@@ -17,7 +18,7 @@ import { resolvedTarget } from "./link-chain.js";
 export function writeAtomic(at: string, text: string, mode?: number): void {
   const file = resolvedTarget(systemFilesystem, at);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
+  const tmp = stagedPath(file);
   const fileMode = mode ?? fs.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
     // Flushed before the rename, so a system crash leaves the old file or the

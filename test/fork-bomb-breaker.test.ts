@@ -301,12 +301,11 @@ describe("realBreakerDeps writeEntry (no orphaned tmp file)", () => {
     // ever touching tmp's own write.
     fs.mkdirSync(filePath);
     const identity = { pid: 123, startTime: "st" };
-    const tmp = `${filePath}.${identity.pid}.tmp`;
     try {
       expect(() =>
         realBreakerDeps(WORLD, null, dir, true).writeEntry(filePath, identity),
       ).toThrow();
-      expect(fs.existsSync(tmp)).toBe(false);
+      expect(fs.readdirSync(dir)).toEqual(["pid-123.json"]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

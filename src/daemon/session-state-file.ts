@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { stagedPath } from "../utils/staged-path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
 import type { SessionSnapshot, SessionStorage } from "./session-state";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
@@ -49,7 +50,11 @@ export class FileSessionStorage implements SessionStorage {
     // daemon.log: the daemon passes its log, every other caller stays quiet.
     private readonly logger: DaemonLogger = quietLogger,
   ) {
-    this.writingPath = `${filePath}.writing`;
+    // [LAW:one-type-per-behavior] Staged where every write stages (stagedPath),
+    // so another process writing this file never renames it. Named once for
+    // the instance's life, so each debounced write reuses it and a flush can
+    // remove it by name.
+    this.writingPath = stagedPath(filePath);
   }
 
   load(): SessionSnapshot {
@@ -179,13 +184,13 @@ export class FileSessionStorage implements SessionStorage {
     if (this.pending === null) return;
     const snapshot = this.pending;
     const started = this.clock.monotonic();
+    const tmp = stagedPath(this.filePath);
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      const tmp = `${this.filePath}.tmp`;
       const body = JSON.stringify(snapshot);
       // [LAW:single-enforcer] Daemon runtime files are owner-only (0o600), like
       // pid/spawn.lock. Session state carries conversation identifiers, so it
-      // gets the same perms — chmod defeats umask and re-perms a reused tmp.
+      // gets the same perms — chmod defeats umask.
       fs.writeFileSync(tmp, body, { mode: 0o600 });
       fs.chmodSync(tmp, 0o600);
       // [LAW:no-ambient-temporal-coupling] The debounced write's temp file goes
@@ -208,6 +213,17 @@ export class FileSessionStorage implements SessionStorage {
       this.pending = null;
     } catch (e) {
       this.logger("warn", `session-state save failed: ${(e as Error).message}`);
+      // [LAW:no-silent-failure] A flush's staged name is its own, so no later
+      // write reuses it: the bytes go with the flush that failed, and a file
+      // left anyway says so.
+      try {
+        fs.rmSync(tmp, { force: true });
+      } catch (rmErr) {
+        this.logger(
+          "warn",
+          `session-state staged file left: ${(rmErr as Error).message}`,
+        );
+      }
     }
   }
 
