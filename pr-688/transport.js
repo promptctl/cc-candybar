@@ -52285,9 +52285,12 @@ function entryAt(filesystem, dir, name) {
     const contents = s.kind === "directory" ? "" : `${s.size}:${s.mtimeMs}`;
     return `${s.kind}:${s.dev}:${s.ino}:${s.mode}:${contents}`;
   } catch (e) {
-    return `error:${e.code}`;
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return "absent";
+    throw e;
   }
 }
+var heardNames = (dir) => new Set([...dir.listeners].flatMap(({ filter }) => [...filter ?? []]));
 var WatcherRegistry = class {
   slots = /* @__PURE__ */ new Map();
   dirs = /* @__PURE__ */ new Map();
@@ -52590,6 +52593,11 @@ var WatcherRegistry = class {
     for (const listener of slot.listeners) {
       const { dir } = listener;
       dir.listeners.delete(listener);
+      if (dir.state.kind === "polling") {
+        const names = heardNames(dir);
+        for (const name of dir.state.seen.keys())
+          if (!names.has(name)) dir.state.seen.delete(name);
+      }
       if (dir.listeners.size > 0) continue;
       if (dir.state.kind === "listening")
         this.closeHandle(dir.path, dir.state.handle, cause);
@@ -52615,19 +52623,45 @@ var WatcherRegistry = class {
   baseline(dir) {
     const { state } = dir;
     if (state.kind !== "polling") return;
-    for (const { filter } of dir.listeners)
-      for (const name of filter ?? [])
-        if (!state.seen.has(name))
-          state.seen.set(name, entryAt(this.filesystem, dir.path, name));
+    const fresh = [...heardNames(dir)].filter((name) => !state.seen.has(name));
+    for (const [name, entry] of this.read(dir, fresh) ?? [])
+      state.seen.set(name, entry);
   }
+  // Each name's entry, or `null` once the disk has refused one: the directory
+  // is then deaf, its slots told why, and the period's judgment opens it again.
+  read(dir, names) {
+    try {
+      return new Map(
+        [...names].map((name) => [
+          name,
+          entryAt(this.filesystem, dir.path, name)
+        ])
+      );
+    } catch (e) {
+      const deafness = {
+        kind: "failed",
+        path: dir.path,
+        reason: e.message
+      };
+      this.logger(
+        "warn",
+        `dir names unreadable ${dir.path}: ${deafness.reason}`
+      );
+      dir.state = { kind: "deaf", deafness };
+      this.tell(dir, failedOf(deafness));
+      return null;
+    }
+  }
+  // [LAW:no-ambient-temporal-coupling] The next sweep is armed before this
+  // one reads, so nothing a sweep meets can leave the polled names unheard.
   armSweep() {
     if (this.sweep !== null || this.closed) return;
     this.sweep = this.clock.after(
       NAMES_POLL_MS,
       () => {
         this.sweep = null;
-        this.pollNames();
         if (this.polling()) this.armSweep();
+        this.pollNames();
       },
       { unref: true }
     );
@@ -52637,26 +52671,21 @@ var WatcherRegistry = class {
   // made again, renamed away) tells every slot on it an `unknown` window, as a
   // directory watch reopened does, and every name is read again from there;
   // otherwise each name whose entry differs fires the slots that hear it, by
-  // its path. Names no listener hears any more are dropped.
+  // its path.
   pollNames() {
     for (const dir of this.dirs.values()) {
       const { state } = dir;
       if (state.kind !== "polling") continue;
-      const names = new Set(
-        [...dir.listeners].flatMap(({ filter }) => [...filter ?? []])
-      );
-      for (const name of state.seen.keys())
-        if (!names.has(name)) state.seen.delete(name);
       const bound = boundKey(boundOf(this.filesystem, dir.path));
+      const read2 = this.read(dir, heardNames(dir));
+      if (read2 === null) continue;
       if (bound !== state.bound) {
         state.bound = bound;
-        for (const name of names)
-          state.seen.set(name, entryAt(this.filesystem, dir.path, name));
+        for (const [name, entry] of read2) state.seen.set(name, entry);
         this.tell(dir, { kind: "unknown" });
         continue;
       }
-      for (const name of names) {
-        const now2 = entryAt(this.filesystem, dir.path, name);
+      for (const [name, now2] of read2) {
         if (state.seen.get(name) === now2) continue;
         state.seen.set(name, now2);
         for (const { slot, filter } of dir.listeners)
