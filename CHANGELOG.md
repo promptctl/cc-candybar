@@ -1,3 +1,9 @@
+## [1.208.8](https://github.com/promptctl/cc-candybar/compare/v1.208.7...v1.208.8) (2026-11-07)
+
+### Bug Fixes
+
+* **feed:** a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0) ([#666](https://github.com/promptctl/cc-candybar/issues/666)) ([fff2581](https://github.com/promptctl/cc-candybar/commit/fff258104584a230d2eb90386e7f1e306eed5c5a))
+
 ## [1.208.7](https://github.com/promptctl/cc-candybar/compare/v1.208.6...v1.208.7) (2026-11-07)
 
 ### Bug Fixes
