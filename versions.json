@@ -4,32 +4,32 @@
     {
       "version": "pr-665",
       "ref": "refs/pull/665/merge",
-      "sha": "251ab4882df747d469836fb3ba2095d85099a3ed",
-      "timestamp": "2026-11-07T01:17:20.073Z",
+      "sha": "94acf207a9cf43746c5216f5511c48bafc3ea4aa",
+      "timestamp": "2026-11-07T01:18:14.835Z",
       "commits": [
         {
-          "sha": "251ab4882df747d469836fb3ba2095d85099a3ed",
+          "sha": "94acf207a9cf43746c5216f5511c48bafc3ea4aa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:16:19Z",
-          "message": "Merge 30bcc22859c6b4ed8208aec1b756b65bd68686b6 into aa9da2bd2f5cf3f7d2d4a21a63a06bbd69ac00b8\n"
+          "timestamp": "2026-11-07T01:17:10Z",
+          "message": "Merge 84c48031c1a80a672960ccf28c2f79e1544d0ac2 into aa9da2bd2f5cf3f7d2d4a21a63a06bbd69ac00b8\n"
         },
         {
-          "sha": "30bcc22859c6b4ed8208aec1b756b65bd68686b6",
+          "sha": "84c48031c1a80a672960ccf28c2f79e1544d0ac2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T18:16:08-07:00",
           "message": "fix(click): a link may name range beside the click verbs, and the click reads carry one brand (brandon-menus-sjhy.ovq)\n\nReview (medium) on #665: the loader no longer refuses a status-line range\nliteral, which the daemon runs; the readers return unbranded reads the\ncompiler checks, branded once in readClick; stale verb-table comments.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         },
         {
-          "sha": "35182667197ea8e865580dbaa4e56bccec69e929",
+          "sha": "5946753b35f3c59b376248a9570f076ae14eabe2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T18:06:05-07:00",
           "message": "fix(click): the loader refuses a link literal naming a verb no link names, and the link verbs are one list the click table keys off (brandon-menus-sjhy.ovq)\n\nReview (high) on #665: an addressed literal naming a leaf verb loaded and then\nclicked nothing; the click readers and their run arms now both answer to the\nwire's LINK_VERBS at compile time; tests cover a session-less dispatch and a\nlone % in a leaf's arguments; stale symbol names in design docs.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         },
         {
-          "sha": "fa1523984279381de668c6453a865a8a8927ce83",
+          "sha": "719432d7474e47b12dfa705eaa82464ee0ef5565",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:44:10-07:00",
