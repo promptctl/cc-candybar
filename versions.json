@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-674",
+      "ref": "refs/pull/674/merge",
+      "sha": "0e9b28eaec6817b19679dd8fb9e2f1531443d5c6",
+      "timestamp": "2026-11-07T09:04:51.811Z",
+      "commits": [
+        {
+          "sha": "0e9b28eaec6817b19679dd8fb9e2f1531443d5c6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T09:03:59Z",
+          "message": "Merge e65f435340fd9f76e44b62523d262c11d673980d into c8e21dd0a0271567df669f0c7b81bc241551c07a\n"
+        },
+        {
+          "sha": "e65f435340fd9f76e44b62523d262c11d673980d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:03:48-07:00",
+          "message": "fix(facts): a shell or file source's key is a root of the declaration walk; one template enumeration; the undeclared read names what its site knows (candybar-gather-renderer-76bb.6pj.opl)\n\nReview (high) findings taken:\n- Every shell and file source is declared and its cache key evaluated whether\n  or not a template reads it, so the walk seeds from those variables too; a key\n  reading a built-in no placed segment read faulted the source before this.\n- The unused-declaration check and the walk enumerate a segment's and a\n  layout's templates through the same two functions.\n- The undeclared read's message states what the reading site knows: the\n  declaration its facts were gathered under does not name the fact, which is\n  also true of a replay under a wider config.\n- The rows' entries are built once, not per path.\n- EVERY_BUILTIN had no production caller and lives in the test helper.\n- Comments and docs: no socket arm exists yet; the declaration log line fires\n  when a hold moves and the render event carries builtins= on every frame;\n  §1 says each declared built-in; the memory paragraph said one thing twice.\n\nRejected, with reasons on the ticket: a whole-row read declares its parts\n(an Undeclared inside a found object would be the silent hole the ticket\nforbids); lead/trail are synthesis-only and never in the config the walk\nreads.\n"
+        },
+        {
+          "sha": "3a370ddd496a1d9f98936b1a82ebec997aecacf5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T00:48:39-07:00",
+          "message": "feat(facts): a renderer declares the built-ins its config reads, and Gather gathers only those (candybar-gather-renderer-76bb.6pj.opl)\n\nThe facts document is complete over what the renderer declared, not total:\nevery declared built-in and source has a key, and nothing else does. The\ndeclaration is one walk over every preset's placements, templates, partials\nand globals rules, mapped through the payload's rows to the built-ins each\npath reads; the doctor asks the same walk. The declared set is consulted once,\nwhere the lanes are declared, and every later stage iterates the lanes it is\nhanded.\n\nThe payload is a table of rows, each composed from exactly the facts it names\n(a compile error to read another), in one of two phases the type carries: a\nturn row once per document, a draw row at the draw's instant (today). A read\nof an undeclared built-in throws naming the variable and the fact, so the\nsegment draws ⚠ and check fails, never a blank. The render event and the\nview-declared log line carry builtins=. FACTS_VERSION 2.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c8e21dd0a0271567df669f0c7b81bc241551c07a",
@@ -56,28 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T01:39:09-07:00",
           "message": "test(lanes): a session's drawn bar carries its session-pane ⚠, through the draw a request takes (candybar-gather-renderer-76bb.1dh.trm)\n\nThe checkpoint stamps each tick from its Claude Code's record on the disk,\nthe request arm records the mismatch run in its turn, and the daemon's draw\nlists the ⚠; the list is read from the session's recording. An unconfirmed\nstamp and a lasted mismatch each list the session-pane message; a confirmed\ntick, a mismatch inside the race and a /clear straggler list none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-674",
-      "ref": "refs/pull/674/merge",
-      "sha": "4083b2ca24abe0ca41b7ef6d44446509b93b4f20",
-      "timestamp": "2026-11-07T08:28:07.094Z",
-      "commits": [
-        {
-          "sha": "4083b2ca24abe0ca41b7ef6d44446509b93b4f20",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:27:10-07:00",
-          "message": "Merge 3a370ddd496a1d9f98936b1a82ebec997aecacf5 into 583ae6d50351c0a6103cc959b6994201e0ad538f\n"
-        },
-        {
-          "sha": "3a370ddd496a1d9f98936b1a82ebec997aecacf5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:48:39-07:00",
-          "message": "feat(facts): a renderer declares the built-ins its config reads, and Gather gathers only those (candybar-gather-renderer-76bb.6pj.opl)\n\nThe facts document is complete over what the renderer declared, not total:\nevery declared built-in and source has a key, and nothing else does. The\ndeclaration is one walk over every preset's placements, templates, partials\nand globals rules, mapped through the payload's rows to the built-ins each\npath reads; the doctor asks the same walk. The declared set is consulted once,\nwhere the lanes are declared, and every later stage iterates the lanes it is\nhanded.\n\nThe payload is a table of rows, each composed from exactly the facts it names\n(a compile error to read another), in one of two phases the type carries: a\nturn row once per document, a draw row at the draw's instant (today). A read\nof an undeclared built-in throws naming the variable and the fact, so the\nsegment draws ⚠ and check fails, never a blank. The render event and the\nview-declared log line carry builtins=. FACTS_VERSION 2.\n"
         }
       ]
     },

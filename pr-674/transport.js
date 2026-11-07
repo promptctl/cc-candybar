@@ -35583,7 +35583,7 @@ function sparkle(curve, glow, z) {
   requireCurve(curve);
   requireZ("sparkle", z);
   const PER = 8;
-  const ROWS2 = 3;
+  const ROWS3 = 3;
   const HALO = 5;
   const HOP = 5;
   const GLIDE = 5;
@@ -35601,7 +35601,7 @@ function sparkle(curve, glow, z) {
     const s = u / TURN - n - at;
     return {
       x: left + home * PER + HOP * (2 * hash(n, id2 + 4) - 1) + GLIDE * strength * (2 * hash(n, id2 + 5) - 1) * given(FLASH, s, strength) + 1.5 * noise(id2, 0.1, t2 * 0.035),
-      y: top + k * ROWS2 + 0.6 * noise(id2, 2.2, t2 * 0.035),
+      y: top + k * ROWS3 + 0.6 * noise(id2, 2.2, t2 * 0.035),
       glow: lit * swell(FLASH, s, strength)
     };
   };
@@ -35610,7 +35610,7 @@ function sparkle(curve, glow, z) {
     const [left, right] = extent(cells.map((cell3) => cell3.col));
     const [top, bottom] = extent(cells.map((cell3) => cell3.row));
     const slot = (col) => (col - left) / PER - 0.5;
-    const band = (row2) => (row2 - top) / ROWS2;
+    const band = (row2) => (row2 - top) / ROWS3;
     const [i0, i1] = [Math.ceil(slot(left - REACH)), Math.floor(slot(right + REACH))];
     const [k0, k1] = [Math.ceil(band(top - REACH_ROWS)), Math.floor(band(bottom + REACH_ROWS))];
     const flies = Array.from({ length: k1 - k0 + 1 }, (_, k) => Array.from({ length: i1 - i0 + 1 }, (_2, i) => firefly(i0 + i, k0 + k, t2, left, top)));
@@ -53721,7 +53721,7 @@ function resolvePath(obj, path47) {
 var UndeclaredReadError = class extends Error {
   constructor(variable, fact) {
     super(
-      `variable "${variable}" reads ${fact}, which this config's declaration does not name`
+      `variable "${variable}" reads ${fact}, which the declaration its facts were gathered under does not name`
     );
     this.name = "UndeclaredReadError";
   }
@@ -67473,12 +67473,28 @@ function segmentTemplates(config2, name) {
     ...Object.values(seg2.partials ?? {})
   ];
 }
-function pathsReached(config2, templates) {
+function layoutTemplates(config2, preset) {
+  const templates = [];
+  for (const node of walkNodes(presetRoot(config2, preset).node)) {
+    if (node.when !== void 0) templates.push(node.when);
+  }
+  const globals = presetGlobals(config2, preset);
+  for (const slot of EXPRESSION_SLOTS) {
+    const rule = globals[slot];
+    if (isExpression(rule)) templates.push(rule);
+  }
+  return templates;
+}
+var runsUnread = (decl) => decl.kind === "shell" || decl.kind === "file";
+function pathsReached(config2, templates, roots = []) {
   const reads = valueReadsOf(config2);
   const decls = new Map(declaredVariables(config2));
-  const frontier = templates.flatMap(
-    (template) => reads.ofTemplate(template).flatMap(({ reaches }) => reaches)
-  );
+  const frontier = [
+    ...roots,
+    ...templates.flatMap(
+      (template) => reads.ofTemplate(template).flatMap(({ reaches }) => reaches)
+    )
+  ];
   const visited = /* @__PURE__ */ new Set();
   const paths2 = /* @__PURE__ */ new Set();
   while (frontier.length > 0) {
@@ -67498,19 +67514,15 @@ function segmentInputPaths(config2, name, whens) {
 function configPayloadPaths(config2) {
   const templates = [];
   for (const preset of presetNames(config2.presets)) {
+    templates.push(...layoutTemplates(config2, preset));
     for (const node of walkNodes(presetRoot(config2, preset).node)) {
-      if (node.when) templates.push(node.when);
       if (node.kind === "segment") {
         templates.push(...segmentTemplates(config2, node.name));
       }
     }
-    const globals = presetGlobals(config2, preset);
-    for (const slot of EXPRESSION_SLOTS) {
-      const rule = globals[slot];
-      if (isExpression(rule)) templates.push(rule);
-    }
   }
-  return pathsReached(config2, templates);
+  const roots = [...declaredVariables(config2)].filter(([, decl]) => runsUnread(decl)).map(([name]) => name);
+  return pathsReached(config2, templates, roots);
 }
 
 // src/daemon/render-payload.ts
@@ -67629,7 +67641,6 @@ function declaredBuiltins(names) {
     BUILTIN_FACTS.filter((name) => named3.has(name))
   );
 }
-var EVERY_BUILTIN = declaredBuiltins(BUILTIN_FACTS);
 function builtinOf(facts, name) {
   const fact = facts.builtins[name];
   return fact ?? undeclaredOf(name);
@@ -68168,6 +68179,7 @@ var PAYLOAD_ROWS = {
 };
 var TURN_ROWS = PAYLOAD_ROWS;
 var DRAW_ROWS = PAYLOAD_ROWS;
+var ROWS2 = Object.entries({ ...TURN_ROWS, ...DRAW_ROWS });
 function rowFacts(document, row2) {
   const facts = {};
   for (const name of row2.facts) {
@@ -68196,10 +68208,7 @@ function builtinsReadAt(paths2) {
   const under2 = (outer, inner) => inner === outer || inner.startsWith(`${outer}.`);
   const read2 = /* @__PURE__ */ new Set();
   for (const path47 of paths2) {
-    for (const [root, row2] of Object.entries({
-      ...TURN_ROWS,
-      ...DRAW_ROWS
-    })) {
+    for (const [root, row2] of ROWS2) {
       if (!under2(root, path47) && !under2(path47, root)) continue;
       for (const name of row2.facts) read2.add(name);
       for (const [name, fields2] of Object.entries(row2.parts)) {
@@ -69865,7 +69874,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.11";
+var PACKAGE_VERSION = "1.208.12";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -83113,21 +83122,11 @@ function* variablesOf(cfg) {
   }
 }
 function* templatesOf(config2) {
-  for (const seg2 of Object.values(config2.segments)) {
-    for (const t2 of [seg2.template, seg2.bg, seg2.fg, seg2.when]) {
-      if (t2 !== void 0) yield t2;
-    }
-    yield* Object.values(seg2.partials ?? {});
+  for (const name of Object.keys(config2.segments)) {
+    yield* segmentTemplates(config2, name);
   }
   for (const preset of presetNames(config2.presets)) {
-    for (const node of walkNodes(presetRoot(config2, preset).node)) {
-      if (node.when !== void 0) yield node.when;
-    }
-    const globals = presetGlobals(config2, preset);
-    for (const slot of EXPRESSION_SLOTS) {
-      const rule = globals[slot];
-      if (isExpression(rule)) yield rule;
-    }
+    yield* layoutTemplates(config2, preset);
   }
   for (const [, v] of variablesOf(config2)) {
     for (const [, t2] of variableTemplates(v)) yield t2;
@@ -86264,8 +86263,10 @@ var LANE_SETUP = {
       };
     },
     // The installed mod draws nothing while the lane is off: the daemon
-    // refuses its subscriber, and it hands the band on.
-    off: async () => done("nothing to stop: the band mod draws nothing while the lane is off")
+    // refuses its subscriber, which ends its child, and it hands the band on.
+    // It stays installed, because the switch is a directory's config while
+    // the install is every session's under the Claude config dir.
+    off: async () => done("nothing to stop: the band mod ends its child once the lane is off")
   },
   statusline: {
     on: async (run3, host, edge) => {
