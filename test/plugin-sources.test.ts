@@ -790,9 +790,13 @@ describe("the view declares the sources its config declares", () => {
 
 // [LAW:behavior-not-structure] The document a session's view holds
 // (src/facts/session-facts.ts), read from the view's source as the renderer
-// will: total, restamped in the turn an owner's reading moves, and one update
-// for every session.
+// will: complete over the built-ins and sources its config declares,
+// restamped in the turn an owner's reading moves, and one update for every
+// session.
 describe("a session's facts document", () => {
+  // What the test's config declares: it merges over the bundled default,
+  // whose presets place every built-in but tmux, so a session in a pane still
+  // gathers no tmux fact for it.
   const BUILTINS = [
     "activity",
     "autocompact",
@@ -805,7 +809,6 @@ describe("a session's facts document", () => {
     "pr",
     "session",
     "speed",
-    "tmux",
     "today",
   ];
   const NEWER = restamp(
@@ -814,7 +817,7 @@ describe("a session's facts document", () => {
     instantOf(new Date(1_700_000_000_000)),
   );
 
-  test("is total as the view opens; a declared source not answered yet is pending, not missing", () => {
+  test("holds every declared built-in as the view opens, and no other; a declared source not answered yet is pending, not missing", () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
     const doc = view.source.facts();

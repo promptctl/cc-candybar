@@ -18,7 +18,10 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { diagnosticsProjection } from "../src/render/diagnostics";
 import { presetNames } from "../src/config/presets";
-import { renderOptionsOf, todayOf } from "../src/daemon/render-payload";
+import {
+  projectDrawFields,
+  renderOptionsOf,
+} from "../src/daemon/render-payload";
 import { drawDsl } from "../src/dsl/render";
 import { ansiOf } from "../src/render/frame";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -55,7 +58,7 @@ async function drawnUnder(preset: string | null) {
     {
       drawing: { by: "request" },
       feeds: UNFOLLOWED_FEEDS,
-      today: todayOf(view.source.facts().builtins.today, AT),
+      ...projectDrawFields(view.source.facts(), AT),
       diagnostics: diagnosticsProjection([]),
     },
     AT,

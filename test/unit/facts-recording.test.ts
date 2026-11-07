@@ -702,7 +702,7 @@ test("a pending that crossed as JSON is a pending, not a value", () => {
     "line 1",
   );
   expect(parsed.builtins.session).toEqual({ kind: "pending", why: "unread" });
-  expect(parsed.builtins.git.kind).toBe("ok");
+  expect(parsed.builtins.git?.kind).toBe("ok");
 });
 
 // Where a play's step is drawn or arrives, from the clock's start.

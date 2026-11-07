@@ -66,6 +66,10 @@ import {
   type DiagnosticSeverity,
 } from "../render/diagnostics";
 
+// The built-ins this build knows, which a recorded document's keys are read
+// against.
+const BUILTIN_NAMES: ReadonlySet<string> = new Set(BUILTIN_FACTS);
+
 // One pushed document and the instant its stamp was taken at: what the player
 // replays, and what the recorder writes.
 export interface FactsLine {
@@ -269,12 +273,15 @@ export function parseSessionFacts(json: unknown, where: string): SessionFacts {
   }
   // [LAW:types-are-the-program] Each built-in's value is its owner's shape
   // carried as JSON, which the type names and this parser takes as read: the
-  // one cast, here, is that claim.
+  // one cast, here, is that claim. The keys are the built-ins the recorded
+  // renderer declared, so a name this build does not know is refused.
   const builtins = Object.fromEntries(
-    BUILTIN_FACTS.map((name) => [
-      name,
-      parseFact(builtinsJson[name], `${where} builtins.${name}`),
-    ]),
+    Object.entries(builtinsJson).map(([name, fact]) => {
+      if (!BUILTIN_NAMES.has(name)) {
+        throw new FactParseError(where, `has no built-in named ${name}`);
+      }
+      return [name, parseFact(fact, `${where} builtins.${name}`)];
+    }),
   ) as unknown as BuiltinFacts;
   if (!isPlainObject(json.sources)) {
     throw new FactParseError(where, "has no `sources`");

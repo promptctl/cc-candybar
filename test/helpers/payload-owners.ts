@@ -31,12 +31,14 @@ import type { Instant } from "../../src/utils/instant";
 import {
   ABSENT,
   isPending,
+  isUndeclared,
   ok,
   pendingOf,
   type Outcome,
   type PayloadNode,
   type Pending,
   type Reading,
+  type Undeclared,
 } from "../../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../../src/utils/reading";
 import { HostService } from "../../src/segments/host";
@@ -45,16 +47,20 @@ import { instantOf } from "../../src/utils/instant";
 import {
   composePayload,
   declareLanes,
+  projectDrawFields,
   readingsOf,
   settlePayload,
-  todayOf,
   type ConfigFileFacts,
   type DrawInputs,
   type DrawnPayload,
-  type KeyedOwners,
+  type LaneOwners,
   type PayloadInputs,
   type RenderPayloadDeps,
 } from "../../src/daemon/render-payload";
+import {
+  EVERY_BUILTIN,
+  type DeclaredBuiltins,
+} from "../../src/facts/session-facts";
 import type { EffectiveGlobals } from "../../src/config/effective-globals";
 import type { ClientHints } from "../../src/daemon/protocol";
 import { EMPTY_HISTORY_DEPTH } from "../../src/daemon/settings-history";
@@ -133,19 +139,23 @@ export function fakeGit(
   };
 }
 
-// The payload a view's source derives, over the owners the inputs name: the
-// facts document stamped from what the owners hold, and the payload composed
-// from it.
-export function payloadOf(inputs: PayloadInputs, draw: DrawInputs) {
-  const document = assembleFacts(
+// The facts document stamped from what the owners the inputs name hold.
+function documentOf(inputs: PayloadInputs) {
+  return assembleFacts(
     undefined,
     sessionIdOf(inputs.hookData.session_id),
     { ...readingsOf(inputs), runs: new Map() },
     pendingOf("unread"),
     instantOf(new Date(0)),
   );
+}
+
+// The payload a view's source derives, over the owners the inputs name: the
+// facts document stamped from what the owners hold, and the payload composed
+// from it.
+export function payloadOf(inputs: PayloadInputs, draw: DrawInputs) {
   return composePayload(
-    document,
+    documentOf(inputs),
     {
       hookData: inputs.hookData,
       hints: inputs.hints,
@@ -324,11 +334,12 @@ export function absentOwners() {
 }
 
 // A request's payload as the daemon draws one: the lanes declared over the
-// owners at the request's facts and closure, as the session's view declares
-// them (brandon-unfiled-3248.8ro6, 4a), the request's refresh and wait
-// (settlePayload), then the view's payload as it stands (payloadOf) with the
-// draw's own projections beside it — `today` at `at`, no feeds. The failures
-// it projected are logged as the daemon's request logs them.
+// owners at the request's facts, as the session's view declares them
+// (brandon-unfiled-3248.8ro6, 4a) for a config that reads `builtins` (every
+// one unless the test says), the request's refresh and wait (settlePayload),
+// then the view's payload as it stands (payloadOf) with the draw's own
+// projections beside it — `today` at `at`, no feeds. The failures it
+// projected are logged as the daemon's request logs them.
 export async function requestPayload(
   hookData: ClaudeHookData,
   at: Instant,
@@ -337,12 +348,13 @@ export async function requestPayload(
   effective: EffectiveGlobals,
   hints: ClientHints,
   configFacts: ConfigFileFacts,
+  builtins: DeclaredBuiltins = EVERY_BUILTIN,
 ): Promise<DrawnPayload> {
   const { lanes } = declareLanes(
-    deps as unknown as KeyedOwners,
+    deps as unknown as LaneOwners,
     new HoldsClass(),
     { sessionId: sessionIdOf(hookData.session_id), hookData, cwd, hints },
-    new Map(),
+    { builtins, sources: new Map() },
   );
   const inputs: PayloadInputs = {
     hookData,
@@ -360,28 +372,33 @@ export async function requestPayload(
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,
-    today: todayOf(readingsOf(inputs).today, at),
+    ...projectDrawFields(documentOf(inputs), at),
   };
 }
 
 // A field of a request's payload, which its wait answered: a request draws
-// once every lane it waits on has landed, so one still pending is a bug.
-export function settled<T extends PayloadNode>(value: T | Pending): T {
+// once every lane it waits on has landed, so one still pending is a bug, and
+// so is one its declaration did not name.
+export function settled<T extends PayloadNode>(
+  value: T | Pending | Undeclared,
+): T {
   if (isPending(value)) throw new Error("pending after the request settled");
+  if (isUndeclared(value)) throw new Error(`${value.fact} is not declared`);
   return value;
 }
 
-// The lanes a view declared at `facts` over `owners` and every lane read, for
-// a test that draws frames over deps it built itself.
+// The lanes a view declared at `facts` over `owners`, of every built-in unless
+// the test says, for a test that draws frames over deps it built itself.
 export function declaredLanes(
   owners: unknown,
   facts: Parameters<typeof declareLanes>[2],
+  builtins: DeclaredBuiltins = EVERY_BUILTIN,
 ): () => ReturnType<typeof declareLanes>["lanes"] {
   const { lanes } = declareLanes(
-    owners as KeyedOwners,
+    owners as LaneOwners,
     new HoldsClass(),
     facts,
-    new Map(),
+    { builtins, sources: new Map() },
   );
   return () => lanes;
 }

@@ -41,12 +41,13 @@ import type { JsonValue } from "../var-system/types";
 import { assembleFacts } from "./facts-assembly";
 import type { PayloadProviders } from "./payload-providers";
 import {
+  builtinsFact,
   declareLanes,
   readingsOf,
   settledLanes,
   settlePayload,
   type DeclaredLanes,
-  type DeclaredSources,
+  type LaneDeclaration,
   type PayloadInputs,
   type Readings,
   type Refreshed,
@@ -55,14 +56,6 @@ import {
   unstamped,
 } from "./render-payload";
 import type { SessionId } from "./session-id";
-
-// What a view declares of a session beyond the request it draws by: the
-// plugin sources its config declares, at the storage keys the state's build
-// took for them. Every built-in is gathered, so nothing a layout places is
-// declared.
-export interface FollowDeclaration {
-  readonly sources: DeclaredSources;
-}
 
 // What a view's source reads of a follow: the document as the source last
 // stamped it, with the instant of that stamp (one line of a recording, which
@@ -92,7 +85,7 @@ export interface Followed extends FollowedFacts {
   // hints or another directory. Synchronous,
   // in the caller's own turn, so a frame drawn in that turn draws the view
   // declared for it.
-  follow(facts: ViewFacts, declaration: FollowDeclaration): void;
+  follow(facts: ViewFacts, declaration: LaneDeclaration): void;
   // What a request arriving at `at` starts of the facts. `at` is the request's
   // instant, so what is sampled at it (tok/s) and what is drawn at it read one
   // clock reading.
@@ -111,9 +104,12 @@ export interface Followed extends FollowedFacts {
 
 export interface Facts {
   // A view follows the request's session at the request it draws by and what
-  // it declares beyond it. A follow whose first document cannot be made
-  // throws, having released what it took.
-  follow(facts: ViewFacts, declaration: FollowDeclaration): Followed;
+  // it declares beyond it. The declaration rides the follow because it is the
+  // config's, fixed for the view's life (a config change is a new state and a
+  // new view); the socket arm's `declare` message is that wire's spelling of
+  // the same value. A follow whose first document cannot be made throws,
+  // having released what it took.
+  follow(facts: ViewFacts, declaration: LaneDeclaration): Followed;
 }
 
 // ─── The in-process arm ──────────────────────────────────────────────────────
@@ -306,7 +302,7 @@ export function inProcessFacts({
       // follow's dispose closes it.
       const lanesFor = (
         facts: ViewFacts,
-        { sources }: FollowDeclaration,
+        declaration: LaneDeclaration,
       ): DeclaredLanes => {
         try {
           const {
@@ -314,7 +310,7 @@ export function inProcessFacts({
             acquired,
             released,
           } = holds.declare(() =>
-            declareLanes(providers, holds, facts, sources),
+            declareLanes(providers, holds, facts, declaration),
           );
           for (const fault of faults) {
             log("error", `session view declaration threw sid=${sid} ${fault}`);
@@ -322,10 +318,12 @@ export function inProcessFacts({
           // [LAW:verifiable-goals] A declaration that moved a hold — a request
           // naming another key — says so; one that kept what the view held,
           // every other request's, writes nothing.
+          // [LAW:nothing-unseen] It names the built-ins it declared, so a lane
+          // left out on purpose is told from one that never ran.
           if (acquired + released > 0) {
             log(
               "info",
-              `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds.size}`,
+              `session view declared sid=${sid} builtins=${builtinsFact(declaration.builtins)} acquired=${acquired} released=${released} held=${holds.size}`,
             );
           }
           return lanes;
@@ -336,7 +334,7 @@ export function inProcessFacts({
           );
           return settledLanes(
             failed(`view declaration threw: ${String(e)}`, "read"),
-            [...sources.keys()],
+            declaration,
           );
         }
       };
@@ -413,9 +411,10 @@ export function inProcessFacts({
         },
       );
       // The first document is stamped here, with no prior, so the box is
-      // total from its first read and every field is pending until an owner
-      // answers. A throw in it is a failed follow: what the follow took is
-      // released, so a view that keeps failing to open leaks nothing.
+      // complete from its first read and every declared field is pending
+      // until an owner answers. A throw in it is a failed follow: what the
+      // follow took is released, so a view that keeps failing to open leaks
+      // nothing.
       try {
         const at = instantAt(clock);
         box = observable.box<Stamped>(

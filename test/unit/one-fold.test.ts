@@ -13,7 +13,7 @@ import {
 import { declaredVariables } from "../../src/config/loader/refs";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 import type { DslConfig } from "../../src/config/dsl-types";
-import { segmentInputPaths } from "../../src/doctor/data-needs";
+import { segmentInputPaths } from "../../src/config/payload-reads";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { EMPTY_DEFAULT, parseAndValidate, validateConfig } from "../helpers/parse-and-validate";
 

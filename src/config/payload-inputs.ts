@@ -12,8 +12,7 @@
 
 import type { VariableDecl } from "./dsl-types.js";
 import type { DiagnosticsProjection } from "../render/diagnostics.js";
-import type { TodayPayload } from "../daemon/render-payload.js";
-import type { Pending } from "../utils/outcome.js";
+import type { DrawFields } from "../daemon/render-payload.js";
 import type { Drawing, LaneFeeds } from "./lanes.js";
 import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
 import {
@@ -249,7 +248,8 @@ export type DrawProjection = keyof typeof DRAW_PROJECTIONS;
 
 // What each projection is, as a draw hands it.
 interface ProjectionValues {
-  readonly today: TodayPayload | Pending | undefined;
+  // [LAW:one-source-of-truth] The today row's value, as the draw rows project it.
+  readonly today: DrawFields["today"];
   readonly feeds: LaneFeeds;
   readonly drawing: Drawing;
   readonly diagnostics: DiagnosticsProjection;

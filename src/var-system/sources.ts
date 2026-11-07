@@ -35,11 +35,13 @@ import {
   failed,
   orElse,
   isPending,
+  isUndeclared,
   pendingOf,
   type Outcome,
   type PayloadNode,
   type Pending,
   type Reading,
+  type Undeclared,
 } from "../utils/outcome.js";
 import type { SourceParse } from "./parse.js";
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
@@ -241,34 +243,55 @@ const UNBOUND: InputSource = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // [LAW:parse-dont-validate] What a path through a payload found: a source that
-// has not answered, or a value. The value is wrapped so a source's own JSON,
-// which can spell anything, is never mistaken for the daemon's pending.
+// has not answered, a built-in the renderer did not declare, or a value. The
+// value is wrapped so a source's own JSON, which can spell anything, is never
+// mistaken for the daemon's pending or undeclared.
 export type Resolved =
   | Pending
+  | Undeclared
   | { readonly kind: "found"; readonly value: unknown };
 
 export const found = (value: unknown): Resolved => ({ kind: "found", value });
+
+// The daemon's own word at a payload node: not answered yet, or not declared.
+const unanswered = (node: PayloadNode): node is Pending | Undeclared =>
+  isPending(node) || isUndeclared(node);
 
 // Recursively resolves a dotted path through a plain object.
 // Finds undefined if any segment is absent or the traversed value is not an
 // object. [LAW:types-are-the-program] A pending node is a source that has not
 // answered yet, so every path through it is pending too: one `git: pending`
-// is every `git.*` input not answered, never each one's default.
+// is every `git.*` input not answered, never each one's default. An
+// undeclared node is the same for a built-in nobody gathers.
 //
 // A source's `ok` reading holds its document under `value`, and a document is
-// the user's JSON: from there down nothing is tested for pending, because a
-// file that says `{"kind":"pending"}` is a value.
+// the user's JSON: from there down nothing is tested, because a file that says
+// `{"kind":"pending"}` is a value.
 export function resolvePath(obj: unknown, path: string): Resolved {
   let cur = obj as PayloadNode;
   let inDocument = false;
   for (const part of path.split(".")) {
-    if (!inDocument && isPending(cur)) return cur;
+    if (!inDocument && unanswered(cur)) return cur;
     if (cur == null || typeof cur !== "object") return found(undefined);
     inDocument ||=
       part === "value" && (cur as { kind?: unknown }).kind === "ok";
     cur = (cur as Record<string, PayloadNode>)[part];
   }
-  return !inDocument && isPending(cur) ? cur : found(cur);
+  return !inDocument && unanswered(cur) ? cur : found(cur);
+}
+
+// [LAW:no-silent-failure] A read of a built-in the config's declaration does
+// not name: the walk that declares what a config reads missed this read, so
+// no owner gathers it. Thrown, never answered by a default — a default stands
+// in for data that failed, and this is no data at all — so the segment
+// reading it draws its ⚠ with the name, and `check` fails on it.
+export class UndeclaredReadError extends Error {
+  constructor(variable: string, fact: string) {
+    super(
+      `variable "${variable}" reads ${fact}, which this config's declaration does not name`,
+    );
+    this.name = "UndeclaredReadError";
+  }
 }
 
 // [LAW:parse-dont-validate] What a view's payload holds at a source's name,
@@ -276,6 +299,9 @@ export function resolvePath(obj: unknown, path: string): Resolved {
 // not answered, and a failure for anything else.
 function sourceReading(name: string, resolved: Resolved): Reading<JsonValue> {
   if (resolved.kind === "pending") return resolved;
+  if (resolved.kind === "undeclared") {
+    return failed(new UndeclaredReadError(name, resolved.fact).message, "read");
+  }
   const raw = resolved.value;
   if (raw === undefined) {
     return failed(
@@ -532,6 +558,11 @@ export class SourceRegistry {
         name,
         `variable "${name}" has no value yet: its source has not answered`,
       );
+    }
+    if (resolved.kind === "undeclared") {
+      const error = new UndeclaredReadError(name, resolved.fact);
+      this.recordError(name, error.message);
+      throw error;
     }
     const raw = resolved.value;
     if (raw === undefined) {

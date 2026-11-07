@@ -4,7 +4,14 @@ import type { Filesystem } from "../../disk/filesystem.js";
 import { chainName } from "../../config-hint.js";
 import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
-import { type DeclaredSources, type ViewFacts } from "../render-payload.js";
+import {
+  builtinsReadAt,
+  type DeclaredSources,
+  type LaneDeclaration,
+  type ViewFacts,
+} from "../render-payload.js";
+import { configPayloadPaths } from "../../config/payload-reads.js";
+import type { DeclaredBuiltins } from "../../facts/session-facts.js";
 import type { ManagedStorage, StorageKey } from "./managed-storage.js";
 import type { RendererLinks } from "../../click/renderer-links.js";
 import type { SessionId } from "../session-id.js";
@@ -77,7 +84,6 @@ import { digestOf, type Projection } from "../../utils/plain.js";
 import type {
   Facts,
   Followed,
-  FollowDeclaration,
   FollowedFacts,
   Settling,
 } from "../facts-source.js";
@@ -343,6 +349,10 @@ export interface DslRenderState {
   // teardown), so a reload — which builds its successor first — never closes
   // and reopens one, and no view touches a watch.
   readonly sources: DeclaredSources;
+  // [LAW:one-source-of-truth] The built-ins this config's draws can read, over
+  // every preset (src/config/payload-reads.ts): what each of its views
+  // declares, so a built-in no template reads is gathered by none of them.
+  readonly builtins: DeclaredBuiltins;
 }
 
 // The installed roots searched (every one watched), and the definitions —
@@ -1019,6 +1029,9 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
         rendering: installed.rendering,
       },
       sources: load.sources,
+      // Walked over the config the state draws, so what it declares is what
+      // its draws read.
+      builtins: builtinsReadAt(configPayloadPaths(config)),
     },
   };
 }
@@ -1299,8 +1312,8 @@ export interface ViewDeclaring<
 // [LAW:no-ambient-temporal-coupling] The view follows its session through the
 // facts source it is handed, declared over the request its renders draw by
 // (brandon-unfiled-3248.8ro6, step 3): a request naming other keys follows
-// again in the turn it lands. The layout places no hold, so a preset pick
-// moves none.
+// again in the turn it lands. What it declares is its config's over every
+// preset, so a preset pick moves no hold.
 //
 // [LAW:types-are-the-program] A view is never undeclared (step 4): it opens
 // with the request it is drawn for and follows in its opening turn, so its
@@ -1315,9 +1328,13 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // parsed: a later request of the view's names the same one.
   const { sessionId } = facts;
   // [LAW:dataflow-not-control-flow] What the view declares beyond its request
-  // is its config's sources, the same for every request: the facts are total,
-  // so nothing a layout places decides what is gathered.
-  const declaration: FollowDeclaration = { sources: state.sources };
+  // is its config's: the built-ins its draws can read over every preset, and
+  // its sources, the same for every request, so a session's pick of a layout
+  // decides nothing that is gathered.
+  const declaration: LaneDeclaration = {
+    builtins: state.builtins,
+    sources: state.sources,
+  };
   // [LAW:no-ambient-temporal-coupling] The opening follow, and each
   // request's, runs in its own call, never as a reaction's run: MobX holds a
   // reaction inside a batch (a reaction's effect, an action) until the batch

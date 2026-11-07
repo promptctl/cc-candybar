@@ -24,9 +24,10 @@ import { parseClientHints } from "../src/daemon/protocol";
 import { sessionIdOf } from "../src/daemon/session-id";
 import {
   declareLanes,
-  type KeyedOwners,
+  type LaneOwners,
   type ViewFacts,
 } from "../src/daemon/render-payload";
+import { EVERY_BUILTIN } from "../src/facts/session-facts";
 import {
   GitService,
   type GitInfo,
@@ -212,7 +213,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
       declareUser: () => settledLane(ABSENT),
     },
     usageStore: { declareToday: () => take("today") },
-  } as unknown as KeyedOwners;
+  } as unknown as LaneOwners;
   const facts: ViewFacts = {
     sessionId: sessionIdOf("s1"),
     hookData: {
@@ -231,17 +232,25 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   // The git hold an earlier declaration took goes with the one that threw.
   holds.declare(() => take("git"));
   const declared = holds.declare(() =>
-    declareLanes(owners, holds, facts, new Map()),
+    declareLanes(owners, holds, facts, {
+      builtins: EVERY_BUILTIN,
+      sources: new Map(),
+    }),
   );
+  // One throw is one fault, though git and the PR both ask the repository.
   expect(declared.result.faults).toEqual([
     expect.stringMatching(/^git: .*resolver bug/),
   ]);
-  // The lane that threw answers its failure; the others answer their own.
-  expect(declared.result.lanes.git.current()).toEqual(
+  // The lanes that read it answer its failure; the others answer their own.
+  const lanes = declared.result.lanes.builtins;
+  expect(lanes.git!.current()).toEqual(
     failed("git: Error: resolver bug", "read"),
   );
-  expect(declared.result.lanes.tmux.current()).toEqual(ABSENT);
-  expect(taken).toEqual(["git", "tmux", "today"]);
+  expect(lanes.pr!.current()).toEqual(
+    failed("git: Error: resolver bug", "read"),
+  );
+  expect(lanes.tmux!.current()).toEqual(ABSENT);
+  expect(taken).toEqual(["git", "today", "tmux"]);
   expect(released).toEqual(["git"]);
   expect(declared).toMatchObject({ acquired: 2, released: 1 });
 });

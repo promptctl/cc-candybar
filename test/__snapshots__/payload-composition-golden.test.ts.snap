@@ -155,7 +155,10 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
     },
     "tmux": {
       "pane": "%0",
-      "session": "work",
+      "session": {
+        "fact": "tmux",
+        "kind": "undeclared",
+      },
     },
     "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
     "transitions": {
@@ -341,7 +344,10 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
     },
     "tmux": {
       "pane": "%0",
-      "session": "work",
+      "session": {
+        "fact": "tmux",
+        "kind": "undeclared",
+      },
     },
     "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
     "transitions": {
@@ -527,7 +533,10 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
     },
     "tmux": {
       "pane": "%0",
-      "session": "work",
+      "session": {
+        "fact": "tmux",
+        "kind": "undeclared",
+      },
     },
     "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
     "transitions": {
@@ -713,7 +722,10 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
     },
     "tmux": {
       "pane": "%0",
-      "session": "work",
+      "session": {
+        "fact": "tmux",
+        "kind": "undeclared",
+      },
     },
     "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
     "transitions": {
@@ -899,7 +911,10 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
     },
     "tmux": {
       "pane": "%0",
-      "session": "work",
+      "session": {
+        "fact": "tmux",
+        "kind": "undeclared",
+      },
     },
     "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
     "transitions": {
@@ -1085,7 +1100,10 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
     },
     "tmux": {
       "pane": "%0",
-      "session": "work",
+      "session": {
+        "fact": "tmux",
+        "kind": "undeclared",
+      },
     },
     "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
     "transitions": {
@@ -1271,7 +1289,10 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
     },
     "tmux": {
       "pane": "%0",
-      "session": "work",
+      "session": {
+        "fact": "tmux",
+        "kind": "undeclared",
+      },
     },
     "transcript_path": "/home/tester/.claude/projects/x/test.jsonl",
     "transitions": {
@@ -1452,7 +1473,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
   },
   "tmux": {
     "pane": "%7",
-    "session": "work",
+    "session": {
+      "fact": "tmux",
+      "kind": "undeclared",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1631,7 +1655,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
   },
   "tmux": {
     "pane": "%7",
-    "session": "work",
+    "session": {
+      "fact": "tmux",
+      "kind": "undeclared",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1810,7 +1837,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
   },
   "tmux": {
     "pane": "%7",
-    "session": "work",
+    "session": {
+      "fact": "tmux",
+      "kind": "undeclared",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1989,7 +2019,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
   },
   "tmux": {
     "pane": "%7",
-    "session": "work",
+    "session": {
+      "fact": "tmux",
+      "kind": "undeclared",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -2168,7 +2201,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
   },
   "tmux": {
     "pane": "%7",
-    "session": "work",
+    "session": {
+      "fact": "tmux",
+      "kind": "undeclared",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -2348,7 +2384,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
   },
   "tmux": {
     "pane": "%7",
-    "session": "work",
+    "session": {
+      "fact": "tmux",
+      "kind": "undeclared",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -2529,7 +2568,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
   },
   "tmux": {
     "pane": "%7",
-    "session": "work",
+    "session": {
+      "fact": "tmux",
+      "kind": "undeclared",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -2705,7 +2747,10 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
   },
   "tmux": {
     "pane": "%7",
-    "session": "work",
+    "session": {
+      "fact": "tmux",
+      "kind": "undeclared",
+    },
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {

@@ -10,13 +10,20 @@ import {
   inProcessFacts,
   recordingFacts,
   type Facts,
-  type FollowDeclaration,
 } from "../src/daemon/facts-source";
-import { runsFactOf, type KeyedOwners } from "../src/daemon/render-payload";
+import {
+  runsFactOf,
+  type LaneDeclaration,
+  type LaneOwners,
+} from "../src/daemon/render-payload";
 import { sessionIdOf } from "../src/daemon/session-id";
 import { restamp, type Fact } from "../src/facts/fact";
 import type { FactsLine } from "../src/facts/recording";
-import type { UpdateNotice } from "../src/facts/session-facts";
+import {
+  declaredBuiltins,
+  EVERY_BUILTIN,
+  type UpdateNotice,
+} from "../src/facts/session-facts";
 import { Holds } from "../src/utils/holds";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { ok, pendingOf } from "../src/utils/outcome";
@@ -46,9 +53,11 @@ const GIT = {
   aheadBehind: ok({ ahead: 0, behind: 0 }),
   head: ok("c0ffee"),
 };
-// A config declaring no plugin source: every built-in is gathered whatever
-// the layout places, so a declaration names nothing else.
-const DECLARED: FollowDeclaration = { sources: new Map() };
+// A config that reads every built-in and declares no plugin source.
+const DECLARED: LaneDeclaration = {
+  builtins: EVERY_BUILTIN,
+  sources: new Map(),
+};
 
 const at0 = instantOf(AT);
 
@@ -84,7 +93,7 @@ describe("the in-process arm", () => {
           return settledLane(ok({ ...GIT, pullRequest: undefined }));
         },
       },
-    } as unknown as KeyedOwners;
+    } as unknown as LaneOwners;
     return { providers, held, released, lines, clock };
   }
   const arm = (
@@ -117,12 +126,54 @@ describe("the in-process arm", () => {
     expect(released).toEqual(["/a"]);
     // Every built-in is declared, so the opening takes one hold per owner
     // lane; the move takes and releases only the repo's.
+    const every = [...EVERY_BUILTIN].join(",");
     expect(lines.filter((l) => l.startsWith("session view declared"))).toEqual([
-      'session view declared sid="s1" acquired=3 released=0 held=3',
-      'session view declared sid="s1" acquired=1 released=1 held=3',
+      `session view declared sid="s1" builtins=${every} acquired=3 released=0 held=3`,
+      `session view declared sid="s1" builtins=${every} acquired=1 released=1 held=3`,
     ]);
     followed.dispose();
     expect(released).toEqual(["/a", "/b"]);
+  });
+
+  test("a config that reads only git starts no request's refresh, takes only the repository's hold, and its document holds git alone", async () => {
+    const { providers, held, lines } = owners();
+    const followed = arm(providers).follow(viewFacts("/a"), {
+      builtins: declaredBuiltins(["git"]),
+      sources: new Map(),
+    });
+    const { refreshed, landed } = followed.settle(instantOf(AT));
+    await landed;
+    expect([...refreshed.keys()]).toEqual([]);
+    expect(held).toEqual(["/a"]);
+    expect(lines).toContainEqual(
+      'session view declared sid="s1" builtins=git acquired=1 released=0 held=1',
+    );
+    expect(Object.keys(followed.stamped().facts.builtins)).toEqual(["git"]);
+    followed.dispose();
+  });
+
+  test("a config that reads the PR takes the repository's PR with it; one that does not, takes none", () => {
+    const asked: boolean[] = [];
+    const { providers } = owners();
+    const git = (
+      providers as unknown as {
+        gitProvider: { declare: (...args: unknown[]) => unknown };
+      }
+    ).gitProvider;
+    const declare = git.declare;
+    git.declare = (holds, dir, options) => {
+      asked.push((options as { showPullRequest?: boolean }).showPullRequest === true);
+      return declare(holds, dir, options);
+    };
+    for (const builtins of [["git"], ["pr"]] as const) {
+      arm(providers)
+        .follow(viewFacts("/a"), {
+          builtins: declaredBuiltins(builtins),
+          sources: new Map(),
+        })
+        .dispose();
+    }
+    expect(asked).toEqual([false, true]);
   });
 
   test("a lane whose owner throws at its declaration answers that failure, takes no hold, and is logged", () => {
@@ -158,10 +209,8 @@ describe("the in-process arm", () => {
     expect(released).toEqual(["/a"]);
   });
 
-  test("a declaration that throws whole is answered on every lane and logged, and a later declaration that returns takes its holds", () => {
-    const { providers, held, released, lines } = owners();
-    // The hints are read before any lane declares, outside every lane's own
-    // catch: a throw there is the declaration's, not a lane's.
+  test("a hint that throws is the fault of the lane that reads it, and every other lane declares", () => {
+    const { providers, held, lines } = owners();
     const broken = viewFacts("/a");
     const hints = Object.defineProperty({ ...broken.hints }, "tmux", {
       get: () => {
@@ -169,19 +218,48 @@ describe("the in-process arm", () => {
       },
     });
     const followed = arm(providers).follow({ ...broken, hints }, DECLARED);
+    const { builtins } = followed.stamped().facts;
+    expect(builtins.tmux).toMatchObject({
+      kind: "failed",
+      reason: expect.stringContaining("tmux: Error: hints bug"),
+    });
+    expect(builtins.git).toMatchObject({ kind: "ok" });
+    expect(held).toEqual(["/a"]);
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^session view declaration threw sid="s1" tmux: .*hints bug/,
+      ),
+    );
+    followed.dispose();
+  });
+
+  test("a declaration that throws whole is answered on every lane and logged, and a later declaration that returns takes its holds", () => {
+    const { providers, held, released, lines } = owners();
+    // A declaration whose sources cannot be walked throws outside every
+    // lane's own catch: the throw is the declaration's, not a lane's.
+    const unwalkable = new Map();
+    unwalkable[Symbol.iterator] = () => {
+      throw new Error("sources bug");
+    };
+    const followed = arm(providers).follow(viewFacts("/a"), {
+      ...DECLARED,
+      sources: unwalkable,
+    });
     expect(followed.stamped().facts.builtins.git).toMatchObject({
       kind: "failed",
       failedAt: "read",
       reason: expect.stringContaining(
-        "view declaration threw: Error: hints bug",
+        "view declaration threw: Error: sources bug",
       ),
     });
     expect(lines).toContainEqual(
       expect.stringMatching(
-        /^session view declaration threw sid="s1": .*hints bug/,
+        /^session view declaration threw sid="s1": .*sources bug/,
       ),
     );
-    expect(held).toEqual([]);
+    // What the lanes before the throw took is the holds' to release: the
+    // declaration that throws keeps what it held, here nothing.
+    expect(released).toEqual([]);
 
     followed.follow(viewFacts("/a"), DECLARED);
     expect(held).toEqual(["/a"]);

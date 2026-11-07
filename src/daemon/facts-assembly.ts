@@ -3,39 +3,15 @@ import { restamp, type Fact } from "../facts/fact";
 import {
   FACTS_VERSION,
   type BuiltinFacts,
-  type GitFacts,
   type RunFact,
   type SessionFacts,
   type SourceValue,
   type UpdateNotice,
 } from "../facts/session-facts";
-import type { GitInfo, PullRequest } from "../segments/git";
 import type { Instant } from "../utils/instant";
-import { ABSENT, ok, pendingOf, type Reading } from "../utils/outcome";
+import type { Reading } from "../utils/outcome";
 import type { SessionId } from "./session-id";
 import type { Readings } from "./render-payload";
-
-// A reading's value carried through `project`; every other arm as it stands.
-const over = <T, U>(
-  reading: Reading<T>,
-  project: (value: T) => U,
-): Reading<U> => (reading.kind === "ok" ? ok(project(reading.value)) : reading);
-
-// [LAW:types-are-the-program] The PR is its own fact (its cost is its own),
-// asked of the repository's lane: no repository has no PR, a repository that
-// failed to read cannot be asked, and a repository read without a PR lane has
-// not been asked.
-function prOf(git: Reading<GitInfo>): Reading<PullRequest> {
-  switch (git.kind) {
-    case "pending":
-    case "failed":
-      return git;
-    case "absent":
-      return ABSENT;
-    case "ok":
-      return git.value.pullRequest ?? pendingOf("unread");
-  }
-}
 
 // The same keys, each holding the very fact it held.
 const sameFacts = <T extends object>(now: T, held: T): boolean => {
@@ -45,10 +21,6 @@ const sameFacts = <T extends object>(now: T, held: T): boolean => {
     entries.every(([key, fact]) => Object.is(fact, Reflect.get(held, key)))
   );
 };
-
-function gitFactsOf({ pullRequest: _pullRequest, ...git }: GitInfo): GitFacts {
-  return git;
-}
 
 // [LAW:single-enforcer] The one definition of a session's facts document: every
 // owner's reading of this turn folded into its fact, each stamped by `restamp`
@@ -64,45 +36,36 @@ export function assembleFacts(
   update: Fact<UpdateNotice>,
   at: Instant,
 ): SessionFacts {
-  const { lanes } = readings;
-  const git = lanes.git;
-  const stamp = <T>(held: Fact<T> | undefined, reading: Reading<T>): Fact<T> =>
-    restamp(held, reading, at);
-  const held = prior?.builtins;
-
-  const builtins: BuiltinFacts = {
-    session: stamp(held?.session, lanes.usage),
-    today: stamp(held?.today, readings.today),
-    speed: stamp(held?.speed, lanes.speed),
-    context: stamp(held?.context, lanes.context),
-    metrics: stamp(held?.metrics, lanes.metrics),
-    activity: stamp(held?.activity, lanes.activity),
-    cache: stamp(held?.cache, lanes.cache),
-    autocompact: stamp(held?.autocompact, lanes.autoCompact),
-    git: stamp(held?.git, over(git, gitFactsOf)),
-    pr: stamp(held?.pr, prOf(git)),
-    tmux: stamp(
-      held?.tmux,
-      over(lanes.tmuxSession, (name) => ({ session: name })),
-    ),
-    hostName: stamp(held?.hostName, lanes.hostName),
-    hostUser: stamp(held?.hostUser, lanes.hostUser),
-  };
-  // [LAW:dataflow-not-control-flow] Every source the config declares has a
-  // lane, so a key: the declaration holds each one.
-  const sources: Record<string, Fact<SourceValue>> = Object.fromEntries(
-    [...lanes.sources].map(([name, reading]) => [
-      name,
-      stamp(prior?.sources[name], reading),
-    ]),
-  );
+  // [LAW:dataflow-not-control-flow] Every built-in and every source the
+  // renderer declared has a reading, so a key; one it did not declare has
+  // neither.
+  const stampAll = (
+    now: Iterable<readonly [string, Reading<unknown>]>,
+    held: Readonly<Record<string, Fact<unknown> | undefined>> | undefined,
+  ): Record<string, Fact<unknown>> =>
+    Object.fromEntries(
+      [...now].map(([name, reading]) => [
+        name,
+        restamp(held?.[name], reading, at),
+      ]),
+    );
+  // [LAW:types-are-the-program] Each fact is stamped from its own built-in's
+  // reading, so it holds that built-in's type: the one cast is that claim.
+  const builtins = stampAll(
+    Object.entries(readings.builtins) as Array<[string, Reading<unknown>]>,
+    prior?.builtins,
+  ) as BuiltinFacts;
+  const sources = stampAll(readings.sources, prior?.sources) as Record<
+    string,
+    Fact<SourceValue>
+  >;
 
   // A run keeps its prior entry whole while neither its reading nor its fault
   // moved, so the sameness below is identity, as for the sources.
   const runs: Record<string, RunFact> = Object.fromEntries(
     [...readings.runs].map(([digest, { reading, fault }]) => {
       const held = prior?.runs[digest];
-      const fact = stamp(held?.reading, reading as Reading<SourceValue>);
+      const fact = restamp(held?.reading, reading as Reading<SourceValue>, at);
       return [
         digest,
         held !== undefined && held.reading === fact && held.fault === fault

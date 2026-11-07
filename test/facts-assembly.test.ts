@@ -146,10 +146,7 @@ describe("a session's facts document", () => {
       T0,
     );
     // The expected document is read from the owners, never from the readings.
-    const lanes = r.deps.lanes();
-    const { pullRequest, ...gitRead } = (
-      lanes.git.current() as unknown as { value: Record<string, unknown> }
-    ).value;
+    const lanes = r.deps.lanes().builtins;
     const settings = claudeSettingsPath(claudeConfigDir(undefined, r.deps.home));
     const expected: Record<keyof BuiltinFacts, Fact<unknown>> = {
       session: restamp(undefined, r.held.usageStore.usageOf(SID), T0),
@@ -161,11 +158,11 @@ describe("a session's facts document", () => {
       activity: restamp(undefined, r.held.activityProvider.activityOf(SID), T0),
       cache: restamp(undefined, r.held.cacheExpiry.expiryOf(SID), T0),
       autocompact: restamp(undefined, r.held.autoCompact.stored(settings), T0),
-      git: restamp(undefined, ok(gitRead), T0),
-      pr: restamp(undefined, pullRequest as Outcome<unknown>, T0),
+      git: restamp(undefined, ok(GIT), T0),
+      pr: restamp(undefined, ok(PR), T0),
       tmux: restamp(undefined, ok({ session: "work" }), T0),
-      hostName: restamp(undefined, lanes.hostName.current(), T0),
-      hostUser: restamp(undefined, lanes.hostUser.current(), T0),
+      hostName: restamp(undefined, lanes.hostName!.current(), T0),
+      hostUser: restamp(undefined, lanes.hostUser!.current(), T0),
     };
     expect(Object.keys(doc.builtins).sort()).toEqual([...BUILTIN_KEYS]);
     expect(doc.builtins).toEqual(expected);
@@ -174,7 +171,7 @@ describe("a session's facts document", () => {
     expect(doc.seq).toBe(1);
   });
 
-  test("is total before any owner has answered, every fact pending", () => {
+  test("holds every declared built-in before any owner has answered, each pending", () => {
     const r = rig();
     const doc = assembleFacts(
       undefined,

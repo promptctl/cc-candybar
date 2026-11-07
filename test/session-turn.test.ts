@@ -26,7 +26,10 @@ import { sessionIdOf } from "../src/daemon/session-id";
 import { instantOf } from "../src/utils/instant";
 import { pendingOf } from "../src/utils/outcome";
 import type { Fact } from "../src/facts/fact";
-import type { UpdateNotice } from "../src/facts/session-facts";
+import {
+  BUILTIN_FACTS,
+  type UpdateNotice,
+} from "../src/facts/session-facts";
 import { perSetting } from "../src/config/setting-projections";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -229,23 +232,10 @@ describe("the all-pending document", () => {
     DEFAULT_DSL_CONFIG,
   );
   const waiting = { kind: "pending", why: "unread", landed: new Promise<void>(() => {}) } as const;
-  // Every owner has not answered yet.
+  // Every built-in declared, and no owner has answered yet.
   const pendingReadings: Readings = {
-    lanes: {
-      git: waiting,
-      usage: pendingOf("unread"),
-      context: pendingOf("unread"),
-      metrics: pendingOf("unread"),
-      activity: pendingOf("unread"),
-      tmuxSession: waiting,
-      hostName: waiting,
-      hostUser: waiting,
-      cache: pendingOf("unread"),
-      speed: pendingOf("unread"),
-      autoCompact: pendingOf("unread"),
-      sources: new Map(),
-    },
-    today: waiting,
+    builtins: Object.fromEntries(BUILTIN_FACTS.map((name) => [name, waiting])),
+    sources: new Map(),
     runs: new Map(),
     faults: [],
   };
@@ -296,4 +286,62 @@ describe("the all-pending document", () => {
       expect(frame.rows.length).toBeGreaterThan(0);
     },
   );
+});
+
+describe("a document missing a built-in its config reads", () => {
+  // The walk that declares what a config reads missed a read: the payload
+  // spells the fact `Undeclared`, and the segment reading it is a broken
+  // segment, whose ⚠ the bar draws and whose report `check` fails on — never a
+  // blank cell or its input's default. This harness turns that report into a
+  // throw (onSegmentError, test/helpers/session-bar.ts).
+  test("reports the reading segment broken, naming the variable and the fact", () => {
+    const config = parseAndValidate(
+      "<user>",
+      "{}",
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
+    const effective = resolveEffectiveGlobals(config, () => null, () => false);
+    const all = { kind: "pending", why: "unread", landed: new Promise<void>(() => {}) } as const;
+    const document = assembleFacts(
+      undefined,
+      sessionIdOf(SESSION),
+      {
+        builtins: Object.fromEntries(
+          BUILTIN_FACTS.filter((name) => name !== "git").map((name) => [name, all]),
+        ),
+        sources: new Map(),
+        runs: new Map(),
+        faults: [],
+      },
+      pendingOf("unread"),
+      instantOf(new Date(0)),
+    );
+    const bar = sessionBar("{}", 160);
+    cleanups.push(() => bar.dispose());
+    const render = () => bar.render(AT, () =>
+      composePayload(
+        document,
+        {
+          hookData: requestOf(dir).hookData,
+          hints: requestOf(dir).hints,
+          home: "/home/tester",
+        },
+        {
+          effective,
+          configFacts: {
+            unsaved: 0,
+            resettable: perSetting(() => false),
+            themeDefault: { differs: false },
+            configPath: null,
+          },
+          history: { undo: 0, redo: 0, sinceEdit: 0 },
+          back: 0,
+        },
+      ) as never,
+    );
+    expect(render).toThrow(
+      'gitaculous: variable "git.branch" reads git, which this config\'s declaration does not name',
+    );
+  });
 });

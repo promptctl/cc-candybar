@@ -46,12 +46,13 @@ import {
   ABSENT,
   failed,
   isPending,
+  isUndeclared,
   ok,
   pendingOf,
   type Outcome,
   type Pending,
-  type PendingWhy,
   type Reading,
+  type Undeclared,
 } from "../utils/outcome.js";
 import type { CacheExpiryProvider } from "../segments/cache.js";
 import {
@@ -69,9 +70,8 @@ import type {
   SpeedObservation,
 } from "./cache/session-usage-store.js";
 import { projectToday, type TodayFacts } from "./cache/today-facts.js";
-import type { ContextInfo, ContextProvider } from "../segments/context.js";
-import type { MetricsInfo, MetricsProvider } from "../segments/metrics.js";
-import type { UsageInfo } from "../segments/session.js";
+import type { ContextProvider } from "../segments/context.js";
+import type { MetricsProvider } from "../segments/metrics.js";
 import type {
   ActivityInfo,
   ActivityProvider,
@@ -95,19 +95,20 @@ import {
   type ValuedGlobals,
 } from "../config/globals-fields.js";
 import { dateOf, type Instant } from "../utils/instant.js";
-import {
-  REFRESH_LANES,
-  type RefreshFaults,
-  type RefreshLane,
-} from "./refresh-faults.js";
+import type { RefreshFaults, RefreshLane } from "./refresh-faults.js";
 import type { Fact } from "../facts/fact.js";
-import type {
-  FactsDiagnostic,
-  GitFacts as DocumentGitFacts,
-  RunFact,
-  SessionFacts,
-  SourceDigest,
-  SourceValue,
+import {
+  builtinOf,
+  declaredBuiltins,
+  type BuiltinName,
+  type BuiltinValues,
+  type DeclaredBuiltins,
+  type FactsDiagnostic,
+  type GitFacts as DocumentGitFacts,
+  type RunFact,
+  type SessionFacts,
+  type SourceDigest,
+  type SourceValue,
 } from "../facts/session-facts.js";
 import type { SessionId } from "./session-id.js";
 import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
@@ -317,8 +318,11 @@ export type SourcesPayload<P> = Readonly<
 
 // What a request is answered from: every source answered.
 export type RenderPayload = RenderPayloadOf<never>;
+// [LAW:types-are-the-program] A field a frame draws without an answer: not
+// answered yet, or filled by a built-in the renderer did not declare.
+export type Unanswered = Pending | Undeclared;
 // What a frame draws: every value as it stands.
-export type DrawnPayload = RenderPayloadOf<Pending>;
+export type DrawnPayload = RenderPayloadOf<Unanswered>;
 // [LAW:types-are-the-program] What a view keeps of it: everything but the
 // facts of the draw's own instant (DRAW_PROJECTIONS, which each draw hands
 // its binding), so no stored value moves with the clock.
@@ -410,13 +414,16 @@ export const PR_FIELDS: { readonly [F in keyof PrFieldTypes]: true } = {
 // The render event's `pr=`: the branch's PR state, `failed` when the forge
 // could not say, `earlier-<state>` when its PR was an older use of the
 // branch's name, `pending` when a PR the render reads is not answered yet,
-// `-` when the payload carries none.
+// `-` when the payload carries none, `undeclared` when the renderer does not
+// read it.
 export function prFactOf(
-  git: GitPayloadOf<Pending> | Pending | undefined,
+  git: GitPayloadOf<Unanswered> | Unanswered | undefined,
 ): string {
   if (isPending(git)) return "pending";
+  if (isUndeclared(git)) return "undeclared";
   const { prState, prError, prEarlier } = git ?? {};
   if (isPending(prState)) return "pending";
+  if (isUndeclared(prState)) return "undeclared";
   if (prState !== undefined) return prState;
   if (prError !== undefined) return "failed";
   if (prEarlier !== undefined) return `earlier-${String(prEarlier)}`;
@@ -806,12 +813,300 @@ export function refreshedFact(refreshed: Refreshed): string {
   );
 }
 
+// ─── Built-in lanes ──────────────────────────────────────────────────────────
+
+// The request's one refresh of its session's usage record, which the session,
+// today and speed lanes share.
+type SessionRequest = ReturnType<SessionUsageStore["request"]>;
+
+// What a request's arrival hands a lane's refresh: the instant its speed
+// sample is taken at, and the session's usage request, made by the first lane
+// that asks for it, so a declaration that reads none of the three makes none.
+export interface LaneRequest {
+  readonly at: Instant;
+  readonly usage: () => SessionRequest;
+}
+
+// A request's own refresh of one lane, named by the lane its timing and its
+// standing fault are kept under.
+export interface LaneRefresh {
+  readonly lane: RefreshLane;
+  readonly run: (request: LaneRequest) => Promise<unknown>;
+}
+
+// [LAW:types-are-the-program] One declared built-in, as every stage after its
+// declaration reads it: its reading as its owner holds it now; the refresh a
+// request's arrival starts, or none for a lane only its owner's period and
+// watch refresh; the first answer a request waits on while the lane has none,
+// or none for a lane a request never waits on; and the refresh's standing
+// fault. So refreshing, reading, waiting and stamping each iterate the lanes
+// they are handed and never ask which built-ins were declared.
+export interface BuiltinLane<T> {
+  readonly current: () => Reading<T>;
+  readonly refresh: LaneRefresh | null;
+  readonly landing: () => Promise<void> | null;
+  readonly fault: () => FactsDiagnostic | null;
+}
+
+export type BuiltinLanes = {
+  readonly [K in BuiltinName]?: BuiltinLane<BuiltinValues[K]>;
+};
+
+// [LAW:types-are-the-program] The one place the declared lanes are walked as
+// entries: an object keyed by a declared name holds that name's lane, and
+// iteration keeps the declaration's order.
+function laneEntries(
+  lanes: BuiltinLanes,
+): ReadonlyArray<readonly [BuiltinName, BuiltinLane<unknown>]> {
+  return Object.entries(lanes) as Array<[BuiltinName, BuiltinLane<unknown>]>;
+}
+
+// A lane whose value has never answered carries its landing: what a request
+// waits on.
+function landingOf(current: Current<unknown>): Promise<void> | null {
+  return current.kind === "pending" && current.why === "unread"
+    ? current.landed
+    : null;
+}
+
+// [LAW:one-type-per-behavior] A keyed lane: the entry its declaration took,
+// read as it stands, refreshed by its owner alone, and waited on for its first
+// answer (git, tmux, the host's name and user).
+function keyedLane<T>(lane: Lane<T>): BuiltinLane<T> {
+  return {
+    current: () => lane.current(),
+    refresh: null,
+    landing: () => landingOf(lane.current()),
+    fault: () => null,
+  };
+}
+
+// A built-in answering one outcome for good: a session outside tmux, or a
+// lane whose declaration threw. [LAW:one-type-per-behavior] A keyed lane over
+// a settled one: read as it stands, refreshed by nobody, and an answered
+// outcome is never waited on.
+const settledBuiltin = <T>(outcome: Outcome<T>): BuiltinLane<T> =>
+  keyedLane(settledLane(outcome));
+
+// A keyed lane's value carried through `project`, its landing kept.
+function mapLane<T, U>(lane: Lane<T>, project: (value: T) => U): Lane<U> {
+  return {
+    current: () => {
+      const current = lane.current();
+      return current.kind === "ok" ? ok(project(current.value)) : current;
+    },
+  };
+}
+
+// What a lane's constructor reads of the declaration it serves: the owners,
+// the holds it takes in, the request its keys come from, and the one
+// repository read git and the PR both ask.
+interface LaneContext {
+  readonly owners: LaneOwners;
+  readonly holds: Holds;
+  readonly facts: ViewFacts;
+  readonly repo: () => Lane<GitInfo>;
+}
+
+// [LAW:single-enforcer] A lane a request refreshes: its owner's stored value
+// for the session, read through the lane's standing fault. A refresh's
+// contract is to answer, so a throw is a bug in its owner: a read that throws
+// is logged here, the one site a read's throw is logged (a frame's included,
+// whose failures go nowhere else), and answered as that lane's failure, so it
+// costs its own cells, never the bar; a refresh that threw is that failure
+// (RefreshFaults) until one runs clean, while a refresh that answered failed
+// was logged by its owner, which met it.
+function sessionLane<T>(
+  { owners, facts }: LaneContext,
+  lane: RefreshLane,
+  read: () => Reading<T>,
+  run: LaneRefresh["run"],
+): BuiltinLane<T> {
+  const sessionId = facts.hookData.session_id;
+  const standing = () => owners.faults.of(sessionId, lane);
+  return {
+    current: () => {
+      const fault = standing();
+      if (fault !== undefined) return fault;
+      try {
+        return read();
+      } catch (e) {
+        owners.log("error", `${lane} read threw: ${inspect(e)}`);
+        return failed(`${lane}: ${String(e)}`, "read");
+      }
+    },
+    refresh: { lane, run },
+    landing: () => null,
+    fault: () => {
+      const fault = standing();
+      return fault === undefined ? null : { lane, reason: fault.reason };
+    },
+  };
+}
+
+// [LAW:types-are-the-program] The PR as a fact of its own (its cost is its
+// own), asked of the repository's read: no repository has no PR, a repository
+// that failed to read cannot be asked, and a repository read without its PR
+// has not been asked.
+function prOf(git: Reading<GitInfo>): Reading<PullRequest> {
+  switch (git.kind) {
+    case "pending":
+    case "failed":
+      return git;
+    case "absent":
+      return ABSENT;
+    case "ok":
+      return git.value.pullRequest ?? pendingOf("unread");
+  }
+}
+
+function gitFactsOf({
+  pullRequest: _pullRequest,
+  ...git
+}: GitInfo): DocumentGitFacts {
+  return git;
+}
+
+// [LAW:single-enforcer] The one constructor of each built-in's lane, which is
+// where a keyed lane takes its hold and a session lane closes over its owner.
+// `declareLanes` calls it for each declared built-in, once per declaration, so
+// a built-in nobody declares takes no hold and starts no refresh.
+const BUILTIN_LANES: {
+  readonly [K in BuiltinName]: (
+    ctx: LaneContext,
+  ) => BuiltinLane<BuiltinValues[K]>;
+} = {
+  session: (ctx) =>
+    sessionLane(
+      ctx,
+      "session",
+      () =>
+        ctx.owners.usageStore.usageOf(
+          ctx.facts.hookData.session_id,
+          ctx.facts.hookData,
+        ),
+      (request) => request.usage().usage(ctx.facts.hookData),
+    ),
+  // Today holds its directory set's day sums and refreshes the session's own
+  // records: the sums land through their scan's store and are never waited
+  // on (waitsOf), the session's days through the request's refresh.
+  today: (ctx) => {
+    const sums = ctx.owners.usageStore.declareToday(
+      ctx.holds,
+      ctx.facts.hints.claudeConfigDir,
+    );
+    return sessionLane(
+      ctx,
+      "today",
+      () =>
+        todayReading(
+          sums,
+          ctx.owners.usageStore,
+          ctx.facts.hookData.session_id,
+        ),
+      (request) => request.usage().today(),
+    );
+  },
+  // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
+  // lane reads, one sample per request: a frame takes none, so how often the
+  // bar is drawn moves no rate.
+  speed: (ctx) =>
+    sessionLane(
+      ctx,
+      "speed",
+      () => ctx.owners.usageStore.speedOf(ctx.facts.hookData.session_id),
+      (request) => request.usage().speed(dateOf(request.at).getTime()),
+    ),
+  context: (ctx) =>
+    sessionLane(
+      ctx,
+      "context",
+      () => ctx.owners.contextProvider.contextOf(ctx.facts.hookData),
+      () => ctx.owners.contextProvider.getContextInfo(ctx.facts.hookData),
+    ),
+  metrics: (ctx) =>
+    sessionLane(
+      ctx,
+      "metrics",
+      () =>
+        ctx.owners.metricsProvider.metricsOf(
+          ctx.facts.hookData.session_id,
+          ctx.facts.hookData,
+        ),
+      () =>
+        ctx.owners.metricsProvider.getMetricsInfo(
+          ctx.facts.hookData.session_id,
+          ctx.facts.hookData,
+        ),
+    ),
+  activity: (ctx) =>
+    sessionLane(
+      ctx,
+      "activity",
+      () =>
+        ctx.owners.activityProvider.activityOf(ctx.facts.hookData.session_id),
+      () =>
+        ctx.owners.activityProvider.getActivityInfo(
+          ctx.facts.hookData.session_id,
+          ctx.facts.hookData,
+        ),
+    ),
+  // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
+  // seam, made only when the transcript's stamp moved.
+  cache: (ctx) =>
+    sessionLane(
+      ctx,
+      "cache",
+      () => ctx.owners.cacheExpiry.expiryOf(ctx.facts.hookData.session_id),
+      () =>
+        ctx.owners.cacheExpiry.refresh(
+          ctx.facts.hookData.session_id,
+          ctx.facts.hookData.transcript_path,
+        ),
+    ),
+  autocompact: (ctx) => {
+    const settings = () => settingsPathOf(ctx.facts.hints, ctx.owners.home);
+    return sessionLane(
+      ctx,
+      "autocompact",
+      () => ctx.owners.autoCompact.stored(settings()),
+      async () => ctx.owners.autoCompact.window(settings()),
+    );
+  },
+  git: (ctx) => keyedLane(mapLane(ctx.repo(), gitFactsOf)),
+  // The PR lands through the repository's own source and is never waited on:
+  // a forge's network call would make every first bar as slow as it.
+  pr: (ctx) => {
+    const repo = ctx.repo();
+    return {
+      current: () => prOf(repo.current()),
+      refresh: null,
+      landing: () => null,
+      fault: () => null,
+    };
+  },
+  // [LAW:dataflow-not-control-flow] A session outside tmux has no pane to
+  // read: its lane answers `ABSENT` and takes no hold.
+  tmux: (ctx) => {
+    const pane = ctx.facts.hints.tmux ?? null;
+    return pane === null
+      ? settledBuiltin(ABSENT)
+      : keyedLane(
+          mapLane(ctx.owners.tmuxService.declare(ctx.holds, pane), (name) => ({
+            session: name,
+          })),
+        );
+  },
+  hostName: (ctx) => keyedLane(ctx.owners.hostService.declareName(ctx.holds)),
+  hostUser: (ctx) => keyedLane(ctx.owners.hostService.declareUser(ctx.holds)),
+};
+
 // [LAW:single-enforcer] A statusline request's own triggers
-// (brandon-unfiled-3248.8ro6, step 3): it refreshes every session source —
-// the transcript's folds, the cache expiry, the speed sample,
-// the auto-compact window, today's first scan — each stamp-gated by its
-// owner, so an unchanged transcript reads nothing. A frame never calls this: it draws the
-// values these refreshes stored.
+// (brandon-unfiled-3248.8ro6, step 3): it refreshes each declared lane a
+// request refreshes — the transcript's folds, the cache expiry, the speed
+// sample, the auto-compact window, today's first scan — each stamp-gated by
+// its owner, so an unchanged transcript reads nothing. A frame never calls
+// this: it draws the values these refreshes stored.
 //
 // [LAW:no-silent-failure] A refresh's contract is to answer, never to throw or
 // reject, so a throw — the owner's or the lane's own code around it — is a
@@ -827,78 +1122,44 @@ export async function refreshPayload(
   at: Instant,
   refreshed: Refreshed,
 ): Promise<void> {
-  const { hookData, deps, hints } = inputs;
+  const { hookData, deps } = inputs;
   const sessionId = hookData.session_id;
-  // The request's one refresh of its session's record, which the session,
-  // today and speed lanes share.
-  const session = deps.usageStore.request(sessionId, hookData.transcript_path);
-  const lane = async (
-    name: RefreshLane,
-    run: () => Promise<unknown>,
-  ): Promise<void> => {
+  let usage: SessionRequest | undefined;
+  const request: LaneRequest = {
+    at,
+    usage: () =>
+      (usage ??= deps.usageStore.request(sessionId, hookData.transcript_path)),
+  };
+  const refresh = async ({ lane, run }: LaneRefresh): Promise<void> => {
     const startedAt = deps.clock.monotonic();
-    refreshed.set(name, null);
+    refreshed.set(lane, null);
     let threw: string | null = null;
     try {
-      await run();
+      await run(request);
     } catch (e) {
-      deps.log("error", `${name} lane threw: ${inspect(e)}`);
-      threw = `${name}: ${String(e)}`;
+      deps.log("error", `${lane} lane threw: ${inspect(e)}`);
+      threw = `${lane}: ${String(e)}`;
     }
-    refreshed.set(name, elapsedMs(deps.clock, startedAt));
-    deps.faults.refreshed(sessionId, name, threw);
+    refreshed.set(lane, elapsedMs(deps.clock, startedAt));
+    deps.faults.refreshed(sessionId, lane, threw);
   };
-  await Promise.all([
-    lane("session", () => session.usage(hookData)),
-    lane("today", () => session.today()),
-    lane("context", () => deps.contextProvider.getContextInfo(hookData)),
-    lane("metrics", () =>
-      deps.metricsProvider.getMetricsInfo(sessionId, hookData),
+  await Promise.all(
+    laneEntries(deps.lanes().builtins).flatMap(([, lane]) =>
+      lane.refresh === null ? [] : [refresh(lane.refresh)],
     ),
-    lane("activity", () =>
-      deps.activityProvider.getActivityInfo(sessionId, hookData),
-    ),
-    // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
-    // seam, made only when the transcript's stamp moved.
-    lane("cache", () =>
-      deps.cacheExpiry.refresh(sessionId, hookData.transcript_path),
-    ),
-    // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
-    // lane reads, one sample per request: a frame takes none, so how often the
-    // bar is drawn moves no rate.
-    lane("speed", () => session.speed(dateOf(at).getTime())),
-    lane("autocompact", async () =>
-      deps.autoCompact.window(settingsPathOf(hints, deps.home)),
-    ),
-  ]);
-}
-
-// Each lane's value as its owner holds it now. The keyed lanes' (git, tmux)
-// are `Current`: a value not answered yet carries its landing.
-// `today` is no lane of the payload: the day it sums is the draw's
-// (`todayOf`).
-export interface Lanes {
-  readonly git: Current<GitInfo>;
-  readonly usage: Reading<UsageInfo>;
-  readonly context: Reading<ContextInfo>;
-  readonly metrics: Reading<MetricsInfo>;
-  readonly activity: Reading<ActivityInfo>;
-  readonly tmuxSession: Current<string>;
-  readonly hostName: Current<string>;
-  readonly hostUser: Current<string>;
-  readonly cache: Reading<number>;
-  readonly speed: Reading<SpeedObservation>;
-  readonly autoCompact: Reading<AutoCompactWindow>;
-  readonly sources: ReadonlyMap<string, Current<JsonValue>>;
+  );
 }
 
 // [LAW:one-source-of-truth] Everything a session's readers read of its owners
-// in one turn: the lanes as the payload folds them (every source the config
-// declares among them), today's day sums, and the session's faults. The payload and the facts
+// in one turn: each declared built-in's reading, every source the config
+// declares, and the declared lanes' standing faults. The payload and the facts
 // document are both folds of this one record.
+export type BuiltinReadings = {
+  readonly [K in BuiltinName]?: Reading<BuiltinValues[K]>;
+};
 export interface Readings {
-  readonly lanes: Lanes;
-  readonly today: Current<TodayFacts>;
+  readonly builtins: BuiltinReadings;
+  readonly sources: ReadonlyMap<string, Current<JsonValue>>;
   // Each declared `shell` and `file` source's run, by its identity's digest.
   readonly runs: ReadonlyMap<SourceDigest, RunReading>;
   readonly faults: readonly FactsDiagnostic[];
@@ -917,25 +1178,16 @@ export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints"> & {
   readonly sessionId: SessionId;
 };
 
-// The owners of the keyed lanes, which a declaration takes its holds in.
-export type KeyedOwners = Pick<
-  RenderPayloadDeps,
-  | "gitProvider"
-  | "tmuxService"
-  | "hostService"
-  | "usageStore"
-  | "managedStorage"
->;
+// The owners a declaration builds its lanes over: every provider, and the
+// log and faults a lane reads through.
+export type LaneOwners = Omit<RenderPayloadDeps, "lanes">;
 
 // [LAW:types-are-the-program] What a view's declaration hands its draws: one
-// lane per keyed lane, each closed over the entry the declaration took, so
-// the key is computed once, by the declaration, and a read takes nothing.
+// lane per declared built-in and per plugin source, each closed over the entry
+// the declaration took, so the key is computed once, by the declaration, and a
+// read takes nothing.
 export interface DeclaredLanes {
-  readonly git: Lane<GitInfo>;
-  readonly tmux: Lane<string>;
-  readonly hostName: Lane<string>;
-  readonly hostUser: Lane<string>;
-  readonly today: Lane<DaySums>;
+  readonly builtins: BuiltinLanes;
   // [LAW:dataflow-not-control-flow] One lane per plugin source the config
   // declares, by the source variable's name: no fixed list — the set is what
   // the loaded plugins declare.
@@ -946,34 +1198,41 @@ export interface DeclaredLanes {
 // its render state's build took for each one's folder.
 export type DeclaredSources = ReadonlyMap<string, StorageKey>;
 
+// What a view declares of a session beyond the request it draws by: the
+// built-ins its config reads and the plugin sources it declares, at the
+// storage keys the state's build took for them. Both are its config's, so
+// the same for every request the view draws.
+export interface LaneDeclaration {
+  readonly builtins: DeclaredBuiltins;
+  readonly sources: DeclaredSources;
+}
+
 // A declaration's lanes, and what threw while it took them.
 export interface Declaration {
   readonly lanes: DeclaredLanes;
   readonly faults: readonly string[];
 }
 
-// Every lane answering one outcome, `sources` one per name: a view's when its
-// declaration threw whole, or a caller's that declares nothing.
+// Every declared lane answering one outcome: a view's when its declaration
+// threw whole.
 export function settledLanes(
   outcome: Outcome<never>,
-  sources: readonly string[],
+  { builtins, sources }: LaneDeclaration,
 ): DeclaredLanes {
-  const lane = settledLane(outcome);
   return {
-    git: lane,
-    tmux: lane,
-    hostName: lane,
-    hostUser: lane,
-    today: lane,
-    sources: new Map(sources.map((name) => [name, lane])),
+    builtins: Object.fromEntries(
+      [...builtins].map((name) => [name, settledBuiltin(outcome)]),
+    ),
+    sources: new Map(
+      [...sources.keys()].map((name) => [name, settledLane(outcome)]),
+    ),
   };
 }
 
 // [LAW:dataflow-not-control-flow] The one option set every session reads git
-// at. The facts document is total, so no field a template can read is left
-// unread for want of a layout that places it, and a repository's state is one
-// value however many configs draw it. The tag is not among them: no field of
-// the document carries it.
+// at, so a repository's state is one value however many configs draw it; the
+// PR's lookup rides it when the PR is declared. The tag is not among them: no
+// field of the document carries it.
 const GIT_READS: GitInfoOptions = {
   showSha: true,
   showWorkingTree: true,
@@ -983,74 +1242,93 @@ const GIT_READS: GitInfoOptions = {
   showRepoUrl: true,
   showOperation: true,
   showCommittedAt: true,
-  showPullRequest: true,
 };
 
-// [LAW:one-source-of-truth] The repo a request names, at the one option set.
-function gitAt({
-  cwd,
-  hookData,
-}: ViewFacts): readonly [
+// [LAW:one-source-of-truth] The repo a request names, at the one option set,
+// with the PR when the declaration reads it.
+function gitAt(
+  { cwd, hookData }: ViewFacts,
+  declared: DeclaredBuiltins,
+): readonly [
   workingDir: string,
   options: GitInfoOptions,
   projectDir: string | undefined,
 ] {
   return [
     cwd ?? hookData.workspace?.current_dir,
-    GIT_READS,
+    { ...GIT_READS, showPullRequest: declared.has("pr") },
     hookData.workspace?.project_dir,
   ];
 }
 
 // [LAW:single-enforcer] A view's declaration (brandon-unfiled-3248.8ro6, steps
-// 3 and 4), the one taker of holds: every keyed entry, at the keys its request
-// names, taken in `holds` — an entry not read yet is created and its first
-// read started — and handed back as the lanes its draws read. It runs when the
-// view opens and when the request moves (src/daemon/cache/render.ts), and
-// takes the same entries whatever the layout places, so a preset pick moves
-// no hold.
-//
-// [LAW:dataflow-not-control-flow] Every lane is a lane: a session outside tmux
-// has no pane to read and answers `ABSENT`, and one whose declaration threw
-// answers that failure and takes no hold.
+// 3 and 4), the one taker of holds and the one reader of what was declared:
+// each declared built-in's lane, built by its constructor (BUILTIN_LANES) at
+// the keys its request names, and each declared source's, taken in `holds` —
+// an entry not read yet is created and its first read started — and handed
+// back as the lanes its draws read. It runs when the view opens and when the
+// request moves (src/daemon/cache/render.ts). What it takes depends on the
+// config and the request, never on the layout a session has picked, so a
+// preset pick moves no hold.
 export function declareLanes(
-  owners: KeyedOwners,
+  owners: LaneOwners,
   holds: Holds,
   facts: ViewFacts,
-  sources: DeclaredSources,
+  { builtins, sources }: LaneDeclaration,
 ): Declaration {
-  const pane = facts.hints.tmux ?? null;
   // [LAW:no-silent-failure] A lane whose declaration throws is a bug in its
   // owner, reported to the caller, while every other lane declares.
   const faults: string[] = [];
-  const declare = <T>(lane: string, take: () => Lane<T>): Lane<T> => {
+  const declare = <L>(
+    lane: string,
+    take: () => L,
+    settled: (outcome: Outcome<never>) => L,
+  ): L => {
     try {
       return take();
     } catch (e) {
       faults.push(`${lane}: ${inspect(e)}`);
-      return settledLane(failed(`${lane}: ${String(e)}`, "read"));
+      return settled(failed(`${lane}: ${String(e)}`, "read"));
     }
   };
+  // The one repository read git and the PR both ask, declared by whichever
+  // asks first: a declaration that throws is one fault, and both lanes answer
+  // it.
+  let repo: Lane<GitInfo> | undefined;
+  const ctx: LaneContext = {
+    owners,
+    holds,
+    facts,
+    repo: () =>
+      (repo ??= declare(
+        "git",
+        () => owners.gitProvider.declare(holds, ...gitAt(facts, builtins)),
+        settledLane,
+      )),
+  };
   const lanes: DeclaredLanes = {
-    git: declare("git", () =>
-      owners.gitProvider.declare(holds, ...gitAt(facts)),
-    ),
-    tmux:
-      pane === null
-        ? settledLane(ABSENT)
-        : declare("tmux", () => owners.tmuxService.declare(holds, pane)),
-    hostName: declare("host.name", () => owners.hostService.declareName(holds)),
-    hostUser: declare("host.user", () => owners.hostService.declareUser(holds)),
-    today: declare("today", () =>
-      owners.usageStore.declareToday(holds, facts.hints.claudeConfigDir),
-    ),
+    // [LAW:types-are-the-program] Each declared name's lane from its own
+    // constructor: the one cast is that a name's constructor returns that
+    // name's lane.
+    builtins: Object.fromEntries(
+      [...builtins].map((name) => [
+        name,
+        declare(
+          name,
+          () => BUILTIN_LANES[name](ctx) as BuiltinLane<unknown>,
+          settledBuiltin,
+        ),
+      ]),
+    ) as BuiltinLanes,
     // [LAW:one-source-of-truth] Each source's hold at (its folder's storage
     // key, the session the checkpoint parsed).
     sources: new Map(
       [...sources].map(([name, key]) => [
         name,
-        declare(name, () =>
-          owners.managedStorage.declare(holds, key, facts.sessionId),
+        declare(
+          name,
+          () => owners.managedStorage.declare(holds, key, facts.sessionId),
+          settledLane,
         ),
       ]),
     ),
@@ -1062,65 +1340,28 @@ export function declareLanes(
 // owner stored, so the view's payload computed over it is recomputed in the
 // turn an owner stores a new value. The runs are the follow's own
 // declaration's, read beside these (src/daemon/facts-source.ts).
-export function readingsOf(inputs: PayloadInputs): Omit<Readings, "runs"> {
-  const { hookData, deps } = inputs;
-  const sessionId = hookData.session_id;
-  const lanes = deps.lanes();
-  // [LAW:no-silent-failure][LAW:single-enforcer] A read that throws is a bug
-  // in its owner: logged here, the one site a read's throw is logged — a
-  // frame's included, whose failures go nowhere else — and that lane's
-  // failure, so it costs its own cells, never the bar. A lane whose refresh
-  // threw is that failure (RefreshFaults); a refresh that answered failed was
-  // logged by its owner, which met it.
-  const read = <T>(lane: RefreshLane, value: () => T): T | Outcome<never> => {
-    const fault = deps.faults.of(sessionId, lane);
-    if (fault !== undefined) return fault;
-    try {
-      return value();
-    } catch (e) {
-      deps.log("error", `${lane} read threw: ${inspect(e)}`);
-      return failed(`${lane}: ${String(e)}`, "read");
-    }
-  };
-  const laneReadings: Lanes = {
-    git: lanes.git.current(),
-    usage: read("session", () => deps.usageStore.usageOf(sessionId, hookData)),
-    context: read("context", () => deps.contextProvider.contextOf(hookData)),
-    metrics: read("metrics", () =>
-      deps.metricsProvider.metricsOf(sessionId, hookData),
-    ),
-    activity: read("activity", () =>
-      deps.activityProvider.activityOf(sessionId),
-    ),
-    tmuxSession: lanes.tmux.current(),
-    hostName: lanes.hostName.current(),
-    hostUser: lanes.hostUser.current(),
-    cache: read("cache", () => deps.cacheExpiry.expiryOf(sessionId)),
-    speed: read("speed", () => deps.usageStore.speedOf(sessionId)),
-    autoCompact: read("autocompact", () =>
-      deps.autoCompact.stored(settingsPathOf(inputs.hints, deps.home)),
-    ),
-    sources: new Map(
-      [...lanes.sources].map(([name, lane]) => [name, lane.current()]),
-    ),
-  };
+export function readingsOf({
+  deps,
+}: Pick<PayloadInputs, "deps">): Omit<Readings, "runs"> {
+  const { builtins, sources } = deps.lanes();
+  const lanes = laneEntries(builtins);
   return {
-    lanes: laneReadings,
-    today: read("today", () =>
-      todayReading(lanes.today, deps.usageStore, sessionId),
+    builtins: Object.fromEntries(
+      lanes.map(([name, lane]) => [name, lane.current()]),
+    ) as BuiltinReadings,
+    sources: new Map(
+      [...sources].map(([name, lane]) => [name, lane.current()]),
     ),
-    faults: REFRESH_LANES.flatMap((lane) => {
-      const fault = deps.faults.of(sessionId, lane);
-      return fault === undefined ? [] : [{ lane, reason: fault.reason }];
-    }),
+    // [LAW:one-source-of-truth] The faults of what is declared: a lane a
+    // reload stops declaring takes its standing fault out of the document.
+    faults: lanes.flatMap(([, lane]) => lane.fault() ?? []),
   };
 }
 
 // [LAW:single-enforcer] Today's facts as the session reads them: the directory
 // set's day sums with the session's own days beside them, failing if the
 // session's last ingest did. The draw's projection (`todayOf`) and the facts
-// document read through this one definition, behind `readingsOf`'s `read`
-// (the refresh's fault, a throw).
+// document read through this one definition, behind the today lane's fault.
 export function todayReading(
   lane: Lane<DaySums>,
   usage: Pick<SessionUsageStore, "daysOutside">,
@@ -1134,43 +1375,21 @@ export function todayReading(
 }
 
 // The landings a request waits on before it draws: every declared lane whose
-// key has never answered, except the two whose first answer is slow and
-// external: today's day sums (a scan of every transcript under the Claude Code
-// directory) and the branch's PR (a forge's network call). A first bar that
-// waited on them would be as slow as the slowest, and every session reads
-// both, so they draw pending and land through the observables their owners
-// store them in. A lane the daemon itself
+// key has never answered, except those whose first answer is slow and
+// external (today's day sums, a scan of every transcript under the Claude Code
+// directory; the branch's PR, a forge's network call), which draw pending and
+// land through the observables their owners store them in, and those a
+// request refreshes, which its refresh awaits. A lane the daemon itself
 // superseded (a click's move) is not waited on either: it draws its loading
 // cell, and its landing reaches the next frame.
 function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
-  // [LAW:dataflow-not-control-flow] One test over every lane: why it is
-  // pending decides, never which lane it is.
+  // [LAW:dataflow-not-control-flow] Each lane says what it waits on; no test
+  // of which lane it is.
   return [
-    lanes.git.current(),
-    lanes.tmux.current(),
-    lanes.hostName.current(),
-    lanes.hostUser.current(),
-    ...[...lanes.sources.values()].map((lane) => lane.current()),
-  ].flatMap((lane) =>
-    lane.kind === "pending" && lane.why === "unread" ? [lane.landed] : [],
-  );
+    ...laneEntries(lanes.builtins).map(([, lane]) => lane.landing()),
+    ...[...lanes.sources.values()].map((lane) => landingOf(lane.current())),
+  ].flatMap((landed) => (landed === null ? [] : [landed]));
 }
-
-// [LAW:dataflow-not-control-flow] A value derived from several lanes is not
-// answered while any of them is not: it waits for the first that is pending,
-// and says why that one is.
-function firstPending(
-  ...lanes: ReadonlyArray<Reading<unknown> | undefined>
-): Pending | undefined {
-  const lane = lanes.find((l) => l?.kind === "pending");
-  return lane?.kind === "pending" ? pendingOf(lane.why) : undefined;
-}
-
-// What a payload is composed from besides the document: the hook's
-// instantaneous fields, the client's hints and the user's home.
-export type ComposeInputs = Pick<PayloadInputs, "hookData" | "hints"> & {
-  readonly home: string;
-};
 
 // [LAW:single-enforcer] The one place a fact's instant is dropped on the way to
 // a template: the payload carries what the owners hold, never when it first
@@ -1188,13 +1407,310 @@ export const unstamped = <T>(fact: Fact<T>): Reading<T> => {
   }
 };
 
+// `over` is the total fold of one fact's reading into its payload field: ok →
+// its projection, absent or failed → undefined, pending → the payload's
+// pending spelling. [LAW:no-silent-failure] A failed lane was logged by the
+// refresh that failed, its owner's (src/utils/refresh-ledger.ts), so a
+// payload derived from it logs nothing again.
+function over<T, U>(
+  reading: Reading<T>,
+  project: (value: T) => U | undefined,
+): U | Pending | undefined {
+  switch (reading.kind) {
+    case "pending":
+      return pendingOf(reading.why);
+    case "failed":
+    case "absent":
+      return undefined;
+    case "ok":
+      return project(reading.value);
+  }
+}
+
+const valueOf = <T>(reading: Reading<T>): T | undefined =>
+  reading.kind === "ok" ? reading.value : undefined;
+
+// [LAW:dataflow-not-control-flow] A value derived from several facts is not
+// answered while any of them is not: it waits for the first that is pending,
+// and says why that one is.
+function firstPending(
+  ...readings: ReadonlyArray<Reading<unknown>>
+): Pending | undefined {
+  const reading = readings.find((r) => r.kind === "pending");
+  return reading?.kind === "pending" ? pendingOf(reading.why) : undefined;
+}
+
+// ─── The payload's rows ──────────────────────────────────────────────────────
+
+// The readings a row is composed from, by the facts it names.
+type RowFacts<R extends BuiltinName> = {
+  readonly [K in R]: Reading<BuiltinValues[K]>;
+};
+// The facts some fields of a row read and the rest do not: the reading, or
+// `Undeclared` when the declaration does not name it.
+type PartFacts<O extends BuiltinName> = {
+  readonly [K in O]: Reading<BuiltinValues[K]> | Undeclared;
+};
+
+// [LAW:types-are-the-program] One payload path a fact fills, and the facts it
+// is composed from. Its composer receives exactly the facts it names, so
+// reading another is a compile error: the row is both what the composition
+// reads and what the walk declares for a read at its path. `parts` are facts
+// only some fields below the path read, each with those fields.
+interface RowReads<R extends BuiltinName, O extends BuiltinName> {
+  readonly facts: readonly R[];
+  readonly parts: { readonly [K in O]: readonly string[] };
+}
+// A row is composed in one of two phases, and the phase is its type: a turn
+// row once per document, a draw row at the draw's instant, because what it
+// picks out of its fact moves with the clock and no owner (today's day turns
+// over at midnight). So the view's payload, which reads no instant, is made
+// of turn rows alone, and a draw row cannot be asked without one.
+interface TurnRow<
+  R extends BuiltinName,
+  O extends BuiltinName,
+  V,
+> extends RowReads<R, O> {
+  readonly phase: "turn";
+  readonly compose: (facts: RowFacts<R> & PartFacts<O>) => V;
+}
+interface DrawRow<R extends BuiltinName, V> extends RowReads<R, never> {
+  readonly phase: "draw";
+  readonly project: (facts: RowFacts<R>, at: Instant) => V;
+}
+
+const turn = <R extends BuiltinName, V, O extends BuiltinName = never>(
+  facts: readonly R[],
+  compose: (facts: RowFacts<R> & PartFacts<O>) => V,
+  parts = {} as { readonly [K in O]: readonly string[] },
+): TurnRow<R, O, V> => ({ phase: "turn", facts, parts, compose });
+
+const draw = <R extends BuiltinName, V>(
+  facts: readonly R[],
+  project: (facts: RowFacts<R>, at: Instant) => V,
+): DrawRow<R, V> => ({ phase: "draw", facts, parts: {}, project });
+
+// [LAW:one-source-of-truth] Every payload path a built-in fact fills. A path
+// not here is the hook's, the hints' or the renderer's own, and reads no fact.
+// `tmux` and `host` are rows at their fact's leaf, because their objects carry
+// a hint beside it (`tmux.pane`, `host.ssh`), which is always present.
+const PAYLOAD_ROWS = {
+  session: turn(["session"], ({ session }) =>
+    over(session, (usage) =>
+      pickNonNull({ cost: usage.session.cost, tokens: usage.session.tokens }),
+    ),
+  ),
+  // [LAW:dataflow-not-control-flow] Absent cost/duration (provider empty)
+  // yields no rate, never a fabricated one, and a rate over a value not
+  // answered yet is not answered either.
+  burn: turn(
+    ["session", "metrics"],
+    ({ session, metrics }): BurnPayload | Pending | undefined =>
+      firstPending(session, metrics) ??
+      burnOf(valueOf(session)?.session.cost, valueOf(metrics)?.sessionDuration),
+  ),
+  // [LAW:dataflow-not-control-flow] The instantaneous rates and the burn-rate
+  // history fold independently from one observation — either can be present
+  // without the other — and the whole key drops only when both are absent.
+  speed: turn(["speed"], ({ speed }) => over(speed, speedPayloadOf)),
+  cache: turn(["cache"], ({ cache }) =>
+    over(cache, (expiresAt) => ({ expiresAt })),
+  ),
+  context: turn(["context"], ({ context }) =>
+    over(context, (info) => ({
+      totalTokens: info.totalTokens,
+      contextLeft: info.contextLeftPercentage,
+    })),
+  ),
+  metrics: turn(["metrics"], ({ metrics }) =>
+    over(metrics, (info) =>
+      pickNonNull({
+        lastResponseTime: info.lastResponseTime,
+        responseTime: info.responseTime,
+        sessionDuration: info.sessionDuration,
+        messageCount: info.messageCount,
+        nonPrompts: info.nonPrompts,
+        linesAdded: info.linesAdded,
+        linesRemoved: info.linesRemoved,
+      }),
+    ),
+  ),
+  activity: turn(["activity"], ({ activity }) =>
+    over(activity, projectActivity),
+  ),
+  // The controls are capped to the model's context window, so they are not
+  // answered while the window is not.
+  autocompact: turn(
+    ["autocompact", "context"],
+    ({ autocompact, context }) =>
+      firstPending(context) ??
+      projectAutoCompact(autocompact, valueOf(context)?.maxTokens),
+  ),
+  // Git logs its own failures, once per refresh that failed
+  // (src/daemon/cache/git.ts): its value is stored, so logging one here would
+  // repeat a failure on every render. The PR is a part of the row: its fields
+  // read it, the rest of git does not.
+  git: turn(
+    ["git"],
+    ({ git, pr }): GitPayloadOf<Unanswered> | Pending | undefined =>
+      git.kind === "pending"
+        ? pendingOf(git.why)
+        : git.kind === "ok"
+          ? projectGitInfo(git.value, pr)
+          : undefined,
+    { pr: Object.keys(PR_FIELDS) },
+  ),
+  "tmux.session": turn(["tmux"], ({ tmux }) =>
+    tmux.kind === "pending" ? pendingOf(tmux.why) : valueOf(tmux)?.session,
+  ),
+  "host.name": turn(["hostName"], ({ hostName }) =>
+    hostName.kind === "pending" ? pendingOf(hostName.why) : valueOf(hostName),
+  ),
+  "host.user": turn(["hostUser"], ({ hostUser }) =>
+    hostUser.kind === "pending" ? pendingOf(hostUser.why) : valueOf(hostUser),
+  ),
+  // [LAW:one-source-of-truth] `today` at a draw's instant: the day of the
+  // document's `today` fact the draw is at, a projection of the draw and never
+  // of the view's payload (DRAW_PROJECTIONS, src/config/payload-inputs.ts).
+  today: draw(["today"], ({ today }, at) => todayOf(today, at)),
+} as const;
+
+type Rows = typeof PAYLOAD_ROWS;
+// The paths of each phase, read off the table, and a row's value: what its
+// composer returns.
+type TurnPath = {
+  [P in keyof Rows]: Rows[P] extends { readonly phase: "turn" } ? P : never;
+}[keyof Rows];
+type DrawPath = Exclude<keyof Rows, TurnPath>;
+type RowValue<P extends keyof Rows> = Rows[P] extends {
+  readonly compose: (facts: never) => infer V;
+}
+  ? V
+  : Rows[P] extends { readonly project: (facts: never, at: Instant) => infer V }
+    ? V
+    : never;
+
+// The rows with their facts' types erased, as the walk and a document's reader
+// see them: a composer over `never` accepts every row's, so no row is cast to
+// be held here.
+interface ErasedReads {
+  readonly facts: readonly BuiltinName[];
+  readonly parts: Readonly<Partial<Record<BuiltinName, readonly string[]>>>;
+}
+interface ErasedTurn extends ErasedReads {
+  readonly compose: (facts: never) => unknown;
+}
+interface ErasedDraw extends ErasedReads {
+  readonly project: (facts: never, at: Instant) => unknown;
+}
+const TURN_ROWS: Readonly<Record<TurnPath, ErasedTurn>> = PAYLOAD_ROWS;
+const DRAW_ROWS: Readonly<Record<DrawPath, ErasedDraw>> = PAYLOAD_ROWS;
+
+// The facts a row reads out of a document: each it names, or the first one
+// the declaration does not; its parts, each its reading or `Undeclared`.
+function rowFacts(
+  document: SessionFacts,
+  row: ErasedReads,
+): Record<string, Reading<unknown> | Undeclared> | Undeclared {
+  const facts: Record<string, Reading<unknown> | Undeclared> = {};
+  for (const name of row.facts) {
+    const fact = builtinOf(document, name);
+    if (fact.kind === "undeclared") return fact;
+    facts[name] = unstamped(fact);
+  }
+  for (const name of Object.keys(row.parts) as BuiltinName[]) {
+    const fact = builtinOf(document, name);
+    facts[name] = fact.kind === "undeclared" ? fact : unstamped(fact);
+  }
+  return facts;
+}
+
+// [LAW:single-enforcer] A row's value: what its composer makes of the facts it
+// names, or `Undeclared` when the declaration does not name one of them — the
+// gap a template's read of it surfaces (src/var-system/sources.ts).
+// [LAW:types-are-the-program] `rowFacts` read exactly the facts the row names,
+// which is what its composer is typed over, and the composer is the one `path`
+// names: the casts in each phase are those two claims.
+function composeRow<P extends TurnPath>(
+  document: SessionFacts,
+  path: P,
+): RowValue<P> | Undeclared {
+  const facts = rowFacts(document, TURN_ROWS[path]);
+  return isUndeclared(facts)
+    ? facts
+    : (TURN_ROWS[path].compose(facts as never) as RowValue<P>);
+}
+
+function projectRow<P extends DrawPath>(
+  document: SessionFacts,
+  path: P,
+  at: Instant,
+): RowValue<P> | Undeclared {
+  const facts = rowFacts(document, DRAW_ROWS[path]);
+  return isUndeclared(facts)
+    ? facts
+    : (DRAW_ROWS[path].project(facts as never, at) as RowValue<P>);
+}
+
+// What a draw answers at its own instant from the document: the draw rows.
+export interface DrawFields {
+  readonly today: RowValue<"today"> | Undeclared;
+}
+
+// [LAW:one-source-of-truth] The draw rows at `at`: what the daemon's draw,
+// `check` and the demo each hand their binding beside the payload.
+export function projectDrawFields(
+  document: SessionFacts,
+  at: Instant,
+): DrawFields {
+  return { today: projectRow(document, "today", at) };
+}
+
+// [LAW:one-source-of-truth] The built-ins a set of payload paths reads, through
+// the rows: a path at or under a row reads the row's facts, and so does a path
+// above one (an input that reads all of `host` reads both of its facts); a
+// part is read by a path at or under one of its fields, or at or above the
+// row. The walk over a config (src/config/payload-reads.ts) supplies the
+// paths, and the declaration is this set.
+export function builtinsReadAt(paths: Iterable<string>): DeclaredBuiltins {
+  const under = (outer: string, inner: string): boolean =>
+    inner === outer || inner.startsWith(`${outer}.`);
+  const read = new Set<BuiltinName>();
+  for (const path of paths) {
+    for (const [root, row] of Object.entries<ErasedReads>({
+      ...TURN_ROWS,
+      ...DRAW_ROWS,
+    })) {
+      if (!under(root, path) && !under(path, root)) continue;
+      for (const name of row.facts) read.add(name);
+      for (const [name, fields] of Object.entries(row.parts) as Array<
+        [BuiltinName, readonly string[]]
+      >) {
+        if (
+          under(path, root) ||
+          fields.some((field) => under(`${root}.${field}`, path))
+        ) {
+          read.add(name);
+        }
+      }
+    }
+  }
+  return declaredBuiltins(read);
+}
+
+// What a payload is composed from besides the document: the hook's
+// instantaneous fields, the client's hints and the user's home.
+export type ComposeInputs = Pick<PayloadInputs, "hookData" | "hints"> & {
+  readonly home: string;
+};
+
 // [LAW:one-source-of-truth] The one assembly of a view's payload: the facts
 // document as its owners held it when it was stamped, a value not answered yet
 // as pending — which the draw takes as its own outcome (the placement's
-// loading cell). Performs no I/O, refreshes nothing and reads no instant, so
-// the session's view keeps it as one computed over its turn
-// (src/daemon/session-source.ts), and `check` composes its fixture document
-// through it.
+// loading cell) — and a value no declared fact fills as `Undeclared`. Performs
+// no I/O, refreshes nothing and reads no instant, so the session's view keeps
+// it as one computed over its turn (src/daemon/session-source.ts), and `check`
+// composes its fixture document through it.
 export function composePayload(
   facts: SessionFacts,
   inputs: ComposeInputs,
@@ -1203,121 +1719,25 @@ export function composePayload(
   const { hookData, hints } = inputs;
   const { effective, configFacts } = draw;
   const { configPath, ...settingCounts } = configFacts;
-  const built = facts.builtins;
-  const lanes = {
-    usage: unstamped(built.session),
-    context: unstamped(built.context),
-    metrics: unstamped(built.metrics),
-    activity: unstamped(built.activity),
-    cache: unstamped(built.cache),
-    speed: unstamped(built.speed),
-    autoCompact: unstamped(built.autocompact),
-    git: unstamped(built.git),
-    pr: unstamped(built.pr),
-    tmux: unstamped(built.tmux),
-    hostName: unstamped(built.hostName),
-    hostUser: unstamped(built.hostUser),
-  };
-  // `over` is the total fold of one lane's reading into its payload field:
-  // ok → its projection, absent or failed → undefined, pending → the payload's
-  // pending spelling. [LAW:no-silent-failure] A failed lane was logged by the
-  // refresh that failed, its owner's (src/utils/refresh-ledger.ts), so a
-  // payload derived from it logs nothing again.
-  const over = <T, U>(
-    reading: Reading<T>,
-    project: (value: T) => U | undefined,
-  ): U | Pending | undefined => {
-    switch (reading.kind) {
-      case "pending":
-        return pendingOf(reading.why);
-      case "failed":
-      case "absent":
-        return undefined;
-      case "ok":
-        return project(reading.value);
-    }
-  };
-  const valueOf = <T>(reading: Reading<T>): T | undefined =>
-    reading.kind === "ok" ? reading.value : undefined;
-
+  const row = <P extends TurnPath>(path: P) => composeRow(facts, path);
   const tmuxPane = hints.tmux ?? null;
-  // Git, tmux and autocompact log their own failures — once per
-  // refresh that failed (src/daemon/cache/git.ts, src/utils/keyed-source.ts,
-  // src/segments/autocompact-provider.ts): their values are stored, so
-  // logging one here would repeat a failure on every render. Their failures
-  // reach the payload as values.
-  const git =
-    lanes.git.kind === "pending"
-      ? pendingOf(lanes.git.why)
-      : lanes.git.kind === "ok"
-        ? projectGitInfo(lanes.git.value, lanes.pr, pendingOf)
-        : undefined;
-  const tmuxValue =
-    lanes.tmux.kind === "pending"
-      ? pendingOf(lanes.tmux.why)
-      : valueOf(lanes.tmux)?.session;
-  const hostName =
-    lanes.hostName.kind === "pending"
-      ? pendingOf(lanes.hostName.why)
-      : valueOf(lanes.hostName);
-  const hostUser =
-    lanes.hostUser.kind === "pending"
-      ? pendingOf(lanes.hostUser.why)
-      : valueOf(lanes.hostUser);
-  // The controls are capped to the model's context window, so they are not
-  // answered while the window is not.
-  const autoCompactValue =
-    firstPending(lanes.context) ??
-    projectAutoCompact(lanes.autoCompact, valueOf(lanes.context)?.maxTokens);
+  const tmuxValue = row("tmux.session");
+  const hostName = row("host.name");
+  const hostUser = row("host.user");
+  const git = row("git");
+  const sessionPayload = row("session");
+  const burn = row("burn");
+  const speedPayload = row("speed");
+  const cachePayload = row("cache");
+  const contextPayload = row("context");
+  const metricsPayload = row("metrics");
+  const activityPayload = row("activity");
+  const autoCompactValue = row("autocompact");
   // [LAW:dataflow-not-control-flow] block.* and weekly.* read straight from
   // hookData's rate-limit windows; what they say relative to now is the
   // draw's (BlockPayload).
   const fiveHour = hookData.rate_limits?.five_hour;
   const sevenDay = hookData.rate_limits?.seven_day;
-  // [LAW:dataflow-not-control-flow] Absent cost/duration (provider empty)
-  // yields no rate, never a fabricated one, and a rate over a value not
-  // answered yet is not answered either. Its two lanes' failures are theirs to
-  // report, below.
-  const burn: BurnPayload | Pending | undefined =
-    firstPending(lanes.usage, lanes.metrics) ??
-    burnOf(
-      valueOf(lanes.usage)?.session.cost,
-      valueOf(lanes.metrics)?.sessionDuration,
-    );
-  // [LAW:dataflow-not-control-flow] The instantaneous rates and the burn-rate
-  // history fold independently from one observation — either can be present
-  // without the other (a fresh burst has rates but a one-sample history; an
-  // idle-after-burst session has a history but no current rate). Merge
-  // whatever each yields; the whole `speed` key drops only when both are
-  // absent.
-  const speedPayload = over(lanes.speed, speedPayloadOf);
-  // [LAW:types-are-the-program] Partial projections so absent provider data
-  // travels as missing fields all the way to the inputs. Each provider's
-  // null sub-fields become absent keys here; an input's fallback chain
-  // fills in the declared DSL default and records a last_error per field.
-  const sessionPayload = over(lanes.usage, (usage) =>
-    pickNonNull({ cost: usage.session.cost, tokens: usage.session.tokens }),
-  );
-  const metricsPayload = over(lanes.metrics, (metrics) =>
-    pickNonNull({
-      lastResponseTime: metrics.lastResponseTime,
-      responseTime: metrics.responseTime,
-      sessionDuration: metrics.sessionDuration,
-      messageCount: metrics.messageCount,
-      nonPrompts: metrics.nonPrompts,
-      linesAdded: metrics.linesAdded,
-      linesRemoved: metrics.linesRemoved,
-    }),
-  );
-  const activityPayload = over(lanes.activity, projectActivity);
-  const contextPayload = over(lanes.context, (context) => ({
-    totalTokens: context.totalTokens,
-    contextLeft: context.contextLeftPercentage,
-  }));
-  const cachePayload = over(lanes.cache, (expiresAt) => ({
-    expiresAt,
-  }));
-
   // home is always available — the host's value, no I/O cost.
   // Letting the gate skip it would add a branch with no win.
   // [LAW:single-enforcer] All path-shaped payload fields are normalized
@@ -1413,6 +1833,14 @@ export function composePayload(
     }),
   };
   return payload;
+}
+
+// [LAW:nothing-unseen] The render event's `builtins=`: the built-ins the view's
+// document holds, which are the ones its renderer declared, in the document's
+// order; `-` for none. A lane left out on purpose is told from one that never
+// ran by this field alone.
+export function builtinsFact(builtins: Iterable<string>): string {
+  return [...builtins].join(",") || "-";
 }
 
 // [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
@@ -1511,11 +1939,8 @@ function speedPayloadOf(obs: SpeedObservation): SpeedPayload | undefined {
     : undefined;
 }
 
-// [LAW:one-source-of-truth] `today` at a draw's instant: the day of the
-// document's `today` fact the draw is at. A projection of the draw, never of
-// the view's payload, since the day turns over at midnight with no source
-// moving (DRAW_PROJECTIONS, src/config/payload-inputs.ts). A failed scan or
-// ingest is logged by its owner, the usage store.
+// The today row's projector (PAYLOAD_ROWS): the day of the `today` fact the
+// draw is at. A failed scan or ingest is logged by its owner, the usage store.
 export function todayOf(
   fact: Reading<TodayFacts>,
   at: Instant,
@@ -1659,11 +2084,10 @@ function posixify(s: string | undefined): string | undefined {
 // fallback chain fills the declared default and records a last_error). It
 // performs no effect ([LAW:effects-at-boundaries]): the git refresh that read a
 // failure is what logged it.
-function projectGitInfo<P>(
+function projectGitInfo(
   info: DocumentGitFacts,
-  pullRequest: Reading<PullRequest>,
-  pending: (why: PendingWhy) => P,
-): GitPayloadOf<P> {
+  pullRequest: Reading<PullRequest> | Undeclared,
+): GitPayloadOf<Unanswered> {
   const field = <T>(oc: Outcome<T> | undefined): T | undefined =>
     oc?.kind === "ok" ? oc.value : undefined;
 
@@ -1687,15 +2111,17 @@ function projectGitInfo<P>(
   // for the operator. `absent` is still a missing key (no PR / no forge →
   // segment off).
   // A PR not answered yet is every PR field not answered: the cell it draws
-  // waits at its width while the rest of git draws as it stands.
+  // waits at its width while the rest of git draws as it stands. A PR the
+  // declaration does not name is every PR field undeclared, the same way.
   const pr =
-    pullRequest.kind === "pending"
+    pullRequest.kind === "pending" || pullRequest.kind === "undeclared"
       ? pullRequest
       : prOfHead(pullRequest, info.head);
-  let prFields: PrPayload | PrPendingOf<P> = {};
+  let prFields: PrPayload | PrPendingOf<Unanswered> = {};
   switch (pr.kind) {
-    case "pending": {
-      const p = pending(pr.why);
+    case "pending":
+    case "undeclared": {
+      const p = pr.kind === "pending" ? pendingOf(pr.why) : pr;
       prFields = {
         prNumber: p,
         prState: p,

@@ -100,6 +100,33 @@ export function pendingOf(why: PendingWhy): Pending {
   return PENDINGS[why];
 }
 
+// [LAW:types-are-the-program] A payload field composed from a built-in fact
+// the renderer did not declare: no owner was asked, so there is no answer and
+// none is coming. It is neither pending, which waits, nor absent, which a
+// default answers: a read of it is a gap in the declaration, and it is a plain
+// value, recognised by its discriminator, so it crosses a process as JSON as
+// `Pending` does. `fact` names the built-in.
+export interface Undeclared {
+  readonly kind: "undeclared";
+  readonly fact: string;
+}
+
+export function undeclaredOf(fact: string): Undeclared {
+  return { kind: "undeclared", fact };
+}
+
+// [LAW:single-enforcer] The one test for undeclared where a typed position may
+// hold it, beside `isPending`.
+export function isUndeclared<T extends PayloadNode>(
+  value: T | Undeclared,
+): value is Undeclared {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { readonly kind?: unknown }).kind === "undeclared"
+  );
+}
+
 // What a payload node the daemon built can be. `unknown` is not among them: a
 // user's JSON (a source's `ok` value) is tested by no one, because a document
 // that reads `{"kind":"pending"}` is a value.
