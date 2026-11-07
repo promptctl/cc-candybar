@@ -23,9 +23,9 @@
 // command is refused by the daemon itself: the session reports a tmux pane (so
 // the bar draws its slash controls, as it does for a session inside tmux) on a
 // socket in the harness's scratch dir, where no tmux server listens. A click
-// whose verb acts on the developer's machine
+// with a step that would act on the developer's machine
 // (src/click/read HOST_VERBS: the clipboard, VS Code, a rebuild of this
-// checkout) is never sent: it comes back as not sent, naming its effects, and
+// checkout) is never sent: it comes back as not sent, naming its steps, and
 // the bar renders as it was. A click the
 // daemon answers TIMEOUT stops the run: it may or may not have landed.
 
@@ -46,8 +46,8 @@ import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-d
 import {
   describeLink as describeWith,
   drawnClickOf,
-  HOST_VERBS,
   linksOf,
+  notSentOnDrivenBar,
   type DrawnLink,
 } from "../../src/click/read";
 import { isBarLink } from "../../src/click/scheme";
@@ -204,12 +204,10 @@ export async function startBar(
     if (!isBarLink(hit.url)) {
       throw new Error(`"${hit.text}" opens ${hit.url}: the terminal's click, not the daemon's`);
     }
-    // A link the parse refuses acts on nothing here: the daemon refuses its
-    // click, with the reason.
-    const drawn = drawnClickOf(hit.url);
-    if (drawn.ok && drawn.effects.some(({ verb }) => HOST_VERBS.has(verb))) {
-      return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
-    }
+    // A link the parse refuses, or a step it refuses, acts on nothing here: the
+    // daemon refuses it, with the reason.
+    const held = notSentOnDrivenBar(drawnClickOf(hit.url), SESSION_ID);
+    if (held !== null) return { refused: held, rendered: await render() };
     const resp = await sendClick(daemon.target, hit.url, REPLY_BUDGET_MS);
     if (!resp.ok && resp.code === "TIMEOUT") {
       throw new Error(`"${hit.text}" timed out: whether it landed is unknown (${resp.error})`);

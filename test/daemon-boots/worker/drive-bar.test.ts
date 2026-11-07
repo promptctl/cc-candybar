@@ -76,7 +76,6 @@ describe("drive-bar", () => {
     expect(textOf(rendered)).toContain("✖ directory");
   });
 
-
   test("a render fits the size it was asked for", async () => {
     bar = await startBar(
       { width: 200, rows: 40, config: userConfig(WIDE_BAR), cwd: process.cwd(), ssh: false },
