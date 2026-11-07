@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-679",
+      "ref": "refs/pull/679/merge",
+      "sha": "c227cd4439188f73a052319b4272af9360536341",
+      "timestamp": "2026-11-07T09:52:57.965Z",
+      "commits": [
+        {
+          "sha": "c227cd4439188f73a052319b4272af9360536341",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:52:07-07:00",
+          "message": "Merge 8451687ec136e11eca3174bd64c1e934b90d5dc2 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
+        },
+        {
+          "sha": "8451687ec136e11eca3174bd64c1e934b90d5dc2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:51:44-07:00",
+          "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr)\n\nsession-pane-draw, the facts-seam test's live session and frame-feed's\nfailed-open case take a whole, uncast DaemonParts from test/helpers/daemon-parts.ts.\nThe render cache's composition, the frame feed's wiring and the teardown move\ninto daemon.ts functions that createDaemon and the builder both call, so the\nbuilder closes everything the daemon closes, and its store is held by the\njournal turns.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-677",
       "ref": "refs/pull/677/merge",
       "sha": "dcdc55f5912da5dacf43042e7d4fcaf650d6811f",
