@@ -44,11 +44,11 @@ These are the existing pieces each part of the proposal touches. They are facts 
 - **State 2 (`< CurrentPresetName >`).** This is a [carousel](#carousel): `{{ carousel "apply" "open" "label" }}`, drawn as `◀ ▦ preset ▶`. Each arrow applies the previous or next value. Clicking the label fires `open`.
 - **State 3 (the list below, with `X`).** This is a [menu](#menu) body: a picker grid dropped below the row, led by `✕`, with `←`/`→` paging when it does not fit. Picking applies the value; whether the list stays open is the `closeOnPick` option (default: stays open).
 - **"The colour changes to show a menu is attached."** That is already the rule for every trigger: an open trigger wears its band's state colour, and the body below sits on a plane of the same hue ([disclosure](#disclosure-and-the--close)).
-- **Theme swatches.** `{{ themePreview }}` draws swatches of the current theme as one row of sample cells. It is the only swatch-like element today. There is no per-theme swatch next to a name.
-- **"Each theme name has the same colour and background as the rest of the UI, unlike today."** Today an option in the theme picker is painted in that theme's own background and primary colour, and an option in the style picker is painted in the base theme with that style applied. Every other picker's options wear the band's colours.
-- **The gear (`[⚙️]`) opening a separate menu.** This is how configure mode works today: `🔧` on a placement opens a body of that placement's settings.
+- **Theme swatches.** A theme or style carries a `▀▀▀` swatch beside its name (`🎨 theme ▀▀▀`, `◐ style ▀▀▀`), and the theme picker's pages are swatches alone. `{{ themePreview }}` samples the selected theme under the list.
+- **"Each theme name has the same colour and background as the rest of the UI, unlike today."** Built: every option in every list wears the band's colours, and a theme's or style's own colours are in its swatch.
+- **The gear (`[⚙️]`) opening a separate menu.** Built: the theme control's `⚙` opens style, variation and shade. Configure mode's `🔧` on a placement opens a body of that placement's settings the same way.
 - **`[Done]`.** Edit mode's `✓ done` / `✓ save` is the nearest element. Every other open body closes with `✕`.
-- **`(random)`.** No element today picks a random value.
+- **`(random)`.** The theme picker's `?` applies a random theme other than the one in force.
 - **Moving style and variation into the theme picker.** The theme control's `⚙` opens style, variation and shade; endcaps stays in the `🎨 look` tab.
 
 ## How a click works
@@ -96,7 +96,7 @@ What a click does depends on the action's kind:
 
 ### Toggle
 
-A [cycle action](#action-region) with one display per member. A click writes the next member, wrapping, so a two-member cycle is an on/off switch. The settings menu's `⚙ config` tab, with `☑ wrap` and `☑ update notice`, and edit mode's top row, with `☐ live`:
+A [cycle action](#action-region) with one display per member. A click writes the next member, wrapping, so a two-member cycle is an on/off switch. The first row of the settings menu's [`⚙ config` tab](#tabs) at 80 columns, with `☑ wrap` and `☑ update notice`, and edit mode's top row, with `☐ live`:
 
 ```
  ✕  ☑ wrap  ◀ padding 1 ▶  ☑ update notice  🧪 toggles
@@ -115,7 +115,7 @@ A [cycle action](#action-region) with one display per member. A click writes the
 
 ### Stepper
 
-Two [action regions](#action-region) on either side of a value. In the settings menu's `⚙ config` tab, then in configure mode for `block`:
+Two [action regions](#action-region) on either side of a value. In the first row of the settings menu's `⚙ config` tab at 80 columns, then in configure mode for `block`:
 
 ```
  ✕  ☑ wrap  ◀ padding 1 ▶  ☑ update notice  🧪 toggles
@@ -289,15 +289,15 @@ Read-only rows under a list, showing what the current pick looks like. Neither h
 `{{ themePreview }}`, under the style list (and, as `{{ themePreview "apply" }}`, under the theme picker's swatches, sampling the selected theme): two rows of sample cells, each drawn by the function that draws that kind of cell on the bar (decoration tones; an open trigger and its plane, warning, error):
 
 ```
-    ~/code  main  opus  42%  5m  $1.20
-    ▾ open  menu   warn  error
+     ~/code  main  opus  42%  5m  $1.20
+     ▾ open  menu   warn  error
 ```
 
 `{{ layoutPreview }}`, under the preset, variation and shade lists: one block per segment of the current preset's rows, in that row's colours, labelled with the segment's name:
 
 ```
-    menu  fps  host  directory  gitaculous
-    model  context  autocompact  block  weekly
+     menu  fps  host  directory  gitaculous
+     model  context  autocompact  block  weekly
 ```
 
 - **Authored as:** `src/render/theme-preview.ts` (`themePreviewFuncs`), `src/render/layout-preview.ts` (`layoutPreviewFuncs`). Both fit the row: the theme preview drops trailing swatches, the layout preview shortens labels.
@@ -356,13 +356,20 @@ Every control writes a session draft. In the settings menu, a control also has a
 
 ### Door
 
-At 80 columns:
+At 80 columns, then at 200:
 
 ```
  🍫   polled  ⇄ bmf@u2  ~/c/cc-candybar (⊫ menus-8zu)
  ⎇ brandon-menus-sjhy.8zu ▸
  ✱ Opus 4.8  ◔ 48,000 (76%)  ⇲ auto −  ◱ 63% (2h 1m)  ◑ 21% (5d)
 ```
+
+```
+ 🍫   polled  ⇄ bmf@u2  ~/c/cc-candybar (⊫ menus-8zu)  ⎇ brandon-menus-sjhy.8zu ▸
+ ✱ Opus 4.8  ◔ 48,000 (76%)  ⇲ auto −  ◱ 63% (2h 1m)  ◑ 21% (5d)
+```
+
+Beside the door, `polled` says how the bar is redrawn: `polled` while Claude Code polls it, `≤N fps` while a [lane](#tabs) pushes it, N being the most frames a second the lane draws. It has no click.
 
 Clicking `🍫` opens the menu above the bar. The door rises with it as `✖`, in the theme's error colour, and the bar's rows stay as they were:
 
@@ -431,7 +438,7 @@ The theme picker at 80 columns, then at 200. While it is open, its label names t
 | Region | Click |
 |---|---|
 | `◀` / `▶` | applies the previous / next theme, turning to its page |
-| `?` | applies a random theme |
+| `?` | applies a random theme other than the one in force, chosen when the bar is drawn |
 | `←` / `→` | the previous / next page of swatches; shown while there is one |
 | A swatch | applies that theme; the one in force is bracketed |
 | The open label | closes the picker |
@@ -442,7 +449,7 @@ The gear's carousels:
  ✕  ◀ ◐ style ▀▀▀ ▶  ◀ 🎼 variation ▶  ◀ 🔆 shade ▶
 ```
 
-The style list carries the theme preview; the variation and shade lists carry the layout preview.
+The style list carries the theme preview; the variation and shade lists carry the layout preview. While the look these make differs from the theme's own default, a cell after them, `⤓ default for <theme> ▀▀▀`, saves it as that theme's default in the config file.
 
 The preset list, with the layout preview under it, the same at 80 and 200 columns:
 
@@ -492,7 +499,7 @@ One tab is open at a time; it leads with `▾`. A tab click writes `candybar.tab
 | `/clear` | [confirm step](#confirm-step), then types `/clear` |
 | `⇲ auto −` | the [autocompact](#bundled-segments-with-clicks) control the bar draws |
 
-These are the same trays the opt-in `toolbar` and `commands` segments draw (`src/config/quick-actions.ts`, `src/config/command-tray.ts`).
+The copy-and-open cells and the slash commands are the same trays the opt-in `toolbar` and `commands` segments draw (`src/config/quick-actions.ts`, `src/config/command-tray.ts`); `⇲ auto −` is the autocompact control, laid beside the command tray.
 
 **`🎨 look`:**
 
@@ -533,16 +540,21 @@ These are the same trays the opt-in `toolbar` and `commands` segments draw (`src
 | `☑ update notice` | toggles the update notice |
 | `🧪 toggles` | opens the lane toggles (below) |
 | `◀ menu timeout 120 ▶` | stepper for the seconds a menu stays open with no click, by 15 |
-| `◀ renderer ▶` | carousel over where the bar is drawn; its list explains each |
+| `◀ renderer ▶` | carousel over where the bar is drawn; its list explains each. Offered only inside tmux, as in these drawings |
 | `(?)` | help for the renderer |
 
-The lane toggles, at 200 columns:
+The lane toggles, at 80 columns, then at 200:
+
+```
+ ✕  ☐ 🧪 band (A)  (?)  ☐ 🧪 statusline (B)  (?)  ☐ 🧪 tmux pane (C)
+ (?)
+```
 
 ```
  ✕  ☐ 🧪 band (A)  (?)  ☐ 🧪 statusline (B)  (?)  ☐ 🧪 tmux pane (C)  (?)
 ```
 
-Each is a toggle, and its `(?)` says what its lane does.
+Each is a toggle, and its `(?)` says what its lane does. While a lane is on, its toggle (and the renderer, set to tmux) is followed by what the lane is doing: a spinner and `N fps` while something is subscribed to it, with `· off screen` when its pane is not on a screen, or `no subscriber`.
 
 **`🧰 tools`:**
 
@@ -783,7 +795,7 @@ Found while drawing the above. Each is for Brandon to decide; none is changed he
 
 1. **A value outside a carousel's domain counts as its first member.** A stale value steps from the first member, so `▶` skips that member, and a colour-valued domain shows the first member's swatch.
 2. **The doctor's result row does not fit 80 columns.** It is 113 cells, under an empty row; at 200 columns it sits on its own indented row with no empty row.
-3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ docs/… ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`.
+3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ brandon-menus-sjhy.8zu ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`.
 4. **Two `✚` side by side.** Between `model` and `context`, edit mode draws adjacent `✚` with nothing between them, because `context` and `autocompact` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing leaves its two `✚` adjacent too.
 5. **`✖` means two things on one screen.** In edit mode with the menu open, `✖` closes the menu (the door) and `✖` removes a segment, both visible at once. Bodies close with `✕`.
 6. **Three ways to choose one value.** A [carousel](#carousel) whose label opens a list (`◀ ✨ effect ▶`), the theme picker's pages of swatches (`◀ ? ▶ ← ▀▀▀ [▀▀▀]`), and [library pages](#library-pages). The settings menu and configure mode use the carousel and the theme picker; edit mode's `✚` is a [menu](#menu) over the library. A carousel's list is a menu's picker grid too, so the two share one list; nothing bundled uses a bare menu over a plain list.
