@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "c528b6a5b6526a191a75fddaa5dd0251b0889828",
+      "timestamp": "2026-11-07T05:50:18.375Z",
+      "commits": [
+        {
+          "sha": "c528b6a5b6526a191a75fddaa5dd0251b0889828",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T22:49:20-07:00",
+          "message": "fix(lanes): a /clear's mismatched tick draws no ⚠, and its render line names it (candybar-gather-renderer-76bb.1dh.jw7) (#669)\n\n* fix(lanes): a cleared session's straggling tick has left its pane, and draws no ⚠ (candybar-gather-renderer-76bb.1dh.jw7)\n\nA request whose Claude Code's record holds another session is stamped\nleft, not unconfirmed: that Claude Code is alive and has moved on, so\nthe tick names nothing to fix. Only an unread record, or a client too old\nto name its parent, still draws the session-pane ⚠. The render line keeps\nthe why for both.\n\n* fix(lanes): a stamp whose Claude Code holds another session is mismatched, either side of the rewrite, and its render line says so (candybar-gather-renderer-76bb.1dh.jw7)\n\n* test(lanes): a /clear's mismatched straggler leaves its session's status line held (candybar-gather-renderer-76bb.1dh.jw7)\n\n* test(lanes): the mismatched stamp in the hold test names the session its record holds (candybar-gather-renderer-76bb.1dh.jw7)"
+        },
+        {
+          "sha": "fc49ff5db45144707ebd065b13c507d038867cde",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-07T02:17:53Z",
+          "message": "chore(release): set `package.json` to 1.208.9 [skip ci]\n\n## [1.208.9](https://github.com/promptctl/cc-candybar/compare/v1.208.8...v1.208.9) (2026-11-07)\n\n### Bug Fixes\n\n* **lanes:** a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom) ([#663](https://github.com/promptctl/cc-candybar/issues/663)) ([e91dc65](https://github.com/promptctl/cc-candybar/commit/e91dc65779794fd06d6ce4db8ec43c25efb26e07))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-668",
       "ref": "refs/pull/668/merge",
       "sha": "51a21af9216132e6040626c8d71664d381019069",
@@ -48,71 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T18:57:41-07:00",
           "message": "fix(click): a drawn link reads as the daemon's one read, step by step, and one gate holds back a driven bar's machine click (brandon-menus-sjhy.3c7)\n\nThe dispatch read stamps each step once: one that runs carries its leaf,\nsession and arguments; one refused carries the daemon's text for why and the\narguments that decoded. The fold is the one reader of step outcomes and the\none caller of the refusal owners. drawnClickOf and describeLink read through\nreadClick, so adjacent writes read as the batch that lands and a malformed\nstep as its own refusal beside the steps that run; effectsOf stays the wire\ncodec's inverse. The harness and the site hold a click back by one gate that\ncounts only steps that run, naming refused steps beside them.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-669",
-      "ref": "refs/pull/669/merge",
-      "sha": "f829a137d812b0f785c1f0e1fd1ed12fa23477ab",
-      "timestamp": "2026-11-07T05:43:39.669Z",
-      "commits": [
-        {
-          "sha": "f829a137d812b0f785c1f0e1fd1ed12fa23477ab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:41:56Z",
-          "message": "Merge 308a82ded6a075fcbd8b322e6474fbbd79ca4a48 into fc49ff5db45144707ebd065b13c507d038867cde\n"
-        },
-        {
-          "sha": "308a82ded6a075fcbd8b322e6474fbbd79ca4a48",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:41:45-07:00",
-          "message": "test(lanes): the mismatched stamp in the hold test names the session its record holds (candybar-gather-renderer-76bb.1dh.jw7)\n"
-        },
-        {
-          "sha": "db2d5a78ce5c3d08d51d6d95ed586a1c1c82890d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:38:27-07:00",
-          "message": "test(lanes): a /clear's mismatched straggler leaves its session's status line held (candybar-gather-renderer-76bb.1dh.jw7)\n"
-        },
-        {
-          "sha": "f3362bc18f077f47df02e0aee252757b163aafb4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:35:16-07:00",
-          "message": "fix(lanes): a stamp whose Claude Code holds another session is mismatched, either side of the rewrite, and its render line says so (candybar-gather-renderer-76bb.1dh.jw7)\n"
-        },
-        {
-          "sha": "76972919abe9a32955039b19dc6bc0eb5e750ce1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:26:25-07:00",
-          "message": "fix(lanes): a cleared session's straggling tick has left its pane, and draws no ⚠ (candybar-gather-renderer-76bb.1dh.jw7)\n\nA request whose Claude Code's record holds another session is stamped\nleft, not unconfirmed: that Claude Code is alive and has moved on, so\nthe tick names nothing to fix. Only an unread record, or a client too old\nto name its parent, still draws the session-pane ⚠. The render line keeps\nthe why for both.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e91dc65779794fd06d6ce4db8ec43c25efb26e07",
-      "timestamp": "2026-11-07T02:10:41.030Z",
-      "commits": [
-        {
-          "sha": "e91dc65779794fd06d6ce4db8ec43c25efb26e07",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:09:45-07:00",
-          "message": "fix(lanes): a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom) (#663)\n\n* fix(lanes): a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom)\n\nEvery process in a tmux pane inherits TMUX and TMUX_PANE, so a one-shot\n`cc-candybar` run from Claude Code's Bash tool, under any session id, became\n\"the pane's session\": the status line released the pane to it and a bar pane\nfollowed it.\n\nThe client now reports its parent pid (for a statusline, Claude Code itself,\nmeasured on 2.1.299). The render checkpoint reads that process's own record,\n`<config dir>/sessions/<pid>.json`, the one the restart already reads, and\nstamps the request with the pane its session runs in: outside, runs, or\nunconfirmed with why. The status line's holds and the pane-session reply read\nonly that stamp, so namesPane is gone. Every render event records it as\n`pane=`, and while the status line or a bar pane is on, an unconfirmed session's\nbar carries a ⚠ that says why.\n\n* fix(lanes): a pane's session is read from its Claude Code's record at the asking, and a request not known to run in a pane releases nothing (candybar-gather-renderer-76bb.1dh.aom)\n\nHigh review of #663:\n- The takeover check and the pane-session reply read the record when they ask, so a stamp from before a /clear no longer answers for the pane.\n- A request whose parent is not the pane's Claude Code is no evidence about where its session runs: a held session stays where it is.\n- A record that fails to parse is read once more: Claude Code rewrites it in place.\n- One record reader: the lane edge is handed the daemon's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* fix(lanes): a stamp says where its session runs, outside tmux included, and a lookup reads each record once (candybar-gather-renderer-76bb.1dh.aom)\n\nMedium review of #663:\n- The record is read for every request, so a session its Claude Code holds outside tmux releases the pane it was held in; an unconfirmed one releases nothing.\n- One lookup reads each record once, however many of its sessions it weighs.\n- A click's commit judges by the record as it reads then.\n- The bar pane's waiting line says what it waits for, and where a rendered statusline says why it isn't the pane's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* fix(lanes): a torn record's re-read reports what it found, and an unread parent's warning names the wrapper fix (candybar-gather-renderer-76bb.1dh.aom)\n\nSecond high review of #663.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* docs(lanes): rewrap the click's comment (candybar-gather-renderer-76bb.1dh.aom)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
-        },
-        {
-          "sha": "30386afe1d6f69b407d95bb4159aebbc3d9217d6",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T01:56:23Z",
-          "message": "chore(release): set `package.json` to 1.208.8 [skip ci]\n\n## [1.208.8](https://github.com/promptctl/cc-candybar/compare/v1.208.7...v1.208.8) (2026-11-07)\n\n### Bug Fixes\n\n* **feed:** a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0) ([#666](https://github.com/promptctl/cc-candybar/issues/666)) ([fff2581](https://github.com/promptctl/cc-candybar/commit/fff258104584a230d2eb90386e7f1e306eed5c5a))\n"
         }
       ]
     },
