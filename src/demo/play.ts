@@ -214,7 +214,8 @@ export type DrawnAt =
 // view was declared with; a draw (an answer, or a lane's frame) is drawn at
 // its instant, from the session's state it read and with what it was handed;
 // a document becomes the arm's; a turn is taken over its line's inputs (the
-// clicks' state, the request, the document it reaches) and held or not; a state is the session's clicks' state from there.
+// clicks' state, the request, the document it reaches) and held or not; a
+// state is the session's clicks' state from there.
 export type DemoStep =
   | {
       readonly kind: "request";

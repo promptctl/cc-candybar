@@ -150,7 +150,7 @@ export function sessionRecorder(
   // write that throws ends that recording with the error, which its sink
   // reports, and no later line is offered. A declaration that is already the
   // last one written is not written again: a replay's view already holds it.
-  const write = (sessionId: string, rec: Open, line: RecordingLine): void => {
+  const put = (sessionId: string, rec: Open, line: RecordingLine): void => {
     if (line.kind === "declared" && line.request === rec.declaration) return;
     try {
       rec.sink.write(line);
@@ -175,10 +175,20 @@ export function sessionRecorder(
       end(sessionId, rec, { kind: "failed", error: e });
     }
   };
+  // A facts line is offered only through `writeDocument`, which writes the
+  // clicks' state ahead of it.
+  const write = (
+    sessionId: string,
+    rec: Open,
+    line: Exclude<RecordingLine, { kind: "facts" }>,
+  ): void => put(sessionId, rec, line);
   // [LAW:single-enforcer] Every facts line a recording writes goes through
-  // here, unless it is the last document written, and after the clicks' state it was stamped under when that is not the
-  // last one written: a click moves the store before the document its keys
-  // restamp, so the state read now is the one its runs were declared under.
+  // here: a document already the last written is skipped, and one written
+  // under clicks' state other than the last written goes after a state line.
+  // A click moves the store before the document its keys restamp, so the
+  // state a replay holds when it reaches the document is the one its runs
+  // were declared under. The state is read when the document is written,
+  // which can be after its stamp.
   const writeDocument = (
     sessionId: string,
     rec: Open,
@@ -193,7 +203,7 @@ export function sessionRecorder(
     // A state write that failed ended the recording: its document is not
     // offered.
     if (open.get(sessionId)?.has(rec)) {
-      write(sessionId, rec, { kind: "facts", ...line });
+      put(sessionId, rec, { kind: "facts", ...line });
     }
   };
   // [LAW:one-source-of-truth] The turn of `view` as it stands, written when
@@ -261,7 +271,7 @@ export function sessionRecorder(
       () => writeTurn(sessionId, rec, view),
     );
     // The document the turn line just wrote is the follow's while the turn is
-    // not held: `write` skips a document already the last written.
+    // not held: `writeDocument` skips a document already the last written.
     watch(
       () => view.followed.stamped(),
       (line) => writeDocument(sessionId, rec, view, line),

@@ -42,7 +42,10 @@ const ANSWERED: Handed = {
 };
 const FED: Handed = {
   drawing: { by: "feed", fps: 30 },
-  feeds: { ...UNFOLLOWED_FEEDS, pane: { subscribers: 1, fps: 30, shown: true } },
+  feeds: {
+    ...UNFOLLOWED_FEEDS,
+    pane: { subscribers: 1, fps: 30, shown: true },
+  },
   diagnostics: [],
 };
 
@@ -134,6 +137,24 @@ test("a recording whose first document fails to write is ended, and its view's n
   v.move(2);
   v.hold(true);
   expect(offered).toEqual(["recording", "turn"]);
+});
+
+test("a recording whose state line fails to write is ended, and the document stamped after the click is offered to no one", () => {
+  const v = view();
+  const recorder = sessionRecorder({ sessionView: () => v }, () => {});
+  const offered: RecordingLine["kind"][] = [];
+  const ended: unknown[] = [];
+  recorder.record(SID, {
+    write: (line) => {
+      offered.push(line.kind);
+      if (line.kind === "state") throw new Error("ENOSPC");
+    },
+    end: (failure) => ended.push(failure),
+  });
+  v.click(6);
+  v.move(2);
+  expect(offered).toEqual(["recording", "turn", "state"]);
+  expect(ended).toEqual([{ kind: "failed", error: new Error("ENOSPC") }]);
 });
 
 test("a recording that fails on the document of the view it moved to is ended, and that view's next document is offered to no one", () => {
