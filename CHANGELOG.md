@@ -1,3 +1,9 @@
+## [1.208.7](https://github.com/promptctl/cc-candybar/compare/v1.208.6...v1.208.7) (2026-11-07)
+
+### Bug Fixes
+
+* **click:** a click is read once at the daemon's edge, and its event carries that read (brandon-menus-sjhy.ovq) ([#665](https://github.com/promptctl/cc-candybar/issues/665)) ([1806d37](https://github.com/promptctl/cc-candybar/commit/1806d3735da43b2aaeceb9ca12a48cce517d6201))
+
 ## [1.208.6](https://github.com/promptctl/cc-candybar/compare/v1.208.5...v1.208.6) (2026-11-07)
 
 ### Bug Fixes
