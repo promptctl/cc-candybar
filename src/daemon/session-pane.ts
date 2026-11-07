@@ -108,8 +108,9 @@ export const paneFact = (pane: SessionPane): string =>
 
 // [LAW:no-silent-failure] Why a lane that shows the session its pane runs
 // shows another bar than this one, while such a lane is on: null otherwise.
-// A mismatched stamp names nothing to fix: its Claude Code is the pane's and
-// confirms its next tick; its render line still says why.
+// A mismatched stamp names nothing to fix: its client was run by the pane's
+// Claude Code, whose ticks of the session it holds are confirmed; its render
+// line still says why.
 export function sessionPaneError(
   pane: SessionPane,
   lanes: LaneSwitches,
