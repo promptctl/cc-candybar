@@ -6,10 +6,11 @@
 import { autorun } from "mobx";
 import { SessionState, SINGLE_RUN } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
+import { systemFilesystem } from "../../src/disk/system-filesystem";
 
 test("one session's step moves its own depth and no other session's", () => {
   const sessionState = new SessionState(SINGLE_RUN);
-  const history = new SettingsHistory(sessionState, () => {});
+  const history = new SettingsHistory(systemFilesystem, sessionState, () => {});
   const pick = (sessionId: string, theme: string): void => {
     const journal = history.begin();
     journal.sessionState.set(sessionId, "theme", theme);

@@ -28,7 +28,6 @@ import { BadVerbArgs } from "./verb-error";
 import JSON5 from "json5";
 import { writeAtomicOn } from "../utils/atomic-write.js";
 import { resolvedTarget } from "../utils/link-chain.js";
-import { systemFilesystem } from "../disk/system-filesystem.js";
 import type { Filesystem, FilesystemReads } from "../disk/filesystem.js";
 import {
   DEFAULT_DSL_CONFIG,
@@ -125,16 +124,14 @@ export function persistValueText(key: string, raw: string): string {
 // ─── The file ────────────────────────────────────────────────────────────────
 
 /** The file's text, or null when it does not exist. */
-// [LAW:effects-at-boundaries] exception: undo reads and writes the system
-// disk, a pair of its own, until the settings history takes a disk.
-export function readConfigText(file: string): string | null {
-  return textOn(systemFilesystem, file);
-}
-
 // [LAW:one-source-of-truth] A click reads, proves and writes its home on the
-// home's one disk, so the text it splices, the chain it judges and the file it
-// writes are one disk's.
-function textOn(reads: FilesystemReads, file: string): string | null {
+// home's one disk, and its undo on the daemon's, which is the same disk: the
+// text it splices, the chain it judges, the file it writes and the text undo
+// puts back are one disk's.
+export function readConfigText(
+  reads: FilesystemReads,
+  file: string,
+): string | null {
   try {
     return reads.readFileSync(file);
   } catch (e) {
@@ -150,14 +147,6 @@ function textOn(reads: FilesystemReads, file: string): string | null {
 // Logs at "error" for the daemon-log breadcrumb, then RETHROWS so the click
 // fails loudly instead of claiming a success that didn't happen.
 export function writeConfigText(
-  file: string,
-  text: string | null,
-  logger: DaemonLogger,
-): void {
-  writeOn(systemFilesystem, file, text, logger);
-}
-
-function writeOn(
   disk: Filesystem,
   file: string,
   text: string | null,
@@ -486,7 +475,7 @@ function commit(
   const was: Was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse(home, was, will);
-  writeOn(home.disk, home.path, after, store.logger);
+  writeConfigText(home.disk, home.path, after, store.logger);
   store.record(home.path, before, after);
 }
 
@@ -658,7 +647,7 @@ export function readValue(
   key: string,
 ): string | number | boolean | undefined {
   const target = requireValueTarget(key);
-  const doc = docOf(textOn(home.disk, home.path) ?? "");
+  const doc = docOf(readConfigText(home.disk, home.path) ?? "");
   const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
   return node !== undefined && "value" in node ? node.value : undefined;
 }
@@ -692,7 +681,7 @@ export function writeDrafts(
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
   placements: readonly PlacementValue[],
 ): void {
-  const before = textOn(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
@@ -796,7 +785,7 @@ export function deleteValues(
   keys: readonly string[],
 ): void {
   const targets = keys.map(requireTarget);
-  const before = textOn(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   if (before === null) return;
   const after = targets.reduce(
     (text, target) => deleteAtPath(text, resetPathOf(docOf(text), target)),
@@ -856,7 +845,7 @@ export function writePreset(
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
-  const before = textOn(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc, home);
   const own: ConfigPath = ["presets", name];
@@ -915,7 +904,7 @@ export function writeThemeDefault(
   theme: string,
   look: Readonly<Record<ThemeDefaultField, string>>,
 ): void {
-  const before = textOn(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme],
@@ -944,7 +933,7 @@ export function deletePreset(
     );
   }
   const own: ConfigPath = ["presets", name];
-  const before = textOn(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
@@ -984,7 +973,7 @@ export function applyLayoutOp(
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = textOn(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const placement = homeOnly(home, () =>
     layoutPlacementOf(docOf(before ?? ""), target.preset, subject),

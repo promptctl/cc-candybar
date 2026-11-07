@@ -324,6 +324,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const journalTurns = new JournalTurns();
   const sessionState = new SessionState(journalTurns, storage.session);
   const settingsHistory = new SettingsHistory(
+    inputs.filesystem,
     sessionState,
     log,
     storage.history,

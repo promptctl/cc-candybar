@@ -29,6 +29,7 @@ import {
   PLACEMENT_DRAFT_NS,
 } from "../config/loader/edit-mode";
 import { readConfigText, writeConfigText } from "./config-file-store";
+import type { Filesystem } from "../disk/filesystem";
 import type { DaemonLogger } from "../utils/logger";
 import { recordingView, type SessionStateRW } from "./session-state";
 import { BadVerbArgs } from "./verb-error";
@@ -187,6 +188,9 @@ export class SettingsHistory {
   }
 
   constructor(
+    // The disk a file change is read back and put back on: the one the click
+    // that recorded it wrote.
+    private readonly disk: Filesystem,
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
     private readonly storage: HistoryStorage = EPHEMERAL_HISTORY_STORAGE,
@@ -413,12 +417,12 @@ export class SettingsHistory {
   private read(sessionId: string, change: Change): string | null {
     return change.kind === "session"
       ? this.sessionState.get(sessionId, change.key)
-      : readConfigText(change.file);
+      : readConfigText(this.disk, change.file);
   }
 
   private write(sessionId: string, change: Change, value: string | null): void {
     if (change.kind === "file") {
-      writeConfigText(change.file, value, this.logger);
+      writeConfigText(this.disk, change.file, value, this.logger);
     } else if (value === null) {
       this.sessionState.clear(sessionId, change.key);
     } else {

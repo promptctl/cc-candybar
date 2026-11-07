@@ -16,6 +16,7 @@ import {
 } from "../src/daemon/settings-history";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { readConfigText, writeConfigText } from "../src/daemon/config-file-store";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 const SID = "s1";
 let dir: string;
@@ -30,15 +31,15 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function rig(storage?: ConstructorParameters<typeof SettingsHistory>[2]) {
+function rig(storage?: ConstructorParameters<typeof SettingsHistory>[3]) {
   const sessionState = new SessionState(SINGLE_RUN);
-  const history = new SettingsHistory(sessionState, () => {}, storage);
+  const history = new SettingsHistory(systemFilesystem, sessionState, () => {}, storage);
   // One click that rewrites the config file: the file already holds `to` when
   // the journal is told, as a verb handler reports it.
   let n = 0;
   const edit = (): void => {
-    const before = readConfigText(file);
-    writeConfigText(file, `v${++n}`, () => {});
+    const before = readConfigText(systemFilesystem, file);
+    writeConfigText(systemFilesystem, file, `v${++n}`, () => {});
     const journal = history.begin();
     journal.file(SID, file, before, `v${n}`);
     journal.commit();
@@ -127,13 +128,13 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     edit(); // v2
     edit(); // v3
     history.rewind(SID);
-    expect(readConfigText(file)).toBe("v1");
+    expect(readConfigText(systemFilesystem, file)).toBe("v1");
     expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
     // A rewind alone leaves edit mode open, so it is cancellable again.
     edit(); // v4
     expect(history.depth(SID).sinceEdit).toBe(1);
     history.rewind(SID);
-    expect(readConfigText(file)).toBe("v1");
+    expect(readConfigText(systemFilesystem, file)).toBe("v1");
     toggle("closed");
     expect(history.history(SID).savepoint).toBeUndefined();
   });
@@ -145,9 +146,9 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     edit(); // v2
     history.rewind(SID);
     history.undo(SID);
-    expect(readConfigText(file)).toBe("v0");
+    expect(readConfigText(systemFilesystem, file)).toBe("v0");
     history.redo(SID);
-    expect(readConfigText(file)).toBe("v1");
+    expect(readConfigText(systemFilesystem, file)).toBe("v1");
     expect(() => history.redo(SID)).toThrow(/nothing to redo/);
   });
 
@@ -157,7 +158,7 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     for (let i = 0; i < 55; i++) edit();
     expect(history.depth(SID).undo).toBe(50);
     history.rewind(SID);
-    expect(readConfigText(file)).toBe("v0");
+    expect(readConfigText(systemFilesystem, file)).toBe("v0");
     expect(history.depth(SID)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
   });
 
@@ -170,10 +171,10 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     history.undo(SID); // v0
     expect(history.depth(SID)).toEqual({ undo: 0, redo: 2, sinceEdit: 1 });
     history.rewind(SID);
-    expect(readConfigText(file)).toBe("v2");
+    expect(readConfigText(systemFilesystem, file)).toBe("v2");
     expect(history.depth(SID)).toEqual({ undo: 2, redo: 0, sinceEdit: 0 });
     history.undo(SID);
-    expect(readConfigText(file)).toBe("v1");
+    expect(readConfigText(systemFilesystem, file)).toBe("v1");
   });
 
   test("a fresh step after an undo below the savepoint does not cost cancel the undone change", () => {
@@ -185,7 +186,7 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     expect(theme()).toBeNull();
     history.rewind(SID);
     expect(theme()).toBe("nord");
-    expect(readConfigText(file)).toBe("v0");
+    expect(readConfigText(systemFilesystem, file)).toBe("v0");
   });
 
   test("with nothing done since, puts back nothing", () => {
@@ -193,7 +194,7 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     edit();
     toggle("arrange");
     expect(history.rewind(SID)).toEqual([]);
-    expect(readConfigText(file)).toBe("v1");
+    expect(readConfigText(systemFilesystem, file)).toBe("v1");
     expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
   });
 
@@ -201,7 +202,7 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     const { history, edit } = rig();
     edit();
     expect(() => history.rewind(SID)).toThrow(/no savepoint/);
-    expect(readConfigText(file)).toBe("v1");
+    expect(readConfigText(systemFilesystem, file)).toBe("v1");
   });
 
   test("a file edited by hand since is kept, everything else is put back, and the refusal names it", () => {
@@ -213,7 +214,7 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     expect(() => history.rewind(SID)).toThrow(
       /config\.json5 changed since edit mode opened — kept as it is/,
     );
-    expect(readConfigText(file)).toBe("hand edit");
+    expect(readConfigText(systemFilesystem, file)).toBe("hand edit");
     expect(theme()).toBeNull();
     expect(history.depth(SID)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
   });
@@ -228,12 +229,12 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     history.undo(SID); // v1: s2 too
     edit(); // v4: abandons s2 and s3
     history.rewind(SID);
-    expect(readConfigText(file)).toBe("v3");
+    expect(readConfigText(systemFilesystem, file)).toBe("v3");
     expect(history.depth(SID)).toEqual({ undo: 3, redo: 0, sinceEdit: 0 });
     history.undo(SID);
-    expect(readConfigText(file)).toBe("v2");
+    expect(readConfigText(systemFilesystem, file)).toBe("v2");
     history.undo(SID);
-    expect(readConfigText(file)).toBe("v1");
+    expect(readConfigText(systemFilesystem, file)).toBe("v1");
   });
 
   test("steps abandoned by two fresh steps keep their order", () => {
@@ -249,7 +250,7 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     edit(); // abandons the edit and p2; at = 1
     history.rewind(SID);
     expect(theme()).toBe("c");
-    expect(readConfigText(file)).toBe("v0");
+    expect(readConfigText(systemFilesystem, file)).toBe("v0");
     history.undo(SID);
     expect(theme()).toBe("b");
     history.undo(SID);
@@ -260,7 +261,7 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
 describe("the savepoint under the history's bounds", () => {
   test("a net change alone over the byte bound releases the savepoint, said in the log", () => {
     const logs: string[] = [];
-    const history = new SettingsHistory(new SessionState(SINGLE_RUN), (_l, m) =>
+    const history = new SettingsHistory(systemFilesystem, new SessionState(SINGLE_RUN), (_l, m) =>
       logs.push(m),
     );
     const toggle = history.begin();
@@ -278,8 +279,8 @@ describe("the savepoint under the history's bounds", () => {
     const other = path.join(dir, "other.json5");
     fs.writeFileSync(other, "o0");
     const both = (): void => {
-      const before = readConfigText(other);
-      writeConfigText(other, "o1", () => {});
+      const before = readConfigText(systemFilesystem, other);
+      writeConfigText(systemFilesystem, other, "o1", () => {});
       const journal = history.begin();
       journal.file(SID, other, before, "o1");
       journal.commit();
@@ -289,7 +290,7 @@ describe("the savepoint under the history's bounds", () => {
     toggle("arrange"); // at = 2
     // C: changes `other` and the theme, made in edit mode.
     const journal = history.begin();
-    writeConfigText(other, "o2", () => {});
+    writeConfigText(systemFilesystem, other, "o2", () => {});
     journal.file(SID, other, "o1", "o2");
     journal.sessionState.set(SID, "theme", "gruvbox");
     journal.commit();
@@ -313,13 +314,14 @@ describe("the savepoint survives a restart", () => {
     first.toggle("arrange");
     first.edit();
     const second = new SettingsHistory(
+      systemFilesystem,
       new SessionState(SINGLE_RUN),
       () => {},
       fileHistoryStorage(historyFile, storedRootAt(dir), () => {}),
     );
     expect(second.depth(SID)).toEqual({ undo: 2, redo: 0, sinceEdit: 1 });
     second.rewind(SID);
-    expect(readConfigText(file)).toBe("v1");
+    expect(readConfigText(systemFilesystem, file)).toBe("v1");
   });
 
   test("a file in the root is saved relative to it, and read back under the root it is loaded against", () => {
@@ -445,6 +447,7 @@ describe("the savepoint survives a restart", () => {
       }),
     );
     const history = new SettingsHistory(
+      systemFilesystem,
       new SessionState(SINGLE_RUN),
       () => {},
       fileHistoryStorage(historyFile, storedRootAt(dir), () => {}),
