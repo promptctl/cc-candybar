@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-676",
+      "ref": "refs/pull/676/merge",
+      "sha": "10cbb6eecf2a69ae804da708379d1be5aed6495a",
+      "timestamp": "2026-11-07T09:58:07.660Z",
+      "commits": [
+        {
+          "sha": "10cbb6eecf2a69ae804da708379d1be5aed6495a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T09:57:05Z",
+          "message": "Merge 5627645ffc3a6143723f1b290c8b909ba84d0704 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
+        },
+        {
+          "sha": "5627645ffc3a6143723f1b290c8b909ba84d0704",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:56:27-07:00",
+          "message": "test(lanes): the session-pane draw composes its view with the state gates the daemon hands it (brandon-menus-sjhy.46w)\n\nThe rebase onto main brought in a test that builds a session view without\nthe state gates this branch's view now judges by.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "e090e7473717a5ef608ce61455f4845b60423413",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:50:18-07:00",
+          "message": "fix(state): a reserved key has only its control as writer, and a never-rendered session judges nothing (brandon-menus-sjhy.46w)\n\nAnswers /code-review high on 068bb06a (dispositions on PR #676).\n\n- The loader refuses an authored `set` whose key is in a reserved\n  namespace, so a placement draft's gate is its declaration's and its\n  parse at the render cannot refuse what the gate admitted.\n- A session with no recorded render origin has no config: its judged\n  read judges nothing instead of throwing inside a write's closing view.\n- The keyspace epoch is a MobX atom, so a computed judging through a\n  gate re-evaluates on a daemon-wide register or dispose.\n- toolbar-toggle reads toolbar-expanded judged; save-theme-default's\n  release read is raw, as every release read is.\n- The demo and check judge and gate with one Gates each.\n- The cycle, ring and standing-warning comments say what holds.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "cb4dcf335431b902029ec749088188c9035311a6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:07:39-07:00",
+          "message": "fix(state): a session value its config no longer admits draws the default and warns (brandon-menus-sjhy.46w)\n\nSession state outlives the config that wrote it. A stale value was swallowed\nsilently: the globals resolution dropped it, a placement's bar drew the saved\nvalue while its carousel sat on its first option, and a carousel or cycle\nfolded an author key's stale value to its first member.\n\n- The gate judges a stored value (Gate.verdict): a key one of the config's\n  own `set` actions writes, holding a value its validator refuses or changes,\n  is foreign. A key no `set` writes is the daemon's own and is held.\n- JudgedState (src/daemon/foundations/judged-state.ts) is the branded reader\n  every interpretive reader demands: the registry's `state` variables, step-\n  state (which now steps from the seed instead of clamping), the verbs'\n  settings picks, the closing view's closeNested, and the idle close's\n  openRoots. Back admits a value only if the verdict holds it. Release reads\n  after a reload stay raw.\n- session.foreign (the session view) lists foreign values; the draw stands one\n  amber `domain` warning per key, identified by its key.\n- The ring shows a held non-option between the last and first options; the\n  cycle keeps its rest-first reading, with the reason stated.\n- validateBoolean accepts its own canonical false, \"\".\n- placementSetting drops its fallback for a refused draft.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-677",
       "ref": "refs/pull/677/merge",
       "sha": "91e55ecba0713649acc0ba4e99ae2c25117bf9fb",
@@ -77,35 +113,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T00:48:39-07:00",
           "message": "feat(facts): a renderer declares the built-ins its config reads, and Gather gathers only those (candybar-gather-renderer-76bb.6pj.opl)\n\nThe facts document is complete over what the renderer declared, not total:\nevery declared built-in and source has a key, and nothing else does. The\ndeclaration is one walk over every preset's placements, templates, partials\nand globals rules, mapped through the payload's rows to the built-ins each\npath reads; the doctor asks the same walk. The declared set is consulted once,\nwhere the lanes are declared, and every later stage iterates the lanes it is\nhanded.\n\nThe payload is a table of rows, each composed from exactly the facts it names\n(a compile error to read another), in one of two phases the type carries: a\nturn row once per document, a draw row at the draw's instant (today). A read\nof an undeclared built-in throws naming the variable and the fact, so the\nsegment draws ⚠ and check fails, never a blank. The render event and the\nview-declared log line carry builtins=. FACTS_VERSION 2.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-676",
-      "ref": "refs/pull/676/merge",
-      "sha": "000fa2a6a8dd82e8cffe16f154fe4d6c171750fc",
-      "timestamp": "2026-11-07T09:53:51.245Z",
-      "commits": [
-        {
-          "sha": "000fa2a6a8dd82e8cffe16f154fe4d6c171750fc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T09:52:56Z",
-          "message": "Merge e090e7473717a5ef608ce61455f4845b60423413 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
-        },
-        {
-          "sha": "e090e7473717a5ef608ce61455f4845b60423413",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:50:18-07:00",
-          "message": "fix(state): a reserved key has only its control as writer, and a never-rendered session judges nothing (brandon-menus-sjhy.46w)\n\nAnswers /code-review high on 068bb06a (dispositions on PR #676).\n\n- The loader refuses an authored `set` whose key is in a reserved\n  namespace, so a placement draft's gate is its declaration's and its\n  parse at the render cannot refuse what the gate admitted.\n- A session with no recorded render origin has no config: its judged\n  read judges nothing instead of throwing inside a write's closing view.\n- The keyspace epoch is a MobX atom, so a computed judging through a\n  gate re-evaluates on a daemon-wide register or dispose.\n- toolbar-toggle reads toolbar-expanded judged; save-theme-default's\n  release read is raw, as every release read is.\n- The demo and check judge and gate with one Gates each.\n- The cycle, ring and standing-warning comments say what holds.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "cb4dcf335431b902029ec749088188c9035311a6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:07:39-07:00",
-          "message": "fix(state): a session value its config no longer admits draws the default and warns (brandon-menus-sjhy.46w)\n\nSession state outlives the config that wrote it. A stale value was swallowed\nsilently: the globals resolution dropped it, a placement's bar drew the saved\nvalue while its carousel sat on its first option, and a carousel or cycle\nfolded an author key's stale value to its first member.\n\n- The gate judges a stored value (Gate.verdict): a key one of the config's\n  own `set` actions writes, holding a value its validator refuses or changes,\n  is foreign. A key no `set` writes is the daemon's own and is held.\n- JudgedState (src/daemon/foundations/judged-state.ts) is the branded reader\n  every interpretive reader demands: the registry's `state` variables, step-\n  state (which now steps from the seed instead of clamping), the verbs'\n  settings picks, the closing view's closeNested, and the idle close's\n  openRoots. Back admits a value only if the verdict holds it. Release reads\n  after a reload stay raw.\n- session.foreign (the session view) lists foreign values; the draw stands one\n  amber `domain` warning per key, identified by its key.\n- The ring shows a held non-option between the last and first options; the\n  cycle keeps its rest-first reading, with the reason stated.\n- validateBoolean accepts its own canonical false, \"\".\n- placementSetting drops its fallback for a refused draft.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
