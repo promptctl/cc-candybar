@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-680",
+      "ref": "refs/pull/680/merge",
+      "sha": "1c77b8473937ddc35899763d25fa95c3b8473c7d",
+      "timestamp": "2026-11-07T10:10:23.092Z",
+      "commits": [
+        {
+          "sha": "1c77b8473937ddc35899763d25fa95c3b8473c7d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:09:38Z",
+          "message": "Merge 12eb650a9cee5ae0a196513bc4839615f241aa09 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
+        },
+        {
+          "sha": "12eb650a9cee5ae0a196513bc4839615f241aa09",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:09:19-07:00",
+          "message": "fix(update-act): a look spends at most five polls, and a spend it can't read is an error (brandon-unfiled-3248.9eu3)\n\nA dark wake mid-sleep spent the 60 s cap, so forty of them overnight ended\nthe act and could tear the bundle; the cap now follows the poll interval,\nin the watch that owns both. awake.json is parsed: a missing number read\nas NaN, compared past the budget and ended a running build. Corrects the\nrace comment: concurrent looks lose nothing.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "87d211a918f2138408bb7b7974565298f42f147e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:56:43-07:00",
+          "message": "fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3)\n\nThe update act was ended once the wall clock passed the deadline in its\nrecord. Wall time runs while the machine sleeps, so closing the lid mid-build\nfor longer than ten minutes signalled the build's group at the first tick\nafter wake, possibly mid-write, which tears the bundle.\n\nThe budget is now spent in observed time: each tick that finds the act's group\nalive adds the span since the last look, whichever daemon took it, capped at\n60 s, into the act's awake.json, and the act ends once that passes ten\nminutes. A sleep of any length spends at most the cap, a clock set back spends\nnothing, and daemons looking in turn or restarting mid-act share one budget.\nThe record keeps its deadline for older daemons reading the same acts during\nan update.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-681",
       "ref": "refs/pull/681/merge",
       "sha": "3fcace6d0437932cd3639c8e56738a0c0bfe240f",
@@ -121,28 +150,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:00:45-07:00",
           "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-680",
-      "ref": "refs/pull/680/merge",
-      "sha": "212637ede9f0198abfecf8cf4fb5c0dcb71272e6",
-      "timestamp": "2026-11-07T09:58:12.811Z",
-      "commits": [
-        {
-          "sha": "212637ede9f0198abfecf8cf4fb5c0dcb71272e6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:57:08-07:00",
-          "message": "Merge 87d211a918f2138408bb7b7974565298f42f147e into caff813e34090cb361f74867fbc7e70dd4c11663\n"
-        },
-        {
-          "sha": "87d211a918f2138408bb7b7974565298f42f147e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:56:43-07:00",
-          "message": "fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3)\n\nThe update act was ended once the wall clock passed the deadline in its\nrecord. Wall time runs while the machine sleeps, so closing the lid mid-build\nfor longer than ten minutes signalled the build's group at the first tick\nafter wake, possibly mid-write, which tears the bundle.\n\nThe budget is now spent in observed time: each tick that finds the act's group\nalive adds the span since the last look, whichever daemon took it, capped at\n60 s, into the act's awake.json, and the act ends once that passes ten\nminutes. A sleep of any length spends at most the cap, a clock set back spends\nnothing, and daemons looking in turn or restarting mid-act share one budget.\nThe record keeps its deadline for older daemons reading the same acts during\nan update.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
