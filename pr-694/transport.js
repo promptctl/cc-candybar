@@ -23794,8 +23794,7 @@ function readJobEnd(status) {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
 function endJob(spawner, clock, pid2, status, end) {
-  const staged = stagedPath(status);
-  const verdict = writeVerdict(staged, status, end);
+  const verdict = writeVerdict(status, end);
   if (verdict.verdict === "gone") return verdict;
   const signalled = spawner.signalJob(pid2, "SIGTERM");
   if (signalled) {
@@ -23809,7 +23808,8 @@ function endJob(spawner, clock, pid2, status, end) {
   }
   return { ...verdict, signalled };
 }
-function writeVerdict(staged, status, end) {
+function writeVerdict(status, end) {
+  const staged = stagedPath(status);
   try {
     writeFileSync(staged, `${formatJobEnd(end)}
 `);
@@ -23819,9 +23819,12 @@ function writeVerdict(staged, status, end) {
     const code = err.code;
     if (code === "ENOENT") return { verdict: "gone" };
     if (code === "EEXIST") return { verdict: "preceded" };
-    return { verdict: "unrecorded", error: err.message };
+    return {
+      verdict: "unrecorded",
+      error: `${status}: ${code ?? err.message}`
+    };
   } finally {
-    rmSync(staged, { force: true });
+    if (existsSync(staged)) rmSync(staged, { force: true });
   }
 }
 function createLauncher(owner, clock, spawner) {
@@ -69950,7 +69953,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.3";
+var PACKAGE_VERSION = "1.210.4";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -79261,7 +79264,10 @@ var stay = (resp) => ({
   exitAfterFlush: null,
   delivered: NOTHING_DELIVERED
 });
-var replied = (reply) => ({ kind: "reply", ...reply });
+var replied = (reply) => ({
+  kind: "reply",
+  ...reply
+});
 var REPLY_KINDS = {
   render: true,
   "pane-session": true,
@@ -79876,7 +79882,9 @@ var unwatched = (record2) => ({
 });
 var latestLook = (record2, shared, own2) => {
   if (own2 === null) return shared ?? unwatched(record2);
-  return shared === null || own2.lastSeen > shared.lastSeen ? own2 : shared;
+  if (shared === null) return own2;
+  const ownLater = own2.spentMs > shared.spentMs || own2.spentMs === shared.spentMs && own2.lastSeen > shared.lastSeen;
+  return ownLater ? own2 : shared;
 };
 var observe = (awake, now2, longestMs) => {
   const span = now2 - awake.lastSeen;
@@ -80064,29 +80072,36 @@ function readAwake(file) {
   try {
     text4 = readActFile(file);
   } catch (err) {
-    return { ok: false, reason: err.message };
+    return { kind: "unread", reason: err.message };
   }
-  if (text4 === null) return { ok: true, awake: null };
+  if (text4 === null) return { kind: "spend", awake: null };
   let parsed2;
   try {
     parsed2 = JSON.parse(text4);
   } catch (err) {
-    return { ok: false, reason: `${err.message}: ${text4}` };
+    return { kind: "unparsed", reason: `${err.message}: ${text4}` };
   }
   const { spentMs, lastSeen } = parsed2 ?? {};
-  return typeof spentMs === "number" && typeof lastSeen === "number" && spentMs >= 0 && Number.isFinite(spentMs) && Number.isFinite(lastSeen) ? { ok: true, awake: { spentMs, lastSeen } } : { ok: false, reason: `not an act's spend: ${text4}` };
+  return typeof spentMs === "number" && typeof lastSeen === "number" && spentMs >= 0 && Number.isFinite(spentMs) && Number.isFinite(lastSeen) ? { kind: "spend", awake: { spentMs, lastSeen } } : { kind: "unparsed", reason: `not an act's spend: ${text4}` };
 }
 function spendLook(dir, facts, own2, now2, longestMs) {
   const actDir = import_node_path40.default.join(dir, String(facts.act));
   const file = awakeOf(actDir);
   const read2 = readAwake(file);
   const awake = observe(
-    latestLook(facts.record, read2.ok ? read2.awake : null, own2),
+    latestLook(facts.record, read2.kind === "spend" ? read2.awake : null, own2),
     now2,
     longestMs
   );
+  if (read2.kind === "unread") {
+    const base = own2 === null ? "the act's start" : "this daemon's last look";
+    return {
+      awake,
+      fault: `${file}: ${read2.reason}; left in place, this look counts on from ${base}`
+    };
+  }
   const faults = [];
-  if (!read2.ok) {
+  if (read2.kind === "unparsed") {
     const carried = own2 === null ? "its spend restarts" : "its spend carries on from this daemon's last look";
     faults.push(`${file}: ${read2.reason}; ${carried}`);
   }
@@ -80095,9 +80110,10 @@ function spendLook(dir, facts, own2, now2, longestMs) {
     fs_default.writeFileSync(staged, JSON.stringify(awake));
     fs_default.renameSync(staged, file);
   } catch (err) {
-    fs_default.rmSync(staged, { force: true });
-    if (err.code === "ENOENT") return null;
-    faults.push(`${file}: ${err.message}`);
+    if (fs_default.existsSync(staged)) fs_default.rmSync(staged, { force: true });
+    const code = err.code;
+    if (code === "ENOENT") return null;
+    faults.push(`${file}: not written: ${code ?? err.message}`);
   }
   return { awake, fault: faults.length === 0 ? null : faults.join("; ") };
 }
@@ -80370,6 +80386,7 @@ function makeUpdateWatch(opts) {
   }
   let unreadable = null;
   const logUnreadable = changeLogger(log);
+  const actsFault = (why2) => `update act files (${actsDir2}): ${why2}`;
   async function touchActs(touch) {
     try {
       const value = await touch();
@@ -80379,7 +80396,7 @@ function makeUpdateWatch(opts) {
       if (err instanceof DaemonClosing) {
         return { ok: false, error: err.message };
       }
-      unreadable = `update act files (${actsDir2}): ${err.message}`;
+      unreadable = actsFault(err.message);
       logUnreadable(["error", unreadable]);
       return { ok: false, error: unreadable };
     }
@@ -80397,7 +80414,13 @@ function makeUpdateWatch(opts) {
   }
   function endAct(facts) {
     const ending = endOverdue(actsDir2, facts, launcher);
-    if (ending.verdict === "gone") return;
+    if (ending.verdict === "gone") {
+      log(
+        "error",
+        `apply-update: act ${facts.act} timed out, but its files were removed before it could be ended; its group (pid ${facts.record.pid}) was not signalled`
+      );
+      return;
+    }
     const signal = ending.signalled ? "ending it" : "its group took no signal";
     if (ending.verdict !== "unrecorded") {
       const why2 = ending.verdict === "stands" ? "timed out" : "outlived its verdict";
@@ -80410,8 +80433,10 @@ function makeUpdateWatch(opts) {
     );
     const end = ending.signalled ? "was ended" : "its group took no signal";
     unrecorded = {
-      act: facts.act,
-      reason: `update act files (${actsDir2}): act ${facts.act} spent its budget and ${end}; its timeout verdict could not be written: ${ending.error}`
+      job: facts.job,
+      reason: actsFault(
+        `act ${facts.act} spent its budget and ${end}; its timeout verdict could not be written: ${ending.error}`
+      )
     };
   }
   async function watchAct() {
@@ -80421,6 +80446,9 @@ function makeUpdateWatch(opts) {
       return facts;
     });
     if (closed || !read2.ok) return;
+    if (unrecorded !== null && read2.value?.job !== unrecorded.job) {
+      unrecorded = null;
+    }
     const next = judgeAct(read2.value);
     if (seen === null && next.kind === "running") {
       log("info", `apply-update: act ${next.act} is running; watching it`);
@@ -80464,7 +80492,7 @@ function makeUpdateWatch(opts) {
       const read2 = await touchActs(() => acts.read());
       return read2.ok && judgeAct(read2.value).kind === "running";
     }),
-    error: () => unreadable ?? (unrecorded !== null && seen !== null && seen.kind !== "idle" && seen.act === unrecorded.act ? unrecorded.reason : null),
+    error: () => unreadable ?? unrecorded?.reason ?? null,
     act: () => actTurn(async () => {
       if (closed) throw new DaemonClosing("apply-update");
       const read2 = await touchActs(() => acts.read());
@@ -80499,6 +80527,7 @@ function makeUpdateWatch(opts) {
         `apply-update: act ${claim.act}: ${facts.act} \u2014 ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`
       );
       seen = { kind: "running", act: claim.act };
+      unrecorded = null;
     })
   };
 }

@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-694",
+      "ref": "refs/pull/694/merge",
+      "sha": "b339f085c6a633c95014e79f98ce023142583e6a",
+      "timestamp": "2026-11-07T12:34:37.259Z",
+      "commits": [
+        {
+          "sha": "b339f085c6a633c95014e79f98ce023142583e6a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T12:33:44Z",
+          "message": "Merge d1b1340ee39e094d69f9f3e8f39f6587efe67f34 into b21e989ab734befd8acc182d17139d743372d040\n"
+        },
+        {
+          "sha": "d1b1340ee39e094d69f9f3e8f39f6587efe67f34",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:33:16-07:00",
+          "message": "fix(update-act): a fault reads the same at every look, a failed read keeps the shared spend, and cleanup never blocks an end (brandon-unfiled-3248.7cay)\n\nHigh review of PR #694:\n- A write fault names the published file and the errno code, not the\n  message that names a fresh staged path each look, so the change logger\n  dedupes it and the warning text holds still.\n- A spend file that can't be read is left in place and the look counts on\n  from this daemon's own; only bytes that can't be parsed are replaced, so a\n  transient read error no longer hands the act a fresh budget.\n- The latest look is the larger spend, ties going to the later look: a wall\n  clock set back no longer lets a stale copy win.\n- A staging is removed only when it is there: in a directory that can't be\n  searched the removal's EACCES replaced the verdict and nothing was ended.\n- An act whose files vanish before its end is logged, with its pid.\n- The unrecorded-end reason is keyed by job, not act number, and\n  error() reads it directly.\n- The verdict write's type is the one JobEnding derives from; the warning\n  prefix is spelled once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "be7b7b9a247b32d0a850198204517e488a7b800d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:19:15-07:00",
+          "message": "fix(update-act): an act whose files can't be written is still ended after its budget (brandon-unfiled-3248.7cay)\n\nA look now judges its spend before it reports a write it could not make:\nspendLook returns the spend and its fault instead of throwing, and counts\non from the later of the act's files and this daemon's own last look of\nthe same job (the reader's job identity decides \"same job\"). endJob\nsignals the group even when its timeout verdict can't be written, as a\nnew `unrecorded` arm of JobEnding, and the watch keeps why it ended that\nact so the warning still says so once the group is gone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b21e989ab734befd8acc182d17139d743372d040",
@@ -64,28 +93,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:24:50-07:00",
           "message": "fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (brandon-unfiled-3248.5bfl)\n\nEdit chrome spelled every insert slot, removal, configure entry, draft\nvariable and setting control from one walk counter shared over the preset\ntree, so adding, removing or moving a placement shifted the name of every\ncontrol after it, and an open + library, its page cursor or an open\nconfigure list landed on a neighbour after the reload. Every name is now\nspelled from the placement it serves through chromeIdent, an injective\nbase-36 spelling of the id that is a fixed point of ident, and the counter\nis gone.\n\nThe default-menu bytes snapshot regenerates for the new link names; its\nplain text is unchanged.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-694",
-      "ref": "refs/pull/694/merge",
-      "sha": "52a77fd3f30e6d623f77bd5700ef0ef2a677118a",
-      "timestamp": "2026-11-07T12:21:58.692Z",
-      "commits": [
-        {
-          "sha": "52a77fd3f30e6d623f77bd5700ef0ef2a677118a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:20:42Z",
-          "message": "Merge be7b7b9a247b32d0a850198204517e488a7b800d into 06ac017c63f4be865a8f33c02e0612d2eebddab5\n"
-        },
-        {
-          "sha": "be7b7b9a247b32d0a850198204517e488a7b800d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:19:15-07:00",
-          "message": "fix(update-act): an act whose files can't be written is still ended after its budget (brandon-unfiled-3248.7cay)\n\nA look now judges its spend before it reports a write it could not make:\nspendLook returns the spend and its fault instead of throwing, and counts\non from the later of the act's files and this daemon's own last look of\nthe same job (the reader's job identity decides \"same job\"). endJob\nsignals the group even when its timeout verdict can't be written, as a\nnew `unrecorded` arm of JobEnding, and the watch keeps why it ended that\nact so the warning still says so once the group is gone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
