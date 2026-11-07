@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-689",
+      "ref": "refs/pull/689/merge",
+      "sha": "d813227f1678f5ad03561fcc8020a873b7b6846e",
+      "timestamp": "2026-11-07T11:32:35.174Z",
+      "commits": [
+        {
+          "sha": "d813227f1678f5ad03561fcc8020a873b7b6846e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:31:27-07:00",
+          "message": "Merge e3b43619ed7eecd374a294a790e68916b834304f into 3e574dde3244026257856ed4e675a0275bc287d1\n"
+        },
+        {
+          "sha": "e3b43619ed7eecd374a294a790e68916b834304f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:30:53-07:00",
+          "message": "fix(daemon): a connection's state is one value, and past waiting it reads no more frames (brandon-unfiled-3248.df7i)\n\nA connection's lifecycle is one state (awaiting, answering, unattended,\nanswered, held, streaming, closed) moved by one pure transition table; the\nconnection only performs the effects a step names. In-flight and the\nbackstop are columns of the table, so each moves once, on crossing its line.\n\nA connection reads exactly one frame: a second frame, a frame after the\nanswer, and the bytes behind an over-cap header or unparseable frame are\nnever handled or buffered. A reply that cannot be encoded is answered\nRENDER_FAILED and ends the stream, its exit still sequenced on that flush.\nA dropped exit's warning names its one cause: the client was told TIMEOUT.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-680",
       "ref": "refs/pull/680/merge",
       "sha": "1f31a5414e87b0644d196794e34337ff20f44626",
