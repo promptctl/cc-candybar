@@ -223,15 +223,15 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
   test("at 256 colours a red that reads under the quiet floor in truecolor keeps that contrast, and is never lifted toward the floor", () => {
     // atom-one-dark's error-lighten-3 on primary-darken-2: the farthest named
     // red, accepted at 2.00:1. Lifted to the quiet floor it rounds to a yellow
-    // (#ffff87, 3.65:1); kept at what it had it stays a red (#ffaf87, 2.15:1).
+    // (#ffff87, 3.65:1). Its own rounding (#ffaf87, 2.15:1) already keeps
+    // what it had, so it is the red itself.
     const FAINT_RED = "#ffa09b";
     const GROUND = "#2c87c4";
     const held = contrastRatio(parseRgbHex(FAINT_RED.slice(1)), parseRgbHex(GROUND.slice(1)));
     expect(held).toBeLessThan(QUIET_MIN_CONTRAST);
     const kept = at(ColorDepth.EIGHT_BIT)(FAINT_RED, GROUND);
-    const keptContrast = contrastRatio(drawn(kept), drawn(GROUND));
-    expect(keptContrast).toBeGreaterThanOrEqual(held);
-    expect(keptContrast).toBeLessThan(QUIET_MIN_CONTRAST);
+    expect(kept).toBe(FAINT_RED);
+    expect(contrastRatio(drawn(kept), drawn(GROUND))).toBeGreaterThanOrEqual(held);
   });
 
   test("a translucent colour is measured as the terminal draws it, over black — never laid over its ground", () => {
