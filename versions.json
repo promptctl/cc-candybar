@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-682",
+      "ref": "refs/pull/682/merge",
+      "sha": "0db16836661950bf2be27b6cc8a027966d1bfa6a",
+      "timestamp": "2026-11-07T10:02:37.777Z",
+      "commits": [
+        {
+          "sha": "0db16836661950bf2be27b6cc8a027966d1bfa6a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:01:51-07:00",
+          "message": "Merge bc8bc80f68d4832db29bd312c108b75838362100 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
+        },
+        {
+          "sha": "bc8bc80f68d4832db29bd312c108b75838362100",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:00:45-07:00",
+          "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-681",
       "ref": "refs/pull/681/merge",
       "sha": "d221f7f628d32d4fb3967eb9f97f8fbe30dba5d5",
