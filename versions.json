@@ -4,32 +4,32 @@
     {
       "version": "pr-672",
       "ref": "refs/pull/672/merge",
-      "sha": "c58aa92ceb9849722ff5e2ff36843ec8008c0488",
-      "timestamp": "2026-11-07T07:03:41.355Z",
+      "sha": "fe681d5df88763a53e9165de87e1898d08585f15",
+      "timestamp": "2026-11-07T07:04:54.024Z",
       "commits": [
         {
-          "sha": "c58aa92ceb9849722ff5e2ff36843ec8008c0488",
+          "sha": "fe681d5df88763a53e9165de87e1898d08585f15",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T07:02:49Z",
-          "message": "Merge 4a1d8bc453c2107515ccc31c703edc829587122e into 82a8be34cbd5540ea30fe1ddb7709b50c4568b1f\n"
+          "timestamp": "2026-11-07T00:03:34-07:00",
+          "message": "Merge 2143afe0d7aa185011c06b8fdeb5e3fb8642aa5d into 82a8be34cbd5540ea30fe1ddb7709b50c4568b1f\n"
         },
         {
-          "sha": "4a1d8bc453c2107515ccc31c703edc829587122e",
+          "sha": "2143afe0d7aa185011c06b8fdeb5e3fb8642aa5d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T00:02:37-07:00",
           "message": "docs(ui-elements): un-redrawn drawings are flagged, and the rate cell, the picker's ✕ and gap 7 say what the bar draws (brandon-menus-sjhy.8zu)\n"
         },
         {
-          "sha": "3afca36cd9e2013cc83bb76ddbdb96982731e3a2",
+          "sha": "973fe76075db9c4bbff605078bcab0642d917a2c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T23:59:03-07:00",
           "message": "docs(ui-elements): the proposal notes, the gear, the door's rate cell and the lane readouts say what the bar does now (brandon-menus-sjhy.8zu)\n"
         },
         {
-          "sha": "7ecff3e2de9185f41e9827285d63150706eb9d16",
+          "sha": "35b6c1b654309f0ea4470f985dffa4a5d465c06d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T23:51:15-07:00",
