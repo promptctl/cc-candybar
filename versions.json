@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-688",
+      "ref": "refs/pull/688/merge",
+      "sha": "4559aa23c7126737d4cf9d9ee1f7ad084fcf5a5a",
+      "timestamp": "2026-11-07T12:29:02.221Z",
+      "commits": [
+        {
+          "sha": "4559aa23c7126737d4cf9d9ee1f7ad084fcf5a5a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T12:28:06Z",
+          "message": "Merge bbb3f7b4dc0ecb51eb4812f9ae3f4bbaefb7d299 into e5b0fe5cb0e0b514bcdc61157f7356ddfffc2b6b\n"
+        },
+        {
+          "sha": "bbb3f7b4dc0ecb51eb4812f9ae3f4bbaefb7d299",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:15:32-07:00",
+          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-695",
       "ref": "refs/pull/695/merge",
       "sha": "1f4e639890462d51ccccc347c3779722de6442f4",
@@ -107,28 +129,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:17:14-07:00",
           "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-688",
-      "ref": "refs/pull/688/merge",
-      "sha": "b727f9a8ef5c5c818ea2ff19e7434a77c71fe87a",
-      "timestamp": "2026-11-07T12:19:24.093Z",
-      "commits": [
-        {
-          "sha": "b727f9a8ef5c5c818ea2ff19e7434a77c71fe87a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:17:47Z",
-          "message": "Merge d2fc5978315bad14a2e3643cdf6b5a7a85bed7ea into 06ac017c63f4be865a8f33c02e0612d2eebddab5\n"
-        },
-        {
-          "sha": "d2fc5978315bad14a2e3643cdf6b5a7a85bed7ea",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:15:32-07:00",
-          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
         }
       ]
     },
