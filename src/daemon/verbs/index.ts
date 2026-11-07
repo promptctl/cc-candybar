@@ -552,7 +552,7 @@ const copyDiagnostic: VerbHandler = (sid, args, ctx) => {
   const text = ctx.diagnosticCopy(sid, requireDrawer(by), key);
   if (text === undefined)
     throw new BadVerbArgs(
-      `that message is no longer listed in session ${sid}'s diagnostics — open ⚠ again and copy from there`,
+      `that message is no longer listed in session ${sid}'s diagnostics — open the indicator beside the settings door again and copy from there`,
     );
   pbcopy(text, ctx);
 };

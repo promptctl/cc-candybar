@@ -27,6 +27,10 @@ export const noticeOf = (pages: readonly ViewerPage[]): ViewerPage | undefined =
   pages.find((p) => p.text.startsWith("⬆"));
 export const hasNotice = (pages: readonly ViewerPage[]): boolean =>
   noticeOf(pages) !== undefined;
+// A failed act is a warning of its own beside the notice.
+export const actFailureOf = (
+  pages: readonly ViewerPage[],
+): ViewerPage | undefined => pages.find((p) => /^⚠ \w+ failed: /.test(p.text));
 // [LAW:no-ambient-temporal-coupling] Reads the bar's messages until what is
 // waited for shows, or fails naming the last messages read.
 export async function pagesUntil(

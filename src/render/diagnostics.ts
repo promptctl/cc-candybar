@@ -1,8 +1,8 @@
-// The render's diagnostics: every error, notice and warning a bar owes its
-// reader, as one ordered list of messages. The bar shows the list as one small
-// indicator beside the settings door (the door's own template reads the
-// projection below); a click opens the viewer, which takes the body's place
-// and shows one message in full.
+// The render's diagnostics: every error, warning, notice and question a bar
+// owes its reader, as one list of messages, worst first. The bar shows the
+// list as one small indicator beside the settings door (the door's own
+// template reads the projection below); a click opens the viewer, which takes
+// the body's place and shows one message in full.
 //
 // [LAW:one-source-of-truth] A message's rows are ordinary render data: every
 // word becomes a cell that flows through the SAME drawStripCells the bar's
@@ -26,6 +26,7 @@ import type { Drawing } from "../config/lanes.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import {
   DIAGNOSTIC_ERROR_COLORS,
+  DIAGNOSTIC_INFO_COLORS,
   DIAGNOSTIC_WARNING_COLORS,
   type DiagnosticColors,
 } from "./diagnostic-style.js";
@@ -37,51 +38,68 @@ import {
   type ColorCompatibility,
 } from "./strip.js";
 
-// [LAW:types-are-the-program] The two things a reader is told: something is
-// broken (red) or something wants attention (amber). The indicator wears the
-// worst level in the list.
-export type DiagnosticLevel = "error" | "warning";
+// [LAW:types-are-the-program] The three things a reader is told: something
+// is broken (red), something wants attention because it is going wrong
+// (amber), or there is something to know with nothing wrong (blue). Each
+// level is one row: its rank (lower is worse), the glyph the door's indicator
+// wears for it, and the colours of every message at it. The indicator wears
+// the worst level in the list.
+// [LAW:dataflow-not-control-flow] A level picks a row; nothing branches on it.
+// [LAW:one-type-per-behavior] A fourth level is one more row.
+// `ℹ` and `⚠` are one width class: East Asian Width N, so a terminal that
+// draws ambiguous characters wide still draws them one cell, as rich-js
+// counts them; both are text by default.
+export const DIAGNOSTIC_LEVELS = {
+  error: { rank: 0, glyph: "⚠", colors: DIAGNOSTIC_ERROR_COLORS },
+  warning: { rank: 1, glyph: "⚠", colors: DIAGNOSTIC_WARNING_COLORS },
+  info: { rank: 2, glyph: "ℹ", colors: DIAGNOSTIC_INFO_COLORS },
+} as const satisfies Record<
+  string,
+  { rank: number; glyph: string; colors: DiagnosticColors }
+>;
+export type DiagnosticLevel = keyof typeof DIAGNOSTIC_LEVELS;
 
-// [LAW:one-type-per-behavior] Errors, notices, questions and warnings are one
-// shape: rows of words under a severity. What differs is data — the glyph that
-// leads the message, its colours, and the level it counts as.
+// [LAW:one-type-per-behavior] Errors, warnings, notices and questions are one
+// shape: rows of words under a severity. What differs is data — the level it
+// counts as, and the glyph that leads the message.
+// [LAW:one-source-of-truth] A message's colours are its level's, read from
+// the level's row, so no severity can wear another level's colours.
 export interface DiagnosticSeverity {
   readonly level: DiagnosticLevel;
   readonly glyph: string;
-  readonly colors: DiagnosticColors;
 }
 export const ERROR_SEVERITY: DiagnosticSeverity = {
   level: "error",
   glyph: "⚠",
-  colors: DIAGNOSTIC_ERROR_COLORS,
 };
 export const WARNING_SEVERITY: DiagnosticSeverity = {
   level: "warning",
   glyph: "⚠",
-  colors: DIAGNOSTIC_WARNING_COLORS,
 };
-// An update notice is advisory like a warning, but it is an offer, not an
-// alarm, and its glyph says so.
+// An update notice: nothing is wrong and the bar runs. It is an offer with
+// three answers, not an alarm, and its glyph says so.
 export const UPDATE_SEVERITY: DiagnosticSeverity = {
-  level: "warning",
+  level: "info",
   glyph: "⬆",
-  colors: DIAGNOSTIC_WARNING_COLORS,
 };
 // A repository's config waiting on the user's answer before anything in it
-// runs: advisory, and its glyph is a lock.
+// runs: the state it reports is the safe one, so it is a question, not a
+// warning, and its glyph is a lock.
 export const APPROVAL_SEVERITY: DiagnosticSeverity = {
-  level: "warning",
+  level: "info",
   glyph: "🔒",
-  colors: DIAGNOSTIC_WARNING_COLORS,
 };
 // The statusline handing the bar off to an animation lane that draws it
-// elsewhere (src/daemon/lane-handoff.ts): advisory, and its glyph is the
-// lanes' own.
+// elsewhere (src/daemon/lane-handoff.ts): it says where the bar is drawn for as
+// long as a lane is on, and its glyph is the lanes' own.
 export const HANDOFF_SEVERITY: DiagnosticSeverity = {
-  level: "warning",
+  level: "info",
   glyph: "🧪",
-  colors: DIAGNOSTIC_WARNING_COLORS,
 };
+
+// The colours a message at `severity` is drawn in.
+const colorsOf = (severity: DiagnosticSeverity): DiagnosticColors =>
+  DIAGNOSTIC_LEVELS[severity.level].colors;
 
 // [LAW:parse-dont-validate] A run of words sharing one click, or none: a plain
 // message's first line copies what ⧉ copies and its other lines carry no
@@ -107,7 +125,7 @@ export type DiagnosticLine = readonly [DiagnosticSpan, ...DiagnosticSpan[]];
 // lines the viewer shows. Non-empty by construction — a
 // message with no visible line is no message. `about` is named by the message's
 // producer — its source, and the file or repository it concerns — and stays
-// put while the text changes (an issue fixed, a failure line gained).
+// put while the text changes (an issue fixed, a count moved).
 export interface DiagnosticMessage {
   readonly severity: DiagnosticSeverity;
   readonly about: string;
@@ -132,10 +150,11 @@ export interface SourcedText {
 }
 
 // [LAW:parse-dont-validate] The one place a draw's diagnostics become a list,
-// in severity order: each error, then the notices and questions (already
-// shaped — their lines carry per-word clicks), then each warning. A text with
-// nothing visible in it — empty, whitespace, control characters — is no
-// message, decided here.
+// worst level first, each level in the order its producers gave it. The
+// errors and warnings are plain texts, the notices and questions already
+// shaped (their lines carry per-word clicks): that split says who builds the
+// lines, not what level they are. A text with nothing visible in it — empty,
+// whitespace, control characters — is no message, decided here.
 export function collectDiagnostics(
   // The renderer every click in the list is addressed to.
   to: RendererAddress,
@@ -156,11 +175,15 @@ export function collectDiagnostics(
     for (const m of made) plain.add(m);
     return made;
   };
+  // [LAW:one-source-of-truth] Order derives from level, never from which
+  // argument a message came in through, so the indicator's click (the first
+  // message) opens a message of the level the indicator wears. The sort is
+  // stable, keeping producer order within a level.
   const list = [
     ...errors.flatMap((e) => plainOf(e, ERROR_SEVERITY)),
     ...notices,
     ...warnings.flatMap((w) => plainOf(w, WARNING_SEVERITY)),
-  ];
+  ].sort((a, b) => rankOf(a) - rankOf(b));
   // A message's key depends on the whole list (which occurrence it is), so
   // its first line's click is minted once the list stands.
   const keys = copyKeys(list);
@@ -222,13 +245,18 @@ function copyLink(
   );
 }
 
+const rankOf = (message: DiagnosticMessage): number =>
+  DIAGNOSTIC_LEVELS[message.severity.level].rank;
+
 // The level the list counts as: the worst of its members, none when empty.
 export function worstLevel(list: DiagnosticList): DiagnosticLevel | null {
-  return list.length === 0
-    ? null
-    : list.some((m) => m.severity.level === "error")
-      ? "error"
-      : "warning";
+  return list.reduce<DiagnosticLevel | null>(
+    (worst, m) =>
+      worst === null || rankOf(m) < DIAGNOSTIC_LEVELS[worst].rank
+        ? m.severity.level
+        : worst,
+    null,
+  );
 }
 
 // [LAW:one-source-of-truth] Which message the viewer shows is stored as the
@@ -236,10 +264,10 @@ export function worstLevel(list: DiagnosticList): DiagnosticLevel | null {
 // viewer would otherwise show another message under the same position, and
 // one that shrank and grew again would reopen it. The identity is the
 // severity and what the message is about, digested — never its text, which
-// moves while the message stays the same one (an issue count, a failure line
-// gained) — and which of the list's messages of that identity it is, so two
-// alike are two stops. The page of the message shown rides in the same key, so a message has
-// at most PAGES pages: the viewer never draws a page its key cannot name.
+// moves while the message stays the same one (an issue count) — and which of
+// the list's messages of that identity it is, so two alike are two stops. The
+// page of the message shown rides in the same key, so a message has at most
+// PAGES pages: the viewer never draws a page its key cannot name.
 const IDENTITY_BITS = 32;
 const OCCURRENCES = 256;
 export const PAGES = 4096;
@@ -284,10 +312,12 @@ export interface ViewerPosition {
 }
 
 // [LAW:one-source-of-truth] What the door's indicator reads (the `diagnostics`
-// draw projection): its label, empty when there is nothing to show, the
-// colours of the list's worst level, and the key of the message its click
-// opens — the first. The count is capped so the indicator never grows past
-// four cells.
+// draw projection): its label — the worst level's glyph and the count of every
+// message, since the count is the viewer's [i/N] — empty when there is nothing
+// to show, that level's colours, and the key of the message its click opens:
+// the first, which is of that level. The count is capped so the indicator
+// never grows past four cells. An empty list draws no label, and its colours
+// are the info row's: nothing is wrong.
 export const INDICATOR_CAP = 9;
 export interface DiagnosticsProjection {
   readonly label: string;
@@ -295,19 +325,17 @@ export interface DiagnosticsProjection {
   readonly bg: string;
   readonly open: string;
 }
-const LEVEL_COLORS: Readonly<Record<DiagnosticLevel, DiagnosticColors>> = {
-  error: DIAGNOSTIC_ERROR_COLORS,
-  warning: DIAGNOSTIC_WARNING_COLORS,
-};
 export function diagnosticsProjection(
   list: DiagnosticList,
 ): DiagnosticsProjection {
   const level = worstLevel(list);
   const n = list.length;
-  const colors = LEVEL_COLORS[level ?? "warning"];
+  const { glyph, colors } = DIAGNOSTIC_LEVELS[level ?? "info"];
   return {
     label:
-      level === null ? "" : `⚠ ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
+      level === null
+        ? ""
+        : `${glyph} ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
     fg: colors.fg,
     bg: colors.bg,
     open: list.length === 0 ? DIAGNOSTICS_CLOSED : viewerKey(list, 0, 0),
@@ -366,10 +394,8 @@ export function viewerRows(
   const shown = list[index - 1]!;
   const opts = viewerOptions(geometry);
   const body = channelRows(shown, opts, []);
-  const style = new Style({
-    bgcolor: shown.severity.colors.bg,
-    color: shown.severity.colors.fg,
-  });
+  const colors = colorsOf(shown.severity);
+  const style = new Style({ bgcolor: colors.bg, color: colors.fg });
   const button = (text: string, link: string | null): RichText =>
     cell(text, link === null ? style : style.withLink(link));
   // [LAW:dataflow-not-control-flow] A step with nowhere to go is a blank of
@@ -539,10 +565,8 @@ function channelRows(
   opts: BuildLineOptions,
   trailing: readonly RichText[],
 ): readonly Row[] {
-  const base = new Style({
-    bgcolor: message.severity.colors.bg,
-    color: message.severity.colors.fg,
-  });
+  const colors = colorsOf(message.severity);
+  const base = new Style({ bgcolor: colors.bg, color: colors.fg });
   const styled = (link: string | null): Style =>
     link === null ? base : base.withLink(link);
   // A cell plus its trailing space must fit one row, so words fold at width−1

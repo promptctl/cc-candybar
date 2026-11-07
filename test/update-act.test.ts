@@ -621,7 +621,7 @@ describe("claimAct: one act per bundle", () => {
     expect(admits("999.0.0")).toBe(false);
     expect(
       watch.notice({ to: MAIN_NAME, sessionId: "s", dismissed: null, enabled: true }),
-    ).toEqual([]);
+    ).toEqual({ offer: [], failure: [] });
   });
 
   // [LAW:one-source-of-truth] The update is one fact for the daemon, stamped by
@@ -760,7 +760,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       notice,
       applied: () => applied,
       asked: (n: number) => until(() => ps.length >= n, `${n} ps in flight`),
-      known: () => until(() => notice().length > 0, "the newer release"),
+      known: () => until(() => notice().offer.length > 0, "the newer release"),
     };
   }
 

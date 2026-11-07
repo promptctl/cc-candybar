@@ -25,6 +25,7 @@ import { builtBundle } from "../../helpers/spawn-test-daemon";
 import { waitForExit } from "../../helpers/daemon-wire";
 import { answerRepo } from "../../helpers/repo-approval";
 import {
+  actFailureOf,
   affordance,
   noticeOf,
   pagesOf,
@@ -267,11 +268,11 @@ describe("a daemon spawned from the built bundle", () => {
             sock,
             sid,
             s.projectDir,
-            (pages) => /rebuild failed:/.test(noticeOf(pages)?.text ?? ""),
+            (pages) => /rebuild failed:/.test(actFailureOf(pages)?.text ?? ""),
             "the failure the successor did not start",
             10_000,
           );
-          expect(noticeOf(failed)!.text).toMatch(
+          expect(actFailureOf(failed)!.text).toMatch(
             /rebuild failed: non-zero \(exit 1\): tsdown: boom/,
           );
         },

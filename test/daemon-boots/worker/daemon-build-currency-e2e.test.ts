@@ -32,6 +32,7 @@ import {
 } from "../../helpers/in-worker-daemon";
 import { answerRepo } from "../../helpers/repo-approval";
 import {
+  actFailureOf,
   affordance,
   hasNotice,
   noticeOf,
@@ -77,13 +78,13 @@ async function withDaemon<T>(
 }
 
 describe("brandon-build-notice-5d6: the daemon renders what is newer than it, with its clicks", () => {
-  test("edited source: the notice leads, then the config warning", async () => {
+  test("edited source: the config warning leads, then the notice", async () => {
     const s = scratchLayout("edited");
     await withDaemon(s, {}, async (sock) => {
       const pages = await pagesOf(sock, "bc-stale", s.projectDir);
       expect(pages).toHaveLength(2);
-      expect(pages[0]!.text).toMatch(SOURCE_ROW);
-      expect(pages[1]!.text).toContain("config-extension collision");
+      expect(pages[0]!.text).toContain("config-extension collision");
+      expect(pages[1]!.text).toMatch(SOURCE_ROW);
     });
   });
 
@@ -168,7 +169,7 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
     });
   });
 
-  test("[rebuild] runs pnpm build in the checkout; a failure is said on the notice's second line", async () => {
+  test("[rebuild] runs pnpm build in the checkout; a failure is a warning of its own beside the notice", async () => {
     const s = scratchLayout("edited");
     await withDaemon(s, {}, async (sock) => {
       const before = noticeOf(await pagesOf(sock, "bc-rebuild", s.projectDir))!;
@@ -177,11 +178,11 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
         sock,
         "bc-rebuild",
         s.projectDir,
-        (pages) => /rebuild failed:/.test(noticeOf(pages)?.text ?? ""),
+        (pages) => /rebuild failed:/.test(actFailureOf(pages)?.text ?? ""),
         "the rebuild failure",
         20_000,
       );
-      expect(noticeOf(failed)!.text).toMatch(
+      expect(actFailureOf(failed)!.text).toMatch(
         /rebuild failed: non-zero \(exit \d+\): \S/,
       );
       expect(noticeOf(failed)!.text).toMatch(SOURCE_ROW);

@@ -6,12 +6,14 @@
 import { plainOf, textOf, type Frame } from "../../src/render/frame";
 import { linksOf } from "../../src/click/read";
 import { DIAGNOSTICS_VIEWING } from "../../src/config/door";
+import { DIAGNOSTIC_LEVELS } from "../../src/render/diagnostics";
 import type { ClientHints } from "../../src/daemon/protocol";
 import { effectsOf } from "./click";
 import { click, render } from "./daemon-e2e";
 import type { DaemonTarget } from "./daemon-wire";
 
-// The indicator's text in a rendered bar (`⚠ N`), or null when it shows none.
+// The indicator's text in a rendered bar (`⚠ N`, or `ℹ N` with nothing
+// wrong), or null when it shows none.
 export function indicatorOf(rendered: Frame): string | null {
   const link = viewerLink(rendered, "open");
   return link === undefined ? null : link.text;
@@ -22,14 +24,20 @@ export function indicatorOf(rendered: Frame): string | null {
 export type ViewerControl = "open" | "‹" | "›" | "✕";
 
 // The rendered link that writes the viewer's key as `control`: told apart by
-// the text it wears, since each writes a message's key, not a position.
+// the text it wears, since each writes a message's key, not a position. The
+// indicator wears its level's glyph.
+const INDICATOR_GLYPHS = Object.values(DIAGNOSTIC_LEVELS).map(
+  ({ glyph }) => `${glyph} `,
+);
 export function viewerLink(
   rendered: Frame,
   control: ViewerControl,
 ): { url: string; text: string } | undefined {
   return linksOf(rendered).find(
     ({ text, url }) =>
-      (control === "open" ? text.startsWith("⚠") : text === control) &&
+      (control === "open"
+        ? INDICATOR_GLYPHS.some((glyph) => text.startsWith(glyph))
+        : text === control) &&
       effectsOf(url).some(
         (e) => e.verb === "set-state" && e.args[1] === DIAGNOSTICS_VIEWING,
       ),
