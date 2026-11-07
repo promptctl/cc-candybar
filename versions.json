@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-684",
+      "ref": "refs/pull/684/merge",
+      "sha": "d446ef402d51816b0edc54ce5417d055d9dd2216",
+      "timestamp": "2026-11-07T10:58:43.556Z",
+      "commits": [
+        {
+          "sha": "d446ef402d51816b0edc54ce5417d055d9dd2216",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:57:55Z",
+          "message": "Merge 77442d25f9ab88d43d78b67ba2a601e701b3e053 into ffb0376812d7b52ce21a6cb5f0ef4d76eaf9e832\n"
+        },
+        {
+          "sha": "77442d25f9ab88d43d78b67ba2a601e701b3e053",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:57:44-07:00",
+          "message": "fix(pricing): a failing load says each backoff once, and a close during a first load keeps the disk copy (candybar-gather-renderer-76bb.1p8)\n\nFrom the medium review. A load that landed nothing warned on every retry, so a machine with no network wrote the same line every hour for as long as it stayed offline: the line now goes through the change-only logger and names the backoff rather than the count, so it changes while the backoff grows and falls silent at the ceiling. A close during the first load on a copy past its day returned nothing held and priced the awaiting fold by the bundled rates: the copy stands before anything was held.\n"
+        },
+        {
+          "sha": "c44c017c2a6bc47283d9297eb62c78b1dd0c9932",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:46:14-07:00",
+          "message": "fix(pricing): a failed load keeps the last table that landed anywhere, and a close is no failure (candybar-gather-renderer-76bb.1p8)\n\nFrom the high review. A daemon that starts on a day-old disk copy with no network priced by the bundled rates, because the due copy was passed over and the fetch landed nothing: the failed load now keeps the later of the disk copy and the held table, so one rule covers the cold start and the refresh. A load the close ended was recorded as a failure in a row and warned of a retry that could not happen: it now settles nothing and says nothing. A copy stamped ahead of the clock was held past its day for as long as the stamp stood: it is malformed like any other field and the fetch rewrites it. The warning says what the code does, that the next ask after the backoff tries again, since nothing is armed. The architecture memory no longer says the table is loaded once.\n"
+        },
+        {
+          "sha": "5f56d40c298367a903585d64c3878720db7f62d6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:31:15-07:00",
+          "message": "fix(pricing): a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8)\n\nThe pricing held one promise for the daemon's life, so a daemon that\nstarted offline priced by the bundled rates until it was restarted, and\none that fetched kept its table past the disk copy's day.\n\nWhat a load settles is now a Landed table or a Failed load that carries\nthe last table that landed, if any. Each ask starts the one load when\nwhat is held is due, and answers with what is held: the first ask awaits,\nlater asks answer at once while the load lands behind them. A landed\ntable is due a day after it was read; a failed load after a backoff that\ndoubles per failure in a row up to an hour. The disk copy is a candidate\njudged by the same due predicate, so the day ends once. No timer is\narmed: the retry is the next ask after the due moment. A load that\nlanded nothing says so on the owner's log with the retry delay.\n\nThe test moves onto a held clock and drives the retry, the refresh, a\nrefresh that fails, a copy another daemon wrote, and a close mid-refresh.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-678",
       "ref": "refs/pull/678/merge",
       "sha": "92ab74b373ff1cda86bfe15bc5d761ad543066a8",
@@ -49,35 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:53:25-07:00",
           "message": "fix(state): a session value its config no longer admits draws the default and warns (brandon-menus-sjhy.46w) (#676)\n\n* fix(state): a session value its config no longer admits draws the default and warns (brandon-menus-sjhy.46w)\n\nSession state outlives the config that wrote it. A stale value was swallowed\nsilently: the globals resolution dropped it, a placement's bar drew the saved\nvalue while its carousel sat on its first option, and a carousel or cycle\nfolded an author key's stale value to its first member.\n\n- The gate judges a stored value (Gate.verdict): a key one of the config's\n  own `set` actions writes, holding a value its validator refuses or changes,\n  is foreign. A key no `set` writes is the daemon's own and is held.\n- JudgedState (src/daemon/foundations/judged-state.ts) is the branded reader\n  every interpretive reader demands: the registry's `state` variables, step-\n  state (which now steps from the seed instead of clamping), the verbs'\n  settings picks, the closing view's closeNested, and the idle close's\n  openRoots. Back admits a value only if the verdict holds it. Release reads\n  after a reload stay raw.\n- session.foreign (the session view) lists foreign values; the draw stands one\n  amber `domain` warning per key, identified by its key.\n- The ring shows a held non-option between the last and first options; the\n  cycle keeps its rest-first reading, with the reason stated.\n- validateBoolean accepts its own canonical false, \"\".\n- placementSetting drops its fallback for a refused draft.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(state): a reserved key has only its control as writer, and a never-rendered session judges nothing (brandon-menus-sjhy.46w)\n\nAnswers /code-review high on 068bb06a (dispositions on PR #676).\n\n- The loader refuses an authored `set` whose key is in a reserved\n  namespace, so a placement draft's gate is its declaration's and its\n  parse at the render cannot refuse what the gate admitted.\n- A session with no recorded render origin has no config: its judged\n  read judges nothing instead of throwing inside a write's closing view.\n- The keyspace epoch is a MobX atom, so a computed judging through a\n  gate re-evaluates on a daemon-wide register or dispose.\n- toolbar-toggle reads toolbar-expanded judged; save-theme-default's\n  release read is raw, as every release read is.\n- The demo and check judge and gate with one Gates each.\n- The cycle, ring and standing-warning comments say what holds.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* test(lanes): the session-pane draw composes its view with the state gates the daemon hands it (brandon-menus-sjhy.46w)\n\nThe rebase onto main brought in a test that builds a session view without\nthe state gates this branch's view now judges by.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(state): a set key is reserved as spelled, and the domain ⚠ says what the bar draws (brandon-menus-sjhy.46w)\n\nThe loader refused an authored `set` whose key only collapsed like one under\na reserved namespace (`edit-mode`, `menus_open`), though a session key is\ncompared as spelled and can never meet a synthesized one. The refusal now\nasks the spelled namespace, the one `isReservedName` already asked.\n\nThe domain warning said the bar draws the key's default, but a stale\nplacement draft falls to the saved value and a stale setting to the file or\npreset. It now says the bar draws as if nothing were picked.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(state): only a placement's draft refuses an authored set, and a stored boolean says what it admits (brandon-menus-sjhy.46w)\n\nThe load refused an authored `set` on every reserved namespace, so a config\nwhose button opens its own menu by its `menus.` key stopped loading (the\nundo test's `openMenu` among them). Only a draft's read trusts its gate's\ndomain: a wider gate elsewhere only makes more values held, and a cycle\ntakes a non-member as at rest. The refusal now covers the drafts alone, and\nthe authoring doc quotes its error.\n\n`toolbar-expanded` said it admits \"true or false\" while its verdict holds\nonly the stored \"1\" and \"\", so a stored \"true\" was reported as foreign by a\nmessage that admitted it. It now names the stored spellings, and the\nvalidator's refusal lists the empty false it accepts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        }
-      ]
-    },
-    {
-      "version": "pr-684",
-      "ref": "refs/pull/684/merge",
-      "sha": "582b93df6b3320214474f0f3265b52ebbf0e7c09",
-      "timestamp": "2026-11-07T10:48:01.931Z",
-      "commits": [
-        {
-          "sha": "582b93df6b3320214474f0f3265b52ebbf0e7c09",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:46:26Z",
-          "message": "Merge c44c017c2a6bc47283d9297eb62c78b1dd0c9932 into 219fb6b570c49d5b4a42a1ad8fdf84727f5b387a\n"
-        },
-        {
-          "sha": "c44c017c2a6bc47283d9297eb62c78b1dd0c9932",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:46:14-07:00",
-          "message": "fix(pricing): a failed load keeps the last table that landed anywhere, and a close is no failure (candybar-gather-renderer-76bb.1p8)\n\nFrom the high review. A daemon that starts on a day-old disk copy with no network priced by the bundled rates, because the due copy was passed over and the fetch landed nothing: the failed load now keeps the later of the disk copy and the held table, so one rule covers the cold start and the refresh. A load the close ended was recorded as a failure in a row and warned of a retry that could not happen: it now settles nothing and says nothing. A copy stamped ahead of the clock was held past its day for as long as the stamp stood: it is malformed like any other field and the fetch rewrites it. The warning says what the code does, that the next ask after the backoff tries again, since nothing is armed. The architecture memory no longer says the table is loaded once.\n"
-        },
-        {
-          "sha": "5f56d40c298367a903585d64c3878720db7f62d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:31:15-07:00",
-          "message": "fix(pricing): a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8)\n\nThe pricing held one promise for the daemon's life, so a daemon that\nstarted offline priced by the bundled rates until it was restarted, and\none that fetched kept its table past the disk copy's day.\n\nWhat a load settles is now a Landed table or a Failed load that carries\nthe last table that landed, if any. Each ask starts the one load when\nwhat is held is due, and answers with what is held: the first ask awaits,\nlater asks answer at once while the load lands behind them. A landed\ntable is due a day after it was read; a failed load after a backoff that\ndoubles per failure in a row up to an hour. The disk copy is a candidate\njudged by the same due predicate, so the day ends once. No timer is\narmed: the retry is the next ask after the due moment. A load that\nlanded nothing says so on the owner's log with the retry delay.\n\nThe test moves onto a held clock and drives the retry, the refresh, a\nrefresh that fails, a copy another daemon wrote, and a close mid-refresh.\n"
         }
       ]
     },
