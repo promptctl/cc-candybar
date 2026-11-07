@@ -95,11 +95,16 @@ describe("pnpm demo", () => {
   // nothing but a run of it keeps it loadable as the default grows names.
   test("renders its bundled sample, reading the default's model and session", () => {
     const r = runDemo(undefined, { COLUMNS: "1000" });
-    expect(r.stderr).not.toContain("error:");
+    // The loader's refusals and advisories name the file they are about, and a
+    // cell that fails to draw shows as the bar's ⚠ indicator: the sample is
+    // clean only if neither appears. The machine's own warnings (an
+    // unauthenticated gh) share stderr and name no config.
+    expect(r.stderr).not.toContain(join("src", "demo", "statusline.json5"));
     expect(r.status).toBe(0);
     // Each cell's glyph and value are separate styled runs, and the session id
     // is also in the door's link, so the cells are read as drawn text.
     const drawn = stripVTControlCharacters(r.stdout);
+    expect(drawn).not.toContain("⚠");
     expect(drawn).toContain(" Opus 4.7 ");
     expect(drawn).toContain(" ⌗demo0a1b ");
   });
