@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-670",
+      "ref": "refs/pull/670/merge",
+      "sha": "29e624af27fc048491d05ec79cda3c21c9112cbb",
+      "timestamp": "2026-11-07T06:20:19.363Z",
+      "commits": [
+        {
+          "sha": "29e624af27fc048491d05ec79cda3c21c9112cbb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T06:19:15Z",
+          "message": "Merge 06771a30cee7ab99726be7f346992cf426536020 into d8be82f47dab2890d335b8563bbfdc937aedba77\n"
+        },
+        {
+          "sha": "06771a30cee7ab99726be7f346992cf426536020",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:19:05-07:00",
+          "message": "fix(lanes): a straggler after the new session's first confirmed tick is the race; runs are measured on the monotonic clock (candybar-gather-renderer-76bb.1dh.2d2)\n\nThe mismatched stamp names the session the record holds, and a Claude\nCode's first confirmed tick of a session dates the rewrite, so a straggler\nholding it within the race opens no run a later /resume could inherit.\n"
+        },
+        {
+          "sha": "16d8c48bcf8d9ffc70dee45109914b4c0aab9f1e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:08:44-07:00",
+          "message": "fix(lanes): a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2)\n\nA request whose Claude Code's record holds another session is the rewrite\nrace at first. Each session's run of such stamps is now held in memory,\nkeyed by the Claude Code that ran its client. A confirmed tick from that\nprocess ends every run it opened, whatever the session. Once a run goes on\npast the race (10 s), the bar's session-pane ⚠ names the session the record\nholds, under a stable identity. The render line gains a mismatch fact.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-671",
       "ref": "refs/pull/671/merge",
       "sha": "f3f290e1d40ee4de21590ddc1acdcbce3f2c8e43",
@@ -70,28 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:33:52-07:00",
           "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-670",
-      "ref": "refs/pull/670/merge",
-      "sha": "5641d316e8105489f28eb0ca229ff0e292c398e3",
-      "timestamp": "2026-11-07T06:10:11.506Z",
-      "commits": [
-        {
-          "sha": "5641d316e8105489f28eb0ca229ff0e292c398e3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:09:14-07:00",
-          "message": "Merge 16d8c48bcf8d9ffc70dee45109914b4c0aab9f1e into d8be82f47dab2890d335b8563bbfdc937aedba77\n"
-        },
-        {
-          "sha": "16d8c48bcf8d9ffc70dee45109914b4c0aab9f1e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:08:44-07:00",
-          "message": "fix(lanes): a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2)\n\nA request whose Claude Code's record holds another session is the rewrite\nrace at first. Each session's run of such stamps is now held in memory,\nkeyed by the Claude Code that ran its client. A confirmed tick from that\nprocess ends every run it opened, whatever the session. Once a run goes on\npast the race (10 s), the bar's session-pane ⚠ names the session the record\nholds, under a stable identity. The render line gains a mismatch fact.\n"
         }
       ]
     },

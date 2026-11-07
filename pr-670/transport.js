@@ -72316,6 +72316,7 @@ function sessionPaneOf(hints, sessionId2, heldSession) {
     kind: "mismatched",
     tmux: tmux3,
     claude,
+    held: held.sessionId,
     why: `the Claude Code that ran its statusline (pid ${parentPid}) holds session ${held.sessionId}`
   };
 }
@@ -78046,7 +78047,13 @@ function describeEffect(effect) {
 init_globals();
 var MISMATCH_RACE_S = 10;
 var MISMATCH_RUNS_KEPT = 64;
-var sameProcess = (a, b) => a.pid === b.pid && a.configDir === b.configDir;
+var processKey = (claude) => `${claude.pid}@${claude.configDir ?? ""}`;
+var raceOver = (since, at) => spanMs(since, at) > MISMATCH_RACE_S * 1e3;
+function keepNewest(map, key, value) {
+  map.delete(key);
+  map.set(key, value);
+  if (map.size > MISMATCH_RUNS_KEPT) map.delete(map.keys().next().value);
+}
 var MismatchRuns = class {
   // [LAW:single-enforcer] Written by the request arm in its turn, so the
   // holder refuses a write no event explains, as session state does.
@@ -78055,38 +78062,44 @@ var MismatchRuns = class {
   }
   turns;
   runs = /* @__PURE__ */ new Map();
+  confirmed = /* @__PURE__ */ new Map();
   // [LAW:dataflow-not-control-flow] The run `sessionId` holds once a request
   // stamped `pane` arrives at `at`. A confirmed tick from a Claude Code is the
-  // evidence its record is being rewritten, so it ends every run that
-  // process's ticks opened: a cleared session's straggler says nothing more
-  // of itself, and the new session's confirmed ticks end its run. A tick no
-  // readable Claude Code ran is no evidence about any record.
+  // evidence its record is being rewritten: it ends every run that process's
+  // ticks opened, and its first tick of a session dates the rewrite. So a
+  // mismatched tick holding that session within the race of it is the race,
+  // whichever side of the new session's first tick the straggler lands, and
+  // opens no run. A tick no readable Claude Code ran is no evidence about any
+  // record.
   record(sessionId2, pane, at) {
     if (this.turns.inTurn() === null)
       throw new Error(
         `mismatch runs: a write of ${JSON.stringify(sessionId2)} outside any turn`
       );
     switch (pane.kind) {
-      case "runs":
+      case "runs": {
+        const key = processKey(pane.claude);
         for (const [held, run3] of this.runs)
-          if (sameProcess(run3.claude, pane.claude)) this.runs.delete(held);
+          if (processKey(run3.claude) === key) this.runs.delete(held);
+        const was = this.confirmed.get(key);
+        keepNewest(
+          this.confirmed,
+          key,
+          was?.sessionId === sessionId2 ? was : { sessionId: sessionId2, since: at }
+        );
         return null;
+      }
       case "unconfirmed":
         return this.of(sessionId2);
       case "mismatched": {
+        const key = processKey(pane.claude);
+        const rewrite = this.confirmed.get(key);
+        if (rewrite?.sessionId === pane.held && !raceOver(rewrite.since, at))
+          return this.of(sessionId2);
         const was = this.runs.get(sessionId2);
-        const since = was !== void 0 && sameProcess(was.claude, pane.claude) ? was.since : at;
-        const run3 = {
-          claude: pane.claude,
-          since,
-          lasted: at - since > MISMATCH_RACE_S
-        };
-        this.runs.delete(sessionId2);
-        this.runs.set(sessionId2, run3);
-        for (const held of this.runs.keys()) {
-          if (this.runs.size <= MISMATCH_RUNS_KEPT) break;
-          this.runs.delete(held);
-        }
+        const since = was !== void 0 && processKey(was.claude) === key ? was.since : at;
+        const run3 = { claude: pane.claude, since, lasted: raceOver(since, at) };
+        keepNewest(this.runs, sessionId2, run3);
         return run3;
       }
     }
@@ -78094,13 +78107,14 @@ var MismatchRuns = class {
   of(sessionId2) {
     return this.runs.get(sessionId2) ?? null;
   }
-  // Whether the session's mismatch has outlasted the race, as its last
-  // request left it: what a draw shows, never measured on the draw's clock.
+  // Whether the session's mismatch has outlasted the race, as the requests
+  // its Claude Code ran left it: what a draw shows, never measured on the
+  // draw's clock.
   lasted(sessionId2) {
     return this.runs.get(sessionId2)?.lasted ?? false;
   }
 };
-var mismatchFact = (run3) => run3 === null ? "-" : `${run3.lasted ? "lasted " : ""}since ${dateOf(run3.since).toISOString()}`;
+var mismatchFact = (run3, at) => run3 === null ? "-" : `${run3.lasted ? "lasted " : ""}${spanMs(run3.since, at)}ms`;
 
 // src/daemon/apply.ts
 var NO_EFFECTS = [];
@@ -78116,10 +78130,14 @@ var ARMS = {
   // landed. The revision its turn left and the effects it described go on the
   // request's line, the render event, which is its record and opens with the
   // session the edge noted.
-  request: ({ req, at, facts }, { verbCtx }) => {
+  request: ({ req, arrived: arrived2, facts }, { verbCtx }) => {
     const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
-      const mismatch = verbCtx.mismatchRuns.record(req.sessionId, req.pane, at);
+      const mismatch = verbCtx.mismatchRuns.record(
+        req.sessionId,
+        req.pane,
+        arrived2
+      );
       return {
         effects: verbCtx.lanes.arrived(req),
         revision: verbCtx.sessionState.revision(req.sessionId),
@@ -78129,7 +78147,7 @@ var ARMS = {
     noteFacts(facts, {
       revision: String(turn.revision),
       effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-",
-      mismatch: mismatchFact(turn.mismatch)
+      mismatch: mismatchFact(turn.mismatch, arrived2)
     });
     return { answer: void 0, effects: turn.effects, facts: [] };
   },
@@ -78951,6 +78969,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         kind: "request",
         req: checked.req,
         at,
+        arrived: t0,
         // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
         // fixed at its arrival: early enough before its client hangs up to
         // draw (src/daemon/request-deadline.ts).
