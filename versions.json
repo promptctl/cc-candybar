@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-665",
+      "ref": "refs/pull/665/merge",
+      "sha": "79cfd855f8ec2152b35711f32e39cb30861c0ca3",
+      "timestamp": "2026-11-07T00:46:41.511Z",
+      "commits": [
+        {
+          "sha": "79cfd855f8ec2152b35711f32e39cb30861c0ca3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:45:47-07:00",
+          "message": "Merge fa1523984279381de668c6453a865a8a8927ce83 into 1c67112e8a6fe0cfc8d98ccf9ca7846a4a44830b\n"
+        },
+        {
+          "sha": "fa1523984279381de668c6453a865a8a8927ce83",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:44:10-07:00",
+          "message": "fix(click): a click is read once at the daemon's edge, and its event carries that read (brandon-menus-sjhy.ovq)\n\nThe edge read a click to find its session, then the verb's run read the raw\nvalue again, and the journal, the landing stamp and the fold took their\nsession from that second read. Now `readClick` reads a link once, at the\nedge, into a branded Click whose dispatch session is taken from its effects\nin the read. The click event carries that Click, and `runClick` runs from it,\nso the session the reply facts record, the one the journal and landing use,\nand the steps the fold performs are one value.\n\nThe click table holds what a link can name: dispatch, and the doctor's\nprobe, whose nonce is now parsed at the edge too. A link naming a leaf verb\nitself, which nothing draws, is an unknown click verb refused at the edge.\nfoldEffects is the one leaf runner. VERBS, VERB_NAMES, ClickVerb, clickVerb,\nclickSessionOf and decodeWire are gone, and the drawn-link reader refuses a\nlink that names anything but dispatch.\n\nTests click as the bar does. The helpers that split a drawn link and ran\neach effect as its own click (one turn and undo step per effect, no\nbatching) run the whole link, and hand-built single-verb clicks go through\na one-effect dispatch link (test/helpers/click.ts clickEffect, effectLink).\n"
+        }
+      ]
+    },
+    {
       "version": "pr-664",
       "ref": "refs/pull/664/merge",
       "sha": "dc30fa0165d75e3db31f536394bf9aa3088346f5",
