@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-645",
+      "ref": "refs/pull/645/merge",
+      "sha": "6433d11b020ce1b3d2bb4032974673ad5ca0fb05",
+      "timestamp": "2026-11-07T08:54:05.727Z",
+      "commits": [
+        {
+          "sha": "6433d11b020ce1b3d2bb4032974673ad5ca0fb05",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T08:53:08Z",
+          "message": "Merge 2c7898eda4b0f96bf1056c9a05a9d165fb26fd8d into f584545e1238fd69bdf373b0895cd40c18ab62a2\n"
+        },
+        {
+          "sha": "2c7898eda4b0f96bf1056c9a05a9d165fb26fd8d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:52:52-07:00",
+          "message": "fix(band): the lane-off end is decided once, at the refusal, and a kill that fails keeps the session's child (candybar-animation-wbxz.w33)\n\nThe refusal sets the child's end where it is read, so nothing after the\nloop decides it again or waits on a result the engine rejects for a\nstream closed early. A stream or kill that throws is drawn above the band\nand keeps the slot, since its child may still run; the off frame is\nwritten once.\n"
+        },
+        {
+          "sha": "41b28f4855ae34e8ed40a969fb2362fac3c40156",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:43:28-07:00",
+          "message": "fix(band): every end the band did not ask for lets go of the session, and the refused child's result is awaited (candybar-animation-wbxz.w33)\n\nA refused child's stream result now settles inside the try, as a stopped\none's does, so the engine's rejection for an early close is handled. A\nchild that exited lets go of the slot like a refused one, so the next\nprompt follows again; the slot is emptied only by the child holding it.\n"
+        },
+        {
+          "sha": "a866080871cc4ce4056d6e1d09d251caac09e9af",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:33:43-07:00",
+          "message": "fix(band): band off uninstalls nothing, and a band refused asks again at the next prompt (candybar-animation-wbxz.w33)\n\nThe band switch is resolved per directory, but the plugin install covers\nevery session under the Claude config dir, so an uninstall on off blanked\nthe band in other repos that still had it on. A child the lane's refusal\nended now hands the mod's slot back, and prompt.submit follows again, so\na lane switched on by any route draws again without an idle process.\nLeaving the stream loop kills the refused child, so stop() runs once.\n"
+        },
+        {
+          "sha": "13466b0087e505748133936c4597800cc53b1099",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T11:56:58-07:00",
+          "message": "feat(band): a switched-off band lane holds no follower process (candybar-animation-wbxz.w33)\n\nThe band mod stops its follow child on the daemon's SWITCHED_OFF answer\ninstead of keeping it alive to re-ask every 5s, and turning band (A) off\nuninstalls the mod so sessions started afterwards never load it. An\nuninstall of a mod that is not installed is the state off asks for, so it\nis said rather than thrown.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-675",
       "ref": "refs/pull/675/merge",
       "sha": "393b8409167a124e8008716484e1d8a32a1cb65e",
@@ -27,42 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T01:39:09-07:00",
           "message": "test(lanes): a session's drawn bar carries its session-pane ⚠, through the draw a request takes (candybar-gather-renderer-76bb.1dh.trm)\n\nThe checkpoint stamps each tick from its Claude Code's record on the disk,\nthe request arm records the mismatch run in its turn, and the daemon's draw\nlists the ⚠; the list is read from the session's recording. An unconfirmed\nstamp and a lasted mismatch each list the session-pane message; a confirmed\ntick, a mismatch inside the race and a /clear straggler list none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-645",
-      "ref": "refs/pull/645/merge",
-      "sha": "13dfb857d1c935c02f06152ec688ac23bb7326fe",
-      "timestamp": "2026-11-07T08:44:34.627Z",
-      "commits": [
-        {
-          "sha": "13dfb857d1c935c02f06152ec688ac23bb7326fe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T08:43:38Z",
-          "message": "Merge 41b28f4855ae34e8ed40a969fb2362fac3c40156 into f584545e1238fd69bdf373b0895cd40c18ab62a2\n"
-        },
-        {
-          "sha": "41b28f4855ae34e8ed40a969fb2362fac3c40156",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:43:28-07:00",
-          "message": "fix(band): every end the band did not ask for lets go of the session, and the refused child's result is awaited (candybar-animation-wbxz.w33)\n\nA refused child's stream result now settles inside the try, as a stopped\none's does, so the engine's rejection for an early close is handled. A\nchild that exited lets go of the slot like a refused one, so the next\nprompt follows again; the slot is emptied only by the child holding it.\n"
-        },
-        {
-          "sha": "a866080871cc4ce4056d6e1d09d251caac09e9af",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:33:43-07:00",
-          "message": "fix(band): band off uninstalls nothing, and a band refused asks again at the next prompt (candybar-animation-wbxz.w33)\n\nThe band switch is resolved per directory, but the plugin install covers\nevery session under the Claude config dir, so an uninstall on off blanked\nthe band in other repos that still had it on. A child the lane's refusal\nended now hands the mod's slot back, and prompt.submit follows again, so\na lane switched on by any route draws again without an idle process.\nLeaving the stream loop kills the refused child, so stop() runs once.\n"
-        },
-        {
-          "sha": "13466b0087e505748133936c4597800cc53b1099",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T11:56:58-07:00",
-          "message": "feat(band): a switched-off band lane holds no follower process (candybar-animation-wbxz.w33)\n\nThe band mod stops its follow child on the daemon's SWITCHED_OFF answer\ninstead of keeping it alive to re-ask every 5s, and turning band (A) off\nuninstalls the mod so sessions started afterwards never load it. An\nuninstall of a mod that is not installed is the state off asks for, so it\nis said rather than thrown.\n"
         }
       ]
     },
