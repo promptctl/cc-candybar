@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-689",
+      "ref": "refs/pull/689/merge",
+      "sha": "afb25fec0698df8ef509fc54dff1084e620b5fac",
+      "timestamp": "2026-11-07T11:45:19.440Z",
+      "commits": [
+        {
+          "sha": "afb25fec0698df8ef509fc54dff1084e620b5fac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:44:16Z",
+          "message": "Merge 7cd320bc9e0a04d8fa2145485773bb893d4efaf2 into 37f5c35ff91a229f08869f5b34660301b699233a\n"
+        },
+        {
+          "sha": "7cd320bc9e0a04d8fa2145485773bb893d4efaf2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:44:06-07:00",
+          "message": "fix(daemon): a url frame read past the deadline stays unattended, a socket error is the peer leaving, and a frame handler's throw is heard (brandon-unfiled-3248.df7i)\n\n- The read carries who waits in every state: a url frame read after the\n  backstop answered is unattended and lapsed, so its forwarder's hang-up\n  no longer leaves in-flight or reads as a client gone mid-click.\n- A socket error moves the state to closed, so a click whose turn falls\n  between the destroy and the 'close' sees its client gone.\n- readOneFrame delivers its first outcome outside the reader's parse, so a\n  throw from onFrame reaches the stream instead of being dropped as a\n  second parse failure.\n- The connection uses reply.ts's stay-up reply instead of a copy.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "fe4bfaf6f9f3ab466e116ca775c1878e15e1bf94",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:30:53-07:00",
+          "message": "fix(daemon): a connection's state is one value, and past waiting it reads no more frames (brandon-unfiled-3248.df7i)\n\nA connection's lifecycle is one state (awaiting, answering, unattended,\nanswered, held, streaming, closed) moved by one pure transition table; the\nconnection only performs the effects a step names. In-flight and the\nbackstop are columns of the table, so each moves once, on crossing its line.\n\nA connection reads exactly one frame: a second frame, a frame after the\nanswer, and the bytes behind an over-cap header or unparseable frame are\nnever handled or buffered. A reply that cannot be encoded is answered\nRENDER_FAILED and ends the stream, its exit still sequenced on that flush.\nA dropped exit's warning names its one cause: the client was told TIMEOUT.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-680",
       "ref": "refs/pull/680/merge",
       "sha": "277adff7b1b260868c63914cde97797e898470c5",
@@ -214,28 +243,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:43:20-07:00",
           "message": "refactor(cache): the render cache takes a render origin, not three positional strings (brandon-unfiled-3248.9cru)\n\nThe cache's entry points (getOrCreate, hold, holdSession, reload, the\nprivate load, and loadFromDisk) take one LoadOrigin, picked from\nRenderOrigin, so every caller passes the origin it already holds and a\nswapped or missing field is a type error. loadFromDisk is the one place\nthe origin is spelled out into the resolver's arguments. An entry holds\na copy of what resolution reads, never the caller's target source, so\norigins that name one file by different sources share one entry.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-689",
-      "ref": "refs/pull/689/merge",
-      "sha": "e7d6e201727066a1aff80a11d703126b343b6caf",
-      "timestamp": "2026-11-07T11:34:09.563Z",
-      "commits": [
-        {
-          "sha": "e7d6e201727066a1aff80a11d703126b343b6caf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:32:42Z",
-          "message": "Merge fe4bfaf6f9f3ab466e116ca775c1878e15e1bf94 into 3e574dde3244026257856ed4e675a0275bc287d1\n"
-        },
-        {
-          "sha": "fe4bfaf6f9f3ab466e116ca775c1878e15e1bf94",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:30:53-07:00",
-          "message": "fix(daemon): a connection's state is one value, and past waiting it reads no more frames (brandon-unfiled-3248.df7i)\n\nA connection's lifecycle is one state (awaiting, answering, unattended,\nanswered, held, streaming, closed) moved by one pure transition table; the\nconnection only performs the effects a step names. In-flight and the\nbackstop are columns of the table, so each moves once, on crossing its line.\n\nA connection reads exactly one frame: a second frame, a frame after the\nanswer, and the bytes behind an over-cap header or unparseable frame are\nnever handled or buffered. A reply that cannot be encoded is answered\nRENDER_FAILED and ends the stream, its exit still sequenced on that flush.\nA dropped exit's warning names its one cause: the client was told TIMEOUT.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
