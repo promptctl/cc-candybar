@@ -510,11 +510,23 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       expect.stringContaining("status amber"),
       expect.stringContaining("status red"),
     ]);
-    // Measured from the write, as the click's is: the still bar's next frame
-    // falls due a still period after the last one started, just before the
-    // write, so a frame in by half of one is the wake's.
-    expect(frames[2]!.at - wrote).toBeLessThan(FEED_PERIODS.still / 2);
-    expect(await closedSummary(sid)).toMatch(/ woke=data:[1-9]\d*,/u);
+    // [LAW:no-ambient-temporal-coupling] Write → frame is two intervals: the
+    // watch delivering the write to the daemon, which is the machine's under
+    // load, and the feed drawing after that wake, which is the feed's promise.
+    // The still bar's next frame falls due a still period after the last one
+    // started, just before the write, so a frame in by half of one after the
+    // wake is the wake's. The feed times wake → frame on its own clock, and
+    // its longest covers every wake it answered, the red write's among them;
+    // write → frame is reported, never bounded.
+    const summary = await closedSummary(sid);
+    expect(summary).toMatch(/ woke=data:[1-9]\d*,/u);
+    const timed = / wakeToFrame=last:[\d.]+ms,max:([\d.]+)ms /u.exec(summary);
+    expect(timed).not.toBeNull();
+    const wakeToFrame = Number(timed![1]);
+    expect({
+      frameInHalfAStill: wakeToFrame < FEED_PERIODS.still / 2,
+      spans: `write → frame ${frames[2]!.at - wrote} ms, wake → frame ${wakeToFrame} ms`,
+    }).toMatchObject({ frameInHalfAStill: true });
   });
 
   test("a config saved under an open feed is pushed with no request after it, woken by the reload", async () => {
