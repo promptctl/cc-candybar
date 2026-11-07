@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-688",
+      "ref": "refs/pull/688/merge",
+      "sha": "348fb784bd3fd9abca03d15cb04951b50bbb1744",
+      "timestamp": "2026-11-07T11:42:06.635Z",
+      "commits": [
+        {
+          "sha": "348fb784bd3fd9abca03d15cb04951b50bbb1744",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:38:51Z",
+          "message": "Merge 1ed036f50924f0e19743fe7f495dccce12dc1be0 into 37f5c35ff91a229f08869f5b34660301b699233a\n"
+        },
+        {
+          "sha": "1ed036f50924f0e19743fe7f495dccce12dc1be0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:38:41-07:00",
+          "message": "fix(watchers): a disk says how far its directory watch reaches, so poll mode follows the disk; a named directory polls its identity alone; the last polled folder released disarms the sweep (brandon-unfiled-3248.iywk)\n\nReview of #688 (high):\n- The poll choice was a registry option beside the disk it describes, so the check command, the demo and every darwin test ran a mode macOS production never does. It is now the filesystem port's watchReach.\n- A named directory's size and mtime are its children's, which a parent watch never hears; its entry is now identity and mode.\n- The sweep timer outlived the last polled folder by up to a period, against close leaving no timer armed.\n- Memory: the one-stream paragraph now covers OS watches only; counters doc counts polled slots as opened.\n"
+        },
+        {
+          "sha": "68e4584151d31b1e8d148a464668eee16faaf18d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:17:59-07:00",
+          "message": "docs(watchers): a macOS watch close waits on fseventsd and registers a new client; tests on the disk add to its backlog (brandon-unfiled-3248.iywk)\n"
+        },
+        {
+          "sha": "544aac91d39631dba9e6011a37420c607bfa5bb8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:00:01-07:00",
+          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-680",
       "ref": "refs/pull/680/merge",
       "sha": "c905e1f1159074bed899a87d80b7bf863b2ca08a",
@@ -215,35 +251,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-07T11:15:43Z",
           "message": "chore(release): set `package.json` to 1.210.2 [skip ci]\n\n## [1.210.2](https://github.com/promptctl/cc-candybar/compare/v1.210.1...v1.210.2) (2026-11-07)\n\n### Bug Fixes\n\n* **state:** concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1) ([#678](https://github.com/promptctl/cc-candybar/issues/678)) ([3bc07ed](https://github.com/promptctl/cc-candybar/commit/3bc07edfbe9d321a6fea2f6a74c80414ed0ef5e7))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-688",
-      "ref": "refs/pull/688/merge",
-      "sha": "0484954183c66c2fdc8f47514b8c886e737dd24d",
-      "timestamp": "2026-11-07T11:19:08.600Z",
-      "commits": [
-        {
-          "sha": "0484954183c66c2fdc8f47514b8c886e737dd24d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:18:22Z",
-          "message": "Merge 68e4584151d31b1e8d148a464668eee16faaf18d into f92fb0e65423da82e8e6030b5d393e6c9369d852\n"
-        },
-        {
-          "sha": "68e4584151d31b1e8d148a464668eee16faaf18d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:17:59-07:00",
-          "message": "docs(watchers): a macOS watch close waits on fseventsd and registers a new client; tests on the disk add to its backlog (brandon-unfiled-3248.iywk)\n"
-        },
-        {
-          "sha": "544aac91d39631dba9e6011a37420c607bfa5bb8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:00:01-07:00",
-          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
         }
       ]
     },

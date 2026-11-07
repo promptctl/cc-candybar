@@ -52073,6 +52073,7 @@ var statOf = (st) => ({
   birthtimeNs: st.birthtimeNs
 });
 var systemFilesystem = {
+  watchReach: process_default.platform === "darwin" ? "tree" : "directory",
   statSync: (p2) => statOf(fs_default.statSync(p2, { bigint: true })),
   lstatSync: (p2) => statOf(fs_default.lstatSync(p2, { bigint: true })),
   readlinkSync: (p2) => fs_default.readlinkSync(p2),
@@ -52278,10 +52279,11 @@ var failedOf = (d) => ({
 });
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
 var dirId = (target, polled) => `${polled ? "names" : target.recursive === true ? "tree" : "dir"}:${target.path}`;
-function entryOf3(filesystem, at) {
+function entryAt(filesystem, dir, name) {
   try {
-    const s = filesystem.lstatSync(at);
-    return `${s.kind}:${s.dev}:${s.ino}:${s.size}:${s.mtimeMs}:${s.mode}`;
+    const s = filesystem.lstatSync(import_node_path6.default.join(dir, name));
+    const contents = s.kind === "directory" ? "" : `${s.size}:${s.mtimeMs}`;
+    return `${s.kind}:${s.dev}:${s.ino}:${s.mode}:${contents}`;
   } catch (e) {
     return `error:${e.code}`;
   }
@@ -52296,14 +52298,12 @@ var WatcherRegistry = class {
   // owner sharing this registry reads the folders and links it judges from,
   // so a watch and the identity it is judged by read one tree.
   filesystem;
-  named;
   // The sweep armed while any directory is polled.
   sweep = null;
   closed = false;
   constructor(opts) {
     this.clock = opts.clock;
     this.filesystem = opts.filesystem;
-    this.named = opts.named ?? "watch";
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
   }
@@ -52389,7 +52389,7 @@ var WatcherRegistry = class {
   // The directory watch a new slot's target joins: the one already open
   // there, judged, or a new one.
   dirFor(target) {
-    const polled = this.named === "poll" && target.filenames !== void 0;
+    const polled = this.filesystem.watchReach === "tree" && target.filenames !== void 0;
     const id2 = dirId(target, polled);
     const existing = this.dirs.get(id2);
     if (existing !== void 0) {
@@ -52600,7 +52600,14 @@ var WatcherRegistry = class {
         );
       this.dirs.delete(dir.id);
     }
+    if (this.sweep !== null && !this.polling()) {
+      this.sweep();
+      this.sweep = null;
+    }
     if (this.counters) this.counters.watchersClosed++;
+  }
+  polling() {
+    return [...this.dirs.values()].some((d) => d.state.kind === "polling");
   }
   // Every name a polled directory's listeners hear is read now, unless the
   // last sweep already read it: a name newly asked for starts from what is
@@ -52611,10 +52618,7 @@ var WatcherRegistry = class {
     for (const { filter } of dir.listeners)
       for (const name of filter ?? [])
         if (!state.seen.has(name))
-          state.seen.set(
-            name,
-            entryOf3(this.filesystem, import_node_path6.default.join(dir.path, name))
-          );
+          state.seen.set(name, entryAt(this.filesystem, dir.path, name));
   }
   armSweep() {
     if (this.sweep !== null || this.closed) return;
@@ -52623,8 +52627,7 @@ var WatcherRegistry = class {
       () => {
         this.sweep = null;
         this.pollNames();
-        if ([...this.dirs.values()].some((d) => d.state.kind === "polling"))
-          this.armSweep();
+        if (this.polling()) this.armSweep();
       },
       { unref: true }
     );
@@ -52648,15 +52651,12 @@ var WatcherRegistry = class {
       if (bound !== state.bound) {
         state.bound = bound;
         for (const name of names)
-          state.seen.set(
-            name,
-            entryOf3(this.filesystem, import_node_path6.default.join(dir.path, name))
-          );
+          state.seen.set(name, entryAt(this.filesystem, dir.path, name));
         this.tell(dir, { kind: "unknown" });
         continue;
       }
       for (const name of names) {
-        const now2 = entryOf3(this.filesystem, import_node_path6.default.join(dir.path, name));
+        const now2 = entryAt(this.filesystem, dir.path, name);
         if (state.seen.get(name) === now2) continue;
         state.seen.set(name, now2);
         for (const { slot, filter } of dir.listeners)
@@ -68914,7 +68914,7 @@ function jsonLine(line) {
     return { kind: "unparsed", reason: String(parseError) };
   }
 }
-function entryOf4(line) {
+function entryOf3(line) {
   const read2 = jsonLine(line);
   if (read2.kind === "unparsed") {
     debug(`Failed to parse JSONL line: ${read2.reason}`);
@@ -68931,7 +68931,7 @@ function entryOf4(line) {
 function parseJsonlLines(text4) {
   const entries = [];
   for (const line of text4.split("\n")) {
-    const entry = entryOf4(line);
+    const entry = entryOf3(line);
     if (entry) entries.push(entry);
   }
   return entries;
@@ -70050,7 +70050,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.2";
+var PACKAGE_VERSION = "1.210.3";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -77379,14 +77379,14 @@ var FrameFeeds = class {
   // frame set for a change shows it however early its timer fires, and none is
   // ever drawn further ahead of the wall than that, so nothing carries from
   // one frame to the next. Its moment on the monotonic clock is that instant's.
-  draw(feed2, due) {
+  draw(feed2, due2) {
     feed2.phase = { kind: "rendering" };
     const woke = feed2.wokeSince;
     feed2.wokeSince = null;
     const started2 = this.deps.clock.monotonic();
     const wall = this.deps.instant();
     const at = Math.min(
-      Math.max(due, wall),
+      Math.max(due2, wall),
       wall + TIMER_RESOLUTION_S
     );
     const moment2 = started2 + (at - wall) * 1e3;
@@ -77484,21 +77484,21 @@ var FrameFeeds = class {
   // its monotonic due time is what a later caller compares against.
   // [LAW:single-enforcer] The one rule that a timer is never set later than
   // it already falls due. Answers whether it moved the timer.
-  arm(feed2, due, wall) {
-    const delay = Math.max(0, (due - wall) * 1e3);
+  arm(feed2, due2, wall) {
+    const delay = Math.max(0, (due2 - wall) * 1e3);
     const dueMoment = this.deps.clock.monotonic() + delay;
     if (feed2.phase.kind === "due" && feed2.phase.at <= dueMoment) return false;
-    this.setTimer(feed2, due, dueMoment, delay);
+    this.setTimer(feed2, due2, dueMoment, delay);
     return true;
   }
-  setTimer(feed2, due, dueMoment, delay) {
+  setTimer(feed2, due2, dueMoment, delay) {
     if (feed2.phase.kind === "due") feed2.phase.clear();
     feed2.phase = {
       kind: "due",
       at: dueMoment,
       clear: this.deps.clock.after(
         delay,
-        () => this.fire(feed2, due, dueMoment)
+        () => this.fire(feed2, due2, dueMoment)
       )
     };
   }
@@ -77511,10 +77511,10 @@ var FrameFeeds = class {
   // `due`: that turn drawn twice and the one after it late. The wall clock is
   // not asked, so a wall stepped back, which leaves the monotonic moment
   // reached, still draws and is followed by `draw`.
-  fire(feed2, due, dueMoment) {
+  fire(feed2, due2, dueMoment) {
     const remaining = dueMoment - this.deps.clock.monotonic();
-    if (remaining > 0) this.setTimer(feed2, due, dueMoment, remaining);
-    else this.draw(feed2, due);
+    if (remaining > 0) this.setTimer(feed2, due2, dueMoment, remaining);
+    else this.draw(feed2, due2);
   }
   shown(feed2) {
     const noted = this.requests.get(feed2.sessionId);
@@ -81333,37 +81333,78 @@ var OFFLINE_PRICING_DATA = {
 var PRICING_URL = new U(
   "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json"
 );
-var DISK_TTL_MS = 24 * 60 * 60 * 1e3;
+var PRICING_PERIOD = {
+  okMs: 24 * 60 * 60 * 1e3,
+  failedMs: 3e4
+};
+var PRICING_RETRY_CEILING_MS = 60 * 60 * 1e3;
+var lastLanded = (held) => held === null ? null : held.kind === "landed" ? held : held.last;
+var tableOf = (held) => lastLanded(held)?.table ?? OFFLINE_PRICING_DATA;
+var later = (a, b) => a === null ? b : b === null ? a : a.at >= b.at ? a : b;
+var failuresOf = (held) => held.kind === "landed" ? 0 : held.failures;
+var standsMs = (failures) => backedOffMs(PRICING_PERIOD, failures, PRICING_RETRY_CEILING_MS);
+var due = (held, now2) => held.at + standsMs(failuresOf(held)) <= now2;
 function livePricing(owner) {
+  let held = null;
   let loading = null;
+  const sayNotLoaded = changeLogger(owner.log);
   return {
-    table: () => owner.closing.aborted ? Promise.resolve(OFFLINE_PRICING_DATA) : loading ??= loadTable(owner).catch((e) => {
-      owner.log("error", `pricing load threw: ${String(e)}`);
-      return OFFLINE_PRICING_DATA;
-    })
+    table: () => {
+      const owed = held === null || due(held, owner.clock.now());
+      if (owed && !owner.closing.aborted) {
+        loading ??= loadHeld(owner, held, sayNotLoaded).then((settled4) => {
+          held = settled4;
+          loading = null;
+          return settled4;
+        });
+      }
+      if (held !== null) return Promise.resolve(tableOf(held));
+      return loading === null ? Promise.resolve(OFFLINE_PRICING_DATA) : loading.then(tableOf);
+    }
   };
 }
+async function loadHeld(owner, prev, sayNotLoaded) {
+  const copy3 = await readDisk(owner);
+  if (copy3 !== null && !due(copy3, owner.clock.now())) return copy3;
+  const landed = await fetchLanded(owner).catch((e) => {
+    owner.log("error", `pricing load threw: ${String(e)}`);
+    return null;
+  });
+  if (landed !== null) return landed;
+  if (owner.closing.aborted) return prev ?? copy3;
+  const failed3 = {
+    kind: "failed",
+    at: owner.clock.now(),
+    failures: (prev === null ? 0 : failuresOf(prev)) + 1,
+    last: later(copy3, lastLanded(prev))
+  };
+  sayNotLoaded([
+    "warn",
+    `pricing table not loaded: priced by ${failed3.last === null ? "the bundled rates" : "the last table"}; the next ask after ${standsMs(failed3.failures)}ms tries again`
+  ]);
+  return failed3;
+}
 var diskPath = (cacheRoot) => import_node_path42.default.join(cacheRoot, "usage", "pricing.json");
-async function loadTable(owner) {
-  const cached = await readDisk(owner);
-  if (cached !== null) return cached;
+async function fetchLanded(owner) {
   const fresh = owner.closing.aborted ? null : await fetchPricingData(owner.closing);
-  if (fresh === null) {
-    debug(
-      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
-    );
-    return OFFLINE_PRICING_DATA;
-  }
-  if (!owner.closing.aborted) await writeDisk(owner, fresh);
-  return fresh;
+  if (fresh === null) return null;
+  const landed = {
+    kind: "landed",
+    table: fresh,
+    at: owner.clock.now()
+  };
+  if (!owner.closing.aborted) await writeDisk(owner, landed);
+  return landed;
 }
 async function readDisk(owner) {
   try {
-    const stored = JSON.parse(
+    const { data, timestamp } = JSON.parse(
       await fs_default.promises.readFile(diskPath(owner.cacheRoot), "utf8")
     );
-    const fresh = typeof stored.timestamp === "number" && stored.timestamp >= owner.clock.now() - DISK_TTL_MS;
-    return fresh && validatePricingData(stored.data) ? stored.data : null;
+    if (typeof timestamp !== "number" || timestamp > owner.clock.now() || !validatePricingData(data)) {
+      return null;
+    }
+    return { kind: "landed", table: data, at: timestamp };
   } catch (e) {
     if (e.code !== "ENOENT") {
       owner.log("warn", `pricing disk cache unreadable: ${String(e)}`);
@@ -81371,14 +81412,14 @@ async function readDisk(owner) {
     return null;
   }
 }
-async function writeDisk(owner, table) {
+async function writeDisk(owner, landed) {
   const file = diskPath(owner.cacheRoot);
   const staged = stagedPath(file);
   try {
     await fs_default.promises.mkdir(import_node_path42.default.dirname(file), { recursive: true });
     await fs_default.promises.writeFile(
       staged,
-      JSON.stringify({ data: table, timestamp: owner.clock.now() }),
+      JSON.stringify({ data: landed.table, timestamp: landed.at }),
       "utf8"
     );
     await fs_default.promises.rename(staged, file);
@@ -87154,16 +87195,16 @@ var MenuIdle = class {
   // [LAW:single-enforcer] The one place the timer follows the record.
   settle(sessionId2) {
     const idle = this.sessions.get(sessionId2);
-    const due = idle.shown && !idle.closing && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
-    if (idle.timer?.at === due) return;
+    const due2 = idle.shown && !idle.closing && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
+    if (idle.timer?.at === due2) return;
     this.disarm(idle);
-    if (due === null) return;
+    if (due2 === null) return;
     const clear = this.deps.clock.after(
-      Math.max(0, (due - this.deps.now()) * 1e3),
+      Math.max(0, (due2 - this.deps.now()) * 1e3),
       () => this.fire(sessionId2),
       { unref: true }
     );
-    idle.timer = { at: due, clear };
+    idle.timer = { at: due2, clear };
   }
   disarm(idle) {
     idle.timer?.clear();
@@ -87268,7 +87309,6 @@ function createDaemon(inputs) {
   const doctorStores = inputs.doctorStores;
   const watcherRegistry = new WatcherRegistry({
     filesystem: inputs.filesystem,
-    named: inputs.namedEntries,
     clock,
     counters: stats,
     logger: log
@@ -88709,11 +88749,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     }),
     fetch,
     pricing: (own2) => livePricing({ ...own2, clock: machine }),
-    filesystem: systemFilesystem,
-    // [LAW:effects-at-boundaries] A macOS directory watch is an FSEvents
-    // stream over the directory's whole tree; a Linux one is one inotify
-    // watch on the directory alone.
-    namedEntries: process_default.platform === "darwin" ? "poll" : "watch"
+    filesystem: systemFilesystem
   };
 }
 
