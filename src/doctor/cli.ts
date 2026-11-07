@@ -13,7 +13,7 @@
 // itself here (handler-probe.ts), the click that asked there — and the fold
 // is one function either way.
 
-import type { World } from "../host.js";
+import type { Host, World } from "../host.js";
 import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { daemonGates } from "../daemon/update-keys.js";
 import { locations, stateDir } from "../daemon/paths.js";
@@ -227,7 +227,7 @@ export async function doctorPlan(
   edge: DoctorEdge,
   handler: HandlerProbeEdge,
   daemon: () => Promise<DaemonAnswer>,
-  env: Readonly<Record<string, string | undefined>>,
+  host: Pick<Host, "env" | "parentPid">,
   cwd: string,
   // Measures the terminal the command runs in (`commandTerminal`), inside
   // the one try below, so a measurement that throws is a `doctor:` line and
@@ -235,6 +235,7 @@ export async function doctorPlan(
   measureTerminal: () => { readonly columns?: number; readonly rows?: number },
   configFile: string | undefined = undefined,
 ): Promise<CliPlan> {
+  const { env } = host;
   let facts: DoctorFacts;
   try {
     const answer = await daemon();
@@ -243,7 +244,7 @@ export async function doctorPlan(
     // command runs in, standing in for the stream Claude Code would hand
     // that client (which the command's own redirects say nothing about).
     const hints = detectClientHints(
-      { env, home: edge.home },
+      { ...host, home: edge.home },
       cwd,
       measureTerminal(),
     );
@@ -373,7 +374,7 @@ export async function doctorCommandPlan(
         ),
         productionHandlerProbeEdge(world.launcher, world),
         () => askDaemon(world),
-        world.host.env,
+        world.host,
         process.cwd(),
         commandTerminal,
         parsed.configFile,

@@ -88,6 +88,7 @@ export interface RenderRequest {
   configEnv?: string;
   claudeConfigDir?: string;
   terminalEnv?: TerminalEnvHint;
+  parentPid?: number;
   client?: ClientHint;
 }
 
@@ -156,6 +157,11 @@ export interface ReaderRenderRequest extends RenderRequest {
 //     Present, it is the absolute directory the client resolved from it
 //     (detectClaudeConfigDir, src/claude-settings.ts) — the one whose
 //     settings.json that session's Claude Code reads.
+//   • `parentPid` absent — the client did not REPORT (too old, as `ssh`).
+//     Present, it is the pid of the process that ran the client: Claude Code,
+//     for a statusline, whose record of the session it holds is what makes
+//     the session its pane's (src/daemon/session-pane.ts). Any other process
+//     in the pane has a parent that keeps no such record.
 //   • `client` absent — the client did not REPORT what it is: a client too
 //     old to carry the field, which is itself the doctor's finding (an
 //     install whose client predates its daemon). Present, it is total: the
@@ -168,6 +174,7 @@ export interface ClientHints {
   readonly configEnv?: string;
   readonly claudeConfigDir?: string;
   readonly terminalEnv?: TerminalEnvHint;
+  readonly parentPid?: number;
   readonly client?: ClientHint;
 }
 
@@ -181,6 +188,7 @@ const CLIENT_HINT_FIELDS = Object.keys({
   configEnv: true,
   claudeConfigDir: true,
   terminalEnv: true,
+  parentPid: true,
   client: true,
 } satisfies Record<keyof ClientHints, true>) as ReadonlyArray<
   keyof ClientHints
@@ -203,6 +211,7 @@ export function parseClientHints(
   const configEnv = sanitizeAbsolutePath(req.configEnv);
   const claudeConfigDir = sanitizeAbsolutePath(req.claudeConfigDir);
   const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
+  const parentPid = sanitizePid(req.parentPid);
   const client = sanitizeClient(req.client);
   return {
     ...(termCols !== undefined && { termCols }),
@@ -212,6 +221,7 @@ export function parseClientHints(
     ...(configEnv !== undefined && { configEnv }),
     ...(claudeConfigDir !== undefined && { claudeConfigDir }),
     ...(terminalEnv !== undefined && { terminalEnv }),
+    ...(parentPid !== undefined && { parentPid }),
     ...(client !== undefined && { client }),
   };
 }
@@ -353,6 +363,13 @@ export function sanitizeSsh(v: unknown): boolean | undefined {
   return typeof v === "boolean" ? v : undefined;
 }
 
+// A process id: a positive integer, or the hint is unreported.
+function sanitizePid(v: unknown): number | undefined {
+  return Number.isSafeInteger(v) && (v as number) > 0
+    ? (v as number)
+    : undefined;
+}
+
 export interface ShutdownRequest {
   v: number;
   kind: "shutdown";
@@ -440,8 +457,9 @@ export interface SubscribeRequest {
   lane: Lane;
 }
 
-// Which session last rendered from a tmux pane: the session of the daemon's
-// newest render request whose client reported that pane. A tmux bar pane
+// Which session a tmux pane runs: the session of the daemon's newest render
+// request whose session runs in that pane, as Claude Code's own record of its
+// process confirmed it (src/daemon/session-pane.ts). A tmux bar pane
 // (lane C) knows the pane it draws beside, not the session in it, which
 // changes on a /clear; it asks again to follow.
 export interface PaneSessionRequest {
@@ -518,7 +536,7 @@ export type Response =
   // self-describing — the client doesn't need to remember which `what` it sent.
   | { ok: true; debug: DebugSnapshot }
   // A pane-session answer: the session, or null when no request the daemon
-  // holds came from that pane.
+  // holds runs in that pane.
   | { ok: true; paneSession: string | null }
   // A record request's answer, once its file is closed.
   | { ok: true; recorded: Recorded }

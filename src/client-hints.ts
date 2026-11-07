@@ -34,11 +34,11 @@ const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
 // Every hint but `client`: what the calling program IS is no fact of its
 // environment, and only a statusline client has one to report.
 export function detectClientHints(
-  host: Pick<Host, "env" | "home">,
+  host: Pick<Host, "env" | "home" | "parentPid">,
   cwd: string,
   tty: { readonly columns?: number; readonly rows?: number },
 ): Omit<ClientHints, "client"> {
-  const { env } = host;
+  const { env, parentPid } = host;
   return {
     termCols: detectTermExtent(env.COLUMNS, tty.columns),
     // The terminal's height, as the render event reports it.
@@ -61,5 +61,8 @@ export function detectClientHints(
     // too old". The doctor reads which terminal draws the bar from these
     // (src/doctor/terminal.ts).
     terminalEnv: detectTerminalEnv(env),
+    // Total like ssh: the process that ran this client, whose record of the
+    // session it holds makes the session its pane's (src/daemon/session-pane.ts).
+    parentPid,
   };
 }

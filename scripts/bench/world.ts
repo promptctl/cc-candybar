@@ -190,7 +190,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
   const terminal = sessionEnv(dirs.claude);
   // The host this world's clients are handed: its socket, its home.
   const machine = processWorld();
-  const host = { env, home: dirs.home, tmp: machine.host.tmp };
+  const host = { ...machine.host, env, home: dirs.home };
   // What its clients ask the daemon with: this world's host, the machine's clock.
   const home = homeOf(host);
   const client = { host, home, clock: machine.clock, dialer: machine.dialer };
@@ -295,7 +295,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
 
   // What a client reports of the terminal it runs at.
   const hintsOf = (session: Session, columns: number): ClientHints => ({
-    ...detectClientHints({ env: terminal, home: dirs.home }, session.cwd, {
+    ...detectClientHints({ ...host, env: terminal }, session.cwd, {
       columns,
       rows: 48,
     }),

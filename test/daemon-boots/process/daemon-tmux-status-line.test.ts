@@ -19,6 +19,7 @@ import {
   NO_RENDERER,
   RENDERER_OPTION,
 } from "../../../src/tmux-status/click-binding";
+import { claudeHolds } from "../../helpers/claude-record";
 import { configFlag, killAndWait, render } from "../../helpers/daemon-e2e";
 import { logLines } from "../../helpers/daemon-log";
 import {
@@ -180,6 +181,10 @@ const USER_BINDING = "switch-client -t = \\; set-option -g @ccb-pressed yes";
         env: typeof a,
         pane: string,
       ): Promise<void> => {
+        // Run by a Claude Code of its own, which holds the row's session.
+        const claudeConfigDir = path.join(dir, ".claude");
+        const parentPid = s === "a" ? 4001 : 4002;
+        claudeHolds(claudeConfigDir, parentPid, `row-${s}`);
         await until(async () => {
           await render(
             env.home,
@@ -189,6 +194,8 @@ const USER_BINDING = "switch-client -t = \\; set-option -g @ccb-pressed yes";
               termCols: COLS,
               termRows: ROWS,
               tmux: { socket: inner, pane, truecolor: null },
+              parentPid,
+              claudeConfigDir,
             },
             configFlag(config),
           );

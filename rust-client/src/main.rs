@@ -328,6 +328,10 @@ fn client_hints(request: &mut serde_json::Value, cwd: &std::path::Path) {
     // environment does not set left out of it — absence stays "client too old
     // to report".
     request["terminalEnv"] = detect_terminal_env();
+    // parentPid is UNCONDITIONAL like ssh: the process that ran us, which for
+    // a statusline is Claude Code itself, whose record of the session it holds
+    // the daemon reads by this pid.
+    request["parentPid"] = serde_json::Value::from(std::os::unix::process::parent_id());
     // client is CONDITIONAL only on the binary naming its own path: one that
     // cannot (current_exe failed) can spawn no daemon either, and its absence
     // reads as the doctor's "unreported" — never a guessed bundle.

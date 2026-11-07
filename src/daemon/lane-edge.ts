@@ -27,12 +27,9 @@ import { presence } from "../utils/presence.js";
 import { sessionEnv } from "./session-env.js";
 import { canonical, executableOn, regularFileWith } from "../path-search.js";
 import { launcherNode } from "../attach-preload.js";
-import {
-  type HeldSession,
-  type LaneEdge,
-  type PaneClaude,
-} from "./lane-setup.js";
+import { type LaneEdge, type PaneClaude } from "./lane-setup.js";
 import { claudeConfigDir } from "../claude-settings.js";
+import type { HeldSession, HeldSessionOf } from "./session-pane.js";
 
 const SHELL_BUFFER = "cc-candybar-lane";
 // How often the wait for an exit looks again.
@@ -293,6 +290,15 @@ export function heldSessionIn(file: string): HeldSession {
     : { kind: "unread", why: `its session record ${file} names no session` };
 }
 
+// [LAW:single-enforcer] The one place a record's file is found: `home` is the
+// user's, where the configuration directory is when the process names none.
+export const heldSessionUnder =
+  (home: string): HeldSessionOf =>
+  (pid, configDir) =>
+    heldSessionIn(
+      path.join(claudeConfigDir(configDir, home), "sessions", `${pid}.json`),
+    );
+
 // How often the wait for a lane's subscriber looks again.
 const FOLLOW_POLL_MS = 200;
 
@@ -363,10 +369,7 @@ export function productionLaneEdge(
     fileExists: (file) => fs.existsSync(file),
     presence,
     paneClaude: (hint) => paneClaude(launcher, hint),
-    heldSession: (pid, configDir) =>
-      heldSessionIn(
-        path.join(claudeConfigDir(configDir, home), "sessions", `${pid}.json`),
-      ),
+    heldSession: heldSessionUnder(home),
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the
     // shell's once the shell holds its terminal again: until it has reaped
     // Claude Code and taken the foreground back, tmux reads the directory of

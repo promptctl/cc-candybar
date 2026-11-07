@@ -52,6 +52,7 @@ A Bun-compiled Claude Code honours BUN_OPTIONS. It doesn't honour BUN_INSPECT_PR
 
 ## The tmux status line
 
+- The session a pane runs is the one the pane's Claude Code holds, by the record Claude Code keeps of its process, found by the pid of the process that ran the statusline client. Every process in the pane inherits TMUX_PANE, so a client run from Claude Code's own shell names the pane too, and only the record tells them apart. A statusline command that runs the client under a shell or a wrapper hands it the wrong parent, so its session is never the pane's, and its bar says so while the status line or a bar pane is on.
 - tmux stores an array option whole at each level. A session-level status-format[1] blanks the global [0] (the window list), and unsetting indices leaves an empty array that still shadows the global one. So copy, write and restore the session's array whole.
 - A layout's restore compares against a record kept in tmux itself, so the next daemon puts back what a dead one left. Each record names the socket of the daemon that wrote it, and a daemon touches only its own records. A dev or test daemon on the same tmux server therefore leaves the real one's records alone.
 - The click binding is text every renderer writes alike, so no renderer owns it. A renderer's handler, name and mac ride on the session it draws, because they differ per renderer and per build, and a binding carrying one renderer's would make every other renderer fight it or click through a bundle a removed worktree took with it.

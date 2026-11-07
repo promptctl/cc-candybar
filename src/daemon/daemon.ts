@@ -91,7 +91,7 @@ import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
 import { MenuIdle } from "./menu-idle.js";
-import { namesPane } from "../tmux-hint.js";
+import { runsIn, type HeldSessionOf } from "./session-pane.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -155,6 +155,9 @@ export interface DaemonAdapters {
     // The user's home (`Host`).
     home: string,
   ) => LaneEdge;
+  // The session a Claude Code process holds, by the records Claude Code keeps
+  // under the user's home (`home`) or the directory a session names.
+  readonly heldSession: (home: string) => HeldSessionOf;
   // The one signer of every `run` link this daemon draws.
   readonly linkSigner: LinkSigner;
   // What the memory backstop reads and writes on the machine.
@@ -473,7 +476,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
     subscribe: (sessionId, sub) => frameFeeds.subscribe(sessionId, sub),
     sessionInPane: (where) =>
-      frameFeeds.newestWhere(({ hints: { tmux } }) => namesPane(tmux, where)),
+      frameFeeds.newestWhere(({ pane }) => runsIn(pane, where)),
     // Run by tmux under its server's environment, so the renderer's home is
     // stated whole on the command, every variable of it.
     handler: [
@@ -777,6 +780,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     home: host.home,
     storedRoot: paths.storedRoot,
     tmp: host.tmp,
+    heldSession: inputs.heldSession(host.home),
     launcher,
     log,
     clock,

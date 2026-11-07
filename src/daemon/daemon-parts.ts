@@ -31,6 +31,7 @@ import type { Launcher } from "../proc/launch";
 import type { EffectSessions } from "../render/effect.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { StoredRoot } from "./foundations/stored-path";
+import type { HeldSessionOf } from "./session-pane.js";
 
 // [LAW:one-source-of-truth] What one daemon holds, built once by `createDaemon`
 // (src/daemon/daemon.ts) and read by the request handling, which keeps none of
@@ -43,6 +44,9 @@ export interface DaemonParts {
   readonly storedRoot: StoredRoot;
   // The temporary directory a click's handoff writes under.
   readonly tmp: string;
+  // The session a Claude Code process holds, by its own record: what makes a
+  // request's session the one its tmux pane runs.
+  readonly heldSession: HeldSessionOf;
   readonly clock: Timekeeper;
   readonly launcher: Launcher;
   readonly log: DaemonLogger;

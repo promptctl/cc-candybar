@@ -555,8 +555,13 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     // declaring its view: what that declaration stamps is later than `at`.
     clock.burn(burnMs);
     // The view is declared with the request as the daemon's checkpoint
-    // passes it on, which a lane's frame draws by: no argument refused.
-    const req = { ...request(cwd, home, claudeConfigDir, model), refusedArgs: [] };
+    // passes it on, which a lane's frame draws by: no argument refused, and
+    // run in no tmux pane.
+    const req = {
+      ...request(cwd, home, claudeConfigDir, model),
+      refusedArgs: [],
+      pane: { kind: "outside" },
+    };
     const held = live.cache.holdSession(cwd, cwd, configFile, req);
     const settling = settleRequest(live.recorder, held.view, at);
     return {

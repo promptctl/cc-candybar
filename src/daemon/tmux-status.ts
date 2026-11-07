@@ -399,8 +399,8 @@ export interface TmuxStatusDeps {
     sessionId: string,
     sub: Subscriber<"tmuxStatus">,
   ) => () => void;
-  // The session whose statusline last rendered from `pane`, as the daemon
-  // holds it — a /clear or a new Claude Code in the pane takes it over.
+  // The session `pane` runs, as the daemon's newest request confirmed in it
+  // says it — a /clear or a new Claude Code in the pane takes it over.
   readonly sessionInPane: (
     where: Pick<TmuxHint, "socket" | "pane">,
   ) => string | null;
@@ -491,20 +491,19 @@ export class TmuxStatusLines {
   constructor(private readonly deps: TmuxStatusDeps) {}
 
   // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
-  // arrival with its own hints, a click's commit with its session's latest —
-  // never at a draw: a session whose switch is on and that reported a tmux
-  // pane is held, any other is not. A daemon restart picks each session up at
-  // its next request.
-  observe(
-    sessionId: string,
-    tmux: TmuxHint | null | undefined,
-    on: boolean,
-  ): void {
+  // arrival, a click's commit with its session's latest request — never at a
+  // draw: a session whose switch is on and that runs in a tmux pane
+  // (`running`, as its request was stamped) is held, any other is not. A
+  // daemon restart picks each session up at its next request.
+  observe(sessionId: string, running: TmuxHint | null, on: boolean): void {
     if (this.closed) return;
     const held = this.held.get(sessionId);
-    const where = on && tmux !== null && tmux !== undefined ? tmux : null;
+    const where = on ? running : null;
     if (held !== undefined && (where === null || !samePane(held, where)))
-      this.release(held, "switched off or moved");
+      this.release(
+        held,
+        "switched off, moved, or no longer known to run in the pane",
+      );
     if (where === null || this.held.has(sessionId)) return;
     const entry: Held = {
       sessionId,
