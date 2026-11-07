@@ -299,7 +299,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     );
     expect(await paneFactOf("lane-stranger")).toBe(
       valueOf(
-        `unconfirmed: the Claude Code that ran its statusline (pid ${pane.parentPid}) holds session ${sid}`,
+        `mismatched: the Claude Code that ran its statusline (pid ${pane.parentPid}) holds session ${sid}`,
       ),
     );
     // Run from that shell under the pane's own session, a client says

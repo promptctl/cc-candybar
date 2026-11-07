@@ -22,15 +22,16 @@ export type HeldSessionOf = (
 
 // [LAW:types-are-the-program] Where a request's session runs, as the render
 // checkpoint stamps it: confirmed by the record of the Claude Code that ran its
-// client, in the tmux pane the client names or outside tmux (`tmux` null); left,
-// when that Claude Code's record holds another session, so the request is a
-// tick of a session it has moved on from (a `/clear` can be followed by one);
-// or not known, with why, wherever the client ran. Only a confirmed stamp says
-// anything of where the session is.
+// client, in the tmux pane the client names or outside tmux (`tmux` null);
+// mismatched, when that Claude Code's record holds another session, as it does
+// on either side of a `/clear` or `/resume` rewriting it (the old session's
+// last tick can follow the rewrite, the new one's first can precede it); or not
+// known, with why, wherever the client ran. Only a confirmed stamp places the
+// session in a pane.
 export type SessionPane =
   | { readonly kind: "runs"; readonly tmux: TmuxHint | null }
   | {
-      readonly kind: "left" | "unconfirmed";
+      readonly kind: "mismatched" | "unconfirmed";
       readonly tmux: TmuxHint | null;
       readonly why: string;
     };
@@ -64,7 +65,7 @@ export function sessionPaneOf(
   return held.sessionId === sessionId
     ? { kind: "runs", tmux }
     : {
-        kind: "left",
+        kind: "mismatched",
         tmux,
         why: `the Claude Code that ran its statusline (pid ${parentPid}) holds session ${held.sessionId}`,
       };
@@ -100,15 +101,15 @@ export function runsNowIn(
 // [LAW:nothing-unseen] The stamp as the render event's `pane` field.
 export const paneFact = (pane: SessionPane): string =>
   pane.kind !== "runs"
-    ? `unconfirmed: ${pane.why}`
+    ? `${pane.kind}: ${pane.why}`
     : pane.tmux === null
       ? "outside"
       : "runs";
 
 // [LAW:no-silent-failure] Why a lane that shows the session its pane runs
 // shows another bar than this one, while such a lane is on: null otherwise.
-// A session its Claude Code has left names nothing to fix, since that Claude
-// Code's next tick is the pane's session; its render line still says why.
+// A mismatched stamp names nothing to fix: its Claude Code is the pane's and
+// confirms its next tick; its render line still says why.
 export function sessionPaneError(
   pane: SessionPane,
   lanes: LaneSwitches,
