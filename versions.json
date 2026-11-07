@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-692",
+      "ref": "refs/pull/692/merge",
+      "sha": "94481901787c8e59e57ee6863d3807d843fe22b9",
+      "timestamp": "2026-11-07T12:37:54.141Z",
+      "commits": [
+        {
+          "sha": "94481901787c8e59e57ee6863d3807d843fe22b9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T12:37:02Z",
+          "message": "Merge b3349f126c430a5f5df24850e18abc58bf790ad9 into b21e989ab734befd8acc182d17139d743372d040\n"
+        },
+        {
+          "sha": "b3349f126c430a5f5df24850e18abc58bf790ad9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:36:51-07:00",
+          "message": "test(facts): the live session states a client's deadline, spells its argv once, and checks the pane its checkpoint stamped (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "b72b705f710b16fab4ba22a42c743a393f4044bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:14:46-07:00",
+          "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-691",
       "ref": "refs/pull/691/merge",
       "sha": "a70d120a1a5ead31326ea632ad99f63f02399e39",
@@ -173,28 +202,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:24:50-07:00",
           "message": "fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (brandon-unfiled-3248.5bfl)\n\nEdit chrome spelled every insert slot, removal, configure entry, draft\nvariable and setting control from one walk counter shared over the preset\ntree, so adding, removing or moving a placement shifted the name of every\ncontrol after it, and an open + library, its page cursor or an open\nconfigure list landed on a neighbour after the reload. Every name is now\nspelled from the placement it serves through chromeIdent, an injective\nbase-36 spelling of the id that is a fixed point of ident, and the counter\nis gone.\n\nThe default-menu bytes snapshot regenerates for the new link names; its\nplain text is unchanged.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-692",
-      "ref": "refs/pull/692/merge",
-      "sha": "25513690fbe9939fd2b17d242edeee914654f6f8",
-      "timestamp": "2026-11-07T12:17:59.837Z",
-      "commits": [
-        {
-          "sha": "25513690fbe9939fd2b17d242edeee914654f6f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:17:00Z",
-          "message": "Merge b72b705f710b16fab4ba22a42c743a393f4044bc into 06ac017c63f4be865a8f33c02e0612d2eebddab5\n"
-        },
-        {
-          "sha": "b72b705f710b16fab4ba22a42c743a393f4044bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:14:46-07:00",
-          "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
