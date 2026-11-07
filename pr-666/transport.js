@@ -22774,11 +22774,16 @@ var VERB_DOCTOR_RUN = "doctor-run";
 var VERB_DOCTOR_FIX = "doctor-fix";
 var VERB_DOCTOR_MARK = "doctor-mark";
 var VERB_PROBE = "probe";
+var CLICK_VERBS = [VERB_DISPATCH, VERB_PROBE];
+function isClickVerb(verb) {
+  return CLICK_VERBS.includes(verb);
+}
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var VERB_RANGE = "range";
+var LINK_VERBS = [...CLICK_VERBS, VERB_RANGE];
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
 function sayWrite(key, value) {
@@ -22909,10 +22914,14 @@ function parseHandlerUrl(rawUrl) {
     return { ok: false, problem: error.message };
   }
 }
-function spellsUnaddressedLink(text4) {
-  if (!isBarLink(text4)) return false;
+function deadLinkOf(text4) {
+  if (!isBarLink(text4)) return null;
   const head = text4.slice(LINK_PREFIX.length).split("%")[0];
-  return !head.startsWith(ADDRESS) && !ADDRESS.startsWith(head);
+  if (!head.startsWith(ADDRESS)) {
+    return ADDRESS.startsWith(head) ? null : "in a grammar older than names, which names no renderer";
+  }
+  const [, , verb, ...tail] = head.split("/");
+  return verb === void 0 || tail.length === 0 || LINK_VERBS.includes(verb) ? null : `naming the verb "${verb}", which a link never names: a link names ${LINK_VERBS.join(", ")}`;
 }
 function verbOf(rest2, to) {
   const slash2 = rest2.indexOf("/");
@@ -46314,14 +46323,15 @@ function templateActionRefs(template, helpers) {
   }
   return [...refs.values()];
 }
-function templateUnaddressedLinks(template, helpers) {
+function templateDeadLinks(template, helpers) {
   const refs = /* @__PURE__ */ new Map();
   for (const { code, via } of callGraph(template, helpers)) {
     for (const s of code.matchAll(STRING_LITERAL_RE)) {
       const literal = s[0].slice(1, -1);
-      if (!spellsUnaddressedLink(literal)) continue;
+      const problem = deadLinkOf(literal);
+      if (problem === null) continue;
       const key = `${literal}\0${via ?? "\0"}`;
-      if (!refs.has(key)) refs.set(key, { literal, via });
+      if (!refs.has(key)) refs.set(key, { literal, problem, via });
     }
   }
   return [...refs.values()];
@@ -61207,12 +61217,12 @@ function checkTemplateRefs(ctx, declPath, template, scope, opts) {
     const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
     report2(`Template references unknown variable ".${ref}"${hint}`, via);
   }
-  for (const { literal, via } of templateUnaddressedLinks(
+  for (const { literal, problem, via } of templateDeadLinks(
     template,
     scope.helpers
   )) {
     report2(
-      `Template spells a link in a grammar older than names, which names no renderer: "${literal}". Bind an action instead ({{ action "name" \u2026 }}): its link names the renderer that draws it`,
+      `Template spells a link ${problem}: "${literal}". Bind an action instead ({{ action "name" \u2026 }}): the bar draws its link`,
       via
     );
   }
@@ -64461,11 +64471,6 @@ function parseWire(decode) {
       return { ok: false, problem: `malformed wire encoding: ${err.message}` };
     throw err;
   }
-}
-function decodeWire(decode) {
-  const parsed2 = parseWire(decode);
-  if (!parsed2.ok) throw new BadVerbArgs(parsed2.problem);
-  return parsed2.value;
 }
 
 // src/daemon/config-file-store.ts
@@ -70845,9 +70850,6 @@ function parseSessionId(raw) {
 }
 
 // src/daemon/verbs/index.ts
-function oneArg(value) {
-  return decodeWire(() => decodeURIComponent(value));
-}
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
 function clickFailed(r, what, log) {
   if (r.reason === "rate-limited") {
@@ -71669,11 +71671,9 @@ function landStep(ctx, sid, step4, facts) {
 var doctorRun = (sid, _args, ctx) => {
   describeDoctor(ctx, sid, { kind: "run" });
 };
-var probe2 = (value, ctx) => {
-  const nonce = parseProbeNonce(oneArg(value));
-  if (nonce === null) {
-    throw new BadVerbArgs("probe: the value is not a probe nonce");
-  }
+var probe2 = (read2, ctx) => {
+  if (!read2.ok) throw new BadVerbArgs(`probe: ${read2.problem}`);
+  const nonce = read2.value;
   if (ctx.arrival.via !== "link")
     throw new BadVerbArgs("probe: a probe arrives only as a link");
   const { delivery } = ctx.arrival;
@@ -71842,26 +71842,37 @@ function readEffect({ verb, value }) {
   const leaf = LEAF_VERBS.get(verb);
   return leaf === void 0 ? { verb, leaf } : readLeaf(verb, leaf, value);
 }
-function readDispatch(value) {
-  return batchAdjacentWrites(parseEffects(value)).map(readEffect);
-}
 function sessionOf(effects) {
   return effects.find((e) => e.leaf !== void 0)?.session ?? null;
 }
-function clickSessionOf(verb, value) {
-  return sessionOf(
-    verb === VERB_DISPATCH ? readDispatch(value) : [readEffect({ verb, value })]
-  );
+function readProbe(value) {
+  const decoded = parseWire(() => decodeURIComponent(value));
+  if (!decoded.ok) return decoded;
+  const nonce = parseProbeNonce(decoded.value);
+  return nonce === null ? { ok: false, problem: "the value is not a probe nonce" } : { ok: true, value: nonce };
 }
-function perform({ verb, leaf, session, args }, click3, ctx) {
+var CLICK_READERS = {
+  [VERB_DISPATCH]: (value) => {
+    const effects = batchAdjacentWrites(parseEffects(value)).map(readEffect);
+    return { kind: VERB_DISPATCH, effects, session: sessionOf(effects) };
+  },
+  [VERB_PROBE]: (value) => ({ kind: VERB_PROBE, nonce: readProbe(value) })
+};
+function readClick(verb, value) {
+  return isClickVerb(verb) ? CLICK_READERS[verb](value) : null;
+}
+function clickSession(click2) {
+  return click2.kind === VERB_DISPATCH && click2.session?.ok ? click2.session.id : null;
+}
+function perform({ verb, leaf, session, args }, click2, ctx) {
   const described = [];
   try {
     if (!session.ok) throw new BadVerbArgs(`session id ${session.problem}`);
-    if (!click3?.ok)
+    if (!click2?.ok)
       throw new BadVerbArgs(
         "its click's own session is refused, so no step of it runs"
       );
-    if (click3.id !== session.id)
+    if (click2.id !== session.id)
       throw new BadVerbArgs(
         `names session ${session.id}, not the session its click is in`
       );
@@ -71878,7 +71889,7 @@ function perform({ verb, leaf, session, args }, click3, ctx) {
   } catch (e) {
     if (e instanceof BadVerbArgs) {
       REFUSAL_OWNERS.get(verb)?.(ctx, {
-        sid: click3?.ok ? click3.id : "-",
+        sid: click2?.ok ? click2.id : "-",
         args: args.ok ? args.value : [],
         reason: e.message
       });
@@ -71977,49 +71988,29 @@ function journaled(sid, ctx, handler) {
   ctx.described(effects);
   throwAll(failures);
 }
-function click(verb, read2, handler) {
-  return (value, ctx) => {
-    if (ctx.gone()) throw new ClickAbandoned(verb);
-    const effects = read2(value);
-    const session = sessionOf(effects);
-    const sid = session?.ok ? session.id : null;
-    ctx.journalTurns.take(
-      verb,
-      () => journaled(sid, ctx, (c) => {
-        try {
-          handler(effects, session, c);
-        } finally {
-          if (sid !== null) ctx.clickLanded(sid);
-        }
-      })
-    );
-  };
+function dispatch(click2, ctx) {
+  if (ctx.gone()) throw new ClickAbandoned(VERB_DISPATCH);
+  const sid = clickSession(click2);
+  ctx.journalTurns.take(
+    VERB_DISPATCH,
+    () => journaled(sid, ctx, (c) => {
+      try {
+        foldEffects(click2.effects, click2.session, c);
+      } finally {
+        if (sid !== null) ctx.clickLanded(sid);
+      }
+    })
+  );
 }
-var VERBS = new Map([
-  ...[...LEAF_VERBS].map(
-    ([verb, leaf]) => [
-      verb,
-      click(
-        verb,
-        (value) => [readLeaf(verb, leaf, value)],
-        (effects, session, ctx) => {
-          for (const effect of effects) perform(effect, session, ctx);
-        }
-      )
-    ]
-  ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, readDispatch, foldEffects)],
-  // A link kind, never a leaf, so no dispatch can carry it as an effect: a
-  // probe writes no journal, so nothing may refuse it for a turn, and it
-  // describes nothing.
-  [VERB_PROBE, probe2]
-]);
-var VERB_NAMES = Object.freeze([
-  ...VERBS.keys()
-]);
-function clickVerb(name) {
-  const run3 = VERBS.get(name);
-  return run3 === void 0 ? null : { name, run: run3 };
+function runClick(click2, ctx) {
+  switch (click2.kind) {
+    case VERB_DISPATCH:
+      return dispatch(click2, ctx);
+    case VERB_PROBE:
+      return probe2(click2.nonce, ctx);
+    default:
+      return click2;
+  }
 }
 function closeIdleMenus(sid, idle, ctx) {
   ctx.journalTurns.take(
@@ -72060,17 +72051,18 @@ function linksOf({ rows }) {
     );
   });
 }
-function decodeArgs(verb, value) {
-  return LEAF_VERB_NAMES.has(verb) ? decodeSegments(value) : [decodeURIComponent(value)];
-}
 function drawnClickOf(url) {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
-  const { verb, value } = link;
-  const known = verb === VERB_DISPATCH ? LEAF_VERB_NAMES : VERBS;
+  if (link.verb !== VERB_DISPATCH) {
+    return {
+      ok: false,
+      problem: `a drawn link names ${VERB_DISPATCH}, and this names "${link.verb}": ${url}`
+    };
+  }
   try {
-    const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    const unknown = raw.find((e) => !known.has(e.verb));
+    const raw = parseEffects(link.value);
+    const unknown = raw.find((e) => !LEAF_VERB_NAMES.has(e.verb));
     if (unknown !== void 0) {
       return {
         ok: false,
@@ -72081,7 +72073,7 @@ function drawnClickOf(url) {
       ok: true,
       effects: raw.map((e) => ({
         verb: e.verb,
-        args: decodeArgs(e.verb, e.value)
+        args: decodeSegments(e.value)
       }))
     };
   } catch (error) {
@@ -72093,9 +72085,9 @@ function drawnClickOf(url) {
 }
 function describeLink(link, sessionId2) {
   if (!isBarLink(link.url)) return `opens ${link.url}`;
-  const click3 = drawnClickOf(link.url);
-  if (!click3.ok) return `refused: ${click3.problem}`;
-  return click3.effects.map(
+  const click2 = drawnClickOf(link.url);
+  if (!click2.ok) return `refused: ${click2.problem}`;
+  return click2.effects.map(
     ({ verb, args }) => [verb, ...args.map((a) => a === sessionId2 ? "<session>" : a)].join(" ")
   ).join(" ; ");
 }
@@ -77975,11 +77967,11 @@ var ARMS = {
   // a refused step is answered beside them; a click whose client has left is
   // refused by the verb, where it would land (src/daemon/verbs/index.ts). A
   // turn is synchronous, so no idle timer can close a menu under one.
-  click: ({ verb, value, arrival, gone }, { verbCtx }) => {
+  click: ({ click: click2, arrival, gone }, { verbCtx }) => {
     const effects = [];
     let answer2 = null;
     try {
-      verb.run(value, {
+      runClick(click2, {
         ...verbCtx,
         arrival,
         gone,
@@ -78142,7 +78134,7 @@ var LINE = {
 };
 var ORIGIN = {
   request: ({ req }) => ({ verb: "request", session: req.sessionId }),
-  click: ({ verb, session }) => ({ verb: verb.name, session }),
+  click: ({ click: click2 }) => ({ verb: click2.kind, session: clickSession(click2) }),
   "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
   "effect-done": ({ of }) => of,
   answered: ({ session }) => ({ verb: "answered", session })
@@ -79021,9 +79013,9 @@ async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
     }
   );
 }
-async function clickRan(click3) {
+async function clickRan(click2) {
   try {
-    return await click3();
+    return await click2();
   } catch (error) {
     return thrownOutcome(error);
   }
@@ -79071,23 +79063,14 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
-  const resolved = clickVerb(verb);
-  if (resolved === null) {
+  const click2 = readClick(verb, value);
+  if (click2 === null) {
     return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
-  const named3 = clickSessionOf(verb, value);
-  const session = named3?.ok ? named3.id : null;
-  noteFacts(facts, { sid: session ?? "-" });
+  noteFacts(facts, { sid: clickSession(click2) ?? "-" });
   const { answer: answer2 } = await apply(
-    {
-      kind: "click",
-      verb: resolved,
-      value,
-      arrival,
-      session,
-      gone: clientGone
-    },
+    { kind: "click", click: click2, arrival, gone: clientGone },
     parts
   );
   if (answer2 !== null) throw answer2.error;
@@ -79116,13 +79099,13 @@ async function statusLineClick(parts, value, facts, clientGone) {
     kind: "bad-request",
     problems: [problem]
   });
-  const click3 = tmuxStatusLines.linkAt(value);
-  if (click3.kind === "refused") return refused2(click3.reason);
-  noteFacts(facts, { link: click3.url });
-  if (isBarLink(click3.url)) {
+  const click2 = tmuxStatusLines.linkAt(value);
+  if (click2.kind === "refused") return refused2(click2.reason);
+  noteFacts(facts, { link: click2.url });
+  if (isBarLink(click2.url)) {
     return linkClick(
       parts,
-      click3.url,
+      click2.url,
       { via: "tmux-status" },
       facts,
       clientGone
@@ -79132,10 +79115,10 @@ async function statusLineClick(parts, value, facts, clientGone) {
     parts.launcher,
     {
       bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-      args: [click3.url],
+      args: [click2.url],
       category: "click.open"
     },
-    `opening ${click3.url}`,
+    `opening ${click2.url}`,
     parts.log,
     CLICK_PROGRAM_TIMEOUT_MS,
     parts.tmp
@@ -88343,7 +88326,7 @@ function copy2(text4) {
     (e) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text4}`
   );
 }
-async function click2(url, size) {
+async function click(url, size) {
   const drawn = drawnClickOf(url);
   const effects = drawn.ok ? drawn.effects : [];
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
@@ -88395,7 +88378,7 @@ var transport = {
   landscape: "landscape/",
   frame,
   render: render2,
-  click: click2,
+  click,
   // A new session over the bundled config: what the visitor's clicks wrote is
   // undone, and the daemon re-reads the config now, as a save's click does after it writes.
   restart: async (size) => {
