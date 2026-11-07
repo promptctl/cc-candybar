@@ -75004,15 +75004,19 @@ function segmentColorFuncs(ref) {
         drawnColour(fg, ColorDepth.TRUECOLOR),
         drawnColour(bg, ColorDepth.TRUECOLOR)
       );
-      const floor2 = Math.min(
-        TEXT_MIN_CONTRAST,
-        Math.max(held, QUIET_MIN_CONTRAST)
-      );
-      return (ensureDrawn(
+      const floor2 = Math.min(TEXT_MIN_CONTRAST, held);
+      const depth = ref.drawnAt();
+      const kept = ensureDrawn(
         fg,
-        ref.drawnAt(),
+        depth,
         (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor2
-      ) ?? fg).hex;
+      );
+      if (kept === void 0) {
+        throw new Error(
+          `keptOn: nothing drawn at ${ColorDepth[depth]} stands ${floor2.toFixed(2)}:1 off ${bg.hex} (drawn ${drawnColour(bg, depth).hex})`
+        );
+      }
+      return kept.hex;
     }),
     argTypes: ["string", "string"],
     arity: { kind: "exact" },

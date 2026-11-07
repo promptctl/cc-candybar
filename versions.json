@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-682",
+      "ref": "refs/pull/682/merge",
+      "sha": "34c14ce42e8f8387019ebf19ef85ab4c562f1e1d",
+      "timestamp": "2026-11-07T10:32:06.912Z",
+      "commits": [
+        {
+          "sha": "34c14ce42e8f8387019ebf19ef85ab4c562f1e1d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:30:28Z",
+          "message": "Merge 32978aa15c48ef46b8ce5640a197b620b9e86aa9 into 215f486db0c68765107dc69e715ccb26c5ac01d3\n"
+        },
+        {
+          "sha": "32978aa15c48ef46b8ce5640a197b620b9e86aa9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:20:01-07:00",
+          "message": "docs(demo): say padding is structural in the sample, and what the strip leaves in the test (brandon-unfiled-3248.0d5a)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "9416f1230a33e31a449113e635a1e148000d6364",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:14:45-07:00",
+          "message": "fix(demo): the bundled sample draws the default's session cell and no doubled padding (brandon-unfiled-3248.0d5a)\n\nThe sample re-derived the default's session-id cell without its `when`,\nso an empty id drew a bare glyph; it now places the default's\n`sessionId`. Its templates padded cells the layout already pads. The\nbundled-sample test now also fails on a loader advisory naming the\nsample and on a drawn warning indicator, not only on a refusal.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "c37d6befcc47a6e3507d98176016a2a9e3f811b4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:00:45-07:00",
+          "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "215f486db0c68765107dc69e715ccb26c5ac01d3",
@@ -135,42 +171,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:40:04-07:00",
           "message": "fix(state): concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1)\n\nTwo processes sharing a state directory both staged a write at\n`<file>.tmp`, so one's rename published or moved the other's bytes and\nthe other's rename failed ENOENT. Every staged name now carries the\nwriting process's pid, spelled once by `stagedPath` in\nsrc/utils/atomic-write.ts: writeAtomic, both session-state-file stages\nand the socket lease use it. The fork-bomb breaker stages by an\ninjected identity's pid and is left as it is.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-682",
-      "ref": "refs/pull/682/merge",
-      "sha": "cf3fad5f4978a0cb9df71f8b0d4fc1516ba9b572",
-      "timestamp": "2026-11-07T10:24:55.784Z",
-      "commits": [
-        {
-          "sha": "cf3fad5f4978a0cb9df71f8b0d4fc1516ba9b572",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:22:52Z",
-          "message": "Merge 15cd138ee702c16666a38b76f3ca155977d66a5f into 1f5014d66591bcdbb9dac6e5fb1aa8619e0bf5fd\n"
-        },
-        {
-          "sha": "15cd138ee702c16666a38b76f3ca155977d66a5f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:20:01-07:00",
-          "message": "docs(demo): say padding is structural in the sample, and what the strip leaves in the test (brandon-unfiled-3248.0d5a)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "fa4856e08537e9f425e753a6cdb99718afbca415",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:14:45-07:00",
-          "message": "fix(demo): the bundled sample draws the default's session cell and no doubled padding (brandon-unfiled-3248.0d5a)\n\nThe sample re-derived the default's session-id cell without its `when`,\nso an empty id drew a bare glyph; it now places the default's\n`sessionId`. Its templates padded cells the layout already pads. The\nbundled-sample test now also fails on a loader advisory naming the\nsample and on a drawn warning indicator, not only on a refusal.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "4cf0267d72aac9115d9a489c437cc3f1d8f01d82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:00:45-07:00",
-          "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
