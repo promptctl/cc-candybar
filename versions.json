@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-666",
+      "ref": "refs/pull/666/merge",
+      "sha": "edecbcab297d20a1248ccd4dc814382ba9a5ce5a",
+      "timestamp": "2026-11-07T01:05:29.826Z",
+      "commits": [
+        {
+          "sha": "edecbcab297d20a1248ccd4dc814382ba9a5ce5a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:04:28-07:00",
+          "message": "Merge ce02827821b0348fe79ca3c074ef0feda6894647 into 536561c3a05d572669c0b7bd7a2830dd6ab3bcc6\n"
+        },
+        {
+          "sha": "ce02827821b0348fe79ca3c074ef0feda6894647",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:04:13-07:00",
+          "message": "fix(feed): a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0)\n\nThe feed's phase splits drawing into rendering, whose wakes the frame\nreads, and pushing, whose wakes mark the frame so its schedule draws the\nnext a spacing on. No sink wakes synchronously today; a lane refused\nmid-push did, and waited out the still period untimed.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "536561c3a05d572669c0b7bd7a2830dd6ab3bcc6",
