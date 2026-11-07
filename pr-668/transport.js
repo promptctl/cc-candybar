@@ -72139,7 +72139,7 @@ function notSentOnDrivenBar(click2, sessionId2) {
     const does = step4.ok ? HOST_VERBS.get(step4.verb) : void 0;
     return does === void 0 ? [] : [does];
   });
-  return acts.length === 0 ? null : `not sent: on a real machine this ${acts.join(", ")}: ${describeClick(click2, sessionId2)}`;
+  return acts.length === 0 ? null : `not sent: on a real machine this ${[...new Set(acts)].join(", ")}: ${describeClick(click2, sessionId2)}`;
 }
 
 // src/daemon/daemon.ts
@@ -88460,7 +88460,8 @@ async function click(url, size) {
     (step4) => step4.ok && step4.verb === VERB_COPY ? [step4.args[1]] : []
   );
   if (steps2.length > 0 && copies.length === steps2.length) {
-    return { ...await render2(size), refused: await copy2(copies.join("\n")) };
+    const copied = copy2(copies.join("\n"));
+    return { ...await render2(size), refused: await copied };
   }
   const held = notSentOnDrivenBar(drawn, sessionId);
   if (held !== null) return { ...await render2(size), refused: held };
