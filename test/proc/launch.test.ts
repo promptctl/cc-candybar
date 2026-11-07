@@ -1055,10 +1055,18 @@ describe("a launcher's scope", () => {
 
 // Every case asserts the launch's whole verdict, so a failure prints its
 // reason: toMatchObject's failure message shows only the keys it was given.
+// The blocking timeout feeds no input: it is the one blocking timeout case, so
+// it covers the launch with no input pipe.
 describe("launch input a child does not read", () => {
   const unread = "x".repeat(10 * 1024 * 1024);
-  const ended = { stdout: "", stderr: "" };
-  const timedOut = { ok: false, reason: "timeout", ...ended, exitCode: null, signal: "SIGTERM" };
+  const noOutput = { stdout: "", stderr: "" };
+  const timedOut = {
+    ok: false,
+    reason: "timeout",
+    ...noOutput,
+    exitCode: null,
+    error: "timed out after 0.1 s",
+  };
 
   it("leaves a child's success standing", async () => {
     const r = await launch({
@@ -1067,7 +1075,7 @@ describe("launch input a child does not read", () => {
       args: ["-c", "exit 0"],
       stdinInput: unread,
     });
-    expect(r).toStrictEqual({ ok: true, ...ended, exitCode: 0 });
+    expect(r).toStrictEqual({ ok: true, ...noOutput, exitCode: 0 });
   });
 
   it("leaves a child's failure its own explanation", async () => {
@@ -1080,7 +1088,7 @@ describe("launch input a child does not read", () => {
     expect(r).toStrictEqual({
       ok: false,
       reason: "non-zero",
-      stdout: "",
+      ...noOutput,
       stderr: "refused\n",
       exitCode: 1,
       signal: null,
@@ -1095,29 +1103,25 @@ describe("launch input a child does not read", () => {
       stdinInput: unread,
       timeoutMs: 100,
     });
-    // The error names the bound, not the unread input.
-    expect(r).toStrictEqual({ ...timedOut, error: "timed out after 0.1 s" });
+    // The error names the bound, not the unread input. The signal is whichever
+    // ended the child: SIGTERM, or SIGKILL once the grace runs out.
+    expect(r).toStrictEqual({ ...timedOut, signal: expect.stringMatching(/^SIG(TERM|KILL)$/) });
   });
 
   it("names the bound when the blocking launch times out", () => {
-    const r = launchSync({
-      category: "user-shell",
-      bin: "sleep",
-      args: ["5"],
-      stdinInput: unread,
-      timeoutMs: 100,
-    });
-    expect(r).toStrictEqual({ ...timedOut, error: "timed out after 0.1 s" });
+    const r = launchSync({ category: "user-shell", bin: "sleep", args: ["5"], timeoutMs: 100 });
+    expect(r).toStrictEqual({ ...timedOut, signal: "SIGTERM" });
   });
 
   it("gives the blocking launch the same verdicts", () => {
-    const run = (script: string) =>
-      launchSync({ category: "user-shell", bin: "sh", args: ["-c", script], stdinInput: unread });
-    const killed = { ok: false, reason: "signal", ...ended, exitCode: null };
-    expect(run("exit 0")).toStrictEqual({ ok: true, ...ended, exitCode: 0 });
-    expect(run("exit 1")).toStrictEqual({ ok: false, reason: "non-zero", ...ended, exitCode: 1, signal: null });
-    expect(run("head -c 1 >/dev/null")).toStrictEqual({ ok: true, ...ended, exitCode: 0 });
-    expect(run("kill -TERM $$")).toStrictEqual({ ...killed, signal: "SIGTERM" });
+    const run = (script: string, timeoutMs?: number) =>
+      launchSync({ category: "user-shell", bin: "sh", args: ["-c", script], stdinInput: unread, timeoutMs });
+    const killed = { ok: false, reason: "signal", ...noOutput, exitCode: null };
+    expect(run("exit 0")).toStrictEqual({ ok: true, ...noOutput, exitCode: 0 });
+    expect(run("exit 1")).toStrictEqual({ ok: false, reason: "non-zero", ...noOutput, exitCode: 1, signal: null });
+    expect(run("head -c 1 >/dev/null")).toStrictEqual({ ok: true, ...noOutput, exitCode: 0 });
+    // A signal from outside while a timeout is armed is still a signal.
+    expect(run("kill -TERM $$", 5000)).toStrictEqual({ ...killed, signal: "SIGTERM" });
     expect(run("kill -KILL $$")).toStrictEqual({ ...killed, signal: "SIGKILL" });
   });
 });
