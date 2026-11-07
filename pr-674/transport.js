@@ -59792,6 +59792,147 @@ function validateHelpers(ctx, raw) {
 // src/config/loader/cross-ref.ts
 init_globals();
 
+// src/config/payload-reads.ts
+init_globals();
+
+// src/config/loader/value-reads.ts
+init_globals();
+function valueReads({ names, helpers, actions }) {
+  const actionTexts = (name, seen) => {
+    const decl = Object.hasOwn(actions, name) ? actions[name] : void 0;
+    if (decl === void 0 || seen.has(name)) return [];
+    seen.add(name);
+    return [
+      ...[...actionTemplates(decl)].map(([, source]) => source),
+      ..."do" in decl ? decl.do.flatMap((m) => actionTexts(m, seen)) : []
+    ];
+  };
+  const texts = perTemplate((template) => {
+    const bound = bindsComputedAction(template, helpers) ? Object.keys(actions) : templateActionRefs(template, helpers).map((ref) => ref.name);
+    const seen = /* @__PURE__ */ new Set();
+    return [template, ...bound.flatMap((name) => actionTexts(name, seen))];
+  });
+  const ofTemplate = perTemplate(
+    (template) => texts(template).flatMap(
+      (text4) => [...templateReads(text4, helpers).keys()].map((path47) => ({
+        path: path47,
+        reaches: variableRead(path47, names)
+      }))
+    )
+  );
+  const calls = perTemplate(
+    (template) => new Set(
+      texts(template).flatMap((text4) => [
+        ...templateFunctions(text4, helpers)
+      ])
+    )
+  );
+  const ofVariable = (decl) => [
+    ...variableTemplates(decl).flatMap(
+      ([field, template]) => ofTemplate(template).map((read2) => ({ ...read2, field }))
+    ),
+    ...hasCacheField(decl) && "depends_on" in decl.cache ? decl.cache.depends_on.map((name) => ({
+      path: name,
+      reaches: names.has(name) ? [name] : [],
+      field: "cache.depends_on"
+    })) : []
+  ];
+  return { ofTemplate, calls, ofVariable };
+}
+function payloadPathOf(name, decl) {
+  switch (decl.kind) {
+    case "input":
+      return decl.path;
+    case "source":
+      return name;
+    default:
+      return void 0;
+  }
+}
+var FOLDS = /* @__PURE__ */ new WeakMap();
+function valueReadsOf(config2) {
+  let fold = FOLDS.get(config2);
+  if (fold === void 0) {
+    fold = valueReads({
+      names: new Set([...declaredVariables(config2)].map(([name]) => name)),
+      helpers: config2.helpers,
+      actions: config2.actions
+    });
+    FOLDS.set(config2, fold);
+  }
+  return fold;
+}
+
+// src/config/payload-reads.ts
+function segmentTemplates(config2, name) {
+  const seg2 = config2.segments[name];
+  if (!seg2) return [];
+  return [
+    ...[seg2.template, seg2.when, seg2.bg, seg2.fg].flatMap(
+      (src) => src !== void 0 ? [src] : []
+    ),
+    ...Object.values(seg2.partials ?? {})
+  ];
+}
+function pathUnder(outer, inner) {
+  return inner === outer || inner.startsWith(`${outer}.`);
+}
+function layoutTemplates(config2, preset) {
+  const templates = [];
+  for (const node of walkNodes(presetRoot(config2, preset).node)) {
+    if (node.when !== void 0) templates.push(node.when);
+    if (node.kind === "segment") {
+      if (node.lead !== void 0) templates.push(node.lead);
+      if (node.trail !== void 0) templates.push(node.trail);
+    }
+  }
+  const globals = presetGlobals(config2, preset);
+  for (const slot of EXPRESSION_SLOTS) {
+    const rule = globals[slot];
+    if (isExpression(rule)) templates.push(rule);
+  }
+  return templates;
+}
+var runsUnread = (decl) => decl.kind === "shell" || decl.kind === "file";
+function pathsReached(config2, templates, roots = []) {
+  const reads = valueReadsOf(config2);
+  const decls = new Map(declaredVariables(config2));
+  const frontier = [
+    ...roots,
+    ...templates.flatMap(
+      (template) => reads.ofTemplate(template).flatMap(({ reaches }) => reaches)
+    )
+  ];
+  const visited = /* @__PURE__ */ new Set();
+  const paths2 = /* @__PURE__ */ new Set();
+  while (frontier.length > 0) {
+    const reached = frontier.pop();
+    if (visited.has(reached)) continue;
+    visited.add(reached);
+    const decl = decls.get(reached);
+    const read2 = payloadPathOf(reached, decl);
+    if (read2 !== void 0) paths2.add(read2);
+    for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
+  }
+  return paths2;
+}
+function segmentInputPaths(config2, name, whens) {
+  return pathsReached(config2, [...segmentTemplates(config2, name), ...whens]);
+}
+function configPayloadPaths(config2) {
+  const templates = [];
+  const placed2 = /* @__PURE__ */ new Set();
+  for (const preset of presetNames(config2.presets)) {
+    templates.push(...layoutTemplates(config2, preset));
+    for (const node of walkNodes(presetRoot(config2, preset).node)) {
+      if (node.kind === "segment") placed2.add(node.name);
+    }
+  }
+  for (const name of placed2) templates.push(...segmentTemplates(config2, name));
+  const roots = [...declaredVariables(config2)].filter(([, decl]) => runsUnread(decl)).map(([name]) => name);
+  return pathsReached(config2, templates, roots);
+}
+
 // src/config/loader/unplaced.ts
 init_globals();
 function presenceOf(segments, rendering) {
@@ -59878,76 +60019,6 @@ var EMPTY_ROW = {
 
 // src/config/loader/projections.ts
 init_globals();
-
-// src/config/loader/value-reads.ts
-init_globals();
-function valueReads({ names, helpers, actions }) {
-  const actionTexts = (name, seen) => {
-    const decl = Object.hasOwn(actions, name) ? actions[name] : void 0;
-    if (decl === void 0 || seen.has(name)) return [];
-    seen.add(name);
-    return [
-      ...[...actionTemplates(decl)].map(([, source]) => source),
-      ..."do" in decl ? decl.do.flatMap((m) => actionTexts(m, seen)) : []
-    ];
-  };
-  const texts = perTemplate((template) => {
-    const bound = bindsComputedAction(template, helpers) ? Object.keys(actions) : templateActionRefs(template, helpers).map((ref) => ref.name);
-    const seen = /* @__PURE__ */ new Set();
-    return [template, ...bound.flatMap((name) => actionTexts(name, seen))];
-  });
-  const ofTemplate = perTemplate(
-    (template) => texts(template).flatMap(
-      (text4) => [...templateReads(text4, helpers).keys()].map((path47) => ({
-        path: path47,
-        reaches: variableRead(path47, names)
-      }))
-    )
-  );
-  const calls = perTemplate(
-    (template) => new Set(
-      texts(template).flatMap((text4) => [
-        ...templateFunctions(text4, helpers)
-      ])
-    )
-  );
-  const ofVariable = (decl) => [
-    ...variableTemplates(decl).flatMap(
-      ([field, template]) => ofTemplate(template).map((read2) => ({ ...read2, field }))
-    ),
-    ...hasCacheField(decl) && "depends_on" in decl.cache ? decl.cache.depends_on.map((name) => ({
-      path: name,
-      reaches: names.has(name) ? [name] : [],
-      field: "cache.depends_on"
-    })) : []
-  ];
-  return { ofTemplate, calls, ofVariable };
-}
-function payloadPathOf(name, decl) {
-  switch (decl.kind) {
-    case "input":
-      return decl.path;
-    case "source":
-      return name;
-    default:
-      return void 0;
-  }
-}
-var FOLDS = /* @__PURE__ */ new WeakMap();
-function valueReadsOf(config2) {
-  let fold = FOLDS.get(config2);
-  if (fold === void 0) {
-    fold = valueReads({
-      names: new Set([...declaredVariables(config2)].map(([name]) => name)),
-      helpers: config2.helpers,
-      actions: config2.actions
-    });
-    FOLDS.set(config2, fold);
-  }
-  return fold;
-}
-
-// src/config/loader/projections.ts
 function instantRead(template, basis) {
   for (const name of basis.reads.calls(template)) {
     if (basis.clock.has(name)) return `calls "${name}"`;
@@ -61203,7 +61274,7 @@ function checkRuleSlotReads(ctx, cfg) {
   const slotRead = (reads, seen) => {
     for (const { path: path47, reaches } of reads) {
       const atSlot = EXPRESSION_SLOTS.find(
-        (slot) => SLOT_PATHS[slot] === path47 || SLOT_PATHS[slot].startsWith(`${path47}.`)
+        (slot) => pathUnder(path47, SLOT_PATHS[slot])
       );
       if (atSlot !== void 0)
         return `reads "${SLOT_PATHS[atSlot]}", the ${atSlot}'s own name`;
@@ -67462,75 +67533,6 @@ var GitService = class {
 // src/doctor/data-needs.ts
 init_globals();
 
-// src/config/payload-reads.ts
-init_globals();
-function segmentTemplates(config2, name) {
-  const seg2 = config2.segments[name];
-  if (!seg2) return [];
-  return [
-    ...[seg2.template, seg2.when, seg2.bg, seg2.fg].flatMap(
-      (src) => src ? [src] : []
-    ),
-    ...Object.values(seg2.partials ?? {})
-  ];
-}
-var pathUnder = (outer, inner) => inner === outer || inner.startsWith(`${outer}.`);
-function layoutTemplates(config2, preset) {
-  const templates = [];
-  for (const node of walkNodes(presetRoot(config2, preset).node)) {
-    if (node.when !== void 0) templates.push(node.when);
-    if (node.kind === "segment") {
-      if (node.lead !== void 0) templates.push(node.lead);
-      if (node.trail !== void 0) templates.push(node.trail);
-    }
-  }
-  const globals = presetGlobals(config2, preset);
-  for (const slot of EXPRESSION_SLOTS) {
-    const rule = globals[slot];
-    if (isExpression(rule)) templates.push(rule);
-  }
-  return templates;
-}
-var runsUnread = (decl) => decl.kind === "shell" || decl.kind === "file";
-function pathsReached(config2, templates, roots = []) {
-  const reads = valueReadsOf(config2);
-  const decls = new Map(declaredVariables(config2));
-  const frontier = [
-    ...roots,
-    ...templates.flatMap(
-      (template) => reads.ofTemplate(template).flatMap(({ reaches }) => reaches)
-    )
-  ];
-  const visited = /* @__PURE__ */ new Set();
-  const paths2 = /* @__PURE__ */ new Set();
-  while (frontier.length > 0) {
-    const reached = frontier.pop();
-    if (visited.has(reached)) continue;
-    visited.add(reached);
-    const decl = decls.get(reached);
-    const read2 = payloadPathOf(reached, decl);
-    if (read2 !== void 0) paths2.add(read2);
-    for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
-  }
-  return paths2;
-}
-function segmentInputPaths(config2, name, whens) {
-  return pathsReached(config2, [...segmentTemplates(config2, name), ...whens]);
-}
-function configPayloadPaths(config2) {
-  const templates = [];
-  for (const preset of presetNames(config2.presets)) {
-    templates.push(...layoutTemplates(config2, preset));
-    for (const node of walkNodes(presetRoot(config2, preset).node)) {
-      if (node.kind === "segment") {
-        templates.push(...segmentTemplates(config2, node.name));
-      }
-    }
-  }
-  const roots = [...declaredVariables(config2)].filter(([, decl]) => runsUnread(decl)).map(([name]) => name);
-  return pathsReached(config2, templates, roots);
-}
-
 // src/daemon/render-payload.ts
 init_globals();
 var import_node_path25 = __toESM(require_path_browserify(), 1);
@@ -68211,14 +68213,13 @@ function projectDrawFields(document, at) {
   return { today: projectRow(document, "today", at) };
 }
 function builtinsReadAt(paths2) {
-  const under2 = pathUnder;
   const read2 = /* @__PURE__ */ new Set();
   for (const path47 of paths2) {
     for (const [root, row2] of ROWS2) {
-      if (!under2(root, path47) && !under2(path47, root)) continue;
+      if (!pathUnder(root, path47) && !pathUnder(path47, root)) continue;
       for (const name of row2.facts) read2.add(name);
       for (const [name, fields2] of Object.entries(row2.parts)) {
-        if (under2(path47, root) || fields2.some((field) => under2(`${root}.${field}`, path47))) {
+        if (pathUnder(path47, root) || fields2.some((field) => pathUnder(`${root}.${field}`, path47))) {
           read2.add(name);
         }
       }
