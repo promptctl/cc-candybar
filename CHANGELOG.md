@@ -1,3 +1,9 @@
+## [1.208.9](https://github.com/promptctl/cc-candybar/compare/v1.208.8...v1.208.9) (2026-11-07)
+
+### Bug Fixes
+
+* **lanes:** a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom) ([#663](https://github.com/promptctl/cc-candybar/issues/663)) ([e91dc65](https://github.com/promptctl/cc-candybar/commit/e91dc65779794fd06d6ce4db8ec43c25efb26e07))
+
 ## [1.208.8](https://github.com/promptctl/cc-candybar/compare/v1.208.7...v1.208.8) (2026-11-07)
 
 ### Bug Fixes
