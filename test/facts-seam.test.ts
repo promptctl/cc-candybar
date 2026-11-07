@@ -7,10 +7,10 @@
 // (src/daemon/session-recorder.ts), read back by the one parser, replayed by
 // the demo (src/demo/play.ts).
 //
-// The live half is a render-cache rig in this worker, built as the daemon
-// builds its cache (`recordedCache` over `inProcessFacts`) and settling each
-// request as the daemon's request path does (`settleRequest`), because the
-// boot ratchet admits no new booting case (.claude/memory/testing.md). Each
+// The live half is the daemon's parts in this worker (test/helpers/
+// daemon-parts.ts), settling each request as the daemon's request path does
+// (`settleRequest`), because the boot ratchet admits no new booting case
+// (.claude/memory/testing.md). Each
 // live frame is drawn only once every fact has landed, so a line stamped
 // after a draw never exists: the recording at an instant is what the frame at
 // that instant drew from. Every frame, live and replayed, is drawn by the
@@ -26,7 +26,6 @@ import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { RenderCache, type SessionView } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import {
-  inProcessFacts,
   recordingFacts,
   type Facts,
 } from "../src/daemon/facts-source";
@@ -52,11 +51,9 @@ import {
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import {
   observable,
-  reaction,
   runInAction,
   type IObservableValue,
 } from "mobx";
-import { MenuIdle } from "../src/daemon/menu-idle";
 import {
   DIAGNOSTICS_VIEWING,
   SETTINGS_ANCHOR,
@@ -67,7 +64,6 @@ import { diagnosticsProjection } from "../src/render/diagnostics";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { flashBegins, MENU_TIMEOUT_DEFAULT } from "../src/config/menu-timeout";
 import { SETTINGS } from "../src/config/setting-projections";
-import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
 import {
   heldArrival,
   loadDemo,
@@ -101,20 +97,10 @@ import {
   shell,
   type Behaviour,
 } from "../src/proc/spawner-fake";
-import { EffectSessions, SessionEffects } from "../src/render/effect";
+import { SessionEffects } from "../src/render/effect";
 import { type Lane } from "../src/config/lanes";
-import type { DaemonParts } from "../src/daemon/daemon-parts";
-import { MismatchRuns } from "../src/daemon/mismatch-runs";
-import {
-  drawForAnswer,
-  renderFrame,
-  viewLanes,
-  type RenderSetup,
-} from "../src/daemon/draw-bar";
-import { FEED_PERIODS, FrameFeeds } from "../src/daemon/frame-feed";
-import type { LaneEncoders } from "../src/daemon/lane-frames";
+import { drawForAnswer, type RenderSetup } from "../src/daemon/draw-bar";
 import type { CheckedRenderRequest } from "../src/daemon/render-checkpoint";
-import { RenderWarningRecords } from "../src/daemon/render-warnings";
 import type { Frame } from "../src/render/frame";
 import { textOf } from "../src/render/frame";
 import type { Timekeeper } from "../src/time";
@@ -122,13 +108,13 @@ import { instantAt, msOf } from "../src/utils/instant";
 import type { DaemonLogger } from "../src/utils/logger";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { offlinePricing } from "../src/segments/pricing";
-import { SourceRuns } from "../src/var-system/source-runs";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { bareGates } from "./helpers/gates";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 import { WORLD, hostOf } from "./helpers/host";
 import { TEST_LINKS } from "./helpers/link-signer";
 import { until } from "./helpers/until";
+import { daemonParts } from "./helpers/daemon-parts";
 
 jest.setTimeout(30_000);
 
@@ -160,9 +146,19 @@ let cleanups: Array<() => void>;
 beforeEach(() => {
   cleanups = [];
 });
+// Every cleanup runs, so a check that fails one still tears the rig down.
 afterEach(() => {
-  for (const fn of cleanups.reverse()) fn();
+  const failed: unknown[] = [];
+  for (const fn of cleanups.reverse()) {
+    try {
+      fn();
+    } catch (error) {
+      failed.push(error);
+    }
+  }
   jest.restoreAllMocks();
+  if (failed.length === 1) throw failed[0];
+  if (failed.length > 1) throw new AggregateError(failed, `${failed.length} cleanups failed`);
 });
 
 // A client that waits for its recording to the end.
@@ -290,37 +286,23 @@ function request(
 interface Rig {
   readonly cache: RenderCache<SessionSource, SessionRequest>;
   readonly recorder: SessionRecorder;
-  readonly providers: ReturnType<typeof createPayloadProviders>;
-  readonly lines: string[];
-  // Why the session's turn inputs cannot be read while set: the next turn
-  // cannot be taken, and the bar is held on the last one that was.
-  readonly turnThrows: IObservableValue<string | null>;
-  // What the session's clicks leave: its store, the histories' depths, and
-  // its menus' idle clock, which every frame is drawn under.
+  // What the session's clicks leave, as a replay restores them: its store and
+  // the histories' depths.
   readonly sessionState: SessionState;
   readonly depths: IObservableValue<Depths>;
-  readonly menuIdle: MenuIdle;
 }
 
-// The daemon's own composition of a render cache over providers
-// (src/daemon/daemon.ts), its recorder wired over it, its facts source chosen
-// by the caller. `failsFor` is a directory whose view's source throws as it
-// opens, standing in for any view that fails after its follow was taken.
+// The replay's renderer: a render cache over the recording's facts arm, its
+// recorder wired over it, composed as the daemon composes its own
+// (src/daemon/daemon.ts). Its store holds every write, because a replay
+// restores each line's picks as it reaches it and takes no turn.
 function rig(
   host: Host,
   clock: Timekeeper,
   launcher: ReturnType<typeof fakeLauncher>["launcher"],
-  factsOf: (
-    providers: ReturnType<typeof createPayloadProviders>,
-    update: UpdateFact,
-    runs: SourceRuns,
-  ) => Facts,
-  failsFor: string | null = null,
+  facts: Facts,
 ): Rig {
-  const lines: string[] = [];
-  const log: DaemonLogger = (level, message) => {
-    lines.push(`${level} ${message}`);
-  };
+  const log: DaemonLogger = () => {};
   const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock, logger: log });
   const home = homeOf(host);
   const providers = createPayloadProviders({
@@ -334,28 +316,13 @@ function rig(
     ledger: new RefreshLedger(log),
   });
   const sessionState = new SessionState(SINGLE_RUN);
-  const update = newUpdateFact();
-  const runs = new SourceRuns({ launcher, clock });
   const depths = observable.box<Depths>(NEVER_CLICKED, { deep: false });
-  const turnThrows = observable.box<string | null>(null);
   const source = sessionSource({
     providers,
     sessionState,
     stateGates: bareGates().state,
     history: () => depths.get().history,
-    navigation: () => {
-      const reason = turnThrows.get();
-      if (reason !== null) throw new Error(reason);
-      return depths.get().back;
-    },
-  });
-  // The close a timeout makes is a click's, which no case here reaches.
-  const menuIdle = new MenuIdle({
-    clock,
-    now: () => instantAt(clock),
-    close: async () => {},
-    failed: (sessionId, error) =>
-      lines.push(`error menu-idle sid=${sessionId}: ${String(error)}`),
+    navigation: () => depths.get().back,
   });
   const { cache, recorder } = recordedCache(
     (recording) =>
@@ -370,13 +337,8 @@ function rig(
           links: TEST_LINKS,
           gates: bareGates(),
           log,
-          facts: factsOf(providers, update, runs),
-          source: (view) => {
-            if (view.declared().facts.cwd === failsFor) {
-              throw new Error(`the source of ${failsFor} throws as it opens`);
-            }
-            return source(view);
-          },
+          facts,
+          source,
         },
         {
           budgetBytes: () => 1024 * 1024 * 1024,
@@ -386,26 +348,17 @@ function rig(
     log,
   );
   cleanups.push(() => {
-    menuIdle.dispose();
     recorder.close();
     cache.close();
-    runs.close();
     providers.gitProvider.close();
     providers.usageStore.close();
     providers.tmuxService.close();
+    providers.hostService.close();
     providers.managedStorage.close();
     watchers.closeAll();
+    sessionState.close();
   });
-  return {
-    cache,
-    recorder,
-    providers,
-    lines,
-    turnThrows,
-    sessionState,
-    depths,
-    menuIdle,
-  };
+  return { cache, recorder, sessionState, depths };
 }
 
 // Every fact of the document answered: the owners' children run on the held
@@ -452,85 +405,82 @@ interface Pace {
 }
 const HELD: Pace = { runsMs: 0, stepMs: 0 };
 
-// A live session over the in-process arm: its directory, its home, its held
-// clock and scripted programs, its rig, and the frame feed its lanes follow
-// through. Every frame it draws, an answer or a lane's, is the daemon's own
-// draw (src/daemon/draw-bar.ts), kept in the order drawn.
+// A live session over the daemon's parts (test/helpers/daemon-parts.ts): its
+// directory, its home, its held clock and scripted programs, and the frame
+// feed its lanes follow through. Every frame it draws, an answer or a lane's,
+// is the daemon's own draw (src/daemon/draw-bar.ts), kept in the order drawn.
+// The session's histories' depths, and whether its turn's inputs can be
+// read, are the case's to set; a view opened from `<home>/fails` throws as
+// its source opens, standing in for any view that fails after its follow was
+// taken.
 function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
   const dir = sessionDir(config);
   const { home, claudeConfigDir } = homeDir();
   const clock = heldClock(AT);
-  const launcher = fakeLauncher(clock);
-  scriptPrograms(launcher, runsMs);
-  const live = rig(
-    hostOf({}, { home, tmp: home }),
-    clock,
-    launcher.launcher,
-    (providers, update, runs) =>
-      inProcessFacts({ providers, update: () => update.get(), runs }),
-    path.join(home, "fails"),
-  );
+  const failsFor = path.join(home, "fails");
+  const lines: string[] = [];
+  const depths = observable.box<Depths>(NEVER_CLICKED, { deep: false });
+  const turnThrows = observable.box<string | null>(null);
+  // The errors a turn's inputs threw because the case said to.
+  const thrown = new Set<string>();
   // Every frame drawn, in the order drawn: each answer, and each frame a lane
   // drew between them.
   const drawn: Frame[] = [];
-  const ledger = new RefreshLedger();
-  // The daemon's frame feed, built over the parts below.
-  let feeds: FrameFeeds<CheckedRenderRequest> | null = null;
-  // [LAW:single-enforcer] The parts the daemon's draw reads: the rig's own,
-  // the daemon's frame feed over them, and a stand-in for each that has
-  // nothing to warn of here (no update, no link-id fault, no launch), so the
-  // diagnostics are the daemon's own list over what this session's view says.
-  const parts = {
-    rendererName: "seam",
+  const built = daemonParts({
+    host: hostOf({}, { home, tmp: home }),
     clock,
-    recorder: live.recorder,
-    sessionState: live.sessionState,
-    mismatchRuns: new MismatchRuns(SINGLE_RUN),
-    renderCache: live.cache,
-    payloadProviders: live.providers,
-    menuIdle: live.menuIdle,
-    links: TEST_LINKS,
-    fileEvents: NO_FILE_EVENTS,
-    renderWarnings: new RenderWarningRecords(),
-    effectSessions: new EffectSessions<RenderedLine>(),
-    updateWatch: { notice: () => [], error: () => null },
-    linkIds: { error: () => null },
-    launcher: { launcherWarnings: () => [] },
-    get frameFeeds() {
-      if (feeds === null) throw new Error("a draw read the feed before it was built");
-      return feeds;
+    log: (level, message) => void lines.push(`${level} ${message}`),
+    source: (daemon) => {
+      const source = sessionSource({
+        ...daemon,
+        history: () => depths.get().history,
+        navigation: () => {
+          const reason = turnThrows.get();
+          if (reason !== null) {
+            thrown.add(`Error: ${reason}`);
+            throw new Error(reason);
+          }
+          return depths.get().back;
+        },
+      });
+      return (view) => {
+        if (view.declared().facts.cwd === failsFor) {
+          throw new Error(`the source of ${failsFor} throws as it opens`);
+        }
+        return source(view);
+      };
     },
-  } as unknown as DaemonParts;
-  // Each lane is handed the answer as the feed serialized it.
-  const passed = () => (_bar: Frame, json: string) => ({ json, value: null });
-  // [LAW:single-enforcer] The daemon's frame feed (src/daemon/daemon.ts), its
-  // frames the daemon's own, on the session's held clock, with its pane shown.
-  const feed = new FrameFeeds<CheckedRenderRequest>({
-    render: (sessionId, fps, at) => {
-      const frame = renderFrame(parts, sessionId, fps, at);
+    drew: (frame) => {
       if (frame !== null) drawn.push(frame.bar);
-      return frame;
     },
-    watch: (sessionId, onChange) =>
-      reaction(() => live.sessionState.revision(sessionId), onChange),
-    lanes: (sessionId) => viewLanes(parts, sessionId),
-    pin: (sessionId) => live.cache.pin(sessionId),
-    shown: () => true,
-    watching: () => () => {},
-    refreshes: () => ledger.totals(),
-    periods: FEED_PERIODS,
-    encoders: {
-      band: passed,
-      statusline: passed,
-      pane: passed,
-      tmuxStatus: passed,
-    } as unknown as LaneEncoders,
-    clock,
-    instant: () => instantAt(clock),
-    log: () => {},
   });
-  feeds = feed;
-  cleanups.push(() => feed.close());
+  // [LAW:no-silent-failure] An error the daemon's parts only log fails the
+  // case, unless it is one the case made a turn's inputs throw. Pushed ahead of
+  // the teardown, so it runs after it and reads what the close logged too.
+  cleanups.push(() => {
+    const errors = lines.filter(
+      (line) =>
+        line.startsWith("error ") && ![...thrown].some((error) => line.endsWith(error)),
+    );
+    if (errors.length > 0) throw new Error(`the daemon logged errors:\n${errors.join("\n")}`);
+  });
+  cleanups.push(built.close);
+  const { parts } = built;
+  scriptPrograms(built.launcher, runsMs);
+  const live = {
+    cache: parts.renderCache,
+    recorder: parts.recorder,
+    menuIdle: parts.menuIdle,
+    sessionState: parts.sessionState,
+    // A write to the session's store, in a turn of its own, as a click's is.
+    pick: (pairs: { key: string; value: string }[]): void =>
+      parts.verbCtx.journalTurns.take("pick", () =>
+        parts.sessionState.setBatch(SID, pairs),
+      ),
+    depths,
+    turnThrows,
+  };
+  const feed = parts.frameFeeds;
   // A subscriber to `lane` of the session's frames, which draws each one it is
   // sent; returns its leave.
   const follow = (lane: Lane): (() => void) =>
@@ -564,7 +514,7 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
       ...request(cwd, home, claudeConfigDir, model),
       refusedArgs: [],
       pane: { kind: "runs", tmux: null, claude: { pid: 4242, configDir: claudeConfigDir } },
-    };
+    } as unknown as CheckedRenderRequest;
     const held = live.cache.holdSession(cwd, cwd, configFile, req);
     const settling = settleRequest(live.recorder, held.view, at);
     return {
@@ -575,13 +525,13 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
         await settling.landed;
         // The setup the daemon's request path makes, over this request.
         const setup: RenderSetup = {
-          req: req as unknown as CheckedRenderRequest,
+          req,
           at,
           facts: [],
           sessionId: req.sessionId,
           entry: held.entry,
           state: held.state,
-          view: held.view as unknown as RenderSetup["view"],
+          view: held.view,
           hintsError: null,
           [Symbol.dispose]: () => {},
         };
@@ -605,7 +555,7 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     ...dir,
     home,
     clock,
-    launcher: launcher.spawner,
+    launcher: built.launcher.spawner,
     live,
     drawn,
     follow,
@@ -970,7 +920,7 @@ test("a session recorded with a pick made and a menu open replays with the pick 
   // A click, as it leaves the session: the theme picked and not saved, the
   // settings menu open, two steps to undo, and the menus' idle clock begun.
   const click = (pairs: { key: string; value: string }[]): void => {
-    s.live.sessionState.setBatch(SID, pairs);
+    s.live.pick(pairs);
     s.live.menuIdle.clicked(SID, instantAt(s.clock));
   };
   click([
@@ -1469,7 +1419,7 @@ test("a recording of a session's facts replays through a second cache into the b
     hostOf({}, { home: recording.home, tmp: replayTmp }),
     replayClock,
     replayLauncher.launcher,
-    () => arm,
+    arm,
   );
   // The load: the config and the plugin are read here, before the instruments.
   replay.cache.getOrCreate(s.cwd, s.cwd, s.configFile);
@@ -1542,7 +1492,7 @@ const held = (s: ReturnType<typeof liveSession>, reason: string | null) =>
 const pick = (
   s: ReturnType<typeof liveSession>,
   pairs: { key: string; value: string }[],
-) => s.live.sessionState.setBatch(SID, pairs);
+) => s.live.pick(pairs);
 
 // What a replay of a held turn says it did: each hold is the recording's.
 const heldSays = (said: readonly string[]) =>

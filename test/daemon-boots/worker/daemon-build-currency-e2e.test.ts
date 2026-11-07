@@ -26,10 +26,10 @@ import {
   prepareIsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
 import {
-  bundleAt,
   startArmedDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
+import { bundleAt } from "../../helpers/worker-edges";
 import { answerRepo } from "../../helpers/repo-approval";
 import {
   affordance,

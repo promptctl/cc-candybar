@@ -7,7 +7,7 @@
 import { hostOf } from "../../helpers/host";
 import { configDir as homeConfigDir } from "../../../src/daemon/paths";
 import { homeOf } from "../../../src/daemon/home";
-import { NO_TMUX_AT_EXIT } from "../../helpers/in-worker-daemon";
+import { NO_TMUX_AT_EXIT } from "../../helpers/worker-edges";
 import {
   chmodSync,
   existsSync,

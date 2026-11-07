@@ -45,7 +45,8 @@ import { homeEndpoint, sendDaemonRequest, type DaemonEndpoint } from "../../help
 import { fakeDialer } from "../../helpers/dial";
 import { until } from "../../helpers/until";
 import { hostOf } from "../../helpers/host";
-import { NO_TMUX_AT_EXIT, buildDaemon } from "../../helpers/in-worker-daemon";
+import { buildDaemon } from "../../helpers/in-worker-daemon";
+import { NO_TMUX_AT_EXIT } from "../../helpers/worker-edges";
 
 jest.setTimeout(30_000);
 

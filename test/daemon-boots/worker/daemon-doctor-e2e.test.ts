@@ -31,7 +31,8 @@ import {
   renderRequest,
   urlWriting,
 } from "../../helpers/daemon-e2e";
-import { bundleAt, startDaemon, statsOf } from "../../helpers/in-worker-daemon";
+import { startDaemon, statsOf } from "../../helpers/in-worker-daemon";
+import { bundleAt } from "../../helpers/worker-edges";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { effectsOf } from "../../helpers/click";
 import {

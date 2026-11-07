@@ -4,12 +4,11 @@
 // the render a test reads is the one a client reads. What a test talks to it
 // through is daemon-e2e's helpers, which take this in place of a socket path.
 
-import type { TmuxAtExit } from "../../src/daemon/tmux-status";
 import { HOST } from "./host";
+import { bundleAt, NO_TMUX_AT_EXIT } from "./worker-edges";
 import fs from "node:fs";
 import path from "node:path";
 import type { Duplex } from "node:stream";
-import { pathToFileURL } from "node:url";
 
 import { handleConnection } from "../../src/daemon/connection";
 import {
@@ -55,22 +54,6 @@ const TEST_FILE = process.env[TEST_FILE_ENV] ?? null;
 export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage">> & {
   readonly storage?: (log: DaemonLogger) => Partial<DaemonStorage>;
 };
-
-// A bundle at `checkout`, which need not exist: nothing runs it unless a case
-// lays one down there.
-export function bundleAt(
-  checkout: string,
-  digest: string | null = null,
-): RunningBundle {
-  const file = path.join(checkout, "dist", "index.mjs");
-  return {
-    entryUrl: pathToFileURL(file).href,
-    digest,
-    path: file,
-    node: [process.execPath],
-    targets: [file],
-  };
-}
 
 // A daemon with the log it writes to, which the case that built it ends.
 export interface BuiltDaemon {
@@ -134,11 +117,6 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   }
 }
 
-// A worker's daemon lays out no tmux status line, so nothing is put back.
-export const NO_TMUX_AT_EXIT: TmuxAtExit = () => ({
-  kind: "failed",
-  reason: "no tmux at this daemon's exit",
-});
 
 // The daemon's counts from its request handling, past the connection: the 200 ms
 // guard is the connection's, and a busy machine is no fact about them.
