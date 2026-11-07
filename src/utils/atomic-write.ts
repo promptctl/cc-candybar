@@ -23,15 +23,15 @@ export function writeAtomicOn(
   const file = resolvedTarget(disk, at);
   disk.mkdirSync(path.dirname(file));
   const tmp = `${file}.tmp`;
+  // Taken before the tmp exists, so a stat that fails is the error the caller
+  // sees, never a cleanup's of a tmp this write did not make.
+  const fileMode = mode ?? existingMode(disk, file);
   try {
     // Flushed before the rename, so a system crash leaves the old file or the
     // new one: a rename can reach the disk before contents still in the page
     // cache, and the file then reads empty. A plain fsync reaches the drive's
     // own cache, which a power loss can still lose on macOS.
-    disk.writeFileSync(tmp, text, {
-      mode: mode ?? existingMode(disk, file),
-      flush: true,
-    });
+    disk.writeFileSync(tmp, text, { mode: fileMode, flush: true });
     disk.renameSync(tmp, file);
   } catch (e) {
     disk.rmSync(tmp);

@@ -93,7 +93,7 @@ export function testVerbContext(
     locations: locations(host, homeOf(host)),
     storedRoot: storedRoot(homeOf(host)),
     sessionState,
-    history: history ?? new SettingsHistory(sessionState, () => {}),
+    history: history ?? new SettingsHistory(systemFilesystem, sessionState, () => {}),
     navigation: new NavigationHistory(),
     journalTurns,
     // [LAW:no-silent-failure] A turn's effects go to the arm that ran it

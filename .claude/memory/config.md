@@ -4,7 +4,7 @@
 
 Config locations form a chain, lowest precedence first: the XDG file, then cwd, then project. Each layer merges over the ones below it and is validated together with them, so an error names its own file. An explicit path replaces the chain and is the only layer. The config-path env var is read by the client and sent as a hint (architecture.md).
 
-Only ENOENT counts as absent. A location a stat can't see past, such as an unsearchable directory or a symlink loop, is reported and the search continues. An explicit path that doesn't exist renders the bundled default under a warning, never a silently empty config.
+Only ENOENT counts as absent, and ENOTDIR, since nothing can be at a path that runs through a regular file. A location a stat can't see past, such as an unsearchable directory or a symlink loop, is reported and the search continues. An explicit path that doesn't exist renders the bundled default under a warning, never a silently empty config.
 
 When `.json5` and `.json` sit side by side, `.json5` wins and the shadowed file gets a warning.
 

@@ -220,7 +220,6 @@ const OWNED_IMPORTS = {
       "src/daemon/production-adapters.ts",
       "src/host.ts",
       "src/daemon/cache/git.ts",
-      "src/daemon/config-file-store.ts",
       "src/daemon/paths.ts",
       "src/demo/dsl.ts",
       "src/plugin-install.ts",

@@ -47,6 +47,7 @@ import {
 } from "../../src/daemon/paths";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
+import { systemFilesystem } from "../../src/disk/system-filesystem";
 
 export interface DurableConfig {
   /** The host whose environment names the fixture's home. */
@@ -131,7 +132,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
       { kind: "file", file, before, after },
     ],
     historyFor: (sessionState) =>
-      new SettingsHistory(sessionState, () => {}, historyStorage()),
+      new SettingsHistory(systemFilesystem, sessionState, () => {}, historyStorage()),
     seedOrigin: (sessionState, sessionId, configFile) =>
       sessionState.set(
         sessionId,
