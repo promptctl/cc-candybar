@@ -33,11 +33,9 @@ import {
 import { homeOf } from "../src/daemon/home";
 import { locations, stateDir } from "../src/daemon/paths";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
-import { parseClientHints } from "../src/daemon/protocol";
-import type { ViewFacts } from "../src/daemon/render-payload";
+import { PROTOCOL_VERSION, type ReaderRenderRequest } from "../src/daemon/protocol";
 import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import {
-  drawRequest,
   recordedCache,
   RecordingFailed,
   recordToFile,
@@ -100,8 +98,8 @@ import {
 } from "../src/proc/spawner-fake";
 import { SessionEffects } from "../src/render/effect";
 import { type Lane } from "../src/config/lanes";
-import { drawForAnswer, type RenderSetup } from "../src/daemon/draw-bar";
-import type { CheckedRenderRequest } from "../src/daemon/render-checkpoint";
+import { drawForAnswer, setUpRender } from "../src/daemon/draw-bar";
+import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type { Frame } from "../src/render/frame";
 import { textOf } from "../src/render/frame";
 import type { Timekeeper } from "../src/time";
@@ -116,6 +114,7 @@ import { WORLD, hostOf } from "./helpers/host";
 import { TEST_LINKS } from "./helpers/link-signer";
 import { until } from "./helpers/until";
 import { daemonParts } from "./helpers/daemon-parts";
+import { CLAUDE_START, claudeHolds } from "./helpers/claude-record";
 
 jest.setTimeout(30_000);
 
@@ -253,14 +252,25 @@ function scriptPrograms(
   spawner.program((bin) => bin === "tmux", answers(exits(0, "work\n")));
 }
 
-function request(
+// The pid of the stand-in Claude Code that runs the live session's client.
+const CLAUDE_PID = 4242;
+
+// The request a statusline client that Claude Code's process CLAUDE_PID ran
+// sends from `cwd` with `--config <configFile>`, in its wire form, raw hints
+// and all: what the daemon's checkpoint takes.
+function wireRequest(
   cwd: string,
   home: string,
   claudeConfigDir: string,
+  configFile: string,
+  deadline: number,
   model = "Opus 4.7",
-): SessionRequest {
+): ReaderRenderRequest {
   return {
-    sessionId: sessionIdOf(SID),
+    v: PROTOCOL_VERSION,
+    kind: "render",
+    encoding: "frame",
+    deadline,
     hookData: {
       hook_event_name: "Status",
       session_id: SID,
@@ -269,18 +279,18 @@ function request(
       model: { id: "claude-opus-4-7", display_name: model },
       workspace: { current_dir: cwd, project_dir: cwd },
     },
+    args: ["cc-candybar", "--config", configFile],
     cwd,
-    hints: parseClientHints({
-      termCols: WIDTH,
-      termRows: 40,
-      ssh: true,
-      tmux: {
-        socket: path.join(home, "tmux.sock"),
-        pane: "%0",
-        truecolor: null,
-      },
-      claudeConfigDir,
-    }),
+    termCols: WIDTH,
+    termRows: 40,
+    ssh: true,
+    tmux: {
+      socket: path.join(home, "tmux.sock"),
+      pane: "%0",
+      truecolor: null,
+    },
+    claudeConfigDir,
+    parent: { pid: CLAUDE_PID, startTime: CLAUDE_START },
   };
 }
 
@@ -417,6 +427,7 @@ const HELD: Pace = { runsMs: 0, stepMs: 0 };
 function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
   const dir = sessionDir(config);
   const { home, claudeConfigDir } = homeDir();
+  claudeHolds(claudeConfigDir, CLAUDE_PID, SID);
   const clock = heldClock(AT);
   const failsFor = path.join(home, "fails");
   const lines: string[] = [];
@@ -508,34 +519,30 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     // What the request path spends between reading the request's instant and
     // declaring its view: what that declaration stamps is later than `at`.
     clock.burn(burnMs);
-    // The view is declared with the request as the daemon's checkpoint
-    // passes it on, which a lane's frame draws by: no argument refused, and
-    // run in no tmux pane.
-    const req = {
-      ...request(cwd, home, claudeConfigDir, model),
-      refusedArgs: [],
-      pane: { kind: "runs", tmux: null, claude: { pid: 4242, configDir: claudeConfigDir } },
-    } as unknown as CheckedRenderRequest;
-    const held = live.cache.holdSession(originAt(cwd, configFile), req);
-    const settling = settleRequest(live.recorder, held.view, at);
+    // The request crosses the daemon's checkpoint, which stamps its pane from
+    // the record that says Claude Code's process runs the session, and its view
+    // is declared by the daemon's own render setup over what that passes on.
+    // Its deadline bounds only the request path's wait, which this case makes
+    // its own.
+    const checked = checkRenderRequest(
+      wireRequest(cwd, home, claudeConfigDir, configFile, clock.now(), model),
+      parts.stats,
+      parts.log,
+      parts.home,
+      parts.storedRoot,
+      parts.heldSession,
+    );
+    if (!checked.ok) {
+      throw new Error(`the checkpoint refused the request: ${checked.problems.join("; ")}`);
+    }
+    const setup = setUpRender(parts, checked.req, at, []);
+    const settling = settleRequest(live.recorder, setup.view, at);
     return {
-      view: held.view,
+      view: setup.view,
       answer: async (): Promise<Frame> => {
-        using _held = held;
-        await landed(clock, held.view, stepMs);
+        using _setup = setup;
+        await landed(clock, setup.view, stepMs);
         await settling.landed;
-        // The setup the daemon's request path makes, over this request.
-        const setup: RenderSetup = {
-          req,
-          at,
-          facts: [],
-          sessionId: req.sessionId,
-          entry: held.entry,
-          state: held.state,
-          view: held.view,
-          hintsError: null,
-          [Symbol.dispose]: () => {},
-        };
         const frame = drawForAnswer(parts, setup, settling.arrival).drawn.body;
         drawn.push(frame);
         return frame;
@@ -807,7 +814,7 @@ async function recordedRuns(): Promise<{
 }
 
 test("a session's shell and file sources, recorded live, replay with what each run read, with nothing read and nothing spawned", async () => {
-  const { s, configFile, file, liveFrames } = await recordedRuns();
+  const { configFile, file, liveFrames } = await recordedRuns();
   const liveText = liveFrames.map(textOf);
   expect(liveText).toEqual([
     expect.stringContaining(
