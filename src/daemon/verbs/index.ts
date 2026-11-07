@@ -2068,6 +2068,11 @@ export function unknownVerb(verb: string): string {
 function stepRefusal(verb: string, reason: string): Refusal {
   return { kind: "refused", reason, problem: stepProblem(verb, reason) };
 }
+// A verb the daemon has not has no refusal owner, so its reason is its problem.
+function unknownVerbRefusal(verb: string): Refusal {
+  const problem = unknownVerb(verb);
+  return { kind: "refused", reason: problem, problem };
+}
 
 function refused(
   { verb }: ReadEffect,
@@ -2079,19 +2084,17 @@ function refused(
 
 // [LAW:single-enforcer] A step is refused as bad input here, the one place,
 // when its session fails the checkpoint or is not its click's, so a dispatch
-// cannot act on one session and report to another's bar. A verb the daemon
-// has not has no refusal owner, so its reason is its problem.
+// cannot act on one session and report to another's bar.
 function readStep(
   effect: ReadEffect,
   click: ParsedSessionId | null,
 ): ClickStep {
   if (effect.leaf === undefined) {
-    const problem = unknownVerb(effect.verb);
     return {
       ok: false,
       verb: effect.verb,
       args: [],
-      refusal: { kind: "refused", reason: problem, problem },
+      refusal: unknownVerbRefusal(effect.verb),
     };
   }
   const { verb, leaf, session, args } = effect;
