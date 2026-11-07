@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-675",
+      "ref": "refs/pull/675/merge",
+      "sha": "a049db71d1f531bddad22d3221cda9c669b2e1b9",
+      "timestamp": "2026-11-07T08:40:41.802Z",
+      "commits": [
+        {
+          "sha": "a049db71d1f531bddad22d3221cda9c669b2e1b9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:39:51-07:00",
+          "message": "Merge 5297d0cecbdf1e3e5ea506a8859055b11eb52004 into f584545e1238fd69bdf373b0895cd40c18ab62a2\n"
+        },
+        {
+          "sha": "5297d0cecbdf1e3e5ea506a8859055b11eb52004",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:39:09-07:00",
+          "message": "test(lanes): a session's drawn bar carries its session-pane ⚠, through the draw a request takes (candybar-gather-renderer-76bb.1dh.trm)\n\nThe checkpoint stamps each tick from its Claude Code's record on the disk,\nthe request arm records the mismatch run in its turn, and the daemon's draw\nlists the ⚠; the list is read from the session's recording. An unconfirmed\nstamp and a lasted mismatch each list the session-pane message; a confirmed\ntick, a mismatch inside the race and a /clear straggler list none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-645",
       "ref": "refs/pull/645/merge",
       "sha": "1a19fb1f2b5b189eea40c0fe000262e5699e9fba",
