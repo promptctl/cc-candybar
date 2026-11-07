@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-682",
+      "ref": "refs/pull/682/merge",
+      "sha": "cf3fad5f4978a0cb9df71f8b0d4fc1516ba9b572",
+      "timestamp": "2026-11-07T10:24:55.784Z",
+      "commits": [
+        {
+          "sha": "cf3fad5f4978a0cb9df71f8b0d4fc1516ba9b572",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:22:52Z",
+          "message": "Merge 15cd138ee702c16666a38b76f3ca155977d66a5f into 1f5014d66591bcdbb9dac6e5fb1aa8619e0bf5fd\n"
+        },
+        {
+          "sha": "15cd138ee702c16666a38b76f3ca155977d66a5f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:20:01-07:00",
+          "message": "docs(demo): say padding is structural in the sample, and what the strip leaves in the test (brandon-unfiled-3248.0d5a)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "fa4856e08537e9f425e753a6cdb99718afbca415",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:14:45-07:00",
+          "message": "fix(demo): the bundled sample draws the default's session cell and no doubled padding (brandon-unfiled-3248.0d5a)\n\nThe sample re-derived the default's session-id cell without its `when`,\nso an empty id drew a bare glyph; it now places the default's\n`sessionId`. Its templates padded cells the layout already pads. The\nbundled-sample test now also fails on a loader advisory naming the\nsample and on a drawn warning indicator, not only on a refusal.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "4cf0267d72aac9115d9a489c437cc3f1d8f01d82",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:00:45-07:00",
+          "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-681",
       "ref": "refs/pull/681/merge",
       "sha": "d3abf822d1057f7ae7432e0d8370216287086538",
@@ -41,42 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:58:53-07:00",
           "message": "fix(colour): the door's ✖ keeps its truecolor contrast at lower depths, never lifted to the quiet floor (brandon-unfiled-3248.692p)\n\nkeptOn floored its lower-depth contrast at the quiet floor for a reason\nthat no longer holds: grounds are named shades, not repaired ones. The\nfloor only acted on the accepted farthest-red case, where it let rounding\npick a non-red that clears 3:1. The floor is now min(text floor, held),\nand the comment states the reasons that hold of named grounds.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-682",
-      "ref": "refs/pull/682/merge",
-      "sha": "83780c4870014907227a45d4819c20c3544355d3",
-      "timestamp": "2026-11-07T10:23:10.265Z",
-      "commits": [
-        {
-          "sha": "83780c4870014907227a45d4819c20c3544355d3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:21:17Z",
-          "message": "Merge 0efa70295dae9f590fab48b8ddacafb340863010 into 2e9ea2dce98b1908a16f3ffa2128310350ebc817\n"
-        },
-        {
-          "sha": "0efa70295dae9f590fab48b8ddacafb340863010",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:20:01-07:00",
-          "message": "docs(demo): say padding is structural in the sample, and what the strip leaves in the test (brandon-unfiled-3248.0d5a)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "fc4a82677cbd3820064e779a2ca9f59bae29a8f5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:14:45-07:00",
-          "message": "fix(demo): the bundled sample draws the default's session cell and no doubled padding (brandon-unfiled-3248.0d5a)\n\nThe sample re-derived the default's session-id cell without its `when`,\nso an empty id drew a bare glyph; it now places the default's\n`sessionId`. Its templates padded cells the layout already pads. The\nbundled-sample test now also fails on a loader advisory naming the\nsample and on a drawn warning indicator, not only on a refusal.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "ec4ed4533dbf980d4b1f151bf1f75bfba20619ef",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:00:45-07:00",
-          "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
