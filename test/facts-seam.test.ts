@@ -50,12 +50,7 @@ import {
   type SessionSource,
 } from "../src/daemon/session-source";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
-import {
-  observable,
-  reaction,
-  runInAction,
-  type IObservableValue,
-} from "mobx";
+import { observable, reaction, runInAction, type IObservableValue } from "mobx";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import {
   DIAGNOSTICS_VIEWING,
@@ -320,7 +315,11 @@ function rig(
   const log: DaemonLogger = (level, message) => {
     lines.push(`${level} ${message}`);
   };
-  const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock, logger: log });
+  const watchers = new WatcherRegistry({
+    filesystem: systemFilesystem,
+    clock,
+    logger: log,
+  });
   const home = homeOf(host);
   const providers = createPayloadProviders({
     clock,
@@ -494,7 +493,8 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     linkIds: { error: () => null },
     launcher: { launcherWarnings: () => [] },
     get frameFeeds() {
-      if (feeds === null) throw new Error("a draw read the feed before it was built");
+      if (feeds === null)
+        throw new Error("a draw read the feed before it was built");
       return feeds;
     },
   } as unknown as DaemonParts;
@@ -535,7 +535,9 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
       lane,
       frame: () => {},
       refused: (resp) => {
-        throw new Error(`the ${lane} lane was refused: ${JSON.stringify(resp)}`);
+        throw new Error(
+          `the ${lane} lane was refused: ${JSON.stringify(resp)}`,
+        );
       },
       drawing: () => true,
     });
@@ -556,7 +558,10 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     clock.burn(burnMs);
     // The view is declared with the request as the daemon's checkpoint
     // passes it on, which a lane's frame draws by: no argument refused.
-    const req = { ...request(cwd, home, claudeConfigDir, model), refusedArgs: [] };
+    const req = {
+      ...request(cwd, home, claudeConfigDir, model),
+      refusedArgs: [],
+    };
     const held = live.cache.holdSession(cwd, cwd, configFile, req);
     const settling = settleRequest(live.recorder, held.view, at);
     return {
@@ -679,7 +684,13 @@ async function replayFile(
     drawn.warn(`${level} ${message}`);
   // The load: the config and the plugin are read here, before the instruments.
   using loaded = loadDemo({
-    world: { host, home: homeOf(host), launcher: launcher.launcher, clock, dialer: dialerFake(clock) },
+    world: {
+      host,
+      home: homeOf(host),
+      launcher: launcher.launcher,
+      clock,
+      dialer: dialerFake(clock),
+    },
     stateDir: stateDir(homeOf(host)),
     links: TEST_LINKS,
     configPath: configFile,
@@ -1689,22 +1700,26 @@ test("a request answered from a held view the session moved away from replays th
   const s = liveSession({ runsMs: 300, stepMs: 50 });
   const other = sessionDir();
   await s.requestFrom(s.cwd, s.configFile);
-  const { file, liveFrames } = await recordHeld(s, "moved-held.jsonl", async () => {
-    await s.after(1000);
-    // A's wait is open on the first view when B opens the second.
-    const a = s.arrive(s.cwd, s.configFile);
-    await s.after(100);
-    const b = s.arrive(other.cwd, other.configFile);
-    // Both views' facts land, then their turns stop reading before either
-    // answer is drawn, and a pick lands.
-    await landed(s.clock, a.view, 50);
-    await landed(s.clock, b.view, 50);
-    held(s, HELD_REASON);
-    pick(s, [{ key: SETTINGS.theme.sessionKey, value: "nord" }]);
-    const frames = [await a.answer(), await b.answer()];
-    held(s, null);
-    return frames;
-  });
+  const { file, liveFrames } = await recordHeld(
+    s,
+    "moved-held.jsonl",
+    async () => {
+      await s.after(1000);
+      // A's wait is open on the first view when B opens the second.
+      const a = s.arrive(s.cwd, s.configFile);
+      await s.after(100);
+      const b = s.arrive(other.cwd, other.configFile);
+      // Both views' facts land, then their turns stop reading before either
+      // answer is drawn, and a pick lands.
+      await landed(s.clock, a.view, 50);
+      await landed(s.clock, b.view, 50);
+      held(s, HELD_REASON);
+      pick(s, [{ key: SETTINGS.theme.sessionKey, value: "nord" }]);
+      const frames = [await a.answer(), await b.answer()];
+      held(s, null);
+      return frames;
+    },
+  );
   const liveText = liveFrames.map(textOf);
   expect(liveText[0]).toContain(`dir=${s.cwd}`);
   expect(liveText[1]).toContain(`dir=${other.cwd}`);
@@ -1774,8 +1789,10 @@ test("a click that moves a source's state key mid-recording replays the old run'
       root: { h: ["runs"] },
     }),
   );
-  s.launcher.program(shell("seam-detail"), runsFor(2000, exits(0, "ran")));
+  s.launcher.program(shell("seam-detail"), runsFor(2000, exits(0, "old")));
   await s.requestFrom(s.cwd, configFile);
+  // The click's key runs a command that prints what the old key's did not.
+  s.launcher.program(shell("seam-detail"), runsFor(2000, exits(0, "new")));
   // The pane lane draws the click's frame at once, with the new run out.
   cleanups.push(s.follow("pane"));
   const from = s.drawn.length;
@@ -1789,14 +1806,10 @@ test("a click that moves a source's state key mid-recording replays the old run'
   });
   const liveFrames = s.drawn.slice(from);
   const liveText = liveFrames.map(textOf);
-  expect(liveText[0]).toContain("detail=off run=ran");
-  expect(liveText.at(-1)).toContain("detail=on run=ran");
+  expect(liveText[0]).toContain("detail=off run=old");
+  expect(liveText.at(-1)).toContain("detail=on run=new");
   // A frame of the click's, drawn before its run landed, shows the old run.
-  const drawnBefore = readRecording(file).lines.flatMap((line) =>
-    line.kind === "draw" && line.drawing.by === "feed" ? [line] : [],
-  );
-  expect(drawnBefore).not.toEqual([]);
-  expect(liveText).toContainEqual(expect.stringContaining("detail=on run=ran"));
+  expect(liveText).toContainEqual(expect.stringContaining("detail=on run=old"));
   const replay = await replayFile(file, configFile);
   expect(replay.reads).toEqual([]);
   expect(replay.started).toEqual([]);
@@ -1872,13 +1885,11 @@ test("a session recorded with a standing warning and a lane following replays th
     line.kind === "draw" ? [line] : [],
   );
   expect(draws.map((line) => line.drawing.by)).toEqual(
-    liveFrames.map((frame) =>
-      answers.includes(frame) ? "request" : "feed",
-    ),
+    liveFrames.map((frame) => (answers.includes(frame) ? "request" : "feed")),
   );
-  expect(draws.filter((line) => line.drawing.by === "feed").length).toBeGreaterThan(
-    answers.length,
-  );
+  expect(
+    draws.filter((line) => line.drawing.by === "feed").length,
+  ).toBeGreaterThan(answers.length);
   expect(draws.every((line) => line.feeds.pane.subscribers === 1)).toBe(true);
   const replay = await replayFile(file, configFile);
   expect(replay.reads).toEqual([]);

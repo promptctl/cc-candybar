@@ -148,11 +148,9 @@ export function sessionRecorder(
   };
   // [LAW:single-enforcer] Every line a recording writes goes through here: a
   // write that throws ends that recording with the error, which its sink
-  // reports, and no later line is offered. A document or a declaration that is
-  // already the last of its kind written is not written again: a replay's view
-  // already holds it.
+  // reports, and no later line is offered. A declaration that is already the
+  // last one written is not written again: a replay's view already holds it.
   const write = (sessionId: string, rec: Open, line: RecordingLine): void => {
-    if (line.kind === "facts" && line.facts === rec.document) return;
     if (line.kind === "declared" && line.request === rec.declaration) return;
     try {
       rec.sink.write(line);
@@ -177,8 +175,8 @@ export function sessionRecorder(
       end(sessionId, rec, { kind: "failed", error: e });
     }
   };
-  // [LAW:single-enforcer] Every document a recording writes goes through
-  // here, after the clicks' state it was stamped under when that is not the
+  // [LAW:single-enforcer] Every facts line a recording writes goes through
+  // here, unless it is the last document written, and after the clicks' state it was stamped under when that is not the
   // last one written: a click moves the store before the document its keys
   // restamp, so the state read now is the one its runs were declared under.
   const writeDocument = (
@@ -192,7 +190,11 @@ export function sessionRecorder(
     if (rec.state === null || !sameClickState(rec.state, state)) {
       write(sessionId, rec, { kind: "state", state });
     }
-    write(sessionId, rec, { kind: "facts", ...line });
+    // A state write that failed ended the recording: its document is not
+    // offered.
+    if (open.get(sessionId)?.has(rec)) {
+      write(sessionId, rec, { kind: "facts", ...line });
+    }
   };
   // [LAW:one-source-of-truth] The turn of `view` as it stands, written when
   // the replay's view does not already hold it: another view's turn was the

@@ -211,6 +211,36 @@ test("what the recorder writes reads back as itself, opening on the turn the bar
   });
 });
 
+test("a state line reads back as itself, and is refused when its state is not one or reads a revision over other values", () => {
+  const moved: ClickState = {
+    ...CLICKS,
+    values: { ...CLICKS.values, "seam.detail": "on" },
+    revision: CLICKS.revision + 1,
+  };
+  const state: RecordingLine = { kind: "state", state: moved };
+  expect(
+    parseRecording(
+      text(header, turned(0, 1), state, facts(0.2, 2), requested(1), drawn(1)),
+    ).lines.slice(0, 2),
+  ).toEqual([state, { kind: "facts", at: at(0.2), facts: document(2) }]);
+  expect(() =>
+    parseRecording(
+      text(header, turned(0, 1)) +
+        `${JSON.stringify({ kind: "state", state: "on" })}\n`,
+    ),
+  ).toThrow(/^line 3: has no `state` object/);
+  expect(() =>
+    parseRecording(
+      text(header, turned(0, 1), {
+        kind: "state",
+        state: { ...moved, revision: CLICKS.revision },
+      }),
+    ),
+  ).toThrow(
+    /^line 3: reads revision \d+ over other values than a line before it read there/,
+  );
+});
+
 test("a recording opens on a turn, and a turn line is refused by its line when it is not one", () => {
   expect(() =>
     parseRecording(text(header, facts(0, 1), requested(1), drawn(1))),
@@ -685,7 +715,9 @@ const stepOf = (step: DemoStep): string =>
         : `answer of +${step.at.request}`
       : step.kind === "turn"
         ? `turn${step.turn.held ? " held" : ""}`
-        : "document";
+        : step.kind === "state"
+          ? "state"
+          : "document";
 
 test("a replay's clock starts at the first request, however long the view sat before it, and its steps keep the file's order, a turn's among them", () => {
   const reached: FactsLine[] = [];
