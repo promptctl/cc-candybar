@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-691",
+      "ref": "refs/pull/691/merge",
+      "sha": "2c3560f035fc5e954579c320df3286cf6dae4745",
+      "timestamp": "2026-11-07T12:15:10.724Z",
+      "commits": [
+        {
+          "sha": "2c3560f035fc5e954579c320df3286cf6dae4745",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:14:27-07:00",
+          "message": "Merge dddefac9547e0eeb8bcea0a776cc0bc4fd87c389 into 06ac017c63f4be865a8f33c02e0612d2eebddab5\n"
+        },
+        {
+          "sha": "dddefac9547e0eeb8bcea0a776cc0bc4fd87c389",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:13:44-07:00",
+          "message": "fix(pricing): entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fold priced each un-costed entry with the table held when it ran and\nstored the sum, so a daemon that started offline kept the bundled rates\nfor every entry folded before the live table landed, in the session total\nand in today, until a rewrite re-folded the file from zero.\n\nA record now holds the price's inputs and no price: the cost its entries\ncarried themselves, and the tokens of the entries that carried none by\nthe model they are priced as. Every reader prices the record with the\ntable held at the read. The pricing adapter's table is an observable\nread, and the ask that starts a due load is a separate effect the\nrequest's refresh makes, so the day sums and the session draw recompute\nin the turn a table lands and no read inside a derivation starts a load.\nNothing waits for the first load any more: a cold daemon's first frame\ndraws at the bundled rates and is re-priced when the table lands.\n\nTests: a store over the live adapter and the mocked network folds entries\nbefore the fetch answers and reads the landed table's price for them\nafter it, with no transcript read and no refresh, and again when the\nday's table lands; a carried cost stands under any table; the adapter's\ncases are restated over the read and the ask, with a reaction observing\nthe landing.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "06ac017c63f4be865a8f33c02e0612d2eebddab5",
