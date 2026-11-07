@@ -4,7 +4,7 @@
 // which files are candidates. This file changes when the resolution rules change.
 
 import path from "node:path";
-import type { FilesystemReads } from "../../disk/filesystem.js";
+import type { Filesystem, FilesystemReads } from "../../disk/filesystem.js";
 import type { InstalledLayerMemo } from "../dsl-loader.js";
 import type { Locations } from "../../daemon/paths.js";
 import { presence, type Unchecked } from "../../utils/presence.js";
@@ -329,15 +329,15 @@ export interface ConfigHome {
   readonly cwd: string | null;
   // Where the installed plugins this chain loads over live.
   readonly locs: Locations;
-  // The disk the chain was found on, which a load of it reads, and the
-  // installed layers those loads share: the render cache's, so a click's proof
-  // checks no plugin the bar's last load already checked.
-  readonly reads: FilesystemReads;
+  // The disk the chain was found on, which a load of it reads and the write
+  // lands on, and the installed layers those loads share: the render cache's,
+  // so a click's proof checks no plugin the bar's last load already checked.
+  readonly disk: Filesystem;
   readonly memo: InstalledLayerMemo;
 }
 
 export function durableConfig(
-  reads: FilesystemReads,
+  disk: Filesystem,
   memo: InstalledLayerMemo,
   locs: Locations,
   answers: RepoAnswers,
@@ -346,7 +346,7 @@ export function durableConfig(
   configFile?: string,
 ): ConfigHome {
   const resolved = resolveDslConfig(
-    reads,
+    disk,
     locs,
     answers,
     projectDir,
@@ -360,7 +360,7 @@ export function durableConfig(
     repo: resolved.repos.plugins,
     cwd: cwd ?? null,
     locs,
-    reads,
+    disk,
     memo,
   };
 }

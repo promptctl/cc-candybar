@@ -10,16 +10,14 @@
 import type { FilesystemReads } from "../disk/filesystem.js";
 import path from "node:path";
 import { ABSENT, failed, ok, type Outcome } from "./outcome";
+import { presence } from "./presence";
 
-// Whether `dir` holds a `.git`, a link to one included. A stat that fails for
-// any reason is no `.git` here, and the ascent goes on to the parent.
+// Whether `dir` holds a `.git`, a link to one included.
+// [LAW:no-silent-failure] exception: a `.git` stat cannot see past is no `.git`
+// here, and the ascent goes on to the parent, until the ascent carries the
+// failure as data (candybar-testing-ihvy.izc.sv9).
 export function holdsGit(reads: FilesystemReads, dir: string): boolean {
-  try {
-    reads.statSync(path.join(dir, ".git"));
-    return true;
-  } catch {
-    return false;
-  }
+  return presence(reads, path.join(dir, ".git")) === "present";
 }
 
 // Undefined when no ancestor holds one: the path is in no checkout.

@@ -7,6 +7,7 @@
 import path from "node:path";
 import type { FilesystemReads } from "../../disk/filesystem.js";
 import { readStateFile } from "../../disk/state-file.js";
+import { presence } from "../../utils/presence.js";
 import { parseRepoConfigBook, type RepoAnswers } from "./repo-gate.js";
 
 export const REPO_CONFIGS_FILE = "repo-configs.json";
@@ -32,15 +33,12 @@ export function repoConfigsPath(stateDir: string): string {
 // the folder with that answer: nothing is moved, so no answer is lost to a
 // move, and every reader — the daemon, `check`, the demo — reads the same
 // answers. `true` when the folder's book is the one.
-// [LAW:no-silent-failure] Only ENOENT is no book in the folder: a stat that
-// cannot see it reads it, and the read names what stopped it.
+// [LAW:no-silent-failure] Only an absent book is no book in the folder: a
+// stat that cannot see it reads it, and the read names what stopped it.
+// [LAW:single-enforcer] Absent as presence says it, so a folder that is a
+// regular file holds no book, as it holds no config.
 export function bookIsFiled(reads: FilesystemReads, stateDir: string): boolean {
-  try {
-    reads.statSync(repoConfigsPath(stateDir));
-    return true;
-  } catch (e) {
-    return (e as { code?: string }).code !== "ENOENT";
-  }
+  return presence(reads, repoConfigsPath(stateDir)) !== "absent";
 }
 
 // The answers a load runs under: the folder's book, else the loose one.

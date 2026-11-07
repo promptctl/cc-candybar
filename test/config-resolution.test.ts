@@ -258,7 +258,7 @@ describe("resolveDslConfig", () => {
         repo,
         cwd: dir,
         locs: L,
-        reads: systemFilesystem,
+        disk: systemFilesystem,
         memo: expect.any(InstalledLayerMemo),
       });
     } finally {
@@ -296,7 +296,7 @@ describe("resolveDslConfig", () => {
         repo: null,
         cwd: dir,
         locs: L,
-        reads: systemFilesystem,
+        disk: systemFilesystem,
         memo: expect.any(InstalledLayerMemo),
       });
     } finally {
@@ -329,7 +329,7 @@ describe("resolveDslConfig", () => {
         repo: null,
         cwd: dir,
         locs: L,
-        reads: systemFilesystem,
+        disk: systemFilesystem,
         memo: expect.any(InstalledLayerMemo),
       });
     } finally {
@@ -374,7 +374,7 @@ describe("resolveDslConfig", () => {
         repo: null,
         cwd: dir,
         locs: L,
-        reads: systemFilesystem,
+        disk: systemFilesystem,
         memo: expect.any(InstalledLayerMemo),
       });
     } finally {
