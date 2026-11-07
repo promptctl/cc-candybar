@@ -80072,7 +80072,7 @@ function spendLook(dir, facts, now2, longestMs) {
     now2,
     longestMs
   );
-  const staged = `${file}.${process_default.pid}.tmp`;
+  const staged = stagedPath(file);
   try {
     fs_default.writeFileSync(staged, JSON.stringify(awake));
     fs_default.renameSync(staged, file);

@@ -4,15 +4,22 @@
     {
       "version": "pr-680",
       "ref": "refs/pull/680/merge",
-      "sha": "0f179117569801c4a64fdfb07a144573381f30f7",
-      "timestamp": "2026-11-07T11:09:42.292Z",
+      "sha": "348f623b5ed9972645a815c246f2088bda72406d",
+      "timestamp": "2026-11-07T11:11:42.743Z",
       "commits": [
         {
-          "sha": "0f179117569801c4a64fdfb07a144573381f30f7",
+          "sha": "348f623b5ed9972645a815c246f2088bda72406d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:08:47Z",
-          "message": "Merge 9c068212807c9db088fcfcb4f1140840f1a2d9a4 into 3bc07edfbe9d321a6fea2f6a74c80414ed0ef5e7\n"
+          "timestamp": "2026-11-07T11:10:41Z",
+          "message": "Merge 1f37e0f8cc539ee5d5c4565158c586e1a95d4d6d into 3bc07edfbe9d321a6fea2f6a74c80414ed0ef5e7\n"
+        },
+        {
+          "sha": "1f37e0f8cc539ee5d5c4565158c586e1a95d4d6d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:10:21-07:00",
+          "message": "refactor(update-act): the spend file stages through stagedPath (brandon-unfiled-3248.9eu3)\n\nCloses brandon-unfiled-3248.9gmz: with wkh1 on main, the spend's staging\nname is the one spelling every writer uses, unique per write.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
           "sha": "9c068212807c9db088fcfcb4f1140840f1a2d9a4",
