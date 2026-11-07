@@ -4,15 +4,22 @@
     {
       "version": "pr-673",
       "ref": "refs/pull/673/merge",
-      "sha": "259d4a7b29cae001f0b3ccd724cf6a6ef5110a3a",
-      "timestamp": "2026-11-07T07:55:37.075Z",
+      "sha": "01922c090ac4bc6ee83cd3bf4fce527c55a559e5",
+      "timestamp": "2026-11-07T08:02:38.082Z",
       "commits": [
         {
-          "sha": "259d4a7b29cae001f0b3ccd724cf6a6ef5110a3a",
+          "sha": "01922c090ac4bc6ee83cd3bf4fce527c55a559e5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T07:54:41Z",
-          "message": "Merge 3079149fd31c1401ed7d216e97ad9a4dbd04839a into 1bd51ef3f44ff8c49821b7b309e85764c97b024e\n"
+          "timestamp": "2026-11-07T08:01:39Z",
+          "message": "Merge a7a1ac3b39dd95de56da6b81b57e5ea20544c9a8 into 1bd51ef3f44ff8c49821b7b309e85764c97b024e\n"
+        },
+        {
+          "sha": "a7a1ac3b39dd95de56da6b81b57e5ea20544c9a8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:01:13-07:00",
+          "message": "fix(lanes): a restart refused at the kill names both processes by their starts; a replaced client hint is additive (candybar-gather-renderer-76bb.1dh.ycm)\n"
         },
         {
           "sha": "3079149fd31c1401ed7d216e97ad9a4dbd04839a",

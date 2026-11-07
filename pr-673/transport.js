@@ -86137,7 +86137,7 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
   const now2 = await edge.paneClaude(tmux3);
   if (now2.pid !== claude.pid || now2.startTime !== claude.startTime) {
     throw new Error(
-      `Claude Code in ${tmux3.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`
+      `Claude Code in ${tmux3.pane} is no longer the process the restart read (pid ${claude.pid}, started ${claude.startTime}; now pid ${now2.pid}, started ${now2.startTime}), so it was not restarted under the attach launcher`
     );
   }
   const loses = endingLoses(await edge.claudeInput.read(tmux3));
