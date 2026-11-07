@@ -164,13 +164,14 @@ export const VERB_DOCTOR_MARK = "doctor-mark";
 // daemon's arrivals.
 export const VERB_PROBE = "probe";
 
-// [LAW:one-source-of-truth] The verbs a link may name: `dispatch`, which every
-// link the bar draws names and which carries the leaf verbs as its effects,
-// and the doctor's probe. A leaf verb a link names itself clicks nothing.
-export const LINK_VERBS = [VERB_DISPATCH, VERB_PROBE] as const;
-export type LinkVerb = (typeof LINK_VERBS)[number];
-export function isLinkVerb(verb: string): verb is LinkVerb {
-  return (LINK_VERBS as readonly string[]).includes(verb);
+// [LAW:one-source-of-truth] The verbs a click runs from: `dispatch`, which
+// every link the bar draws names and which carries the leaf verbs as its
+// effects, and the doctor's probe. A leaf verb a link names itself clicks
+// nothing.
+export const CLICK_VERBS = [VERB_DISPATCH, VERB_PROBE] as const;
+export type ClickVerb = (typeof CLICK_VERBS)[number];
+export function isClickVerb(verb: string): verb is ClickVerb {
+  return (CLICK_VERBS as readonly string[]).includes(verb);
 }
 
 // [LAW:effects-at-boundaries] Type a slash command into the session's Claude
@@ -214,6 +215,10 @@ export interface EvaluatedRun {
 // range up in the frame it drew there and runs the link it marks, so no link
 // rides the URL. Not a leaf verb: the link's own verb is the click's.
 export const VERB_RANGE = "range";
+
+// The verbs a link may name: a click's, and the status-line range that runs
+// another link's click.
+export const LINK_VERBS: readonly string[] = [...CLICK_VERBS, VERB_RANGE];
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
@@ -530,9 +535,9 @@ export function deadLinkOf(text: string): string | null {
   }
   // `to/<renderer>/<verb>/…`: the verb is spelled whole once its `/` follows.
   const [, , verb, ...tail] = head.split("/");
-  return verb === undefined || tail.length === 0 || isLinkVerb(verb)
+  return verb === undefined || tail.length === 0 || LINK_VERBS.includes(verb)
     ? null
-    : `naming the verb "${verb}", which a link never names: a link names ${LINK_VERBS.join(" or ")}`;
+    : `naming the verb "${verb}", which a link never names: a link names ${LINK_VERBS.join(", ")}`;
 }
 
 // A `<verb>/<tail>` run as a click addressed to `to`.

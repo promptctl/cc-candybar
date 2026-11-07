@@ -1748,7 +1748,7 @@ describe("loadDslConfig — cross-references", () => {
     expectIssue(leaf, {
       path: "segments.a.template",
       message:
-        /^Template spells a link naming the verb "copy-text", which a link never names: a link names dispatch or probe: "cc-candybar:\/\/to\/main\/copy-text\/%s"\./,
+        /^Template spells a link naming the verb "copy-text", which a link never names: a link names dispatch, probe, range: "cc-candybar:\/\/to\/main\/copy-text\/%s"\./,
     });
     const unknown = `{ segments: { a: { template: '{{ link "cc-candybar://to/main/x/1" "go" }}' } }, root: { h: ['a'] } }`;
     expectIssue(unknown, { path: "segments.a.template", message: 'naming the verb "x"' });
@@ -1760,6 +1760,7 @@ describe("loadDslConfig — cross-references", () => {
   test("a template whose literals open an addressed link, or are no link, loads", () => {
     for (const template of [
       '{{ link "cc-candybar://to/main/dispatch/e=x" "go" }}',
+      '{{ link "cc-candybar://to/main/range/s/m/1/r" "go" }}',
       '{{ link "cc-candybar://to/main/copy" "go" }}',
       '{{ link (printf "%s/copy/%s" "cc-candybar://to/main" "x") "go" }}',
       '{{ link (printf "cc-candybar://to/%s/copy/%s" "main" "x") "go" }}',

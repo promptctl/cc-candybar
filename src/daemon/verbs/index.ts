@@ -130,9 +130,9 @@ import {
   VERB_RUN,
   VERB_REPO_CONFIG,
   VERB_COPY_DIAGNOSTIC,
-  isLinkVerb,
+  isClickVerb,
+  type ClickVerb,
   type EvaluatedRun,
-  type LinkVerb,
 } from "../../click/wire";
 import type { RendererLinks } from "../../click/renderer-links";
 import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
@@ -2043,46 +2043,39 @@ function readProbe(value: string): WireParse<string> {
 // dispatch's session is taken from its effects in the read, so the session the
 // reply facts record, the one its journal and landing use, and the steps it
 // folds are one value. Branded, so only `readClick` makes one.
-interface DispatchClick {
-  readonly kind: typeof VERB_DISPATCH;
-  readonly effects: readonly ReadEffect[];
-  readonly session: ParsedSessionId | null;
-}
-export type Click = (
-  | DispatchClick
-  | { readonly kind: typeof VERB_PROBE; readonly nonce: WireParse<string> }
-) & { readonly __click: true };
+type ClickRead =
+  | {
+      readonly kind: typeof VERB_DISPATCH;
+      readonly effects: readonly ReadEffect[];
+      readonly session: ParsedSessionId | null;
+    }
+  | { readonly kind: typeof VERB_PROBE; readonly nonce: WireParse<string> };
+export type Click = ClickRead & { readonly __click: true };
+type ClickOf<V extends ClickVerb> = Extract<Click, { readonly kind: V }>;
 
-type ClickOf<V extends LinkVerb> = Extract<Click, { readonly kind: V }>;
-
-// [LAW:one-source-of-truth] One reader for each verb a link may name, keyed
-// by the wire's list of them, so a link verb with no reader does not compile.
+// [LAW:one-source-of-truth] One reader for each verb a click runs from, keyed
+// by the wire's list of them, so a click verb with no reader does not compile.
 // A leaf verb arrives only as a dispatch's effect, so a link naming one is a
 // miss here.
 const CLICK_READERS: {
-  readonly [V in LinkVerb]: (value: string) => ClickOf<V>;
+  readonly [V in ClickVerb]: (
+    value: string,
+  ) => Extract<ClickRead, { readonly kind: V }>;
 } = {
   [VERB_DISPATCH]: (value) => {
     const effects = batchAdjacentWrites(parseEffects(value)).map(readEffect);
-    const read: DispatchClick = {
-      kind: VERB_DISPATCH,
-      effects,
-      session: sessionOf(effects),
-    };
-    return read as ClickOf<typeof VERB_DISPATCH>;
+    return { kind: VERB_DISPATCH, effects, session: sessionOf(effects) };
   },
-  [VERB_PROBE]: (value) =>
-    ({ kind: VERB_PROBE, nonce: readProbe(value) }) as ClickOf<
-      typeof VERB_PROBE
-    >,
+  [VERB_PROBE]: (value) => ({ kind: VERB_PROBE, nonce: readProbe(value) }),
 };
 
-// A link's click, or null for a verb no link may name. Reading never throws:
-// a malformed step or nonce is held as data, for the run to refuse. The verb
-// is untrusted wire input, so it is matched against the list before it keys
-// the table: a `__proto__` is a miss, never a hit on Object.prototype.
+// A link's click, or null for a verb no click runs from. Reading never
+// throws: a malformed step or nonce is held as data, for the run to refuse.
+// The verb is untrusted wire input, so it is matched against the list before
+// it keys the table: a `__proto__` is a miss, never a hit on
+// Object.prototype. The brand is set here, once.
 export function readClick(verb: string, value: string): Click | null {
-  return isLinkVerb(verb) ? CLICK_READERS[verb](value) : null;
+  return isClickVerb(verb) ? (CLICK_READERS[verb](value) as Click) : null;
 }
 
 // The session a click is in, as its event names it: a dispatch's that passed
@@ -2319,7 +2312,10 @@ function journaled<C extends DaemonContext>(
 // whatever the fold did. One whose client has left never lands, so a client
 // told TIMEOUT can click again without reverting a toggle: it takes no turn,
 // stamps no landing and describes nothing.
-function dispatch(click: DispatchClick & Click, ctx: VerbContext): void {
+function dispatch(
+  click: ClickOf<typeof VERB_DISPATCH>,
+  ctx: VerbContext,
+): void {
   if (ctx.gone()) throw new ClickAbandoned(VERB_DISPATCH);
   const sid = clickSession(click);
   ctx.journalTurns.take(VERB_DISPATCH, () =>

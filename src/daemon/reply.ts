@@ -837,9 +837,11 @@ function daemonOutcome(error: unknown): RequestOutcome {
     : { kind: "threw", error };
 }
 
-// [LAW:dataflow-not-control-flow] The dispatcher is a table lookup. The verb
-// table (src/daemon/verbs/index.ts) is the single canonical list of supported
-// verbs — handlers live there, the dispatcher only routes.
+// [LAW:dataflow-not-control-flow] The dispatcher is a table lookup. The wire's
+// link verbs (src/click/wire.ts) are the single canonical list of what a link
+// may name: a status-line range is routed here, and every other click is read
+// by the daemon's click readers (src/daemon/verbs/index.ts), where its
+// handlers live — the dispatcher only routes.
 //
 // [LAW:types-are-the-program] The error class on the throw determines the
 // response code: BadVerbArgs (invalid input shape) becomes BAD_REQUEST; any

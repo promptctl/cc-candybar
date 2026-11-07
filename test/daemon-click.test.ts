@@ -87,13 +87,11 @@ describe("click protocol", () => {
   });
 
   test("the click read is prototype-pollution-safe", () => {
-    // [LAW:types-are-the-program] The click readers are a ReadonlyMap, not a
-    // plain object — wire-level untrusted verb names like `__proto__` and
-    // `constructor` are non-members, not truthy hits on Object.prototype.
-    // A future revert to `Readonly<Record<string, VerbHandler>>` would
-    // let those names return prototype functions, bypass the `!handler`
-    // check in handleClick, then crash on `handler(value, ctx)` as
-    // RENDER_FAILED instead of the intended BAD_REQUEST.
+    // [LAW:types-are-the-program] Wire-level untrusted verb names like
+    // `__proto__` and `constructor` are non-members of the click verbs, never
+    // keys into the plain-object reader table: a lookup that skipped the
+    // membership check would return a prototype function and crash the click
+    // as RENDER_FAILED instead of the intended BAD_REQUEST.
     // [LAW:behavior-not-structure] Pins the safety guarantee at lookup,
     // so the regression reads as "verb table leaks Object.prototype"
     // rather than as a type-only diff a reviewer might wave through.
