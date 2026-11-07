@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { processLauncher } from "./helpers/host";
 import {
+  processIdentityOf,
   readStartTime,
   readOwnStartTime,
   sameLiveProcess,
@@ -191,5 +192,27 @@ describe("readOwnStartTime", () => {
     expect(
       await readOwnStartTime(1, async () => ({ kind: "start", token: "TOK" })),
     ).toBe("TOK");
+  });
+});
+
+// The identity a record or a hint names: the start the read found, in the
+// form `ps` prints it, or why there is none to name.
+describe("processIdentityOf", () => {
+  test("a start in the form ps prints is the identity's", () => {
+    const token = "Fri Nov  6 02:12:23 2026";
+    expect(processIdentityOf(4242, { kind: "start", token })).toEqual({ pid: 4242, startTime: token });
+  });
+
+  test("a start that could not be read, or not in that form, is null and says why", () => {
+    expect(processIdentityOf(4242, { kind: "unavailable", detail: "ps timeout (exit null)" })).toEqual({
+      pid: 4242,
+      startTime: null,
+      why: "ps timeout (exit null)",
+    });
+    expect(processIdentityOf(4242, { kind: "start", token: "2026-11-06T02:12:23Z" })).toEqual({
+      pid: 4242,
+      startTime: null,
+      why: 'ps printed "2026-11-06T02:12:23Z", not a start in the form `ps -o lstart=` prints',
+    });
   });
 });

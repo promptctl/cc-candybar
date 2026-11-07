@@ -42,6 +42,7 @@ import { performInOrder } from "../src/daemon/apply";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { lastClickError } from "../src/daemon/click-error";
 import type { VerbContext } from "../src/daemon/verbs";
+import type { StartToken } from "../src/daemon/process-fingerprint";
 import {
   effectsUrl,
   VERB_COPY,
@@ -578,12 +579,16 @@ describe("lane B, statusline", () => {
     expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });
 
-  test("a Claude Code the pane no longer shows by the time of the kill is not killed", async () => {
+  // A later process the kernel handed the read one's pid is not it either.
+  test.each([
+    ["another pid", { pid: 5151 }],
+    ["the same pid, started later", { startTime: "Sat Nov  7 09:30:00 2026" as StartToken }],
+  ])("a Claude Code the pane no longer shows by the time of the kill (%s) is not killed", async (_case, later) => {
     const { edge: base } = fakeEdge();
     const first = await base.paneClaude(TMUX);
     let reads = 0;
     const { edge, did } = fakeEdge({
-      paneClaude: async () => (reads++ === 0 ? first : { ...first, pid: 5151 }),
+      paneClaude: async () => (reads++ === 0 ? first : { ...first, ...later }),
     });
     await expect(
       finished(await LANE_SETUP.statusline.on(run(session()), HOST, edge)),

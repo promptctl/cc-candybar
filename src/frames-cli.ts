@@ -104,6 +104,9 @@ export async function runFrames(
   // it, as a subscriber of the daemon does.
   const emit = newestWins(process.stdout);
 
+  // The process that ran this one, for its whole life: read once, not per
+  // hook, since the read is a blocking `ps`.
+  const parent = world.parent();
   let sessionId: string | null = null;
   let lastHook: ClaudeHookData | null = null;
   let follower: FrameFollower | null = null;
@@ -120,7 +123,7 @@ export async function runFrames(
     // The terminal as it is now: a resize between two statusline ticks is in
     // the next one.
     const hints = {
-      ...detectClientHints(world.host, world.parent(), cwd, process.stderr),
+      ...detectClientHints(world.host, parent, cwd, process.stderr),
       client: nodeClientHint("frames", bundle),
     };
     const outcome = await tryRenderViaDaemon(

@@ -92,7 +92,7 @@ export interface RenderRequest {
   configEnv?: string;
   claudeConfigDir?: string;
   terminalEnv?: TerminalEnvHint;
-  parent?: { pid: number; startTime: string | null };
+  parent?: { pid: number; startTime: string | null; why?: string };
   client?: ClientHint;
 }
 
@@ -168,8 +168,8 @@ export interface ReaderRenderRequest extends RenderRequest {
 //     process in the pane has a parent that keeps no such record. Its pid
 //     names it only with its start, since the kernel reuses pids: the start
 //     token Claude Code writes as its record's `procStart`
-//     (src/daemon/process-fingerprint.ts), or `null` when the client could not
-//     read it.
+//     (src/daemon/process-fingerprint.ts), or `null` with `why` the client
+//     could not read it.
 //   • `client` absent — the client did not REPORT what it is: a client too
 //     old to carry the field, which is itself the doctor's finding (an
 //     install whose client predates its daemon). Present, it is total: the
@@ -372,14 +372,24 @@ export function sanitizeSsh(v: unknown): boolean | undefined {
 }
 
 // The process that ran the client: a positive pid with its start, as a token
-// or `null` for one the client could not read; anything else is unreported.
+// or `null` with why the client could not read it; anything else is
+// unreported.
 function sanitizeParent(v: unknown): ClientHints["parent"] {
   if (typeof v !== "object" || v === null) return undefined;
-  const { pid, startTime } = v as { pid?: unknown; startTime?: unknown };
-  const token = startTime === null ? null : parseStartToken(startTime);
-  return Number.isSafeInteger(pid) && (pid as number) > 0 && token !== undefined
-    ? { pid: pid as number, startTime: token }
-    : undefined;
+  const { pid, startTime, why } = v as {
+    pid?: unknown;
+    startTime?: unknown;
+    why?: unknown;
+  };
+  if (!Number.isSafeInteger(pid) || (pid as number) <= 0) return undefined;
+  if (startTime === null)
+    return typeof why === "string" && why !== ""
+      ? { pid: pid as number, startTime: null, why }
+      : undefined;
+  const token = parseStartToken(startTime);
+  return token === undefined
+    ? undefined
+    : { pid: pid as number, startTime: token };
 }
 
 export interface ShutdownRequest {

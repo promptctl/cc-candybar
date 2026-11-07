@@ -29,7 +29,11 @@ import { canonical, executableOn, regularFileWith } from "../path-search.js";
 import { launcherNode } from "../attach-preload.js";
 import { type LaneEdge, type PaneClaude } from "./lane-setup.js";
 import { claudeConfigDir } from "../claude-settings.js";
-import { parseStartToken, readStartTime } from "./process-fingerprint.js";
+import {
+  parseStartToken,
+  processIdentityOf,
+  readStartTime,
+} from "./process-fingerprint.js";
 import type {
   ClaudeProcess,
   HeldSession,
@@ -248,17 +252,18 @@ async function paneClaude(
   }
   // [LAW:no-silent-failure] Its record is judged against its start, so a
   // start that cannot be read stops the restart before any kill.
-  const start = await readStartTime(pid, (opts) => launcher.launch(opts));
-  const startTime =
-    start.kind === "start" ? parseStartToken(start.token) : undefined;
-  if (startTime === undefined) {
+  const job = processIdentityOf(
+    pid,
+    await readStartTime(pid, (opts) => launcher.launch(opts)),
+  );
+  if (job.startTime === null) {
     throw new Error(
-      `the start of pane ${hint.pane}'s foreground job ${pid} could not be read (${start.kind === "start" ? `ps printed ${JSON.stringify(start.token)}` : start.detail})`,
+      `the start of pane ${hint.pane}'s foreground job ${pid} could not be read (${job.why})`,
     );
   }
   return {
     pid,
-    startTime,
+    startTime: job.startTime,
     // The installed binary itself, as cc-extra's own `bin/cc-attach` hands it
     // to the launcher (`readlink -f`): `~/.local/bin/claude` is a link to the
     // release it runs.
@@ -308,7 +313,7 @@ function recordIn(
       held:
         (e as NodeJS.ErrnoException).code === "ENOENT"
           ? {
-              kind: "unread",
+              kind: "none",
               why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`,
             }
           : { kind: "unread", why: (e as Error).message },
@@ -351,7 +356,7 @@ function recordIn(
               }
             : start !== claude.startTime
               ? {
-                  kind: "unread",
+                  kind: "none",
                   why: `its session record ${file} was left by a Claude Code that has exited: the record names a process started ${start}, and pid ${claude.pid} is a process started ${claude.startTime}`,
                 }
               : { kind: "holds", sessionId },

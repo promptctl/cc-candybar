@@ -52,11 +52,11 @@ const START_TOKEN =
 export const parseStartToken = (v: unknown): StartToken | undefined =>
   typeof v === "string" && START_TOKEN.test(v) ? (v as StartToken) : undefined;
 
-// A process's identity with its start checked for the token's shape: `null`
-// when its start could not be read.
-export type ParsedProcessIdentity = Readonly<
-  ProcessIdentity & { readonly startTime: StartToken | null }
->;
+// A process's identity with its start checked for the token's shape, or
+// `null` and why its start could not be read.
+export type ParsedProcessIdentity =
+  | { readonly pid: number; readonly startTime: StartToken }
+  | { readonly pid: number; readonly startTime: null; readonly why: string };
 
 // A read of a pid's kernel start-time. Only TWO outcomes, because nothing
 // derivable from a `ps` exit code can SOUNDLY prove a process is dead — a
@@ -116,6 +116,25 @@ export const startTimeLaunch = (
   // can't make one live process render two different start-time strings.
   envOverlay: { LC_ALL: "C", TZ: "UTC" },
 });
+
+// [LAW:single-enforcer] The one fold of a start read into the identity a
+// record or a hint names, so every reader says the same why for a start it
+// could not use.
+export function processIdentityOf(
+  pid: number,
+  read: StartTimeRead,
+): ParsedProcessIdentity {
+  if (read.kind === "unavailable")
+    return { pid, startTime: null, why: read.detail };
+  const startTime = parseStartToken(read.token);
+  return startTime === undefined
+    ? {
+        pid,
+        startTime: null,
+        why: `ps printed ${JSON.stringify(read.token)}, not a start in the form \`ps -o lstart=\` prints`,
+      }
+    : { pid, startTime };
+}
 
 export function startTimeOf(res: LaunchResult): StartTimeRead {
   if (res.ok) {

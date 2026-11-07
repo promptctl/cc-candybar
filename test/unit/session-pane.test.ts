@@ -19,7 +19,8 @@ import { CLAUDE_START } from "../helpers/claude-record";
 const TMUX: TmuxHint = { socket: "/tmp/tmux-501/default", pane: "%7", truecolor: null };
 const CLAUDE = 4242;
 const BY = { pid: CLAUDE, startTime: CLAUDE_START, configDir: undefined };
-// What every unread parent's why ends with: the likely cause and its fix.
+// What the why of a parent no record is the process's of ends with: the
+// likely cause and its fix.
 const WRAPPED = ". A statusline command that runs the client through a shell or a wrapper (a script, `pnpm dlx`) hands it that process instead: `cc-candybar install` writes one that runs it directly";
 
 // Claude Code's records, by pid and configuration directory, as a fake of
@@ -32,7 +33,7 @@ const records = (held: Record<string, HeldSession>) => {
     asked.push([pid, configDir]);
     return (
       held[`${pid}@${configDir ?? "default"}`] ?? {
-        kind: "unread",
+        kind: "none",
         why: `it keeps no session record for ${pid}`,
       }
     );
@@ -96,9 +97,18 @@ describe("sessionPaneOf", () => {
 
   test("a client that could not read when its parent started is not the pane's, and no record is read", () => {
     const { of, asked } = records({ [`${CLAUDE}@default`]: holds("s1") });
-    const pane = sessionPaneOf(hints({ parent: { pid: CLAUDE, startTime: null } }), "s1", of);
-    expect(paneFact(pane)).toBe(`unconfirmed: its client could not read when the process that ran it (pid ${CLAUDE}) started`);
+    const pane = sessionPaneOf(hints({ parent: { pid: CLAUDE, startTime: null, why: "ps timeout (exit null)" } }), "s1", of);
+    expect(paneFact(pane)).toBe(`unconfirmed: its client could not read when the process that ran it (pid ${CLAUDE}) started: ps timeout (exit null)`);
     expect(asked).toEqual([]);
+  });
+
+  // A record under the parent's pid it cannot judge may still be its own, so
+  // the shell-or-wrapper fix is not said.
+  test("a client whose parent's record cannot be read is not the pane's, saying why without the wrapper fix", () => {
+    const { of } = records({ [`${CLAUDE}@default`]: { kind: "unread", why: "its session record names no process start" } });
+    expect(paneFact(sessionPaneOf(hints({}), "s1", of))).toBe(
+      `unconfirmed: the session of the process that ran its statusline (pid ${CLAUDE}) cannot be read: its session record names no process start`,
+    );
   });
 
   test("a session its record holds outside tmux runs outside, and one it does not is unconfirmed there too", () => {

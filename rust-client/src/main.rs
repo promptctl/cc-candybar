@@ -333,12 +333,15 @@ fn client_hints(request: &mut serde_json::Value, cwd: &std::path::Path) {
     // us, which for a statusline is Claude Code itself, whose record of the
     // session it holds the daemon reads by this pid and checks against this
     // start, since the kernel reuses pids. A start that could not be read is
-    // the affirmative `null`.
+    // the affirmative `null`, with why.
     let parent = std::os::unix::process::parent_id();
-    request["parent"] = serde_json::json!({
-        "pid": parent,
-        "startTime": process_start::start_secs(parent).ok().map(process_start::lstart_token),
-    });
+    request["parent"] = match process_start::start_secs(parent) {
+        Ok(secs) => serde_json::json!({
+            "pid": parent,
+            "startTime": process_start::lstart_token(secs),
+        }),
+        Err(why) => serde_json::json!({ "pid": parent, "startTime": null, "why": why }),
+    };
     // client is CONDITIONAL only on the binary naming its own path: one that
     // cannot (current_exe failed) can spawn no daemon either, and its absence
     // reads as the doctor's "unreported" — never a guessed bundle.

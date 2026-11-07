@@ -40,16 +40,25 @@ describe("a Claude Code process's session record", () => {
     expect(heldSessionIn(file, LIVE)).toEqual({ kind: "holds", sessionId: SID });
   });
 
-  test("an exited Claude Code left, under a pid a later process holds, is unread, naming both starts", () => {
+  test("an exited Claude Code left, under a pid a later process holds, is none of the process's, naming both starts", () => {
     const file = record({ procStart: CLAUDE_START });
     expect(heldSessionIn(file, { pid: 4242, startTime: LATER })).toEqual({
-      kind: "unread",
+      kind: "none",
       why: `its session record ${file} was left by a Claude Code that has exited: the record names a process started ${CLAUDE_START}, and pid 4242 is a process started ${LATER}`,
     });
   });
 
+  test("missing, is none of the process's", () => {
+    const file = path.join(dir, "4242.json");
+    expect(heldSessionIn(file, LIVE)).toEqual({
+      kind: "none",
+      why: expect.stringMatching(new RegExp(`^it keeps no session record at ${file} \\(update Claude Code`)),
+    });
+  });
+
+  // The record under the pid may be the process's own: what it cannot say is
+  // said, and never as the shell-or-wrapper case.
   test.each([
-    ["missing", null, (file: string) => expect.stringMatching(new RegExp(`^it keeps no session record at ${file} \\(update Claude Code`))],
     ["not JSON", "{\"pid\": 42", (file: string) => expect.stringContaining(`its session record ${file} is not JSON (`)],
     ["without a session", JSON.stringify({ pid: 4242, procStart: CLAUDE_START }), (file: string) => `its session record ${file} names no session`],
     ["not an object", "42", (file: string) => `its session record ${file} names no session`],
@@ -65,8 +74,7 @@ describe("a Claude Code process's session record", () => {
       (file: string) => `its session record ${file} names its process start as "2026-11-06T02:12:23Z", not in the form \`ps -o lstart=\` prints it`,
     ],
   ])("%s, is said as unread, never as a session", (_case, text, why) => {
-    const file = path.join(dir, "4242.json");
-    if (text !== null) write(file, text);
+    const file = write(path.join(dir, "4242.json"), text);
     expect(heldSessionIn(file, LIVE)).toEqual({ kind: "unread", why: why(file) });
   });
 

@@ -163,16 +163,22 @@ describe("parseClientHints (the one wire checkpoint)", () => {
 
   // candybar-gather-renderer-76bb.1dh.ycm: the process that ran the client is
   // one value, its pid with its start, since the kernel reuses pids. A start
-  // the client could not read is `null`, which is a reported fact; a start not
-  // in the form `ps` prints is refused with the whole value, never kept as a
-  // pid alone.
-  test("parent is admitted as a pid with its start token, or with a null start; anything else is refused", () => {
+  // the client could not read is `null` with why, which is a reported fact; a
+  // start not in the form `ps` prints is refused with the whole value, never
+  // kept as a pid alone.
+  test("parent is admitted as a pid with its start token, or with a null start and why; anything else is refused", () => {
     const start = "Fri Nov  6 02:12:23 2026";
     expect(parseClientHints(req({ parent: { pid: 4242, startTime: start } })).parent).toEqual({ pid: 4242, startTime: start });
-    expect(parseClientHints(req({ parent: { pid: 4242, startTime: null } })).parent).toEqual({ pid: 4242, startTime: null });
+    expect(parseClientHints(req({ parent: { pid: 4242, startTime: null, why: "ps timeout (exit null)" } })).parent).toEqual({
+      pid: 4242,
+      startTime: null,
+      why: "ps timeout (exit null)",
+    });
     for (const parent of [
       4242,
       { pid: 4242 },
+      { pid: 4242, startTime: null },
+      { pid: 4242, startTime: null, why: "" },
       { pid: 0, startTime: start },
       { pid: 4242, startTime: "2026-11-06T02:12:23Z" },
       { pid: 4242, startTime: "Fri Nov 6 02:12:23 2026" },

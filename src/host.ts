@@ -1,7 +1,7 @@
 import os from "node:os";
 import { homeOf, type RendererHome } from "./daemon/home.js";
 import {
-  parseStartToken,
+  processIdentityOf,
   startTimeLaunch,
   startTimeOf,
   type ParsedProcessIdentity,
@@ -68,18 +68,15 @@ export function processWorld(): World {
     // [LAW:no-silent-failure] Bounded like a connect, so a slow `ps` costs
     // a tick no more than a slow daemon would: one that runs out reads as a
     // start not known, which the daemon says (src/daemon/session-pane.ts).
-    parent: () => {
-      const read = startTimeOf(
-        launcher.launchSync(
-          startTimeLaunch(process.ppid, PARENT_START_READ_BUDGET_MS),
+    parent: () =>
+      processIdentityOf(
+        process.ppid,
+        startTimeOf(
+          launcher.launchSync(
+            startTimeLaunch(process.ppid, PARENT_START_READ_BUDGET_MS),
+          ),
         ),
-      );
-      return {
-        pid: process.ppid,
-        startTime:
-          read.kind === "start" ? (parseStartToken(read.token) ?? null) : null,
-      };
-    },
+      ),
   };
 }
 

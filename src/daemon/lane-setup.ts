@@ -538,8 +538,10 @@ async function restartUnderAttach(
   // anything is judged on the pane as it is at the kill, not as it was before
   // the module-graph read above (seconds, on a large binary): the user may
   // have started a turn or a draft meanwhile, or left Claude Code.
+  // [LAW:one-source-of-truth] The same process by its identity, pid and
+  // start: the kernel hands an exited one's pid to the next.
   const now = await edge.paneClaude(tmux);
-  if (now.pid !== claude.pid) {
+  if (now.pid !== claude.pid || now.startTime !== claude.startTime) {
     throw new Error(
       `Claude Code in ${tmux.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`,
     );
@@ -611,7 +613,7 @@ async function restartUnderAttach(
     startTime: claude.startTime,
     configDir: detectClaudeConfigDir(Object.fromEntries(started), claude.cwd),
   });
-  if (held.kind === "unread") {
+  if (held.kind !== "holds") {
     throw new Error(
       `Claude Code in ${tmux.pane} was left running: ${held.why}, so which session it runs is unknown`,
     );

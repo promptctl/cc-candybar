@@ -8,8 +8,14 @@ import type { ClientHints } from "./protocol.js";
 
 // [LAW:no-silent-failure] A process's session as its own record says it, or
 // why the record says none: never read as the session a reader expects.
+// [LAW:types-are-the-program] Two ways to say none, because they have two
+// fixes: `none` when no record is the process's (it keeps none, or the one
+// under its pid an exited Claude Code left), so the process is likely no
+// Claude Code; `unread` when the record under its pid may be the process's
+// own but cannot be judged.
 export type HeldSession =
   | { readonly kind: "holds"; readonly sessionId: string }
+  | { readonly kind: "none"; readonly why: string }
   | { readonly kind: "unread"; readonly why: string };
 
 // The Claude Code whose record is read: a process by its identity, its start
@@ -81,24 +87,30 @@ export function sessionPaneOf(
       tmux,
       why: "its client is too old to say which process ran it (reinstall it with `cc-candybar install`)",
     };
-  const { pid: parentPid, startTime } = parent;
-  if (startTime === null)
+  const parentPid = parent.pid;
+  if (parent.startTime === null)
     return {
       kind: "unconfirmed",
       tmux,
-      why: `its client could not read when the process that ran it (pid ${parentPid}) started`,
+      why: `its client could not read when the process that ran it (pid ${parentPid}) started: ${parent.why}`,
     };
   const claude = {
     pid: parentPid,
-    startTime,
+    startTime: parent.startTime,
     configDir: hints.claudeConfigDir,
   };
   const held = heldSession(claude);
-  if (held.kind === "unread")
+  if (held.kind === "none")
     return {
       kind: "unconfirmed",
       tmux,
       why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}. A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`,
+    };
+  if (held.kind === "unread")
+    return {
+      kind: "unconfirmed",
+      tmux,
+      why: `the session of the process that ran its statusline (pid ${parentPid}) cannot be read: ${held.why}`,
     };
   return held.sessionId === sessionId
     ? { kind: "runs", tmux, claude }
