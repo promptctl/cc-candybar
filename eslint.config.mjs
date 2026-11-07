@@ -31,6 +31,7 @@ const CLOCK_PROPERTIES = [
   { object: "performance", property: "now", message: CLOCK_MESSAGE },
   { object: "process", property: "hrtime", message: CLOCK_MESSAGE },
   { object: "process", property: "uptime", message: CLOCK_MESSAGE },
+  { object: "os", property: "uptime", message: CLOCK_MESSAGE },
   { object: "AbortSignal", property: "timeout", message: CLOCK_MESSAGE },
 ];
 // [LAW:single-enforcer] A signal sent to a pid or its group, or signal 0 asking
@@ -73,13 +74,26 @@ const CLOCK_GLOBALS = [
   "clearImmediate",
 ].map((name) => ({ name, message: CLOCK_MESSAGE }));
 const CLOCK_IMPORT_PATHS = [
-  "node:timers",
-  "timers",
-  "node:timers/promises",
-  "timers/promises",
-  "node:perf_hooks",
-  "perf_hooks",
-].map((name) => ({ name, message: CLOCK_MESSAGE }));
+  ...[
+    "node:timers",
+    "timers",
+    "node:timers/promises",
+    "timers/promises",
+    "node:perf_hooks",
+    "perf_hooks",
+  ].map((name) => ({ name, message: CLOCK_MESSAGE })),
+  // The clock reads CLOCK_PROPERTIES bans, imported by name.
+  ...["os", "node:os"].map((name) => ({
+    name,
+    importNames: ["uptime"],
+    message: CLOCK_MESSAGE,
+  })),
+  ...["process", "node:process"].map((name) => ({
+    name,
+    importNames: ["hrtime", "uptime"],
+    message: CLOCK_MESSAGE,
+  })),
+];
 
 // [LAW:single-enforcer] Names only their owners may import, so what makes a
 // launch ownerless, or a path ambient, cannot be reached for by accident. Daemon

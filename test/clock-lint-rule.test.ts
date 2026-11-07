@@ -54,6 +54,18 @@ const FORMS = {
     code: "export const x = process.uptime();\n",
     rule: "no-restricted-properties",
   },
+  "os.uptime": {
+    code: 'import os from "node:os";\nexport const x = os.uptime();\n',
+    rule: "no-restricted-properties",
+  },
+  "uptime from node:os": {
+    code: 'import { uptime } from "node:os";\nexport const x = uptime();\n',
+    rule: "no-restricted-imports",
+  },
+  "hrtime from node:process": {
+    code: 'import { hrtime } from "node:process";\nexport const x = hrtime();\n',
+    rule: "no-restricted-imports",
+  },
   "AbortSignal.timeout": {
     code: "export const x = AbortSignal.timeout(1);\n",
     rule: "no-restricted-properties",

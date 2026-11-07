@@ -54,6 +54,7 @@ import {
   IDLE,
   judgeAct,
   makeActReader,
+  spendLook,
   type ActFacts,
   type ActState,
 } from "./update-act";
@@ -280,7 +281,7 @@ function releaseReading(release: Sampled<Currency>): Reading<Update> {
 export interface UpdateWatchOptions {
   // The fact the watch publishes each sample into.
   readonly fact: UpdateFact;
-  // The daemon's clock: the act's deadline and the watch's timers run on it.
+  // The daemon's clock: the act's looks and the watch's timers run on it.
   readonly clock: Timekeeper;
   // Who the act's job belongs to.
   readonly launcher: Launcher;
@@ -326,12 +327,17 @@ export interface UpdateWatch {
   error(): string | null;
 }
 
-// A build or an install is a long child; ten minutes is generous for either
-// and bounds a wedged one.
+// A build or an install is a long child; ten minutes of being watched running
+// is generous for either and bounds a wedged one.
 const ACT_TIMEOUT_MS = 10 * 60 * 1000;
 // How often the act's record is looked at for an end: the notice's busy label
 // and the restart after a success trail an end by at most this.
 const ACT_POLL_MS = 2_000;
+// The longest span one look spends of the budget. A look trails the one before
+// it by the poll and the turn it waited behind; a gap many polls long is a
+// machine that was not running the loop, and spends nothing, however many dark
+// wakes a sleep has.
+const LONGEST_LOOK_MS = 5 * ACT_POLL_MS;
 
 function describeBuild(b: BuildCurrency): [LogLevel, string] {
   switch (b.kind) {
@@ -512,10 +518,14 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     }
   }
 
-  // Ends the act if its group is alive past its deadline, with a timeout
-  // verdict unless the job's own landed first.
+  // Spends a look on the act if its group is alive, and ends it once that has
+  // spent its budget, with a timeout verdict unless the job's own landed first.
+  // [LAW:one-source-of-truth] The one budget is observed time, shared through
+  // the act's files by every daemon that looks.
   function endIfOverdue(facts: ActFacts | null): void {
-    if (!facts?.alive || clock.now() <= facts.record.deadline) return;
+    if (!facts?.alive) return;
+    const spent = spendLook(actsDir, facts, clock.now(), LONGEST_LOOK_MS);
+    if (spent === null || spent.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir, facts, launcher);
     const why = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
