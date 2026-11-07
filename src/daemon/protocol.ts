@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Duplex } from "node:stream";
+import type { Duplex, Readable } from "node:stream";
 import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
@@ -691,6 +691,31 @@ export function makeFrameReader(
       }
     }
   };
+}
+
+// One frame read off a stream, then no more: the first complete frame or the
+// first error is delivered, and the reader detaches, so later bytes are
+// discarded by the flowing stream and nothing is buffered for them. A daemon's
+// connection reads this way, so a sender past the cap, or one writing on after
+// its frame, cannot grow the daemon's memory or run a second request.
+// [LAW:single-enforcer] The parse and the cap are the frame reader's; this only
+// stops it, and a frame after the first in the chunk that held it is dropped.
+export function readOneFrame(
+  stream: Readable,
+  onFrame: (frame: unknown) => void,
+  onError: (err: Error) => void,
+): void {
+  let read = false;
+  const once =
+    <T>(deliver: (value: T) => void) =>
+    (value: T): void => {
+      if (read) return;
+      read = true;
+      stream.off("data", reader);
+      deliver(value);
+    };
+  const reader = makeFrameReader(once(onFrame), once(onError));
+  stream.on("data", reader);
 }
 
 // Send one frame and await one response, giving up at `deadline` (epoch
