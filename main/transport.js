@@ -69515,7 +69515,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.2";
+var PACKAGE_VERSION = "1.208.3";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -87169,12 +87169,13 @@ init_globals();
 
 // src/daemon/process-fingerprint.ts
 init_globals();
+var START_TIME_READ_BUDGET_MS = 2e3;
 async function readStartTime(pid2, launch2) {
   const res = await launch2({
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid2)],
     category: "process-fingerprint",
-    timeoutMs: 2e3,
+    timeoutMs: START_TIME_READ_BUDGET_MS,
     // [FRAMING:representation] Pin BOTH locale and timezone so the token is
     // deterministic across daemons — the writer and reader must render the same
     // process identically for opaque string equality to be sound. LC_ALL=C fixes
