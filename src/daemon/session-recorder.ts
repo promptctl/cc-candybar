@@ -23,8 +23,11 @@ import { appendFileSync, closeSync, openSync, unlinkSync } from "node:fs";
 import { reaction } from "mobx";
 import {
   formatLine,
+  sameClickState,
+  type ClickState,
   type DrawLine,
   type DrawState,
+  type FactsLine,
   type RecordingLine,
   type RequestLine,
   type SessionRequest,
@@ -48,7 +51,7 @@ import type { SessionSource } from "./session-source.js";
 export interface RecordedView {
   readonly followed: SessionView["followed"];
   readonly facts: () => SessionRequest;
-  readonly source: Pick<SessionSource, "home" | "turn" | "held">;
+  readonly source: Pick<SessionSource, "home" | "turn" | "held" | "state">;
 }
 
 export interface SessionViews {
@@ -118,6 +121,8 @@ interface Open {
   // line.
   document: SessionFacts | null;
   declaration: SessionRequest | null;
+  // The last clicks' state a line this recording wrote carried.
+  state: ClickState | null;
   turn: { readonly view: RecordedView; readonly held: boolean } | null;
 }
 
@@ -154,6 +159,13 @@ export function sessionRecorder(
       if (line.kind === "facts") rec.document = line.facts;
       if (line.kind === "turn") rec.document = line.document.facts;
       if (
+        line.kind === "state" ||
+        line.kind === "draw" ||
+        line.kind === "turn"
+      ) {
+        rec.state = line.state;
+      }
+      if (
         line.kind === "request" ||
         line.kind === "declared" ||
         line.kind === "turn"
@@ -164,6 +176,23 @@ export function sessionRecorder(
       log("error", `recording sid=${JSON.stringify(sessionId)}: ${inspect(e)}`);
       end(sessionId, rec, { kind: "failed", error: e });
     }
+  };
+  // [LAW:single-enforcer] Every document a recording writes goes through
+  // here, after the clicks' state it was stamped under when that is not the
+  // last one written: a click moves the store before the document its keys
+  // restamp, so the state read now is the one its runs were declared under.
+  const writeDocument = (
+    sessionId: string,
+    rec: Open,
+    view: RecordedView,
+    line: FactsLine,
+  ): void => {
+    if (line.facts === rec.document) return;
+    const state = view.source.state();
+    if (rec.state === null || !sameClickState(rec.state, state)) {
+      write(sessionId, rec, { kind: "state", state });
+    }
+    write(sessionId, rec, { kind: "facts", ...line });
   };
   // [LAW:one-source-of-truth] The turn of `view` as it stands, written when
   // the replay's view does not already hold it: another view's turn was the
@@ -197,8 +226,7 @@ export function sessionRecorder(
     const draw: DrawLine = { at, drawing, feeds, state, diagnostics };
     const writes: Array<() => void> = [
       () => writeTurn(sessionId, rec, view),
-      () =>
-        write(sessionId, rec, { kind: "facts", ...view.followed.stamped() }),
+      () => writeDocument(sessionId, rec, view, view.followed.stamped()),
       () => write(sessionId, rec, { kind: "declared", request: view.facts() }),
       () => write(sessionId, rec, { kind: "draw", ...draw }),
       ...(current === null ? [] : [() => writeTurn(sessionId, rec, current)]),
@@ -234,7 +262,7 @@ export function sessionRecorder(
     // not held: `write` skips a document already the last written.
     watch(
       () => view.followed.stamped(),
-      (line) => write(sessionId, rec, { kind: "facts", ...line }),
+      (line) => writeDocument(sessionId, rec, view, line),
     );
   };
   return {
@@ -253,6 +281,7 @@ export function sessionRecorder(
         watching: new Set(),
         document: null,
         declaration: null,
+        state: null,
         turn: null,
       };
       const recs = open.get(session) ?? new Set<Open>();
