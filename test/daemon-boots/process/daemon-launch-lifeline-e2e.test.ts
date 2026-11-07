@@ -18,7 +18,6 @@ import {
 } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../helpers/until";
 
-jest.setTimeout(30_000);
 
 // A `sleep` no other process on the host runs, matched whole.
 const running = (seconds: string): boolean =>

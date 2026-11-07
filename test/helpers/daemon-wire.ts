@@ -17,6 +17,7 @@ import { dialWithin, type Dialer } from "../../src/dial/dialer";
 import { systemDialer } from "../../src/dial/system-dialer";
 import type { Request, Response } from "../../src/daemon/protocol";
 import { systemTimekeeper } from "../../src/time";
+import { within, type Wait } from "./case-time";
 
 const DEFAULT_REPLY_BUDGET_MS = 5000;
 
@@ -66,7 +67,25 @@ export function sendDaemonRequest(
   req: Record<string, unknown>,
   timeoutMs: number = DEFAULT_REPLY_BUDGET_MS,
 ): Promise<Response> {
-  return endpointOf(target).send(req, timeoutMs);
+  return sendWithin(target, req, within(timeoutMs));
+}
+
+// A request sent under a bound already cut, for a caller that states the same
+// bound to the daemon as its deadline. [LAW:no-silent-failure] A failure names
+// the bound, so one cut short by its case says so.
+export function sendWithin(
+  target: DaemonTarget,
+  req: Record<string, unknown>,
+  wait: Wait,
+): Promise<Response> {
+  return endpointOf(target)
+    .send(req, wait.ms)
+    .catch((e: unknown) => {
+      throw new Error(
+        `${String(req.kind)} request within ${wait.named} failed: ${e instanceof Error ? e.message : String(e)}`,
+        { cause: e },
+      );
+    });
 }
 
 // [LAW:one-source-of-truth] A thin connect-then-delegate wrapper around
@@ -84,8 +103,9 @@ async function overDialer(
   req: Record<string, unknown>,
   timeoutMs: number,
 ): Promise<Response> {
-  // [LAW:no-ambient-temporal-coupling] The connect has its own bound, which
-  // sendOne (entered only once connected) does not budget for.
+  // [LAW:no-ambient-temporal-coupling] The connect and the reply share one
+  // deadline: sendOne, entered only once connected, gets what the connect left.
+  const deadline = Date.now() + timeoutMs;
   const dialed = await dialWithin(
     dialer,
     sockPath,
@@ -95,14 +115,14 @@ async function overDialer(
   if (!dialed.ok) {
     throw new Error(
       dialed.failure.cause === "timeout"
-        ? `connect did not complete within ${timeoutMs}ms`
+        ? "the connect did not complete"
         : dialed.failure.message,
     );
   }
   return sendOne(
     dialed.conn,
     req as unknown as Request,
-    Date.now() + timeoutMs,
+    deadline,
     systemTimekeeper,
   );
 }

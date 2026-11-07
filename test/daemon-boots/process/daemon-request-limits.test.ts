@@ -15,17 +15,14 @@ import {
   TOTAL_BUDGET_MS,
 } from "../../../src/daemon/protocol";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/request-deadline";
+import { restOfCase } from "../../helpers/case-time";
 import { killAndWait, renderBody } from "../../helpers/daemon-e2e";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { sendDaemonRequest, sendWithin } from "../../helpers/daemon-wire";
 import { field, landedEvents, only } from "../../helpers/request-event";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
 } from "../../helpers/spawn-isolated-daemon";
-
-const TEST_TIMEOUT_MS = 30_000;
-
-jest.setTimeout(TEST_TIMEOUT_MS);
 
 // The connection's backstop answers TIMEOUT only if the loop gets a turn
 // before the reply, and a render takes none after its wait: a wait whose time
@@ -51,9 +48,9 @@ test("a render whose config read outlives the request timeout answers its client
     // synchronous read yields, and the answer is written in the turn it
     // yields in: this client's wait is bounded by the hold below, not by the
     // backstop. The helper's default budget is for an answered request, so
-    // the budget here is the test's own timeout. The event's `took` below is
+    // the budget here is the rest of the case. The event's `took` below is
     // what says the render outlived the backstop.
-    const answered = sendDaemonRequest(
+    const answered = sendWithin(
       home,
       {
         v: PROTOCOL_VERSION,
@@ -65,7 +62,7 @@ test("a render whose config read outlives the request timeout answers its client
         ]),
         deadline: Date.now() + TOTAL_BUDGET_MS,
       },
-      TEST_TIMEOUT_MS,
+      restOfCase(),
     );
     // A pipe opens for writing only once a reader has opened it, so this
     // open resolving is the daemon's loop stopping in its read. A render that

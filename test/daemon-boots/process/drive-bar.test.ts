@@ -5,7 +5,6 @@ import { startBar, type Bar } from "../../helpers/drive-bar";
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
 import { textOf } from "../../../src/render/frame";
 
-jest.setTimeout(30_000);
 
 let bar: Bar | undefined;
 afterEach(async () => bar?.stop());

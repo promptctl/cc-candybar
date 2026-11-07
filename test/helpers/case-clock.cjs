@@ -1,0 +1,48 @@
+// [LAW:single-enforcer] How long the running case has left before Jest fails it
+// with its own timeout. The test environment is the one writer: it sees each
+// hook and test function start and end, and computes the deadline from the
+// same expression jest-circus arms its timer with, just before circus arms it.
+// A helper's wait reads it through the clock the environment publishes on the
+// sandbox's global (test/helpers/case-time.ts), so no wait need know how many
+// others the case has already spent.
+//
+// The clock is the environment's own, not the sandbox's: a test that fakes the
+// sandbox's Date still reads its case's real time here, and a wait's deadline
+// kept on it still passes.
+//
+// CommonJS because jest loads an environment untransformed.
+
+const CASE_CLOCK = Symbol.for("cc-candybar.caseClock");
+
+const STARTS = new Set(["hook_start", "test_fn_start"]);
+// A test whose before-hook failed starts its function and ends with neither
+// its success nor its failure, so its case ends only with the test.
+const ENDS = new Set([
+  "hook_success",
+  "hook_failure",
+  "test_fn_success",
+  "test_fn_failure",
+  "test_done",
+]);
+
+/**
+ * Between functions no case is running, so none has a deadline.
+ * @param {() => number} now
+ */
+function caseClock(now) {
+  let deadline = Infinity;
+  return {
+    /** @param {{ name: string, hook?: { timeout?: number }, test?: { timeout?: number } }} event */
+    observe(event, state) {
+      if (STARTS.has(event.name)) {
+        deadline = now() + ((event.hook ?? event.test).timeout || state.testTimeout);
+      } else if (ENDS.has(event.name)) {
+        deadline = Infinity;
+      }
+    },
+    now,
+    left: () => deadline - now(),
+  };
+}
+
+module.exports = { CASE_CLOCK, caseClock };

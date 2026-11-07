@@ -53,7 +53,8 @@ export default {
   globalTeardown: "<rootDir>/test/global-teardown.ts",
   preset: "ts-jest/presets/default-esm",
   extensionsToTreatAsEsm: [".ts"],
-  // Jest's node environment, plus the one place a quarantined case leaves the gate.
+  // Jest's node environment, plus the one place a quarantined case leaves the
+  // gate and the keeper of how long the running case has left.
   testEnvironment: "<rootDir>/test/helpers/quarantine-environment.cjs",
   roots: ["<rootDir>/test"],
   testMatch: [],

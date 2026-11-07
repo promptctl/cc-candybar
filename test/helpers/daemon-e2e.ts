@@ -21,10 +21,12 @@ import {
 } from "../../src/daemon/protocol";
 import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
+import { within } from "./case-time";
 import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
   sendDaemonRequest,
+  sendWithin,
   waitForExit,
   type DaemonTarget,
 } from "./daemon-wire";
@@ -114,20 +116,24 @@ async function renderAnswer(
     // [LAW:one-source-of-truth] The deadline it states is the one it waits
     // to: like a real client, it says when it will hang up, so the daemon's
     // wait for its refreshes ends by that or by its own backstop
-    // (src/daemon/request-deadline.ts). A case's own deadline wins.
-    const resp = await sendDaemonRequest(
+    // (src/daemon/request-deadline.ts). A case's own deadline wins, and so
+    // does the time the case has left.
+    const wait = within(replyBudgetMs);
+    const resp = await sendWithin(
       target,
       {
         v: PROTOCOL_VERSION,
         kind: "render",
-        deadline: now() + replyBudgetMs,
+        deadline: now() + wait.ms,
         ...request,
       },
-      replyBudgetMs,
+      wait,
     );
     if (!resp.ok) {
       if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
-      throw new Error(`render failed: ${resp.error} (${resp.code})`);
+      throw new Error(
+        `render failed within ${wait.named}: ${resp.error} (${resp.code})`,
+      );
     }
     let event = "";
     await until(
@@ -145,7 +151,7 @@ async function renderAnswer(
       throw new Error(`render drew pending though its wait answered: ${event}`);
     if (attempt >= PENDING_RETRY_BUDGET)
       throw new Error(
-        `render still drew pending after ${attempt} asks: ${event}`,
+        `render still drew pending after ${attempt} asks, the last within ${wait.named}: ${event}`,
       );
     // [LAW:no-ambient-temporal-coupling] A value no request waits for is asked
     // again once its owner logs the refresh that lands it, never after a guessed

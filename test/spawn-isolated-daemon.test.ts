@@ -22,6 +22,7 @@ import {
   readinessFailure,
   type ReadinessFailure,
 } from "./helpers/spawn-isolated-daemon";
+import { boundedBy, MARGIN_MS, type Bound } from "./helpers/case-time";
 
 const LOG_LINE = "2026-09-12T00:00:00.000Z [error] refusing to boot: nope";
 const STDERR_LINE = "Error: died before it had a log";
@@ -48,8 +49,10 @@ describe("readinessFailure — what the socket did, what our process did", () =>
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  const message = (readiness: ReadinessFailure): string =>
-    readinessFailure(readiness, SOCK, env, STDERR_LINE);
+  const message = (
+    readiness: Omit<ReadinessFailure, "waited">,
+    waited: Bound = boundedBy(12_000, Infinity),
+  ): string => readinessFailure({ ...readiness, waited }, SOCK, env, STDERR_LINE);
 
   // The ticket's acceptance criterion: the message itself distinguishes "never
   // booted" from "booted, never served". Not the log tail beneath it — the
@@ -71,9 +74,17 @@ describe("readinessFailure — what the socket did, what our process did", () =>
 
   test("a live process at the budget is named a slow boot, not a refusal", () => {
     const m = message({ phase: "booting", exit: null });
-    expect(m).toMatch(/still running when the \d+ms budget expired/);
+    expect(m).toContain("still running after 12000ms");
     expect(m).toContain("a slow boot, not a refusal");
     expect(m).not.toContain("the process exited");
+  });
+
+  test("a boot cut short by its case names the case's time, not the budget", () => {
+    const m = message(
+      { phase: "booting", exit: null },
+      boundedBy(12_000, 4_210 + MARGIN_MS),
+    );
+    expect(m).toContain("still running after the 4210ms its case had left");
   });
 
   test("an exit is named by code, and a killed process by its signal", () => {

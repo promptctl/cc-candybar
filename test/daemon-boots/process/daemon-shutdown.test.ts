@@ -75,11 +75,6 @@ async function expectExitWithinBudget(child: ChildProcess): Promise<void> {
 }
 
 describe("daemon shutdown contract", () => {
-  // The shutdown path involves spawning Node via tsx and binding a Unix
-  // socket; 30s is the project-wide jest default and is plenty even on a
-  // cold machine.
-  jest.setTimeout(30_000);
-
   test("daemon exits within budget after a shutdown request", async () => {
     const handle = await spawnDaemon();
     try {

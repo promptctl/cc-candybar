@@ -23,6 +23,7 @@ import {
   TSX_SOURCE_ENTRY,
   type DaemonEntry,
 } from "./spawn-test-daemon";
+import { within, type Bound } from "./case-time";
 import { daemonPool } from "./daemon-pool";
 import {
   exitedAlready,
@@ -221,8 +222,8 @@ export async function spawnDaemonWithEnv(
 // Boot cost tracks CPU oversubscription almost linearly, so this number is a
 // statement about how starved a machine may be before the suite calls a healthy
 // daemon broken. 12 s buys ~24x oversubscription — 2.4x the load that broke the
-// inherited 5 s — and two of them still fit inside jest.config.js's 30 s
-// testTimeout, which is what a cold-restart test spends it on.
+// inherited 5 s. What the case has left bounds it too (test/helpers/case-time.ts),
+// so a cold-restart test that spends it twice fails by this wait's name.
 const READINESS_BUDGET_MS = 12_000;
 
 // A bound socket answered in 2-65 ms across every row above, so this bounds a
@@ -253,6 +254,8 @@ type FailedPhase = Exclude<BootPhase, "serving">;
 export interface ReadinessFailure {
   readonly phase: FailedPhase;
   readonly exit: ExitResult | null;
+  // The bound the boot was waited on, which a slow boot outlived.
+  readonly waited: Bound;
 }
 
 type Readiness = { readonly phase: "serving" } | ReadinessFailure;
@@ -272,7 +275,7 @@ async function awaitReadiness(
   child: ChildProcess,
   home: RendererHome,
 ): Promise<Readiness> {
-  const deadline = Date.now() + READINESS_BUDGET_MS;
+  const waited = within(READINESS_BUDGET_MS);
   let phase: FailedPhase = "booting";
   for (;;) {
     if (fs.existsSync(socketPath(home))) {
@@ -280,8 +283,8 @@ async function awaitReadiness(
       if (await answersStats(home)) return { phase: "serving" };
     }
     const exit = exitedAlready(child);
-    if (exit !== null) return { phase, exit };
-    if (Date.now() >= deadline) return { phase, exit: null };
+    if (exit !== null) return { phase, exit, waited };
+    if (waited.left() <= 0) return { phase, exit: null, waited };
     await new Promise((r) => setTimeout(r, READINESS_POLL_MS));
   }
 }
@@ -312,7 +315,7 @@ export function readinessFailure(
 ): string {
   return (
     `daemon never became ready: ${socketDid(readiness.phase, sockPath)}; ` +
-    `${processDid(readiness.exit)}\n${daemonLogTail(env)}\nstderr:\n${stderr}`
+    `${processDid(readiness.exit, readiness.waited)}\n${daemonLogTail(env)}\nstderr:\n${stderr}`
   );
 }
 
@@ -325,11 +328,11 @@ function socketDid(phase: FailedPhase, sockPath: string): string {
   }
 }
 
-function processDid(exit: ExitResult | null): string {
+function processDid(exit: ExitResult | null, waited: Bound): string {
   if (exit === null) {
     return (
-      `the process was still running when the ${READINESS_BUDGET_MS}ms budget ` +
-      `expired, so this is a slow boot, not a refusal`
+      `the process was still running after ${waited.named}, ` +
+      `so this is a slow boot, not a refusal`
     );
   }
   const how =
