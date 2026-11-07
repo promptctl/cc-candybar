@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-689",
+      "ref": "refs/pull/689/merge",
+      "sha": "40802177da8398a7f2ae3cca15808d91cda4427a",
+      "timestamp": "2026-11-07T11:51:33.935Z",
+      "commits": [
+        {
+          "sha": "40802177da8398a7f2ae3cca15808d91cda4427a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:50:35Z",
+          "message": "Merge b06fe470176ef7dcd6c1d28783367a0a1a872e46 into c3eb590e336d3dfbc8184093e0fe9c489121c59e\n"
+        },
+        {
+          "sha": "b06fe470176ef7dcd6c1d28783367a0a1a872e46",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:50:24-07:00",
+          "message": "fix(daemon): a frame handler's synchronous throw is answered RENDER_FAILED, never an exception out of the socket's read (brandon-unfiled-3248.df7i)\n\nThe connection's frame handling runs inside one promise started in the\nread's turn, so a throw before its first await takes the handler-threw\npath. readOneFrame raising onFrame's throw would otherwise end the shared\ndaemon through uncaughtException.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "7cd320bc9e0a04d8fa2145485773bb893d4efaf2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:44:06-07:00",
+          "message": "fix(daemon): a url frame read past the deadline stays unattended, a socket error is the peer leaving, and a frame handler's throw is heard (brandon-unfiled-3248.df7i)\n\n- The read carries who waits in every state: a url frame read after the\n  backstop answered is unattended and lapsed, so its forwarder's hang-up\n  no longer leaves in-flight or reads as a client gone mid-click.\n- A socket error moves the state to closed, so a click whose turn falls\n  between the destroy and the 'close' sees its client gone.\n- readOneFrame delivers its first outcome outside the reader's parse, so a\n  throw from onFrame reaches the stream instead of being dropped as a\n  second parse failure.\n- The connection uses reply.ts's stay-up reply instead of a copy.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "fe4bfaf6f9f3ab466e116ca775c1878e15e1bf94",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:30:53-07:00",
+          "message": "fix(daemon): a connection's state is one value, and past waiting it reads no more frames (brandon-unfiled-3248.df7i)\n\nA connection's lifecycle is one state (awaiting, answering, unattended,\nanswered, held, streaming, closed) moved by one pure transition table; the\nconnection only performs the effects a step names. In-flight and the\nbackstop are columns of the table, so each moves once, on crossing its line.\n\nA connection reads exactly one frame: a second frame, a frame after the\nanswer, and the bytes behind an over-cap header or unparseable frame are\nnever handled or buffered. A reply that cannot be encoded is answered\nRENDER_FAILED and ends the stream, its exit still sequenced on that flush.\nA dropped exit's warning names its one cause: the client was told TIMEOUT.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-685",
       "ref": "refs/pull/685/merge",
       "sha": "5447ff2055f90618bee990f1653258682659cf5e",
@@ -106,35 +142,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:00:01-07:00",
           "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-689",
-      "ref": "refs/pull/689/merge",
-      "sha": "afb25fec0698df8ef509fc54dff1084e620b5fac",
-      "timestamp": "2026-11-07T11:45:19.440Z",
-      "commits": [
-        {
-          "sha": "afb25fec0698df8ef509fc54dff1084e620b5fac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:44:16Z",
-          "message": "Merge 7cd320bc9e0a04d8fa2145485773bb893d4efaf2 into 37f5c35ff91a229f08869f5b34660301b699233a\n"
-        },
-        {
-          "sha": "7cd320bc9e0a04d8fa2145485773bb893d4efaf2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:44:06-07:00",
-          "message": "fix(daemon): a url frame read past the deadline stays unattended, a socket error is the peer leaving, and a frame handler's throw is heard (brandon-unfiled-3248.df7i)\n\n- The read carries who waits in every state: a url frame read after the\n  backstop answered is unattended and lapsed, so its forwarder's hang-up\n  no longer leaves in-flight or reads as a client gone mid-click.\n- A socket error moves the state to closed, so a click whose turn falls\n  between the destroy and the 'close' sees its client gone.\n- readOneFrame delivers its first outcome outside the reader's parse, so a\n  throw from onFrame reaches the stream instead of being dropped as a\n  second parse failure.\n- The connection uses reply.ts's stay-up reply instead of a copy.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "fe4bfaf6f9f3ab466e116ca775c1878e15e1bf94",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:30:53-07:00",
-          "message": "fix(daemon): a connection's state is one value, and past waiting it reads no more frames (brandon-unfiled-3248.df7i)\n\nA connection's lifecycle is one state (awaiting, answering, unattended,\nanswered, held, streaming, closed) moved by one pure transition table; the\nconnection only performs the effects a step names. In-flight and the\nbackstop are columns of the table, so each moves once, on crossing its line.\n\nA connection reads exactly one frame: a second frame, a frame after the\nanswer, and the bytes behind an over-cap header or unparseable frame are\nnever handled or buffered. A reply that cannot be encoded is answered\nRENDER_FAILED and ends the stream, its exit still sequenced on that flush.\nA dropped exit's warning names its one cause: the client was told TIMEOUT.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
