@@ -2,53 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-672",
-      "ref": "refs/pull/672/merge",
-      "sha": "fe681d5df88763a53e9165de87e1898d08585f15",
-      "timestamp": "2026-11-07T07:04:54.024Z",
-      "commits": [
-        {
-          "sha": "fe681d5df88763a53e9165de87e1898d08585f15",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:03:34-07:00",
-          "message": "Merge 2143afe0d7aa185011c06b8fdeb5e3fb8642aa5d into 82a8be34cbd5540ea30fe1ddb7709b50c4568b1f\n"
-        },
-        {
-          "sha": "2143afe0d7aa185011c06b8fdeb5e3fb8642aa5d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:02:37-07:00",
-          "message": "docs(ui-elements): un-redrawn drawings are flagged, and the rate cell, the picker's ✕ and gap 7 say what the bar draws (brandon-menus-sjhy.8zu)\n"
-        },
-        {
-          "sha": "973fe76075db9c4bbff605078bcab0642d917a2c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:59:03-07:00",
-          "message": "docs(ui-elements): the proposal notes, the gear, the door's rate cell and the lane readouts say what the bar does now (brandon-menus-sjhy.8zu)\n"
-        },
-        {
-          "sha": "35b6c1b654309f0ea4470f985dffa4a5d465c06d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:51:15-07:00",
-          "message": "docs(ui-elements): the carousel and the settings menu are drawn as the bar draws them now (brandon-menus-sjhy.8zu)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f71e4018241defe5e52915caeb204883a59da539",
-      "timestamp": "2026-11-07T06:50:07.145Z",
+      "sha": "1bd51ef3f44ff8c49821b7b309e85764c97b024e",
+      "timestamp": "2026-11-07T07:11:35.421Z",
       "commits": [
         {
-          "sha": "f71e4018241defe5e52915caeb204883a59da539",
+          "sha": "1bd51ef3f44ff8c49821b7b309e85764c97b024e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:49:03-07:00",
-          "message": "fix(lanes): a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2) (#670)\n\n* fix(lanes): a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2)\n\nA request whose Claude Code's record holds another session is the rewrite\nrace at first. Each session's run of such stamps is now held in memory,\nkeyed by the Claude Code that ran its client. A confirmed tick from that\nprocess ends every run it opened, whatever the session. Once a run goes on\npast the race (10 s), the bar's session-pane ⚠ names the session the record\nholds, under a stable identity. The render line gains a mismatch fact.\n\n* fix(lanes): a straggler after the new session's first confirmed tick is the race; runs are measured on the monotonic clock (candybar-gather-renderer-76bb.1dh.2d2)\n\nThe mismatched stamp names the session the record holds, and a Claude\nCode's first confirmed tick of a session dates the rewrite, so a straggler\nholding it within the race opens no run a later /resume could inherit.\n\n* fix(lanes): mismatch runs are kept by the Claude Code whose ticks open and end them, from the request's arrival (candybar-gather-renderer-76bb.1dh.2d2)\n\n* fix(lanes): a draw asks for the run under the pair its request was recorded by; an in-race tick ends its session's run (candybar-gather-renderer-76bb.1dh.2d2)"
+          "timestamp": "2026-11-07T00:10:38-07:00",
+          "message": "docs(ui-elements): the carousel and the settings menu are drawn as the bar draws them now (brandon-menus-sjhy.8zu) (#672)\n\n* docs(ui-elements): the carousel and the settings menu are drawn as the bar draws them now (brandon-menus-sjhy.8zu)\n\n* docs(ui-elements): the proposal notes, the gear, the door's rate cell and the lane readouts say what the bar does now (brandon-menus-sjhy.8zu)\n\n* docs(ui-elements): un-redrawn drawings are flagged, and the rate cell, the picker's ✕ and gap 7 say what the bar draws (brandon-menus-sjhy.8zu)"
+        },
+        {
+          "sha": "82a8be34cbd5540ea30fe1ddb7709b50c4568b1f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-07T06:58:32Z",
+          "message": "chore(release): set `package.json` to 1.208.11 [skip ci]\n\n## [1.208.11](https://github.com/promptctl/cc-candybar/compare/v1.208.10...v1.208.11) (2026-11-07)\n\n### Bug Fixes\n\n* **lanes:** a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2) ([#670](https://github.com/promptctl/cc-candybar/issues/670)) ([f71e401](https://github.com/promptctl/cc-candybar/commit/f71e4018241defe5e52915caeb204883a59da539))\n"
         }
       ]
     },
