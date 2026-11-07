@@ -1,3 +1,9 @@
+## [1.210.2](https://github.com/promptctl/cc-candybar/compare/v1.210.1...v1.210.2) (2026-11-07)
+
+### Bug Fixes
+
+* **state:** concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1) ([#678](https://github.com/promptctl/cc-candybar/issues/678)) ([3bc07ed](https://github.com/promptctl/cc-candybar/commit/3bc07edfbe9d321a6fea2f6a74c80414ed0ef5e7))
+
 ## [1.210.1](https://github.com/promptctl/cc-candybar/compare/v1.210.0...v1.210.1) (2026-11-07)
 
 ### Bug Fixes
