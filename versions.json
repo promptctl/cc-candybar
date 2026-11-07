@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-685",
+      "ref": "refs/pull/685/merge",
+      "sha": "2a45795259059fc1fdd15d2d3ea08c5d20f9ccbc",
+      "timestamp": "2026-11-07T11:30:28.439Z",
+      "commits": [
+        {
+          "sha": "2a45795259059fc1fdd15d2d3ea08c5d20f9ccbc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:28:56Z",
+          "message": "Merge 8d49c3c855b5654d0c04349b76bece094bdb680e into 3e574dde3244026257856ed4e675a0275bc287d1\n"
+        },
+        {
+          "sha": "8d49c3c855b5654d0c04349b76bece094bdb680e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:28:34-07:00",
+          "message": "fix(watchers): one window reports one storage fault and re-reads once (brandon-unfiled-3248.tvhj)\n\nA failed window re-read every held file even when its fault had not moved,\nso a watch that errors after every reopen logged a failed refresh per file on\nevery period. A window now takes the handle's deafness before judging, reports\nonce, and makes one re-read: the files it names, every file on the folder's\nown name or an unnamed event, and every file when the fault moves. A stat that\nfails as the watch opens is the generation's stat failure, never a throw out\nof the build.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "3eba9646bbe0a72527a4b76481a9eb1319e59a91",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:41:20-07:00",
+          "message": "fix(watchers): a storage folder's fault clears when its watch or stat recovers (brandon-unfiled-3248.tvhj)\n\nA refused or erroring watch, and a stat that failed during a judgment, are\nno longer terminal health. Each generation's fault is derived (unusable,\nthen the handle's deafness, then the last stat failure) and logged and\ncounted on a start, change or clear, so the registry's period reopen and the\nowner's period judgment clear it in the same generation. Deafness is\ncompared only when a window closes and at opening, so the result holds in\neither subscription order.\n\nThe registry's reopen now tells a failed window when a deaf directory ends\ndeaf another way (an error then a refusal, a refusal whose reason changes),\nreusing the comparison its refusal log already makes.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3e574dde3244026257856ed4e675a0275bc287d1",
@@ -143,28 +172,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:43:20-07:00",
           "message": "refactor(cache): the render cache takes a render origin, not three positional strings (brandon-unfiled-3248.9cru)\n\nThe cache's entry points (getOrCreate, hold, holdSession, reload, the\nprivate load, and loadFromDisk) take one LoadOrigin, picked from\nRenderOrigin, so every caller passes the origin it already holds and a\nswapped or missing field is a type error. loadFromDisk is the one place\nthe origin is spelled out into the resolver's arguments. An entry holds\na copy of what resolution reads, never the caller's target source, so\norigins that name one file by different sources share one entry.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-685",
-      "ref": "refs/pull/685/merge",
-      "sha": "59ee06622f55d4e4509b2dff0404b0722c2b109c",
-      "timestamp": "2026-11-07T11:14:52.529Z",
-      "commits": [
-        {
-          "sha": "59ee06622f55d4e4509b2dff0404b0722c2b109c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:13:57Z",
-          "message": "Merge 3eba9646bbe0a72527a4b76481a9eb1319e59a91 into 3bc07edfbe9d321a6fea2f6a74c80414ed0ef5e7\n"
-        },
-        {
-          "sha": "3eba9646bbe0a72527a4b76481a9eb1319e59a91",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:41:20-07:00",
-          "message": "fix(watchers): a storage folder's fault clears when its watch or stat recovers (brandon-unfiled-3248.tvhj)\n\nA refused or erroring watch, and a stat that failed during a judgment, are\nno longer terminal health. Each generation's fault is derived (unusable,\nthen the handle's deafness, then the last stat failure) and logged and\ncounted on a start, change or clear, so the registry's period reopen and the\nowner's period judgment clear it in the same generation. Deafness is\ncompared only when a window closes and at opening, so the result holds in\neither subscription order.\n\nThe registry's reopen now tells a failed window when a deaf directory ends\ndeaf another way (an error then a refusal, a refusal whose reason changes),\nreusing the comparison its refusal log already makes.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },

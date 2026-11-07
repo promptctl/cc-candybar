@@ -69949,7 +69949,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.1";
+var PACKAGE_VERSION = "1.210.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -77276,14 +77276,14 @@ var FrameFeeds = class {
   // frame set for a change shows it however early its timer fires, and none is
   // ever drawn further ahead of the wall than that, so nothing carries from
   // one frame to the next. Its moment on the monotonic clock is that instant's.
-  draw(feed2, due) {
+  draw(feed2, due2) {
     feed2.phase = { kind: "rendering" };
     const woke = feed2.wokeSince;
     feed2.wokeSince = null;
     const started2 = this.deps.clock.monotonic();
     const wall = this.deps.instant();
     const at = Math.min(
-      Math.max(due, wall),
+      Math.max(due2, wall),
       wall + TIMER_RESOLUTION_S
     );
     const moment2 = started2 + (at - wall) * 1e3;
@@ -77381,21 +77381,21 @@ var FrameFeeds = class {
   // its monotonic due time is what a later caller compares against.
   // [LAW:single-enforcer] The one rule that a timer is never set later than
   // it already falls due. Answers whether it moved the timer.
-  arm(feed2, due, wall) {
-    const delay = Math.max(0, (due - wall) * 1e3);
+  arm(feed2, due2, wall) {
+    const delay = Math.max(0, (due2 - wall) * 1e3);
     const dueMoment = this.deps.clock.monotonic() + delay;
     if (feed2.phase.kind === "due" && feed2.phase.at <= dueMoment) return false;
-    this.setTimer(feed2, due, dueMoment, delay);
+    this.setTimer(feed2, due2, dueMoment, delay);
     return true;
   }
-  setTimer(feed2, due, dueMoment, delay) {
+  setTimer(feed2, due2, dueMoment, delay) {
     if (feed2.phase.kind === "due") feed2.phase.clear();
     feed2.phase = {
       kind: "due",
       at: dueMoment,
       clear: this.deps.clock.after(
         delay,
-        () => this.fire(feed2, due, dueMoment)
+        () => this.fire(feed2, due2, dueMoment)
       )
     };
   }
@@ -77408,10 +77408,10 @@ var FrameFeeds = class {
   // `due`: that turn drawn twice and the one after it late. The wall clock is
   // not asked, so a wall stepped back, which leaves the monotonic moment
   // reached, still draws and is followed by `draw`.
-  fire(feed2, due, dueMoment) {
+  fire(feed2, due2, dueMoment) {
     const remaining = dueMoment - this.deps.clock.monotonic();
-    if (remaining > 0) this.setTimer(feed2, due, dueMoment, remaining);
-    else this.draw(feed2, due);
+    if (remaining > 0) this.setTimer(feed2, due2, dueMoment, remaining);
+    else this.draw(feed2, due2);
   }
   shown(feed2) {
     const noted = this.requests.get(feed2.sessionId);
@@ -81229,37 +81229,78 @@ var OFFLINE_PRICING_DATA = {
 var PRICING_URL = new U(
   "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json"
 );
-var DISK_TTL_MS = 24 * 60 * 60 * 1e3;
+var PRICING_PERIOD = {
+  okMs: 24 * 60 * 60 * 1e3,
+  failedMs: 3e4
+};
+var PRICING_RETRY_CEILING_MS = 60 * 60 * 1e3;
+var lastLanded = (held) => held === null ? null : held.kind === "landed" ? held : held.last;
+var tableOf = (held) => lastLanded(held)?.table ?? OFFLINE_PRICING_DATA;
+var later = (a, b) => a === null ? b : b === null ? a : a.at >= b.at ? a : b;
+var failuresOf = (held) => held.kind === "landed" ? 0 : held.failures;
+var standsMs = (failures) => backedOffMs(PRICING_PERIOD, failures, PRICING_RETRY_CEILING_MS);
+var due = (held, now2) => held.at + standsMs(failuresOf(held)) <= now2;
 function livePricing(owner) {
+  let held = null;
   let loading = null;
+  const sayNotLoaded = changeLogger(owner.log);
   return {
-    table: () => owner.closing.aborted ? Promise.resolve(OFFLINE_PRICING_DATA) : loading ??= loadTable(owner).catch((e) => {
-      owner.log("error", `pricing load threw: ${String(e)}`);
-      return OFFLINE_PRICING_DATA;
-    })
+    table: () => {
+      const owed = held === null || due(held, owner.clock.now());
+      if (owed && !owner.closing.aborted) {
+        loading ??= loadHeld(owner, held, sayNotLoaded).then((settled4) => {
+          held = settled4;
+          loading = null;
+          return settled4;
+        });
+      }
+      if (held !== null) return Promise.resolve(tableOf(held));
+      return loading === null ? Promise.resolve(OFFLINE_PRICING_DATA) : loading.then(tableOf);
+    }
   };
 }
+async function loadHeld(owner, prev, sayNotLoaded) {
+  const copy3 = await readDisk(owner);
+  if (copy3 !== null && !due(copy3, owner.clock.now())) return copy3;
+  const landed = await fetchLanded(owner).catch((e) => {
+    owner.log("error", `pricing load threw: ${String(e)}`);
+    return null;
+  });
+  if (landed !== null) return landed;
+  if (owner.closing.aborted) return prev ?? copy3;
+  const failed3 = {
+    kind: "failed",
+    at: owner.clock.now(),
+    failures: (prev === null ? 0 : failuresOf(prev)) + 1,
+    last: later(copy3, lastLanded(prev))
+  };
+  sayNotLoaded([
+    "warn",
+    `pricing table not loaded: priced by ${failed3.last === null ? "the bundled rates" : "the last table"}; the next ask after ${standsMs(failed3.failures)}ms tries again`
+  ]);
+  return failed3;
+}
 var diskPath = (cacheRoot) => import_node_path42.default.join(cacheRoot, "usage", "pricing.json");
-async function loadTable(owner) {
-  const cached = await readDisk(owner);
-  if (cached !== null) return cached;
+async function fetchLanded(owner) {
   const fresh = owner.closing.aborted ? null : await fetchPricingData(owner.closing);
-  if (fresh === null) {
-    debug(
-      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
-    );
-    return OFFLINE_PRICING_DATA;
-  }
-  if (!owner.closing.aborted) await writeDisk(owner, fresh);
-  return fresh;
+  if (fresh === null) return null;
+  const landed = {
+    kind: "landed",
+    table: fresh,
+    at: owner.clock.now()
+  };
+  if (!owner.closing.aborted) await writeDisk(owner, landed);
+  return landed;
 }
 async function readDisk(owner) {
   try {
-    const stored = JSON.parse(
+    const { data, timestamp } = JSON.parse(
       await fs_default.promises.readFile(diskPath(owner.cacheRoot), "utf8")
     );
-    const fresh = typeof stored.timestamp === "number" && stored.timestamp >= owner.clock.now() - DISK_TTL_MS;
-    return fresh && validatePricingData(stored.data) ? stored.data : null;
+    if (typeof timestamp !== "number" || timestamp > owner.clock.now() || !validatePricingData(data)) {
+      return null;
+    }
+    return { kind: "landed", table: data, at: timestamp };
   } catch (e) {
     if (e.code !== "ENOENT") {
       owner.log("warn", `pricing disk cache unreadable: ${String(e)}`);
@@ -81267,14 +81308,14 @@ async function readDisk(owner) {
     return null;
   }
 }
-async function writeDisk(owner, table) {
+async function writeDisk(owner, landed) {
   const file = diskPath(owner.cacheRoot);
   const staged = stagedPath(file);
   try {
     await fs_default.promises.mkdir(import_node_path42.default.dirname(file), { recursive: true });
     await fs_default.promises.writeFile(
       staged,
-      JSON.stringify({ data: table, timestamp: owner.clock.now() }),
+      JSON.stringify({ data: landed.table, timestamp: landed.at }),
       "utf8"
     );
     await fs_default.promises.rename(staged, file);
@@ -83000,7 +83041,8 @@ var ManagedStorage = class {
       throw new Error(`plugin storage: no key was asked for ${key.folder}`);
     }
     const unusable = key.generation === folder.generation ? folder.unusable : null;
-    const identity2 = unusable === null ? statIdentity(this.watchers.filesystem, key.folder) : "gone";
+    const stat3 = unusable === null ? this.statOf(key.folder) : { now: "gone" };
+    const identity2 = "now" in stat3 ? stat3.now : "gone";
     if (key.generation === folder.generation) {
       folder.identity = identity2 === "gone" ? null : identity2;
     }
@@ -83024,11 +83066,12 @@ var ManagedStorage = class {
       ),
       health: unusable === null ? { kind: "watching" } : { kind: "unusable", reason: unusable },
       deafness: null,
-      statFailure: null,
+      statFailure: "failed" in stat3 ? stat3.failed : null,
       reported: null
     };
     this.watched.set(keyString(key), watched);
     this.heard(watched);
+    this.settled(watched, () => false);
     void this.sweep(key);
     return watched;
   }
@@ -83041,67 +83084,68 @@ var ManagedStorage = class {
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
   // held files it names re-read; the folder's own name, an unnamed event or
-  // an error is judged against the disk, re-reading every held file in the
-  // folder still there. An `unknown` window may hold the folder's own event
-  // (an unnamed one, or a named one the window folded), and a `failed` one
-  // may have missed it. The OS reports a change to the watched folder itself
-  // under the folder's own name, as though it were a child, so that path is
-  // the folder joined with its own name. Every window then hears the handle's
-  // deafness, since the registry tells one on every move of it.
+  // an error is judged against the disk. An `unknown` window may hold the
+  // folder's own event (an unnamed one, or a named one the window folded), and
+  // a `failed` one may have missed it. A folder still there re-reads every held
+  // file on the folder's own name or an unnamed event; on an error its files
+  // read the fault, re-read only when the fault moves, so a watch that errors
+  // after every reopen reads nothing on each period. The OS reports a change to
+  // the watched folder itself under the folder's own name, as though it were a
+  // child, so that path is the folder joined with its own name. The window
+  // hears the handle's deafness first, since the registry tells one on every
+  // move of it, so the judgment and the deafness report as one fault.
   invalidated(watched, invalidation) {
     const { key } = watched;
-    const inFolder = (f) => sameKey(f.storage, key);
     const own2 = import_node_path44.default.join(key.folder, import_node_path44.default.basename(key.folder));
+    this.heard(watched);
+    let reread;
     if (invalidation.kind === "changed" && !invalidation.paths.has(own2)) {
       const { paths: paths2 } = invalidation;
-      this.sessions.changed((f) => inFolder(f) && paths2.has(fileOf(f)));
+      reread = (f) => paths2.has(fileOf(f));
     } else {
-      this.judged(watched, () => this.sessions.changed(inFolder));
+      const found2 = this.judged(watched);
+      const all2 = found2 === "lost" || found2 === "present" && invalidation.kind !== "failed";
+      reread = () => all2;
     }
-    this.heard(watched);
+    this.settled(watched, reread);
   }
-  // [LAW:no-ambient-temporal-coupling] The handle's deafness, compared only
-  // when a window closes and at the watch's opening, never on a period: the
+  // [LAW:no-ambient-temporal-coupling] The handle's deafness, taken only when
+  // a window closes and at the watch's opening, never on a period: the
   // registry's period reopen and this owner's period judgment are two
   // listeners to one notice in an order nothing owns, and a handle that errors
   // after every reopen listens for an instant between them.
   heard(watched) {
     watched.deafness = watched.handle.deaf[0] ?? null;
-    this.reported(watched);
   }
   // [LAW:one-source-of-truth] Whether the folder is gone is the disk's to
   // say: a chmod, a utimes or an xattr reports the folder's own name exactly
-  // as a removal does. Lost only if the path is gone or holds another folder;
-  // otherwise `present` runs. A lost folder's held files are re-read from the
-  // path, so no draw shows a value from a folder no longer there while the
-  // config's reload opens the next generation. A generation already ended has
-  // nothing left to judge. A stat that fails is this judgment's answer, the
-  // fault until a judgment's stat succeeds.
-  judged(watched, present) {
+  // as a removal does. Lost only if the path is gone or holds another folder.
+  // A lost folder's held files are re-read from the path, so no draw shows a
+  // value from a folder no longer there while the config's reload opens the
+  // next generation. A generation already ended has nothing left to judge. A
+  // stat that fails is this judgment's answer, the fault until a judgment's
+  // stat succeeds.
+  judged(watched) {
     const { health } = watched;
-    if (health.kind !== "watching") return;
+    if (health.kind !== "watching") return "none";
     const { key, folder } = watched;
     const stat3 = this.statOf(key.folder);
     watched.statFailure = "failed" in stat3 ? stat3.failed : null;
-    this.reported(watched);
-    if ("failed" in stat3) return;
+    if ("failed" in stat3) return "none";
     const { now: now2 } = stat3;
     const opened = watched.identity;
-    if (now2 !== "gone" && opened !== "gone" && sameIdentity(now2, opened)) {
-      present();
-      return;
-    }
+    if (now2 !== "gone" && opened !== "gone" && sameIdentity(now2, opened))
+      return "present";
     watched.health = { kind: "lost" };
-    if (key.generation !== folder.generation) return;
+    if (key.generation !== folder.generation) return "none";
     folder.lost = true;
     this.lost++;
     this.logger(
       "info",
       `plugin storage lost folder=${valueOf(key.folder)} generation=${key.generation} now=${now2 === "gone" ? "gone" : "replaced"}`
     );
-    this.sessions.changed((f) => sameKey(f.storage, key));
+    return "lost";
   }
-  // The disk's answer for the folder, or why it gave none.
   statOf(folder) {
     try {
       return { now: statIdentity(this.watchers.filesystem, folder) };
@@ -83109,14 +83153,25 @@ var ManagedStorage = class {
       return { failed: `stat failed: ${e.message}` };
     }
   }
+  // [LAW:single-enforcer] The one re-read a window, a period or an opening
+  // earns: the held files `reread` names, and every held file in the folder
+  // when the fault moved. One call, so a fault that moves on a window that
+  // re-reads queues no second read behind the first.
+  settled(watched, reread) {
+    const { key } = watched;
+    const moved = this.reported(watched);
+    this.sessions.changed(
+      (f) => sameKey(f.storage, key) && (moved || reread(f))
+    );
+  }
   // [LAW:no-silent-failure] A generation's fault is a standing failure of
   // every source read from it, for as long as the OS or the disk gives that
   // answer: the registry's period reopens a deaf watch, and the owner's period
   // judges the folder again. [LAW:nothing-unseen] Each start, change of
-  // reason, or clear is logged once and re-reads the folder's held files; a
-  // start or change counts under its cause. The same fault again is no
-  // change: every period asks again, and repeating it would bury the events
-  // around it.
+  // reason, or clear is logged once and moves the fault, which re-reads the
+  // folder's held files; a start or change counts under its cause. The same
+  // fault again is no change: every period asks again, and repeating it would
+  // bury the events around it.
   reported(watched) {
     const { key } = watched;
     const was = watched.reported;
@@ -83129,13 +83184,16 @@ var ManagedStorage = class {
         "warn",
         `plugin storage fault ${at} cause=${now2.cause} reason=${JSON.stringify(now2.reason)}`
       );
-    } else if (now2 === null && was !== null) {
+      return true;
+    }
+    if (now2 === null && was !== null) {
       this.logger(
         "info",
         `plugin storage fault cleared ${at} cause=${was.cause}`
       );
-    } else return;
-    this.sessions.changed((f) => sameKey(f.storage, key));
+      return true;
+    }
+    return false;
   }
   // [LAW:one-source-of-truth] What the delivery owner says reaches every
   // folder. Each period judges every folder against the disk: the event naming
@@ -83146,9 +83204,10 @@ var ManagedStorage = class {
   noticed(notice) {
     switch (notice.kind) {
       case "period":
-        for (const watched of [...this.watched.values()])
-          this.judged(watched, () => {
-          });
+        for (const watched of [...this.watched.values()]) {
+          const lost = this.judged(watched) === "lost";
+          this.settled(watched, () => lost);
+        }
         return;
       case "moved":
       case "caught-up":
@@ -87076,16 +87135,16 @@ var MenuIdle = class {
   // [LAW:single-enforcer] The one place the timer follows the record.
   settle(sessionId2) {
     const idle = this.sessions.get(sessionId2);
-    const due = idle.shown && !idle.closing && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
-    if (idle.timer?.at === due) return;
+    const due2 = idle.shown && !idle.closing && !this.disposed ? closesAt(idle.since, idle.timeoutS) : null;
+    if (idle.timer?.at === due2) return;
     this.disarm(idle);
-    if (due === null) return;
+    if (due2 === null) return;
     const clear = this.deps.clock.after(
-      Math.max(0, (due - this.deps.now()) * 1e3),
+      Math.max(0, (due2 - this.deps.now()) * 1e3),
       () => this.fire(sessionId2),
       { unref: true }
     );
-    idle.timer = { at: due, clear };
+    idle.timer = { at: due2, clear };
   }
   disarm(idle) {
     idle.timer?.clear();
