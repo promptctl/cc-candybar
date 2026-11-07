@@ -1063,7 +1063,9 @@ describe("launch input a child does not read", () => {
       args: ["-c", "exit 0"],
       stdinInput: unread,
     });
-    expect(r.ok).toBe(true);
+    // The whole verdict, so a failure prints its reason: toMatchObject's
+    // failure message shows only the keys it was given.
+    expect(r).toStrictEqual({ ok: true, stdout: "", stderr: "", exitCode: 0 });
   });
 
   it("leaves a child's failure its own explanation", async () => {
@@ -1073,8 +1075,14 @@ describe("launch input a child does not read", () => {
       args: ["-c", "echo refused >&2; exit 1"],
       stdinInput: unread,
     });
-    expect(r).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1, stderr: "refused\n" });
-    expect(r).not.toHaveProperty("error");
+    expect(r).toStrictEqual({
+      ok: false,
+      reason: "non-zero",
+      stdout: "",
+      stderr: "refused\n",
+      exitCode: 1,
+      signal: null,
+    });
   });
 
   it("reports a timeout as a timeout", async () => {
@@ -1097,12 +1105,19 @@ describe("launch input a child does not read", () => {
   it("gives the blocking launch the same verdicts", () => {
     const run = (script: string) =>
       launchSync({ category: "user-shell", bin: "sh", args: ["-c", script], stdinInput: unread });
-    expect(run("exit 0").ok).toBe(true);
-    expect(run("exit 1")).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1 });
-    expect(run("head -c 1 >/dev/null").ok).toBe(true);
+    const ended = { stdout: "", stderr: "" };
+    expect(run("exit 0")).toStrictEqual({ ok: true, ...ended, exitCode: 0 });
+    expect(run("exit 1")).toStrictEqual({ ok: false, reason: "non-zero", ...ended, exitCode: 1, signal: null });
+    expect(run("head -c 1 >/dev/null")).toStrictEqual({ ok: true, ...ended, exitCode: 0 });
     expect(
       launchSync({ category: "user-shell", bin: "sh", args: ["-c", "kill -TERM $$"], timeoutMs: 5000 }),
-    ).toMatchObject({ ok: false, reason: "signal", signal: "SIGTERM" });
-    expect(run("kill -KILL $$")).toMatchObject({ ok: false, reason: "signal", signal: "SIGKILL" });
+    ).toStrictEqual({ ok: false, reason: "signal", ...ended, exitCode: null, signal: "SIGTERM" });
+    expect(run("kill -KILL $$")).toStrictEqual({
+      ok: false,
+      reason: "signal",
+      ...ended,
+      exitCode: null,
+      signal: "SIGKILL",
+    });
   });
 });
