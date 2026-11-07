@@ -16,7 +16,7 @@ import {
   walkNodes,
   type DslConfig,
 } from "../config/dsl-types.js";
-import { segmentInputPaths } from "../config/payload-reads.js";
+import { pathUnder, segmentInputPaths } from "../config/payload-reads.js";
 import { presetRoot } from "../config/presets.js";
 import { builtinsReadAt } from "../daemon/render-payload.js";
 
@@ -28,18 +28,10 @@ const READS: Readonly<
 > = {
   pullRequests: (paths) => builtinsReadAt(paths).has("pr"),
   rateLimits: (paths) =>
-    anyPathStartsWith(paths, "block") || anyPathStartsWith(paths, "weekly"),
+    [...paths].some(
+      (path) => pathUnder("block", path) || pathUnder("weekly", path),
+    ),
 };
-
-function anyPathStartsWith(
-  paths: ReadonlySet<string>,
-  prefix: string,
-): boolean {
-  for (const p of paths) {
-    if (p === prefix || p.startsWith(prefix + ".")) return true;
-  }
-  return false;
-}
 
 // Per source, the segments of `preset` that read it and count its absence as
 // a failure (`missingData`), each named once however often it is placed.

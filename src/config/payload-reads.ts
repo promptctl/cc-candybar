@@ -36,14 +36,25 @@ export function segmentTemplates(config: DslConfig, name: string): string[] {
   ];
 }
 
+// [LAW:one-source-of-truth] Whether a dotted payload path is `outer` or lies
+// under it: the one spelling of containment the declaration walk, the rows and
+// the doctor's needs share.
+export const pathUnder = (outer: string, inner: string): boolean =>
+  inner === outer || inner.startsWith(`${outer}.`);
+
 // [LAW:one-source-of-truth] The strings a preset's layout has the engine
-// evaluate besides its segments' own: each node's `when` and each globals rule
-// that is an expression. The unused-declaration check enumerates them through
-// this function too.
+// evaluate besides its segments' own: each node's `when`, the `lead` and
+// `trail` the loader synthesizes into a segment's cell (edit mode's buttons),
+// and each globals rule that is an expression. The unused-declaration check
+// enumerates them through this function too.
 export function layoutTemplates(config: DslConfig, preset: string): string[] {
   const templates: string[] = [];
   for (const node of walkNodes(presetRoot(config, preset).node)) {
     if (node.when !== undefined) templates.push(node.when);
+    if (node.kind === "segment") {
+      if (node.lead !== undefined) templates.push(node.lead);
+      if (node.trail !== undefined) templates.push(node.trail);
+    }
   }
   const globals = presetGlobals(config, preset);
   for (const slot of EXPRESSION_SLOTS) {

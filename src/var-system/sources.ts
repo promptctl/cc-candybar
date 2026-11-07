@@ -34,8 +34,7 @@ import {
   ok,
   failed,
   orElse,
-  isPending,
-  isUndeclared,
+  isUnanswered,
   pendingOf,
   type Outcome,
   type PayloadNode,
@@ -253,10 +252,6 @@ export type Resolved =
 
 export const found = (value: unknown): Resolved => ({ kind: "found", value });
 
-// The daemon's own word at a payload node: not answered yet, or not declared.
-const unanswered = (node: PayloadNode): node is Pending | Undeclared =>
-  isPending(node) || isUndeclared(node);
-
 // Recursively resolves a dotted path through a plain object.
 // Finds undefined if any segment is absent or the traversed value is not an
 // object. [LAW:types-are-the-program] A pending node is a source that has not
@@ -271,13 +266,13 @@ export function resolvePath(obj: unknown, path: string): Resolved {
   let cur = obj as PayloadNode;
   let inDocument = false;
   for (const part of path.split(".")) {
-    if (!inDocument && unanswered(cur)) return cur;
+    if (!inDocument && isUnanswered(cur)) return cur;
     if (cur == null || typeof cur !== "object") return found(undefined);
     inDocument ||=
       part === "value" && (cur as { kind?: unknown }).kind === "ok";
     cur = (cur as Record<string, PayloadNode>)[part];
   }
-  return !inDocument && unanswered(cur) ? cur : found(cur);
+  return !inDocument && isUnanswered(cur) ? cur : found(cur);
 }
 
 // [LAW:no-silent-failure] A read of a built-in the declaration the session's
@@ -287,11 +282,12 @@ export function resolvePath(obj: unknown, path: string): Resolved {
 // default stands in for data that failed, and this is no data at all — so the
 // segment reading it draws its ⚠ with the name, and `check` fails on it. The
 // message says what the reading site knows: the facts carry no such key.
+export const undeclaredRead = (variable: string, fact: string): string =>
+  `variable "${variable}" reads ${fact}, which the declaration its facts were gathered under does not name`;
+
 export class UndeclaredReadError extends Error {
   constructor(variable: string, fact: string) {
-    super(
-      `variable "${variable}" reads ${fact}, which the declaration its facts were gathered under does not name`,
-    );
+    super(undeclaredRead(variable, fact));
     this.name = "UndeclaredReadError";
   }
 }
@@ -302,7 +298,7 @@ export class UndeclaredReadError extends Error {
 function sourceReading(name: string, resolved: Resolved): Reading<JsonValue> {
   if (resolved.kind === "pending") return resolved;
   if (resolved.kind === "undeclared") {
-    return failed(new UndeclaredReadError(name, resolved.fact).message, "read");
+    return failed(undeclaredRead(name, resolved.fact), "read");
   }
   const raw = resolved.value;
   if (raw === undefined) {

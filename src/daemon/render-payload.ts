@@ -27,6 +27,7 @@ import {
 } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import type { SettingName } from "../config/setting-projections.js";
+import { pathUnder } from "../config/payload-reads.js";
 import type { EffectiveGlobals } from "../config/effective-globals.js";
 import type { LaneFeeds } from "../config/lanes.js";
 import {
@@ -47,6 +48,7 @@ import {
   failed,
   isPending,
   isUndeclared,
+  isUnanswered,
   ok,
   pendingOf,
   type Outcome,
@@ -1676,8 +1678,7 @@ export function projectDrawFields(
 // row. The walk over a config (src/config/payload-reads.ts) supplies the
 // paths, and the declaration is this set.
 export function builtinsReadAt(paths: Iterable<string>): DeclaredBuiltins {
-  const under = (outer: string, inner: string): boolean =>
-    inner === outer || inner.startsWith(`${outer}.`);
+  const under = pathUnder;
   const read = new Set<BuiltinName>();
   for (const path of paths) {
     for (const [root, row] of ROWS) {
@@ -2113,10 +2114,9 @@ function projectGitInfo(
   // A PR not answered yet is every PR field not answered: the cell it draws
   // waits at its width while the rest of git draws as it stands. A PR the
   // declaration does not name is every PR field undeclared, the same way.
-  const pr =
-    pullRequest.kind === "pending" || pullRequest.kind === "undeclared"
-      ? pullRequest
-      : prOfHead(pullRequest, info.head);
+  const pr = isUnanswered(pullRequest)
+    ? pullRequest
+    : prOfHead(pullRequest, info.head);
   let prFields: PrPayload | PrPendingOf<Unanswered> = {};
   switch (pr.kind) {
     case "pending":

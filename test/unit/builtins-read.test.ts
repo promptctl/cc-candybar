@@ -73,6 +73,19 @@ describe("the built-ins a config declares", () => {
     ).toEqual(["pr"]);
   });
 
+  // A path at or above a row can see every part of the row's value, so a read
+  // of all of git holds the PR too: an Undeclared could otherwise sit inside a
+  // found object, which is the blank the declaration must never draw.
+  test("hold the PR for a read of all of git", () => {
+    expect(
+      declaredBy(`{
+        variables: { ${INPUTS} wholeGit: { kind: "input", path: "git", default: "" } },
+        segments: { g: { template: "{{ .wholeGit }}" } },
+        root: { h: ["g"] },
+      }`),
+    ).toEqual(["pr"]);
+  });
+
   test("hold every fact a derived field is composed from", () => {
     expect(
       declaredBy(`{

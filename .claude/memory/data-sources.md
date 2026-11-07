@@ -60,7 +60,7 @@ The document, what the payload is composed from beside it, and the globals a dra
 
 ## Usage and today
 
-Per-session usage records live in one store. Session totals and today's total are folds over that store, and nothing scans the transcript tree per render. Today counts the rendering session plus every record whose transcript sits under that Claude Code directory's projects. It doesn't count every session the daemon has seen, because that sum would change depending on which other sessions happened to render. Today's period rescans the tree, so sessions that never render (headless `claude -p`, the Agent SDK) still reach today within a minute. Today rolls over at local midnight without a refresh.
+Per-session usage records live in one store. Session totals and today's total are folds over that store, and nothing scans the transcript tree per render. Today counts the rendering session plus every record whose transcript sits under that Claude Code directory's projects. It doesn't count every session the daemon has seen, because that sum would change depending on which other sessions happened to render. Today's period rescans the tree, so sessions that never render (headless `claude -p`, the Agent SDK) and sessions whose config reads no usage fact, which ingest nothing on their own ticks, still reach today within a minute. Today rolls over at local midnight without a refresh.
 
 A transcript's change stamp is its mtime plus its size, because an append within one mtime tick changes only the size.
 

@@ -127,6 +127,15 @@ export function isUndeclared<T extends PayloadNode>(
   );
 }
 
+// [LAW:single-enforcer] The daemon's own word at a payload node, which no
+// reader takes as a value: not answered yet, or not declared. Every site that
+// asks "is this a value" asks here, so a third such word is added in one place.
+export function isUnanswered<T extends PayloadNode>(
+  value: T | Pending | Undeclared,
+): value is Pending | Undeclared {
+  return isPending(value) || isUndeclared(value);
+}
+
 // What a payload node the daemon built can be. `unknown` is not among them: a
 // user's JSON (a source's `ok` value) is tested by no one, because a document
 // that reads `{"kind":"pending"}` is a value.

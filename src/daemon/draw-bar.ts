@@ -50,7 +50,7 @@ import {
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
 import { drawnLanes, drawView, type Handed } from "./draw-view.js";
-import { isPending, isUndeclared } from "../utils/outcome.js";
+import { isUnanswered } from "../utils/outcome.js";
 import {
   laneSwitches,
   resolveEffectiveGlobals,
@@ -629,10 +629,7 @@ export function drawRender(
     feeds: frameFeeds.feedsOf(sessionId, at),
     diagnostics,
   };
-  const metrics =
-    isPending(payload.metrics) || isUndeclared(payload.metrics)
-      ? undefined
-      : payload.metrics;
+  const metrics = isUnanswered(payload.metrics) ? undefined : payload.metrics;
   noteFacts(facts, {
     builtins: builtinsFact(Object.keys(document.builtins)),
     ...sourcesFactOf(document.sources),
