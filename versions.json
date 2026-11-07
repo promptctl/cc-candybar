@@ -4,32 +4,32 @@
     {
       "version": "pr-662",
       "ref": "refs/pull/662/merge",
-      "sha": "be8ecd0361fa879da269f8f9e0b9d1e0265b4b9d",
-      "timestamp": "2026-11-07T00:21:25.923Z",
+      "sha": "6baeed589d4b8a036fc885f18b56c9a06ef9d868",
+      "timestamp": "2026-11-07T00:22:43.494Z",
       "commits": [
         {
-          "sha": "be8ecd0361fa879da269f8f9e0b9d1e0265b4b9d",
+          "sha": "6baeed589d4b8a036fc885f18b56c9a06ef9d868",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:20:36Z",
-          "message": "Merge eaa592299fb886d5aa6985dcc02761bcde7012fc into 71d231b7b17cb286ba143c6b7c09d3046d2af023\n"
+          "timestamp": "2026-11-07T00:21:56Z",
+          "message": "Merge 8fffc18f4e787072f8bab4f25cbb9a25d842b69b into 71d231b7b17cb286ba143c6b7c09d3046d2af023\n"
         },
         {
-          "sha": "eaa592299fb886d5aa6985dcc02761bcde7012fc",
+          "sha": "8fffc18f4e787072f8bab4f25cbb9a25d842b69b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:20:15-07:00",
           "message": "fix(recording): a facts line can be written only through the document path that writes its state ahead; a failing state write is tested (candybar-gather-renderer-76bb.6pj.09q)\n"
         },
         {
-          "sha": "f57af33ee2d7e8ef3b941b7d3a9238eaa258fecc",
+          "sha": "23a6664292bee7c314181fd9976e55787d524be0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:15:53-07:00",
           "message": "fix(recording): a state write that ends the recording offers no document after it; tests prove the old run shows until the new one lands (candybar-gather-renderer-76bb.6pj.09q)\n"
         },
         {
-          "sha": "d1954c4706ec91671ff0d225411acf040992cc27",
+          "sha": "b28d0c317ea963bd9cce22d5e877fb4ba4444275",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:08:39-07:00",
