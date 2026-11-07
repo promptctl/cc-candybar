@@ -1,3 +1,9 @@
+## [1.208.4](https://github.com/promptctl/cc-candybar/compare/v1.208.3...v1.208.4) (2026-11-07)
+
+### Bug Fixes
+
+* **testing:** every budgeted wait in a test is cut to what its case has left, so a slow run fails by the wait's name (brandon-menus-sjhy.r62) ([#661](https://github.com/promptctl/cc-candybar/issues/661)) ([71d231b](https://github.com/promptctl/cc-candybar/commit/71d231b7b17cb286ba143c6b7c09d3046d2af023))
+
 ## [1.208.3](https://github.com/promptctl/cc-candybar/compare/v1.208.2...v1.208.3) (2026-11-07)
 
 ### Bug Fixes
