@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-688",
+      "ref": "refs/pull/688/merge",
+      "sha": "0484954183c66c2fdc8f47514b8c886e737dd24d",
+      "timestamp": "2026-11-07T11:19:08.600Z",
+      "commits": [
+        {
+          "sha": "0484954183c66c2fdc8f47514b8c886e737dd24d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:18:22Z",
+          "message": "Merge 68e4584151d31b1e8d148a464668eee16faaf18d into f92fb0e65423da82e8e6030b5d393e6c9369d852\n"
+        },
+        {
+          "sha": "68e4584151d31b1e8d148a464668eee16faaf18d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:17:59-07:00",
+          "message": "docs(watchers): a macOS watch close waits on fseventsd and registers a new client; tests on the disk add to its backlog (brandon-unfiled-3248.iywk)\n"
+        },
+        {
+          "sha": "544aac91d39631dba9e6011a37420c607bfa5bb8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:00:01-07:00",
+          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-684",
       "ref": "refs/pull/684/merge",
       "sha": "425ff8c6b2269e7a707c977db976ef6a9266c8ec",
@@ -150,28 +179,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-07T11:01:16Z",
           "message": "chore(release): set `package.json` to 1.210.1 [skip ci]\n\n## [1.210.1](https://github.com/promptctl/cc-candybar/compare/v1.210.0...v1.210.1) (2026-11-07)\n\n### Bug Fixes\n\n* **colour:** the door's ✖ keeps the contrast its red has on its ground at lower depths, never lifted to the quiet floor (brandon-unfiled-3248.692p) ([#681](https://github.com/promptctl/cc-candybar/issues/681)) ([215f486](https://github.com/promptctl/cc-candybar/commit/215f486db0c68765107dc69e715ccb26c5ac01d3))\n* **demo:** `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a) ([#682](https://github.com/promptctl/cc-candybar/issues/682)) ([219fb6b](https://github.com/promptctl/cc-candybar/commit/219fb6b570c49d5b4a42a1ad8fdf84727f5b387a))\n* **doctor:** the config row names a repository config the load left out ([#683](https://github.com/promptctl/cc-candybar/issues/683)) ([2a63ae5](https://github.com/promptctl/cc-candybar/commit/2a63ae55593d80d6590080431d83cf19e539622e))\n* **state:** a session value its config no longer admits draws the default and warns (brandon-menus-sjhy.46w) ([#676](https://github.com/promptctl/cc-candybar/issues/676)) ([ffb0376](https://github.com/promptctl/cc-candybar/commit/ffb0376812d7b52ce21a6cb5f0ef4d76eaf9e832))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-688",
-      "ref": "refs/pull/688/merge",
-      "sha": "164b9d631e18ed8f3bac5e0e559eee84873f4bf1",
-      "timestamp": "2026-11-07T11:01:18.713Z",
-      "commits": [
-        {
-          "sha": "164b9d631e18ed8f3bac5e0e559eee84873f4bf1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:00:22-07:00",
-          "message": "Merge 544aac91d39631dba9e6011a37420c607bfa5bb8 into ffb0376812d7b52ce21a6cb5f0ef4d76eaf9e832\n"
-        },
-        {
-          "sha": "544aac91d39631dba9e6011a37420c607bfa5bb8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:00:01-07:00",
-          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
         }
       ]
     },

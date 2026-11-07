@@ -23097,6 +23097,56 @@ var msOf = (at) => Math.round(at * 1e3);
 var dateOf = (at) => new Date(msOf(at));
 var instantAt = (clock) => instantOf(new Date(clock.now()));
 
+// src/utils/staged-path.ts
+init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer2 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer2.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer2.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i) => byte === b[i]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/utils/staged-path.ts
+function stagedPath(file) {
+  return `${file}.${process_default.pid}.${randomUUID()}.tmp`;
+}
+
 // src/proc/launch.ts
 function spawnErrorText(err, cwd2) {
   if (!types.isNativeError(err)) return String(err);
@@ -23742,7 +23792,7 @@ function readJobEnd(status) {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
 function endJob(spawner, clock, pid2, status, end) {
-  const staged = `${status}.${process_default.pid}`;
+  const staged = stagedPath(status);
   try {
     writeFileSync(staged, `${formatJobEnd(end)}
 `);
@@ -23956,7 +24006,7 @@ init_globals();
 
 // site/shims/child_process.ts
 init_globals();
-var import_buffer2 = __toESM(require_buffer(), 1);
+var import_buffer3 = __toESM(require_buffer(), 1);
 var import_events2 = __toESM(require_events(), 1);
 var RESIDENT = "resident";
 var programs = /* @__PURE__ */ new Map();
@@ -23968,7 +24018,7 @@ var Stream = class extends import_events2.EventEmitter {
     return this;
   }
   chunk(text4) {
-    this.emit("data", this.encoding === null ? import_buffer2.Buffer.from(text4) : text4);
+    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
   }
   pipe() {
     return this;
@@ -37245,50 +37295,6 @@ var import_node_path2 = __toESM(require_path_browserify(), 1);
 
 // src/utils/plain.ts
 init_globals();
-
-// site/shims/crypto.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer3.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer3.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i) => byte === b[i]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
-// src/utils/plain.ts
 function isPlainObject(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -64812,7 +64818,7 @@ var import_node_path18 = __toESM(require_path_browserify(), 1);
 function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(systemFilesystem, at);
   fs_default.mkdirSync(import_node_path18.default.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
+  const tmp = stagedPath(file);
   const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
     const fd = fs_default.openSync(tmp, "w", fileMode);
@@ -70044,7 +70050,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.0";
+var PACKAGE_VERSION = "1.210.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -81367,7 +81373,7 @@ async function readDisk(owner) {
 }
 async function writeDisk(owner, table) {
   const file = diskPath(owner.cacheRoot);
-  const staged = `${file}.${process_default.pid}.${randomUUID()}`;
+  const staged = stagedPath(file);
   try {
     await fs_default.promises.mkdir(import_node_path42.default.dirname(file), { recursive: true });
     await fs_default.promises.writeFile(
@@ -88038,7 +88044,7 @@ var FileSessionStorage = class {
     this.clock = clock;
     this.debounceMs = debounceMs;
     this.logger = logger;
-    this.writingPath = `${filePath2}.writing`;
+    this.writingPath = stagedPath(filePath2);
   }
   filePath;
   clock;
@@ -88159,9 +88165,9 @@ var FileSessionStorage = class {
     if (this.pending === null) return;
     const snapshot = this.pending;
     const started2 = this.clock.monotonic();
+    const tmp = stagedPath(this.filePath);
     try {
       fs_default.mkdirSync(import_node_path49.default.dirname(this.filePath), { recursive: true });
-      const tmp = `${this.filePath}.tmp`;
       const body = JSON.stringify(snapshot);
       fs_default.writeFileSync(tmp, body, { mode: 384 });
       fs_default.chmodSync(tmp, 384);
@@ -88172,6 +88178,14 @@ var FileSessionStorage = class {
       this.pending = null;
     } catch (e) {
       this.logger("warn", `session-state save failed: ${e.message}`);
+      try {
+        fs_default.rmSync(tmp, { force: true });
+      } catch (rmErr) {
+        this.logger(
+          "warn",
+          `session-state staged file left: ${rmErr.message}`
+        );
+      }
     }
   }
   // [LAW:nothing-unseen] Every write says what it wrote, how long it took, and
@@ -88652,7 +88666,7 @@ function readOrCreate(file) {
 }
 function create(file) {
   fs_default.mkdirSync(import_node_path53.default.dirname(file), { recursive: true });
-  const written2 = `${file}.${process_default.pid}.${randomBytes(6).toString("hex")}`;
+  const written2 = stagedPath(file);
   fs_default.writeFileSync(written2, randomBytes(LINK_KEY_BYTES), {
     mode: 384,
     flag: "wx"
