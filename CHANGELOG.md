@@ -1,3 +1,9 @@
+## [1.208.11](https://github.com/promptctl/cc-candybar/compare/v1.208.10...v1.208.11) (2026-11-07)
+
+### Bug Fixes
+
+* **lanes:** a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2) ([#670](https://github.com/promptctl/cc-candybar/issues/670)) ([f71e401](https://github.com/promptctl/cc-candybar/commit/f71e4018241defe5e52915caeb204883a59da539))
+
 ## [1.208.10](https://github.com/promptctl/cc-candybar/compare/v1.208.9...v1.208.10) (2026-11-07)
 
 ### Bug Fixes
