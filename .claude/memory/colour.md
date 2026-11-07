@@ -36,7 +36,7 @@ Every contrast floor is measured on the colours the terminal will actually draw 
 
 Text with no authored colour clears WCAG AA (4.5:1) on its background in every region. A fixed foreground fails on pale bands, and the terminal's own text fails whenever the terminal's light/dark polarity differs from the theme's. `bg: "none"` draws on the terminal's own background with no text colour either, because the detached daemon can't see that background.
 
-The settings door's open ✖ stays red on every theme because it only ever selects among the reds the theme names for its error role and never slides lightness: a red slid until it reads stops reading as red. Where none of those reds reads on the pressed state, it wears the one standing farthest off and reads below the text floor, and that is accepted rather than slid. At lower depths it keeps the contrast it has on the pressed state before rounding, so rounding doesn't cost it. Its hue is held only by that choice among named reds: rounding, and the repair that keeps its contrast, measure contrast alone, so at ansi it can be drawn silver, yellow or purple.
+The settings door's open ✖ stays red on every theme and at every depth because it only ever selects among the reds the depth draws as red, measured as drawn, and never slides lightness: a red slid until it reads stops reading as red. Where none of those reds reads on the pressed state, it wears the one standing farthest off and reads below the text floor, and that is accepted rather than slid. At ansi it chooses between the terminal's red and bright red, because sixteen colours round a theme's reds to greys and purples, and only the terminal's own red is red in every terminal.
 
 ## Authored bg is meaning
 
