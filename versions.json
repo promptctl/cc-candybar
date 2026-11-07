@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-688",
+      "ref": "refs/pull/688/merge",
+      "sha": "f13ae4d6c395148368019d88c8bc74f18c7e4767",
+      "timestamp": "2026-11-07T11:58:00.341Z",
+      "commits": [
+        {
+          "sha": "f13ae4d6c395148368019d88c8bc74f18c7e4767",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:55:46Z",
+          "message": "Merge 5e2fbd52cd14aae4a94db119d76f864d038374b8 into c3eb590e336d3dfbc8184093e0fe9c489121c59e\n"
+        },
+        {
+          "sha": "5e2fbd52cd14aae4a94db119d76f864d038374b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:55:35-07:00",
+          "message": "fix(watchers): a polled name whose read fails fires as it starts and stops failing, never a deaf directory; the sweep's loop drops its polled check (brandon-unfiled-3248.iywk)\n\nSecond high review of #688: taking the directory deaf for one refused read failed every other name on it and told a fresh `failed` window each period while the fault lasted. The holder's own read of the name is what fails loudly, and the poll hears the read recover. The stats test now asserts the polled line.\n"
+        },
+        {
+          "sha": "60b18194b7f7b78ec4e221671295a53e715389d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:46:05-07:00",
+          "message": "fix(watchers): a polled name the disk refuses to read is a deaf directory, judged open again on the period; the sweep re-arms before it reads; a released name is forgotten at the release (brandon-unfiled-3248.iywk)\n\nReview of #688 (medium): a folder that lost its search permission left the poll silent with no fault, a throw in a sweep left every polled name unheard, and a name re-acquired within a period fired for a change from before its acquire. Comments that called every directory watch an OS watch now name the polled kind.\n"
+        },
+        {
+          "sha": "1ed036f50924f0e19743fe7f495dccce12dc1be0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:38:41-07:00",
+          "message": "fix(watchers): a disk says how far its directory watch reaches, so poll mode follows the disk; a named directory polls its identity alone; the last polled folder released disarms the sweep (brandon-unfiled-3248.iywk)\n\nReview of #688 (high):\n- The poll choice was a registry option beside the disk it describes, so the check command, the demo and every darwin test ran a mode macOS production never does. It is now the filesystem port's watchReach.\n- A named directory's size and mtime are its children's, which a parent watch never hears; its entry is now identity and mode.\n- The sweep timer outlived the last polled folder by up to a period, against close leaving no timer armed.\n- Memory: the one-stream paragraph now covers OS watches only; counters doc counts polled slots as opened.\n"
+        },
+        {
+          "sha": "68e4584151d31b1e8d148a464668eee16faaf18d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:17:59-07:00",
+          "message": "docs(watchers): a macOS watch close waits on fseventsd and registers a new client; tests on the disk add to its backlog (brandon-unfiled-3248.iywk)\n"
+        },
+        {
+          "sha": "544aac91d39631dba9e6011a37420c607bfa5bb8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:00:01-07:00",
+          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-687",
       "ref": "refs/pull/687/merge",
       "sha": "07b007872c1ac40ee4ad46f680e3cd2656f881c9",
@@ -199,49 +249,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-07T11:35:57Z",
           "message": "chore(release): set `package.json` to 1.210.3 [skip ci]\n\n## [1.210.3](https://github.com/promptctl/cc-candybar/compare/v1.210.2...v1.210.3) (2026-11-07)\n\n### Bug Fixes\n\n* **pricing:** a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8) ([#684](https://github.com/promptctl/cc-candybar/issues/684)) ([3e574dd](https://github.com/promptctl/cc-candybar/commit/3e574dde3244026257856ed4e675a0275bc287d1))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-688",
-      "ref": "refs/pull/688/merge",
-      "sha": "fd8c4723377ee13793440757f395201c88103ee7",
-      "timestamp": "2026-11-07T11:47:14.489Z",
-      "commits": [
-        {
-          "sha": "fd8c4723377ee13793440757f395201c88103ee7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:46:15Z",
-          "message": "Merge 60b18194b7f7b78ec4e221671295a53e715389d1 into 37f5c35ff91a229f08869f5b34660301b699233a\n"
-        },
-        {
-          "sha": "60b18194b7f7b78ec4e221671295a53e715389d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:46:05-07:00",
-          "message": "fix(watchers): a polled name the disk refuses to read is a deaf directory, judged open again on the period; the sweep re-arms before it reads; a released name is forgotten at the release (brandon-unfiled-3248.iywk)\n\nReview of #688 (medium): a folder that lost its search permission left the poll silent with no fault, a throw in a sweep left every polled name unheard, and a name re-acquired within a period fired for a change from before its acquire. Comments that called every directory watch an OS watch now name the polled kind.\n"
-        },
-        {
-          "sha": "1ed036f50924f0e19743fe7f495dccce12dc1be0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:38:41-07:00",
-          "message": "fix(watchers): a disk says how far its directory watch reaches, so poll mode follows the disk; a named directory polls its identity alone; the last polled folder released disarms the sweep (brandon-unfiled-3248.iywk)\n\nReview of #688 (high):\n- The poll choice was a registry option beside the disk it describes, so the check command, the demo and every darwin test ran a mode macOS production never does. It is now the filesystem port's watchReach.\n- A named directory's size and mtime are its children's, which a parent watch never hears; its entry is now identity and mode.\n- The sweep timer outlived the last polled folder by up to a period, against close leaving no timer armed.\n- Memory: the one-stream paragraph now covers OS watches only; counters doc counts polled slots as opened.\n"
-        },
-        {
-          "sha": "68e4584151d31b1e8d148a464668eee16faaf18d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:17:59-07:00",
-          "message": "docs(watchers): a macOS watch close waits on fseventsd and registers a new client; tests on the disk add to its backlog (brandon-unfiled-3248.iywk)\n"
-        },
-        {
-          "sha": "544aac91d39631dba9e6011a37420c607bfa5bb8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:00:01-07:00",
-          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
         }
       ]
     },
