@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-690",
+      "ref": "refs/pull/690/merge",
+      "sha": "42ccdcfd2302e98dc722cbf0dc1dec02444e6108",
+      "timestamp": "2026-11-07T11:42:30.976Z",
+      "commits": [
+        {
+          "sha": "42ccdcfd2302e98dc722cbf0dc1dec02444e6108",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:36:00Z",
+          "message": "Merge e8bac05493c5757e932b928618df4fe277b75432 into 37f5c35ff91a229f08869f5b34660301b699233a\n"
+        },
+        {
+          "sha": "e8bac05493c5757e932b928618df4fe277b75432",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:34:34-07:00",
+          "message": "fix(git): each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek)\n\nA daemon spawned from an environment carrying GIT_DIR or another of git's\nrepository variables (a hook, vcsh, yadm) passed it to every git read, so\nevery bar showed the spawning shell's repository. The daemon now asks git\nfor those names once at its process edge, before its lease, bounded at 2 s,\nand runs in a world whose environment is the process's without them. An ask\nthat fails keeps the inherited environment and draws a git-env warning on\nevery bar; a git that is not installed names none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-688",
       "ref": "refs/pull/688/merge",
       "sha": "348fb784bd3fd9abca03d15cb04951b50bbb1744",
@@ -156,28 +178,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:13:32-07:00",
           "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-690",
-      "ref": "refs/pull/690/merge",
-      "sha": "0d290a20e279090453d92c2c0e1ae0652a655732",
-      "timestamp": "2026-11-07T11:37:18.856Z",
-      "commits": [
-        {
-          "sha": "0d290a20e279090453d92c2c0e1ae0652a655732",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:35:04-07:00",
-          "message": "Merge 7385f08db99bf390b739c4496afcc3c093f00607 into 3e574dde3244026257856ed4e675a0275bc287d1\n"
-        },
-        {
-          "sha": "7385f08db99bf390b739c4496afcc3c093f00607",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:34:34-07:00",
-          "message": "fix(git): each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek)\n\nA daemon spawned from an environment carrying GIT_DIR or another of git's\nrepository variables (a hook, vcsh, yadm) passed it to every git read, so\nevery bar showed the spawning shell's repository. The daemon now asks git\nfor those names once at its process edge, before its lease, bounded at 2 s,\nand runs in a world whose environment is the process's without them. An ask\nthat fails keeps the inherited environment and draws a git-env warning on\nevery bar; a git that is not installed names none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
