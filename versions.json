@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "219fb6b570c49d5b4a42a1ad8fdf84727f5b387a",
+      "timestamp": "2026-11-07T10:46:20.811Z",
+      "commits": [
+        {
+          "sha": "219fb6b570c49d5b4a42a1ad8fdf84727f5b387a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:45:19-07:00",
+          "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a) (#682)\n\n* fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(demo): the bundled sample draws the default's session cell and no doubled padding (brandon-unfiled-3248.0d5a)\n\nThe sample re-derived the default's session-id cell without its `when`,\nso an empty id drew a bare glyph; it now places the default's\n`sessionId`. Its templates padded cells the layout already pads. The\nbundled-sample test now also fails on a loader advisory naming the\nsample and on a drawn warning indicator, not only on a refusal.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* docs(demo): say padding is structural in the sample, and what the strip leaves in the test (brandon-unfiled-3248.0d5a)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+        }
+      ]
+    },
+    {
       "version": "pr-687",
       "ref": "refs/pull/687/merge",
       "sha": "d16920b00ec2151770514d640de0aab8b59f276d",
@@ -111,42 +126,6 @@
       ]
     },
     {
-      "version": "pr-682",
-      "ref": "refs/pull/682/merge",
-      "sha": "246f7dfacbd2e51744ea5246d2cc010c77777aa7",
-      "timestamp": "2026-11-07T10:40:28.971Z",
-      "commits": [
-        {
-          "sha": "246f7dfacbd2e51744ea5246d2cc010c77777aa7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:39:12Z",
-          "message": "Merge b34cd1a36c02b875bfe35af41261adc088dad4d2 into 2a63ae55593d80d6590080431d83cf19e539622e\n"
-        },
-        {
-          "sha": "b34cd1a36c02b875bfe35af41261adc088dad4d2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:20:01-07:00",
-          "message": "docs(demo): say padding is structural in the sample, and what the strip leaves in the test (brandon-unfiled-3248.0d5a)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "ecf6deba67af088d22f60f99b1b47e20d61cf44f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:14:45-07:00",
-          "message": "fix(demo): the bundled sample draws the default's session cell and no doubled padding (brandon-unfiled-3248.0d5a)\n\nThe sample re-derived the default's session-id cell without its `when`,\nso an empty id drew a bare glyph; it now places the default's\n`sessionId`. Its templates padded cells the layout already pads. The\nbundled-sample test now also fails on a loader advisory naming the\nsample and on a drawn warning indicator, not only on a refusal.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "c569836820d2f4945e368c845d29a7a1bd9b1439",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:00:45-07:00",
-          "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "pr-676",
       "ref": "refs/pull/676/merge",
       "sha": "510a411c2fac3acb57f8d496fdff722363579563",
@@ -229,21 +208,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:40:04-07:00",
           "message": "fix(state): concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1)\n\nTwo processes sharing a state directory both staged a write at\n`<file>.tmp`, so one's rename published or moved the other's bytes and\nthe other's rename failed ENOENT. Every staged name now carries the\nwriting process's pid, spelled once by `stagedPath` in\nsrc/utils/atomic-write.ts: writeAtomic, both session-state-file stages\nand the socket lease use it. The fork-bomb breaker stages by an\ninjected identity's pid and is left as it is.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "2a63ae55593d80d6590080431d83cf19e539622e",
-      "timestamp": "2026-11-07T10:38:53.349Z",
-      "commits": [
-        {
-          "sha": "2a63ae55593d80d6590080431d83cf19e539622e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:38:04-07:00",
-          "message": "fix(doctor): the config row names a repository config the load left out (#683)\n\n* fix(doctor): the config row names a repository config the load left out (brandon-unfiled-3248.qo8j)\n\nThe doctor's config load now carries the repository gate it ruled, so the\nconfig row says why a project's .cc-candybar.json5 is not in the chain. A\nrepository awaiting approval fails the row and names its directory. A\ndeclined repository, and a directory whose worktree claim is unproven, ride\nthe row's text without failing it: only reversing the user's own answer\nwould clear a declined one. repoGateLines is split into the awaiting and\nthe settled lines, so check, the demo and the doctor share one wording.\n\nAn unread answers book already reaches the row as the load's own advisory,\nso the doctor takes the awaiting lines alone and names that notice once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(doctor): a repository answer during the probes refuses a stale report; settled lines count as no problem (brandon-unfiled-3248.qo8j)\n\nThe landing compares the gate by its lines, so an awaiting repository\ndeclined mid-run with the config unchanged gathers again. A failed\nverdict carries notes beside its problems, so a declined repository is\nlisted by the CLI and counted by neither the bar's row nor the log. The\ndoctor's log line carries the gate's counts, and one empty-gate fixture\nserves every test.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(doctor): settled repositories ride the config row's text in either verdict (brandon-unfiled-3248.qo8j)\n\nA declined repository named only in a failed verdict's notes vanished\nfrom the bar while the row failed. It now rides the reason after the\nfirst problem, as it rides the note after the chain, so the bar and the\nCLI name it whatever the verdict and neither counts it. The doctor's log\nkeeps unproven worktrees in a field of their own, since each is also\nawaiting or declined.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* docs(doctor): the gate comparison's completeness and the unproven count said as they hold (brandon-unfiled-3248.qo8j)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         }
       ]
     },
