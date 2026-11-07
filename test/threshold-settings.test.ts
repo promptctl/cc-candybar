@@ -18,9 +18,8 @@ import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, clicking } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { VERBS } from "../src/daemon/verbs";
 import {
   configureMember,
   EDIT_MODE_KEY,
@@ -131,7 +130,7 @@ describe("block's thresholds are settings configure mode steps", () => {
     const rt = thresholdBar(BLOCK_ONLY, 10);
     const warn = placementDraftKey("default", "block", "warnAt");
     const error = placementDraftKey("default", "block", "errorAt");
-    const setState = VERBS.get("set-state")!;
+    const setState = clicking("set-state");
     const ctx = { ...rt.ctx, configFor: () => load(BLOCK_ONLY) };
     expect(() => setState(`${SID}/${warn}/70/${error}/60`, ctx),
     ).toThrow(/"errorAt" \(60\) is below "warnAt" \(70\)/);

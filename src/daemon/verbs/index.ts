@@ -130,6 +130,8 @@ import {
   VERB_RUN,
   VERB_REPO_CONFIG,
   VERB_COPY_DIAGNOSTIC,
+  isClickVerb,
+  type ClickVerb,
   type EvaluatedRun,
 } from "../../click/wire";
 import type { RendererLinks } from "../../click/renderer-links";
@@ -371,7 +373,6 @@ import {
   BadVerbArgs,
   ClickAbandoned,
   DaemonClosing,
-  decodeWire,
   parseWire,
   type WireParse,
 } from "../verb-error";
@@ -386,16 +387,6 @@ import {
   type SessionId,
 } from "../session-id";
 export { BadVerbArgs };
-
-// ─── Argument decoders ───────────────────────────────────────────────────────
-
-// [LAW:types-are-the-program] A probe link carries ONE argument, its nonce: the
-// WHOLE value, decoded once, never split on "/". parseHandlerUrl does not decode
-// the value, so the decode lives with the verb that knows its shape
-// [LAW:single-enforcer].
-function oneArg(value: string): string {
-  return decodeWire(() => decodeURIComponent(value));
-}
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────
 
@@ -1743,13 +1734,11 @@ const doctorRun: VerbHandler = (sid, _args, ctx) => {
 // [LAW:single-enforcer] It writes no journal, so it takes no turn: nothing
 // queued can make it wait, and no client's leaving can refuse a link that came.
 const probe = (
-  value: string,
+  read: WireParse<string>,
   ctx: Pick<VerbContext, "arrival" | "probes" | "log">,
 ): undefined => {
-  const nonce = parseProbeNonce(oneArg(value));
-  if (nonce === null) {
-    throw new BadVerbArgs("probe: the value is not a probe nonce");
-  }
+  if (!read.ok) throw new BadVerbArgs(`probe: ${read.problem}`);
+  const nonce = read.value;
   // [LAW:no-silent-failure] A probe link is opened by the CLI, never drawn in
   // a frame, so one cannot come from the tmux status line.
   if (ctx.arrival.via !== "link")
@@ -2027,10 +2016,6 @@ function readEffect({ verb, value }: ParsedEffect): ReadEffect {
   return leaf === undefined ? { verb, leaf } : readLeaf(verb, leaf, value);
 }
 
-function readDispatch(value: string): readonly ReadEffect[] {
-  return batchAdjacentWrites(parseEffects(value)).map(readEffect);
-}
-
 // [LAW:one-source-of-truth] The session a click is in: the one its first leaf
 // effect names, or none. Dispatch surfaces a failed step in that session's
 // bar, and the daemon counts the click as that session's activity
@@ -2040,15 +2025,65 @@ function sessionOf(effects: readonly ReadEffect[]): ParsedSessionId | null {
   return effects.find((e) => e.leaf !== undefined)?.session ?? null;
 }
 
-export function clickSessionOf(
-  verb: string,
-  value: string,
-): ParsedSessionId | null {
-  return sessionOf(
-    verb === VERB_DISPATCH
-      ? readDispatch(value)
-      : [readEffect({ verb, value })],
-  );
+// [LAW:types-are-the-program] A probe link carries ONE argument, its nonce: the
+// WHOLE value, decoded once, never split on "/". The link's parse leaves the
+// value encoded, so the decode lives with the reader that knows its shape
+// [LAW:single-enforcer].
+function readProbe(value: string): WireParse<string> {
+  const decoded = parseWire(() => decodeURIComponent(value));
+  if (!decoded.ok) return decoded;
+  const nonce = parseProbeNonce(decoded.value);
+  return nonce === null
+    ? { ok: false, problem: "the value is not a probe nonce" }
+    : { ok: true, value: nonce };
+}
+
+// [LAW:one-source-of-truth] A click as the daemon's edge reads it, once
+// (src/daemon/reply.ts): what its event carries and what it runs from. A
+// dispatch's session is taken from its effects in the read, so the session the
+// reply facts record, the one its journal and landing use, and the steps it
+// folds are one value. Branded, so only `readClick` makes one.
+type ClickRead =
+  | {
+      readonly kind: typeof VERB_DISPATCH;
+      readonly effects: readonly ReadEffect[];
+      readonly session: ParsedSessionId | null;
+    }
+  | { readonly kind: typeof VERB_PROBE; readonly nonce: WireParse<string> };
+export type Click = ClickRead & { readonly __click: true };
+type ClickOf<V extends ClickVerb> = Extract<Click, { readonly kind: V }>;
+
+// [LAW:one-source-of-truth] One reader for each verb a click runs from, keyed
+// by the wire's list of them, so a click verb with no reader does not compile.
+// A leaf verb arrives only as a dispatch's effect, so a link naming one is a
+// miss here.
+const CLICK_READERS: {
+  readonly [V in ClickVerb]: (
+    value: string,
+  ) => Extract<ClickRead, { readonly kind: V }>;
+} = {
+  [VERB_DISPATCH]: (value) => {
+    const effects = batchAdjacentWrites(parseEffects(value)).map(readEffect);
+    return { kind: VERB_DISPATCH, effects, session: sessionOf(effects) };
+  },
+  [VERB_PROBE]: (value) => ({ kind: VERB_PROBE, nonce: readProbe(value) }),
+};
+
+// A link's click, or null for a verb no click runs from. Reading never
+// throws: a malformed step or nonce is held as data, for the run to refuse.
+// The verb is untrusted wire input, so it is matched against the list before
+// it keys the table: a `__proto__` is a miss, never a hit on
+// Object.prototype. The brand is set here, once.
+export function readClick(verb: string, value: string): Click | null {
+  return isClickVerb(verb) ? (CLICK_READERS[verb](value) as Click) : null;
+}
+
+// The session a click is in, as its event names it: a dispatch's that passed
+// the checkpoint, or none.
+export function clickSession(click: Click): SessionId | null {
+  return click.kind === VERB_DISPATCH && click.session?.ok
+    ? click.session.id
+    : null;
 }
 
 // A leaf effect's run in the turn. [LAW:single-enforcer] It is refused as bad
@@ -2272,84 +2307,41 @@ function journaled<C extends DaemonContext>(
   throwAll(failures);
 }
 
-// A verb as the daemon runs it: the raw wire value and the click's context.
-// It returns once its turn has committed and handed its effects over; it
-// throws the refusal of a step that failed.
-export type VerbRun = (value: string, ctx: VerbContext) => void;
-
-// [LAW:single-enforcer] A click: one journal turn around its handler
-// (src/daemon/journal-turns.ts), the session's landing stamped whatever the
-// handler did. One whose client has left never lands, so a client told
-// TIMEOUT can click again without reverting a toggle: it takes no turn,
-// stamps no landing and describes nothing. A verb that takes no turn (a
-// probe link) is refused by no client's leaving.
-function click<E extends ReadEffect>(
-  verb: string,
-  read: (value: string) => readonly E[],
-  handler: (
-    effects: readonly E[],
-    session: ParsedSessionId | null,
-    ctx: ClickContext,
-  ) => undefined,
-): VerbRun {
-  return (value, ctx) => {
-    if (ctx.gone()) throw new ClickAbandoned(verb);
-    const effects = read(value);
-    const session = sessionOf(effects);
-    const sid = session?.ok ? session.id : null;
-    ctx.journalTurns.take(verb, () =>
-      journaled(sid, ctx, (c) => {
-        try {
-          handler(effects, session, c);
-        } finally {
-          if (sid !== null) ctx.clickLanded(sid);
-        }
-      }),
-    );
-  };
+// [LAW:single-enforcer] A dispatch: one journal turn around the fold of its
+// effects (src/daemon/journal-turns.ts), the session's landing stamped
+// whatever the fold did. One whose client has left never lands, so a client
+// told TIMEOUT can click again without reverting a toggle: it takes no turn,
+// stamps no landing and describes nothing.
+function dispatch(
+  click: ClickOf<typeof VERB_DISPATCH>,
+  ctx: VerbContext,
+): void {
+  if (ctx.gone()) throw new ClickAbandoned(VERB_DISPATCH);
+  const sid = clickSession(click);
+  ctx.journalTurns.take(VERB_DISPATCH, () =>
+    journaled(sid, ctx, (c) => {
+      try {
+        foldEffects(click.effects, click.session, c);
+      } finally {
+        if (sid !== null) ctx.clickLanded(sid);
+      }
+    }),
+  );
 }
 
-// [LAW:one-source-of-truth] The full dispatch table the daemon looks up against:
-// every leaf verb plus the one `dispatch` wrapper. A link that names a leaf
-// verb itself, not in a dispatch list, resolves here too; every link the
-// renderer draws names `dispatch`.
-export const VERBS: ReadonlyMap<string, VerbRun> = new Map<string, VerbRun>([
-  ...[...LEAF_VERBS].map(
-    ([verb, leaf]) =>
-      [
-        verb,
-        click(
-          verb,
-          (value) => [readLeaf(verb, leaf, value)],
-          (effects, session, ctx) => {
-            for (const effect of effects) perform(effect, session, ctx);
-          },
-        ),
-      ] as const,
-  ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, readDispatch, foldEffects)] as const,
-  // A link kind, never a leaf, so no dispatch can carry it as an effect: a
-  // probe writes no journal, so nothing may refuse it for a turn, and it
-  // describes nothing.
-  [VERB_PROBE, probe] as const,
-]);
-
-export const VERB_NAMES: readonly string[] = Object.freeze([
-  ...VERBS.keys(),
-]) as readonly string[];
-
-// [LAW:types-are-the-program] A verb the table has, as a click event carries
-// it (src/daemon/apply.ts): resolved where the click arrives, so an unknown
-// verb is refused there and never becomes an event, and named, so the event's
-// record can say which. Branded, so only the lookup below makes one.
-export type ClickVerb = {
-  readonly name: string;
-  readonly run: VerbRun;
-} & { readonly __clickVerb: true };
-
-export function clickVerb(name: string): ClickVerb | null {
-  const run = VERBS.get(name);
-  return run === undefined ? null : ({ name, run } as ClickVerb);
+// A click as the daemon runs it, from the edge's read. It returns once its
+// turn has committed and handed its effects over; it throws the refusal of a
+// step that failed.
+export function runClick(click: Click, ctx: VerbContext): void {
+  switch (click.kind) {
+    case VERB_DISPATCH:
+      return dispatch(click, ctx);
+    case VERB_PROBE:
+      return probe(click.nonce, ctx);
+    default:
+      // A link verb with no run arm does not compile.
+      return click satisfies never;
+  }
 }
 
 // How long a session's menus sat with no click before its timer closed them.
@@ -2368,7 +2360,7 @@ export interface IdleClose {
 // mode releases its savepoint, and ◁ back can reopen what it closed — and the
 // closing view, which folds everything open inside what closes. It writes
 // `closed` to each menu open at the top, the write its ✕ makes. No URL names
-// it: it is not in VERBS.
+// it: it is no click verb.
 export function closeIdleMenus(
   sid: string,
   idle: IdleClose,

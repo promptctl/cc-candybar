@@ -47,7 +47,7 @@ import {
 } from "../src/click/wire";
 import { MAIN_NAME, parseRendererName } from "../src/daemon/home";
 import { linkClick } from "./helpers/click";
-import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
+import { BadVerbArgs, LEAF_VERB_NAMES, readClick } from "../src/daemon/verbs";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import {
   recordRender,
@@ -442,8 +442,9 @@ describe("parseHandlerUrl — verb split, value raw", () => {
   });
 
   test("effectsOf mirrors the daemon's decode: every leaf verb's value is segments, its session first", () => {
+    // The tail is spelled raw, as the link carries it.
     const at = (verb: string, tail: string): string =>
-      addressedLink(MAIN_NAME, verb, tail);
+      addressedLink(MAIN_NAME, VERB_DISPATCH, `e=${encodeURIComponent(`${verb}/${tail}`)}`);
     // A copy is its session and its text, the text's own "/" escaped as data,
     // matching what the copy handler copies.
     expect(effectsOf(at(VERB_COPY, "s1/a%2Fb"))).toEqual([
@@ -556,9 +557,10 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
   });
 
   test("dispatch is the only verb that resolves a nested dispatch — leaf table excludes it", () => {
-    // The full table dispatches `dispatch`, but the leaf table it folds over
-    // does not — so an effect can never re-enter dispatch.
-    expect(VERBS.has(VERB_DISPATCH)).toBe(true);
+    // A link reads as a dispatch, but the leaf table it folds over does not
+    // hold `dispatch` — so an effect can never re-enter dispatch.
+    expect(readClick(VERB_DISPATCH, "")).not.toBeNull();
+    expect(LEAF_VERB_NAMES.has(VERB_DISPATCH)).toBe(false);
   });
 
   test("per-effect errors are written to click.error in session state for bar display", async () => {

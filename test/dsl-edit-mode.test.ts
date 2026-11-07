@@ -43,10 +43,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext, effectsOf } from "./helpers/click";
-import { linkClick } from "./helpers/click";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
+import { testVerbContext, effectsOf, clickEffect, runLink, clicking } from "./helpers/click";
 import type { VerbContext } from "../src/daemon/verbs";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import {
@@ -188,14 +185,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
     configFor: () => config,
   };
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = linkClick(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
+    runLink(url, ctx);
   };
   return { config, store, render, click, ctx, history, sessionState };
 }
@@ -787,7 +777,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     // mode wires ONE static undo/redo pair rather than synthesizing one per
     // position, so BASE deliberately declares neither; drive the verb
     // directly, exactly as dsl-undo-redo.test.ts does.
-    const undo = VERBS.get("undo")!;
+    const undo = clicking("undo");
     await undo(encodeURIComponent("s1"), ctx);
     expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "trigger"] });
     await undo(encodeURIComponent("s1"), ctx);
@@ -954,7 +944,7 @@ describe("edit mode's save and cancel", () => {
       sinceEdit: 0,
     });
     expect(rt.sessionState.get("s1", "theme")).toBe("nord");
-    await VERBS.get("undo")!("s1", rt.ctx);
+    await clickEffect("undo", "s1", rt.ctx);
     expect(rt.sessionState.get("s1", "theme")).toBeNull();
     expect(durable.text()).toBe(original);
     expect(rt.history.depth("s1")).toEqual({
@@ -966,11 +956,11 @@ describe("edit mode's save and cancel", () => {
 
   test("rewind says what it put back, and a session with no savepoint is refused loudly", async () => {
     const rt = buildEditRuntime(BASE);
-    expect(() => VERBS.get("rewind")!("s1", rt.ctx)).toThrow(/no savepoint/);
+    expect(() => clickEffect("rewind", "s1", rt.ctx)).toThrow(/no savepoint/);
     await open(rt);
     await removeGit(rt);
     const logs: string[] = [];
-    await VERBS.get("rewind")!("s1", {
+    await clickEffect("rewind", "s1", {
       ...rt.ctx,
       log: (_level, message) => logs.push(message),
     });

@@ -4,7 +4,7 @@
 // itself a step.
 
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
-import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
+import { BadVerbArgs } from "../src/daemon/verbs";
 import { stateGate } from "./helpers/gates";
 import {
   encodeSegments,
@@ -12,7 +12,7 @@ import {
   VERB_BACK,
   VERB_UNDO,
 } from "../src/click/wire";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { recordRender, testVerbContext, clickEffect } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { UPDATE_DISMISSED_KEY } from "../src/daemon/update-keys";
@@ -45,13 +45,13 @@ function setup() {
   // The update notice's dismissal is the daemon's own key, not a config's.
   const dispose = ctx.gates.state.register(UPDATE_DISMISSED_KEY, ["1.2.3"]);
   const set = async (...pairs: string[]): Promise<void> => {
-    await VERBS.get(VERB_SET_STATE)!(encodeSegments(["s1", ...pairs]), ctx);
+    await clickEffect(VERB_SET_STATE, encodeSegments(["s1", ...pairs]), ctx);
   };
   const back = async (): Promise<void> => {
-    await VERBS.get(VERB_BACK)!(encodeSegments(["s1"]), ctx);
+    await clickEffect(VERB_BACK, encodeSegments(["s1"]), ctx);
   };
   const undo = async (): Promise<void> => {
-    await VERBS.get(VERB_UNDO)!(encodeSegments(["s1"]), ctx);
+    await clickEffect(VERB_UNDO, encodeSegments(["s1"]), ctx);
   };
   return {
     sessionState,

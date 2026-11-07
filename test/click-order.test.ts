@@ -9,7 +9,7 @@ import { MAIN_NAME } from "../src/daemon/home";
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { HOST, locs } from "./helpers/host";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
-import { VERBS, type VerbContext, type VerbHandler } from "../src/daemon/verbs";
+import { type VerbContext, type VerbHandler } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   VERB_COPY,
@@ -17,13 +17,12 @@ import {
   VERB_DISPATCH,
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
-  VERB_PROBE,
+  probeLink,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_SLASH,
   VERB_TOOLBAR_TOGGLE,
   effectsUrl,
-  encodeSegments,
 } from "../src/click/wire";
 import { clickErrors, lastClickError } from "../src/daemon/click-error";
 import { DoctorBusy } from "../src/doctor/busy";
@@ -36,7 +35,7 @@ import {
   HEALTHY_INSTALL_EDGE,
   noManagedSettings,
 } from "./helpers/doctor-facts";
-import { applyClick, applyClickAnswered, clickUrl, recordRender, testVerbContext } from "./helpers/click";
+import { applyClick, applyClickAnswered, clickUrl, recordRender, testVerbContext, runLink, effectLink } from "./helpers/click";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -105,9 +104,9 @@ function setup(over: Partial<DoctorEdge> = {}) {
   const clickOf = (url: string, c: VerbContext, gone?: () => boolean) =>
     applyClick(url, c, gone);
   const doctor = (sid: string, c: VerbContext = ctx, gone?: () => boolean) =>
-    clickOf(`cc-candybar://to/main/${VERB_DOCTOR_RUN}/${encodeURIComponent(sid)}`, c, gone);
+    clickOf(effectLink(VERB_DOCTOR_RUN, sid), c, gone);
   const toggle = (sid: string, c: VerbContext = ctx) =>
-    clickOf(`cc-candybar://to/main/${VERB_TOOLBAR_TOGGLE}/${encodeURIComponent(sid)}`, c);
+    clickOf(effectLink(VERB_TOOLBAR_TOGGLE, sid), c);
   const doDoctorThen = (c: VerbContext = ctx, gone?: () => boolean) =>
     clickOf(
       effectsUrl(MAIN_NAME, [
@@ -191,7 +190,7 @@ describe("a gather holds no turn", () => {
     const { ctx, held, doctor } = setup();
     const a = await doctor(B);
     await drain();
-    VERBS.get(VERB_PROBE)!(NONCE, {
+    runLink(probeLink(MAIN_NAME, NONCE), {
       ...ctx,
       arrival: { via: "link", delivery: { kind: "cli" } },
       gone: () => true,
@@ -225,7 +224,7 @@ describe("one session's order", () => {
       },
     });
     const marked = await applyClick(
-      `cc-candybar://to/main/${VERB_DOCTOR_MARK}/${encodeSegments([A, "nerdFont", "drawn"])}`,
+      effectLink(VERB_DOCTOR_MARK, A, "nerdFont", "drawn"),
       ctx,
     );
     const run = await doctorRunOf(A, ctx);
@@ -245,7 +244,7 @@ describe("one session's order", () => {
 });
 
 const doctorRunOf = (sid: string, ctx: VerbContext) =>
-  applyClick(`cc-candybar://to/main/${VERB_DOCTOR_RUN}/${encodeURIComponent(sid)}`, ctx);
+  applyClick(effectLink(VERB_DOCTOR_RUN, sid), ctx);
 
 describe("a gather is a snapshot of what it read", () => {
   test("a `do` of set-config then doctor judges the written config", async () => {
@@ -310,7 +309,7 @@ describe("a gather is a snapshot of what it read", () => {
         return healthyDaemonEdge().daemons();
       },
     });
-    await clickUrl(`cc-candybar://to/main/${VERB_DOCTOR_RUN}/${encodeURIComponent(A)}`, ctx);
+    await clickUrl(effectLink(VERB_DOCTOR_RUN, A), ctx);
     expect(probes).toBe(1);
     expect(reports()).toHaveLength(1);
   });
@@ -326,7 +325,7 @@ describe("a gather is a snapshot of what it read", () => {
     });
     const a = await doctorRunOf(A, ctx);
     await drain();
-    await clickUrl(`cc-candybar://to/main/${VERB_SET_STATE}/${encodeSegments([A, "theme", "nord"])}`, ctx);
+    await clickUrl(effectLink(VERB_SET_STATE, A, "theme", "nord"), ctx);
     first.open();
     await a.performed;
     expect(probes).toBe(2);
@@ -350,7 +349,7 @@ describe("a gather is a snapshot of what it read", () => {
         return healthyDaemonEdge().daemons();
       },
     });
-    await clickUrl(`cc-candybar://to/main/${VERB_DOCTOR_RUN}/${encodeURIComponent(A)}`, ctx);
+    await clickUrl(effectLink(VERB_DOCTOR_RUN, A), ctx);
     expect(probes).toBe(2);
     expect(reports()).toEqual([]);
     expect(lastClickError(sessionState, A)?.text).toBe(

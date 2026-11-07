@@ -6,9 +6,9 @@
 import { randomUUID } from "node:crypto";
 import { parseSessionId } from "../src/daemon/session-id";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
-import { BadVerbArgs, VERBS } from "../src/daemon/verbs";
+import { BadVerbArgs } from "../src/daemon/verbs";
 import { encodeSegments } from "../src/click/wire";
-import { testVerbContext } from "./helpers/click";
+import { testVerbContext, clicking } from "./helpers/click";
 import { REFUSED } from "./helpers/session-id-refused";
 
 describe("the session-id checkpoint", () => {
@@ -33,8 +33,8 @@ describe("the session-id checkpoint", () => {
 });
 
 describe("a click's session id", () => {
-  const toggle = VERBS.get("toolbar-toggle")!;
-  const stepState = VERBS.get("step-state")!;
+  const toggle = clicking("toolbar-toggle");
+  const stepState = clicking("step-state");
 
   test.each(REFUSED)("refuses %s", async (_, raw, problem) => {
     const ctx = testVerbContext(new SessionState(SINGLE_RUN));

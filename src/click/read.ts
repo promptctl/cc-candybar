@@ -16,7 +16,7 @@ import {
   VERB_OPEN_VSCODE,
 } from "./wire";
 import { isBarLink } from "./scheme";
-import { LEAF_VERB_NAMES, VERBS } from "../daemon/verbs";
+import { LEAF_VERB_NAMES } from "../daemon/verbs";
 
 /** One link the bar drew: its visible text and its URL. */
 export interface DrawnLink {
@@ -51,38 +51,32 @@ export interface DecodedEffect {
   readonly args: string[];
 }
 
-// [LAW:one-source-of-truth] Split an effect's value as the daemon splits it,
-// by its own leaf table: a leaf verb's value is `/`-separated segments, its
-// click's session first; the probe takes ONE argument, the whole value
-// decoded once. What a step's session or arguments then fail is the daemon's
-// to refuse, step by step; this reader says only how the link reads.
-function decodeArgs(verb: string, value: string): string[] {
-  return LEAF_VERB_NAMES.has(verb)
-    ? decodeSegments(value)
-    : [decodeURIComponent(value)];
-}
-
 export type DrawnClick =
   | { readonly ok: true; readonly effects: DecodedEffect[] }
   | { readonly ok: false; readonly problem: string };
 
 // [LAW:parse-dont-validate] A drawn link's click as the daemon splits it, its
-// ordered effects (a link whose verb is not dispatch is the one-effect case),
-// or why it does not read: a config can compute a link at the draw that the
-// parse refuses, or whose value carries a malformed escape, and a frame drawn
-// by an older daemon can name a verb this one has retired.
+// ordered effects, or why it does not read: a config can compute a link at the
+// draw that the parse refuses, or whose value carries a malformed escape, and
+// a frame drawn by an older daemon can name a verb this one has retired.
+// [LAW:one-source-of-truth] A link the bar draws names `dispatch`, and its
+// effects name the daemon's leaf verbs, each value `/`-separated segments, its
+// click's session first. What a step's session or arguments then fail is the
+// daemon's to refuse, step by step; this reader says only how the link reads.
 export function drawnClickOf(url: string): DrawnClick {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
-  const { verb, value } = link;
-  // A dispatch carries leaf verbs; a link may name any verb the daemon has.
-  const known = verb === VERB_DISPATCH ? LEAF_VERB_NAMES : VERBS;
+  if (link.verb !== VERB_DISPATCH) {
+    return {
+      ok: false,
+      problem: `a drawn link names ${VERB_DISPATCH}, and this names "${link.verb}": ${url}`,
+    };
+  }
   try {
-    const raw =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+    const raw = parseEffects(link.value);
     // The verb is read before its value, as the daemon reads it: a verb it
     // has not is refused whatever its value holds.
-    const unknown = raw.find((e) => !known.has(e.verb));
+    const unknown = raw.find((e) => !LEAF_VERB_NAMES.has(e.verb));
     if (unknown !== undefined) {
       return {
         ok: false,
@@ -93,7 +87,7 @@ export function drawnClickOf(url: string): DrawnClick {
       ok: true,
       effects: raw.map((e) => ({
         verb: e.verb,
-        args: decodeArgs(e.verb, e.value),
+        args: decodeSegments(e.value),
       })),
     };
   } catch (error) {

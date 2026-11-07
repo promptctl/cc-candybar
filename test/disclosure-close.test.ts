@@ -42,11 +42,9 @@ import {
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { GROUP_NS } from "../src/config/reserved-names";
 import type { RichText } from "@promptctl/rich-js";
-import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
-import { linkClick } from "./helpers/click";
-import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
+import { recordRender, testVerbContext, effectsOf, runLink } from "./helpers/click";
+import { VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 
@@ -142,14 +140,7 @@ function build(src: string, withDefault: boolean) {
   // Drive a click through the daemon's own handlers — the gate the row ✕
   // passes is the cycle action's, derived like every other set.
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = linkClick(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
+    runLink(url, ctx);
   };
   // Click the first link on any rendered line that writes `key` = `value`.
   const clickWriting = async (lines: readonly Row[], key: string, value: string): Promise<void> => {

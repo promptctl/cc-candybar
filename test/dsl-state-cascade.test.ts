@@ -11,9 +11,9 @@
 import { textOf } from "../src/render/frame";
 import { feedInputs } from "./helpers/inputs";
 import { autorun } from "mobx";
-import { VERBS } from "../src/daemon/verbs";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { buildRig } from "./helpers/rig";
+import { clickEffect } from "./helpers/click";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -87,7 +87,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const render = () => draw().frame;
 
     const before = render(); // effective theme = textual-dark (globals default)
-    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+    await clickEffect("set-state", `${SESSION_ID}/theme/nord`, ctx);
     const after = render(); // effective theme = nord
 
     // Same text, different colours — the palette switched live.
@@ -103,10 +103,10 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
     // set-state value shape: "<sessionId>/<key>/<value>" — key must be
     // one the session's config gates and value must satisfy its validator.
-    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+    await clickEffect("set-state", `${SESSION_ID}/theme/nord`, ctx);
     expect(render()).toContain("theme=nord");
 
-    await VERBS.get("set-state")!(`${SESSION_ID}/theme/dracula`, ctx);
+    await clickEffect("set-state", `${SESSION_ID}/theme/dracula`, ctx);
     expect(render()).toContain("theme=dracula");
   });
 
@@ -139,7 +139,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     try {
       expect(observed).toEqual(["(unset)"]);
 
-      await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+      await clickEffect("set-state", `${SESSION_ID}/theme/nord`, ctx);
 
       // Exactly one additional fire — proves the dep graph propagated the
       // change rather than the autorun being scheduled for an unrelated
@@ -191,7 +191,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       expect(themeObs).toEqual(["(unset)"]);
       expect(expandedObs).toEqual([""]);
 
-      await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+      await clickEffect("set-state", `${SESSION_ID}/theme/nord`, ctx);
 
       // Watched key advanced — cascade reached the right computed.
       expect(themeObs).toEqual(["(unset)", "nord"]);
@@ -216,7 +216,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // An unknown theme cannot quietly persist — the daemon's dispatcher
     // converts BadVerbArgs into a BAD_REQUEST wire response.
     const { ctx } = cascadeBar();
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme/not-a-theme`, ctx),
+    expect(() => clickEffect("set-state", `${SESSION_ID}/theme/not-a-theme`, ctx),
     ).toThrow(/unknown theme/);
   });
 
@@ -227,7 +227,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // read inline colors; persisting it as a session theme would render
     // empty/broken at the next refresh.
     const { ctx } = cascadeBar();
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme/custom`, ctx),
+    expect(() => clickEffect("set-state", `${SESSION_ID}/theme/custom`, ctx),
     ).toThrow(/unknown theme/);
   });
 
@@ -237,7 +237,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // exactly which keys ARE writable, so a typo or stale wire spec is
     // self-diagnosing.
     const { ctx } = cascadeBar();
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/not-a-real-key/whatever`, ctx),
+    expect(() => clickEffect("set-state", `${SESSION_ID}/not-a-real-key/whatever`, ctx),
     ).toThrow(/unknown state key "not-a-real-key" \(have: .*theme.*\)/);
   });
 
@@ -245,13 +245,13 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // The set-state verb covers every registered key; the endcaps key was a
     // separate named verb before this epic.
     const { sessionState, ctx } = cascadeBar();
-    await VERBS.get("set-state")!(`${SESSION_ID}/endcaps/capsule`, ctx);
+    await clickEffect("set-state", `${SESSION_ID}/endcaps/capsule`, ctx);
     expect(sessionState.get(SESSION_ID, "endcaps")).toBe("capsule");
   });
 
   test("set-state rejects an unknown endcaps value with the allowed-list", async () => {
     const { ctx } = cascadeBar();
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/endcaps/not-a-shape`, ctx),
+    expect(() => clickEffect("set-state", `${SESSION_ID}/endcaps/not-a-shape`, ctx),
     ).toThrow(/unknown endcaps "not-a-shape" \(have: .*capsule.*\)/);
   });
 
@@ -262,22 +262,22 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // the toolbar-toggle verb produces via clear() for the next render.
     const { sessionState, ctx } = cascadeBar();
 
-    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/true`, ctx);
+    await clickEffect("set-state", `${SESSION_ID}/toolbar-expanded/true`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
 
-    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/false`, ctx);
+    await clickEffect("set-state", `${SESSION_ID}/toolbar-expanded/false`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
 
-    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/1`, ctx);
+    await clickEffect("set-state", `${SESSION_ID}/toolbar-expanded/1`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
 
-    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/0`, ctx);
+    await clickEffect("set-state", `${SESSION_ID}/toolbar-expanded/0`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
   });
 
   test("set-state rejects non-boolean-ish toolbar-expanded values", async () => {
     const { ctx } = cascadeBar();
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/maybe`, ctx),
+    expect(() => clickEffect("set-state", `${SESSION_ID}/toolbar-expanded/maybe`, ctx),
     ).toThrow(/expected boolean-ish/);
   });
 
@@ -289,16 +289,16 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { ctx } = cascadeBar();
 
     // Just the session id (no key/value).
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}`, ctx)).toThrow(
+    expect(() => clickEffect("set-state", `${SESSION_ID}`, ctx)).toThrow(
       /<key>\/<value> is required/,
     );
     // Key but no value separator (odd-count: one segment).
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme`, ctx)).toThrow(
+    expect(() => clickEffect("set-state", `${SESSION_ID}/theme`, ctx)).toThrow(
       /expected even-count.*got 1 segment/,
     );
     // Empty key segment at pair 1 — structurally distinct from the
     // unknown-key validator rejection.
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}//ocean`, ctx)).toThrow(
+    expect(() => clickEffect("set-state", `${SESSION_ID}//ocean`, ctx)).toThrow(
       /empty key at pair 1/,
     );
   });
@@ -317,7 +317,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // unrepresentable today.
     const { ctx } = cascadeBar();
     for (const poison of ["__proto__", "constructor", "toString"]) {
-      expect(() => VERBS.get("set-state")!(`${SESSION_ID}/${poison}/whatever`, ctx),
+      expect(() => clickEffect("set-state", `${SESSION_ID}/${poison}/whatever`, ctx),
       ).toThrow(
         new RegExp(`unknown state key "${poison.replace(/\$/g, "\\$")}"`),
       );
@@ -330,7 +330,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // Menu primitive (chunk 11 .3) uses this to atomically write the
     // chosen value AND collapse the menu in one click.
     const { sessionState, ctx } = cascadeBar();
-    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/toolbar-expanded/0`, ctx);
+    await clickEffect("set-state", `${SESSION_ID}/theme/nord/toolbar-expanded/0`, ctx);
     expect(sessionState.get(SESSION_ID, "theme")).toBe("nord");
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
   });
@@ -375,7 +375,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     try {
       expect(snapshots).toEqual([{ theme: "(unset)", expanded: "1" }]);
 
-      await VERBS.get("set-state")!(
+      await clickEffect("set-state", 
         `${SESSION_ID}/theme/nord/toolbar-expanded/0`,
         ctx,
       );
@@ -401,7 +401,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // Seed a known prior state so we can prove the failing batch did
     // not overwrite it.
     sessionState.set(SESSION_ID, "theme", "dracula");
-    expect(() => VERBS.get("set-state")!(
+    expect(() => clickEffect("set-state", 
         `${SESSION_ID}/theme/nord/toolbar-expanded/maybe`,
         ctx,
       ),
@@ -416,7 +416,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // missing-value structural error — caught with its own message
     // rather than routed through a validator's unknown-key path.
     const { ctx } = cascadeBar();
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/leftover`, ctx),
+    expect(() => clickEffect("set-state", `${SESSION_ID}/theme/nord/leftover`, ctx),
     ).toThrow(/expected even-count.*got 3 segment/);
   });
 
@@ -427,7 +427,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // generic "set-state: unknown state key" without an index would
     // leave them counting slashes by hand.
     const { ctx } = cascadeBar();
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/nonsense-key/foo`, ctx),
+    expect(() => clickEffect("set-state", `${SESSION_ID}/theme/nord/nonsense-key/foo`, ctx),
     ).toThrow(/pair 2: unknown state key "nonsense-key"/);
   });
 
@@ -440,11 +440,11 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // structural defect at the pair index.
     const { ctx } = cascadeBar();
     // Empty key at pair 1.
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}//nord`, ctx)).toThrow(
+    expect(() => clickEffect("set-state", `${SESSION_ID}//nord`, ctx)).toThrow(
       /empty key at pair 1/,
     );
     // Empty key at pair 2 (theme valid, then empty key).
-    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme/nord//1`, ctx),
+    expect(() => clickEffect("set-state", `${SESSION_ID}/theme/nord//1`, ctx),
     ).toThrow(/empty key at pair 2/);
   });
 
@@ -483,9 +483,9 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     }`);
 
     expect(render()).toContain("tb=[]");
-    await VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
+    await clickEffect("toolbar-toggle", SESSION_ID, ctx);
     expect(render()).toContain("tb=[1]");
-    await VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
+    await clickEffect("toolbar-toggle", SESSION_ID, ctx);
     expect(render()).toContain("tb=[]");
   });
 });

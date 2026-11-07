@@ -44,7 +44,6 @@ import { lastClickError } from "../src/daemon/click-error";
 import type { VerbContext } from "../src/daemon/verbs";
 import {
   effectsUrl,
-  encodeSegments,
   VERB_COPY,
   VERB_SET_STATE,
   VERB_SLASH,
@@ -56,7 +55,7 @@ import { heldClock } from "./helpers/held-clock";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { applyClick, clickUrl, recordRender, testVerbContext } from "./helpers/click";
+import { applyClick, clickUrl, recordRender, testVerbContext, effectLink } from "./helpers/click";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import type { LaneSetupEffect } from "../src/daemon/lane-setup";
 import { failed, type EffectOutcome } from "../src/daemon/effect-outcome";
@@ -1413,7 +1412,7 @@ describe("LaneSetups", () => {
     await turns();
     expect(did.at(-1)).toBe(`claude plugin install ${BAND_PLUGIN}`);
     const copy = await applyClick(
-      `cc-candybar://to/main/${VERB_COPY}/${encodeSegments([SID, "hello"])}`,
+      effectLink(VERB_COPY, SID, "hello"),
       r.ctx,
     );
     await copy.performed;

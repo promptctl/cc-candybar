@@ -14,18 +14,20 @@ import { replyTo } from "../src/daemon/reply";
 import { DaemonClosing } from "../src/daemon/verb-error";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { SettingsHistory } from "../src/daemon/settings-history";
-import { closeIdleMenus, VERBS, type VerbContext } from "../src/daemon/verbs";
+import { closeIdleMenus, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import { lastClickError } from "../src/daemon/click-error";
 import {
   VERB_COPY,
-  VERB_PROBE,
+  VERB_DISPATCH,
   VERB_DOCTOR_RUN,
   VERB_SET_STATE,
   VERB_RANGE,
   VERB_UNDO,
+  addressedLink,
   effectsUrl,
   encodeSegments,
+  probeLink,
 } from "../src/click/wire";
 import type { Launcher } from "../src/proc/launch";
 import { instantOf } from "../src/utils/instant";
@@ -33,7 +35,7 @@ import { systemLauncher } from "../src/proc/system-launcher";
 import { DoctorBusy } from "../src/doctor/busy";
 import type { DoctorEdge } from "../src/doctor/edge";
 import { emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_INSTALL_EDGE } from "./helpers/doctor-facts";
-import { applyClick, clickUrl, recordRender, testVerbContext } from "./helpers/click";
+import { applyClick, clickUrl, recordRender, testVerbContext, clicking, effectLink } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 
@@ -212,7 +214,7 @@ test("a navigation commit that throws leaves the settings journal committed", ()
       throw new Error("navigation broke");
     },
   }));
-  const click = VERBS.get(VERB_SET_STATE)!;
+  const click = clicking(VERB_SET_STATE);
   expect(() => click(encodeSegments([SID, "theme", "nord"]), ctx)).toThrow("navigation broke");
   expect(undoDepth(ctx)).toBe(1);
   ctx.history.undo(SID);
@@ -222,7 +224,7 @@ test("a navigation commit that throws leaves the settings journal committed", ()
 test("a verb stamps its session's landing, though its handler threw", () => {
   const { ctx } = setup();
   const landed: string[] = [];
-  const verb = VERBS.get(VERB_UNDO)!;
+  const verb = clicking(VERB_UNDO);
   expect(() =>
     verb(encodeSegments([SID]), {
       ...ctx,
@@ -246,10 +248,10 @@ describe("the click path", () => {
       },
       verbCtx,
     } as unknown as DaemonParts;
-    const send = (verb: string, value: string, gone = () => false) =>
+    const send = (url: string, gone = () => false) =>
       replyTo(
         given,
-        { kind: "click", url: `cc-candybar://to/main/${verb}/${value}` } as Parameters<typeof replyTo>[1],
+        { kind: "click", url } as Parameters<typeof replyTo>[1],
         () => false,
         systemTimekeeper.monotonic(),
         gone,
@@ -263,7 +265,7 @@ describe("the click path", () => {
   test("a BadVerbArgs thrown in the handler reaches the client", async () => {
     const { ctx } = setup();
     const { send } = parts(ctx);
-    const { resp } = await send(VERB_UNDO, encodeSegments([SID]));
+    const { resp } = await send(effectLink(VERB_UNDO, SID));
     expect(resp).toMatchObject({
       ok: false,
       code: "BAD_REQUEST",
@@ -271,23 +273,42 @@ describe("the click path", () => {
     });
   });
 
+  // A leaf verb arrives only as a dispatch's effect, so a link naming one
+  // itself is no click: refused at the edge, it takes no turn and writes
+  // nothing.
+  test("a link naming a leaf verb itself is refused as an unknown click verb", async () => {
+    const { sessionState, ctx } = setup();
+    const { send } = parts(ctx);
+    const { resp } = await send(
+      addressedLink(MAIN_NAME, VERB_SET_STATE, encodeSegments([SID, "theme", "dracula"])),
+    );
+    expect(resp).toMatchObject({
+      ok: false,
+      code: "BAD_REQUEST",
+      error: expect.stringContaining(`unknown click verb: ${VERB_SET_STATE}`),
+    });
+    expect(sessionState.get(SID, "theme")).toBeNull();
+  });
+
   // [LAW:nothing-unseen] The click line always carries its session, so a
   // missing field never reads as either case.
   test.each([
-    ["names no session", ""],
-    ["names one the checkpoint refuses", encodeURIComponent("a/b")],
-  ])("a click that %s records sid=- on its line, never what the link spelled", async (_case, value) => {
+    // A dispatch with no leaf effect has no session to name.
+    ["names no session", addressedLink(MAIN_NAME, VERB_DISPATCH, "")],
+    ["names an empty one", effectLink(VERB_UNDO)],
+    ["names one the checkpoint refuses", effectLink(VERB_UNDO, "a/b")],
+  ])("a click that %s records sid=- on its line, never what the link spelled", async (_case, url) => {
     const { ctx } = setup();
     const { send, clickLine } = parts(ctx);
-    await send(VERB_UNDO, value);
+    await send(url);
     expect(clickLine()).toMatch(/ sid=- /);
   });
 
   test("a status-line link naming a verb re-enters without deadlock", async () => {
     const { ctx } = setup();
-    const url = `cc-candybar://to/main/${VERB_UNDO}/${encodeSegments([SID])}`;
+    const url = effectLink(VERB_UNDO, SID);
     const { send } = parts(ctx, url);
-    const { resp } = await send(VERB_RANGE, "ignored");
+    const { resp } = await send(addressedLink(MAIN_NAME, VERB_RANGE, "ignored"));
     expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
   });
 
@@ -295,7 +316,7 @@ describe("the click path", () => {
     const { ctx, turns } = setup();
     turns.close();
     const { send } = parts(ctx);
-    const { resp } = await send(VERB_UNDO, encodeSegments([SID]));
+    const { resp } = await send(effectLink(VERB_UNDO, SID));
     expect(resp).toMatchObject({
       ok: false,
       error: expect.stringContaining("the daemon closed"),
@@ -306,14 +327,14 @@ describe("the click path", () => {
     const { ctx, turns } = setup();
     turns.close();
     const { send, clickLine } = parts(ctx);
-    await send(VERB_UNDO, encodeSegments([SID]));
+    await send(effectLink(VERB_UNDO, SID));
     expect(clickLine()).toContain("closing=");
   });
 
   test("a click whose client left before it ran never lands, and undoes no toggle", async () => {
     const { sessionState, ctx } = setup();
     const { send, clickLine } = parts(ctx);
-    await send(VERB_SET_STATE, encodeSegments([SID, "theme", "dracula"]), () => true);
+    await send(effectLink(VERB_SET_STATE, SID, "theme", "dracula"), () => true);
     expect(sessionState.get(SID, "theme")).toBeNull();
     expect(clickLine()).toContain("abandoned=1");
   });
@@ -322,7 +343,7 @@ describe("the click path", () => {
     const { ctx } = setup();
     const { send } = parts(ctx);
     const nonce = "01234567-89ab-cdef-0123-456789abcdef";
-    await send(VERB_PROBE, nonce, () => true);
+    await send(probeLink(MAIN_NAME, nonce), () => true);
     expect(ctx.probes.list().map((p) => p.nonce)).toEqual([nonce]);
   });
 });
@@ -333,7 +354,7 @@ describe("a doctor click", () => {
     const before = sessionState.revision(SID);
     const held = gate();
     const { performed } = await applyClick(
-      `cc-candybar://to/main/${VERB_DOCTOR_RUN}/${encodeURIComponent(SID)}`,
+      effectLink(VERB_DOCTOR_RUN, SID),
       { ...ctx, doctor: parkedEdge(held.wait) },
     );
     await drain();
@@ -354,7 +375,7 @@ describe("a doctor click", () => {
         return held.wait.then(() => healthyDaemonEdge().daemons());
       },
     });
-    const url = `cc-candybar://to/main/${VERB_DOCTOR_RUN}/${encodeURIComponent(SID)}`;
+    const url = effectLink(VERB_DOCTOR_RUN, SID);
     const first = await applyClick(url, { ...ctx, doctor });
     const second = await applyClick(url, { ...ctx, doctor });
     await drain();
@@ -372,7 +393,7 @@ describe("a doctor click", () => {
   test("a probe that faults is held on the bar in its own words, and logged whole at error", async () => {
     const { sessionState, ctx } = setup();
     const errors: string[] = [];
-    await clickUrl(`cc-candybar://to/main/${VERB_DOCTOR_RUN}/${encodeURIComponent(SID)}`, {
+    await clickUrl(effectLink(VERB_DOCTOR_RUN, SID), {
       ...ctx,
       log: (level, msg) => void (level === "error" && errors.push(msg)),
       doctor: edge({
@@ -389,7 +410,7 @@ describe("a doctor click", () => {
 
   test("a probe the rate limit refused is the step's failure, held on the bar", async () => {
     const { sessionState, ctx } = setup();
-    await clickUrl(`cc-candybar://to/main/${VERB_DOCTOR_RUN}/${encodeURIComponent(SID)}`, {
+    await clickUrl(effectLink(VERB_DOCTOR_RUN, SID), {
       ...ctx,
       doctor: edge({
         daemons: async () => {
@@ -402,7 +423,7 @@ describe("a doctor click", () => {
 });
 
 describe("a click's real launch", () => {
-  const COPY = `cc-candybar://to/main/${VERB_COPY}/${encodeSegments([SID, "x"])}`;
+  const COPY = effectLink(VERB_COPY, SID, "x");
 
   test("hung, it times out, holding no turn, and its effect says so", async () => {
     const { ctx, turns, logged } = setup();

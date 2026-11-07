@@ -44,10 +44,8 @@ import { ReloadSignal } from "./helpers/reload-signal";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext, effectsOf } from "./helpers/click";
-import { linkClick } from "./helpers/click";
-import { encodeSegments, parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
+import { testVerbContext, effectsOf, clickEffect, runLink, clicking } from "./helpers/click";
+import { encodeSegments } from "../src/click/wire";
 import type { VerbContext } from "../src/daemon/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";
@@ -443,14 +441,7 @@ function buildPersistRuntime(
     durable.host,
   );
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = linkClick(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
+    runLink(url, ctx);
   };
   return { config, store, render, click, sessionState };
 }
@@ -603,14 +594,7 @@ describe("persist action click → the config file", () => {
       durable.host,
     );
     const click = async (url: string): Promise<void> => {
-      const { verb, value } = linkClick(url);
-      const effects =
-        verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-      for (const e of effects) {
-        const handler = VERBS.get(e.verb);
-        if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-        await handler(e.value, ctx);
-      }
+      runLink(url, ctx);
     };
     try {
       // The disclosure toggle is the menu's OWN SessionState write — open it.
@@ -834,7 +818,7 @@ describe("persist action click → the config file", () => {
       config,
       durable.host,
     );
-    const setConfig = VERBS.get("set-config")!;
+    const setConfig = clicking("set-config");
     expect(() =>
       setConfig(
         `${encodeURIComponent("s1")}/${encodeURIComponent("not-a-real-key")}/${encodeURIComponent("x")}`,
@@ -913,7 +897,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       config,
       durable.host,
     );
-    await VERBS.get("set-config")!(
+    await clickEffect("set-config", 
       encodeSegments(["s1", "palette", "nord"]),
       ctx,
     );
@@ -952,7 +936,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       durable.host,
     );
     const click = async (palette: string): Promise<void> => {
-      await VERBS.get("set-config")!(
+      await clickEffect("set-config", 
         encodeSegments(["s1", "palette", palette]),
         ctx,
       );
@@ -1017,7 +1001,7 @@ describe("RenderCache: the config file is the durable store", () => {
           return;
         }
         clicked = true;
-        await VERBS.get("set-config")!(
+        await clickEffect("set-config", 
           ["s1", "palette", "nord"].map(encodeURIComponent).join("/"),
           ctx,
         );

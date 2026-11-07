@@ -6,7 +6,7 @@
 // fold over the one call-graph walk (`callGraphBlocks`); a new question is a new
 // fold over it, never a second walker, or it is blind to helpers again.
 
-import { spellsUnaddressedLink } from "../../click/wire.js";
+import { deadLinkOf } from "../../click/wire.js";
 import { ownedBy } from "./plugin-scope.js";
 import { parseArm, type DslConfig, type VariableDecl } from "../dsl-types.js";
 
@@ -348,30 +348,32 @@ export function templateActionRefs(
   return [...refs.values()];
 }
 
-// [LAW:single-enforcer] The links a template's string literals spell in a
-// grammar older than names — a `"cc-candybar://…"` literal, whole or as a
+// [LAW:single-enforcer] The links a template's string literals spell that no
+// click runs, each with why — a `"cc-candybar://…"` literal, whole or as a
 // printf format, wherever it stands (a `link` argument, a printed text, a
 // comparison: a dead URL is dead in every position), in its own text or any
 // reachable helper's (`callGraphBlocks`), exactly as its action bindings are
 // found — once per body, with the helper whose body spells it (`null` = the
-// template itself). A literal that opens the address, or stops short of it,
-// may still become a link that clicks, and a link computed at the draw is no
-// literal: both are the click's to refuse.
-export interface UnaddressedLink {
+// template itself). A literal whose head opens the address, or stops short of
+// it, and names no verb whole may still become a link that clicks, and a link
+// computed at the draw is no literal: both are the click's to refuse.
+export interface DeadLink {
   readonly literal: string;
+  readonly problem: string;
   readonly via: string | null;
 }
-export function templateUnaddressedLinks(
+export function templateDeadLinks(
   template: string,
   helpers: Readonly<Record<string, string>>,
-): readonly UnaddressedLink[] {
-  const refs = new Map<string, UnaddressedLink>();
+): readonly DeadLink[] {
+  const refs = new Map<string, DeadLink>();
   for (const { code, via } of callGraph(template, helpers)) {
     for (const s of code.matchAll(STRING_LITERAL_RE)) {
       const literal = s[0].slice(1, -1);
-      if (!spellsUnaddressedLink(literal)) continue;
+      const problem = deadLinkOf(literal);
+      if (problem === null) continue;
       const key = `${literal}\0${via ?? "\0"}`;
-      if (!refs.has(key)) refs.set(key, { literal, via });
+      if (!refs.has(key)) refs.set(key, { literal, problem, via });
     }
   }
   return [...refs.values()];

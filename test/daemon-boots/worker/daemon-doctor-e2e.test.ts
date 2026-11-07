@@ -41,7 +41,7 @@ import {
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { SETTINGS_NS } from "../../../src/config/reserved-names";
 import {
-  addressedLink,
+  effectsUrl,
   probeLink,
   VERB_DOCTOR_RUN,
   VERB_PROBE,
@@ -294,7 +294,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     expect(
       await request({
         kind: "click",
-        url: addressedLink(daemon.name, VERB_DOCTOR_RUN, SID),
+        url: effectsUrl(daemon.name, [{ verb: VERB_DOCTOR_RUN, args: [SID] }]),
       }),
     ).toMatchObject({ ok: true });
     await clickPerformed(

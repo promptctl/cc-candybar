@@ -89,7 +89,7 @@ Limits: this used a whole daemon behind a bridge script, and the timing excludes
 
 - **Notification from the handler app.** Whether it needs a permission grant, and whether it appears at all.
 - **Handler update path.** How a staged handler is replaced on upgrade, and what a click does between a new Gather and an old handler.
-- **Link session at routing time.** Whether `clickSessionOf` works on an addressed link, for raising a refusal on its bar.
+- **Link session at routing time.** Whether the session `readClick` reads from an addressed link serves for raising a refusal on its bar.
 
 ## Done when
 

@@ -38,7 +38,7 @@ import {
   renderOptionsOf,
 } from "../src/daemon/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
-import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import { type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   fileHeldSettings,
@@ -46,7 +46,11 @@ import {
 } from "../src/daemon/setting-drafts";
 import { chmodSync } from "node:fs";
 import { dirname } from "node:path";
-import { linkClick } from "./helpers/click";
+import { runLink, effectLink } from "./helpers/click";
+import {
+  VERB_DELETE_PRESET,
+  VERB_SAVE_THEME_DEFAULT,
+} from "../src/click/wire";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -215,13 +219,10 @@ function rig(
         effective,
       ).frame;
     },
-    // The daemon's own path: the URL's verb — `dispatch` for a compound
-    // click — looked up in the one table, so a click is one history step.
+    // The daemon's own path: the whole link, read and run as one click, so
+    // a click is one history step.
     click: async (url: string) => {
-      const { verb, value } = linkClick(url);
-      const handler = VERBS.get(verb);
-      if (!handler) throw new Error(`no handler for verb "${verb}"`);
-      await handler(value, ctx);
+      runLink(url, ctx);
     },
     dispose: () => entry.registry.dispose(),
   };
@@ -1197,7 +1198,7 @@ describe("save as preset", () => {
     await start(source, { preset: "compact" });
     expect(textOf(r.render())).not.toContain(PRESET_DELETE_GLYPH);
     // The click a stale or hand-built URL could still carry.
-    await expect(r.click(`cc-candybar://to/main/delete-preset/${SID}/compact`),
+    await expect(r.click(effectLink(VERB_DELETE_PRESET, SID, "compact")),
     ).rejects.toThrow('cannot delete preset "compact": it is bundled');
     expect(durable.text()).toBe(source);
   });
@@ -1481,7 +1482,7 @@ describe("a theme's default look, set from the bar", () => {
     pick({ shade: "deepest" });
     expect(textOf(r.render())).not.toContain("⤓ default");
     // The click a stale or hand-built URL could still carry.
-    await expect(r.click(`cc-candybar://to/main/save-theme-default/${SID}`)).rejects.toThrow(
+    await expect(r.click(effectLink(VERB_SAVE_THEME_DEFAULT, SID))).rejects.toThrow(
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default",
     );
     expect(durable.text()).toBe(source);

@@ -55,11 +55,9 @@ import {
 
 // The decor the bundled config renders under.
 const BAR = DEFAULT_DECOR;
-import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
-import { linkClick } from "./helpers/click";
-import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
+import { recordRender, testVerbContext, effectsOf, runLink } from "./helpers/click";
+import { VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
@@ -220,14 +218,7 @@ function build(src: string, withDefault = false) {
   const fgOf = (name: string): string =>
     resolvedStyle(cellsOf(name)[0]!.style).color?.value?.hex ?? "(no fg)";
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = linkClick(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
+    runLink(url, ctx);
   };
   // The link spans of a segment's cells, by URL.
   const urlsIn = (name: string): string[] =>

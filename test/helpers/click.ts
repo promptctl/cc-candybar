@@ -16,9 +16,15 @@ import {
   HEALTHY_SERVING,
   noManagedSettings,
 } from "./doctor-facts";
-import { parseHandlerUrl } from "../../src/click/wire";
+import {
+  decodeSegments,
+  effectsUrl,
+  parseHandlerUrl,
+  type EffectVerb,
+} from "../../src/click/wire";
 import { apply, type ClickRefusal } from "../../src/daemon/apply";
-import { clickSessionOf, clickVerb } from "../../src/daemon/verbs";
+import { readClick, runClick, type Click } from "../../src/daemon/verbs";
+import { MAIN_NAME } from "../../src/daemon/home";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 import { describeEffect } from "../../src/daemon/effect";
@@ -284,24 +290,49 @@ export async function applyClickAnswered(
   readonly answer: ClickRefusal | null;
   readonly performed: Promise<void>;
 }> {
-  const { verb: name, value } = linkClick(url);
-  const verb = clickVerb(name);
-  if (verb === null) throw new Error(`no handler for verb "${name}"`);
-  // The session the click names, read as the daemon's edge reads it
-  // (src/daemon/reply.ts handleClick).
-  const session = clickSessionOf(name, value);
   return apply(
-    {
-      kind: "click",
-      verb,
-      value,
-      arrival: ctx.arrival,
-      session: session?.ok ? session.id : null,
-      gone,
-    },
+    { kind: "click", click: readLink(url), arrival: ctx.arrival, gone },
     clickParts(ctx),
   );
 }
+
+// A link's click, read as the daemon's edge reads it (src/daemon/reply.ts
+// handleClick); a test's links always name a click verb.
+export function readLink(url: string): Click {
+  const { verb, value } = linkClick(url);
+  const click = readClick(verb, value);
+  if (click === null) throw new Error(`no click verb "${verb}": ${url}`);
+  return click;
+}
+
+// A link's click, read and run as the daemon's click arm runs it:
+// synchronously, in one journal turn, its effects handed to the context's
+// `described`, throwing its refusal.
+export function runLink(url: string, ctx: VerbContext): void {
+  runClick(readLink(url), ctx);
+}
+
+// The one-effect link the bar would draw for an effect.
+export function effectLink(verb: EffectVerb, ...args: string[]): string {
+  return effectsUrl(MAIN_NAME, [{ verb, args }]);
+}
+
+// One effect, as the one-effect link the bar would draw for it, read and run
+// as the daemon's click arm runs it: synchronously, in its own journal turn,
+// throwing its refusal. `tail` is the effect's wire value, its session first.
+export function clickEffect(
+  verb: EffectVerb,
+  tail: string,
+  ctx: VerbContext,
+): void {
+  runLink(effectLink(verb, ...decodeSegments(tail)), ctx);
+}
+
+// `clickEffect` held for one verb, for a test that clicks it again and again.
+export const clicking =
+  (verb: EffectVerb) =>
+  (tail: string, ctx: VerbContext): void =>
+    clickEffect(verb, tail, ctx);
 
 // Drive a rendered click URL through the real path, effects and all: resolves
 // once the click has answered and every effect it described has reported.
