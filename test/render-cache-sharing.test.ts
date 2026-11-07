@@ -36,11 +36,9 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, runLink } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { linkClick } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
@@ -523,10 +521,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
       const hit = linksOf(last).find((l) => l.text === text);
       if (hit === undefined)
         throw new Error(`no link "${text}" in:\n${textOf(last)}`);
-      const { verb, value } = linkClick(hit.url);
-      const effects =
-        verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-      for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
+      runLink(hit.url, ctx);
       last = drawnBytes(held.view);
     }
     return held.view;

@@ -34,7 +34,7 @@ import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
 } from "../src/config/disclosure";
-import { clickUrl, effectsOf } from "./helpers/click";
+import { clickUrl, effectsOf, clickEffect, effectLink } from "./helpers/click";
 import { lastClickError } from "../src/daemon/click-error";
 import { buildRig } from "./helpers/rig";
 import {
@@ -42,7 +42,7 @@ import {
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
 } from "../src/click/wire";
-import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
+import { BadVerbArgs } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import type { VerbContext } from "../src/daemon/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
@@ -400,7 +400,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // diagnose a guessed "not in tmux".
   test("a doctor-run click for a session that never rendered is refused", async () => {
     const rt = doctorBar(HINT);
-    await rt.click(`cc-candybar://to/main/${VERB_DOCTOR_RUN}/never-rendered`);
+    await rt.click(effectLink(VERB_DOCTOR_RUN, "never-rendered"));
     expect(heldError(rt, "never-rendered")).toMatch(/never-rendered has not rendered yet/);
   });
 
@@ -544,10 +544,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       await rt.clickVerb(VERB_DOCTOR_RUN);
       expect(rt.render()).toContain("✓ Nerd Font");
       expect(markUrl(rt, "drawn")).toBeUndefined();
-      await rt.click(`cc-candybar://to/main/${VERB_DOCTOR_MARK}/s1/nerdFont/drawn`);
+      await rt.click(effectLink(VERB_DOCTOR_MARK, "s1", "nerdFont", "drawn"));
       expect(heldError(rt)).toMatch(/doctor-mark: .*nothing to (mark|look at)/);
       // A mark the click names wrongly is the click's own refusal, in its turn.
-      expect(() => VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx)).toThrow(
+      expect(() => clickEffect(VERB_DOCTOR_MARK, "s1/nerdFont/perhaps", rt.ctx)).toThrow(
         /the mark is "perhaps"/,
       );
     });
@@ -567,7 +567,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
           update: fileMarkBook(dir).update,
         };
         const ctx = { ...rt.ctx, doctorStores: { ...rt.ctx.doctorStores, marks } };
-        await clickUrl(`cc-candybar://to/main/${VERB_DOCTOR_MARK}/s1/nerdFont/drawn`, ctx);
+        await clickUrl(effectLink(VERB_DOCTOR_MARK, "s1", "nerdFont", "drawn"), ctx);
         expect(heldError(rt)).toContain(`doctor-mark: ${file} is not JSON`);
         expect(fs.readFileSync(file, "utf8")).toBe("junk");
       } finally {
@@ -584,7 +584,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       };
       const rt = doctorBar(null, CLEAN_LOAD, busy);
       await rt.openTools();
-      await rt.click(`cc-candybar://to/main/${VERB_DOCTOR_RUN}/s1`);
+      await rt.click(effectLink(VERB_DOCTOR_RUN, "s1"));
       expect(heldError(rt)).toBe(
         "the doctor looked at the font less than a second ago — click again",
       );

@@ -11,7 +11,7 @@ import type { Frame } from "../src/render/frame";
 // non-picker segment renders.
 //
 // [LAW:single-enforcer] Drives the real spine — registerDslConfig + drawDsl
-// for rendering, parseHandlerUrl + VERBS for the click, and the same
+// for rendering, the daemon's click read and run for the click, and the same
 // resolveThemeSelection the daemon calls. No parallel rig.
 //
 // [LAW:behavior-not-structure] A cell's colour is read BY SEGMENT NAME, off the

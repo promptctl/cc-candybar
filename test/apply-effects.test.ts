@@ -29,7 +29,7 @@ import { exits, program, readsStdin, runsFor } from "../src/proc/spawner-fake";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper, type Timekeeper } from "../src/time";
 import { applyUnanswered } from "../src/daemon/apply";
-import { applyClick, applyClickAnswered, clickUrl, testVerbContext } from "./helpers/click";
+import { applyClick, applyClickAnswered, clickUrl, testVerbContext, effectLink } from "./helpers/click";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
 
@@ -59,8 +59,8 @@ function rig(clock: Timekeeper = systemTimekeeper) {
   return { spawner, started, sessionState, ctx, applyLines, warned };
 }
 
-const COPY = `cc-candybar://to/main/${VERB_COPY}/${encodeSegments([SID, "hello"])}`;
-const COPY_DIAGNOSTIC = `cc-candybar://to/main/${VERB_COPY_DIAGNOSTIC}/${encodeSegments([SID, "request", "k"])}`;
+const COPY = effectLink(VERB_COPY, SID, "hello");
+const COPY_DIAGNOSTIC = effectLink(VERB_COPY_DIAGNOSTIC, SID, "request", "k");
 
 describe("a copy click's launch is an effect", () => {
   test("the click answers while pbcopy still runs; the text reaches its stdin; the apply lines name the effect and its outcome", async () => {
@@ -76,16 +76,16 @@ describe("a copy click's launch is an effect", () => {
     expect(r.started()[0]!.ended).toBeNull();
     expect(reported).toBe(false);
     expect(r.applyLines()).toEqual([
-      "apply kind=click verb=copy-text sid=s1 outcome=ok effects=launch:pbcopy revision=0",
+      "apply kind=click verb=dispatch sid=s1 outcome=ok effects=launch:pbcopy revision=0",
     ]);
     clock.advance(50);
     await turns();
     await performed;
     expect(r.started()[0]!.stdin).toBe("hello");
     expect(r.applyLines()).toEqual([
-      "apply kind=click verb=copy-text sid=s1 outcome=ok effects=launch:pbcopy revision=0",
+      "apply kind=click verb=dispatch sid=s1 outcome=ok effects=launch:pbcopy revision=0",
       expect.stringMatching(
-        /^apply kind=effect-done verb=copy-text sid=s1 effect=launch:pbcopy outcome=ok said=- effects=- revision=\d+$/,
+        /^apply kind=effect-done verb=dispatch sid=s1 effect=launch:pbcopy outcome=ok said=- effects=- revision=\d+$/,
       ),
     ]);
   });
@@ -93,7 +93,7 @@ describe("a copy click's launch is an effect", () => {
   test.each([
     [VERB_COPY, COPY],
     [VERB_COPY_DIAGNOSTIC, COPY_DIAGNOSTIC],
-  ])("pbcopy exiting 1 under %s holds the click error for the session, as the next frame reads it", async (verb, url) => {
+  ])("pbcopy exiting 1 under %s holds the click error for the session, as the next frame reads it", async (_verb, url) => {
     const r = rig();
     r.spawner.program(program(PBCOPY), exits(1, "", "pbcopy: no pasteboard"));
     await clickUrl(url, r.ctx);
@@ -104,7 +104,7 @@ describe("a copy click's launch is an effect", () => {
       { hold: "held", error: { text } },
     ]);
     expect(r.applyLines()[1]).toMatch(
-      new RegExp(`^apply kind=effect-done verb=${verb} sid=s1 effect=launch:pbcopy outcome=failed said="pbcopy failed \\(.*no pasteboard\\)" effects=- revision=\\d+$`),
+      new RegExp(`^apply kind=effect-done verb=dispatch sid=s1 effect=launch:pbcopy outcome=failed said="pbcopy failed \\(.*no pasteboard\\)" effects=- revision=\\d+$`),
     );
     // The bar shows it, and the log still says it as a warning.
     expect(r.warned).toEqual([r.applyLines()[1]]);
@@ -301,7 +301,7 @@ describe("a session's effects run in the order their turns committed", () => {
       },
     };
     const update = (sid: string) =>
-      applyClick(`cc-candybar://to/main/${VERB_APPLY_UPDATE}/${encodeURIComponent(sid)}`, ctx);
+      applyClick(effectLink(VERB_APPLY_UPDATE, sid), ctx);
     const first = await update(SID);
     const second = await update(SID);
     const other = await update("s2");
@@ -359,7 +359,7 @@ describe("the store refuses a write outside a turn", () => {
         ctx.sessionState.set(SID, "slipped", "1");
       },
     };
-    await clickUrl(`cc-candybar://to/main/${VERB_APPLY_UPDATE}/${encodeURIComponent(SID)}`, ctx);
+    await clickUrl(effectLink(VERB_APPLY_UPDATE, SID), ctx);
     expect(r.sessionState.get(SID, "slipped")).toBeNull();
     expect(lastClickError(r.sessionState, SID)?.text).toMatch(/outside any turn/);
   });

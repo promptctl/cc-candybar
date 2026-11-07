@@ -15,7 +15,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
-import { closeIdleMenus, clickSessionOf, type VerbContext } from "../src/daemon/verbs/index";
+import { closeIdleMenus, clickSession, readClick, type VerbContext } from "../src/daemon/verbs/index";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
@@ -342,7 +342,7 @@ function idleBar(src: string) {
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     const { verb, value: v } = linkClick(url);
-    expect(clickSessionOf(verb, v)).toEqual({ ok: true, id: SID });
+    expect(clickSession(readClick(verb, v)!)).toBe(SID);
     await clickUrl(url, ctx);
   };
   const held = (key: string): string =>

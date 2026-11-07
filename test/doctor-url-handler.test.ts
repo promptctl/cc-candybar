@@ -24,15 +24,15 @@ import {
 } from "../src/doctor/handler-probe";
 import { clickArrived } from "../src/doctor/edge";
 import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
-import { VERB_DISPATCH, VERB_DOCTOR_RUN, VERB_PROBE } from "../src/click/wire";
-import { BadVerbArgs, VERBS, type VerbContext } from "../src/daemon/verbs";
+import { addressedLink, probeLink, VERB_DISPATCH, VERB_DOCTOR_RUN } from "../src/click/wire";
+import { BadVerbArgs, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
 import { MAIN_NAME, parseRendererAddress } from "../src/daemon/home";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { clickUrl, recordRender, testVerbContext } from "./helpers/click";
+import { clickUrl, effectLink, recordRender, testVerbContext } from "./helpers/click";
 import {
   emptyStores,
   HEALTHY_FACTS,
@@ -471,14 +471,13 @@ describe("the daemon's side of the round trip", () => {
     };
     // Through Apply, as the daemon runs it: a doctor step's report lands
     // with its effect.
-    const click = (verb: string, value: string): Promise<void> =>
-      clickUrl(`cc-candybar://to/main/${verb}/${value}`, ctx);
+    const click = (url: string): Promise<void> => clickUrl(url, ctx);
     return { sessionState, probes, logs, click };
   }
 
   test("a probe link records its nonce and who delivered it", async () => {
     const d = daemon(link(FORWARDED));
-    await d.click(VERB_PROBE, NONCE);
+    await d.click(probeLink(MAIN_NAME, NONCE));
     expect(d.probes.list()).toEqual([{ nonce: NONCE, delivery: FORWARDED }]);
     expect(d.logs).toEqual([
       `probe: arrived nonce=${NONCE} delivery=forwarder`,
@@ -487,14 +486,14 @@ describe("the daemon's side of the round trip", () => {
 
   test("a probe the CLI delivered is recorded as such", async () => {
     const d = daemon(link(CLI));
-    await d.click(VERB_PROBE, NONCE);
+    await d.click(probeLink(MAIN_NAME, NONCE));
     expect(d.probes.list()).toEqual([{ nonce: NONCE, delivery: CLI }]);
     expect(d.logs).toEqual([`probe: arrived nonce=${NONCE} delivery=cli`]);
   });
 
   test("a value that is not a probe nonce is refused and records nothing", async () => {
     const d = daemon(link(FORWARDED));
-    await expect(d.click(VERB_PROBE, "../../etc")).rejects.toThrow(BadVerbArgs);
+    await expect(d.click(probeLink(MAIN_NAME, "../../etc"))).rejects.toThrow(BadVerbArgs);
     expect(d.probes.list()).toEqual([]);
   });
 
@@ -524,7 +523,7 @@ describe("the daemon's side of the round trip", () => {
         termCols: 148,
       }),
     );
-    await d.click(VERB_DOCTOR_RUN, "s1");
+    await d.click(effectLink(VERB_DOCTOR_RUN, "s1"));
     const keys = doctorReportKeys("urlHandler");
     return {
       verdict: d.sessionState.get("s1", keys.verdict),
@@ -565,14 +564,14 @@ describe("the daemon's side of the round trip", () => {
   test("a dispatch cannot carry a probe as one of its effects", async () => {
     const d = daemon(link(FORWARDED));
     await expect(
-      d.click(VERB_DISPATCH, `e=${encodeURIComponent(`probe/${NONCE}`)}`),
+      d.click(addressedLink(MAIN_NAME, VERB_DISPATCH, `e=${encodeURIComponent(`probe/${NONCE}`)}`)),
     ).rejects.toThrow(new BadVerbArgs('dispatch: unknown effect verb "probe"'));
     expect(d.probes.list()).toEqual([]);
   });
 
   test("a probe cannot arrive from the tmux status line", async () => {
     const d = daemon({ via: "tmux-status" });
-    await expect(d.click(VERB_PROBE, NONCE)).rejects.toThrow(BadVerbArgs);
+    await expect(d.click(probeLink(MAIN_NAME, NONCE))).rejects.toThrow(BadVerbArgs);
     expect(d.probes.list()).toEqual([]);
   });
 

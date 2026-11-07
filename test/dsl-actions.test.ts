@@ -30,17 +30,9 @@ import { deriveActionValidators } from "../src/daemon/foundations/state-validato
 import { bareGates, stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { registerOptionDomain } from "../src/config/option-domain";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, runLink } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { linkClick } from "./helpers/click";
-import {
-  decodeSegments,
-  parseEffects,
-  VERB_DISPATCH,
-  VERB_COPY,
-  VERB_OPEN_VSCODE,
-} from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
+import type { Effect } from "../src/daemon/effect";
 import { CHECKS } from "../src/doctor/checks";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -55,37 +47,22 @@ function ownUrls(rendered: Frame): string[] {
 }
 
 
-interface SideEffect {
-  readonly verb: string;
-  readonly args: string[];
-}
-
 // Drive a config through the real spine + the real derived gate (the gate of
-// the config the session renders — the sole interaction authority). `click` drives state
-// verbs (set-state, step-state) through the REAL daemon leaf handlers against a
-// real SessionState, so the gate, the relative-step wrap, and the unset seed are
-// exercised exactly as the daemon runs them; copy/open are recorded as side
-// effects (executing them would launch pbcopy/open).
+// the config the session renders — the sole interaction authority). `click`
+// runs the whole link through the REAL daemon click path against a real
+// SessionState, so the gate, the relative-step wrap, and the unset seed are
+// exercised exactly as the daemon runs them. What a click asks of the machine
+// (copy, open) is described as data and recorded here, never performed.
 function actionBar(src: string) {
   const rig = buildRig({ source: src });
   const { config, store, sessionState } = rig;
   const render = (): Frame => rig.draw().frame;
-  const sideEffects: SideEffect[] = [];
-  // The per-effect loop stays: `rig.click` would run copy/open for real.
+  const sideEffects: Effect[] = [];
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = linkClick(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      // copy/open carry no gate and would launch a real process — record them.
-      if (e.verb === VERB_COPY || e.verb === VERB_OPEN_VSCODE) {
-        sideEffects.push({ verb: e.verb, args: decodeSegments(e.value) });
-        continue;
-      }
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, rig.ctx); // real set-state / step-state through the gate
-    }
+    runLink(url, {
+      ...rig.ctx,
+      described: (effects) => void sideEffects.push(...effects),
+    });
   };
   return { config, store, sessionState, render, click, sideEffects };
 }
@@ -551,9 +528,15 @@ describe("2de.12 — copy / open actions derive no gate", () => {
     const urls = ownUrls(render());
     expect(urls).toHaveLength(2);
     for (const url of urls) await click(url);
-    expect(sideEffects).toEqual([
-      { verb: VERB_COPY, args: ["s1", "s1"] },
-      { verb: VERB_OPEN_VSCODE, args: ["s1", "/tmp/proj"] },
+    expect(sideEffects).toMatchObject([
+      { kind: "launch", spec: { bin: "/usr/bin/pbcopy", stdinInput: "s1" } },
+      {
+        kind: "launch",
+        spec: {
+          bin: "/usr/bin/open",
+          args: ["-a", "Visual Studio Code", "/tmp/proj"],
+        },
+      },
     ]);
   });
 });

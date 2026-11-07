@@ -51,7 +51,7 @@ import {
   linkClick,
 } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { clickSessionOf } from "../src/daemon/verbs";
+import { clickSession, readClick } from "../src/daemon/verbs";
 import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
@@ -498,7 +498,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // [LAW:verifiable-goals] brandon-theming-8uj.1 done-gate: the bundled default
   // ships a clickable theme/style picker, not just documentation describing how
   // to hand-author one. Drives the REAL click wire against DEFAULT_DSL_CONFIG's
-  // own applyTheme/applyStyle actions (clickUrl → VERBS → the gate of the
+  // own applyTheme/applyStyle actions (clickUrl → the daemon's click run → the gate of the
   // config the session renders, the same chain the daemon runs),
   // then re-renders with theme.effective/style.effective recomputed exactly as
   // draw-bar.ts does (resolveThemeSelection/resolveStyleSelection over SessionState) —
@@ -889,7 +889,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(urls.length).toBeGreaterThanOrEqual(5);
       for (const url of urls) {
         const { verb, value } = linkClick(url);
-        expect(clickSessionOf(verb, value)).toEqual({ ok: true, id: "sess-1" });
+        expect(clickSession(readClick(verb, value)!)).toBe("sess-1");
       }
     });
 

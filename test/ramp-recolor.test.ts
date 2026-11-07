@@ -11,7 +11,7 @@ import { MAIN_NAME } from "../src/daemon/home";
 // base palette resolved per render the way the daemon does
 // (resolveThemeSelection, whose decided arm carries the palette), the style the same way
 // (resolveStyleSelection), the clicks driven through the real
-// wire (effectsUrl → clickUrl → VERBS). No parallel rig.
+// wire (effectsUrl → clickUrl → the daemon's click read and run). No parallel rig.
 
 import { runUnder } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";

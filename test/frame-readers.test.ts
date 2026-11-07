@@ -3,6 +3,8 @@
 // in for it.
 
 import { describeLink, drawnClickOf, linksOf } from "../src/click/read";
+import { effectsUrl, VERB_TOOLBAR_TOGGLE } from "../src/click/wire";
+import { MAIN_NAME } from "../src/daemon/home";
 import {
   composeBar,
   parseFrame,
@@ -154,29 +156,35 @@ describe("describeLink", () => {
 
   test("a drawn link whose value carries a malformed escape reads as its refusal", () => {
     expect(
-      describeLink({ text: "x", url: "cc-candybar://to/main/toolbar-toggle/100%" }, "s"),
-    ).toMatch(/^refused: the link's value does not decode .*: cc-candybar:\/\/to\/main\/toolbar-toggle\/100%$/);
+      describeLink({ text: "x", url: "cc-candybar://to/main/dispatch/e=toolbar-toggle%2F100%25" }, "s"),
+    ).toMatch(/^refused: the link's value does not decode .*: cc-candybar:\/\/to\/main\/dispatch\/e=toolbar-toggle%2F100%25$/);
   });
 
   // A frame an older daemon drew can name a verb this one retired; its click
   // is refused, so it reads as refused, never as the act it once was.
   test("a link naming a verb the daemon has not reads as its refusal", () => {
-    expect(describeLink({ text: "x", url: "cc-candybar://to/main/copy/s" }, "s")).toBe(
-      'refused: the daemon has no verb "copy": cc-candybar://to/main/copy/s',
-    );
     const dispatched = `cc-candybar://to/main/dispatch/does=copy&e=${encodeURIComponent("copy/s")}`;
     expect(describeLink({ text: "x", url: dispatched }, "s")).toBe(
       `refused: the daemon has no verb "copy": ${dispatched}`,
     );
     // Its value is never read, so a malformed escape in it is not the reason.
-    expect(describeLink({ text: "x", url: "cc-candybar://to/main/copy/100%" }, "s")).toBe(
-      'refused: the daemon has no verb "copy": cc-candybar://to/main/copy/100%',
+    const malformed = `cc-candybar://to/main/dispatch/e=${encodeURIComponent("copy/100%")}`;
+    expect(describeLink({ text: "x", url: malformed }, "s")).toBe(
+      `refused: the daemon has no verb "copy": ${malformed}`,
+    );
+  });
+
+  // A drawn link names dispatch, and a leaf verb is only ever its effect: a
+  // link naming one itself is a click the daemon refuses.
+  test("a link naming a verb itself, not through dispatch, reads as its refusal", () => {
+    expect(describeLink({ text: "x", url: "cc-candybar://to/main/toolbar-toggle/s" }, "s")).toBe(
+      'refused: a drawn link names dispatch, and this names "toolbar-toggle": cc-candybar://to/main/toolbar-toggle/s',
     );
   });
 
   test("an addressed link reads as its effects, and an outside link as opened", () => {
     expect(
-      describeLink({ text: "x", url: "cc-candybar://to/main/toolbar-toggle/s" }, "s"),
+      describeLink({ text: "x", url: effectsUrl(MAIN_NAME, [{ verb: VERB_TOOLBAR_TOGGLE, args: ["s"] }]) }, "s"),
     ).toBe("toolbar-toggle <session>");
     expect(describeLink({ text: "x", url: B }, "s")).toBe(`opens ${B}`);
   });

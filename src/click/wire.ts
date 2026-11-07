@@ -53,8 +53,8 @@ export const LINK_TO = "to";
 const LINK_PREFIX = `${URL_SCHEME}://`;
 const ADDRESS = `${LINK_TO}/`;
 
-// [LAW:one-source-of-truth] The verb vocabulary. The daemon's VERBS registry
-// keys off these and every emitter builds effects with them, so the emitted
+// [LAW:one-source-of-truth] The verb vocabulary. The daemon's click and leaf
+// tables key off these and every emitter builds effects with them, so the emitted
 // verb and the dispatched handler cannot name-drift.
 export const VERB_DISPATCH = "dispatch";
 export const VERB_SET_STATE = "set-state";

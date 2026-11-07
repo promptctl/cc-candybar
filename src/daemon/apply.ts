@@ -56,7 +56,9 @@ import {
   closeIdleMenus,
   gatherDoctor,
   landDoctor,
-  type ClickVerb,
+  clickSession,
+  runClick,
+  type Click,
   type IdleClose,
 } from "./verbs/index.js";
 
@@ -78,12 +80,10 @@ export type Event =
     }
   | {
       readonly kind: "click";
-      readonly verb: ClickVerb;
-      readonly value: string;
+      // The click as the daemon's edge read it: what it runs from, and the
+      // session it is in.
+      readonly click: Click;
       readonly arrival: ClickArrival;
-      // The session the click names, once it passed the session-id
-      // checkpoint.
-      readonly session: string | null;
       // Whether its client has left: told TIMEOUT, or hung up, while the click
       // sat behind the loop.
       readonly gone: () => boolean;
@@ -195,11 +195,11 @@ export const ARMS: ApplyArms<Event> = {
   // a refused step is answered beside them; a click whose client has left is
   // refused by the verb, where it would land (src/daemon/verbs/index.ts). A
   // turn is synchronous, so no idle timer can close a menu under one.
-  click: ({ verb, value, arrival, gone }, { verbCtx }) => {
+  click: ({ click, arrival, gone }, { verbCtx }) => {
     const effects: Effect[] = [];
     let answer: ClickRefusal | null = null;
     try {
-      verb.run(value, {
+      runClick(click, {
         ...verbCtx,
         arrival,
         gone,
@@ -461,7 +461,7 @@ const ORIGIN: {
   ) => EffectOrigin;
 } = {
   request: ({ req }) => ({ verb: "request", session: req.sessionId }),
-  click: ({ verb, session }) => ({ verb: verb.name, session }),
+  click: ({ click }) => ({ verb: click.kind, session: clickSession(click) }),
   "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
   "effect-done": ({ of }) => of,
   answered: ({ session }) => ({ verb: "answered", session }),

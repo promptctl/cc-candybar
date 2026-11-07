@@ -65,17 +65,13 @@ import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
 import { authoredFragment } from "../src/daemon/config-file-store";
-import { testVerbContext, effectsOf } from "./helpers/click";
-import { linkClick } from "./helpers/click";
+import { testVerbContext, effectsOf, clickEffect, runLink, clicking } from "./helpers/click";
 import {
-  addressedLink,
-  encodeSegments,
-  parseEffects,
-  VERB_DISPATCH,
+  effectsUrl,
   VERB_RESET_CONFIG,
+  type EffectVerb,
 } from "../src/click/wire";
 import { MAIN_NAME } from "../src/daemon/home";
-import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";
@@ -594,14 +590,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
     log: (_level, message) => log.push(message),
   };
   const click = async (url: string): Promise<void> => {
-    const { verb, value } = linkClick(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
+    runLink(url, ctx);
   };
   return { config, store, render, click, log };
 }
@@ -766,7 +755,7 @@ describe("apply-layout-op click → the config file", () => {
     await expect(click(urls[0]!)).rejects.toThrow(undeclared);
     // The reset link is hand-built: the harness filters rendered preset-root
     // resets as edit chrome's own banner, and the verb is what is under test.
-    const resetUrl = addressedLink(MAIN_NAME, VERB_RESET_CONFIG, encodeSegments(["s1", "presets.mine.root"]));
+    const resetUrl = effectsUrl(MAIN_NAME, [{ verb: VERB_RESET_CONFIG, args: ["s1", "presets.mine.root"] }]);
     await expect(click(resetUrl)).rejects.toThrow(undeclared);
     expect(durable.parsed().root).toEqual({
       v: [{ h: ["directory", "git"] }, "bar"],
@@ -798,7 +787,7 @@ describe("apply-layout-op click → the config file", () => {
     }`;
     const { render, click } = buildLayoutRuntime(SRC_PLACED);
     render();
-    const resetUrl = addressedLink(MAIN_NAME, VERB_RESET_CONFIG, encodeSegments(["s1", "presets.mine.root"]));
+    const resetUrl = effectsUrl(MAIN_NAME, [{ verb: VERB_RESET_CONFIG, args: ["s1", "presets.mine.root"] }]);
     await click(resetUrl);
     // The preset the user authored keeps its name: the action still targets it.
     expect(durable.parsed().presets).toEqual({ mine: {} });
@@ -818,7 +807,7 @@ describe("apply-layout-op click → the config file", () => {
       config,
       durable.host,
     );
-    const applyLayoutOp = VERBS.get("apply-layout-op")!;
+    const applyLayoutOp = clicking("apply-layout-op");
     const before = durable.text();
     expect(() =>
       applyLayoutOp(
@@ -843,7 +832,7 @@ describe("apply-layout-op click → the config file", () => {
       config,
       durable.host,
     );
-    const applyLayoutOp = VERBS.get("apply-layout-op")!;
+    const applyLayoutOp = clicking("apply-layout-op");
     expect(() =>
       applyLayoutOp(
         `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
@@ -1081,11 +1070,11 @@ function presetNamesOf(entry: CacheEntry, preset: string): string[] {
 // Fire one leaf verb through the REAL handler, with the wire's own encoding
 // — exactly what a hand click sends, no key discovered from an action name.
 async function fireVerb(
-  verb: string,
+  verb: EffectVerb,
   ctx: VerbContext,
   ...args: string[]
 ): Promise<void> {
-  await VERBS.get(verb)!(args.map(encodeURIComponent).join("/"), ctx);
+  await clickEffect(verb, args.map(encodeURIComponent).join("/"), ctx);
 }
 
 // A session that has rendered from the fixture's file — the origin a durable
@@ -1574,7 +1563,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(parsed.presets.default.root).toEqual({ rows: {} });
       // The same click again is stale, and names the root it stages.
       await expect(removeDirectory).rejects.toThrow(
-        /^root holds no placement "directory"/,
+        /^dispatch: apply-layout-op: root holds no placement "directory"/,
       );
     } finally {
       for (const fn of cleanups) fn();

@@ -28,10 +28,10 @@ import { parseSessionId, type SessionId } from "./session-id";
 import { RecordingFailed, recordToFile } from "./session-recorder.js";
 import { type SourceSnapshots } from "./stats";
 import {
-  clickVerb,
   CLICK_PROGRAM_TIMEOUT_MS,
   clickHandoff,
-  clickSessionOf,
+  clickSession,
+  readClick,
   BadVerbArgs,
 } from "./verbs";
 import { ClickAbandoned, DaemonClosing } from "./verb-error";
@@ -906,26 +906,19 @@ async function handleClick(
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
-  const resolved = clickVerb(verb);
-  if (resolved === null) {
+  // [LAW:single-enforcer] The click's one read: its event carries it, and its
+  // run, its journal and its landing all take the click's session from it.
+  const click = readClick(verb, value);
+  if (click === null) {
     return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   // The click's session, as it crossed the one session-id checkpoint: one
   // that passed is recorded, and a click naming none, or one that failed, records
   // `sid=-`, so what a link spelled never reaches the log unchecked.
-  const named = clickSessionOf(verb, value);
-  const session = named?.ok ? named.id : null;
-  noteFacts(facts, { sid: session ?? "-" });
+  noteFacts(facts, { sid: clickSession(click) ?? "-" });
   const { answer } = await apply(
-    {
-      kind: "click",
-      verb: resolved,
-      value,
-      arrival,
-      session,
-      gone: clientGone,
-    },
+    { kind: "click", click, arrival, gone: clientGone },
     parts,
   );
   // A refused click is answered as data, so the effects its landed steps

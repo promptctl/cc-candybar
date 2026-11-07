@@ -5,10 +5,18 @@ import { socketPath } from "../src/daemon/paths";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { systemTimekeeper } from "../src/time";
-import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
+import { BadVerbArgs, LEAF_VERB_NAMES, readClick } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { encodeSegments, VERB_STEP_STATE, VERB_TOOLBAR_TOGGLE, VERB_APPLY_UPDATE } from "../src/click/wire";
-import { applyClick, clickUrl, recordRender, testVerbContext } from "./helpers/click";
+import { MAIN_NAME } from "../src/daemon/home";
+import {
+  addressedLink,
+  encodeSegments,
+  VERB_DISPATCH,
+  VERB_STEP_STATE,
+  VERB_TOOLBAR_TOGGLE,
+  VERB_APPLY_UPDATE,
+} from "../src/click/wire";
+import { applyClick, clickUrl, recordRender, runLink, testVerbContext, clicking, effectLink } from "./helpers/click";
 import { lastClickError } from "../src/daemon/click-error";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
@@ -78,9 +86,9 @@ describe("click protocol", () => {
     expect(body.url).toBe("cc-candybar://toolbar-toggle/test-session");
   });
 
-  test("VERBS lookup is prototype-pollution-safe", () => {
-    // [LAW:types-are-the-program] VERBS is a ReadonlyMap, not a plain
-    // object — wire-level untrusted verb names like `__proto__` and
+  test("the click read is prototype-pollution-safe", () => {
+    // [LAW:types-are-the-program] The click readers are a ReadonlyMap, not a
+    // plain object — wire-level untrusted verb names like `__proto__` and
     // `constructor` are non-members, not truthy hits on Object.prototype.
     // A future revert to `Readonly<Record<string, VerbHandler>>` would
     // let those names return prototype functions, bypass the `!handler`
@@ -90,7 +98,13 @@ describe("click protocol", () => {
     // so the regression reads as "verb table leaks Object.prototype"
     // rather than as a type-only diff a reviewer might wave through.
     for (const poison of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
-      expect(VERBS.get(poison)).toBeUndefined();
+      expect(readClick(poison, "")).toBeNull();
+    }
+  });
+
+  test("a link naming a leaf verb itself is no click: a leaf arrives only as a dispatch's effect", () => {
+    for (const verb of LEAF_VERB_NAMES) {
+      expect(readClick(verb, encodeSegments(["s1"]))).toBeNull();
     }
   });
 
@@ -100,11 +114,16 @@ describe("click protocol", () => {
     // and any other Error to RENDER_FAILED. A lone `%` makes decodeURIComponent
     // throw a raw URIError — without reclassification it would surface as an
     // operational RENDER_FAILED. Pins the single-arg (toolbar-toggle) and multi-seg
-    // (set-state) codecs at their shared decode boundary.
+    // (set-state) codecs at their shared decode boundary. The effect is spelled
+    // by hand: the wire's own encoder never writes a lone `%`.
     const ctx: VerbContext = testVerbContext(new SessionState(SINGLE_RUN));
     for (const verb of [VERB_TOOLBAR_TOGGLE, "set-state"]) {
-      const handler = VERBS.get(verb)!;
-      expect(() => handler("%", ctx)).toThrow(BadVerbArgs);
+      const url = addressedLink(
+        MAIN_NAME,
+        VERB_DISPATCH,
+        `e=${encodeURIComponent(`${verb}/%`)}`,
+      );
+      expect(() => runLink(url, ctx)).toThrow(BadVerbArgs);
     }
   });
 });
@@ -114,7 +133,7 @@ describe("apply-update verb", () => {
   // handler's whole job is describing the act, which the performer reaches
   // through ctx once the click has answered.
   const url = (sid: string) =>
-    `cc-candybar://to/main/${VERB_APPLY_UPDATE}/${encodeURIComponent(sid)}`;
+    effectLink(VERB_APPLY_UPDATE, sid);
 
   test("a session id reaches ctx.applyUpdate once, outside the turn and unawaited by the click; a missing or unsafe one is BadVerbArgs and never does", async () => {
     const holders: Array<string | null> = [];
@@ -228,7 +247,7 @@ describe("step-state handler", () => {
     const sessionState = new SessionState(SINGLE_RUN);
     recordRender(sessionState, "s1");
     const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
-    const step = VERBS.get(VERB_STEP_STATE)!;
+    const step = clicking(VERB_STEP_STATE);
     const click = async (by: number): Promise<void> => {
       await step(encodeSegments(["s1", KEY, String(by)]), ctx);
     };
@@ -267,7 +286,7 @@ describe("step-state handler", () => {
 
   test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", async () => {
     const { ctx } = setup();
-    const step = VERBS.get(VERB_STEP_STATE)!;
+    const step = clicking(VERB_STEP_STATE);
     expect(() => step(encodeSegments(["s1", KEY, "x"]), ctx),
     ).toThrow(BadVerbArgs);
   });
@@ -304,7 +323,7 @@ describe("step-state handler", () => {
       actions: { pick: { set: KEY, from: ["warm", "cool"] } },
     });
     const range = session(stepper("14"));
-    const set = VERBS.get("set-state")!;
+    const set = clicking("set-state");
     await set(encodeSegments(["s1", KEY, "cool"]), words.ctx);
     expect(words.sessionState.get("s1", KEY)).toBe("cool");
     await range.click(2);
@@ -324,13 +343,13 @@ describe("step-state handler", () => {
   });
 
   test("a key the session's config declares no range for is rejected, not silently stepped", async () => {
-    const step = VERBS.get(VERB_STEP_STATE)!;
+    const step = clicking(VERB_STEP_STATE);
     const { ctx } = setup();
     expect(() => step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
     ).toThrow(BadVerbArgs);
   });
 
   test("step-state is a registered leaf verb", () => {
-    expect(VERB_NAMES).toContain(VERB_STEP_STATE);
+    expect(LEAF_VERB_NAMES).toContain(VERB_STEP_STATE);
   });
 });

@@ -12,9 +12,8 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
-import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { linkClick } from "./helpers/click";
+import { runLink } from "./helpers/click";
 import { registerDslConfig, type DrawnFrame, type RenderWarning } from "../src/dsl/render";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -358,10 +357,7 @@ describe("a kept view draws what a fresh one draws", () => {
             .join(" ")}`,
         );
       }
-      const { verb, value } = linkClick(hit.url);
-      const effects =
-        verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-      for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
+      runLink(hit.url, ctx);
     };
 
     const cold = step();
