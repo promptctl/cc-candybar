@@ -1,4 +1,5 @@
 import path from "node:path";
+import { inspect } from "node:util";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import type { Filesystem } from "../../disk/filesystem.js";
 import { chainName } from "../../config-hint.js";
@@ -599,6 +600,9 @@ export interface RenderCacheStats {
   readonly views: number;
   // Sessions an open feed pins (`pin`).
   readonly pinned: number;
+  // Entries an every-entry reload has yet to reach: above 0 while a catch-up
+  // walks the map, one entry a turn; holding above 0 is a walk that stopped.
+  readonly due: number;
   // Views retired but not yet disposed because a render still holds one: as
   // `retired` is for states, climbing while `views` holds is a render that
   // never returned.
@@ -1456,6 +1460,14 @@ export class RenderCache<
   // What clears the hold sweep while one is running.
   private stopSweep: (() => void) | null = null;
   private closed = false;
+  // [LAW:one-source-of-truth] The entries an every-entry reload asked for that
+  // have not re-read the disk since. Keyed by the entry itself, so an entry
+  // evicted and opened again is a new one, whose own first load read the disk
+  // after the span.
+  private readonly due = new Set<CacheEntry>();
+  // What cancels the one turn armed to reload the next due entry, while one
+  // is. The turn carries the cause of the latest every-entry reload.
+  private walk: (() => void) | null = null;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
@@ -1896,6 +1908,9 @@ export class RenderCache<
     this.closed = true;
     this.stopSweep?.();
     this.stopSweep = null;
+    // The drops below empty the due set, so no turn is armed again.
+    this.walk?.();
+    this.walk = null;
     this.answersWatch.release();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
@@ -1931,6 +1946,7 @@ export class RenderCache<
   ): void {
     entry.watch?.held.handle.release();
     this.entries.delete(key);
+    this.due.delete(entry);
     this.retire(entry.state, reason, null);
   }
 
@@ -1952,6 +1968,7 @@ export class RenderCache<
       compiles: this.compiles.size,
       views: this.views.size,
       pinned: this.pins.size,
+      due: this.due.size,
       retiredViews,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes(),
@@ -2116,6 +2133,10 @@ export class RenderCache<
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
   private reloadInto(entry: CacheEntry, cause: LoadCause): void {
+    // [LAW:one-source-of-truth] Whatever caused it, this reload re-reads the
+    // disk, so the entry is no longer due. Before the load, so one that throws
+    // is not taken again by the next turn.
+    this.due.delete(entry);
     // Taken before the reload, so a session whose view fails to reopen over
     // the new state is still among those it changed.
     const sessions = this.sessionsOn(entry);
@@ -2148,12 +2169,54 @@ export class RenderCache<
 
   // Every entry, re-read for `cause`: the answers on disk moved, and any
   // entry may draw from a repository; or file events resumed, and an edit to
-  // any entry's files may have gone unheard. The live map is walked, so an
-  // entry a reload's `fit` evicts is skipped, never reloaded back to life.
-  // [LAW:one-source-of-truth] Each entry's load names the cause; the batch
-  // has no record of its own.
+  // any entry's files may have gone unheard. Each entry's load names the
+  // cause it ran for; whatever started the batch logs it at its source.
+  //
+  // [LAW:no-ambient-temporal-coupling] One entry per turn of the loop. A
+  // reload that keeps its state still resolves, validates and keys the whole
+  // chain, so a walk over every entry in one turn holds the loop for seconds,
+  // and every client waiting behind it hangs up. [LAW:one-source-of-truth] A
+  // later batch re-walks every entry for its own cause: one re-read of the
+  // disk as it is now answers both.
   reloadEvery(cause: EveryEntryLoad): void {
-    for (const entry of this.entries.values()) this.reloadInto(entry, cause);
+    for (const entry of this.entries.values()) this.due.add(entry);
+    this.walk?.();
+    this.walk = null;
+    this.armWalk(cause);
+  }
+
+  // [LAW:single-enforcer] The one place a walk turn is armed: none while one
+  // is armed, so a batch started from inside a turn leaves one walker, and
+  // one whenever an entry is due.
+  private armWalk(cause: EveryEntryLoad): void {
+    if (this.walk !== null || this.due.size === 0) return;
+    this.walk = this.deps.clock.defer(() => this.walkOne(cause));
+  }
+
+  // The turn takes the most recently used due entry, read off the map as it
+  // is now, so a bar someone draws during the walk is re-read on the next
+  // turn, not where it stood when the batch began. Nothing is due when every
+  // entry left since the turn was armed: dropped, or re-read by its own
+  // reload.
+  // [LAW:no-silent-failure] The turn runs outside any watcher's callback, so
+  // it is its own error boundary, as the watcher registry is for a reload a
+  // watch drives: a reload that throws is logged and ends only its own turn,
+  // where uncaught it would end the daemon.
+  private walkOne(cause: EveryEntryLoad): void {
+    this.walk = null;
+    let next: CacheEntry | null = null;
+    for (const entry of this.entries.values())
+      if (this.due.has(entry)) next = entry;
+    if (next === null) return;
+    try {
+      this.reloadInto(next, cause);
+    } catch (e) {
+      this.log(
+        "error",
+        `catch-up reload threw dir=${next.projectDir} cause=${cause.kind}: ${inspect(e)}`,
+      );
+    }
+    this.armWalk(cause);
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch
