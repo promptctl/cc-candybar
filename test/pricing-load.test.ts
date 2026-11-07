@@ -7,18 +7,21 @@ import {
   costOf,
   livePricing,
   offlinePricing,
+  PRICING_PERIOD,
   type PriceTable,
 } from "../src/segments/pricing";
-import { systemTimekeeper } from "../src/time";
 import type { DaemonLogger } from "../src/utils/logger";
+import { heldClock, type HeldClock } from "./helpers/held-clock";
 import { jestTmpDir } from "./helpers/jest-tmp";
-import { until } from "./helpers/until";
+import { throughout, until } from "./helpers/until";
 
 // The one seam is the network: each `get` is recorded with its options, and
-// answers only when the case says, so a load can be caught in flight.
+// answers, or fails, only when the case says, so a load can be caught in
+// flight.
 interface Asked {
   readonly options: { agent?: unknown; signal?: AbortSignal };
   answer(body: unknown): void;
+  fail(): void;
 }
 let asked: Asked[] = [];
 // A `get` that throws as it is called, as node's does on options it refuses.
@@ -48,6 +51,7 @@ jest.mock("node:https", () => ({
         response.push(Buffer.from(JSON.stringify(body)));
         response.push(null);
       },
+      fail: () => request.emit("error", new Error("offline")),
     });
     return request;
   },
@@ -63,16 +67,37 @@ const RATES: PriceTable = {
     cache_write_1h: 5,
   },
 };
+// The next day's table: a model the first did not carry.
+const NEXT_RATES: PriceTable = {
+  "model-y": {
+    name: "Y",
+    input: 6,
+    output: 7,
+    cache_read: 8,
+    cache_write_5m: 9,
+    cache_write_1h: 10,
+  },
+};
 const warnings: string[] = [];
 const log: DaemonLogger = (_level, message) => void warnings.push(message);
-const asking = () => until(() => asked.length > 0, "the pricing fetch");
+// The n-th fetch has been asked for.
+const asking = (n = 1) => until(() => asked.length >= n, `pricing fetch ${n}`);
+// A real-time hold: a load the case says must not start has had the disk read
+// and the loop turns it would need to reach the network.
+const noFetchPast = (n: number) =>
+  throughout(() => asked.length === n, `no fetch past the ${n}th`, 200);
+const diskCopy = () =>
+  JSON.parse(
+    fs.readFileSync(path.join(cacheRoot, "usage", "pricing.json"), "utf8"),
+  ) as { data: PriceTable; timestamp: number };
 
 let cacheRoot: string;
 let closing: AbortController;
+let clock: HeldClock;
 const live = () =>
   livePricing({
     cacheRoot,
-    clock: systemTimekeeper,
+    clock,
     closing: closing.signal,
     log,
   });
@@ -81,6 +106,7 @@ beforeEach(() => {
   getThrows = null;
   warnings.length = 0;
   closing = new AbortController();
+  clock = heldClock(new Date());
   cacheRoot = jestTmpDir("cache");
   fs.mkdirSync(cacheRoot, { recursive: true });
 });
@@ -90,6 +116,16 @@ afterEach(() => {
   if (fs.existsSync(usage)) fs.chmodSync(usage, 0o700);
   fs.rmSync(cacheRoot, { recursive: true, force: true });
 });
+
+// A first load that lands RATES, so the case starts from a held table.
+async function loaded() {
+  const pricing = live();
+  const first = pricing.table();
+  await asking(1);
+  asked[0]!.answer(RATES);
+  expect(await first).toEqual(RATES);
+  return pricing;
+}
 
 describe("a daemon's pricing", () => {
   test("every entry that asks while the table is out shares one fetch", async () => {
@@ -105,10 +141,7 @@ describe("a daemon's pricing", () => {
   });
 
   test("the day's copy on disk is read by the next daemon, which fetches nothing", async () => {
-    const first = live().table();
-    await asking();
-    asked[0]!.answer(RATES);
-    await first;
+    await loaded();
 
     expect(await live().table()).toEqual(RATES);
     expect(asked).toHaveLength(1);
@@ -119,7 +152,7 @@ describe("a daemon's pricing", () => {
     fs.mkdirSync(path.join(cacheRoot, "usage"), { recursive: true });
     fs.writeFileSync(
       path.join(cacheRoot, "usage", "pricing.json"),
-      JSON.stringify({ data: { "model-x": partial }, timestamp: Date.now() }),
+      JSON.stringify({ data: { "model-x": partial }, timestamp: clock.now() }),
     );
 
     const table = live().table();
@@ -163,7 +196,10 @@ describe("a daemon's pricing", () => {
     getThrows = new Error("bad options");
 
     expect(await live().table()).toEqual(await offlinePricing().table());
-    expect(warnings).toEqual(["pricing load threw: Error: bad options"]);
+    expect(warnings).toEqual([
+      "pricing load threw: Error: bad options",
+      expect.stringContaining("pricing table not loaded (1 in a row)"),
+    ]);
   });
 
   test("after the owner's close, no load starts", async () => {
@@ -171,6 +207,128 @@ describe("a daemon's pricing", () => {
 
     expect(await live().table()).toEqual(await offlinePricing().table());
     expect(asked).toHaveLength(0);
+  });
+
+  test("a load that landed nothing is tried again after a backoff that doubles per failure, and the table that then lands prices", async () => {
+    const bundled = await offlinePricing().table();
+    const pricing = live();
+    const first = pricing.table();
+    await asking(1);
+    asked[0]!.fail();
+    expect(await first).toEqual(bundled);
+    expect(warnings).toEqual([
+      `pricing table not loaded (1 in a row): priced by the bundled rates until a retry in ${PRICING_PERIOD.failedMs}ms`,
+    ]);
+
+    // Before the backoff is up, an ask starts nothing.
+    clock.advance(PRICING_PERIOD.failedMs - 1);
+    expect(await pricing.table()).toEqual(bundled);
+    await noFetchPast(1);
+
+    // At the backoff, the ask is answered by what is held and the retry
+    // starts behind it.
+    clock.advance(1);
+    expect(await pricing.table()).toEqual(bundled);
+    await asking(2);
+    asked[1]!.fail();
+    await until(() => warnings.length === 2, "the second failure said");
+    expect(warnings[1]).toBe(
+      `pricing table not loaded (2 in a row): priced by the bundled rates until a retry in ${2 * PRICING_PERIOD.failedMs}ms`,
+    );
+
+    // The second backoff is twice the first.
+    clock.advance(PRICING_PERIOD.failedMs);
+    expect(await pricing.table()).toEqual(bundled);
+    await noFetchPast(2);
+    clock.advance(PRICING_PERIOD.failedMs);
+    expect(await pricing.table()).toEqual(bundled);
+    await asking(3);
+
+    asked[2]!.answer(RATES);
+    await until(
+      async () => "model-x" in (await pricing.table()),
+      "the fetched table held",
+    );
+    expect(await pricing.table()).toEqual(RATES);
+    expect(diskCopy()).toEqual({ data: RATES, timestamp: clock.now() });
+  });
+
+  test("a loaded table is fetched again once its day is up, and prices until the new one lands", async () => {
+    const pricing = await loaded();
+
+    clock.advance(PRICING_PERIOD.okMs - 1);
+    expect(await pricing.table()).toEqual(RATES);
+    await noFetchPast(1);
+
+    // The day is up: the old table answers, and one fetch starts behind it,
+    // however many ask while it is out.
+    clock.advance(1);
+    expect(await pricing.table()).toEqual(RATES);
+    await asking(2);
+    expect(await pricing.table()).toEqual(RATES);
+    expect(await pricing.table()).toEqual(RATES);
+    await noFetchPast(2);
+
+    asked[1]!.answer(NEXT_RATES);
+    await until(
+      async () => "model-y" in (await pricing.table()),
+      "the next day's table held",
+    );
+    expect(await pricing.table()).toEqual(NEXT_RATES);
+    expect(diskCopy()).toEqual({ data: NEXT_RATES, timestamp: clock.now() });
+    expect(warnings).toEqual([]);
+  });
+
+  test("a refresh that lands nothing keeps the loaded table, says so, and is tried again after the backoff rather than another day", async () => {
+    const pricing = await loaded();
+
+    clock.advance(PRICING_PERIOD.okMs);
+    expect(await pricing.table()).toEqual(RATES);
+    await asking(2);
+    asked[1]!.fail();
+    await until(() => warnings.length === 1, "the failed refresh said");
+    expect(warnings[0]).toBe(
+      `pricing table not loaded (1 in a row): priced by the last table until a retry in ${PRICING_PERIOD.failedMs}ms`,
+    );
+    expect(await pricing.table()).toEqual(RATES);
+
+    clock.advance(PRICING_PERIOD.failedMs);
+    expect(await pricing.table()).toEqual(RATES);
+    await asking(3);
+  });
+
+  test("a refresh takes the day's copy another daemon wrote, and fetches nothing", async () => {
+    const pricing = await loaded();
+
+    clock.advance(PRICING_PERIOD.okMs);
+    fs.writeFileSync(
+      path.join(cacheRoot, "usage", "pricing.json"),
+      JSON.stringify({ data: NEXT_RATES, timestamp: clock.now() }),
+    );
+
+    expect(await pricing.table()).toEqual(RATES);
+    await until(
+      async () => "model-y" in (await pricing.table()),
+      "the copy on disk held",
+    );
+    expect(asked).toHaveLength(1);
+  });
+
+  test("a close during a refresh keeps the loaded table and writes nothing, and after it no load starts", async () => {
+    const pricing = await loaded();
+    const written = diskCopy();
+
+    clock.advance(PRICING_PERIOD.okMs);
+    expect(await pricing.table()).toEqual(RATES);
+    await asking(2);
+    closing.abort();
+    await until(() => warnings.length === 1, "the ended refresh said");
+
+    expect(await pricing.table()).toEqual(RATES);
+    expect(diskCopy()).toEqual(written);
+    clock.advance(PRICING_PERIOD.failedMs);
+    expect(await pricing.table()).toEqual(RATES);
+    await noFetchPast(2);
   });
 
   test("an entry's cost is its usage at its model's rates", () => {
