@@ -115,6 +115,14 @@ test("a book that cannot be read is the unread advisory", () => {
   ]);
 });
 
+test("a config folder that is a regular file holds no config: the bundled default, and nothing unchecked", () => {
+  file(locs.configDir, "not a folder");
+  const l = load();
+  expect(l.chain.layers).toEqual([]);
+  expect(l.advisories.filter((a) => a !== null)).toEqual([]);
+  expect(l.parsed.kind).toBe("parsed");
+});
+
 test("a .json beside a .json5 is the collision advisory", () => {
   file(userFile, "{}");
   file(userFile.replace(/\.json5$/, ".json"), "{}");
@@ -147,6 +155,23 @@ describe("the installed layer's memo", () => {
     // The held clock and an in-place write keep its inode, size and mtime.
     disk.write(installed("p"), `{ segments: { s: { template: "BBBB" } } }`);
     expect(template(load(disk, memo), "plugins.p.s")).toBe("BBBB");
+  });
+
+  test("a load over another disk that holds the same definitions is served the held layer", () => {
+    // A click's proof reads through a disk of its own, lent the render
+    // cache's memo: what the bar's load merged, the proof does not merge again.
+    const memo = new InstalledLayerMemo();
+    file(installed("p"), `{ segments: { s: { template: "AAAA" } } }`);
+    const held = parsed(load(disk, memo)).base;
+    const other = filesystemFake({
+      clock: heldClock(new Date(0)),
+      platform: "darwin",
+    });
+    other.mkdir(path.dirname(installed("p")));
+    other.mkdir(project);
+    other.write(installed("p"), `{ segments: { s: { template: "AAAA" } } }`);
+    expect(parsed(load(other, memo)).base).toBe(held);
+    expect(parsed(load(other, new InstalledLayerMemo())).base).not.toBe(held);
   });
 
   test("reads each definition once per load", () => {

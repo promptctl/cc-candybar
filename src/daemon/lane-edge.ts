@@ -393,7 +393,8 @@ export function productionLaneEdge(
           category: "lane.claude",
         }),
       ),
-    fileExists: (file) => fs.existsSync(file),
+    // [LAW:one-source-of-truth] Both existence questions ask the one disk.
+    fileExists: (file) => presence(filesystem, file) === "present",
     presence: (file) => presence(filesystem, file),
     paneClaude: (hint) => paneClaude(launcher, hint),
     heldSession,

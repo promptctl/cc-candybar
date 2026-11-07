@@ -11,6 +11,7 @@ import path from "node:path";
 import { applyLayoutOp, writeValues } from "../src/daemon/config-file-store";
 import type { ConfigHome } from "../src/config/loader/discovery";
 import { systemFilesystem } from "../src/disk/system-filesystem";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
 
 const store = {
   record: () => {},
@@ -28,6 +29,7 @@ const homeWith = (text: string): ConfigHome => {
     cwd: null,
     locs: locs(),
     reads: systemFilesystem,
+    memo: new InstalledLayerMemo(),
   };
 };
 

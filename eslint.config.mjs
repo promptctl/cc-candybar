@@ -107,7 +107,6 @@ const FS_READERS = [
   "src/config/cli.ts",
   "src/daemon/acquire.ts",
   "src/daemon/build-currency.ts",
-  "src/daemon/config-file-store.ts",
   "src/daemon/fork-bomb-breaker.ts",
   "src/daemon/lane-edge.ts",
   "src/daemon/limits.ts",

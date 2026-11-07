@@ -73,6 +73,7 @@ const noRecord = { record: () => {}, logger: () => {} };
 const projectHome = () =>
   durableConfig(
     systemFilesystem,
+    new InstalledLayerMemo(),
     locations(host, homeOf(host)),
     readRepoAnswers(systemFilesystem, stateDir(homeOf(host))),
     project,
@@ -118,6 +119,7 @@ test("a durable click writes the user's file, never the project's", () => {
     cwd: project,
     locs: locations(host, homeOf(host)),
     reads: systemFilesystem,
+    memo: new InstalledLayerMemo(),
   });
   writeValues(noRecord, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
