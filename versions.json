@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-684",
+      "ref": "refs/pull/684/merge",
+      "sha": "d8300cb540df23473ac21862d3f096a09125a76c",
+      "timestamp": "2026-11-07T10:32:55.789Z",
+      "commits": [
+        {
+          "sha": "d8300cb540df23473ac21862d3f096a09125a76c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:31:24-07:00",
+          "message": "Merge 5f56d40c298367a903585d64c3878720db7f62d6 into 215f486db0c68765107dc69e715ccb26c5ac01d3\n"
+        },
+        {
+          "sha": "5f56d40c298367a903585d64c3878720db7f62d6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:31:15-07:00",
+          "message": "fix(pricing): a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8)\n\nThe pricing held one promise for the daemon's life, so a daemon that\nstarted offline priced by the bundled rates until it was restarted, and\none that fetched kept its table past the disk copy's day.\n\nWhat a load settles is now a Landed table or a Failed load that carries\nthe last table that landed, if any. Each ask starts the one load when\nwhat is held is due, and answers with what is held: the first ask awaits,\nlater asks answer at once while the load lands behind them. A landed\ntable is due a day after it was read; a failed load after a backoff that\ndoubles per failure in a row up to an hour. The disk copy is a candidate\njudged by the same due predicate, so the day ends once. No timer is\narmed: the retry is the next ask after the due moment. A load that\nlanded nothing says so on the owner's log with the retry delay.\n\nThe test moves onto a held clock and drives the retry, the refresh, a\nrefresh that fails, a copy another daemon wrote, and a close mid-refresh.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-676",
       "ref": "refs/pull/676/merge",
       "sha": "f96513dc2de84bfbfb0df4000f3cf3d0ddc706a8",
