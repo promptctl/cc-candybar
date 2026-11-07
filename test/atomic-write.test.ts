@@ -172,6 +172,7 @@ describe("writeAtomic across processes", () => {
   test("two writers of one file: neither fails, and every read is one complete write", async () => {
     const file = path.join(dir, "repo-configs.json");
     writeAtomic(file, JSON.stringify({ child: "seed", i: 0, pad: "" }));
+    let ended = false;
     const children = ["a", "b"].map((name) => {
       // The sandbox env, as cli-plan's children get: the worker's own
       // NODE_OPTIONS is not the one test setup threads through.
@@ -189,8 +190,10 @@ describe("writeAtomic across processes", () => {
             spawnError = String(e);
             resolve({ name, code: null, failure: spawnError });
           });
+          // The exit code says whether the child's writes all landed; its
+          // stderr rides along to say why one did not.
           child.once("close", (code) =>
-            resolve({ name, code, failure: /Error/.test(stderr) ? stderr : "" }),
+            resolve({ name, code, failure: code === 0 ? "" : stderr }),
           );
         },
       );
@@ -212,10 +215,8 @@ describe("writeAtomic across processes", () => {
       // Every read while both write, and the one after, parses as a whole
       // body one writer wrote.
       const torn: string[] = [];
-      let running = true;
-      const ends = Promise.all(children.map((c) => c.exited)).finally(() => {
-        running = false;
-      });
+      let exits: Awaited<(typeof children)[number]["exited"]>[] | null = null;
+      void Promise.all(children.map((c) => c.exited)).then((all) => (exits = all));
       const readWhole = () => {
         const text = fs.readFileSync(file, "utf8");
         try {
@@ -225,13 +226,20 @@ describe("writeAtomic across processes", () => {
           torn.push(`${text.length} bytes: ${text.slice(0, 40)}`);
         }
       };
-      while (running) {
-        readWhole();
-        // Paced to sample the file through the run without holding a core
-        // the two writers and the suite's other workers need.
-        await sleep(1);
-      }
-      const exits = await ends;
+      const sampling = (async () => {
+        while (exits === null && !ended) {
+          readWhole();
+          // Paced to sample the file through the run without holding a core
+          // the two writers and the suite's other workers need.
+          await sleep(1);
+        }
+      })();
+      await until(
+        () => exits !== null,
+        () => `both writers exited (${children.map((c) => c.state()).join("; ")})`,
+        25_000,
+      );
+      await sampling;
       readWhole();
 
       expect(exits).toEqual([
@@ -251,9 +259,10 @@ describe("writeAtomic across processes", () => {
       // Nothing staged is left beside the file.
       expect(fs.readdirSync(dir)).toEqual(["repo-configs.json"]);
     } finally {
-      // A child still waiting for its go reads the end of its stdin and
-      // exits; one that is writing finishes and exits on its own.
-      for (const c of children) c.child.stdin.end();
+      ended = true;
+      // Neither child outlives the case, waiting or writing. A worker that
+      // dies first closes their stdin, which ends one still waiting.
+      for (const c of children) c.child.kill();
     }
   });
 });
