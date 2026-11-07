@@ -33,7 +33,7 @@ import type { Effect } from "../src/daemon/effect";
 import { doctorReportKeys } from "../src/doctor/report";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DoctorEdge } from "../src/doctor/edge";
-import { instantOf, type Instant } from "../src/utils/instant";
+import { instantOf } from "../src/utils/instant";
 import { MISMATCH_RACE_S } from "../src/daemon/mismatch-runs";
 import type { SessionPane } from "../src/daemon/session-pane";
 import { applyClick, recordRender, TEST_STORED_ROOT, testVerbContext } from "./helpers/click";
@@ -45,6 +45,7 @@ import {
   noManagedSettings,
 } from "./helpers/doctor-facts";
 import { heldClock } from "./helpers/held-clock";
+import { plusMs } from "../src/time";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 
 const SID = "session-a";
@@ -164,13 +165,14 @@ function rig() {
       return ANSWER;
     },
   };
-  const render = (termCols: number, sid = SID, pane: SessionPane = RUNS, at = AT) => {
+  const render = (termCols: number, sid = SID, pane: SessionPane = RUNS, arrived = clock.monotonic()) => {
     const facts: RequestFacts = [];
     const answered = applyRequest(
       {
         kind: "request",
         req: request(termCols, sid, pane),
-        at,
+        at: AT,
+        arrived,
         waitEndsAt: clock.monotonic(),
         facts,
       },
@@ -274,13 +276,14 @@ describe("a request takes its turn", () => {
   test("a request's run of mismatched pane stamps lands in its turn, and its line says so", async () => {
     const r = rig();
     const runs = r.ctx.mismatchRuns;
-    const mismatched: SessionPane = { kind: "mismatched", tmux: null, claude: CLAUDE, why: "its Claude Code holds session-b" };
-    await r.render(60, SID, mismatched).answered;
-    expect(runs.of(SID)).toEqual({ claude: CLAUDE, since: AT, lasted: false });
-    const past = r.render(60, SID, mismatched, (AT + MISMATCH_RACE_S + 1) as Instant);
+    const mismatched: SessionPane = { kind: "mismatched", tmux: null, claude: CLAUDE, held: "session-b", why: "its Claude Code holds session-b" };
+    const opened = r.clock.monotonic();
+    await r.render(60, SID, mismatched, opened).answered;
+    expect(runs.of(SID)).toEqual({ claude: CLAUDE, since: opened, lasted: false });
+    const past = r.render(60, SID, mismatched, plusMs(opened, (MISMATCH_RACE_S + 1) * 1000));
     await past.answered;
     expect(runs.lasted(SID)).toBe(true);
-    expect(past.facts).toContainEqual(["mismatch", `lasted since ${START.toISOString()}`]);
+    expect(past.facts).toContainEqual(["mismatch", `lasted ${(MISMATCH_RACE_S + 1) * 1000}ms`]);
     await r.render(60).answered;
     expect(runs.of(SID)).toBeNull();
   });
@@ -336,7 +339,7 @@ describe("a request's arrival settles in its turn", () => {
     const facts: RequestFacts = [];
     const render = () =>
       applyRequest(
-        { kind: "request", req: request(60), at: AT, waitEndsAt: clock.monotonic(), facts },
+        { kind: "request", req: request(60), at: AT, arrived: clock.monotonic(), waitEndsAt: clock.monotonic(), facts },
         { verbCtx, log: ctx.log, draw },
       );
     return { ctx, facts, performed, render };

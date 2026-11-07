@@ -1,6 +1,7 @@
 // candybar-gather-renderer-76bb.1dh.2d2: a mismatched pane stamp is the
-// /clear rewrite race until its session's run of them outlasts it, and only a
-// confirmed tick from the same Claude Code, of any session, ends a run.
+// /clear rewrite race until its session's run of them outlasts it; only a
+// confirmed tick from the same Claude Code, of any session, ends a run, and its
+// first tick of a session dates the rewrite a straggler races.
 
 import {
   MISMATCH_RACE_S,
@@ -10,12 +11,12 @@ import {
 } from "../../src/daemon/mismatch-runs";
 import type { ClaudeProcess, SessionPane } from "../../src/daemon/session-pane";
 import { SINGLE_RUN } from "../../src/daemon/session-state";
-import { instantOf, type Instant } from "../../src/utils/instant";
+import type { Monotonic } from "../../src/time";
 
-// [LAW:no-ambient-temporal-coupling] Every instant a case reads is its own:
-// seconds after the /clear that rewrote the record.
-const CLEARED = instantOf(new Date("2026-11-07T06:00:00Z"));
-const after = (s: number): Instant => (CLEARED + s) as Instant;
+// [LAW:no-ambient-temporal-coupling] Every reading a case takes is its own:
+// seconds after the /clear that rewrote the record, on the monotonic clock.
+const CLEARED = 50_000;
+const after = (s: number): Monotonic => (CLEARED + s * 1000) as Monotonic;
 
 const PANE_CLAUDE: ClaudeProcess = { pid: 4242, configDir: undefined };
 const OTHER_CLAUDE: ClaudeProcess = { pid: 5151, configDir: undefined };
@@ -25,6 +26,7 @@ const mismatched = (held: string, claude = PANE_CLAUDE): SessionPane => ({
   kind: "mismatched",
   tmux: null,
   claude,
+  held,
   why: `the Claude Code that ran its statusline (pid ${claude.pid}) holds session ${held}`,
 });
 const runs = (claude = PANE_CLAUDE): SessionPane => ({ kind: "runs", tmux: null, claude });
@@ -60,6 +62,26 @@ describe("a session's run of mismatched stamps", () => {
     // An hour on, `/resume A` in the same Claude Code: its first tick beats
     // the record's rewrite, inside its own race.
     expect(owner.record("A", mismatched("B"), after(3600))).toEqual({ claude: PANE_CLAUDE, since: after(3600), lasted: false });
+  });
+
+  test("a straggler after the new session's first confirmed tick is the race, so its resume's forerunner opens a fresh run", () => {
+    const owner = new MismatchRuns(SINGLE_RUN);
+    owner.record("B", runs(), after(0.3));
+    expect(owner.record("A", mismatched("B"), after(1))).toBeNull();
+    // B goes on ticking: its record was rewritten when its first tick came.
+    owner.record("B", runs(), after(5));
+    expect(owner.record("A", mismatched("B"), after(MISMATCH_RACE_S))).toBeNull();
+    // An idle hour on, `/resume A` beats the record's rewrite.
+    expect(owner.record("A", mismatched("B"), after(3600))).toEqual({ claude: PANE_CLAUDE, since: after(3600), lasted: false });
+    expect(owner.record("A", mismatched("B"), after(3600 + MISMATCH_RACE_S + 1))?.lasted).toBe(true);
+  });
+
+  test("a record that stops being rewritten holds a session confirmed long before, so the new session's run lasts", () => {
+    const owner = new MismatchRuns(SINGLE_RUN);
+    owner.record("A", runs(), after(-600));
+    owner.record("A", runs(), after(-1));
+    owner.record("B", mismatched("A"), after(0));
+    expect(owner.record("B", mismatched("A"), after(MISMATCH_RACE_S + 1))?.lasted).toBe(true);
   });
 
   test("a confirmed tick from another Claude Code ends no run this one opened", () => {
@@ -105,9 +127,9 @@ describe("a session's run of mismatched stamps", () => {
     expect(owner.of(`s${MISMATCH_RUNS_KEPT - 1}`)).not.toBeNull();
   });
 
-  test("the render line says whether there is a run, since when, and whether it lasted", () => {
-    expect(mismatchFact(null)).toBe("-");
-    expect(mismatchFact({ claude: PANE_CLAUDE, since: after(0), lasted: false })).toBe("since 2026-11-07T06:00:00.000Z");
-    expect(mismatchFact({ claude: PANE_CLAUDE, since: after(0), lasted: true })).toBe("lasted since 2026-11-07T06:00:00.000Z");
+  test("the render line says whether there is a run, how long it has run, and whether it lasted", () => {
+    expect(mismatchFact(null, after(1))).toBe("-");
+    expect(mismatchFact({ claude: PANE_CLAUDE, since: after(0), lasted: false }, after(1.5))).toBe("1500ms");
+    expect(mismatchFact({ claude: PANE_CLAUDE, since: after(0), lasted: true }, after(11))).toBe("lasted 11000ms");
   });
 });

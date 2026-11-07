@@ -69,6 +69,7 @@ describe("sessionPaneOf", () => {
       kind: "mismatched",
       tmux: TMUX,
       claude: BY,
+      held: "real",
       why: `the Claude Code that ran its statusline (pid ${CLAUDE}) holds session real`,
     });
   });

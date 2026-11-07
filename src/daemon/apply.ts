@@ -75,6 +75,9 @@ export type Event =
       readonly kind: "request";
       readonly req: CheckedRenderRequest;
       readonly at: Instant;
+      // Its arrival on the monotonic clock, for spans measured across
+      // requests.
+      readonly arrived: Monotonic;
       // When the request's wait ends (src/daemon/request-deadline.ts).
       readonly waitEndsAt: Monotonic;
       readonly facts: RequestFacts;
@@ -179,10 +182,14 @@ export const ARMS: ApplyArms<Event> = {
   // landed. The revision its turn left and the effects it described go on the
   // request's line, the render event, which is its record and opens with the
   // session the edge noted.
-  request: ({ req, at, facts }, { verbCtx }) => {
+  request: ({ req, arrived, facts }, { verbCtx }) => {
     const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
-      const mismatch = verbCtx.mismatchRuns.record(req.sessionId, req.pane, at);
+      const mismatch = verbCtx.mismatchRuns.record(
+        req.sessionId,
+        req.pane,
+        arrived,
+      );
       return {
         effects: verbCtx.lanes.arrived(req),
         revision: verbCtx.sessionState.revision(req.sessionId),
@@ -192,7 +199,7 @@ export const ARMS: ApplyArms<Event> = {
     noteFacts(facts, {
       revision: String(turn.revision),
       effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-",
-      mismatch: mismatchFact(turn.mismatch),
+      mismatch: mismatchFact(turn.mismatch, arrived),
     });
     return { answer: undefined, effects: turn.effects, facts: [] };
   },

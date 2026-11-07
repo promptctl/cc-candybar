@@ -423,7 +423,7 @@ describe("TmuxStatusLines", () => {
     const tmux = { socket: SOCKET, pane: "%1", truecolor: null };
     const notConfirmed = [
       { kind: "unconfirmed", why: "its parent keeps no record" },
-      { kind: "mismatched", claude: CLAUDE, why: "its Claude Code holds session s2" },
+      { kind: "mismatched", claude: CLAUDE, held: "s2", why: "its Claude Code holds session s2" },
     ] as const;
     for (const stamp of notConfirmed)
       for (const where of [tmux, null]) h.owner.observe("s1", { ...stamp, tmux: where }, true);

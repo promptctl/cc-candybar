@@ -45,6 +45,8 @@ export type SessionPane =
       readonly kind: "mismatched";
       readonly tmux: TmuxHint | null;
       readonly claude: ClaudeProcess;
+      // The session the record holds instead.
+      readonly held: string;
       readonly why: string;
     }
   | {
@@ -86,6 +88,7 @@ export function sessionPaneOf(
         kind: "mismatched",
         tmux,
         claude,
+        held: held.sessionId,
         why: `the Claude Code that ran its statusline (pid ${parentPid}) holds session ${held.sessionId}`,
       };
 }
