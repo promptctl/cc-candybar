@@ -5,7 +5,6 @@
 
 import {
   observe,
-  STEP_CAP_MS,
   unwatched,
   type ActRecord,
 } from "../../src/daemon/update-act";
@@ -19,10 +18,11 @@ const RECORD: ActRecord = {
   deadline: STARTED + 600_000,
 };
 const HOUR = 60 * 60 * 1000;
+const CAP = 10_000;
 
 describe("observe: one look at an act alive", () => {
   test("an act no daemon has looked at has spent nothing, as of its start", () => {
-    expect(observe(unwatched(RECORD), STARTED + 2_000)).toEqual({
+    expect(observe(unwatched(RECORD), STARTED + 2_000, CAP)).toEqual({
       spentMs: 2_000,
       lastSeen: STARTED + 2_000,
     });
@@ -30,23 +30,33 @@ describe("observe: one look at an act alive", () => {
 
   test("consecutive looks 2 s apart add 2 s each", () => {
     let awake = unwatched(RECORD);
-    for (let i = 1; i <= 5; i++) awake = observe(awake, STARTED + i * 2_000);
+    for (let i = 1; i <= 5; i++)
+      awake = observe(awake, STARTED + i * 2_000, CAP);
     expect(awake).toEqual({ spentMs: 10_000, lastSeen: STARTED + 10_000 });
   });
 
   test("a sleep of an hour between two looks adds the cap, not the hour", () => {
     const before = { spentMs: 30_000, lastSeen: STARTED + 30_000 };
-    expect(observe(before, before.lastSeen + HOUR)).toEqual({
-      spentMs: 30_000 + STEP_CAP_MS,
+    expect(observe(before, before.lastSeen + HOUR, CAP)).toEqual({
+      spentMs: 30_000 + CAP,
       lastSeen: before.lastSeen + HOUR,
     });
-    expect(STEP_CAP_MS).toBe(60_000);
   });
 
   test("a wall clock set backwards adds nothing, and the next look counts from where it reads now", () => {
     const before = { spentMs: 30_000, lastSeen: STARTED + 30_000 };
-    const back = observe(before, before.lastSeen - HOUR);
+    const back = observe(before, before.lastSeen - HOUR, CAP);
     expect(back).toEqual({ spentMs: 30_000, lastSeen: before.lastSeen - HOUR });
-    expect(observe(back, back.lastSeen + 2_000).spentMs).toBe(32_000);
+    expect(observe(back, back.lastSeen + 2_000, CAP).spentMs).toBe(32_000);
+  });
+
+  test("two daemons racing one look lose nothing, whichever write lands last", () => {
+    const before = { spentMs: 30_000, lastSeen: STARTED + 30_000 };
+    const a = observe(before, before.lastSeen + 1_000, CAP);
+    const b = observe(before, before.lastSeen + 1_500, CAP);
+    const next = before.lastSeen + 3_000;
+    for (const landed of [a, b]) {
+      expect(observe(landed, next, CAP).spentMs).toBe(33_000);
+    }
   });
 });

@@ -64,10 +64,6 @@ export interface ActAwake {
   readonly lastSeen: number;
 }
 
-// The most one look counts: a sleep of any length between two looks spends at
-// most this.
-export const STEP_CAP_MS = 60_000;
-
 // An act no daemon has looked at, as of its start.
 export const unwatched = (record: ActRecord): ActAwake => ({
   spentMs: 0,
@@ -75,12 +71,16 @@ export const unwatched = (record: ActRecord): ActAwake => ({
 });
 
 // [LAW:dataflow-not-control-flow] One more look at the act running, at `now`:
-// the span since the last look, whichever daemon took it, up to the cap, and
+// the span since the last look, whichever daemon took it, up to `capMs`, and
 // nothing for a clock set back. Daemons looking in turn sum to the time the act
-// was watched, not a multiple of it.
-export const observe = (awake: ActAwake, now: number): ActAwake => ({
-  spentMs:
-    awake.spentMs + Math.min(Math.max(now - awake.lastSeen, 0), STEP_CAP_MS),
+// was watched, not a multiple of it, and a sleep of any length between two
+// looks spends at most the cap.
+export const observe = (
+  awake: ActAwake,
+  now: number,
+  capMs: number,
+): ActAwake => ({
+  spentMs: awake.spentMs + Math.min(Math.max(now - awake.lastSeen, 0), capMs),
   lastSeen: now,
 });
 
@@ -223,14 +223,20 @@ export async function isRecordedJob(
   );
 }
 
-// The record of an act, or null when the act is gone.
-function readRecord(actDir: string): ActRecord | null {
+// One of an act's files, or null when it is not there.
+function readActFile(file: string): string | null {
   try {
-    return JSON.parse(fs.readFileSync(recordOf(actDir), "utf8")) as ActRecord;
+    return fs.readFileSync(file, "utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
+}
+
+// The record of an act, or null when the act is gone.
+function readRecord(actDir: string): ActRecord | null {
+  const text = readActFile(recordOf(actDir));
+  return text === null ? null : (JSON.parse(text) as ActRecord);
 }
 
 export interface ActReader {
@@ -396,26 +402,43 @@ const CLAIMED_FIRST: Claim = {
   reason: "another act claimed this bundle first",
 };
 
-// What the act has spent, or null when no daemon has watched it yet.
+// [LAW:parse-dont-validate] What the act has spent, or null when no daemon
+// has watched it yet. A spend this version can't read throws, for the watch to
+// show, rather than reading as spent: a missing number compares past any
+// budget, and a build ended for it is torn.
 function readAwake(actDir: string): ActAwake | null {
-  try {
-    return JSON.parse(fs.readFileSync(awakeOf(actDir), "utf8")) as ActAwake;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw err;
+  const file = awakeOf(actDir);
+  const text = readActFile(file);
+  if (text === null) return null;
+  const { spentMs, lastSeen } = (JSON.parse(text) ?? {}) as Partial<
+    Record<keyof ActAwake, unknown>
+  >;
+  if (typeof spentMs !== "number" || typeof lastSeen !== "number") {
+    throw new Error(`${file}: not an act's spend: ${text}`);
   }
+  return { spentMs, lastSeen };
 }
 
 // [LAW:effects-at-boundaries] Spends one look at an act its reader saw alive
 // at `now`, and writes what it has spent for every daemon after this one: a
 // daemon started mid-act carries on from it. Two daemons racing one look lose
-// a step between them, which only ever undercounts. A look landing after a
-// newer claim pruned the act leaves its directory holding only this file; it
-// is older than the act that pruned it, so no reader takes it for the newest,
-// and the next claim's prune removes it.
-export function spendLook(dir: string, facts: ActFacts, now: number): ActAwake {
+// nothing whichever write lands: each moves spend and last look on together,
+// so the next look counts from the last look the file names. A look landing
+// after a newer claim pruned the act leaves its directory holding only this
+// file; it is older than the act that pruned it, so no reader takes it for the
+// newest, and the next claim's prune removes it.
+export function spendLook(
+  dir: string,
+  facts: ActFacts,
+  now: number,
+  capMs: number,
+): ActAwake {
   const actDir = path.join(dir, String(facts.act));
-  const awake = observe(readAwake(actDir) ?? unwatched(facts.record), now);
+  const awake = observe(
+    readAwake(actDir) ?? unwatched(facts.record),
+    now,
+    capMs,
+  );
   writeAtomic(awakeOf(actDir), JSON.stringify(awake));
   return awake;
 }
