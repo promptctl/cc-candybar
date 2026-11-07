@@ -4,15 +4,22 @@
     {
       "version": "pr-671",
       "ref": "refs/pull/671/merge",
-      "sha": "aac10a108e2be4a0401ddf3c507776963d7ed2da",
-      "timestamp": "2026-11-07T06:22:01.971Z",
+      "sha": "458f9dca8aea44d3210754441c3ddee807cd769a",
+      "timestamp": "2026-11-07T06:25:42.671Z",
       "commits": [
         {
-          "sha": "aac10a108e2be4a0401ddf3c507776963d7ed2da",
+          "sha": "458f9dca8aea44d3210754441c3ddee807cd769a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T06:21:07Z",
-          "message": "Merge ceb9169016bf4731eec58417e7e30c44b06c2655 into d8be82f47dab2890d335b8563bbfdc937aedba77\n"
+          "timestamp": "2026-11-07T06:24:46Z",
+          "message": "Merge ea429fd00d934107c552f4c27df56e0e6d5868ea into d8be82f47dab2890d335b8563bbfdc937aedba77\n"
+        },
+        {
+          "sha": "ea429fd00d934107c552f4c27df56e0e6d5868ea",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:24:32-07:00",
+          "message": "test(launch): the blocking timeout keeps its unread-input case, and the no-input one sits with launchSync (brandon-menus-sjhy.j5v)\n"
         },
         {
           "sha": "ceb9169016bf4731eec58417e7e30c44b06c2655",
