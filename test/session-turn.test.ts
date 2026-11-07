@@ -341,7 +341,7 @@ describe("a document missing a built-in its config reads", () => {
       ) as never,
     );
     expect(render).toThrow(
-      'gitaculous: variable "git.branch" reads git, which this config\'s declaration does not name',
+      'gitaculous: variable "git.branch" reads git, which the declaration its facts were gathered under does not name',
     );
   });
 });

@@ -24,7 +24,9 @@ const declaredOf = (source: string): readonly string[] => [
 // menu and quick-action tray are placed segments too, and they read the
 // repository (the tray's link), the context window and the auto-compact
 // control.
-const CHROME = declaredOf(`{ segments: { s: { template: "x" } }, root: { h: ["s"] } }`);
+const CHROME = declaredOf(
+  `{ segments: { s: { template: "x" } }, root: { h: ["s"] } }`,
+);
 
 // What a config declares beyond the chrome every config has.
 const declaredBy = (source: string): readonly string[] =>
@@ -124,6 +126,23 @@ describe("the built-ins a config declares", () => {
     ).toEqual(["metrics"]);
   });
 
+  // Every shell and file source is declared and its key evaluated whether or
+  // not a template reads the source, so a key reading a built-in no placed
+  // segment reads would otherwise fault the source on its first evaluation.
+  test("hold what a shell or file source's cache key reads, placed or not", () => {
+    expect(
+      declaredBy(`{
+        variables: {
+          ${INPUTS}
+          rate: { kind: "shell", command: "true", cache: { key: "{{ .burn }}" } },
+          notes: { kind: "file", path: "/tmp/notes", cache: { depends_on: ["host"] } },
+        },
+        segments: { s: { template: "x" } },
+        root: { h: ["s"] },
+      }`),
+    ).toEqual(["session", "metrics", "hostName", "hostUser"]);
+  });
+
   test("hold what a preset no session has picked reads, so a pick moves nothing", () => {
     expect(
       declaredBy(`{
@@ -139,7 +158,12 @@ describe("the built-ins a config declares", () => {
   });
 
   test("of the bundled default, under every preset that places a today segment, include today", () => {
-    const config = parseAndValidate("<user>", "{}", ALLOWED, DEFAULT_DSL_CONFIG);
+    const config = parseAndValidate(
+      "<user>",
+      "{}",
+      ALLOWED,
+      DEFAULT_DSL_CONFIG,
+    );
     const declared = builtinsReadAt(configPayloadPaths(config));
     const placesToday = presetNames(config.presets).some((preset) =>
       [...walkNodes(presetRoot(config, preset).node)].some(

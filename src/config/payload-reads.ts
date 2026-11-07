@@ -13,17 +13,19 @@
 // reading it throws (src/var-system/sources.ts), so the segment draws ⚠ and
 // `cc-candybar check` fails on it.
 
-import { walkNodes, type DslConfig } from "./dsl-types.js";
+import { walkNodes, type DslConfig, type VariableDecl } from "./dsl-types.js";
 import { declaredVariables } from "./loader/refs.js";
 import { payloadPathOf, valueReadsOf } from "./loader/value-reads.js";
 import { presetGlobals, presetNames, presetRoot } from "./presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 
-// One segment's own templates: what its reads start from. A partial's body is
-// seeded directly (not resolved through its segment's `{{ template "name" }}`
-// dispatch) so a payload read inside it is reached whether or not the fold
+// [LAW:one-source-of-truth] One segment's own templates, as the engine
+// evaluates them: the unused-declaration check (src/config/unused.ts) and the
+// walks below enumerate a segment through this one function. A partial's body
+// is seeded directly (not resolved through its segment's `{{ template "name"
+// }}` dispatch) so a payload read inside it is reached whether or not the fold
 // can resolve the dispatch name.
-function segmentTemplates(config: DslConfig, name: string): string[] {
+export function segmentTemplates(config: DslConfig, name: string): string[] {
   const seg = config.segments[name];
   if (!seg) return [];
   return [
@@ -34,18 +36,45 @@ function segmentTemplates(config: DslConfig, name: string): string[] {
   ];
 }
 
+// [LAW:one-source-of-truth] The strings a preset's layout has the engine
+// evaluate besides its segments' own: each node's `when` and each globals rule
+// that is an expression. The unused-declaration check enumerates them through
+// this function too.
+export function layoutTemplates(config: DslConfig, preset: string): string[] {
+  const templates: string[] = [];
+  for (const node of walkNodes(presetRoot(config, preset).node)) {
+    if (node.when !== undefined) templates.push(node.when);
+  }
+  const globals = presetGlobals(config, preset);
+  for (const slot of EXPRESSION_SLOTS) {
+    const rule = globals[slot];
+    if (isExpression(rule)) templates.push(rule);
+  }
+  return templates;
+}
+
+// A shell or file source is declared, and its cache key evaluated, whether or
+// not a template reads it (src/dsl/render.ts declares every one), so what its
+// key and `depends_on` read is read by every view of the config.
+const runsUnread = (decl: VariableDecl): boolean =>
+  decl.kind === "shell" || decl.kind === "file";
+
 // The payload paths a set of templates reaches, through every edge of the
 // fold: each variable a template reads, and on through what that variable
-// reads.
+// reads. `roots` are variables evaluated without a template reading them.
 function pathsReached(
   config: DslConfig,
   templates: readonly string[],
+  roots: readonly string[] = [],
 ): ReadonlySet<string> {
   const reads = valueReadsOf(config);
   const decls = new Map(declaredVariables(config));
-  const frontier = templates.flatMap((template) =>
-    reads.ofTemplate(template).flatMap(({ reaches }) => reaches),
-  );
+  const frontier = [
+    ...roots,
+    ...templates.flatMap((template) =>
+      reads.ofTemplate(template).flatMap(({ reaches }) => reaches),
+    ),
+  ];
   const visited = new Set<string>();
   const paths = new Set<string>();
   while (frontier.length > 0) {
@@ -70,25 +99,25 @@ export function segmentInputPaths(
   return pathsReached(config, [...segmentTemplates(config, name), ...whens]);
 }
 
-// [LAW:one-source-of-truth] The payload paths a config's draws can read, over
+// [LAW:one-source-of-truth] The payload paths a config's views can read, over
 // EVERY preset, so a session's pick of one moves nothing it gathers: each
-// layout node's `when`, each placed segment's templates, and each preset's
-// globals rules. These are what a draw evaluates. A cell an edit-mode click
-// inserts is written to the file, and the reload's state walks it.
+// layout node's `when`, each placed segment's templates, each preset's globals
+// rules, and every shell or file source's key, which is evaluated whether or
+// not a template reads the source. These are what a view evaluates. A cell an
+// edit-mode click inserts is written to the file, and the reload's state walks
+// it.
 export function configPayloadPaths(config: DslConfig): ReadonlySet<string> {
   const templates: string[] = [];
   for (const preset of presetNames(config.presets)) {
+    templates.push(...layoutTemplates(config, preset));
     for (const node of walkNodes(presetRoot(config, preset).node)) {
-      if (node.when) templates.push(node.when);
       if (node.kind === "segment") {
         templates.push(...segmentTemplates(config, node.name));
       }
     }
-    const globals = presetGlobals(config, preset);
-    for (const slot of EXPRESSION_SLOTS) {
-      const rule = globals[slot];
-      if (isExpression(rule)) templates.push(rule);
-    }
   }
-  return pathsReached(config, templates);
+  const roots = [...declaredVariables(config)]
+    .filter(([, decl]) => runsUnread(decl))
+    .map(([name]) => name);
+  return pathsReached(config, templates, roots);
 }

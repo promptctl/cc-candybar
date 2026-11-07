@@ -280,15 +280,17 @@ export function resolvePath(obj: unknown, path: string): Resolved {
   return !inDocument && unanswered(cur) ? cur : found(cur);
 }
 
-// [LAW:no-silent-failure] A read of a built-in the config's declaration does
-// not name: the walk that declares what a config reads missed this read, so
-// no owner gathers it. Thrown, never answered by a default — a default stands
-// in for data that failed, and this is no data at all — so the segment
-// reading it draws its ⚠ with the name, and `check` fails on it.
+// [LAW:no-silent-failure] A read of a built-in the declaration the session's
+// facts were gathered under does not name: the walk that declares what a
+// config reads missed this read, or a recording was made under a config that
+// read less, so no owner gathered it. Thrown, never answered by a default — a
+// default stands in for data that failed, and this is no data at all — so the
+// segment reading it draws its ⚠ with the name, and `check` fails on it. The
+// message says what the reading site knows: the facts carry no such key.
 export class UndeclaredReadError extends Error {
   constructor(variable: string, fact: string) {
     super(
-      `variable "${variable}" reads ${fact}, which this config's declaration does not name`,
+      `variable "${variable}" reads ${fact}, which the declaration its facts were gathered under does not name`,
     );
     this.name = "UndeclaredReadError";
   }

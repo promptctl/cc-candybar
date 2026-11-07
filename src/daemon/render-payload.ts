@@ -1605,6 +1605,9 @@ interface ErasedDraw extends ErasedReads {
 }
 const TURN_ROWS: Readonly<Record<TurnPath, ErasedTurn>> = PAYLOAD_ROWS;
 const DRAW_ROWS: Readonly<Record<DrawPath, ErasedDraw>> = PAYLOAD_ROWS;
+// Every row by its path, as the walk reads them.
+const ROWS: ReadonlyArray<readonly [string, ErasedReads]> =
+  Object.entries<ErasedReads>({ ...TURN_ROWS, ...DRAW_ROWS });
 
 // The facts a row reads out of a document: each it names, or the first one
 // the declaration does not; its parts, each its reading or `Undeclared`.
@@ -1677,10 +1680,7 @@ export function builtinsReadAt(paths: Iterable<string>): DeclaredBuiltins {
     inner === outer || inner.startsWith(`${outer}.`);
   const read = new Set<BuiltinName>();
   for (const path of paths) {
-    for (const [root, row] of Object.entries<ErasedReads>({
-      ...TURN_ROWS,
-      ...DRAW_ROWS,
-    })) {
+    for (const [root, row] of ROWS) {
       if (!under(root, path) && !under(path, root)) continue;
       for (const name of row.facts) read.add(name);
       for (const [name, fields] of Object.entries(row.parts) as Array<

@@ -19,7 +19,7 @@ import { inProcessFacts } from "../src/daemon/facts-source";
 import { sessionSource, type SessionSource } from "../src/daemon/session-source";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
-import { absentOwners } from "./helpers/payload-owners";
+import { absentOwners, EVERY_BUILTIN } from "./helpers/payload-owners";
 import { parseClientHints } from "../src/daemon/protocol";
 import { sessionIdOf } from "../src/daemon/session-id";
 import {
@@ -27,7 +27,6 @@ import {
   type LaneOwners,
   type ViewFacts,
 } from "../src/daemon/render-payload";
-import { EVERY_BUILTIN } from "../src/facts/session-facts";
 import {
   GitService,
   type GitInfo,

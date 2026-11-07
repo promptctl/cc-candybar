@@ -210,7 +210,7 @@ describe("SourceRegistry — input: a built-in the config did not declare", () =
     registry.declareInput("label", "metrics", "string", "-", "computed");
     feedInputs(registry, { metrics: undeclaredOf("metrics") });
     expect(() => store.read("count")).toThrow(
-      'variable "count" reads metrics, which this config\'s declaration does not name',
+      'variable "count" reads metrics, which the declaration its facts were gathered under does not name',
     );
     expect(() => store.read("label")).toThrow(/reads metrics/);
     expect(registry.getLastError("count")?.message).toMatch(/reads metrics/);

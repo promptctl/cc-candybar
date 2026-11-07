@@ -58,9 +58,13 @@ import {
   type RenderPayloadDeps,
 } from "../../src/daemon/render-payload";
 import {
-  EVERY_BUILTIN,
+  BUILTIN_FACTS,
+  declaredBuiltins,
   type DeclaredBuiltins,
 } from "../../src/facts/session-facts";
+
+// Every built-in: what a test that reads them all declares.
+export const EVERY_BUILTIN: DeclaredBuiltins = declaredBuiltins(BUILTIN_FACTS);
 import type { EffectiveGlobals } from "../../src/config/effective-globals";
 import type { ClientHints } from "../../src/daemon/protocol";
 import { EMPTY_HISTORY_DEPTH } from "../../src/daemon/settings-history";

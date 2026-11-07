@@ -151,9 +151,6 @@ export function declaredBuiltins(
   ) as unknown as DeclaredBuiltins;
 }
 
-// Every built-in: what a renderer that reads them all declares.
-export const EVERY_BUILTIN: DeclaredBuiltins = declaredBuiltins(BUILTIN_FACTS);
-
 // [LAW:single-enforcer] The one reading of a document's built-in: its fact, or
 // `Undeclared` when the renderer that followed it did not declare it. Nothing
 // else tests a document's key.

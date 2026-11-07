@@ -106,9 +106,8 @@ export interface Facts {
   // A view follows the request's session at the request it draws by and what
   // it declares beyond it. The declaration rides the follow because it is the
   // config's, fixed for the view's life (a config change is a new state and a
-  // new view); the socket arm's `declare` message is that wire's spelling of
-  // the same value. A follow whose first document cannot be made throws,
-  // having released what it took.
+  // new view), so it needs no verb of its own. A follow whose first document
+  // cannot be made throws, having released what it took.
   follow(facts: ViewFacts, declaration: LaneDeclaration): Followed;
 }
 
@@ -318,8 +317,10 @@ export function inProcessFacts({
           // [LAW:verifiable-goals] A declaration that moved a hold — a request
           // naming another key — says so; one that kept what the view held,
           // every other request's, writes nothing.
-          // [LAW:nothing-unseen] It names the built-ins it declared, so a lane
-          // left out on purpose is told from one that never ran.
+          // [LAW:nothing-unseen] When it writes, it names the built-ins the
+          // view declared; the render event's `builtins=` carries them on
+          // every frame, so a lane left out on purpose is told from one that
+          // never ran whether or not a hold moved.
           if (acquired + released > 0) {
             log(
               "info",

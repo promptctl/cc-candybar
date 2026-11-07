@@ -21,7 +21,6 @@ import { restamp, type Fact } from "../src/facts/fact";
 import type { FactsLine } from "../src/facts/recording";
 import {
   declaredBuiltins,
-  EVERY_BUILTIN,
   type UpdateNotice,
 } from "../src/facts/session-facts";
 import { Holds } from "../src/utils/holds";
@@ -30,7 +29,7 @@ import { ok, pendingOf } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
 import { factsRunning, pendingFacts } from "./helpers/facts";
 import { heldClock } from "./helpers/held-clock";
-import { absentOwners } from "./helpers/payload-owners";
+import { absentOwners, EVERY_BUILTIN } from "./helpers/payload-owners";
 import { viewFacts } from "./helpers/view-facts";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
