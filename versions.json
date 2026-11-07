@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-678",
+      "ref": "refs/pull/678/merge",
+      "sha": "ff8f69a7af8d0198f56e1e876a6096d941c74ab7",
+      "timestamp": "2026-11-07T11:02:58.732Z",
+      "commits": [
+        {
+          "sha": "ff8f69a7af8d0198f56e1e876a6096d941c74ab7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:02:04Z",
+          "message": "Merge 39e39ccb3f347b345a45c45b3c7e9e7955482651 into ed8e8640a86e8dc128a0f9adda4f04821a89b8ab\n"
+        },
+        {
+          "sha": "39e39ccb3f347b345a45c45b3c7e9e7955482651",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:16:16-07:00",
+          "message": "test(state): the cross-process writers are waited on by name and never outlive the case (brandon-unfiled-3248.wkh1)\n\nMedium review of #678. The wait for both writers to exit goes through the\nshared poll helper and names each child's state, the sampling stops with the\ncase, and the case kills both children on the way out. A child's exit code\nis what judges it, with its stderr carried for the reason. stagedPath's\nmarker says it is this runtime's one spelling.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "2b35e2104bf3513ed105e5d4bc67590a1222f827",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:08:02-07:00",
+          "message": "fix(state): every staged write names a staging of its own (brandon-unfiled-3248.wkh1)\n\nHigh review of #678. The staged name adds a random part beside the pid, so\ntwo writes never share one whatever they share (a process, a pid namespace),\nand it lives in a module of its own that every stage-then-publish site uses:\nwriteAtomic, the session state file, the socket lease, the fork-bomb\nregistry, the link key, the pricing cache and a job's end status. A failed\nflush removes its staged file. The cross-process test's children wait on a\npipe the test holds, name a failed spawn, and the reader no longer spins.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "bd33edbc7b6639405b35ec29d115c98d7e8ad5dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:40:04-07:00",
+          "message": "fix(state): concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1)\n\nTwo processes sharing a state directory both staged a write at\n`<file>.tmp`, so one's rename published or moved the other's bytes and\nthe other's rename failed ENOENT. Every staged name now carries the\nwriting process's pid, spelled once by `stagedPath` in\nsrc/utils/atomic-write.ts: writeAtomic, both session-state-file stages\nand the socket lease use it. The fork-bomb breaker stages by an\ninjected identity's pid and is left as it is.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-684",
       "ref": "refs/pull/684/merge",
       "sha": "b2ff4c52e9633b6b796f8cbaab552d69f6626917",
@@ -56,42 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:00:01-07:00",
           "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-678",
-      "ref": "refs/pull/678/merge",
-      "sha": "92ab74b373ff1cda86bfe15bc5d761ad543066a8",
-      "timestamp": "2026-11-07T10:55:04.661Z",
-      "commits": [
-        {
-          "sha": "92ab74b373ff1cda86bfe15bc5d761ad543066a8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:54:03Z",
-          "message": "Merge 7b694b99633ef774a46b4ece70d38f3efc73cb36 into ffb0376812d7b52ce21a6cb5f0ef4d76eaf9e832\n"
-        },
-        {
-          "sha": "7b694b99633ef774a46b4ece70d38f3efc73cb36",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:16:16-07:00",
-          "message": "test(state): the cross-process writers are waited on by name and never outlive the case (brandon-unfiled-3248.wkh1)\n\nMedium review of #678. The wait for both writers to exit goes through the\nshared poll helper and names each child's state, the sampling stops with the\ncase, and the case kills both children on the way out. A child's exit code\nis what judges it, with its stderr carried for the reason. stagedPath's\nmarker says it is this runtime's one spelling.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "7f70364ba814ef95426901ab5836a86bdc4d2e28",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:08:02-07:00",
-          "message": "fix(state): every staged write names a staging of its own (brandon-unfiled-3248.wkh1)\n\nHigh review of #678. The staged name adds a random part beside the pid, so\ntwo writes never share one whatever they share (a process, a pid namespace),\nand it lives in a module of its own that every stage-then-publish site uses:\nwriteAtomic, the session state file, the socket lease, the fork-bomb\nregistry, the link key, the pricing cache and a job's end status. A failed\nflush removes its staged file. The cross-process test's children wait on a\npipe the test holds, name a failed spawn, and the reader no longer spins.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "6ddc7b5a605613483fc3fbc2674ee6f01b1c1c94",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:40:04-07:00",
-          "message": "fix(state): concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1)\n\nTwo processes sharing a state directory both staged a write at\n`<file>.tmp`, so one's rename published or moved the other's bytes and\nthe other's rename failed ENOENT. Every staged name now carries the\nwriting process's pid, spelled once by `stagedPath` in\nsrc/utils/atomic-write.ts: writeAtomic, both session-state-file stages\nand the socket lease use it. The fork-bomb breaker stages by an\ninjected identity's pid and is left as it is.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
