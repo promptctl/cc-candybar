@@ -126,7 +126,7 @@ import { SourceRuns } from "../src/var-system/source-runs";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { bareGates } from "./helpers/gates";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
-import { hostOf } from "./helpers/host";
+import { WORLD, hostOf } from "./helpers/host";
 import { TEST_LINKS } from "./helpers/link-signer";
 import { until } from "./helpers/until";
 
@@ -686,7 +686,7 @@ async function replayFile(
     drawn.warn(`${level} ${message}`);
   // The load: the config and the plugin are read here, before the instruments.
   using loaded = loadDemo({
-    world: { host, home: homeOf(host), launcher: launcher.launcher, clock, dialer: dialerFake(clock) },
+    world: { host, home: homeOf(host), launcher: launcher.launcher, clock, dialer: dialerFake(clock), parent: WORLD.parent },
     stateDir: stateDir(homeOf(host)),
     links: TEST_LINKS,
     configPath: configFile,

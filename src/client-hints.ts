@@ -6,6 +6,7 @@
 // report a session differently from the other. The Rust client mirrors it.
 
 import type { Host } from "./host";
+import type { ParsedProcessIdentity } from "./daemon/process-fingerprint";
 import type { ClientHints } from "./daemon/protocol";
 import { detectClaudeConfigDir } from "./claude-settings";
 import { detectConfigEnv } from "./config-hint";
@@ -29,16 +30,18 @@ import { detectTmuxHint } from "./tmux-hint";
 // widen recall of a fact that is otherwise reported as a plain `false`.
 const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
 
+// `parent` is the process that ran this client, as the world read it.
 // `tty` is the stream still attached to the session's terminal: stderr for a
 // statusline client, whose stdin is the hook JSON and stdout the captured line.
 // Every hint but `client`: what the calling program IS is no fact of its
 // environment, and only a statusline client has one to report.
 export function detectClientHints(
-  host: Pick<Host, "env" | "home" | "parentPid">,
+  host: Pick<Host, "env" | "home">,
+  parent: ParsedProcessIdentity,
   cwd: string,
   tty: { readonly columns?: number; readonly rows?: number },
 ): Omit<ClientHints, "client"> {
-  const { env, parentPid } = host;
+  const { env } = host;
   return {
     termCols: detectTermExtent(env.COLUMNS, tty.columns),
     // The terminal's height, as the render event reports it.
@@ -63,6 +66,6 @@ export function detectClientHints(
     terminalEnv: detectTerminalEnv(env),
     // Total like ssh: the process that ran this client, whose record of the
     // session it holds makes the session its pane's (src/daemon/session-pane.ts).
-    parentPid,
+    parent,
   };
 }

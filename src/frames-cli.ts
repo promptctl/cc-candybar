@@ -28,6 +28,7 @@ import process from "node:process";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import type { World } from "./host";
+import { START_TIME_READ_BUDGET_MS } from "./daemon/process-fingerprint";
 import type { ClaudeHookData } from "./utils/claude";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { followFrames, type FrameFollower } from "./daemon/frame-follow";
@@ -104,6 +105,10 @@ export async function runFrames(
   // it, as a subscriber of the daemon does.
   const emit = newestWins(process.stdout);
 
+  // The process that ran this one, for its whole life: read once, not per
+  // hook, since the read is a blocking `ps`, and with a daemon read's budget,
+  // since a read that ran out would stand for every hook after it.
+  const parent = world.parent(START_TIME_READ_BUDGET_MS);
   let sessionId: string | null = null;
   let lastHook: ClaudeHookData | null = null;
   let follower: FrameFollower | null = null;
@@ -120,7 +125,7 @@ export async function runFrames(
     // The terminal as it is now: a resize between two statusline ticks is in
     // the next one.
     const hints = {
-      ...detectClientHints(world.host, cwd, process.stderr),
+      ...detectClientHints(world.host, parent, cwd, process.stderr),
       client: nodeClientHint("frames", bundle),
     };
     const outcome = await tryRenderViaDaemon(

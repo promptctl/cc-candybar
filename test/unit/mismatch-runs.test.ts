@@ -13,14 +13,18 @@ import {
 import type { ClaudeProcess, SessionPane } from "../../src/daemon/session-pane";
 import { SINGLE_RUN } from "../../src/daemon/session-state";
 import type { Monotonic } from "../../src/time";
+import type { StartToken } from "../../src/daemon/process-fingerprint";
+import { CLAUDE_START } from "../helpers/claude-record";
 
 // [LAW:no-ambient-temporal-coupling] Every reading a case takes is its own:
 // seconds after the /clear that rewrote the record, on the monotonic clock.
 const CLEARED = 50_000;
 const after = (s: number): Monotonic => (CLEARED + s * 1000) as Monotonic;
 
-const PANE_CLAUDE: ClaudeProcess = { pid: 4242, configDir: undefined };
-const OTHER_CLAUDE: ClaudeProcess = { pid: 5151, configDir: undefined };
+const PANE_CLAUDE: ClaudeProcess = { pid: 4242, startTime: CLAUDE_START, configDir: undefined };
+const OTHER_CLAUDE: ClaudeProcess = { pid: 5151, startTime: CLAUDE_START, configDir: undefined };
+// A later Claude Code the kernel handed the pane's Claude Code's pid.
+const REUSED_PID: ClaudeProcess = { ...PANE_CLAUDE, startTime: "Sat Nov  7 09:30:00 2026" as StartToken };
 
 // A tick from `claude`, whose record holds `held` when it is not the session's.
 const mismatched = (held: string, claude = PANE_CLAUDE): SessionPane => ({
@@ -115,6 +119,17 @@ describe("a session's run of mismatched stamps", () => {
     expect(owner.lasted("A", runs(OTHER_CLAUDE))).toBe(true);
   });
 
+  test("a Claude Code under an exited one's pid inherits none of its runs, nor its dated rewrite", () => {
+    const owner = new MismatchRuns(SINGLE_RUN);
+    owner.record("B", runs(), after(0));
+    owner.record("A", mismatched("C"), after(0));
+    owner.record("A", mismatched("C"), after(MISMATCH_RACE_S + 1));
+    expect(owner.lasted("A", runs())).toBe(true);
+    expect(owner.of("A", runs(REUSED_PID))).toBeNull();
+    // Its own straggler holding "B" is no rewrite race of the exited one's.
+    expect(owner.record("A", mismatched("B", REUSED_PID), after(1))).toEqual({ since: after(1), lasted: false });
+  });
+
   test("refuses a write outside any turn", () => {
     const owner = new MismatchRuns({ inTurn: () => null });
     expect(() => owner.record("A", mismatched("B"), after(0))).toThrow(
@@ -125,7 +140,7 @@ describe("a session's run of mismatched stamps", () => {
   test("keeps the Claude Codes heard from last, so one that exited is dropped by age", () => {
     const owner = new MismatchRuns(SINGLE_RUN);
     owner.record("first", mismatched("x"), after(0));
-    const other = (i: number): ClaudeProcess => ({ pid: 9000 + i, configDir: undefined });
+    const other = (i: number): ClaudeProcess => ({ pid: 9000 + i, startTime: CLAUDE_START, configDir: undefined });
     for (let i = 0; i < MISMATCH_PROCESSES_KEPT; i++) owner.record(`s${i}`, mismatched("x", other(i)), after(1));
     expect(owner.of("first", runs())).toBeNull();
     expect(owner.of("s0", runs(other(0)))).not.toBeNull();

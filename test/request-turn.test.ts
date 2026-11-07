@@ -47,6 +47,7 @@ import {
 import { heldClock } from "./helpers/held-clock";
 import { plusMs } from "../src/time";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
+import { CLAUDE_START } from "./helpers/claude-record";
 
 const SID = "session-a";
 const OTHER = "session-b";
@@ -76,7 +77,7 @@ async function drain(): Promise<void> {
 // A render request past the checkpoint, as the arm reads it: its session,
 // its hints and the config inputs it named.
 const REQUESTED = { projectDir: DIR, cwd: DIR, target: { source: "search" } } as const;
-const CLAUDE = { pid: 4242, configDir: undefined };
+const CLAUDE = { pid: 4242, startTime: CLAUDE_START, configDir: undefined };
 const RUNS: SessionPane = { kind: "runs", tmux: null, claude: CLAUDE };
 const request = (termCols: number, sid = SID, pane: SessionPane = RUNS): CheckedRenderRequest =>
   ({

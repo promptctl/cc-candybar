@@ -29,7 +29,16 @@ import { canonical, executableOn, regularFileWith } from "../path-search.js";
 import { launcherNode } from "../attach-preload.js";
 import { type LaneEdge, type PaneClaude } from "./lane-setup.js";
 import { claudeConfigDir } from "../claude-settings.js";
-import type { HeldSession, HeldSessionOf } from "./session-pane.js";
+import {
+  parseStartToken,
+  processIdentityOf,
+  readStartTime,
+} from "./process-fingerprint.js";
+import type {
+  ClaudeProcess,
+  HeldSession,
+  HeldSessionOf,
+} from "./session-pane.js";
 
 const SHELL_BUFFER = "cc-candybar-lane";
 // How often the wait for an exit looks again.
@@ -241,8 +250,20 @@ async function paneClaude(
   if (parent === undefined) {
     throw new Error(`pane ${hint.pane}'s foreground job ${pid} is gone`);
   }
+  // [LAW:no-silent-failure] Its record is judged against its start, so a
+  // start that cannot be read stops the restart before any kill.
+  const job = processIdentityOf(
+    pid,
+    await readStartTime(pid, (opts) => launcher.launch(opts)),
+  );
+  if (job.startTime === null) {
+    throw new Error(
+      `the start of pane ${hint.pane}'s foreground job ${pid} could not be read (${job.why})`,
+    );
+  }
   return {
     pid,
+    startTime: job.startTime,
     // The installed binary itself, as cc-extra's own `bin/cc-attach` hands it
     // to the launcher (`readlink -f`): `~/.local/bin/claude` is a link to the
     // release it runs.
@@ -257,19 +278,29 @@ async function paneClaude(
 }
 
 // [LAW:parse-dont-validate] The session Claude Code's record `file` says its
-// process holds (measured on 2.1.299: `{pid, sessionId, cwd, status, ...}`,
-// rewritten when a `/clear` changes the session). One synchronous read, so a
-// restart judges it and kills with no wait between.
+// process `claude` holds (measured on 2.1.299: `{pid, sessionId, procStart,
+// cwd, status, ...}`, rewritten when a `/clear` changes the session). One
+// synchronous read, so a restart judges it and kills with no wait between.
+// [LAW:one-source-of-truth] The record is the process's only when it names
+// the process's start: a Claude Code that exits without removing its record
+// leaves it under a pid the kernel hands to the next process, a shell or a
+// wrapper as readily as a Claude Code.
 // [LAW:no-silent-failure] Claude Code rewrites its record in place (the file
 // keeps the birth time of its process), so a read can land between the
 // truncate and the write: a record that does not parse is read once more, and
 // that read says what it found.
-export function heldSessionIn(file: string): HeldSession {
-  const first = recordIn(file);
-  return first.torn ? recordIn(file).held : first.held;
+export function heldSessionIn(
+  file: string,
+  claude: Pick<ClaudeProcess, "pid" | "startTime">,
+): HeldSession {
+  const first = recordIn(file, claude);
+  return first.torn ? recordIn(file, claude).held : first.held;
 }
 
-function recordIn(file: string): {
+function recordIn(
+  file: string,
+  claude: Pick<ClaudeProcess, "pid" | "startTime">,
+): {
   readonly held: HeldSession;
   readonly torn: boolean;
 } {
@@ -282,7 +313,7 @@ function recordIn(file: string): {
       held:
         (e as NodeJS.ErrnoException).code === "ENOENT"
           ? {
-              kind: "unread",
+              kind: "none",
               why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`,
             }
           : { kind: "unread", why: (e as Error).message },
@@ -300,19 +331,35 @@ function recordIn(file: string): {
       },
     };
   }
-  const sessionId =
-    typeof record === "object" && record !== null && "sessionId" in record
-      ? record.sessionId
-      : undefined;
+  const { sessionId, procStart } =
+    typeof record === "object" && record !== null
+      ? (record as { sessionId?: unknown; procStart?: unknown })
+      : {};
+  const start = parseStartToken(procStart);
   return {
     torn: false,
     held:
-      typeof sessionId === "string" && sessionId !== ""
-        ? { kind: "holds", sessionId }
-        : {
+      typeof sessionId !== "string" || sessionId === ""
+        ? {
             kind: "unread",
             why: `its session record ${file} names no session`,
-          },
+          }
+        : procStart === undefined
+          ? {
+              kind: "unread",
+              why: `its session record ${file} names no process start (update Claude Code with \`claude update\`: recent releases name one)`,
+            }
+          : start === undefined
+            ? {
+                kind: "unread",
+                why: `its session record ${file} names its process start as ${JSON.stringify(procStart)}, not in the form \`ps -o lstart=\` prints it`,
+              }
+            : start !== claude.startTime
+              ? {
+                  kind: "none",
+                  why: `its session record ${file} was left by a Claude Code that has exited: the record names a process started ${start}, and pid ${claude.pid} is a process started ${claude.startTime}`,
+                }
+              : { kind: "holds", sessionId },
   };
 }
 
@@ -320,9 +367,14 @@ function recordIn(file: string): {
 // user's, where the configuration directory is when the process names none.
 export const heldSessionUnder =
   (home: string): HeldSessionOf =>
-  (pid, configDir) =>
+  (claude) =>
     heldSessionIn(
-      path.join(claudeConfigDir(configDir, home), "sessions", `${pid}.json`),
+      path.join(
+        claudeConfigDir(claude.configDir, home),
+        "sessions",
+        `${claude.pid}.json`,
+      ),
+      claude,
     );
 
 // How often the wait for a lane's subscriber looks again.

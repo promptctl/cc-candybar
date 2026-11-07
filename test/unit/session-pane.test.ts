@@ -14,22 +14,26 @@ import {
   type HeldSessionOf,
 } from "../../src/daemon/session-pane";
 import type { TmuxHint } from "../../src/tmux-hint";
+import { CLAUDE_START } from "../helpers/claude-record";
 
 const TMUX: TmuxHint = { socket: "/tmp/tmux-501/default", pane: "%7", truecolor: null };
 const CLAUDE = 4242;
-const BY = { pid: CLAUDE, configDir: undefined };
-// What every unread parent's why ends with: the likely cause and its fix.
+const BY = { pid: CLAUDE, startTime: CLAUDE_START, configDir: undefined };
+// What the why of a parent no record is the process's of ends with: the
+// likely cause and its fix.
 const WRAPPED = ". A statusline command that runs the client through a shell or a wrapper (a script, `pnpm dlx`) hands it that process instead: `cc-candybar install` writes one that runs it directly";
 
 // Claude Code's records, by pid and configuration directory, as a fake of
 // the port: every read it is asked for is kept, so a case can say none was.
+// Whether a record names the process's start is the reader's to judge
+// (test/lane-edge-held-session.test.ts).
 const records = (held: Record<string, HeldSession>) => {
   const asked: Array<[number, string | undefined]> = [];
-  const of: HeldSessionOf = (pid, configDir) => {
+  const of: HeldSessionOf = ({ pid, configDir }) => {
     asked.push([pid, configDir]);
     return (
       held[`${pid}@${configDir ?? "default"}`] ?? {
-        kind: "unread",
+        kind: "none",
         why: `it keeps no session record for ${pid}`,
       }
     );
@@ -40,7 +44,7 @@ const holds = (sessionId: string): HeldSession => ({ kind: "holds", sessionId })
 
 const hints = (over: Partial<ClientHints>): ClientHints => ({
   tmux: TMUX,
-  parentPid: CLAUDE,
+  parent: { pid: CLAUDE, startTime: CLAUDE_START },
   ...over,
 });
 
@@ -58,7 +62,7 @@ describe("sessionPaneOf", () => {
   test("the record is read in the configuration directory the client names", () => {
     const { of, asked } = records({ [`${CLAUDE}@/home/u/.claude.zai`]: holds("s1") });
     const pane = sessionPaneOf(hints({ claudeConfigDir: "/home/u/.claude.zai" }), "s1", of);
-    expect(pane).toMatchObject({ kind: "runs", claude: { pid: CLAUDE, configDir: "/home/u/.claude.zai" } });
+    expect(pane).toMatchObject({ kind: "runs", claude: { ...BY, configDir: "/home/u/.claude.zai" } });
     expect(asked).toEqual([[CLAUDE, "/home/u/.claude.zai"]]);
   });
 
@@ -76,7 +80,7 @@ describe("sessionPaneOf", () => {
 
   test("a client whose parent keeps no record, as a shell in the pane, is not the pane's", () => {
     const { of } = records({});
-    const pane = sessionPaneOf(hints({ parentPid: 999 }), "test-1", of);
+    const pane = sessionPaneOf(hints({ parent: { pid: 999, startTime: CLAUDE_START } }), "test-1", of);
     expect(pane.kind).toBe("unconfirmed");
     expect(paneFact(pane)).toBe(
       `unconfirmed: the process that ran its statusline (pid 999) is no Claude Code whose session can be read: it keeps no session record for 999${WRAPPED}`,
@@ -91,13 +95,29 @@ describe("sessionPaneOf", () => {
     expect(asked).toEqual([]);
   });
 
+  test("a client that could not read when its parent started is not the pane's, and no record is read", () => {
+    const { of, asked } = records({ [`${CLAUDE}@default`]: holds("s1") });
+    const pane = sessionPaneOf(hints({ parent: { pid: CLAUDE, startTime: null, why: "ps timeout (exit null)" } }), "s1", of);
+    expect(paneFact(pane)).toBe(`unconfirmed: its client could not read when the process that ran it (pid ${CLAUDE}) started: ps timeout (exit null)`);
+    expect(asked).toEqual([]);
+  });
+
+  // A record under the parent's pid it cannot judge may still be its own, so
+  // the shell-or-wrapper fix is not said.
+  test("a client whose parent's record cannot be read is not the pane's, saying why without the wrapper fix", () => {
+    const { of } = records({ [`${CLAUDE}@default`]: { kind: "unread", why: "its session record names no process start" } });
+    expect(paneFact(sessionPaneOf(hints({}), "s1", of))).toBe(
+      `unconfirmed: the session of the process that ran its statusline (pid ${CLAUDE}) cannot be read: its session record names no process start`,
+    );
+  });
+
   test("a session its record holds outside tmux runs outside, and one it does not is unconfirmed there too", () => {
     const { of } = records({ [`${CLAUDE}@default`]: holds("s1") });
     for (const tmux of [null, undefined]) {
       const pane = sessionPaneOf(hints({ tmux }), "s1", of);
       expect(pane).toEqual({ kind: "runs", tmux: null, claude: BY });
       expect(paneFact(pane)).toBe("outside");
-      expect(sessionPaneOf(hints({ tmux, parentPid: 999 }), "s1", of)).toMatchObject({ kind: "unconfirmed", tmux: null });
+      expect(sessionPaneOf(hints({ tmux, parent: { pid: 999, startTime: CLAUDE_START } }), "s1", of)).toMatchObject({ kind: "unconfirmed", tmux: null });
     }
   });
 
@@ -135,7 +155,7 @@ const tick = (sessionId: string, held: string) =>
   sessionPaneOf(hints({}), sessionId, records({ [`${CLAUDE}@default`]: holds(held) }).of);
 
 describe("sessionPaneError", () => {
-  const unconfirmed = sessionPaneOf(hints({ parentPid: 999 }), "test-1", records({}).of);
+  const unconfirmed = sessionPaneOf(hints({ parent: { pid: 999, startTime: CLAUDE_START } }), "test-1", records({}).of);
 
   test("says why while a lane that shows the pane's session is on", () => {
     expect(sessionPaneError(unconfirmed, lanes("tmuxStatus"), false)).toBe(

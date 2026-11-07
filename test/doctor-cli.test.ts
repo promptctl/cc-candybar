@@ -25,6 +25,7 @@ import type { DaemonAnswer } from "../src/doctor/daemon-answer";
 import type { FrameSeen } from "../src/daemon/render-sightings";
 import { answerRepo } from "./helpers/repo-approval";
 import { MAIN_NAME } from "../src/daemon/home";
+import { CLAUDE_START } from "./helpers/claude-record";
 
 // The daemon a healthy bar answers from: its session runs with the Claude
 // Code directory this test's command reports (CLAUDE_CONFIG_DIR, `inDir`).
@@ -100,7 +101,7 @@ const settingsPath = (): string => path.join(dir, "settings.json");
 // Ghostty outside tmux too (EDGE's tmux client is Ghostty inside it).
 const inDir = (env: Record<string, string>) => ({
   env: { TERM_PROGRAM: "ghostty", ...env, CLAUDE_CONFIG_DIR: dir },
-  parentPid: process.pid,
+  parent: () => ({ pid: process.pid, startTime: CLAUDE_START }),
 });
 
 describe("doctorPlan", () => {

@@ -6,6 +6,7 @@ import type { Host, World } from "../../src/host";
 import { systemOneShotLauncher } from "../../src/proc/system-launcher";
 import { systemProbe } from "../../src/daemon/process-fingerprint";
 import { systemTimekeeper } from "../../src/time";
+import { CLAUDE_START } from "./claude-record";
 
 // [LAW:effects-at-boundaries] The machine a test runs on, as src is handed it:
 // this worker's own environment, home and temporary directory. A test that
@@ -15,7 +16,6 @@ export const HOST: Host = {
   env: process.env,
   home: os.homedir(),
   tmp: os.tmpdir(),
-  parentPid: process.ppid,
 };
 
 // The worker's environment as a main home reads it: test setup names the
@@ -39,7 +39,6 @@ export function hostOf(
     env,
     home: rest.home ?? HOST.home,
     tmp: rest.tmp ?? HOST.tmp,
-    parentPid: HOST.parentPid,
   };
 }
 
@@ -52,6 +51,9 @@ export function worldOf(host: Host): World {
     launcher: systemOneShotLauncher({ inherited: host.env }, systemTimekeeper),
     clock: systemTimekeeper,
     dialer: systemDialer,
+    // A stated identity rather than a read one: no test spawns `ps` to learn
+    // which process ran it.
+    parent: () => ({ pid: process.ppid, startTime: CLAUDE_START }),
   };
 }
 

@@ -6,7 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { json } from "node:stream/consumers";
 import { debug, setDebug } from "./utils/logger";
-import { processWorld } from "./host";
+import { processWorld, TICK_PARENT_START_BUDGET_MS } from "./host";
 import {
   runInstall,
   runInstallUrlHandler,
@@ -224,7 +224,12 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       process.argv.slice(1),
       process.cwd(),
       {
-        ...detectClientHints(host, process.cwd(), process.stderr),
+        ...detectClientHints(
+          host,
+          world.parent(TICK_PARENT_START_BUDGET_MS),
+          process.cwd(),
+          process.stderr,
+        ),
         client: nodeClientHint("node", RUNNING_BUNDLE),
       },
     );
