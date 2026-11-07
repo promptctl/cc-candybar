@@ -22774,15 +22774,16 @@ var VERB_DOCTOR_RUN = "doctor-run";
 var VERB_DOCTOR_FIX = "doctor-fix";
 var VERB_DOCTOR_MARK = "doctor-mark";
 var VERB_PROBE = "probe";
-var LINK_VERBS = [VERB_DISPATCH, VERB_PROBE];
-function isLinkVerb(verb) {
-  return LINK_VERBS.includes(verb);
+var CLICK_VERBS = [VERB_DISPATCH, VERB_PROBE];
+function isClickVerb(verb) {
+  return CLICK_VERBS.includes(verb);
 }
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var VERB_RANGE = "range";
+var LINK_VERBS = [...CLICK_VERBS, VERB_RANGE];
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
 function sayWrite(key, value) {
@@ -22920,7 +22921,7 @@ function deadLinkOf(text4) {
     return ADDRESS.startsWith(head) ? null : "in a grammar older than names, which names no renderer";
   }
   const [, , verb, ...tail] = head.split("/");
-  return verb === void 0 || tail.length === 0 || isLinkVerb(verb) ? null : `naming the verb "${verb}", which a link never names: a link names ${LINK_VERBS.join(" or ")}`;
+  return verb === void 0 || tail.length === 0 || LINK_VERBS.includes(verb) ? null : `naming the verb "${verb}", which a link never names: a link names ${LINK_VERBS.join(", ")}`;
 }
 function verbOf(rest2, to) {
   const slash2 = rest2.indexOf("/");
@@ -71853,17 +71854,12 @@ function readProbe(value) {
 var CLICK_READERS = {
   [VERB_DISPATCH]: (value) => {
     const effects = batchAdjacentWrites(parseEffects(value)).map(readEffect);
-    const read2 = {
-      kind: VERB_DISPATCH,
-      effects,
-      session: sessionOf(effects)
-    };
-    return read2;
+    return { kind: VERB_DISPATCH, effects, session: sessionOf(effects) };
   },
   [VERB_PROBE]: (value) => ({ kind: VERB_PROBE, nonce: readProbe(value) })
 };
 function readClick(verb, value) {
-  return isLinkVerb(verb) ? CLICK_READERS[verb](value) : null;
+  return isClickVerb(verb) ? CLICK_READERS[verb](value) : null;
 }
 function clickSession(click2) {
   return click2.kind === VERB_DISPATCH && click2.session?.ok ? click2.session.id : null;
