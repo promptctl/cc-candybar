@@ -84,8 +84,17 @@ let cleanups: Array<() => void>;
 beforeEach(() => {
   cleanups = [];
 });
+// Every cleanup runs, so a check that fails one still tears the rig down.
 afterEach(() => {
-  for (const fn of cleanups.reverse()) fn();
+  const failed: unknown[] = [];
+  for (const fn of cleanups.reverse()) {
+    try {
+      fn();
+    } catch (error) {
+      failed.push(error);
+    }
+  }
+  if (failed.length > 0) throw failed[0];
 });
 
 // The daemon's request path over a home of its own: the checkpoint that
@@ -106,6 +115,12 @@ function daemonDraw() {
   const { launcher } = fakeLauncher(clock);
   const said: string[] = [];
   const log: DaemonLogger = (level, message) => void said.push(`${level} ${message}`);
+  // [LAW:no-silent-failure] An error the daemon only logs fails the case:
+  // checked at every tick, and once more after the last, before teardown.
+  const unlogged = (): void => {
+    const errors = said.filter((line) => line.startsWith("error "));
+    if (errors.length > 0) throw new Error(`the daemon logged errors:\n${errors.join("\n")}`);
+  };
   const watchers = new WatcherRegistry({ filesystem: systemFilesystem, clock, logger: log });
   const providers = createPayloadProviders({
     clock,
@@ -122,6 +137,10 @@ function daemonDraw() {
   const turns = new JournalTurns();
   const sessionState = new SessionState(turns);
   const update = newUpdateFact();
+  // [LAW:one-source-of-truth] One of each part the daemon hands both its
+  // verbs and its draw (src/daemon/daemon.ts).
+  const gates = bareGates();
+  const sightings = new RenderSightings();
   const runs = new SourceRuns({ launcher, clock });
   const source = sessionSource({
     providers,
@@ -146,7 +165,7 @@ function daemonDraw() {
           watchers,
           storage: providers.managedStorage,
           links: TEST_LINKS,
-          gates: bareGates(),
+          gates,
           log,
           facts: inProcessFacts({ providers, update: () => update.get(), runs }),
           source,
@@ -155,14 +174,21 @@ function daemonDraw() {
       ),
     log,
   );
-  const { arrival: _arrival, described: _described, ...testCtx } = testVerbContext(
+  const { arrival: _arrival, described: _described, gone: _gone, ...testCtx } = testVerbContext(
     sessionState,
     undefined,
     undefined,
     host,
     turns,
   );
-  const verbCtx = { ...testCtx, log };
+  const verbCtx = {
+    ...testCtx,
+    gates,
+    log,
+    launcher,
+    now: () => instantAt(clock),
+    clients: sightings,
+  };
   const heldSession = heldSessionUnder(home);
   let feeds: FrameFeeds<CheckedRenderRequest> | null = null;
   // [LAW:single-enforcer] The parts the daemon's reply and draw read, its run
@@ -177,7 +203,7 @@ function daemonDraw() {
     clock,
     log,
     stats: new RuntimeStats(clock),
-    renderSightings: new RenderSightings(),
+    renderSightings: sightings,
     recorder,
     sessionState,
     journalTurns: turns,
@@ -230,6 +256,8 @@ function daemonDraw() {
     turns.close();
     sessionState.close();
   });
+  // Pushed after the teardown, so it runs ahead of it.
+  cleanups.push(unlogged);
 
   // The client hints of a tick run in tmux pane PANE by the process `pid`,
   // started when the stand-in Claude Code's record says.
@@ -243,9 +271,7 @@ function daemonDraw() {
   // replies to it: through the checkpoint, the arm's turn, and the draw, at
   // the clock's instant. Its client's deadline is that instant, so it leaves
   // no time to wait on its sources and the held clock never has to move.
-  // [LAW:no-silent-failure] An error the tick only logs fails it.
   const tick = async (sid: string, pid: number): Promise<void> => {
-    const before = said.length;
     const { resp } = await replyTo(
       parts,
       {
@@ -260,8 +286,7 @@ function daemonDraw() {
       () => false,
     );
     if (!resp.ok) throw new Error(`the tick drew no bar: ${JSON.stringify(resp)}`);
-    const errors = said.slice(before).filter((line) => line.startsWith("error "));
-    if (errors.length > 0) throw new Error(`the tick logged errors:\n${errors.join("\n")}`);
+    unlogged();
   };
   // A session whose first tick from `pid` opened its view, recorded from
   // there on: each later tick returns the list its draw built.
@@ -293,9 +318,13 @@ function daemonDraw() {
   };
 }
 
-// The session-pane message a draw listed, or undefined while it listed none.
-const panePart = (list: DiagnosticList): string | undefined =>
-  list.find((m) => m.about === "session-pane")?.message;
+// The session-pane message a draw listed, after its severity's level, or
+// undefined while it listed none at any level.
+const panePart = (list: DiagnosticList): string | undefined => {
+  const entry = list.find((m) => m.about === "session-pane");
+  return entry === undefined ? undefined : `${entry.severity.level}: ${entry.message}`;
+};
+const RACE_MS = MISMATCH_RACE_S * 1000;
 
 test("a tick whose stamp is unconfirmed draws a bar whose list holds the session-pane message", async () => {
   const d = daemonDraw();
@@ -305,6 +334,7 @@ test("a tick whose stamp is unconfirmed draws a bar whose list holds the session
   // and the record it looked for.
   const s = await d.opened(SID, 4300);
   const message = panePart(await s.tick());
+  expect(message).toMatch(/^error: /);
   expect(message).toContain(`pane ${PANE}`);
   expect(message).toContain("pid 4300");
   expect(message).toContain(d.recordAt(4300));
@@ -317,18 +347,19 @@ test("a confirmed tick's bar lists no session-pane message", async () => {
   expect(panePart(await s.tick())).toBeUndefined();
   // The lane is on in this daemon: a session no Claude Code ran lists it.
   const other = await d.opened(OTHER, 4304);
-  expect(panePart(await other.tick())).toContain("pid 4304");
+  expect(panePart(await other.tick())).toMatch(/^error: .*pid 4304/);
 });
 
-test("a mismatch draws no session-pane message inside the rewrite race, and draws it once its run has lasted past the race", async () => {
+test("a mismatch draws no session-pane message until its run has lasted past the race, and draws it then", async () => {
   const d = daemonDraw();
   // The pane's Claude Code holds another session, and its ticks of SID go on.
   d.holds(4302, CLEARED);
   const s = await d.opened(SID, 4302);
-  d.clock.advance((MISMATCH_RACE_S * 1000) / 2);
+  d.clock.advance(RACE_MS / 2);
   expect(panePart(await s.tick())).toBeUndefined();
-  d.clock.advance(MISMATCH_RACE_S * 1000);
+  d.clock.advance(RACE_MS);
   const message = panePart(await s.tick());
+  expect(message).toMatch(/^error: /);
   expect(message).toContain(`pane ${PANE}`);
   expect(message).toContain("pid 4302");
   expect(message).toContain(CLEARED);
@@ -346,14 +377,14 @@ test("a /clear's straggling ticks of the old session draw no session-pane messag
   // Stragglers inside the race of the new session's first tick are the race
   // and open no run, so one landing past it opens a run of its own, and a
   // race measured from the first straggler would have lasted by then.
-  d.clock.advance(1000);
+  d.clock.advance(RACE_MS / 10);
   expect(panePart(await s.tick())).toBeUndefined();
-  d.clock.advance(MISMATCH_RACE_S * 1000 - 2000);
+  d.clock.advance((RACE_MS * 8) / 10);
   expect(panePart(await s.tick())).toBeUndefined();
-  d.clock.advance(3000);
+  d.clock.advance((RACE_MS * 3) / 10);
   expect(panePart(await s.tick())).toBeUndefined();
   // Ticks of the old session that go on past the race of their own run are
   // a pane that never follows it.
-  d.clock.advance(MISMATCH_RACE_S * 1000 + 1000);
-  expect(panePart(await s.tick())).toContain(CLEARED);
+  d.clock.advance(RACE_MS + RACE_MS / 10);
+  expect(panePart(await s.tick())).toMatch(new RegExp(`^error: .*${CLEARED}`));
 });
