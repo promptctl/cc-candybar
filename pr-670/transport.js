@@ -72335,7 +72335,7 @@ function sessionPaneError(pane, lanes, lasted) {
   const on2 = LANE_NAMES.filter(
     (lane) => lanes[lane] && LANES[lane].showsPaneSession
   );
-  const why2 = pane.kind === "unconfirmed" ? `this one is not known to be it: ${pane.why}` : pane.kind === "mismatched" && lasted ? `this one is not it: ${pane.why}, for longer than a \`/clear\` or \`/resume\` takes to rewrite it` : null;
+  const why2 = pane.kind === "unconfirmed" ? `this one is not known to be it: ${pane.why}` : pane.kind === "mismatched" && lasted(pane.claude) ? `this one is not it: ${pane.why}, for longer than a \`/clear\` or \`/resume\` takes to rewrite it` : null;
   return why2 === null || pane.tmux === null || on2.length === 0 ? null : `The ${on2.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and ${why2}`;
 }
 
@@ -77732,7 +77732,11 @@ function drawRender(parts, setup, drawing2) {
     // stamp's words move.
     sourced(
       "session-pane",
-      sessionPaneError(req.pane, lanes, mismatchRuns.lasted(sessionId2))
+      sessionPaneError(
+        req.pane,
+        lanes,
+        (claude) => mismatchRuns.lasted(sessionId2, claude)
+      )
     ),
     sourced("load", entry.lastError),
     sourced("update-act", updateWatch.error()),
@@ -78061,9 +78065,10 @@ var MismatchRuns = class {
     this.turns = turns;
   }
   turns;
-  runs = /* @__PURE__ */ new Map();
-  confirmed = /* @__PURE__ */ new Map();
-  // [LAW:dataflow-not-control-flow] The run `sessionId` holds once a request
+  // [LAW:one-source-of-truth] Keyed by the Claude Code, since its ticks open
+  // and end its runs: one process's ticks never touch another's.
+  processes = /* @__PURE__ */ new Map();
+  // [LAW:dataflow-not-control-flow] The run `sessionId` is in once a request
   // stamped `pane` arrives at `at`. A confirmed tick from a Claude Code is the
   // evidence its record is being rewritten: it ends every run that process's
   // ticks opened, and its first tick of a session dates the rewrite. So a
@@ -78078,40 +78083,41 @@ var MismatchRuns = class {
       );
     switch (pane.kind) {
       case "runs": {
-        const key = processKey(pane.claude);
-        for (const [held, run3] of this.runs)
-          if (processKey(run3.claude) === key) this.runs.delete(held);
-        const was = this.confirmed.get(key);
-        keepNewest(
-          this.confirmed,
-          key,
-          was?.sessionId === sessionId2 ? was : { sessionId: sessionId2, since: at }
-        );
+        const was = this.processes.get(processKey(pane.claude))?.confirmed;
+        keepNewest(this.processes, processKey(pane.claude), {
+          confirmed: was?.sessionId === sessionId2 ? was : { sessionId: sessionId2, since: at },
+          runs: /* @__PURE__ */ new Map()
+        });
         return null;
       }
       case "unconfirmed":
-        return this.of(sessionId2);
+        return null;
       case "mismatched": {
         const key = processKey(pane.claude);
-        const rewrite = this.confirmed.get(key);
+        const ticks = this.processes.get(key) ?? {
+          confirmed: null,
+          runs: /* @__PURE__ */ new Map()
+        };
+        keepNewest(this.processes, key, ticks);
+        const rewrite = ticks.confirmed;
         if (rewrite?.sessionId === pane.held && !raceOver(rewrite.since, at))
-          return this.of(sessionId2);
-        const was = this.runs.get(sessionId2);
-        const since = was !== void 0 && processKey(was.claude) === key ? was.since : at;
-        const run3 = { claude: pane.claude, since, lasted: raceOver(since, at) };
-        keepNewest(this.runs, sessionId2, run3);
+          return ticks.runs.get(sessionId2) ?? null;
+        const since = ticks.runs.get(sessionId2)?.since ?? at;
+        const run3 = { since, lasted: raceOver(since, at) };
+        keepNewest(ticks.runs, sessionId2, run3);
         return run3;
       }
     }
   }
-  of(sessionId2) {
-    return this.runs.get(sessionId2) ?? null;
+  // The run of `sessionId` that `claude`'s ticks are in.
+  of(sessionId2, claude) {
+    return this.processes.get(processKey(claude))?.runs.get(sessionId2) ?? null;
   }
   // Whether the session's mismatch has outlasted the race, as the requests
-  // its Claude Code ran left it: what a draw shows, never measured on the
-  // draw's clock.
-  lasted(sessionId2) {
-    return this.runs.get(sessionId2)?.lasted ?? false;
+  // `claude` ran left it: what a draw shows, never measured on the draw's
+  // clock.
+  lasted(sessionId2, claude) {
+    return this.of(sessionId2, claude)?.lasted ?? false;
   }
 };
 var mismatchFact = (run3, at) => run3 === null ? "-" : `${run3.lasted ? "lasted " : ""}${spanMs(run3.since, at)}ms`;
@@ -78969,7 +78975,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         kind: "request",
         req: checked.req,
         at,
-        arrived: t0,
+        arrived: accepted,
         // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
         // fixed at its arrival: early enough before its client hangs up to
         // draw (src/daemon/request-deadline.ts).
