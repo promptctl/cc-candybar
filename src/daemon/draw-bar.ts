@@ -12,7 +12,7 @@ import {
 } from "./cache/file-events";
 import type { LauncherWarning, PipeEvent } from "../proc/launch";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
-import { paneFact, runningPane, sessionPaneError } from "./session-pane.js";
+import { paneFact, sessionPaneError, sessionPaneOf } from "./session-pane.js";
 import { UPDATE_DISMISSED_KEY } from "./update-keys";
 import { type RenderOrigin } from "../config-hint";
 import {
@@ -856,11 +856,7 @@ export function requestArrived(
     req.sessionId,
     inTmux(req.hints.tmux),
   );
-  tmuxStatusLines.observe(
-    req.sessionId,
-    runningPane(req.pane),
-    lanes.tmuxStatus,
-  );
+  tmuxStatusLines.observe(req.sessionId, req.pane, lanes.tmuxStatus);
   return laneSetups.noted(req.sessionId, lanes);
 }
 
@@ -893,7 +889,7 @@ export function laneSessionOf(req: CheckedRenderRequest): LaneSession {
 // `before` and left them at `after`: each lane it moved is set up for the
 // session as its latest request reported it, or owed to its first request;
 // and a tmux status line switch it moved is followed in the pane that request
-// reported. A click that left that switch alone holds nothing: the pane is
+// names, if its Claude Code's record holds the session at the commit. A click that left that switch alone holds nothing: the pane is
 // only remembered, and `answered` may have released it to the session that
 // took it since.
 export function laneClicked(
@@ -905,9 +901,11 @@ export function laneClicked(
   const { frameFeeds, laneSetups, tmuxStatusLines } = parts;
   const latest = frameFeeds.latest(sessionId);
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
+    // [LAW:one-source-of-truth] Judged by the record as it reads at the
+    // click's commit, as a request is at its arrival.
     tmuxStatusLines.observe(
       sessionId,
-      runningPane(latest.pane),
+      sessionPaneOf(latest.hints, sessionId, parts.heldSession),
       after.tmuxStatus,
     );
   return laneSetups.clicked(sessionId, before, after);

@@ -7,7 +7,6 @@ import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
 import type { ClientHints } from "../../src/daemon/protocol";
 import {
   paneFact,
-  runningPane,
   runsNowIn,
   sessionPaneError,
   sessionPaneOf,
@@ -51,7 +50,6 @@ describe("sessionPaneOf", () => {
     const pane = sessionPaneOf(hints({}), "s1", of);
     expect(pane).toEqual({ kind: "runs", tmux: TMUX });
     expect(paneFact(pane)).toBe("runs");
-    expect(runningPane(pane)).toBe(TMUX);
   });
 
   test("the record is read in the configuration directory the client names", () => {
@@ -69,7 +67,6 @@ describe("sessionPaneOf", () => {
       tmux: TMUX,
       why: `the Claude Code that ran its statusline (pid ${CLAUDE}) holds session real`,
     });
-    expect(runningPane(pane)).toBeNull();
   });
 
   test("a client whose parent keeps no record, as a shell in the pane, is not the pane's", () => {
@@ -89,16 +86,16 @@ describe("sessionPaneOf", () => {
     expect(asked).toEqual([]);
   });
 
-  test("a session outside tmux runs in no pane, and no record is read", () => {
-    const { of, asked } = records({ [`${CLAUDE}@default`]: holds("s1") });
+  test("a session its record holds outside tmux runs outside, and one it does not is unconfirmed there too", () => {
+    const { of } = records({ [`${CLAUDE}@default`]: holds("s1") });
     for (const tmux of [null, undefined]) {
       const pane = sessionPaneOf(hints({ tmux }), "s1", of);
-      expect(pane).toEqual({ kind: "outside" });
+      expect(pane).toEqual({ kind: "runs", tmux: null });
       expect(paneFact(pane)).toBe("outside");
-      expect(runningPane(pane)).toBeNull();
+      expect(sessionPaneOf(hints({ tmux, parentPid: 999 }), "s1", of)).toMatchObject({ kind: "unconfirmed", tmux: null });
     }
-    expect(asked).toEqual([]);
   });
+
 });
 
 describe("runsNowIn", () => {
@@ -119,6 +116,13 @@ describe("runsNowIn", () => {
     expect(runsNowIn(TMUX, of)({ hints: hints({ tmux: null }), sessionId: "s1" })).toBe(false);
     expect(asked).toEqual([]);
   });
+
+  test("one lookup reads each record once, whatever number of its sessions it weighs", () => {
+    const { of, asked } = records({ [`${CLAUDE}@default`]: holds("s3") });
+    const lookup = runsNowIn(TMUX, of);
+    expect(["s1", "s2", "s3"].map((sessionId) => lookup({ hints: hints({}), sessionId }))).toEqual([false, false, true]);
+    expect(asked).toEqual([[CLAUDE, undefined]]);
+  });
 });
 
 describe("sessionPaneError", () => {
@@ -138,6 +142,7 @@ describe("sessionPaneError", () => {
     expect(sessionPaneError(unconfirmed, lanes("band", "statusline"))).toBeNull();
     const runs = sessionPaneOf(hints({}), "s1", records({ [`${CLAUDE}@default`]: holds("s1") }).of);
     expect(sessionPaneError(runs, lanes("pane", "tmuxStatus"))).toBeNull();
-    expect(sessionPaneError({ kind: "outside" }, lanes("pane", "tmuxStatus"))).toBeNull();
+    expect(sessionPaneError({ kind: "runs", tmux: null }, lanes("pane", "tmuxStatus"))).toBeNull();
+    expect(sessionPaneError({ kind: "unconfirmed", tmux: null, why: "w" }, lanes("pane", "tmuxStatus"))).toBeNull();
   });
 });

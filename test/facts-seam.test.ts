@@ -560,7 +560,7 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     const req = {
       ...request(cwd, home, claudeConfigDir, model),
       refusedArgs: [],
-      pane: { kind: "outside" },
+      pane: { kind: "runs", tmux: null },
     };
     const held = live.cache.holdSession(cwd, cwd, configFile, req);
     const settling = settleRequest(live.recorder, held.view, at);

@@ -37,6 +37,7 @@ import type { TmuxRun } from "../proc/tmux.js";
 import { samePane, type TmuxHint } from "../tmux-hint.js";
 import type { StatusLines } from "./pane-visibility.js";
 import type { Subscriber } from "./frame-feed.js";
+import type { SessionPane } from "./session-pane.js";
 import { decodeSegments, VERB_RANGE } from "../click/wire.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { TmuxStatusBar } from "../tmux-status/frames.js";
@@ -492,17 +493,20 @@ export class TmuxStatusLines {
   constructor(private readonly deps: TmuxStatusDeps) {}
 
   // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
-  // arrival, a click's commit with its session's latest request — never at a
-  // draw: a session whose switch is on is held in the pane it runs in
-  // (`running`, as its request was stamped), and one switched off is not. A
-  // request not known to run in a pane (`running` null) says nothing of where
-  // its session runs — any client in the pane, or one outside tmux, can carry
-  // the session's id — so a session held already stays where it is. A daemon
-  // restart picks each session up at its next request.
-  observe(sessionId: string, running: TmuxHint | null, on: boolean): void {
+  // arrival, a click's commit — never at a draw: a session whose switch is on
+  // is held in the pane its Claude Code's record confirms it runs in (`pane`),
+  // and one switched off, or confirmed outside tmux, is not. An unconfirmed
+  // request says nothing of where its session runs, so a session held already
+  // stays where it is. A daemon restart picks each session up at its next
+  // request.
+  observe(sessionId: string, pane: SessionPane, on: boolean): void {
     if (this.closed) return;
     const held = this.held.get(sessionId);
-    const where = on ? (running ?? held ?? null) : null;
+    const where = !on
+      ? null
+      : pane.kind === "runs"
+        ? pane.tmux
+        : (held ?? null);
     if (held !== undefined && (where === null || !samePane(held, where)))
       this.release(held, "switched off or moved");
     if (where === null || this.held.has(sessionId)) return;

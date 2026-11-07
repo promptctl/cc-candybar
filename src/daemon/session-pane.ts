@@ -20,31 +20,32 @@ export type HeldSessionOf = (
   configDir: string | undefined,
 ) => HeldSession;
 
-// [LAW:types-are-the-program] The pane a request's session runs in, as the
-// render checkpoint stamps it: outside tmux, running in the pane its client
-// names, or named there by a client whose session that pane is not known to
-// run, with why.
+// [LAW:types-are-the-program] Where a request's session runs, as the render
+// checkpoint stamps it: confirmed by the record of the Claude Code that ran its
+// client, in the tmux pane the client names or outside tmux (`tmux` null), or
+// not known, with why, wherever the client ran. Only a confirmed stamp says
+// anything of where the session is.
 export type SessionPane =
-  | { readonly kind: "outside" }
-  | { readonly kind: "runs"; readonly tmux: TmuxHint }
+  | { readonly kind: "runs"; readonly tmux: TmuxHint | null }
   | {
       readonly kind: "unconfirmed";
-      readonly tmux: TmuxHint;
+      readonly tmux: TmuxHint | null;
       readonly why: string;
     };
 
-// [LAW:one-source-of-truth] A session runs in the pane its client names only
-// when the process that ran the client is a Claude Code whose own record holds
-// that session. Every process in the pane inherits its tmux variables, so a
-// client run from Claude Code's shell names the pane too, and so does one run
-// under the old session's id after a `/clear`.
+// [LAW:one-source-of-truth] A session runs where its client ran only when the
+// process that ran the client is a Claude Code whose own record holds that
+// session. Every process in a pane inherits its tmux variables, so a client
+// run from Claude Code's shell names the pane too, and so does one run under
+// the old session's id after a `/clear`; one run outside tmux under a
+// session's id is no sign the session left its pane.
 export function sessionPaneOf(
   hints: ClientHints,
   sessionId: string,
   heldSession: HeldSessionOf,
 ): SessionPane {
-  const { tmux, parentPid } = hints;
-  if (!inTmux(tmux)) return { kind: "outside" };
+  const tmux = inTmux(hints.tmux) ? hints.tmux : null;
+  const { parentPid } = hints;
   if (parentPid === undefined)
     return {
       kind: "unconfirmed",
@@ -67,24 +68,40 @@ export function sessionPaneOf(
       };
 }
 
-// The pane `pane` says its session runs in, or null when it runs in none.
-export const runningPane = (pane: SessionPane): TmuxHint | null =>
-  pane.kind === "runs" ? pane.tmux : null;
-
 // [LAW:one-source-of-truth] Whether `req`'s session runs in the pane `where`
 // now, by its Claude Code's record as it reads at this call: the stamp `req`
 // arrived with is the record as it read then, which a `/clear` rewrites under
 // the same process, so a lookup of a pane's session never answers from it.
-export const runsNowIn =
-  (where: Pick<TmuxHint, "socket" | "pane">, heldSession: HeldSessionOf) =>
-  (req: { readonly hints: ClientHints; readonly sessionId: string }): boolean =>
+// One lookup reads each record once, so every request it weighs is judged
+// against the same read: a pane keeps a request of each session its Claude
+// Code held, all of them naming one record.
+export function runsNowIn(
+  where: Pick<TmuxHint, "socket" | "pane">,
+  heldSession: HeldSessionOf,
+): (req: {
+  readonly hints: ClientHints;
+  readonly sessionId: string;
+}) => boolean {
+  const reads = new Map<string, HeldSession>();
+  const once: HeldSessionOf = (pid, configDir) => {
+    const key = `${pid}\0${configDir ?? ""}`;
+    const read = reads.get(key) ?? heldSession(pid, configDir);
+    reads.set(key, read);
+    return read;
+  };
+  return (req) =>
     inTmux(req.hints.tmux) &&
     samePane(req.hints.tmux, where) &&
-    sessionPaneOf(req.hints, req.sessionId, heldSession).kind === "runs";
+    sessionPaneOf(req.hints, req.sessionId, once).kind === "runs";
+}
 
 // [LAW:nothing-unseen] The stamp as the render event's `pane` field.
 export const paneFact = (pane: SessionPane): string =>
-  pane.kind === "unconfirmed" ? `unconfirmed: ${pane.why}` : pane.kind;
+  pane.kind === "unconfirmed"
+    ? `unconfirmed: ${pane.why}`
+    : pane.tmux === null
+      ? "outside"
+      : "runs";
 
 // [LAW:no-silent-failure] Why a lane that shows the session its pane runs
 // shows another bar than this one, while such a lane is on: null otherwise.
@@ -95,7 +112,7 @@ export function sessionPaneError(
   const on = LANE_NAMES.filter(
     (lane) => lanes[lane] && LANES[lane].showsPaneSession,
   );
-  return pane.kind !== "unconfirmed" || on.length === 0
+  return pane.kind !== "unconfirmed" || pane.tmux === null || on.length === 0
     ? null
     : `The ${on.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and this one is not known to be it: ${pane.why}`;
 }

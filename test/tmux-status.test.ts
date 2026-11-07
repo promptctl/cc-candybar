@@ -273,7 +273,7 @@ function harness(ids: readonly string[] = ["$1"], renderer: Renderer = {}) {
   });
   const hold = (sessionId: string, pane: string): void => {
     newest.set(pane, sessionId);
-    owner.observe(sessionId, { socket: SOCKET, pane, truecolor: null }, true);
+    owner.observe(sessionId, { kind: "runs", tmux: { socket: SOCKET, pane, truecolor: null } }, true);
   };
   const answer = async (
     sessionOf: Record<string, string>,
@@ -346,7 +346,7 @@ describe("TmuxStatusLines", () => {
   // has no status line to draw in, so it keeps drawing in Claude Code's.
   test("a session switched on with no tmux pane holds no status line", async () => {
     const h = harness();
-    h.owner.observe("s1", null, true);
+    h.owner.observe("s1", { kind: "runs", tmux: null }, true);
     await h.answer({}, {});
     expect(h.subs.has("s1")).toBe(false);
     expect([...session(h)]).toEqual([]);
@@ -398,7 +398,7 @@ describe("TmuxStatusLines", () => {
     session(h).set("status", "5");
     h.owner.observe(
       "s1",
-      { socket: SOCKET, pane: "%1", truecolor: null },
+      { kind: "runs", tmux: { socket: SOCKET, pane: "%1", truecolor: null } },
       false,
     );
     await h.owner.settled();
@@ -413,19 +413,31 @@ describe("TmuxStatusLines", () => {
 
   // A client in the pane under the session's own id, run from its shell, is
   // not known to run there: it says nothing of where the session runs.
-  test("a request not known to run in a pane leaves its session's hold where it is, and a switch off still releases it", async () => {
+  test("an unconfirmed request leaves its session's hold where it is, and a switch off still releases it", async () => {
     const h = harness();
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
-    h.owner.observe("s1", null, true);
+    const tmux = { socket: SOCKET, pane: "%1", truecolor: null };
+    for (const where of [tmux, null])
+      h.owner.observe("s1", { kind: "unconfirmed", tmux: where, why: "its parent keeps no record" }, true);
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     expect(h.unsubscribed).toEqual([]);
-    h.owner.observe("s1", null, false);
+    h.owner.observe("s1", { kind: "unconfirmed", tmux, why: "its parent keeps no record" }, false);
     await h.owner.settled();
     expect(h.unsubscribed).toEqual(["s1"]);
     expect(h.logs).toContain(
       'tmux-status: released sid="s1" pane=%1 — switched off or moved',
     );
+  });
+
+  // `claude --resume` of the session in a terminal outside tmux.
+  test("a session its record confirms outside tmux is released from its pane", async () => {
+    const h = harness();
+    h.hold("s1", "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    h.owner.observe("s1", { kind: "runs", tmux: null }, true);
+    await h.owner.settled();
+    expect(h.unsubscribed).toEqual(["s1"]);
   });
 
   test("a pane another session now renders from is released", async () => {
