@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-693",
+      "ref": "refs/pull/693/merge",
+      "sha": "3843cf8b9b522b07d2471f73b65bddab963d37db",
+      "timestamp": "2026-11-07T12:20:41.128Z",
+      "commits": [
+        {
+          "sha": "3843cf8b9b522b07d2471f73b65bddab963d37db",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T12:18:34Z",
+          "message": "Merge 36848c09d445bf8d7a1ce702698f8c157d6233c0 into 06ac017c63f4be865a8f33c02e0612d2eebddab5\n"
+        },
+        {
+          "sha": "36848c09d445bf8d7a1ce702698f8c157d6233c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:17:14-07:00",
+          "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-688",
       "ref": "refs/pull/688/merge",
       "sha": "b727f9a8ef5c5c818ea2ff19e7434a77c71fe87a",
@@ -20,28 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:15:32-07:00",
           "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-693",
-      "ref": "refs/pull/693/merge",
-      "sha": "0e5c353951a262b5948e3c64fa6d1197b20161dd",
-      "timestamp": "2026-11-07T12:19:14.472Z",
-      "commits": [
-        {
-          "sha": "0e5c353951a262b5948e3c64fa6d1197b20161dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:17:43-07:00",
-          "message": "Merge 8d722061f1327cf0fdd3c3884567faf5d5f1e7ff into 06ac017c63f4be865a8f33c02e0612d2eebddab5\n"
-        },
-        {
-          "sha": "8d722061f1327cf0fdd3c3884567faf5d5f1e7ff",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:17:14-07:00",
-          "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
