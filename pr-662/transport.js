@@ -77148,7 +77148,7 @@ function sessionRecorder(views, log) {
     detach(rec);
     rec.sink.end(how);
   };
-  const write = (sessionId2, rec, line) => {
+  const put = (sessionId2, rec, line) => {
     if (line.kind === "declared" && line.request === rec.declaration) return;
     try {
       rec.sink.write(line);
@@ -77165,6 +77165,7 @@ function sessionRecorder(views, log) {
       end(sessionId2, rec, { kind: "failed", error: e });
     }
   };
+  const write = (sessionId2, rec, line) => put(sessionId2, rec, line);
   const writeDocument = (sessionId2, rec, view, line) => {
     if (line.facts === rec.document) return;
     const state = view.source.state();
@@ -77172,7 +77173,7 @@ function sessionRecorder(views, log) {
       write(sessionId2, rec, { kind: "state", state });
     }
     if (open2.get(sessionId2)?.has(rec)) {
-      write(sessionId2, rec, { kind: "facts", ...line });
+      put(sessionId2, rec, { kind: "facts", ...line });
     }
   };
   const writeTurn = (sessionId2, rec, view) => {

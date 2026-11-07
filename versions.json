@@ -4,15 +4,22 @@
     {
       "version": "pr-662",
       "ref": "refs/pull/662/merge",
-      "sha": "ec29b12af75cebe7cfb40fba7f212644e4b09149",
-      "timestamp": "2026-11-07T00:17:04.767Z",
+      "sha": "be8ecd0361fa879da269f8f9e0b9d1e0265b4b9d",
+      "timestamp": "2026-11-07T00:21:25.923Z",
       "commits": [
         {
-          "sha": "ec29b12af75cebe7cfb40fba7f212644e4b09149",
+          "sha": "be8ecd0361fa879da269f8f9e0b9d1e0265b4b9d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:16:18Z",
-          "message": "Merge f57af33ee2d7e8ef3b941b7d3a9238eaa258fecc into 71d231b7b17cb286ba143c6b7c09d3046d2af023\n"
+          "timestamp": "2026-11-07T00:20:36Z",
+          "message": "Merge eaa592299fb886d5aa6985dcc02761bcde7012fc into 71d231b7b17cb286ba143c6b7c09d3046d2af023\n"
+        },
+        {
+          "sha": "eaa592299fb886d5aa6985dcc02761bcde7012fc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:20:15-07:00",
+          "message": "fix(recording): a facts line can be written only through the document path that writes its state ahead; a failing state write is tested (candybar-gather-renderer-76bb.6pj.09q)\n"
         },
         {
           "sha": "f57af33ee2d7e8ef3b941b7d3a9238eaa258fecc",
