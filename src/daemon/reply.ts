@@ -92,7 +92,8 @@ export type HandledRequest =
   | { kind: "subscribe"; sessionId: SessionId; lane: Lane }
   | { kind: "held"; start: (left: AbortSignal) => Promise<Reply> };
 
-const stay = (resp: Response): Reply => ({
+// A reply that leaves the daemon up and delivers nothing.
+export const stay = (resp: Response): Reply => ({
   resp,
   exitAfterFlush: null,
   delivered: NOTHING_DELIVERED,

@@ -44,6 +44,7 @@ export type ConnectionEvent =
   | { readonly kind: "threw"; readonly answer: Reply }
   // The frame's handling is over, however it ended.
   | { readonly kind: "settled" }
+  // The peer left: its socket errored or closed.
   | { readonly kind: "close" };
 
 // [LAW:effects-at-boundaries] What a step asks the connection to do.
@@ -108,12 +109,19 @@ const answered = (by: "reply" | "backstop", answer: Reply): Step => ({
 const cell = (s: ConnectionState, e: ConnectionEvent): Step => {
   switch (e.kind) {
     case "read":
-      // A frame read after the backstop answered: its work still runs, and
-      // its answer goes nowhere (no change here).
-      if (s.kind !== "awaiting") return to(s);
-      return to(
-        e.waits ? { kind: "answering" } : { kind: "unattended", lapsed: false },
-      );
+      if (s.kind === "awaiting")
+        return to(
+          e.waits
+            ? { kind: "answering" }
+            : { kind: "unattended", lapsed: false },
+        );
+      // A frame read after the backstop answered: its work still runs, and its
+      // answer goes nowhere. Who waits is still the frame's fact, so a url
+      // frame's forwarder hanging up is no departure, and it stays in flight
+      // until its click is handled.
+      if (s.kind === "answered" && s.by === "backstop" && !e.waits)
+        return to({ kind: "unattended", lapsed: true });
+      return to(s);
     case "unreadable":
       return s.kind === "awaiting" ? answered("reply", e.answer) : to(s);
     case "deadline":

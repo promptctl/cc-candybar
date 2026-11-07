@@ -79,11 +79,22 @@ describe("the read", () => {
     expect(inFlight(next)).toBe(true);
   });
 
-  test("a frame read after the backstop answered changes nothing", () => {
+  test("a request frame read after the backstop answered changes nothing", () => {
     expect(step(TOLD_TIMEOUT, { kind: "read", waits: true })).toEqual({
       next: TOLD_TIMEOUT,
       effects: [],
     });
+  });
+
+  // The forwarder hangs up by design, so its close is no departure even once
+  // the backstop has fired: the frame stays in flight until it is handled.
+  test("a url frame read after the backstop answered is unattended and lapsed", () => {
+    const { next, effects } = step(TOLD_TIMEOUT, { kind: "read", waits: false });
+    expect(next).toEqual(LAPSED);
+    expect(effects).toEqual([]);
+    expect(step(next, { kind: "close" }).next).toEqual(LAPSED);
+    expect(clientLeft(next)).toBe(false);
+    expect(timedOut(next)).toBe(true);
   });
 
   test("a frame that does not parse is answered, only while awaiting", () => {

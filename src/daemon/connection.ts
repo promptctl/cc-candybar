@@ -17,7 +17,7 @@ import {
   readOneFrame,
 } from "./protocol";
 import type { Response } from "./protocol";
-import type { Reply } from "./reply.js";
+import { stay, type Reply } from "./reply.js";
 import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
 import { REQUEST_TIMEOUT_MS } from "./request-deadline.js";
@@ -37,12 +37,6 @@ export type ConnectionDaemon = Pick<
   Daemon,
   "stats" | "clock" | "handle" | "subscribe" | "exit" | "log"
 >;
-
-const told = (resp: Response): Reply => ({
-  resp,
-  exitAfterFlush: null,
-  delivered: NOTHING_DELIVERED,
-});
 
 export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // [LAW:single-enforcer] A client that ends its side has ended the exchange:
@@ -169,7 +163,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   const clearBackstop = daemon.clock.after(REQUEST_TIMEOUT_MS, () =>
     on({
       kind: "deadline",
-      answer: told({
+      answer: stay({
         ok: false,
         error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
         code: "TIMEOUT",
@@ -207,7 +201,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       (r) => on({ kind: "reply", ...r }),
       (err: unknown) => {
         daemon.log("error", `held request threw: ${inspect(err)}`);
-        on({ kind: "threw", answer: told(renderFailed(err)) });
+        on({ kind: "threw", answer: stay(renderFailed(err)) });
       },
     );
   };
@@ -232,7 +226,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         .then(on)
         .catch((err: unknown) => {
           daemon.log("error", `handler threw: ${inspect(err)}`);
-          on({ kind: "threw", answer: told(renderFailed(err)) });
+          on({ kind: "threw", answer: stay(renderFailed(err)) });
         })
         .finally(() => on({ kind: "settled" }));
     },
@@ -240,7 +234,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       daemon.log("warn", `frame parse failed: ${err.message}`);
       on({
         kind: "unreadable",
-        answer: told({
+        answer: stay({
           ok: false,
           error: err.message,
           code: "BAD_REQUEST",
@@ -249,8 +243,12 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       });
     },
   );
+  // [LAW:one-source-of-truth] An error is the peer leaving too: it destroys the
+  // socket at once, while 'close' waits for the handle to close, so a click
+  // whose turn falls between would otherwise run for a client already gone.
   sock.on("error", (err) => {
     daemon.log("warn", `socket error: ${err.message}`);
+    on({ kind: "close" });
   });
   sock.on("close", () => on({ kind: "close" }));
 }

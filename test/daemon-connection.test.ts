@@ -4,6 +4,7 @@
 // one would answer inside the backstop. A connection to a daemon built in the
 // worker is the other half (test/daemon-boots/worker/daemon-built-connection.test.ts).
 
+import { PassThrough } from "node:stream";
 import { setImmediate } from "node:timers";
 
 import {
@@ -18,6 +19,7 @@ import {
   MAX_FRAME_BYTES,
   PROTOCOL_VERSION,
   encodeFrame,
+  readOneFrame,
   sendOne,
   type Request,
   type Response,
@@ -225,6 +227,44 @@ describe("a connection over a stream", () => {
     expect(received).toEqual([]);
   });
 
+  test("a url frame read after the backstop fired stays in flight until handled, with no client gone", async () => {
+    const request = held();
+    const daemon = standIn({ handle: request.handle });
+    const { client, received } = open(daemon);
+    // The forwarder's frame sat unread while the daemon was busy: it is sent
+    // after the TIMEOUT only because a memory stream cannot hold it unread.
+    client.allowHalfOpen = true;
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    await settled();
+    expect(daemon.stats.requestsTimedOut).toBe(1);
+
+    client.end(encodeFrame({ kind: "url", urlV: 1, url: "cc-candybar://x" }));
+    await settled();
+    expect(request.timedOut()).toBe(true);
+    expect(request.clientLeft()).toBe(false);
+    expect(daemon.stats.inFlight).toBe(1);
+
+    request.answer(replyWith());
+    await settled();
+    expect(daemon.stats.inFlight).toBe(0);
+    expect(received).toMatchObject([{ code: "TIMEOUT" }]);
+  });
+
+  // A socket error destroys it at once, and its 'close' comes later: a click
+  // whose turn falls between sees its client gone.
+  test("a socket error is its client leaving, before the close", async () => {
+    const request = held();
+    const { daemonEnd, client } = memoryConnection();
+    handleConnection(standIn({ handle: request.handle }), daemonEnd);
+    client.write(encodeFrame(STATS));
+    await settled();
+    expect(request.clientLeft()).toBe(false);
+
+    daemonEnd.emit("error", new Error("read ECONNRESET"));
+    expect(request.clientLeft()).toBe(true);
+    client.destroy();
+  });
+
   test("a client that half-closes before its answer is answered to no one", async () => {
     const request = held();
     const daemon = standIn({ handle: request.handle });
@@ -386,6 +426,25 @@ describe("a connection over a stream", () => {
       expect(received).toMatchObject([{ ok: false, code: "BAD_REQUEST" }]);
       client.destroy();
     });
+  });
+
+  // [LAW:no-silent-failure] A throw from what handles the frame is that throw,
+  // raised where the stream delivered the bytes, never a parse failure dropped
+  // because a frame was already read.
+  test("a throw from the frame's handler reaches the stream as itself", () => {
+    const stream = new PassThrough();
+    const onError = jest.fn();
+    readOneFrame(
+      stream,
+      () => {
+        throw new Error("the handler broke");
+      },
+      onError,
+    );
+    expect(() => stream.emit("data", encodeFrame(STATS))).toThrow(
+      "the handler broke",
+    );
+    expect(onError).not.toHaveBeenCalled();
   });
 
   // [LAW:no-silent-failure] An answer that cannot be encoded is still an
