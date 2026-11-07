@@ -822,6 +822,31 @@ describe("a feed's draws and its summary", () => {
     );
   });
 
+  // The render has read the bar's values by the time its frame goes out, so a
+  // wake from a subscriber's sink is the next frame's: it is drawn a spacing
+  // on, not when the still bar would next have been drawn, and it is timed.
+  test("a wake from a subscriber's sink brings the next frame forward", () => {
+    const { feeds, note, state, log, clock } = harness({ motion: "still" });
+    note("s", "bar");
+    let woken = false;
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {
+        if (woken) return;
+        woken = true;
+        feeds.wake("s", "state");
+      }),
+    );
+    clock.advance(PERIODS.moving - 1);
+    expect(state.renders).toBe(1);
+    clock.advance(1);
+    expect(state.renders).toBe(2);
+    close();
+    expect(log.at(-1)).toMatch(
+      / woke=data:0,state:1,reload:0,visibility:0 wakeToFrame=last:[\d.]+ms,max:[\d.]+ms coalesced=0 /,
+    );
+  });
+
   // A feed whose session has no view has no timer: a frame opens no view,
   // so it waits for the event that does. Noting a request wakes nothing; the
   // view the request opens says so (the harness's `note`), and that draws.
