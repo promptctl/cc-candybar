@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-664",
+      "ref": "refs/pull/664/merge",
+      "sha": "29c19e553675e8f334c20c7dc9dab435853716f7",
+      "timestamp": "2026-11-07T00:33:59.604Z",
+      "commits": [
+        {
+          "sha": "29c19e553675e8f334c20c7dc9dab435853716f7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:33:14-07:00",
+          "message": "Merge 2a84cd3b6430af1865f04b2dcb97c03462aeac66 into 52d7647ba197e389f78b91829e5591180ad2f2a3\n"
+        },
+        {
+          "sha": "2a84cd3b6430af1865f04b2dcb97c03462aeac66",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:33:02-07:00",
+          "message": "fix(feed): the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-663",
       "ref": "refs/pull/663/merge",
       "sha": "59b5f9c66d2e03b9b7754e7e5af86d1ed35f5d9e",
