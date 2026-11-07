@@ -419,9 +419,12 @@ describe("TmuxStatusLines", () => {
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     const tmux = { socket: SOCKET, pane: "%1", truecolor: null };
-    for (const kind of ["unconfirmed", "mismatched"] as const)
-      for (const where of [tmux, null])
-        h.owner.observe("s1", { kind, tmux: where, why: "its parent keeps no record" }, true);
+    const notConfirmed = [
+      { kind: "unconfirmed", why: "its parent keeps no record" },
+      { kind: "mismatched", why: "its Claude Code holds session s2" },
+    ] as const;
+    for (const stamp of notConfirmed)
+      for (const where of [tmux, null]) h.owner.observe("s1", { ...stamp, tmux: where }, true);
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     expect(h.unsubscribed).toEqual([]);
     h.owner.observe("s1", { kind: "unconfirmed", tmux, why: "its parent keeps no record" }, false);
