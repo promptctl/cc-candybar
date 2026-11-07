@@ -50691,6 +50691,9 @@ function undeclaredOf(fact) {
 function isUndeclared(value) {
   return typeof value === "object" && value !== null && value.kind === "undeclared";
 }
+function isUnanswered(value) {
+  return isPending(value) || isUndeclared(value);
+}
 function isPending(value) {
   return typeof value === "object" && value !== null && value.kind === "pending";
 }
@@ -53706,30 +53709,28 @@ var UNBOUND = {
   }
 };
 var found = (value) => ({ kind: "found", value });
-var unanswered = (node) => isPending(node) || isUndeclared(node);
 function resolvePath(obj, path47) {
   let cur = obj;
   let inDocument = false;
   for (const part of path47.split(".")) {
-    if (!inDocument && unanswered(cur)) return cur;
+    if (!inDocument && isUnanswered(cur)) return cur;
     if (cur == null || typeof cur !== "object") return found(void 0);
     inDocument ||= part === "value" && cur.kind === "ok";
     cur = cur[part];
   }
-  return !inDocument && unanswered(cur) ? cur : found(cur);
+  return !inDocument && isUnanswered(cur) ? cur : found(cur);
 }
+var undeclaredRead = (variable, fact) => `variable "${variable}" reads ${fact}, which the declaration its facts were gathered under does not name`;
 var UndeclaredReadError = class extends Error {
   constructor(variable, fact) {
-    super(
-      `variable "${variable}" reads ${fact}, which the declaration its facts were gathered under does not name`
-    );
+    super(undeclaredRead(variable, fact));
     this.name = "UndeclaredReadError";
   }
 };
 function sourceReading(name, resolved) {
   if (resolved.kind === "pending") return resolved;
   if (resolved.kind === "undeclared") {
-    return failed(new UndeclaredReadError(name, resolved.fact).message, "read");
+    return failed(undeclaredRead(name, resolved.fact), "read");
   }
   const raw = resolved.value;
   if (raw === void 0) {
@@ -67473,10 +67474,15 @@ function segmentTemplates(config2, name) {
     ...Object.values(seg2.partials ?? {})
   ];
 }
+var pathUnder = (outer, inner) => inner === outer || inner.startsWith(`${outer}.`);
 function layoutTemplates(config2, preset) {
   const templates = [];
   for (const node of walkNodes(presetRoot(config2, preset).node)) {
     if (node.when !== void 0) templates.push(node.when);
+    if (node.kind === "segment") {
+      if (node.lead !== void 0) templates.push(node.lead);
+      if (node.trail !== void 0) templates.push(node.trail);
+    }
   }
   const globals = presetGlobals(config2, preset);
   for (const slot of EXPRESSION_SLOTS) {
@@ -68205,7 +68211,7 @@ function projectDrawFields(document, at) {
   return { today: projectRow(document, "today", at) };
 }
 function builtinsReadAt(paths2) {
-  const under2 = (outer, inner) => inner === outer || inner.startsWith(`${outer}.`);
+  const under2 = pathUnder;
   const read2 = /* @__PURE__ */ new Set();
   for (const path47 of paths2) {
     for (const [root, row2] of ROWS2) {
@@ -68454,7 +68460,7 @@ function projectGitInfo(info, pullRequest) {
   const tracking = info.upstream === void 0 ? void 0 : field(trackingOf(info.upstream, info.aheadBehind));
   const repoName = field(info.repoName);
   const repoUrl = field(info.repoUrl);
-  const pr = pullRequest.kind === "pending" || pullRequest.kind === "undeclared" ? pullRequest : prOfHead(pullRequest, info.head);
+  const pr = isUnanswered(pullRequest) ? pullRequest : prOfHead(pullRequest, info.head);
   let prFields = {};
   switch (pr.kind) {
     case "pending":
@@ -68513,14 +68519,10 @@ function projectGitInfo(info, pullRequest) {
 // src/doctor/data-needs.ts
 var READS = {
   pullRequests: (paths2) => builtinsReadAt(paths2).has("pr"),
-  rateLimits: (paths2) => anyPathStartsWith(paths2, "block") || anyPathStartsWith(paths2, "weekly")
+  rateLimits: (paths2) => [...paths2].some(
+    (path47) => pathUnder("block", path47) || pathUnder("weekly", path47)
+  )
 };
-function anyPathStartsWith(paths2, prefix) {
-  for (const p2 of paths2) {
-    if (p2 === prefix || p2.startsWith(prefix + ".")) return true;
-  }
-  return false;
-}
 function dataNeeds(config2, preset) {
   const placed2 = /* @__PURE__ */ new Map();
   for (const node of walkNodes(presetRoot(config2, preset).node)) {
@@ -69874,7 +69876,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.12";
+var PACKAGE_VERSION = "1.209.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -78186,7 +78188,7 @@ function drawRender(parts, setup, drawing2) {
     feeds: frameFeeds.feedsOf(sessionId2, at),
     diagnostics
   };
-  const metrics = isPending(payload.metrics) || isUndeclared(payload.metrics) ? void 0 : payload.metrics;
+  const metrics = isUnanswered(payload.metrics) ? void 0 : payload.metrics;
   noteFacts(facts, {
     builtins: builtinsFact(Object.keys(document.builtins)),
     ...sourcesFactOf(document.sources)
@@ -79483,8 +79485,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     };
     return stay({ ok: true, debug: buildDebugSnapshot(req.what, dbgState) });
   }
-  const unanswered2 = req;
-  throw new Error(`no reply for request ${inspect(unanswered2)}`);
+  const unanswered = req;
+  throw new Error(`no reply for request ${inspect(unanswered)}`);
 }
 function sourceSnapshots(parts) {
   const {
