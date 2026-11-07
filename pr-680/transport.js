@@ -23097,6 +23097,56 @@ var msOf = (at) => Math.round(at * 1e3);
 var dateOf = (at) => new Date(msOf(at));
 var instantAt = (clock) => instantOf(new Date(clock.now()));
 
+// src/utils/staged-path.ts
+init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer2 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer2.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer2.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i) => byte === b[i]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/utils/staged-path.ts
+function stagedPath(file) {
+  return `${file}.${process_default.pid}.${randomUUID()}.tmp`;
+}
+
 // src/proc/launch.ts
 function spawnErrorText(err, cwd2) {
   if (!types.isNativeError(err)) return String(err);
@@ -23742,7 +23792,7 @@ function readJobEnd(status) {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
 function endJob(spawner, clock, pid2, status, end) {
-  const staged = `${status}.${process_default.pid}`;
+  const staged = stagedPath(status);
   try {
     writeFileSync(staged, `${formatJobEnd(end)}
 `);
@@ -23956,7 +24006,7 @@ init_globals();
 
 // site/shims/child_process.ts
 init_globals();
-var import_buffer2 = __toESM(require_buffer(), 1);
+var import_buffer3 = __toESM(require_buffer(), 1);
 var import_events2 = __toESM(require_events(), 1);
 var RESIDENT = "resident";
 var programs = /* @__PURE__ */ new Map();
@@ -23968,7 +24018,7 @@ var Stream = class extends import_events2.EventEmitter {
     return this;
   }
   chunk(text4) {
-    this.emit("data", this.encoding === null ? import_buffer2.Buffer.from(text4) : text4);
+    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
   }
   pipe() {
     return this;
@@ -24121,6 +24171,19 @@ init_globals();
 // src/daemon/verbs/index.ts
 init_globals();
 var import_node_path34 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/foundations/judged-state.ts
+init_globals();
+function judged(reads, gateOf3) {
+  const read2 = {
+    get: (sessionId2, key) => {
+      const stored = reads.get(sessionId2, key);
+      return stored === null || gateOf3(sessionId2)?.verdict(key, stored).kind === "foreign" ? null : stored;
+    },
+    revision: (sessionId2) => reads.revision(sessionId2)
+  };
+  return read2;
+}
 
 // src/daemon/click-error.ts
 init_globals();
@@ -37188,11 +37251,17 @@ function parseSettingSpelling(decl, raw) {
   const value = domain === "bool" ? raw === "true" ? true : raw === "false" ? false : raw : raw;
   return inSettingDomain(decl, value) ? value : void 0;
 }
-function placementSetting(node, name, decl, pick2) {
-  const saved = node.settings?.[name] ?? decl.default;
+function placementSetting(node, name, decl, read2) {
   const draft = node.drafts?.[name];
-  const raw = draft === void 0 ? null : pick2(draft);
-  return (raw === null ? void 0 : parseSettingSpelling(decl, raw)) ?? saved;
+  if (draft === void 0) return node.settings?.[name] ?? decl.default;
+  const spelled3 = read2(draft);
+  const value = parseSettingSpelling(decl, spelled3);
+  if (value === void 0) {
+    throw new Error(
+      `placement setting "${name}": its draft reads ${JSON.stringify(spelled3)}, which its declaration does not admit (${describeSettingDomain(decl)})`
+    );
+  }
+  return value;
 }
 function describeSettingDomain(decl) {
   const { domain } = decl;
@@ -37226,50 +37295,6 @@ var import_node_path2 = __toESM(require_path_browserify(), 1);
 
 // src/utils/plain.ts
 init_globals();
-
-// site/shims/crypto.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer3.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer3.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i) => byte === b[i]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
-// src/utils/plain.ts
 function isPlainObject(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -54821,15 +54846,21 @@ function controlDomainAdmits(domain, value, perConfigDomains) {
 }
 var LISTED_MEMBERS = 8;
 var SAMPLED_MEMBERS = 3;
+function describeMembers(members, named3) {
+  const quoted = members.map((m) => JSON.stringify(m));
+  if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
+  const name = named3 === void 0 ? "" : ` "${named3}"`;
+  return `one of the ${members.length}${name} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+}
 function describeControlDomain(domain, perConfigDomains) {
   if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
   if (!("min" in domain)) {
     const from = optionsOf(domain);
     const { members } = resolveOptionDomain(from, perConfigDomains);
-    const quoted = members.map((m) => JSON.stringify(m));
-    if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
-    const named3 = typeof from === "string" ? ` "${from}"` : "";
-    return `one of the ${members.length}${named3} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+    return describeMembers(
+      members,
+      typeof from === "string" ? from : void 0
+    );
   }
   return `an integer from ${domain.min} to ${domain.max}`;
 }
@@ -57104,13 +57135,13 @@ var config = {
   label: "config",
   takesMark: false,
   probe: ({ config: config2 }) => {
-    const judged = judgedConfig(config2);
+    const judged2 = judgedConfig(config2);
     const [reason, ...more] = [
       ...configProblems(config2),
       ...repoAwaitingLines(config2.repos)
     ];
     const said = (head) => [head, ...repoSettledLines(config2.repos)].join("; ");
-    return reason === void 0 ? { ok: true, note: said(judged) } : { ok: false, reason: said(`${judged}: ${reason}`), more };
+    return reason === void 0 ? { ok: true, note: said(judged2) } : { ok: false, reason: said(`${judged2}: ${reason}`), more };
   }
 };
 var REINSTALL = "re-run `cc-candybar install`";
@@ -59391,7 +59422,16 @@ function validateDiscriminatorKey(ctx, path47, raw, discriminator) {
     `${discriminator} key must be non-empty (${noun})`,
     (v) => `${discriminator} key "${v}" contains "/" \u2014 keys must be slash-free`
   );
-  return value === null ? null : { [discriminator]: value };
+  if (value === null) return null;
+  if (discriminator === "set" && value.startsWith(PLACEMENT_DRAFT_NS)) {
+    issue2(
+      ctx,
+      `${path47}.set`,
+      `set key "${value}" is a placement's draft, under "${PLACEMENT_DRAFT_NS}" \u2014 the setting control configure mode synthesizes is its only writer, so its read can trust what it holds. Write a key outside it`
+    );
+    return null;
+  }
+  return { [discriminator]: value };
 }
 function wireName(discriminator) {
   return discriminator === "set" ? "set-state" : "set-config";
@@ -64594,11 +64634,12 @@ function openRoots(nest, read2) {
 
 // src/daemon/closing-view.ts
 init_globals();
-function closingView(store2, nestOf2, log) {
+function closingView(store2, judge, nestOf2, log) {
+  const reads = judge(store2);
   const write = (sessionId2, writes, land2) => {
     const folds = closeNested(
       nestOf2(sessionId2),
-      (key) => store2.get(sessionId2, key),
+      (key) => reads.get(sessionId2, key),
       writes
     );
     runInAction(() => {
@@ -64672,7 +64713,7 @@ var import_node_path18 = __toESM(require_path_browserify(), 1);
 function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(systemFilesystem, at);
   fs_default.mkdirSync(import_node_path18.default.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
+  const tmp = stagedPath(file);
   const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
     const fd = fs_default.openSync(tmp, "w", fileMode);
@@ -69904,7 +69945,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.0";
+var PACKAGE_VERSION = "1.210.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71351,7 +71392,10 @@ var openVscode = (_sid, [target = ""], ctx) => {
   );
 };
 var toolbarToggle = (sessionId2, _args, ctx) => {
-  const expanded = ctx.navigating.get(sessionId2, "toolbar-expanded");
+  const expanded = judgedReads(ctx, ctx.navigating).get(
+    sessionId2,
+    "toolbar-expanded"
+  );
   if (expanded) ctx.navigating.clear(sessionId2, "toolbar-expanded");
   else ctx.navigating.set(sessionId2, "toolbar-expanded", "1");
 };
@@ -71414,21 +71458,17 @@ var stepState = (sid, args, ctx) => {
       `step-state: key "${key}" is not a bounded (range) state key (have keys: ${gate2.listKeys().join(", ")})`
     );
   }
-  const stored = ctx.sessionState.get(sid, key);
-  const clamped = stored && STEP_INT_RE.test(stored) ? clampTo(params, parseInt(stored, 10)) : stepFrom(
-    "step-state",
-    key,
-    params,
-    stateKeySeed(config2, (k) => ctx.sessionState.get(sid, k), key)
-  );
-  const next = stepWithin(clamped, by, params.min, params.max);
+  const pick2 = judgedPick(ctx, sid);
+  const stored = pick2(key);
+  const from = stored === null ? stepFrom("step-state", key, params, stateKeySeed(config2, pick2, key)) : parseInt(stored, 10);
+  const next = stepWithin(from, by, params.min, params.max);
   const result = gate2.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
   ctx.navigating.set(sid, key, result.value);
   ctx.log(
     "info",
-    `step-state: ${key} ${clamped}\u2192${result.value} (by ${by}, session=${sid})`
+    `step-state: ${key} ${from}\u2192${result.value} (by ${by}, session=${sid})`
   );
 };
 function refuseDisorderedPicks(ctx, sid, verb, writes) {
@@ -71436,7 +71476,7 @@ function refuseDisorderedPicks(ctx, sid, verb, writes) {
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx, sid),
-    (k) => ctx.sessionState.get(sid, k),
+    judgedPick(ctx, sid),
     picks
   );
   if (problems.length > 0) {
@@ -71506,6 +71546,16 @@ function reloadIfWritten(ctx, sid, step4) {
 function sessionConfig(ctx, sid) {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
+function judgedReads(ctx, store2) {
+  return judged(store2, (sid) => {
+    const origin = recordedOrigin(ctx, sid);
+    return origin === null ? null : ctx.gates.state.gateFor(ctx.configFor(origin));
+  });
+}
+function judgedPick(ctx, sid) {
+  const reads = judgedReads(ctx, ctx.sessionState);
+  return (key) => reads.get(sid, key);
+}
 function laneMeter(ctx, sid) {
   const origin = recordedOrigin(ctx, sid);
   if (origin === null) return null;
@@ -71544,11 +71594,7 @@ var setConfig = (sid, args, ctx) => {
   const result = gate2.validate(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
   const home = originHome(ctx, origin);
-  const landing = durableLanding(
-    config2,
-    (k) => ctx.sessionState.get(sid, k),
-    key
-  );
+  const landing = durableLanding(config2, judgedPick(ctx, sid), key);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
   ctx.log(
@@ -71579,11 +71625,7 @@ var stepConfig = (sid, args, ctx) => {
     );
   }
   const home = originHome(ctx, origin);
-  const landing = durableLanding(
-    config2,
-    (k) => ctx.sessionState.get(sid, k),
-    key
-  );
+  const landing = durableLanding(config2, judgedPick(ctx, sid), key);
   const stored = readValue(home.path, landing.key);
   const current = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
     "step-config",
@@ -71604,7 +71646,7 @@ var stepConfig = (sid, args, ctx) => {
 var save = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
-  const pick2 = (key) => ctx.sessionState.get(sid, key);
+  const pick2 = judgedPick(ctx, sid);
   const drafts = settingDrafts(config2, pick2);
   const placements = placementDrafts(config2, pick2);
   if (drafts.length + placements.length === 0) {
@@ -71645,10 +71687,7 @@ function gatePlacements(verb, gate2, placements) {
 var savePreset = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
-  const snapshot = presetSnapshot(
-    config2,
-    (key) => ctx.sessionState.get(sid, key)
-  );
+  const snapshot = presetSnapshot(config2, judgedPick(ctx, sid));
   const gate2 = ctx.gates.state.gateFor(config2);
   const picks = snapshot.picks.map((d) => {
     const result = gate2.validate(d.sessionKey, d.value);
@@ -71681,10 +71720,7 @@ var savePreset = (sid, _args, ctx) => {
 var saveThemeDefault = (sid, _args, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
-  const save2 = themeDefaultSave(
-    config2,
-    (key) => ctx.sessionState.get(sid, key)
-  );
+  const save2 = themeDefaultSave(config2, judgedPick(ctx, sid));
   if (save2.kind === "rule") {
     throw new BadVerbArgs(
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default \u2014 pick one in the menu first"
@@ -71693,9 +71729,11 @@ var saveThemeDefault = (sid, _args, ctx) => {
   const home = originHome(ctx, origin);
   writeThemeDefault(editStore(ctx, sid), home, save2.theme, save2.look);
   ctx.reloadConfig(origin);
-  const pick2 = (key) => ctx.sessionState.get(sid, key);
   const drafted = new Set(
-    settingDrafts(ctx.configFor(origin), pick2).map((d) => d.sessionKey)
+    settingDrafts(
+      ctx.configFor(origin),
+      (key) => ctx.sessionState.get(sid, key)
+    ).map((d) => d.sessionKey)
   );
   const released = THEME_DEFAULT_FIELDS.map(
     (f) => SETTINGS[f].sessionKey
@@ -72375,6 +72413,7 @@ function journaled(sid, ctx, handler) {
   const failures = [];
   const closing = (store2) => closingView(
     store2,
+    (reads) => judgedReads(ctx, reads),
     (sid2) => nestOf(ctx, sid2),
     (line) => ctx.log("info", line)
   );
@@ -72447,10 +72486,8 @@ function closeIdleMenus(sid, idle, ctx) {
         return;
       }
       idle.closed();
-      const roots = openRoots(
-        nestOf(c, sid),
-        (key) => c.navigating.get(sid, key)
-      );
+      const open2 = judgedReads(c, c.navigating);
+      const roots = openRoots(nestOf(c, sid), (key) => open2.get(sid, key));
       c.navigating.setBatch(
         sid,
         roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED }))
@@ -72853,11 +72890,27 @@ function mergeContributions(contributions, noun = "state") {
     spec: mergeKeySpecs(key, specs, noun)
   }));
 }
+function describeSpec(spec) {
+  if (spec.kind === "int") return "an integer";
+  if (spec.kind === "range") {
+    return `an integer from ${spec.min} to ${spec.max}`;
+  }
+  return describeMembers(spec.allowed);
+}
 function createGate(baseline, daemonWide, derived3, noun) {
-  const validators = new Map(Object.entries(baseline));
+  const validators = new Map(
+    Object.entries(baseline).map(([key, b]) => [key, b.validate])
+  );
+  const admits = new Map(
+    Object.entries(baseline).map(([key, b]) => [key, b.admits])
+  );
+  const written2 = new Set(derived3.map((c) => c.key));
+  const gated2 = derived3.filter(
+    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(baseline, c.key)
+  );
   const ranges = /* @__PURE__ */ new Map();
   const daemonKeys = new Set(daemonWide.map((d) => d.key));
-  for (const { key, spec } of derived3) {
+  for (const { key, spec } of gated2) {
     if (daemonKeys.has(key) && spec.kind !== "allow-list") {
       throw new Error(
         `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
@@ -72869,7 +72922,7 @@ function createGate(baseline, daemonWide, derived3, noun) {
       key,
       spec: { kind: "allow-list", allowed }
     })),
-    ...derived3
+    ...gated2
   ];
   for (const { key, spec } of mergeContributions(contributions, noun)) {
     if (!key) throw new Error(`${noun} gate: key is required`);
@@ -72884,6 +72937,7 @@ function createGate(baseline, daemonWide, derived3, noun) {
       );
     }
     validators.set(key, validatorForSpec(key, spec, noun));
+    admits.set(key, describeSpec(spec));
     if (spec.kind === "range") {
       ranges.set(key, { min: spec.min, max: spec.max });
     }
@@ -72899,6 +72953,11 @@ function createGate(baseline, daemonWide, derived3, noun) {
       }
       return validator(rawValue);
     },
+    verdict(key, stored) {
+      if (!written2.has(key)) return { kind: "held" };
+      const result = validators.get(key)(stored);
+      return result.ok && result.value === stored ? { kind: "held" } : { kind: "foreign", admits: admits.get(key) };
+    },
     listKeys: () => [...validators.keys()],
     rangeParamsFor: (key) => ranges.get(key) ?? null
   };
@@ -72906,22 +72965,28 @@ function createGate(baseline, daemonWide, derived3, noun) {
 function createKeyspace(baseline, noun, derive) {
   const daemonWide = [];
   let epoch = 0;
+  const changed = createAtom(`${noun}.keyspace`);
   const gates = /* @__PURE__ */ new WeakMap();
+  const bump3 = () => {
+    epoch++;
+    changed.reportChanged();
+  };
   return {
     register(key, allowed) {
       const contribution = { key, allowed };
       createGate(baseline, [contribution], [], noun);
       daemonWide.push(contribution);
-      epoch++;
+      bump3();
       let active2 = true;
       return () => {
         if (!active2) return;
         active2 = false;
         daemonWide.splice(daemonWide.indexOf(contribution), 1);
-        epoch++;
+        bump3();
       };
     },
     gateFor(config2) {
+      changed.reportObserved();
       const held = gates.get(config2);
       if (held?.epoch === epoch) return held.gate;
       const gate2 = createGate(baseline, daemonWide, derive(config2), noun);
@@ -73062,19 +73127,29 @@ var validateEndcaps = (raw) => {
   return { ok: true, value: raw };
 };
 var BOOLEAN_TRUTHY2 = /* @__PURE__ */ new Set(["1", "true"]);
-var BOOLEAN_FALSY2 = /* @__PURE__ */ new Set(["0", "false"]);
+var BOOLEAN_FALSY2 = /* @__PURE__ */ new Set(["", "0", "false"]);
 var validateBoolean = (raw) => {
   if (BOOLEAN_TRUTHY2.has(raw)) return { ok: true, value: "1" };
   if (BOOLEAN_FALSY2.has(raw)) return { ok: true, value: "" };
   return {
     ok: false,
-    reason: `expected boolean-ish (1, 0, true, false), got "${raw}"`
+    reason: `expected boolean-ish (1, 0, true, false, or empty), got "${raw}"`
   };
 };
 var BASELINE = {
-  endcaps: validateEndcaps,
-  theme: validateTheme,
-  "toolbar-expanded": validateBoolean
+  endcaps: {
+    validate: validateEndcaps,
+    admits: describeMembers(ENDCAPS_SHAPES)
+  },
+  theme: {
+    validate: validateTheme,
+    admits: describeMembers(RESOLVABLE_THEMES_LIST, "themes")
+  },
+  // What it admits as stored: the two values a click writes for true and false.
+  "toolbar-expanded": {
+    validate: validateBoolean,
+    admits: '"1" for true or "" for false'
+  }
 };
 function makeStateKeyspace() {
   return createKeyspace(BASELINE, "state", deriveActionValidators);
@@ -73108,17 +73183,10 @@ function actionKeySpecs2(a, perConfigDomains) {
     }
   ];
 }
-function dropBaselineAllowLists(contributions) {
-  return contributions.filter(
-    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
-  );
-}
 function actionContributions2(config2) {
   const perConfigDomains = configOptionDomains(config2);
-  return dropBaselineAllowLists(
-    Object.values(config2.actions).flatMap(
-      (a) => actionKeySpecs2(a, perConfigDomains)
-    )
+  return Object.values(config2.actions).flatMap(
+    (a) => actionKeySpecs2(a, perConfigDomains)
   );
 }
 function deriveActionValidators(config2) {
@@ -74506,8 +74574,15 @@ var CAROUSEL_PREV = "\u25C0";
 var CAROUSEL_NEXT = "\u25B6";
 function ringAround(options, current) {
   const count = options.length;
-  const centre = Math.max(options.indexOf(current), 0);
-  return (offset) => ((centre + offset) % count + count) % count;
+  const found2 = options.indexOf(current);
+  const at = found2 === -1 ? void 0 : found2;
+  return {
+    at,
+    // Between the last and the first: -1 steps forward to the first, and
+    // `count` steps back to the last.
+    next: ((at ?? -1) + 1) % count,
+    prev: ((at ?? count) - 1 + count) % count
+  };
 }
 function renderCarousel(applyName, apply2, openName, label2, runtime) {
   if (!("stateVar" in apply2)) {
@@ -74525,36 +74600,38 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
   const sessionId2 = readVar(store2, "session.id");
   const { options } = apply2;
   if (options.length === 0) return assemble([]);
-  const indexAt = ringAround(options, readVar(store2, apply2.stateVar));
-  const ring = (offset) => options[indexAt(offset)];
-  const step4 = (offset) => effectsUrl(
+  const held = readVar(store2, apply2.stateVar);
+  const ring = ringAround(options, held);
+  const step4 = (to) => effectsUrl(
     runtime.links.to,
     realize(
       declared,
-      ring(offset),
-      ring(offset),
+      options[to],
+      options[to],
       store2,
       sessionId2,
       runtime.links.signer
     ).effects
   );
   return assemble([
-    linkFragment(CAROUSEL_PREV, step4(-1), false),
+    linkFragment(CAROUSEL_PREV, step4(ring.prev), false),
     linkOver(
       // Drawn as the arrows are, in the segment's own colours (Brandon: "The
       // name loses its styling"), beside the swatch of the value in force
-      // when the domain is colour-valued.
+      // when the domain is colour-valued. A domain's palette answers only for
+      // its own options, so a held value that is none of them draws the
+      // label alone.
       labelPaint(
         renderLook(runtime, "{{ carousel }}"),
-        apply2.paletteOf,
-        ring(0),
+        ring.at === void 0 ? void 0 : apply2.paletteOf,
+        held,
         label2
       ),
       effectsUrl(
         runtime.links.to,
         realize(
           runtime.compiled.get(openName),
-          ring(0),
+          held,
           void 0,
           store2,
           sessionId2,
@@ -74562,7 +74639,7 @@ function renderCarousel(applyName, apply2, openName, label2, runtime) {
         ).effects
       )
     ),
-    linkFragment(CAROUSEL_NEXT, step4(1), false)
+    linkFragment(CAROUSEL_NEXT, step4(ring.next), false)
   ]);
 }
 function carouselFuncs(runtime) {
@@ -74621,7 +74698,8 @@ function randomOther(seed, count, centre) {
   let h = Math.imul(seed ^ seed >>> 16, 73244475);
   h = Math.imul(h ^ h >>> 16, 73244475);
   h ^= h >>> 16;
-  return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
+  const others = centre === void 0 ? count : Math.max(count - 1, 1);
+  return ((centre ?? -1) + 1 + (h >>> 0) % others) % count;
 }
 function optionPalette(runtime, applyName, helper, chosen) {
   const apply2 = requireSwatchable(runtime, applyName, helper);
@@ -74674,17 +74752,17 @@ function swatchesFuncs(runtime, activeSegment, clock) {
         const { options } = apply2;
         const count = options.length;
         const steps2 = () => {
-          const at = ringAround(
+          const ring = ringAround(
             options,
             readVar(renderBinding(runtime, "swatches").store, apply2.stateVar)
           );
           return [
-            { glyph: CAROUSEL_PREV, option: options[at(-1)] },
+            { glyph: CAROUSEL_PREV, option: options[ring.prev] },
             {
               glyph: SWATCHES_RANDOM,
-              option: options[randomOther(clock().getTime(), count, at(0))]
+              option: options[randomOther(clock().getTime(), count, ring.at)]
             },
-            { glyph: CAROUSEL_NEXT, option: options[at(1)] }
+            { glyph: CAROUSEL_NEXT, option: options[ring.next] }
           ];
         };
         const [line] = renderPicker(
@@ -78199,7 +78277,10 @@ function drawRender(parts, setup, drawing2) {
         kind: "facts",
         message: failure.cause === "inputs" ? `the bar is held on the last turn taken: ${failure.reason}` : `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure.reason}`
       }
-    ]
+    ],
+    // Every value the session holds that its config no longer admits, while
+    // it holds it.
+    ...view.source.foreign().map(domainWarning)
   ];
   const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
@@ -78208,11 +78289,12 @@ function drawRender(parts, setup, drawing2) {
     drawing2.by,
     errors2,
     [...updates, ...questions],
-    // A standing warning is one per kind whose words change as it does (a
-    // pipe event's counts), so its kind alone is what it is about: a viewer
-    // open on it stays open. A render warning is about its words.
+    // A standing warning's words change as it does (a pipe event's counts),
+    // so what it is about is its identity, `standingAbout`: its kind, or for a
+    // domain warning its kind and key, of which a session holds many. A
+    // viewer open on one stays on it. A render warning is about its words.
     [
-      ...standing.map((w) => ({ about: w.kind, message: w.message })),
+      ...standing.map((w) => ({ about: standingAbout(w), message: w.message })),
       ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message }))
     ].map((w) => ({ about: w.about, text: w.message, copy: w.message }))
   );
@@ -78278,6 +78360,8 @@ function drawRender(parts, setup, drawing2) {
         return `refresh:${w.variable}`;
       case "file-events":
         return `${w.kind}:${w.state}`;
+      case "domain":
+        return `domain:${w.key}`;
       case "load":
       case "facts":
       case "config-watch":
@@ -78346,6 +78430,16 @@ function drawRender(parts, setup, drawing2) {
     handed
   };
 }
+var domainWarning = ({
+  key,
+  held,
+  admits
+}) => ({
+  kind: "domain",
+  key,
+  message: `"${key}" holds ${JSON.stringify(held)}, which this config does not admit (it admits ${admits}), so the bar ignores it and draws as if nothing were picked`
+});
+var standingAbout = (w) => w.kind === "domain" ? `${w.kind}\0${w.key}` : w.kind;
 function requestArrived(parts, req) {
   const { laneSetups, tmuxStatusLines } = parts;
   const lanes = switchesAt(
@@ -81223,7 +81317,7 @@ async function readDisk(owner) {
 }
 async function writeDisk(owner, table) {
   const file = diskPath(owner.cacheRoot);
-  const staged = `${file}.${process_default.pid}.${randomUUID()}`;
+  const staged = stagedPath(file);
   try {
     await fs_default.promises.mkdir(import_node_path42.default.dirname(file), { recursive: true });
     await fs_default.promises.writeFile(
@@ -83498,7 +83592,7 @@ function buildRenderState(load, deps) {
     NO_RUNS,
     store2,
     config2.globals.default_empty_value ?? "",
-    deps.sessionState
+    judged(deps.sessionState, () => deps.gates.state.gateFor(config2))
   );
   let registration;
   try {
@@ -84352,7 +84446,7 @@ var NavigationHistory = class {
     const kept = [];
     for (const step4 of [...this.past.get(sessionId2) ?? []].reverse()) {
       const holds2 = step4.every(
-        (c) => read2(c.key) === c.after && (c.before === null || gate2.validate(c.key, c.before).ok)
+        (c) => read2(c.key) === c.after && (c.before === null || gate2.validate(c.key, c.before).ok && gate2.verdict(c.key, c.before).kind === "held")
       );
       if (!holds2) continue;
       kept.unshift(step4);
@@ -84735,6 +84829,19 @@ function sessionSource(deps) {
         (preset) => state.authoredRoots.has(preset)
       )
     );
+    const foreign = store2.derive(
+      "session.foreign",
+      "computed",
+      () => {
+        const gate2 = deps.stateGates.gateFor(state.config);
+        return Object.entries(deps.sessionState.values(sessionId2)).flatMap(
+          ([key, held]) => {
+            const verdict = gate2.verdict(key, held);
+            return verdict.kind === "foreign" ? [{ key, held, admits: verdict.admits }] : [];
+          }
+        );
+      }
+    );
     const compose = store2.derive(
       "session.compose",
       "computed",
@@ -84822,6 +84929,7 @@ function sessionSource(deps) {
     return {
       payload: () => payload.read(),
       effective: () => turn2.get().draw.effective,
+      foreign: () => foreign.read(),
       facts: () => turn2.get().stamped.facts,
       turn: () => {
         const { stamped: stamped2, request: request2, picks: turnPicks, draw: drawn } = turn2.get();
@@ -87297,6 +87405,7 @@ function createDaemon(inputs) {
         source: sessionSource({
           providers: payloadProviders,
           sessionState,
+          stateGates: gates.state,
           history: (sessionId2) => settingsHistory.depth(sessionId2),
           // Measured against the gate of the config the view draws with.
           navigation: (sessionId2, config2) => navigationHistory.depth(
@@ -87878,7 +87987,7 @@ var FileSessionStorage = class {
     this.clock = clock;
     this.debounceMs = debounceMs;
     this.logger = logger;
-    this.writingPath = `${filePath2}.writing`;
+    this.writingPath = stagedPath(filePath2);
   }
   filePath;
   clock;
@@ -87999,9 +88108,9 @@ var FileSessionStorage = class {
     if (this.pending === null) return;
     const snapshot = this.pending;
     const started2 = this.clock.monotonic();
+    const tmp = stagedPath(this.filePath);
     try {
       fs_default.mkdirSync(import_node_path49.default.dirname(this.filePath), { recursive: true });
-      const tmp = `${this.filePath}.tmp`;
       const body = JSON.stringify(snapshot);
       fs_default.writeFileSync(tmp, body, { mode: 384 });
       fs_default.chmodSync(tmp, 384);
@@ -88012,6 +88121,14 @@ var FileSessionStorage = class {
       this.pending = null;
     } catch (e) {
       this.logger("warn", `session-state save failed: ${e.message}`);
+      try {
+        fs_default.rmSync(tmp, { force: true });
+      } catch (rmErr) {
+        this.logger(
+          "warn",
+          `session-state staged file left: ${rmErr.message}`
+        );
+      }
     }
   }
   // [LAW:nothing-unseen] Every write says what it wrote, how long it took, and
@@ -88492,7 +88609,7 @@ function readOrCreate(file) {
 }
 function create(file) {
   fs_default.mkdirSync(import_node_path53.default.dirname(file), { recursive: true });
-  const written2 = `${file}.${process_default.pid}.${randomBytes(6).toString("hex")}`;
+  const written2 = stagedPath(file);
   fs_default.writeFileSync(written2, randomBytes(LINK_KEY_BYTES), {
     mode: 384,
     flag: "wx"
