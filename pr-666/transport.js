@@ -76775,8 +76775,7 @@ var FrameFeeds = class {
   // costs. A frame step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
   // next change is Infinity, and an unseen bar's spacing is the still period.
-  // A wake while the frame went out has already set the timer, and the frame
-  // never sets it later than that.
+  // A wake while the frame went out may already have set the timer sooner.
   schedule(feed2, frame2, at) {
     const { moving, still } = this.deps.periods;
     const until2 = ((frame2?.bar.nextChange ?? Infinity) - at) * 1e3;
@@ -76785,11 +76784,7 @@ var FrameFeeds = class {
     if (shownPeriod < still && shown) feed2.moving++;
     if (shownPeriod < still && !shown) feed2.unseen++;
     const period = shown ? shownPeriod : still;
-    const due = at + period / 1e3;
-    const wall = this.deps.instant();
-    const dueMoment = this.deps.clock.monotonic() + Math.max(0, (due - wall) * 1e3);
-    if (feed2.phase.kind === "due" && feed2.phase.at <= dueMoment) return;
-    this.arm(feed2, due, wall);
+    this.arm(feed2, at + period / 1e3, this.deps.instant());
   }
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
   // moving period while its bar is on a screen, the still period while it is
@@ -76812,19 +76807,22 @@ var FrameFeeds = class {
     if (phase.kind === "rendering") return false;
     const now2 = this.deps.clock.monotonic();
     const at = Math.max(now2, feed2.lastStart + this.spacingOf(feed2));
-    if (phase.kind === "due" && phase.at <= at) return false;
     const wall = this.deps.instant();
-    this.arm(feed2, wall + (at - now2) / 1e3, wall);
-    return true;
+    return this.arm(feed2, wall + (at - now2) / 1e3, wall);
   }
   // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
   // the wall instant `due`, in a later turn than the caller's however soon
   // that is. Its wait is measured from `wall`, the caller's own reading, so
   // the instant a caller set is never rebuilt from a second, truncated one;
-  // its monotonic due time is what a wake compares against.
+  // its monotonic due time is what a later caller compares against.
+  // [LAW:single-enforcer] The one rule that a timer is never set later than
+  // it already falls due. Answers whether it moved the timer.
   arm(feed2, due, wall) {
     const delay = Math.max(0, (due - wall) * 1e3);
-    this.setTimer(feed2, due, this.deps.clock.monotonic() + delay, delay);
+    const dueMoment = this.deps.clock.monotonic() + delay;
+    if (feed2.phase.kind === "due" && feed2.phase.at <= dueMoment) return false;
+    this.setTimer(feed2, due, dueMoment, delay);
+    return true;
   }
   setTimer(feed2, due, dueMoment, delay) {
     if (feed2.phase.kind === "due") feed2.phase.clear();
