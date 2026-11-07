@@ -270,12 +270,13 @@ describe("a catch-up walks the entries one per turn", () => {
   const walked = (r: ReturnType<typeof rig>, from: number) =>
     r.reloaded.slice(from);
 
-  test("nothing reloads in the turn that asks, and work deferred behind it runs between the first entry and the second", () => {
+  test("nothing reloads in the turn that asks, the most recently used entry reloads first, and work deferred behind it runs between the first entry and the second", () => {
     fakeWatches();
     const clock = heldClock(new Date());
     const r = rig({ clock });
     const a = r.project("a");
     const b = r.project("b");
+    r.cache.getOrCreate(a, a, path.join(a, "config.json5"));
     const from = r.reloaded.length;
     r.cache.reloadEvery(resumed);
     expect(walked(r, from)).toEqual([]);
@@ -331,7 +332,7 @@ describe("a catch-up walks the entries one per turn", () => {
     } as const;
     r.cache.reloadEvery(answers);
     clock.advance(0);
-    expect(walked(r, from)).toEqual([a, b]);
+    expect(walked(r, from)).toEqual([b, a]);
     expect(r.causes.slice(from)).toEqual([answers, answers]);
   });
 
@@ -350,7 +351,7 @@ describe("a catch-up walks the entries one per turn", () => {
     expect(walked(r, from)).toEqual([dir, b]);
   });
 
-  test("a reload that throws ends only its own turn: the rest of the walk and a later catch-up still reload", () => {
+  test("a reload that throws is logged and ends only its own turn: the rest of the walk and a later catch-up still reload", () => {
     fakeWatches();
     const clock = heldClock(new Date());
     let failing: string | null = null;
@@ -362,16 +363,20 @@ describe("a catch-up walks the entries one per turn", () => {
     });
     const a = r.project("a");
     const b = r.project("b");
-    failing = a;
+    failing = b;
     const from = r.reloaded.length;
     r.cache.reloadEvery(resumed);
-    expect(() => clock.advance(0)).toThrow("observer failed");
     clock.advance(0);
-    expect(walked(r, from)).toEqual([a, b]);
+    expect(walked(r, from)).toEqual([b, a]);
     expect(r.cache.stats.due).toBe(0);
+    expect(
+      r.lines.filter((l) => l.startsWith("catch-up reload threw ")),
+    ).toEqual([
+      `catch-up reload threw dir=${b} cause=events-resumed: observer failed`,
+    ]);
     failing = null;
     r.cache.reloadEvery(resumed);
     clock.advance(0);
-    expect(walked(r, from)).toEqual([a, b, a, b]);
+    expect(walked(r, from)).toEqual([b, a, b, a]);
   });
 });
