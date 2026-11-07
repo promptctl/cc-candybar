@@ -76668,7 +76668,8 @@ var FrameFeeds = class {
       cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
       wokeSince: null,
-      wakeToFrame: null,
+      wakeToFrameLast: null,
+      wakeToFrameMax: 0,
       coalesced: 0,
       summarizedAt: now2,
       refreshesAtOpen: this.deps.refreshes()
@@ -76713,6 +76714,8 @@ var FrameFeeds = class {
   // one frame to the next. Its moment on the monotonic clock is that instant's.
   draw(feed2, due) {
     feed2.phase = { kind: "drawing" };
+    const woke = feed2.wokeSince;
+    feed2.wokeSince = null;
     const started2 = this.deps.clock.monotonic();
     const wall = this.deps.instant();
     const at = Math.min(
@@ -76721,7 +76724,7 @@ var FrameFeeds = class {
     );
     const moment2 = started2 + (at - wall) * 1e3;
     try {
-      this.step(feed2, started2, moment2, at);
+      this.step(feed2, woke, started2, moment2, at);
     } catch (error) {
       feed2.lastStart = moment2;
       this.deps.log(
@@ -76732,7 +76735,7 @@ var FrameFeeds = class {
       this.schedule(feed2, null, at);
     }
   }
-  step(feed2, started2, moment2, at) {
+  step(feed2, woke, started2, moment2, at) {
     const frame2 = this.deps.render(
       feed2.sessionId,
       paceOf(this.spacingOf(feed2)),
@@ -76744,15 +76747,11 @@ var FrameFeeds = class {
       return;
     }
     feed2.lastStart = moment2;
-    if (feed2.wokeSince !== null) {
-      const span = started2 - feed2.wokeSince;
-      feed2.wakeToFrame = {
-        last: span,
-        max: Math.max(span, feed2.wakeToFrame?.max ?? 0)
-      };
-      feed2.wokeSince = null;
-    }
     const finished = this.deps.clock.monotonic();
+    if (woke !== null) {
+      feed2.wakeToFrameLast = finished - woke;
+      feed2.wakeToFrameMax = Math.max(feed2.wakeToFrameMax, finished - woke);
+    }
     this.drawn++;
     feed2.drawn++;
     feed2.drawMs += finished - started2;
@@ -76921,7 +76920,7 @@ var FrameFeeds = class {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} wakeToFrame=${feed2.wakeToFrame === null ? "-" : `last:${feed2.wakeToFrame.last.toFixed(1)}ms,max:${feed2.wakeToFrame.max.toFixed(1)}ms`} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
+      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} wakeToFrame=${feed2.wakeToFrameLast === null ? "-" : `last:${feed2.wakeToFrameLast.toFixed(1)}ms,max:${feed2.wakeToFrameMax.toFixed(1)}ms`} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
     );
     feed2.summarizedAt = now2;
   }

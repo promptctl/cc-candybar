@@ -4,15 +4,22 @@
     {
       "version": "pr-664",
       "ref": "refs/pull/664/merge",
-      "sha": "2d3f2a385406312b94f753f1b87f85cd3c50e90e",
-      "timestamp": "2026-11-07T00:39:55.024Z",
+      "sha": "dc30fa0165d75e3db31f536394bf9aa3088346f5",
+      "timestamp": "2026-11-07T00:43:35.122Z",
       "commits": [
         {
-          "sha": "2d3f2a385406312b94f753f1b87f85cd3c50e90e",
+          "sha": "dc30fa0165d75e3db31f536394bf9aa3088346f5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:38:58Z",
-          "message": "Merge bfb4b140666b55a566830f93a7712edcfb7627b7 into 1c67112e8a6fe0cfc8d98ccf9ca7846a4a44830b\n"
+          "timestamp": "2026-11-07T00:42:47Z",
+          "message": "Merge ec44f06366084dad3f3473db2d1e4a241332389a into 1c67112e8a6fe0cfc8d98ccf9ca7846a4a44830b\n"
+        },
+        {
+          "sha": "ec44f06366084dad3f3473db2d1e4a241332389a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:42:33-07:00",
+          "message": "fix(feed): every draw answers its wake, timed to the frame drawn (candybar-gather-renderer-76bb.6pj.qbv)\n"
         },
         {
           "sha": "bfb4b140666b55a566830f93a7712edcfb7627b7",
