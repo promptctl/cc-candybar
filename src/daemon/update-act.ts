@@ -10,7 +10,8 @@
 //
 // Layout: `<state>/update-act/<bundle key>/<n>/` per act, `n` counting up.
 // Each act directory holds `record.json` (what was started, by whom it is
-// identified) beside the job's `stdout`, `stderr` and `status`. The key is the
+// identified) beside the job's `stdout`, `stderr` and `status`, and
+// `awake.json` once a daemon has watched it running. The key is the
 // bundle's path, because the bundle is what an act writes: two daemons on one
 // state folder running two bundles never see each other's acts.
 
@@ -27,6 +28,7 @@ import {
   type LaunchOpts,
   type Launcher,
 } from "../proc/launch";
+import { writeAtomic } from "../utils/atomic-write";
 import { readTailSync } from "../utils/transcript-fs";
 import type { StartTimeRead } from "./process-fingerprint";
 import type { Timekeeper } from "../time.js";
@@ -39,14 +41,48 @@ export function actsDir(stateDir: string, entryPath: string): string {
 // What `act()` started: the identity of the newer thing it applies (the
 // notice names a failure against it), the job's process identity (its start
 // time null where `ps` could not answer, as process-fingerprint.ts allows),
-// when it started, and when it is overdue.
+// and when it started.
 export interface ActRecord {
   readonly identity: string;
   readonly pid: number;
   readonly startTime: string | null;
   readonly started: number;
+  // [LAW:one-source-of-truth] exception: the budget's wall-time end, which
+  // this version never judges by (an act's budget is the `ActAwake` below).
+  // Daemons of older versions read the same acts during an update and end an
+  // act once their clock passes it, so a record without it would be ended by
+  // every one of them at its next look.
   readonly deadline: number;
 }
+
+// [LAW:types-are-the-program] What an act has spent of its budget, in observed
+// time: the time some daemon watched it running, as of the last look. Wall time
+// runs while the machine sleeps, and on macOS so do `hrtime` and `os.uptime`, so
+// no clock reads awake time; what bounds a wedged act is time it could have run.
+export interface ActAwake {
+  readonly spentMs: number;
+  readonly lastSeen: number;
+}
+
+// The most one look counts: a sleep of any length between two looks spends at
+// most this.
+export const STEP_CAP_MS = 60_000;
+
+// An act no daemon has looked at, as of its start.
+export const unwatched = (record: ActRecord): ActAwake => ({
+  spentMs: 0,
+  lastSeen: record.started,
+});
+
+// [LAW:dataflow-not-control-flow] One more look at the act running, at `now`:
+// the span since the last look, whichever daemon took it, up to the cap, and
+// nothing for a clock set back. Daemons looking in turn sum to the time the act
+// was watched, not a multiple of it.
+export const observe = (awake: ActAwake, now: number): ActAwake => ({
+  spentMs:
+    awake.spentMs + Math.min(Math.max(now - awake.lastSeen, 0), STEP_CAP_MS),
+  lastSeen: now,
+});
 
 // [LAW:types-are-the-program] The act as every daemon sees it. `succeeded`
 // is its own arm, not `idle`, so a daemon watching an act end can tell a
@@ -107,6 +143,7 @@ const filesOf = (actDir: string): JobFiles => ({
   status: path.join(actDir, "status"),
 });
 const recordOf = (actDir: string): string => path.join(actDir, "record.json");
+const awakeOf = (actDir: string): string => path.join(actDir, "awake.json");
 
 // The numbered acts, ascending. A claim in progress stages under a dotted
 // name, and an act being removed leaves under one, which is no act.
@@ -359,7 +396,31 @@ const CLAIMED_FIRST: Claim = {
   reason: "another act claimed this bundle first",
 };
 
-// Ends an act whose group its reader saw alive past its deadline, with a
+// What the act has spent, or null when no daemon has watched it yet.
+function readAwake(actDir: string): ActAwake | null {
+  try {
+    return JSON.parse(fs.readFileSync(awakeOf(actDir), "utf8")) as ActAwake;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+// [LAW:effects-at-boundaries] Spends one look at an act its reader saw alive
+// at `now`, and writes what it has spent for every daemon after this one: a
+// daemon started mid-act carries on from it. Two daemons racing one look lose
+// a step between them, which only ever undercounts. A look landing after a
+// newer claim pruned the act leaves its directory holding only this file; it
+// is older than the act that pruned it, so no reader takes it for the newest,
+// and the next claim's prune removes it.
+export function spendLook(dir: string, facts: ActFacts, now: number): ActAwake {
+  const actDir = path.join(dir, String(facts.act));
+  const awake = observe(readAwake(actDir) ?? unwatched(facts.record), now);
+  writeAtomic(awakeOf(actDir), JSON.stringify(awake));
+  return awake;
+}
+
+// Ends an act whose group its reader saw alive past its budget, with a
 // `timeout` verdict unless the job's own landed first: a live read already
 // proved the group the recorded job.
 export function endOverdue(

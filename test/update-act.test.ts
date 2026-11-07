@@ -33,6 +33,8 @@ import { makeBinaryWatch } from "../src/daemon/binary-watch";
 import { BadVerbArgs, DaemonClosing } from "../src/daemon/verb-error";
 import { until } from "./helpers/until";
 import { systemTimekeeper } from "../src/time";
+import { heldClock } from "./helpers/held-clock";
+import { fakeLauncher } from "./helpers/fake-launcher";
 
 let scratch: string;
 beforeEach(() => {
@@ -961,5 +963,122 @@ describe("the update watch: one turn at a time on the act files", () => {
 
   test("an act refused is a BadVerbArgs rejection, for the verb to answer with", async () => {
     await expect(harness().watch.act()).rejects.toThrow(BadVerbArgs);
+  });
+});
+
+// [LAW:behavior-not-structure] The act's budget is spent in observed time
+// (brandon-unfiled-3248.9eu3): the time some daemon watched the act running, on
+// a held clock, with a job group the fake spawner holds alive and that takes no
+// signal, as a wedged act does.
+describe("the update watch: an act's budget is the time it was watched running", () => {
+  const MINUTE = 60_000;
+  const POLL = 2_000;
+  const closers: Array<() => void> = [];
+  afterEach(() => closers.splice(0).forEach((close) => close()));
+
+  // Every tick's read and write is synchronous behind resolved promises, so one
+  // turn of the real loop lets a fired tick answer and arm the next.
+  const settled = () => new Promise((resolve) => setImmediate(resolve));
+
+  // One act on the bundle, claimed now and running for good.
+  function bench() {
+    const clock = heldClock(new Date());
+    const { launcher, spawner } = fakeLauncher(clock);
+    const pid = 41_000;
+    spawner.seedGroup(pid);
+    const dir = actsDir(scratch, "/some/bundle/index.mjs");
+    fs.mkdirSync(path.join(dir, "1"), { recursive: true });
+    const started = clock.now();
+    fs.writeFileSync(
+      path.join(dir, "1", "record.json"),
+      JSON.stringify({ ...RECORD, pid, started, deadline: started + 10 * MINUTE }),
+    );
+    const logged: string[] = [];
+    // A daemon on the bundle, watching from now.
+    const daemon = () => {
+      const watch = makeUpdateWatch({
+        fact: newUpdateFact(),
+        clock,
+        launcher,
+        probe: { startTime: sameLeader },
+        digest: null,
+        entryUrl: "file:///some/bundle/index.mjs",
+        actsDir: dir,
+        intervalMs: 60 * MINUTE,
+        releaseIntervalMs: 60 * MINUTE,
+        registryUrl: "http://127.0.0.1:1",
+        fetchImpl: async () => Response.json({ latest: "999.0.0" }),
+        gates: daemonGates(),
+        onApplied: () => {},
+        log: (_level, msg) => logged.push(msg),
+      });
+      closers.push(() => watch.close());
+      watch.arm();
+      return watch;
+    };
+    const verdict = () => readJobEnd(path.join(dir, "1", "status"));
+    // Moves the clock on in steps, letting each tick that fell due answer.
+    const awake = async (ms: number, step = POLL) => {
+      for (let t = 0; t < ms; t += step) {
+        clock.advance(step);
+        await settled();
+      }
+    };
+    return { clock, logged, daemon, verdict, awake, settled };
+  }
+
+  test("an act running across a sleep longer than its budget is not ended at the first look after waking", async () => {
+    const b = bench();
+    b.daemon();
+    await b.settled();
+    await b.awake(3 * POLL);
+
+    // Asleep: the wall clock runs and the loop does not.
+    b.clock.burn(60 * MINUTE);
+    await b.awake(POLL);
+
+    expect(b.verdict()).toBeNull();
+    expect(b.logged.filter((l) => /timed out/.test(l))).toEqual([]);
+  });
+
+  test("a wedged act on an awake machine is ended with a timeout verdict after ten minutes of looks", async () => {
+    const b = bench();
+    b.daemon();
+    await b.settled();
+    await b.awake(10 * MINUTE - POLL);
+    expect(b.verdict()).toBeNull();
+
+    await b.awake(3 * POLL);
+    expect(b.verdict()).toEqual({ kind: "timeout" });
+    expect(b.logged).toContain("apply-update: act 1 timed out; ending it");
+  });
+
+  test("two daemons looking in turn spend one budget between them: about ten minutes, not five", async () => {
+    const b = bench();
+    b.daemon();
+    await b.settled();
+    b.clock.advance(POLL / 2);
+    b.daemon();
+    await b.settled();
+
+    await b.awake(10 * MINUTE - POLL - POLL / 2, POLL / 2);
+    expect(b.verdict()).toBeNull();
+    await b.awake(3 * POLL, POLL / 2);
+    expect(b.verdict()).toEqual({ kind: "timeout" });
+  });
+
+  test("a daemon started mid-act carries on from what the one before it spent", async () => {
+    const b = bench();
+    const first = b.daemon();
+    await b.settled();
+    await b.awake(6 * MINUTE);
+    first.close();
+
+    b.daemon();
+    await b.settled();
+    await b.awake(4 * MINUTE - POLL);
+    expect(b.verdict()).toBeNull();
+    await b.awake(3 * POLL);
+    expect(b.verdict()).toEqual({ kind: "timeout" });
   });
 });
