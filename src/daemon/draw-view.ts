@@ -9,7 +9,7 @@
 
 import type { RendererAddress } from "./home.js";
 import type { SessionView } from "./cache/render.js";
-import { renderOptionsOf, todayOf } from "./render-payload.js";
+import { projectDrawFields, renderOptionsOf } from "./render-payload.js";
 import type { SessionSource } from "./session-source.js";
 import { laneSwitches } from "../config/effective-globals.js";
 import {
@@ -92,7 +92,7 @@ export function drawView(
       diagnostics: diagnosticsProjection(diagnostics),
       drawing,
       feeds,
-      today: todayOf(source.facts().builtins.today, at),
+      ...projectDrawFields(source.facts(), at),
     },
     at,
     // [LAW:one-source-of-truth] The options drawDsl draws with are the SAME

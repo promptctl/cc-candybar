@@ -42,6 +42,7 @@ import {
   type Frame,
 } from "../render/frame.js";
 import {
+  builtinsFact,
   prFactOf,
   runsFactOf,
   sourcesFactOf,
@@ -49,7 +50,7 @@ import {
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
 import { drawnLanes, drawView, type Handed } from "./draw-view.js";
-import { isPending } from "../utils/outcome.js";
+import { isUnanswered } from "../utils/outcome.js";
 import {
   laneSwitches,
   resolveEffectiveGlobals,
@@ -628,8 +629,11 @@ export function drawRender(
     feeds: frameFeeds.feedsOf(sessionId, at),
     diagnostics,
   };
-  const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
-  noteFacts(facts, sourcesFactOf(document.sources));
+  const metrics = isUnanswered(payload.metrics) ? undefined : payload.metrics;
+  noteFacts(facts, {
+    builtins: builtinsFact(Object.keys(document.builtins)),
+    ...sourcesFactOf(document.sources),
+  });
   noteFacts(facts, runsFactOf(document.runs));
   // [LAW:nothing-unseen] The document this frame drew from, by its seq, so a
   // frame in a bug report traces to it.

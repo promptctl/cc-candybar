@@ -39,7 +39,7 @@ import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
-import { pendingOf } from "../src/utils/outcome";
+import { pendingOf, undeclaredOf } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 import { buildScope } from "../src/template-engine/scope";
 import { systemTimekeeper } from "../src/time";
@@ -197,6 +197,39 @@ describe("SourceRegistry — input: before its first payload", () => {
     // A default that cannot be the input's type answers as its zero.
     expect(store.read("count")).toBe(0);
     expect(store.read("flag")).toBe(false);
+  });
+});
+
+describe("SourceRegistry — input: a built-in the config did not declare", () => {
+  // A read of a built-in nobody gathers is a gap in the declaration, not data
+  // that failed: no default answers it, so the segment reading it draws ⚠
+  // naming the variable and the fact, never a blank or a zero.
+  it("throws naming the variable and the fact, whatever its default, and records the error", () => {
+    const { store, registry } = make("(unset)");
+    registry.declareInput("count", "metrics.messageCount", "number", 7, "computed");
+    registry.declareInput("label", "metrics", "string", "-", "computed");
+    feedInputs(registry, { metrics: undeclaredOf("metrics") });
+    expect(() => store.read("count")).toThrow(
+      'variable "count" reads metrics, which the declaration its facts were gathered under does not name',
+    );
+    expect(() => store.read("label")).toThrow(/reads metrics/);
+    expect(registry.getLastError("count")?.message).toMatch(/reads metrics/);
+    let thrown: unknown;
+    try {
+      store.read("count");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(readPending(thrown)).toBeUndefined();
+  });
+
+  it("is a value inside a source's own document, which can spell anything", () => {
+    const { store, registry } = make("(unset)");
+    registry.declareInput("kind", "src.value.kind", "string", "-", "computed");
+    feedInputs(registry, {
+      src: { kind: "ok", value: { kind: "undeclared", fact: "metrics" } },
+    });
+    expect(store.read("kind")).toBe("undeclared");
   });
 });
 

@@ -687,6 +687,21 @@ test("a partial document is refused naming the field", () => {
   ).toThrow(/^line 3 facts builtins.git: has no finite `at`/);
 });
 
+// A declaration naming the PR names the repository it is asked of, so a
+// document's keys are refused when they are not closed that way, as the one
+// constructor of a declaration closes them.
+test("a document holding the PR without its repository is refused", () => {
+  const whole = document(1) as unknown as { builtins: Record<string, unknown> };
+  const { git: _git, ...withoutGit } = whole.builtins;
+  const open = {
+    ...whole,
+    builtins: { ...withoutGit, pr: whole.builtins.git },
+  };
+  expect(() => parseSessionFacts(open, "line 1")).toThrow(
+    /^line 1: holds the PR without the repository it is asked of/,
+  );
+});
+
 test("a document of another facts version is refused", () => {
   const other = { ...document(1), v: FACTS_VERSION + 1 };
   expect(() => parseSessionFacts(other, "line 1")).toThrow(
@@ -702,7 +717,7 @@ test("a pending that crossed as JSON is a pending, not a value", () => {
     "line 1",
   );
   expect(parsed.builtins.session).toEqual({ kind: "pending", why: "unread" });
-  expect(parsed.builtins.git.kind).toBe("ok");
+  expect(parsed.builtins.git?.kind).toBe("ok");
 });
 
 // Where a play's step is drawn or arrives, from the clock's start.

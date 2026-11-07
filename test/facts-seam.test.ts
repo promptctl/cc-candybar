@@ -177,14 +177,14 @@ function tempDir(prefix: string): string {
 // The session's directory: a checkout whose `.git` the repo resolution reads
 // and the git cache watches, the config, and the plugin with its session
 // document already in managed storage.
-function sessionDir(): { cwd: string; configFile: string } {
+function sessionDir(config = CONFIG): { cwd: string; configFile: string } {
   const cwd = tempDir("ccb-seam-cwd-");
   fs.mkdirSync(path.join(cwd, ".git", "refs", "heads"), { recursive: true });
   fs.writeFileSync(path.join(cwd, ".git", "HEAD"), "ref: refs/heads/main\n");
   fs.writeFileSync(path.join(cwd, ".git", "refs", "heads", "main"), "c0ffee\n");
   fs.writeFileSync(path.join(cwd, ".git", "index"), "");
   const configFile = path.join(cwd, "config.json5");
-  fs.writeFileSync(configFile, CONFIG);
+  fs.writeFileSync(configFile, config);
   fs.mkdirSync(path.join(cwd, "p", "session"), { recursive: true });
   fs.writeFileSync(path.join(cwd, "p", "plugin.json5"), PLUGIN);
   // The program's contract: the whole document, renamed into place.
@@ -455,8 +455,8 @@ const HELD: Pace = { runsMs: 0, stepMs: 0 };
 // clock and scripted programs, its rig, and the frame feed its lanes follow
 // through. Every frame it draws, an answer or a lane's, is the daemon's own
 // draw (src/daemon/draw-bar.ts), kept in the order drawn.
-function liveSession({ runsMs, stepMs }: Pace = HELD) {
-  const dir = sessionDir();
+function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
+  const dir = sessionDir(config);
   const { home, claudeConfigDir } = homeDir();
   const clock = heldClock(AT);
   const launcher = fakeLauncher(clock);
@@ -1893,4 +1893,47 @@ test("a session recorded with a standing warning and a lane following replays th
   // The demo says the load's warning, as `check` does.
   expect(replay.said).toEqual([expect.stringContaining("duplicate key")]);
   expect(replay.frames.map(whole)).toEqual(liveFrames.map(whole));
+});
+
+test("a config that reads two built-ins records documents holding only what it declared, and the replay draws the bars the live renderer drew", async () => {
+  const s = liveSession(HELD, `{ root: { h: ["gitaculous", "metrics"] } }`);
+  await s.requestFrom(s.cwd, s.configFile);
+  const file = path.join(tempDir("ccb-seam-declared-"), "bar.jsonl");
+  const recorded = recordToFile(
+    s.live.recorder,
+    s.clock,
+    sessionIdOf(SID),
+    file,
+    7,
+    stays(),
+  );
+  const liveFrames: Frame[] = [];
+  for (const offset of [1000, 2000, 2000]) {
+    await s.after(offset);
+    liveFrames.push(await s.requestFrom(s.cwd, s.configFile));
+  }
+  await s.after(2000);
+  await recorded;
+  // Nothing the config does not read was gathered: no key for it in any
+  // document, rather than a pending that never lands. The config merges over
+  // the bundled default, whose presets place every built-in but tmux and
+  // declare them though unpicked.
+  const keys = documentsOf(readRecording(file)).map(({ facts }) =>
+    Object.keys(facts.builtins),
+  );
+  for (const held of keys) {
+    expect(held).toEqual(keys[0]);
+    expect(held).toEqual(expect.arrayContaining(["git", "metrics"]));
+    expect(held).not.toContain("tmux");
+  }
+  expect(liveFrames.map(textOf)[0]).toContain("main");
+  expect(warned(liveFrames)).toBe(false);
+
+  const replay = await replayFile(file, s.configFile);
+  expect(replay.reads).toEqual([]);
+  expect(replay.started).toEqual([]);
+  expect(replay.said).toEqual([]);
+  expect(replay.frames.map((f) => f.rows)).toEqual(
+    liveFrames.map((f) => f.rows),
+  );
 });

@@ -30,7 +30,7 @@ import {
 } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { loggedWhen, renderLines } from "../../helpers/daemon-log";
-import { valueOf } from "../../../src/utils/logfmt";
+import { fieldsOf, valueOf } from "../../../src/utils/logfmt";
 import { effectsOf } from "../../helpers/click";
 import { effectsUrl, VERB_RUN } from "../../../src/click/wire";
 
@@ -157,6 +157,13 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     // when it drew.
     const event = (await renderLines(env, SESSION)).at(-1);
     expect(event).toContain(" sources=1 sourcesPending=- ");
+    // [LAW:nothing-unseen] The event names the built-ins the renderer
+    // declared: the bundled default's, which its config merges over, and none
+    // its layouts leave unplaced (tmux), so a lane left out on purpose is told
+    // from one that never ran.
+    const builtins = fieldsOf(event!).get("builtins")!.split(",");
+    expect(builtins).toEqual(expect.arrayContaining(["git", "session"]));
+    expect(builtins).not.toContain("tmux");
 
     // The program's write: the whole file, renamed into place, again until a
     // render shows it (the folder's watch goes live after it opens).

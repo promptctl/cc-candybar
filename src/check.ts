@@ -71,24 +71,31 @@ import { instantOf, type Instant } from "./utils/instant.js";
 import { perSetting } from "./config/setting-projections.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
+  builtinsReadAt,
   composePayload,
+  projectDrawFields,
   renderOptionsOf,
-  todayOf,
+  type DrawFields,
   type Readings,
   type RenderPayload,
   type ViewPayload,
 } from "./daemon/render-payload.js";
+import { configPayloadPaths } from "./config/payload-reads.js";
+import type {
+  BuiltinName,
+  BuiltinValues,
+  GitFacts as DocumentGitFacts,
+} from "./facts/session-facts.js";
 import { assembleFacts } from "./daemon/facts-assembly.js";
 import { sessionIdOf } from "./daemon/session-id.js";
 import type { ClientHints } from "./daemon/protocol.js";
 import type { ClaudeHookData } from "./utils/claude.js";
-import type { GitInfo } from "./segments/git.js";
 import type { UsageInfo } from "./segments/session.js";
 import type { ContextInfo } from "./segments/context.js";
 import type { MetricsInfo } from "./segments/metrics.js";
 import type { AutoCompactWindow } from "./segments/autocompact.js";
 import { oneDay, type TodayFacts } from "./daemon/cache/today-facts.js";
-import { ABSENT, ok } from "./utils/outcome.js";
+import { ABSENT, ok, type Reading } from "./utils/outcome.js";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
@@ -200,7 +207,7 @@ function bindPass(
 // width), so it is left out; `today` is the draw's projection of the
 // document's `today` fact, handed beside the payload as a draw hands it.
 export type CheckPayload = Omit<ViewPayload, "term"> & {
-  readonly today: ReturnType<typeof todayOf>;
+  readonly today: DrawFields["today"];
 };
 
 const CHECK_HOME = "/home/tester";
@@ -244,75 +251,80 @@ function checkHook(at: Instant): ClaudeHookData {
 }
 
 // What every owner reads for the fixture's session, each in the type the owner
-// gives it. Every declared source reads absent: `check` runs no plugin program
-// and has no session, and absent is what a session reads before its program
-// first writes. So a segment gated on `hasKey` is hidden, and an unguarded
-// read fails the check with the missing-field error that session's bar would
-// draw.
-function checkReadings(
-  config: Pick<ValidatedConfig, "variables">,
-  at: Instant,
-): Readings {
+// gives it, of the built-ins the config declares: a template that reads one
+// its declaration misses fails the check, as that session's bar would draw it
+// (src/var-system/sources.ts). Every declared source reads absent: `check`
+// runs no plugin program and has no session, and absent is what a session
+// reads before its program first writes. So a segment gated on `hasKey` is
+// hidden, and an unguarded read fails the check with the missing-field error
+// that session's bar would draw.
+function checkReadings(config: ValidatedConfig, at: Instant): Readings {
   const nowSec = Math.floor(at);
   const sources = Object.entries(config.variables).flatMap(([name, decl]) =>
     decl.kind === "source" ? [name] : [],
   );
-  return {
-    lanes: {
-      git: ok<GitInfo>({
-        branch: "main",
-        status: "dirty",
-        aheadBehind: ok({ ahead: 2, behind: 1 }),
-        head: ok("abc1234def5678"),
-        workingTree: { staged: 3, unstaged: 2, untracked: 1, conflicts: 0 },
-        sha: ok("abc1234"),
-        operation: ok("rebase"),
-        committedAt: ok(nowSec - 780),
-        stashCount: ok(1),
-        upstream: ok("origin/main"),
-        repoName: ok("cc-candybar"),
-        repoUrl: ok("https://github.com/promptctl/cc-candybar"),
-        // A branch with no PR: no PR keys, as the fixture has always had none.
-        pullRequest: ABSENT,
-      }),
-      usage: ok<UsageInfo>({
-        session: {
-          cost: 0.39,
-          calculatedCost: 0.39,
-          officialCost: null,
-          tokens: 241400,
-          tokenBreakdown: null,
-        },
-      }),
-      context: ok<ContextInfo>({
-        totalTokens: 48487,
-        percentage: 76,
-        contextLeftPercentage: 24,
-        maxTokens: 1_000_000,
-      }),
-      metrics: ok<MetricsInfo>({
-        lastResponseTime: 8.2,
-        responseTime: 4.2,
-        sessionDuration: 930,
-        messageCount: 8,
-        nonPrompts: 0,
-        linesAdded: 512,
-        linesRemoved: 88,
-      }),
-      activity: ABSENT,
-      tmuxSession: ok("work"),
-      hostName: ok("tester-box"),
-      hostUser: ok("tester"),
-      cache: ok(nowSec + 15 * 60),
-      speed: ABSENT,
-      // A set window with a step each way, so the when-gated `autocompact`
-      // control renders all of its cells.
-      autoCompact: ok<AutoCompactWindow>(400_000),
-      sources: new Map(sources.map((name) => [name, ABSENT])),
-    },
+  // [LAW:types-are-the-program] Total over the built-ins, so one added to the
+  // document is a compile error here until the fixture carries it.
+  const every: { readonly [K in BuiltinName]: Reading<BuiltinValues[K]> } = {
+    git: ok<DocumentGitFacts>({
+      branch: "main",
+      status: "dirty",
+      aheadBehind: ok({ ahead: 2, behind: 1 }),
+      head: ok("abc1234def5678"),
+      workingTree: { staged: 3, unstaged: 2, untracked: 1, conflicts: 0 },
+      sha: ok("abc1234"),
+      operation: ok("rebase"),
+      committedAt: ok(nowSec - 780),
+      stashCount: ok(1),
+      upstream: ok("origin/main"),
+      repoName: ok("cc-candybar"),
+      repoUrl: ok("https://github.com/promptctl/cc-candybar"),
+    }),
+    // A branch with no PR: no PR keys, as the fixture has always had none.
+    pr: ABSENT,
+    session: ok<UsageInfo>({
+      session: {
+        cost: 0.39,
+        calculatedCost: 0.39,
+        officialCost: null,
+        tokens: 241400,
+        tokenBreakdown: null,
+      },
+    }),
+    context: ok<ContextInfo>({
+      totalTokens: 48487,
+      percentage: 76,
+      contextLeftPercentage: 24,
+      maxTokens: 1_000_000,
+    }),
+    metrics: ok<MetricsInfo>({
+      lastResponseTime: 8.2,
+      responseTime: 4.2,
+      sessionDuration: 930,
+      messageCount: 8,
+      nonPrompts: 0,
+      linesAdded: 512,
+      linesRemoved: 88,
+    }),
+    activity: ABSENT,
+    tmux: ok({ session: "work" }),
+    hostName: ok("tester-box"),
+    hostUser: ok("tester"),
+    cache: ok(nowSec + 15 * 60),
+    speed: ABSENT,
+    // A set window with a step each way, so the when-gated `autocompact`
+    // control renders all of its cells.
+    autocompact: ok<AutoCompactWindow>(400_000),
     // [LAW:one-source-of-truth] One day's sums, which the draw projects to its
-    // own day (`todayOf`) as the daemon's draw does.
+    // own day (the today row) as the daemon's draw does.
     today: ok<TodayFacts>({ sums: oneDay(at, 12.5, 3_400_000), own: {} }),
+  };
+  const declared = builtinsReadAt(configPayloadPaths(config));
+  return {
+    builtins: Object.fromEntries(
+      [...declared].map((name) => [name, every[name]]),
+    ),
+    sources: new Map(sources.map((name) => [name, ABSENT])),
     // check's registry runs its own sources (`prepareConfig`), so its payload's
     // document carries none.
     runs: new Map(),
@@ -379,7 +391,7 @@ export function checkPayload(
       back: 1,
     },
   );
-  return { ...payload, today: todayOf(document.builtins.today, at) };
+  return { ...payload, ...projectDrawFields(document, at) };
 }
 
 // [LAW:dataflow-not-control-flow] The check result is DATA — a pure function of

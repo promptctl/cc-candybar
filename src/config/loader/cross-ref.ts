@@ -67,6 +67,7 @@ import { SLOT_PATHS, slotAt } from "../payload-inputs.js";
 import { endcapsNameMessage } from "./styles.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
+import { pathUnder } from "../payload-reads.js";
 import {
   fragmentNode,
   fragmentNodePaths,
@@ -966,9 +967,8 @@ function checkRuleSlotReads(ctx: ValidateCtx, cfg: DslConfig): void {
     seen: Set<string>,
   ): string | null => {
     for (const { path, reaches } of reads) {
-      const atSlot = EXPRESSION_SLOTS.find(
-        (slot) =>
-          SLOT_PATHS[slot] === path || SLOT_PATHS[slot].startsWith(`${path}.`),
+      const atSlot = EXPRESSION_SLOTS.find((slot) =>
+        pathUnder(path, SLOT_PATHS[slot]),
       );
       if (atSlot !== undefined)
         return `reads "${SLOT_PATHS[atSlot]}", the ${atSlot}'s own name`;

@@ -4,11 +4,11 @@ The daemon becomes two kinds of process. **Gather** is one process per user that
 
 The drafts in `docs/design/` get most of this right. This proposal takes their shape and removes three things that make the seams rough: Gather routing clicks, the renderer forwarding hook data up to Gather, and Gather's build being "whichever renderer started it". It adds one thing the goal needs and the drafts leave out: a recorded facts stream as a first-class input to a renderer. Everything below is the architecture I would defend; where it departs from the drafts or from something said in a session, it says so. Part I is the shape; Part II (§12 onward) sets each seam to the detail a ticket can be pulled against, with every chosen value named as a parameter.
 
-## 1. The seam is facts, and the facts are total
+## 1. The seam is facts, and the facts are complete over what was declared
 
 The joint between the two halves is the one the goal names: what is true about a session, versus how it is drawn. Gather owns the first and nothing of the second. [LAW:decomposition]
 
-`SessionFacts` is one plain JSON document per session: every built-in fact (session, metrics, activity, context, git, PR, today's sums, usage speed, tmux visibility), every declared `shell` and `file` source's reading, and Gather's own diagnostics for that session. It is total: every field always exists, and a fact that is not yet known is a typed `pending` value, never a missing key and never an identity-compared sentinel. A renderer that has a document can draw; a renderer that has no document draws the all-pending bar. There is no "wants" negotiation, no closure of which fields a config reads, and the code that computes one today (`wantsOf`, `buildNeededPrefixes`, `sourcesRead`, the `closure` parameters) is deleted. The measured cost of totality is about 150 bytes per payload and 1 ms per built-in, which is the price of having one shape. [LAW:dataflow-not-control-flow] [LAW:types-are-the-program]
+`SessionFacts` is one plain JSON document per session: each declared built-in fact (of session, metrics, activity, context, git, PR, today's sums, usage speed, tmux visibility), every declared `shell` and `file` source's reading, and Gather's own diagnostics for that session. It is complete over what its renderer declared: the renderer declares the built-ins its config can reach, over every preset so a pick moves nothing, as it declares its sources, and every declared field exists on every document. A fact that is not yet known is a typed `pending` value, never a missing key and never an identity-compared sentinel. A built-in nobody declared is gathered by nobody and has no key; a template that reads one anyway throws naming the variable and the fact, so the segment draws its ⚠ and `check` fails, never a blank cell or a default. That loudness is what separates the declaration from the closure it replaces, whose missed path drew silently blank. A renderer that has a document can draw; a renderer that has no document draws the all-pending bar. [LAW:dataflow-not-control-flow] [LAW:types-are-the-program] [LAW:no-silent-failure]
 
 Two sources must stop blocking the first bar before totality lands, exactly as the gather draft says: `today` draws pending and lands through its reaction, and the PR fact leaves the first-request wait and gets a concurrency cap and backoff. Without that, totality makes every first bar pay for a scan and a network call that nothing on the bar may read.
 
@@ -114,7 +114,7 @@ Part I is the shape. This part sets every seam to the point where a ticket can b
 
 ## 12. `SessionFacts`
 
-One document per session. Every field exists on every document. A field that is not yet known is a `Reading` in the pending arm; a field that was read and found nothing is `absent`; a field whose read failed carries its reason. `Reading<T>` in `src/utils/outcome.ts` is this shape without the instant, and the owners hold it as `Held<T>` in `src/utils/reading.ts`, whose pending arm also carries the landing a waiter awaits; a fact is a `Reading` with `at` on each answered arm, stamped by `restamp` (`src/facts/fact.ts`) when the document is assembled, so no owner stores a time. The identity-compared `PENDING` singleton is retired: pending is a plain `{ kind, why }` recognised by its discriminator, because a site left on identity would read a deserialised pending as a value and draw a default with a `last_error`. A source's own document can spell the same thing, so a path walk stops testing for pending once it steps into an `ok` reading's `value`. [LAW:types-are-the-program] [LAW:one-source-of-truth]
+One document per session. Every declared field exists on every document (§1); an undeclared built-in has no key. A field that is not yet known is a `Reading` in the pending arm; a field that was read and found nothing is `absent`; a field whose read failed carries its reason. `Reading<T>` in `src/utils/outcome.ts` is this shape without the instant, and the owners hold it as `Held<T>` in `src/utils/reading.ts`, whose pending arm also carries the landing a waiter awaits; a fact is a `Reading` with `at` on each answered arm, stamped by `restamp` (`src/facts/fact.ts`) when the document is assembled, so no owner stores a time. The identity-compared `PENDING` singleton is retired: pending is a plain `{ kind, why }` recognised by its discriminator, because a site left on identity would read a deserialised pending as a value and draw a default with a `last_error`. A source's own document can spell the same thing, so a path walk stops testing for pending once it steps into an `ok` reading's `value`. [LAW:types-are-the-program] [LAW:one-source-of-truth]
 
 ```ts
 type Fact<T> =
@@ -127,7 +127,7 @@ interface SessionFacts {
   readonly v: number;                       // facts protocol major, the N in §3
   readonly session: SessionId;
   readonly seq: number;                     // per session, monotonic, Gather's
-  readonly builtins: {
+  readonly builtins: {                      // each key present exactly when declared
     readonly session: Fact<SessionUsage>;   // today's SessionUsageStore session fact
     readonly today: Fact<DaySums>;          // the day Gather is in; the renderer re-cuts at its instant
     readonly speed: Fact<Speed>;
@@ -153,7 +153,7 @@ In code the value types keep the names their owners already give them (`UsageInf
 
 What stays out, because it is the renderer's: the hook's instantaneous fields (model, cost, context window, cwd as of the tick), client hints (width, depth, terminal, ssh), settings and their history depth, picks, config facts, `feeds`, `drawing`, the menu. The payload a template reads is `payloadOf(facts, hook, hints, rendererState)` and is composed in the renderer, as today. `block` and `weekly` come from the hook and never cross.
 
-Totality means the wants closure goes: `wantsOf`, `buildNeededPrefixes`, `neededPrefixesByPreset`, `anyPathStartsWith`, `sourcesRead`, `segmentInputPaths`, `gitOptionsFromClosure` (becomes one constant set), the `closure` parameter on `declareLanes`/`refreshPayload`/`readLanes`/`projectPayload`, `prFactOf`'s `readsPr`, and the preset reaction in `openView`. `doctor/data-needs.ts` keeps its own config walk, because it answers a different question (what this config would read), not what Gather runs.
+The declaration is computed once per config, by the one walk over every preset's placements, templates, partials and globals rules (`src/config/payload-reads.ts`), mapped through the payload's rows to the built-ins each path reads; the doctor asks the same walk. The PR is asked of the repository's read, so a declaration naming the PR names git. The declared set is consulted once, where the lanes are declared, never stage by stage.
 
 **Size.** A document measured about 2.7 KB with every built-in on. Full documents, not deltas: a delta protocol is a second representation of the same state with its own reconciliation bugs, and 2.7 KB at the rate facts move is nothing. [LAW:one-source-of-truth]
 

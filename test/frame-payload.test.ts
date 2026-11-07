@@ -128,7 +128,7 @@ function counted(pr?: unknown) {
   };
   // `today` as a draw at `at` projects it.
   const today = (at = AT) =>
-    todayOf(readingsOf(inputs()).today, at);
+    todayOf(readingsOf(inputs()).builtins.today!, at);
   return { reads, inputs, request, today, deps, logs };
 }
 
@@ -203,7 +203,7 @@ describe("a frame's payload", () => {
     deps.usageStore.daysOutside = () => {
       throw new Error("days bug");
     };
-    expect(readingsOf(inputs()).today).toMatchObject({
+    expect(readingsOf(inputs()).builtins.today).toMatchObject({
       kind: "failed",
     });
     expect(payloadOf(inputs(), DRAW).git).toMatchObject({ branch: "main" });
@@ -217,7 +217,7 @@ describe("a frame's payload", () => {
     await request();
     const before = reads["today"];
     deps.faults.refreshed(HOOK.session_id, "today", "scan threw");
-    expect(readingsOf(inputs()).today).toEqual(
+    expect(readingsOf(inputs()).builtins.today).toEqual(
       failed("scan threw", "read"),
     );
     expect(reads["today"]).toBe(before);
@@ -225,10 +225,24 @@ describe("a frame's payload", () => {
 
   test("autocompact's controls are not answered while the context window they are capped to is not", async () => {
     // The settings file is shared, the window is per session: another
-    // session's frame has the one answered and not the other.
-    const { inputs, request } = counted();
+    // session's frame, over the lanes its own view declared, has the one
+    // answered and not the other.
+    const { inputs, request, deps } = counted();
     await request();
-    const other = { ...inputs(), hookData: { ...HOOK, session_id: "other" } };
+    const hookData = { ...HOOK, session_id: "other" };
+    const other: PayloadInputs = {
+      ...inputs(),
+      hookData,
+      deps: {
+        ...deps,
+        lanes: declaredLanes(deps, {
+          sessionId: sessionIdOf(hookData.session_id),
+          hookData,
+          cwd: undefined,
+          hints: HINTS,
+        }),
+      } as unknown as RenderPayloadDeps,
+    };
     expect(payloadOf(other, DRAW).autocompact).toEqual(pendingOf("unread"));
     expect(payloadOf(inputs(), DRAW).autocompact).not.toEqual(
       pendingOf("unread"),
