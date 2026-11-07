@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-670",
-      "ref": "refs/pull/670/merge",
-      "sha": "724340268b48309eff836e1bf30ea31fe89b0290",
-      "timestamp": "2026-11-07T06:41:51.444Z",
-      "commits": [
-        {
-          "sha": "724340268b48309eff836e1bf30ea31fe89b0290",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T06:40:53Z",
-          "message": "Merge 12bf50ae44d875cdd0a178ee892bd7ac5c56c3cb into 984751dd6be809899d57b70e17cf917289e3d76a\n"
-        },
-        {
-          "sha": "12bf50ae44d875cdd0a178ee892bd7ac5c56c3cb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:33:09-07:00",
-          "message": "fix(lanes): a draw asks for the run under the pair its request was recorded by; an in-race tick ends its session's run (candybar-gather-renderer-76bb.1dh.2d2)\n"
-        },
-        {
-          "sha": "d92931360e59c5d7d4951feeee380f4d8579a12d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:24:50-07:00",
-          "message": "fix(lanes): mismatch runs are kept by the Claude Code whose ticks open and end them, from the request's arrival (candybar-gather-renderer-76bb.1dh.2d2)\n"
-        },
-        {
-          "sha": "e6061b2c98ba31232f9f23e3b65b292c9714f68c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:19:05-07:00",
-          "message": "fix(lanes): a straggler after the new session's first confirmed tick is the race; runs are measured on the monotonic clock (candybar-gather-renderer-76bb.1dh.2d2)\n\nThe mismatched stamp names the session the record holds, and a Claude\nCode's first confirmed tick of a session dates the rewrite, so a straggler\nholding it within the race opens no run a later /resume could inherit.\n"
-        },
-        {
-          "sha": "dff57be51af649c46ab460ae4b823e2f47645f1a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:08:44-07:00",
-          "message": "fix(lanes): a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2)\n\nA request whose Claude Code's record holds another session is the rewrite\nrace at first. Each session's run of such stamps is now held in memory,\nkeyed by the Claude Code that ran its client. A confirmed tick from that\nprocess ends every run it opened, whatever the session. Once a run goes on\npast the race (10 s), the bar's session-pane ⚠ names the session the record\nholds, under a stable identity. The render line gains a mismatch fact.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "984751dd6be809899d57b70e17cf917289e3d76a",
-      "timestamp": "2026-11-07T06:34:33.212Z",
+      "sha": "f71e4018241defe5e52915caeb204883a59da539",
+      "timestamp": "2026-11-07T06:50:07.145Z",
       "commits": [
         {
-          "sha": "984751dd6be809899d57b70e17cf917289e3d76a",
+          "sha": "f71e4018241defe5e52915caeb204883a59da539",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:33:32-07:00",
-          "message": "test(launch): the unread-input cases assert each launch's whole verdict (brandon-menus-sjhy.j5v) (#671)\n\n* test(launch): the unread-input cases assert each launch's whole verdict, so a failure prints its reason (brandon-menus-sjhy.j5v)\n\nThe blocking case failed once under a loaded worker tier at an `.ok`\nassertion, which printed only `false`. toMatchObject would not have\nhelped: its failure message cuts the received object down to the keys it\nwas given. toStrictEqual prints reason, error, exitCode and signal.\n\n* test(launch): the timeout cases assert the whole verdict too, and every case feeds the unread input (brandon-menus-sjhy.j5v)\n\n* test(launch): the async timeout admits the escalated SIGKILL, and the armed-timeout signal and no-input timeout cases return (brandon-menus-sjhy.j5v)\n\n* test(launch): the blocking timeout keeps its unread-input case, and the no-input one sits with launchSync (brandon-menus-sjhy.j5v)"
-        },
-        {
-          "sha": "d8be82f47dab2890d335b8563bbfdc937aedba77",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T06:07:34Z",
-          "message": "chore(release): set `package.json` to 1.208.10 [skip ci]\n\n## [1.208.10](https://github.com/promptctl/cc-candybar/compare/v1.208.9...v1.208.10) (2026-11-07)\n\n### Bug Fixes\n\n* **click:** a drawn link reads as the daemon's one read, step by step (brandon-menus-sjhy.3c7) ([#668](https://github.com/promptctl/cc-candybar/issues/668)) ([0ef9c4d](https://github.com/promptctl/cc-candybar/commit/0ef9c4da61959281fbf7cfad5a299221a3c2d732))\n* **lanes:** a /clear's mismatched tick draws no ⚠, and its render line names it (candybar-gather-renderer-76bb.1dh.jw7) ([#669](https://github.com/promptctl/cc-candybar/issues/669)) ([c528b6a](https://github.com/promptctl/cc-candybar/commit/c528b6a5b6526a191a75fddaa5dd0251b0889828))\n"
+          "timestamp": "2026-11-06T23:49:03-07:00",
+          "message": "fix(lanes): a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2) (#670)\n\n* fix(lanes): a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2)\n\nA request whose Claude Code's record holds another session is the rewrite\nrace at first. Each session's run of such stamps is now held in memory,\nkeyed by the Claude Code that ran its client. A confirmed tick from that\nprocess ends every run it opened, whatever the session. Once a run goes on\npast the race (10 s), the bar's session-pane ⚠ names the session the record\nholds, under a stable identity. The render line gains a mismatch fact.\n\n* fix(lanes): a straggler after the new session's first confirmed tick is the race; runs are measured on the monotonic clock (candybar-gather-renderer-76bb.1dh.2d2)\n\nThe mismatched stamp names the session the record holds, and a Claude\nCode's first confirmed tick of a session dates the rewrite, so a straggler\nholding it within the race opens no run a later /resume could inherit.\n\n* fix(lanes): mismatch runs are kept by the Claude Code whose ticks open and end them, from the request's arrival (candybar-gather-renderer-76bb.1dh.2d2)\n\n* fix(lanes): a draw asks for the run under the pair its request was recorded by; an in-race tick ends its session's run (candybar-gather-renderer-76bb.1dh.2d2)"
         }
       ]
     },

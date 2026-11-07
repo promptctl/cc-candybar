@@ -72295,6 +72295,7 @@ var import_node_path37 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/session-pane.ts
 init_globals();
+var claudeKey = (claude) => `${claude.pid}\0${claude.configDir ?? ""}`;
 function sessionPaneOf(hints, sessionId2, heldSession) {
   const tmux3 = inTmux(hints.tmux) ? hints.tmux : null;
   const { parentPid } = hints;
@@ -72304,6 +72305,7 @@ function sessionPaneOf(hints, sessionId2, heldSession) {
       tmux: tmux3,
       why: "its client is too old to say which process ran it (reinstall it with `cc-candybar install`)"
     };
+  const claude = { pid: parentPid, configDir: hints.claudeConfigDir };
   const held = heldSession(parentPid, hints.claudeConfigDir);
   if (held.kind === "unread")
     return {
@@ -72311,16 +72313,18 @@ function sessionPaneOf(hints, sessionId2, heldSession) {
       tmux: tmux3,
       why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}. A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`
     };
-  return held.sessionId === sessionId2 ? { kind: "runs", tmux: tmux3 } : {
+  return held.sessionId === sessionId2 ? { kind: "runs", tmux: tmux3, claude } : {
     kind: "mismatched",
     tmux: tmux3,
+    claude,
+    held: held.sessionId,
     why: `the Claude Code that ran its statusline (pid ${parentPid}) holds session ${held.sessionId}`
   };
 }
 function runsNowIn(where, heldSession) {
   const reads = /* @__PURE__ */ new Map();
   const once2 = (pid2, configDir2) => {
-    const key = `${pid2}\0${configDir2 ?? ""}`;
+    const key = claudeKey({ pid: pid2, configDir: configDir2 });
     const read2 = reads.get(key) ?? heldSession(pid2, configDir2);
     reads.set(key, read2);
     return read2;
@@ -72328,11 +72332,12 @@ function runsNowIn(where, heldSession) {
   return (req) => inTmux(req.hints.tmux) && samePane(req.hints.tmux, where) && sessionPaneOf(req.hints, req.sessionId, once2).kind === "runs";
 }
 var paneFact = (pane) => pane.kind !== "runs" ? `${pane.kind}: ${pane.why}` : pane.tmux === null ? "outside" : "runs";
-function sessionPaneError(pane, lanes) {
+function sessionPaneError(pane, lanes, lasted) {
   const on2 = LANE_NAMES.filter(
     (lane) => lanes[lane] && LANES[lane].showsPaneSession
   );
-  return pane.kind !== "unconfirmed" || pane.tmux === null || on2.length === 0 ? null : `The ${on2.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and this one is not known to be it: ${pane.why}`;
+  const why2 = pane.kind === "unconfirmed" ? `this one is not known to be it: ${pane.why}` : pane.kind === "mismatched" && lasted ? `this one is not it: ${pane.why}, for longer than a \`/clear\` or \`/resume\` takes to rewrite it` : null;
+  return why2 === null || pane.tmux === null || on2.length === 0 ? null : `The ${on2.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and ${why2}`;
 }
 
 // src/daemon/update-keys.ts
@@ -77695,7 +77700,8 @@ function drawRender(parts, setup, drawing2) {
     payloadProviders,
     effectSessions,
     menuIdle,
-    launcher
+    launcher,
+    mismatchRuns
   } = parts;
   const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const payload = view.source.payload();
@@ -77723,7 +77729,16 @@ function drawRender(parts, setup, drawing2) {
   const errors2 = [
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
-    said(sessionPaneError(req.pane, lanes)),
+    // About the session's pane, so a viewer open on it stays on it as the
+    // stamp's words move.
+    sourced(
+      "session-pane",
+      sessionPaneError(
+        req.pane,
+        lanes,
+        mismatchRuns.lasted(req.sessionId, req.pane)
+      )
+    ),
     sourced("load", entry.lastError),
     sourced("update-act", updateWatch.error()),
     // [LAW:no-silent-failure] The home's link-id counter, faulted: no tmux
@@ -78033,12 +78048,95 @@ function describeEffect(effect) {
   return describe4(effect);
 }
 
+// src/daemon/mismatch-runs.ts
+init_globals();
+var MISMATCH_RACE_S = 10;
+var MISMATCH_PROCESSES_KEPT = 64;
+var MISMATCH_RUNS_KEPT = 4;
+var raceOver = (since, at) => spanMs(since, at) > MISMATCH_RACE_S * 1e3;
+function keepNewest(map, kept, key, value) {
+  map.delete(key);
+  map.set(key, value);
+  if (map.size > kept) map.delete(map.keys().next().value);
+}
+var MismatchRuns = class {
+  // [LAW:single-enforcer] Written by the request arm in its turn, so the
+  // holder refuses a write no event explains, as session state does.
+  constructor(turns) {
+    this.turns = turns;
+  }
+  turns;
+  // [LAW:one-source-of-truth] Keyed by the Claude Code, since its ticks open
+  // and end its runs: one process's ticks never touch another's.
+  processes = /* @__PURE__ */ new Map();
+  // [LAW:dataflow-not-control-flow] The run `sessionId` is in once a request
+  // stamped `pane` arrives at `at`. A confirmed tick from a Claude Code is the
+  // evidence its record is being rewritten: it ends every run that process's
+  // ticks opened, and its first tick of a session dates the rewrite. So a
+  // mismatched tick holding that session within the race of it is the race,
+  // whichever side of the new session's first tick the straggler lands, and
+  // its session is in no run. A tick no readable Claude Code ran is no evidence about any
+  // record.
+  record(sessionId2, pane, at) {
+    if (this.turns.inTurn() === null)
+      throw new Error(
+        `mismatch runs: a write of ${JSON.stringify(sessionId2)} outside any turn`
+      );
+    switch (pane.kind) {
+      case "runs": {
+        const key = claudeKey(pane.claude);
+        const was = this.processes.get(key)?.confirmed;
+        keepNewest(this.processes, MISMATCH_PROCESSES_KEPT, key, {
+          confirmed: was?.sessionId === sessionId2 ? was : { sessionId: sessionId2, since: at },
+          runs: /* @__PURE__ */ new Map()
+        });
+        return null;
+      }
+      case "unconfirmed":
+        return null;
+      case "mismatched": {
+        const key = claudeKey(pane.claude);
+        const ticks = this.processes.get(key) ?? {
+          confirmed: null,
+          runs: /* @__PURE__ */ new Map()
+        };
+        keepNewest(this.processes, MISMATCH_PROCESSES_KEPT, key, ticks);
+        const rewrite = ticks.confirmed;
+        if (rewrite?.sessionId === pane.held && !raceOver(rewrite.since, at)) {
+          ticks.runs.delete(sessionId2);
+          return null;
+        }
+        const since = Math.min(
+          ticks.runs.get(sessionId2)?.since ?? at,
+          at
+        );
+        const run3 = { since, lasted: raceOver(since, at) };
+        keepNewest(ticks.runs, MISMATCH_RUNS_KEPT, sessionId2, run3);
+        return run3;
+      }
+    }
+  }
+  // The run of `sessionId` that the Claude Code `pane` names has its ticks
+  // in: the same pair a request is recorded under.
+  of(sessionId2, pane) {
+    return pane.kind === "unconfirmed" ? null : this.processes.get(claudeKey(pane.claude))?.runs.get(sessionId2) ?? null;
+  }
+  // Whether the session's mismatch has outlasted the race, as the requests
+  // its Claude Code ran left it: what a draw shows, never measured on the
+  // draw's clock.
+  lasted(sessionId2, pane) {
+    return this.of(sessionId2, pane)?.lasted ?? false;
+  }
+};
+var mismatchFact = (run3, at) => run3 === null ? "-" : `${run3.lasted ? "lasted " : ""}${spanMs(run3.since, at)}ms`;
+
 // src/daemon/apply.ts
 var NO_EFFECTS = [];
 var ARMS = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
-  // batch in a journal turn, with what its arrival settles (the lane setups
+  // batch in a journal turn, and so does its session's run of mismatched pane
+  // stamps, with what its arrival settles (the lane setups
   // its session's clicks owed, described as the turn's effects), and its draw
   // begins once the turn is over (`applyRequest`). A turn is synchronous
   // (src/daemon/journal-turns.ts), so the request waits behind no other
@@ -78046,17 +78144,24 @@ var ARMS = {
   // landed. The revision its turn left and the effects it described go on the
   // request's line, the render event, which is its record and opens with the
   // session the edge noted.
-  request: ({ req, facts }, { verbCtx }) => {
+  request: ({ req, arrived: arrived2, facts }, { verbCtx }) => {
     const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
+      const mismatch = verbCtx.mismatchRuns.record(
+        req.sessionId,
+        req.pane,
+        arrived2
+      );
       return {
         effects: verbCtx.lanes.arrived(req),
-        revision: verbCtx.sessionState.revision(req.sessionId)
+        revision: verbCtx.sessionState.revision(req.sessionId),
+        mismatch
       };
     });
     noteFacts(facts, {
       revision: String(turn.revision),
-      effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-"
+      effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-",
+      mismatch: mismatchFact(turn.mismatch, arrived2)
     });
     return { answer: void 0, effects: turn.effects, facts: [] };
   },
@@ -78878,6 +78983,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         kind: "request",
         req: checked.req,
         at,
+        arrived: accepted,
         // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
         // fixed at its arrival: early enough before its client hangs up to
         // draw (src/daemon/request-deadline.ts).
@@ -86823,6 +86929,7 @@ function createDaemon(inputs) {
     onApplied: () => binaryWatch.checkNow(),
     log
   });
+  const mismatchRuns = new MismatchRuns(journalTurns);
   const verbCtx = {
     gates,
     sessionState,
@@ -86859,6 +86966,7 @@ function createDaemon(inputs) {
     doctorStores,
     probes: handlerProbes,
     clients: renderSightings,
+    mismatchRuns,
     bundle: bundle.path,
     serving: () => limits.serving(),
     claudeInput: inputs.claudeInput(launcher),
@@ -86896,6 +87004,7 @@ function createDaemon(inputs) {
     stats,
     handlerProbes,
     renderSightings,
+    mismatchRuns,
     watcherRegistry,
     refreshLedger,
     fileEvents,
