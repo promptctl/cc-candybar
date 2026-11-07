@@ -88,6 +88,7 @@ import { waitWithin } from "../utils/reading.js";
 import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
 import type { DaemonParts } from "./daemon-parts.js";
+import { gitEnvFault } from "../git-env.js";
 import {
   drawFeedFrame,
   drawRequest,
@@ -469,6 +470,7 @@ export function drawRender(
     menuIdle,
     launcher,
     mismatchRuns,
+    gitEnv,
   } = parts;
   const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
   // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
@@ -576,6 +578,12 @@ export function drawRender(
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
+    // [LAW:no-silent-failure] An ask that failed left the daemon's environment
+    // as the spawning shell's, so any session's git reads may answer for that
+    // shell's repository: every bar says so while the daemon lives.
+    ...(gitEnv.kind === "asked"
+      ? []
+      : [{ kind: "git-env" as const, message: gitEnvFault(gitEnv.reason) }]),
     ...(entry.lastWarning === null
       ? []
       : [{ kind: "load" as const, message: entry.lastWarning }]),
@@ -724,6 +732,7 @@ export function drawRender(
       case "load":
       case "facts":
       case "config-watch":
+      case "git-env":
       case "lifeline":
       case "launch-pipes":
       case "when":
@@ -805,6 +814,13 @@ interface ConfigWatchWarning {
   readonly message: string;
 }
 
+// git could not name the variables that locate a repository, so the daemon's
+// git reads run in the spawning shell's environment (src/git-env.ts).
+interface GitEnvWarning {
+  readonly kind: "git-env";
+  readonly message: string;
+}
+
 // The facts the bar is drawn from are behind: the latest turn could not be
 // stamped.
 interface FactsWarning {
@@ -837,6 +853,7 @@ type StandingWarning =
   | FileEventsWarning
   | LauncherWarning
   | ConfigWatchWarning
+  | GitEnvWarning
   | LoadWarning
   | FactsWarning
   | DomainWarning;

@@ -6,7 +6,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { json } from "node:stream/consumers";
 import { debug, setDebug } from "./utils/logger";
-import { processWorld, TICK_PARENT_START_BUDGET_MS } from "./host";
+import { daemonWorld, processWorld, TICK_PARENT_START_BUDGET_MS } from "./host";
+import { askGitEnv } from "./git-env";
 import {
   runInstall,
   runInstallUrlHandler,
@@ -93,9 +94,14 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   "url-handle": async (args) => {
     await runUrlHandle(args[0], world);
   },
-  // The daemon owns its own lifecycle.
+  // The daemon owns its own lifecycle. [LAW:single-enforcer] Its environment is
+  // cleaned once, here at its process edge, before anything it runs spawns a
+  // child: git names the variables that locate a repository, and the daemon's
+  // world is the process's without them (src/host.ts daemonWorld). The ask's
+  // outcome goes in with it, so a failed ask is on every bar.
   daemon: async () => {
-    runDaemon(world);
+    const gitEnv = askGitEnv(world.launcher);
+    runDaemon(daemonWorld(gitEnv), gitEnv);
   },
   "daemon-stats": async (args) => {
     await exitWith(await daemonStatsPlan(world, args));

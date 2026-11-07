@@ -90,6 +90,9 @@ const pageDaemon = createDaemon({
   memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
   clock: WORLD.clock,
+  // The page's simulated machine sets none of git's repository variables, so
+  // its daemon has none to drop.
+  gitEnv: { kind: "asked", names: [] },
   exit: (code) => {
     throw new Error(`the page's daemon asked to exit ${code}`);
   },

@@ -15,6 +15,7 @@ import {
 } from "./config/loader/plugin-folders.js";
 import { DEFINITION_FILE, pluginDefinition } from "./config/loader/plugins.js";
 import { locations } from "./daemon/paths.js";
+import { askGitEnv } from "./git-env.js";
 import type { World } from "./host.js";
 import { failureText, type OneShotLauncher } from "./proc/launch.js";
 import { canonicalDirectory } from "./utils/on-disk-path.js";
@@ -114,10 +115,14 @@ function cloneRepo(
     return run.stdout;
   };
   // Overlay: terminal prompts off, and the variables that locate a repository
-  // (named by the tool itself) unset.
+  // (named by the tool itself, src/git-env.ts) unset.
+  // [LAW:no-silent-failure] An ask that failed is the install's error: a
+  // clone under a hook's GIT_DIR would act on the hook's repository.
+  const asked = askGitEnv(launcher);
+  if (asked.kind === "failed")
+    throw new Error(`git rev-parse --local-env-vars failed (${asked.reason})`);
   const env: Record<string, string | undefined> = { GIT_TERMINAL_PROMPT: "0" };
-  for (const name of git(env, "rev-parse", "--local-env-vars").split("\n"))
-    env[name] = undefined;
+  for (const name of asked.names) env[name] = undefined;
   git(
     env,
     "clone",

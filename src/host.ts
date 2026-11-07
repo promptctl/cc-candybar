@@ -7,6 +7,7 @@ import {
   type ParsedProcessIdentity,
 } from "./daemon/process-fingerprint.js";
 import type { Dialer } from "./dial/dialer.js";
+import type { GitEnvAsk } from "./git-env.js";
 import { systemDialer } from "./dial/system-dialer.js";
 import type { Filesystem } from "./disk/filesystem.js";
 import { systemFilesystem } from "./disk/system-filesystem.js";
@@ -54,15 +55,44 @@ export const TICK_PARENT_START_BUDGET_MS = 50;
 // [LAW:single-enforcer] The one place src reads the process's environment, home
 // and temporary directory (besides the preload's own main, which runs apart
 // from the rest). The eslint config keeps every other file from naming them.
-// The launcher holds the live `process.env`, not a copy, so a variable the
-// process sets after this still reaches the children it launches. This is also
-// the one file that names the real clock (src/time.ts): everything else is
-// handed the world's.
+// Every subcommand's world holds the live `process.env`, not a copy, so a
+// variable the process sets after this still reaches the children it
+// launches; the daemon's (`daemonWorld`) holds a copy taken once at its boot.
+// This is also the one file that names the real clock (src/time.ts):
+// everything else is handed the world's.
 export function processWorld(): World {
+  return worldOver(process.env);
+}
+
+// [LAW:single-enforcer] The daemon's world: the process environment less the
+// variables git reads as locating a repository, as git named them at boot
+// (src/git-env.ts). The daemon's environment is whichever shell spawned it, so
+// a `GIT_DIR` there (a hook, vcsh, yadm) would point every session's git reads
+// at that shell's repository. Its host and its launcher hold the same copy, so
+// the daemon and every child it launches see one environment. An ask that
+// failed has nothing to drop by: the environment is kept as inherited, and the
+// daemon says so on every bar.
+export function daemonWorld(gitEnv: GitEnvAsk): World {
+  return worldOver(daemonEnv(process.env, gitEnv));
+}
+
+// `env` less each variable git named, and nothing else changed: a failed ask
+// names none.
+export function daemonEnv(
+  env: Readonly<NodeJS.ProcessEnv>,
+  gitEnv: GitEnvAsk,
+): NodeJS.ProcessEnv {
+  const kept = { ...env };
+  for (const name of gitEnv.kind === "asked" ? gitEnv.names : [])
+    delete kept[name];
+  return kept;
+}
+
+function worldOver(env: NodeJS.ProcessEnv): World {
   const clock = systemTimekeeper;
-  const launcher = systemOneShotLauncher({ inherited: process.env }, clock);
+  const launcher = systemOneShotLauncher({ inherited: env }, clock);
   const host: Host = {
-    env: process.env,
+    env,
     home: os.homedir(),
     tmp: os.tmpdir(),
   };
