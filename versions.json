@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-667",
+      "ref": "refs/pull/667/merge",
+      "sha": "7a5f3eb09f63be6bcfd6e0f68452fbe00f9be9a1",
+      "timestamp": "2026-11-07T01:47:48.346Z",
+      "commits": [
+        {
+          "sha": "7a5f3eb09f63be6bcfd6e0f68452fbe00f9be9a1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:47:00Z",
+          "message": "Merge f695c1939c60612cdbf7496e99645656c87562fe into fff258104584a230d2eb90386e7f1e306eed5c5a\n"
+        },
+        {
+          "sha": "f695c1939c60612cdbf7496e99645656c87562fe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:41:39-07:00",
+          "message": "fix(config): a click writes its home on the disk it read and proved; the book's folder is absent as presence says (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the click's writable disk; the commit writes through it\n  (writeAtomicOn), so a click's read, proof and write are one disk's. Undo\n  keeps its own system-disk pair until the settings history takes a disk.\n- bookIsFiled asks presence(): a book folder that is a regular file holds no\n  book, and the loose book is read.\n- holdsGit asks presence() and marks its no-silent-failure exception; the\n  ascent carrying the failure is candybar-testing-ihvy.izc.sv9.\n"
+        },
+        {
+          "sha": "cd8e26b4ff14dc4af5df62a1584818e8c0d2e502",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:27:28-07:00",
+          "message": "fix(config): a click's proof shares the render cache's installed layers and reads its home's disk (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the installed-layer memo its loads share; the render\n  cache lends its own through the verb context, so a click's proof checks no\n  plugin the bar's last load already checked. The memo keys on definition\n  text, so a lent memo serves no layer the borrower's disk does not hold.\n- presence() reads ENOTDIR as absent, as the stat it replaced did: a path\n  through a regular file holds nothing. The filesystem contract pins ENOTDIR.\n- A click reads its home's text and the layers above on the disk its proof\n  loads; config-file-store leaves FS_READERS.\n- The lane edge's fileExists asks the same disk as its presence.\n- stateFromLoad folds into loadFromDisk; keyLoad is module-private.\n"
+        },
+        {
+          "sha": "97eef3f912a48117db644a175cefe3d4266e6fdb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:33:52-07:00",
+          "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "fff258104584a230d2eb90386e7f1e306eed5c5a",
@@ -70,35 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:25:22-07:00",
           "message": "fix(lanes): a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom)\n\nEvery process in a tmux pane inherits TMUX and TMUX_PANE, so a one-shot\n`cc-candybar` run from Claude Code's Bash tool, under any session id, became\n\"the pane's session\": the status line released the pane to it and a bar pane\nfollowed it.\n\nThe client now reports its parent pid (for a statusline, Claude Code itself,\nmeasured on 2.1.299). The render checkpoint reads that process's own record,\n`<config dir>/sessions/<pid>.json`, the one the restart already reads, and\nstamps the request with the pane its session runs in: outside, runs, or\nunconfirmed with why. The status line's holds and the pane-session reply read\nonly that stamp, so namesPane is gone. Every render event records it as\n`pane=`, and while the status line or a bar pane is on, an unconfirmed session's\nbar carries a ⚠ that says why.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-667",
-      "ref": "refs/pull/667/merge",
-      "sha": "9140279bf05f301135fb6d37807cb87a5f776f6e",
-      "timestamp": "2026-11-07T01:34:27.107Z",
-      "commits": [
-        {
-          "sha": "9140279bf05f301135fb6d37807cb87a5f776f6e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:33:33Z",
-          "message": "Merge cd8e26b4ff14dc4af5df62a1584818e8c0d2e502 into 1806d3735da43b2aaeceb9ca12a48cce517d6201\n"
-        },
-        {
-          "sha": "cd8e26b4ff14dc4af5df62a1584818e8c0d2e502",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:27:28-07:00",
-          "message": "fix(config): a click's proof shares the render cache's installed layers and reads its home's disk (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the installed-layer memo its loads share; the render\n  cache lends its own through the verb context, so a click's proof checks no\n  plugin the bar's last load already checked. The memo keys on definition\n  text, so a lent memo serves no layer the borrower's disk does not hold.\n- presence() reads ENOTDIR as absent, as the stat it replaced did: a path\n  through a regular file holds nothing. The filesystem contract pins ENOTDIR.\n- A click reads its home's text and the layers above on the disk its proof\n  loads; config-file-store leaves FS_READERS.\n- The lane edge's fileExists asks the same disk as its presence.\n- stateFromLoad folds into loadFromDisk; keyLoad is module-private.\n"
-        },
-        {
-          "sha": "97eef3f912a48117db644a175cefe3d4266e6fdb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:33:52-07:00",
-          "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },

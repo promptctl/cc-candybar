@@ -61716,13 +61716,22 @@ function isDirectoryLink(reads, root, e) {
 // src/utils/git-root.ts
 init_globals();
 var import_node_path16 = __toESM(require_path_browserify(), 1);
-function holdsGit(reads, dir) {
+
+// src/utils/presence.ts
+init_globals();
+function presence(reads, path47) {
   try {
-    reads.statSync(import_node_path16.default.join(dir, ".git"));
-    return true;
-  } catch {
-    return false;
+    reads.statSync(path47);
+    return "present";
+  } catch (e) {
+    const code = e.code;
+    return code === "ENOENT" || code === "ENOTDIR" ? "absent" : { path: path47, error: e.message };
   }
+}
+
+// src/utils/git-root.ts
+function holdsGit(reads, dir) {
+  return presence(reads, import_node_path16.default.join(dir, ".git")) === "present";
 }
 function gitRootOf(reads, start) {
   let dir = import_node_path16.default.resolve(start);
@@ -61818,18 +61827,6 @@ function checkoutLocation(reads, dir) {
 // src/config/loader/discovery.ts
 init_globals();
 var import_node_path17 = __toESM(require_path_browserify(), 1);
-
-// src/utils/presence.ts
-init_globals();
-function presence(reads, path47) {
-  try {
-    reads.statSync(path47);
-    return "present";
-  } catch (e) {
-    const code = e.code;
-    return code === "ENOENT" || code === "ENOTDIR" ? "absent" : { path: path47, error: e.message };
-  }
-}
 
 // src/config/loader/repo-gate.ts
 init_globals();
@@ -61997,9 +61994,9 @@ function repoProject(reads, projectDir) {
 function userHome(locs, layers) {
   return layers.find((l) => isUserFile(locs, l.path))?.path ?? `${userConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`;
 }
-function durableConfig(reads, memo, locs, answers, projectDir, cwd2, configFile) {
+function durableConfig(disk, memo, locs, answers, projectDir, cwd2, configFile) {
   const resolved = resolveDslConfig(
-    reads,
+    disk,
     locs,
     answers,
     projectDir,
@@ -62013,7 +62010,7 @@ function durableConfig(reads, memo, locs, answers, projectDir, cwd2, configFile)
     repo: resolved.repos.plugins,
     cwd: cwd2 ?? null,
     locs,
-    reads,
+    disk,
     memo
   };
 }
@@ -64623,12 +64620,15 @@ function textOn3(reads, file) {
   }
 }
 function writeConfigText(file, text4, logger) {
+  writeOn(systemFilesystem, file, text4, logger);
+}
+function writeOn(disk, file, text4, logger) {
   try {
     if (text4 === null) {
-      systemFilesystem.rmSync(resolvedTarget(systemFilesystem, file));
+      disk.rmSync(resolvedTarget(disk, file));
       return;
     }
-    writeAtomic(file, text4);
+    writeAtomicOn(disk, file, text4);
   } catch (e) {
     const message = `config write failed (${file}): ${e.message}`;
     logger("error", message);
@@ -64788,7 +64788,7 @@ function commit2(store2, home, before, after, refuse4) {
   const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse4(home, was, will);
-  writeConfigText(home.path, after, store2.logger);
+  writeOn(home.disk, home.path, after, store2.logger);
   store2.record(home.path, before, after);
 }
 function refuseHidden(home, was, will) {
@@ -64828,7 +64828,7 @@ function loadedOrNull(home, text4) {
 }
 function chainOver(home, text4) {
   return loadConfigChain(
-    text4 === null ? home.reads : withText(home.reads, home.path, text4),
+    text4 === null ? home.disk : withText(home.disk, home.path, text4),
     home.memo,
     home.locs,
     text4 !== null ? [homeLayer(home.path), ...home.above] : home.above,
@@ -64896,7 +64896,7 @@ function refuseNewDrops(home, was, will) {
 }
 function readValue(home, key) {
   const target = requireValueTarget(key);
-  const doc = docOf(textOn3(home.reads, home.path) ?? "");
+  const doc = docOf(textOn3(home.disk, home.path) ?? "");
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
   return node !== void 0 && "value" in node ? node.value : void 0;
 }
@@ -64904,7 +64904,7 @@ function writeValues(store2, home, pairs2) {
   writeDrafts(store2, home, pairs2, []);
 }
 function writeDrafts(store2, home, pairs2, placements) {
-  const before = textOn3(home.reads, home.path);
+  const before = textOn3(home.disk, home.path);
   const valued = pairs2.reduce(
     (text4, [key, raw]) => setValue(
       text4,
@@ -64969,7 +64969,7 @@ function deleteAtPath(text4, path47) {
 }
 function deleteValues(store2, home, keys2) {
   const targets = keys2.map(requireTarget);
-  const before = textOn3(home.reads, home.path);
+  const before = textOn3(home.disk, home.path);
   if (before === null) return;
   const after = targets.reduce(
     (text4, target) => deleteAtPath(text4, resetPathOf(docOf(text4), target)),
@@ -64992,7 +64992,7 @@ function freePresetName(doc, home) {
       // all) — the editor refuses files the loader renders.
       ...home.above.flatMap(
         (l) => Object.keys(
-          import_json54.default.parse(home.reads.readFileSync(l.path)).presets ?? {}
+          import_json54.default.parse(home.disk.readFileSync(l.path)).presets ?? {}
         )
       )
     ].map(ident)
@@ -65003,7 +65003,7 @@ function freePresetName(doc, home) {
   ).find((candidate) => !taken2.has(ident(candidate)));
 }
 function writePreset(store2, home, from, globals, picks, placements) {
-  const before = textOn3(home.reads, home.path);
+  const before = textOn3(home.disk, home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc, home);
   const own2 = ["presets", name];
@@ -65041,7 +65041,7 @@ function writePreset(store2, home, from, globals, picks, placements) {
   return name;
 }
 function writeThemeDefault(store2, home, theme24, look) {
-  const before = textOn3(home.reads, home.path);
+  const before = textOn3(home.disk, home.path);
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme24],
@@ -65057,7 +65057,7 @@ function deletePreset(store2, home, name) {
     );
   }
   const own2 = ["presets", name];
-  const before = textOn3(home.reads, home.path);
+  const before = textOn3(home.disk, home.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own2) === void 0) {
     throw new BadVerbArgs(
@@ -65082,7 +65082,7 @@ function applyLayoutOp(store2, home, key, op) {
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = textOn3(home.reads, home.path);
+  const before = textOn3(home.disk, home.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const placement = homeOnly(
     home,
@@ -66025,12 +66025,7 @@ function repoConfigsPath(stateDir2) {
   return import_node_path22.default.join(repoConfigsDir(stateDir2), REPO_CONFIGS_FILE);
 }
 function bookIsFiled(reads, stateDir2) {
-  try {
-    reads.statSync(repoConfigsPath(stateDir2));
-    return true;
-  } catch (e) {
-    return e.code !== "ENOENT";
-  }
+  return presence(reads, repoConfigsPath(stateDir2)) !== "absent";
 }
 function readRepoAnswers(reads, stateDir2) {
   return readStateFile(
@@ -69633,7 +69628,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.6";
+var PACKAGE_VERSION = "1.208.7";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -76681,7 +76676,7 @@ var FrameFeeds = class {
     const feed2 = this.feeds.get(sessionId2);
     if (feed2 === void 0) return;
     feed2.woke[cause]++;
-    if (feed2.phase.kind !== "drawing")
+    if (feed2.phase.kind !== "rendering")
       feed2.wokeSince ??= this.deps.clock.monotonic();
     if (!this.hasten(feed2)) feed2.coalesced++;
   }
@@ -76821,7 +76816,7 @@ var FrameFeeds = class {
   // ever drawn further ahead of the wall than that, so nothing carries from
   // one frame to the next. Its moment on the monotonic clock is that instant's.
   draw(feed2, due) {
-    feed2.phase = { kind: "drawing" };
+    feed2.phase = { kind: "rendering" };
     const woke = feed2.wokeSince;
     feed2.wokeSince = null;
     const started2 = this.deps.clock.monotonic();
@@ -76854,6 +76849,7 @@ var FrameFeeds = class {
       feed2.phase = { kind: "waiting" };
       return;
     }
+    feed2.phase = { kind: "pushing" };
     feed2.lastStart = moment2;
     const finished = this.deps.clock.monotonic();
     if (woke !== null) {
@@ -76882,6 +76878,7 @@ var FrameFeeds = class {
   // costs. A frame step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
   // next change is Infinity, and an unseen bar's spacing is the still period.
+  // A wake while the frame went out may already have set the timer sooner.
   schedule(feed2, frame2, at) {
     const { moving, still } = this.deps.periods;
     const until2 = ((frame2?.bar.nextChange ?? Infinity) - at) * 1e3;
@@ -76904,27 +76901,31 @@ var FrameFeeds = class {
   // never later than it already falls due. Answers whether it moved anything:
   // a wake that did not was coalesced into a frame already due. Spaced on the
   // monotonic clock, so a wall clock stepped back cannot stall a wake.
-  // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
-  // turn and opens nothing, so a wake while it draws is the draw's own, and
-  // the frame reads what that moved: it is coalesced into that frame.
+  // [LAW:no-ambient-temporal-coupling] A frame renders in one synchronous
+  // turn and opens nothing, so a wake while it renders is the render's own,
+  // and the frame reads what that moved: it is coalesced into that frame. A
+  // wake after the render read its values is the next frame's.
   hasten(feed2) {
     const { phase } = feed2;
-    if (phase.kind === "drawing") return false;
+    if (phase.kind === "rendering") return false;
     const now2 = this.deps.clock.monotonic();
     const at = Math.max(now2, feed2.lastStart + this.spacingOf(feed2));
-    if (phase.kind === "due" && phase.at <= at) return false;
     const wall = this.deps.instant();
-    this.arm(feed2, wall + (at - now2) / 1e3, wall);
-    return true;
+    return this.arm(feed2, wall + (at - now2) / 1e3, wall);
   }
   // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
   // the wall instant `due`, in a later turn than the caller's however soon
   // that is. Its wait is measured from `wall`, the caller's own reading, so
   // the instant a caller set is never rebuilt from a second, truncated one;
-  // its monotonic due time is what a wake compares against.
+  // its monotonic due time is what a later caller compares against.
+  // [LAW:single-enforcer] The one rule that a timer is never set later than
+  // it already falls due. Answers whether it moved the timer.
   arm(feed2, due, wall) {
     const delay = Math.max(0, (due - wall) * 1e3);
-    this.setTimer(feed2, due, this.deps.clock.monotonic() + delay, delay);
+    const dueMoment = this.deps.clock.monotonic() + delay;
+    if (feed2.phase.kind === "due" && feed2.phase.at <= dueMoment) return false;
+    this.setTimer(feed2, due, dueMoment, delay);
+    return true;
   }
   setTimer(feed2, due, dueMoment, delay) {
     if (feed2.phase.kind === "due") feed2.phase.clear();
