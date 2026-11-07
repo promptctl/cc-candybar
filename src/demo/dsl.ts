@@ -37,6 +37,7 @@ import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
 import { processWorld, type World } from "../host.js";
+import { START_TIME_READ_BUDGET_MS } from "../daemon/process-fingerprint.js";
 import { heldClock } from "../held-clock.js";
 import { livePricing } from "../segments/pricing.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
@@ -137,7 +138,12 @@ function liveArm(): Arm {
   };
   // The demo's frames go to stdout, so stdout is the stream on the terminal.
   const hints = parseClientHints(
-    detectClientHints(machine.host, machine.parent(), cwd, process.stdout),
+    detectClientHints(
+      machine.host,
+      machine.parent(START_TIME_READ_BUDGET_MS),
+      cwd,
+      process.stdout,
+    ),
   );
   const watchers = new WatcherRegistry({
     filesystem: systemFilesystem,

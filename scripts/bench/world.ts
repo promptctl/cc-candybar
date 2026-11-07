@@ -18,6 +18,7 @@
 import { spawn } from "node:child_process";
 import { processWorld } from "../../src/host.js";
 import { homeOf } from "../../src/daemon/home.js";
+import { START_TIME_READ_BUDGET_MS } from "../../src/daemon/process-fingerprint.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -195,7 +196,7 @@ export async function startWorld(config = "{}\n"): Promise<World> {
   const home = homeOf(host);
   const client = { host, home, clock: machine.clock, dialer: machine.dialer };
   // Every client this world runs is run by this process, read once.
-  const parent = machine.parent();
+  const parent = machine.parent(START_TIME_READ_BUDGET_MS);
   const log = logPath(home);
 
   // The shipped daemon's own argv, heap cap included. A process group of its

@@ -126,10 +126,12 @@ export const LAUNCH_CATEGORIES = [
   "install.pbcopy",
   "install.open",
   "daemon-spawn",
-  // Process start-time fingerprint (`ps -o lstart=`) for socket-lease liveness
-  // (process-fingerprint.ts). Spawned only at daemon start, EADDRINUSE
-  // arbitration, and once per update act a daemon reads (src/daemon/update-act.ts)
-  // — never per render — so it needs no rate limit.
+  // Process start-time fingerprint (`ps -o lstart=`, process-fingerprint.ts):
+  // socket-lease liveness at daemon start, EADDRINUSE arbitration and once
+  // per update act a daemon reads (src/daemon/update-act.ts); a lane
+  // restart's read of its pane's Claude Code; and a Node client's read of the
+  // process that ran it, once per tick of its own process. None is per
+  // render in the daemon, so it needs no rate limit.
   "process-fingerprint",
   // The memory backstop's post-mortem memory attribution (memory-report.ts):
   // `footprint`/`vmmap` on the death path, once per breach, never per render.

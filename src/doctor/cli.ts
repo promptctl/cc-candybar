@@ -14,6 +14,7 @@
 // is one function either way.
 
 import type { Host, World } from "../host.js";
+import { START_TIME_READ_BUDGET_MS } from "../daemon/process-fingerprint.js";
 import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { daemonGates } from "../daemon/update-keys.js";
 import { locations, stateDir } from "../daemon/paths.js";
@@ -245,7 +246,7 @@ export async function doctorPlan(
     // that client (which the command's own redirects say nothing about).
     const hints = detectClientHints(
       { env, home: edge.home },
-      host.parent(),
+      host.parent(START_TIME_READ_BUDGET_MS),
       cwd,
       measureTerminal(),
     );

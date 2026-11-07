@@ -1,4 +1,9 @@
-import type { LaunchOpts, LaunchResult, Launcher } from "../proc/launch";
+import {
+  whyFailed,
+  type LaunchOpts,
+  type LaunchResult,
+  type Launcher,
+} from "../proc/launch";
 
 // ─── Process start-time fingerprint ──────────────────────────────────────────
 //
@@ -144,11 +149,9 @@ export function startTimeOf(res: LaunchResult): StartTimeRead {
     // mint an empty-string fingerprint; defer to kill.
     return { kind: "unavailable", detail: "ps produced no start-time" };
   }
-  const detail =
-    res.reason === "spawn-error"
-      ? (res.error ?? "ps spawn failed")
-      : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
+  // [LAW:single-enforcer] Said as the launcher says every failure: this is
+  // the why a client's unread start shows on the bar.
+  return { kind: "unavailable", detail: `ps ${whyFailed(res)}` };
 }
 
 // [LAW:effects-at-boundaries] What the daemon asks of the machine's process

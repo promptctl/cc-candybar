@@ -204,10 +204,10 @@ describe("processIdentityOf", () => {
   });
 
   test("a start that could not be read, or not in that form, is null and says why", () => {
-    expect(processIdentityOf(4242, { kind: "unavailable", detail: "ps timeout (exit null)" })).toEqual({
+    expect(processIdentityOf(4242, { kind: "unavailable", detail: "ps timed out after 0.05 s" })).toEqual({
       pid: 4242,
       startTime: null,
-      why: "ps timeout (exit null)",
+      why: "ps timed out after 0.05 s",
     });
     expect(processIdentityOf(4242, { kind: "start", token: "2026-11-06T02:12:23Z" })).toEqual({
       pid: 4242,

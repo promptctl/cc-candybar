@@ -37,12 +37,15 @@ export interface World {
   readonly launcher: OneShotLauncher;
   readonly clock: Timekeeper;
   readonly dialer: Dialer;
-  readonly parent: () => ParsedProcessIdentity;
+  // `budgetMs` is the caller's: a statusline tick has a connect's worth, a
+  // process that reads once for its whole life has a daemon read's.
+  readonly parent: (budgetMs: number) => ParsedProcessIdentity;
 }
 
-// The longest a client waits to learn when the process that ran it started:
-// a `ps`, on the client's own tick, so bounded like the connect it precedes.
-const PARENT_START_READ_BUDGET_MS = 50;
+// The longest a statusline tick waits to learn when the process that ran it
+// started: a `ps` before the connect, inside the tick's total budget, so
+// bounded like that connect (CONNECT_TIMEOUT_MS, src/daemon/protocol.ts).
+export const TICK_PARENT_START_BUDGET_MS = 50;
 
 // [LAW:single-enforcer] The one place src reads the process's environment, home
 // and temporary directory (besides the preload's own main, which runs apart
@@ -65,16 +68,15 @@ export function processWorld(): World {
     launcher,
     clock,
     dialer: systemDialer,
-    // [LAW:no-silent-failure] Bounded like a connect, so a slow `ps` costs
-    // a tick no more than a slow daemon would: one that runs out reads as a
-    // start not known, which the daemon says (src/daemon/session-pane.ts).
-    parent: () =>
+    // [LAW:no-silent-failure] Bounded by its caller, so a slow `ps` costs a
+    // tick no more than a slow daemon would: one that runs out reads as a
+    // start not known, with why, which the daemon says
+    // (src/daemon/session-pane.ts).
+    parent: (budgetMs) =>
       processIdentityOf(
         process.ppid,
         startTimeOf(
-          launcher.launchSync(
-            startTimeLaunch(process.ppid, PARENT_START_READ_BUDGET_MS),
-          ),
+          launcher.launchSync(startTimeLaunch(process.ppid, budgetMs)),
         ),
       ),
   };
