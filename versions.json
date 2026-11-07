@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-675",
+      "ref": "refs/pull/675/merge",
+      "sha": "393b8409167a124e8008716484e1d8a32a1cb65e",
+      "timestamp": "2026-11-07T08:53:23.965Z",
+      "commits": [
+        {
+          "sha": "393b8409167a124e8008716484e1d8a32a1cb65e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T08:52:34Z",
+          "message": "Merge d53301a2cd8b6afaf4ad94e622ea7e3f06227720 into f584545e1238fd69bdf373b0895cd40c18ab62a2\n"
+        },
+        {
+          "sha": "d53301a2cd8b6afaf4ad94e622ea7e3f06227720",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:51:58-07:00",
+          "message": "test(lanes): the pane-draw ticks take the daemon's reply, and a /clear's stragglers cross the race (candybar-gather-renderer-76bb.1dh.trm)\n\nHigh review of #675:\n- The straggler case could not fail: its ticks never crossed the race, so\n  a broken rewrite-race exemption passed. Its stragglers now land at 1s,\n  race-1s and race+2s after the new session's first tick.\n- Each tick goes through replyTo, with the home as the daemon passes it\n  and a deadline already due, instead of a hand copy of its render arm.\n- The session store is held by the journal turns; teardown closes the\n  host service, the turns and the store, as the daemon's does.\n- A tick that logs an error fails.\n- The messages are asserted by the facts that tell the stamps apart;\n  their wording is the unit test's.\n\nBreaking the exemption, the draw's run lookup, or its lasted check each\nfails a case. The shared in-worker draw-parts helper is .5hr.\n"
+        },
+        {
+          "sha": "64e0c157d136ae82bd6f95ac71fc30be2c8a7412",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:39:09-07:00",
+          "message": "test(lanes): a session's drawn bar carries its session-pane ⚠, through the draw a request takes (candybar-gather-renderer-76bb.1dh.trm)\n\nThe checkpoint stamps each tick from its Claude Code's record on the disk,\nthe request arm records the mismatch run in its turn, and the daemon's draw\nlists the ⚠; the list is read from the session's recording. An unconfirmed\nstamp and a lasted mismatch each list the session-pane message; a confirmed\ntick, a mismatch inside the race and a /clear straggler list none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-645",
       "ref": "refs/pull/645/merge",
       "sha": "13dfb857d1c935c02f06152ec688ac23bb7326fe",
@@ -34,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T11:56:58-07:00",
           "message": "feat(band): a switched-off band lane holds no follower process (candybar-animation-wbxz.w33)\n\nThe band mod stops its follow child on the daemon's SWITCHED_OFF answer\ninstead of keeping it alive to re-ask every 5s, and turning band (A) off\nuninstalls the mod so sessions started afterwards never load it. An\nuninstall of a mod that is not installed is the state off asks for, so it\nis said rather than thrown.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-675",
-      "ref": "refs/pull/675/merge",
-      "sha": "2c17ac4a05231ea0f82beaace8e40962643e5a50",
-      "timestamp": "2026-11-07T08:42:05.502Z",
-      "commits": [
-        {
-          "sha": "2c17ac4a05231ea0f82beaace8e40962643e5a50",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T08:41:08Z",
-          "message": "Merge 64e0c157d136ae82bd6f95ac71fc30be2c8a7412 into f584545e1238fd69bdf373b0895cd40c18ab62a2\n"
-        },
-        {
-          "sha": "64e0c157d136ae82bd6f95ac71fc30be2c8a7412",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:39:09-07:00",
-          "message": "test(lanes): a session's drawn bar carries its session-pane ⚠, through the draw a request takes (candybar-gather-renderer-76bb.1dh.trm)\n\nThe checkpoint stamps each tick from its Claude Code's record on the disk,\nthe request arm records the mismatch run in its turn, and the daemon's draw\nlists the ⚠; the list is read from the session's recording. An unconfirmed\nstamp and a lasted mismatch each list the session-pane message; a confirmed\ntick, a mismatch inside the race and a /clear straggler list none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
