@@ -51,6 +51,12 @@ export interface Watch {
 }
 
 export interface Filesystem {
+  // [LAW:types-are-the-program] What one directory watch subscribes to,
+  // however shallow it asks to be: the directory alone (Linux's inotify), or
+  // every file event in the tree beneath it (macOS's FSEvents, which has no
+  // depth; libuv drops the deeper events only after fseventsd has routed each
+  // one to the process).
+  readonly watchReach: "directory" | "tree";
   statSync(path: string): Stat;
   lstatSync(path: string): Stat;
   readlinkSync(path: string): string;

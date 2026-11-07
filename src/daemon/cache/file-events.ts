@@ -192,7 +192,10 @@ export class FileEventDelivery {
       // [LAW:single-enforcer] The only acquirer of this registry key.
       handle: this.watchers.acquire(
         `file-events:${folder}`,
-        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
+        // [LAW:one-source-of-truth] Every child of a folder of its own: a
+        // watch for a named entry may be polled, and the probe measures the
+        // OS's delivery, which only an OS watch rides.
+        { dirs: [{ path: folder }] },
         (heard) => this.heard(probing, heard),
       ),
     };

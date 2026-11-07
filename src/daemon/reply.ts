@@ -383,6 +383,7 @@ export async function replyTo(
         linkIds: parts.linkIds.stats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
+        dirsPolled: watcherRegistry.polledDirs(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
         clients: renderSightings.list(instantOf(new Date(clock.now()))),
