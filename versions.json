@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-680",
+      "ref": "refs/pull/680/merge",
+      "sha": "41dadca3fec2d691884ce65ebb881d8b55c25d25",
+      "timestamp": "2026-11-07T11:17:15.371Z",
+      "commits": [
+        {
+          "sha": "41dadca3fec2d691884ce65ebb881d8b55c25d25",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:16:26Z",
+          "message": "Merge f848db993dac0e223e5a79cce5c9f4714c10f794 into f92fb0e65423da82e8e6030b5d393e6c9369d852\n"
+        },
+        {
+          "sha": "f848db993dac0e223e5a79cce5c9f4714c10f794",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:10:21-07:00",
+          "message": "refactor(update-act): the spend file stages through stagedPath (brandon-unfiled-3248.9eu3)\n\nCloses brandon-unfiled-3248.9gmz: with wkh1 on main, the spend's staging\nname is the one spelling every writer uses, unique per write.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "9023d18c890d790d1e8dba2507aeea81d2e7fb3b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:41:44-07:00",
+          "message": "fix(update-act): a gap the loop could not have run spends nothing, and an unreadable spend restarts loudly (brandon-unfiled-3248.9eu3)\n\nA clamped gap charged every dark wake the cap, so a weekend's wakes still\nspent the budget; a gap longer than five polls now counts 0. A spend this\nversion can't read held the act unbounded while it held every restart;\nit is now replaced by one counted from that look and reported. A failed\nstage or rename removes its staged file.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "0f35fc5d1ae44635d375a110436a52813bb64a83",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:25:17-07:00",
+          "message": "fix(update-act): a look stages its spend in the act's own directory, never making one (brandon-unfiled-3248.9eu3)\n\nwriteAtomic made the act's directory when a newer claim had pruned it,\nflushed every 2 s look on the render loop, and staged at a name shared by\nevery daemon. A look now stages at a pid-named file inside the act and\nrenames it, unflushed: an act gone under the look spends nothing. The\nconcurrent-writer safety no longer waits on writeAtomic's staging change.\nReverts a formatter reflow of test/update-act.test.ts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "700f1c7580ebdd29db9efbfda6e322ee3021a497",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:09:19-07:00",
+          "message": "fix(update-act): a look spends at most five polls, and a spend it can't read is an error (brandon-unfiled-3248.9eu3)\n\nA dark wake mid-sleep spent the 60 s cap, so forty of them overnight ended\nthe act and could tear the bundle; the cap now follows the poll interval,\nin the watch that owns both. awake.json is parsed: a missing number read\nas NaN, compared past the budget and ended a running build. Corrects the\nrace comment: concurrent looks lose nothing.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "bf7bfd01a26d80a26c1f56ef0eec5e0c293606bb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:56:43-07:00",
+          "message": "fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3)\n\nThe update act was ended once the wall clock passed the deadline in its\nrecord. Wall time runs while the machine sleeps, so closing the lid mid-build\nfor longer than ten minutes signalled the build's group at the first tick\nafter wake, possibly mid-write, which tears the bundle.\n\nThe budget is now spent in observed time: each tick that finds the act's group\nalive adds the span since the last look, whichever daemon took it, capped at\n60 s, into the act's awake.json, and the act ends once that passes ten\nminutes. A sleep of any length spends at most the cap, a clock set back spends\nnothing, and daemons looking in turn or restarting mid-act share one budget.\nThe record keeps its deadline for older daemons reading the same acts during\nan update.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-687",
       "ref": "refs/pull/687/merge",
       "sha": "60888e32e0da9c681a49dfc03036ae1ea4b5ea90",
@@ -42,56 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:41:20-07:00",
           "message": "fix(watchers): a storage folder's fault clears when its watch or stat recovers (brandon-unfiled-3248.tvhj)\n\nA refused or erroring watch, and a stat that failed during a judgment, are\nno longer terminal health. Each generation's fault is derived (unusable,\nthen the handle's deafness, then the last stat failure) and logged and\ncounted on a start, change or clear, so the registry's period reopen and the\nowner's period judgment clear it in the same generation. Deafness is\ncompared only when a window closes and at opening, so the result holds in\neither subscription order.\n\nThe registry's reopen now tells a failed window when a deaf directory ends\ndeaf another way (an error then a refusal, a refusal whose reason changes),\nreusing the comparison its refusal log already makes.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-680",
-      "ref": "refs/pull/680/merge",
-      "sha": "348f623b5ed9972645a815c246f2088bda72406d",
-      "timestamp": "2026-11-07T11:11:42.743Z",
-      "commits": [
-        {
-          "sha": "348f623b5ed9972645a815c246f2088bda72406d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:10:41Z",
-          "message": "Merge 1f37e0f8cc539ee5d5c4565158c586e1a95d4d6d into 3bc07edfbe9d321a6fea2f6a74c80414ed0ef5e7\n"
-        },
-        {
-          "sha": "1f37e0f8cc539ee5d5c4565158c586e1a95d4d6d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:10:21-07:00",
-          "message": "refactor(update-act): the spend file stages through stagedPath (brandon-unfiled-3248.9eu3)\n\nCloses brandon-unfiled-3248.9gmz: with wkh1 on main, the spend's staging\nname is the one spelling every writer uses, unique per write.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "9c068212807c9db088fcfcb4f1140840f1a2d9a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:41:44-07:00",
-          "message": "fix(update-act): a gap the loop could not have run spends nothing, and an unreadable spend restarts loudly (brandon-unfiled-3248.9eu3)\n\nA clamped gap charged every dark wake the cap, so a weekend's wakes still\nspent the budget; a gap longer than five polls now counts 0. A spend this\nversion can't read held the act unbounded while it held every restart;\nit is now replaced by one counted from that look and reported. A failed\nstage or rename removes its staged file.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "73ee1f639dc406fd3144b162e3f79b4f61798ee7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:25:17-07:00",
-          "message": "fix(update-act): a look stages its spend in the act's own directory, never making one (brandon-unfiled-3248.9eu3)\n\nwriteAtomic made the act's directory when a newer claim had pruned it,\nflushed every 2 s look on the render loop, and staged at a name shared by\nevery daemon. A look now stages at a pid-named file inside the act and\nrenames it, unflushed: an act gone under the look spends nothing. The\nconcurrent-writer safety no longer waits on writeAtomic's staging change.\nReverts a formatter reflow of test/update-act.test.ts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "609e5c9e9a0223f2cf92ed67f87100ab1b873d6e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:09:19-07:00",
-          "message": "fix(update-act): a look spends at most five polls, and a spend it can't read is an error (brandon-unfiled-3248.9eu3)\n\nA dark wake mid-sleep spent the 60 s cap, so forty of them overnight ended\nthe act and could tear the bundle; the cap now follows the poll interval,\nin the watch that owns both. awake.json is parsed: a missing number read\nas NaN, compared past the budget and ended a running build. Corrects the\nrace comment: concurrent looks lose nothing.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "f1d2b69a81a49f9489837e28367cfe89b1731147",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:56:43-07:00",
-          "message": "fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3)\n\nThe update act was ended once the wall clock passed the deadline in its\nrecord. Wall time runs while the machine sleeps, so closing the lid mid-build\nfor longer than ten minutes signalled the build's group at the first tick\nafter wake, possibly mid-write, which tears the bundle.\n\nThe budget is now spent in observed time: each tick that finds the act's group\nalive adds the span since the last look, whichever daemon took it, capped at\n60 s, into the act's awake.json, and the act ends once that passes ten\nminutes. A sleep of any length spends at most the cap, a clock set back spends\nnothing, and daemons looking in turn or restarting mid-act share one budget.\nThe record keeps its deadline for older daemons reading the same acts during\nan update.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
