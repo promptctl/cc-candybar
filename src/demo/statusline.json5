@@ -16,16 +16,16 @@
   // ── Variables: where each segment's data comes from ──────────────────────
   // Every `kind` maps to one runtime source. Templates reference these by name
   // with a leading dot (`.user`, `.cwd`, …). A referenced-but-undeclared name
-  // is a load-time error, not a silent blank.
+  // is a load-time error, not a silent blank. This file merges over the bundled
+  // default, so the default's variables (`.model.display_name`, `.session.id`)
+  // are readable here too, and `root` below places the default's `sessionId`
+  // segment beside this file's own.
   variables: {
     // input — pulled from the JSON payload Claude Code sends each render tick.
     user: { kind: "input", path: "host.user", default: "anon" },
     cwd: { kind: "input", path: "workspace.current_dir", default: "?" },
-    model: { kind: "input", path: "model.display_name", default: "" },
-    session: { kind: "input", path: "session_id", default: "" },
 
     // template — derived from other vars; recomputed reactively when they move.
-    sid: { kind: "template", template: "{{ trunc 8 .session }}" },
     here: { kind: "template", template: "{{ basename .cwd }}" },
 
     // shell — run a command, cache the result for a TTL window. Populates
@@ -48,38 +48,35 @@
   // `bg`/`fg` are palette spec strings, and either may also be a template
   // that computes a color — `fg: '{{ contrastOn (bgOf) }}'` below picks
   // black or white, whichever is readable against this segment's own
-  // background. `when` hides a segment when it evaluates false.
+  // background. `when` hides a segment when it evaluates false. A template
+  // draws content only: the layout pads every cell, so a space written at
+  // either end is drawn beside that padding.
   segments: {
     user: {
-      template: " {{ .user }} ",
+      template: "{{ .user }}",
       bg: "primary",
       fg: "{{ contrastOn (bgOf) }}",
     },
     directory: {
-      template: " {{ .here }} ",
+      template: "{{ .here }}",
       bg: "surface",
       fg: "foreground",
     },
     branch: {
-      template: " {{ .branch }} ",
+      template: "{{ .branch }}",
       bg: "accent",
       fg: "{{ contrastOn (bgOf) }}",
       when: '{{ ne .branch "" }}', // hidden entirely outside a git repo
       palette: "gruvbox", // this segment pulls its OWN palette (per-segment switch)
     },
     model: {
-      template: " {{ .model }} ",
+      template: "{{ .model.display_name }}",
       bg: "secondary",
       fg: "{{ contrastOn (bgOf) }}",
-      when: '{{ ne .model "" }}',
-    },
-    session: {
-      template: " ⌗{{ .sid }} ",
-      bg: "surface",
-      fg: "foreground",
+      when: '{{ ne .model.display_name "" }}',
     },
     clock: {
-      template: " {{ .clock }} ",
+      template: "{{ .clock }}",
       bg: "primary",
       fg: "{{ contrastOn (bgOf) }}",
     },
@@ -88,5 +85,5 @@
   // ── Layout: Option A shape grammar — one horizontal row of segment refs.
   // { v: [...] } for multiple rows; { h: ['a', 'b'], when: '...' } for a gated row;
   // bare string 'segname' for a single segment ref.
-  root: { h: ["user", "directory", "branch", "model", "session", "clock"] },
+  root: { h: ["user", "directory", "branch", "model", "sessionId", "clock"] },
 }
