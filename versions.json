@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-678",
+      "ref": "refs/pull/678/merge",
+      "sha": "e3f95026a8bca9990f708ef11b262e90e56f73c5",
+      "timestamp": "2026-11-07T09:41:38.409Z",
+      "commits": [
+        {
+          "sha": "e3f95026a8bca9990f708ef11b262e90e56f73c5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:40:32-07:00",
+          "message": "Merge addbedc036ff4484d1f2ef4845a257c47aae91b9 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
+        },
+        {
+          "sha": "addbedc036ff4484d1f2ef4845a257c47aae91b9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:40:04-07:00",
+          "message": "fix(state): concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1)\n\nTwo processes sharing a state directory both staged a write at\n`<file>.tmp`, so one's rename published or moved the other's bytes and\nthe other's rename failed ENOENT. Every staged name now carries the\nwriting process's pid, spelled once by `stagedPath` in\nsrc/utils/atomic-write.ts: writeAtomic, both session-state-file stages\nand the socket lease use it. The fork-bomb breaker stages by an\ninjected identity's pid and is left as it is.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-677",
       "ref": "refs/pull/677/merge",
       "sha": "d2d523a584ba99ab266e1574d376f9fcbeb2ac89",
