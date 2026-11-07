@@ -26,7 +26,9 @@ as rows of styled runs, which the mod draws as `Text` runs and `Link`s. The
 child relays them, at about 2 MB RSS. The band shows nothing until the session's
 statusline has rendered once, and nothing while lane A's toggle is off: turn on
 `🧪 band (A)` in the settings menu's `⚙ config › 🧪 toggles` (a draft until `💾 save`),
-or set `globals.experimentalBand: true` in the config file. A line the band
+or set `globals.experimentalBand: true` in the config file. While the toggle is
+off the mod keeps no child: the daemon's refusal ends it, and the mod asks again
+at the session's next prompt, start or `/clear`. A line the band
 cannot draw — the daemon from a different build than the mod — is said above
 the band.
 

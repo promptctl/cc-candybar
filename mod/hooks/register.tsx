@@ -21,8 +21,10 @@ const bandAtom = atom(bandRef, { frame: null, failure: null })
 type Child = { sessionId: string; stop: () => void }
 
 // [LAW:single-enforcer] One owner of the child: `follow` starts the one the
-// session calls for and stops any other. A reload starts these over; the
-// engine kills the old module's child with it.
+// session calls for and stops any other, and a child that ended on its own
+// (the lane off, an exit) empties the slot it holds, so the next follow asks
+// again. A reload starts these over; the engine kills the old module's child
+// with it.
 let child: Child | null = null
 
 // [LAW:one-source-of-truth] The band names the session and nothing else: its
@@ -33,7 +35,10 @@ async function followNow($: EngineInterface) {
     const sessionId = await $.session.id()
     if (child?.sessionId === sessionId) return
     child?.stop()
-    child = start($, sessionId)
+    const started: Child = start($, sessionId, () => {
+      if (child === started) child = null
+    })
+    child = started
   } catch (error) {
     // [LAW:no-silent-failure] A band that cannot follow its session says so.
     $.ui.log(`candybar-band: following the session failed: ${String(error)}`, { to: 'debug' })
@@ -67,6 +72,15 @@ export const register: Register = on => {
     const result = await next(e)
     $.clock.after(0, () => void follow($))
     return result
+  })
+
+  // A band whose child ended (its lane off, an exit) holds none, so it asks
+  // again as the person works: the lane comes back on by a click in any
+  // session, a save, a `cd` or a hand edit, and the band follows by the next
+  // prompt.
+  on('prompt.submit', async ($, e, next) => {
+    void follow($)
+    return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -156,7 +170,7 @@ function parseBandLine(text: string): { readonly line: BandLine } | { readonly u
 
 // The child is the native client of the checkout this mod sits in: `<repo>/mod`
 // beside `<repo>/bin/cc-candybar-native`, built by `just install-rust`.
-function start($: EngineInterface, sessionId: string): Child {
+function start($: EngineInterface, sessionId: string, release: () => void): Child {
   // A new session's band starts empty: the last frame is another session's,
   // its links that session's.
   void $.state.set(bandRef, { frame: null, failure: null })
@@ -173,7 +187,10 @@ function start($: EngineInterface, sessionId: string): Child {
     let said = ''
     const partial = { stdout: '', stderr: '' }
     const draw = (failure: string | null) => $.state.set(bandRef, { frame, failure })
-    let ended: { readonly log: string; readonly says: string }
+    // How the child ended: what the debug log says, what stands above the
+    // band, and whether the child is known gone, so the session is free to
+    // follow again.
+    let ended: { readonly log: string; readonly failure: string | null; readonly gone: boolean } | null = null
     try {
       for await (const { stream: pipe, text } of stream) {
         if (stopped) break
@@ -201,27 +218,44 @@ function start($: EngineInterface, sessionId: string): Child {
           await draw(parsed.unreadable)
           continue
         }
-        const next = parsed.line
-        // [LAW:no-silent-failure] A band switched off draws nothing, so the
-        // debug log says why it is blank, once each time it goes off.
-        if (!next.ok && frame?.ok !== false)
-          $.ui.log(`candybar-band: lane A is off for ${sessionId}: ${next.error}`, { to: 'debug' })
-        frame = next
+        frame = parsed.line
+        // A lane switched off holds no process: the child would only ask the
+        // daemon again every few seconds for as long as the session runs.
+        // Leaving the loop returns the stream, which kills the child; a kill
+        // that fails throws here instead.
+        if (!frame.ok) {
+          ended = { log: `not following: lane A is off (${frame.error})`, failure: null, gone: true }
+          break
+        }
         await draw(null)
       }
-      const { code, signal } = await stream.result
-      const how = signal ?? `exit ${code}`
-      ended = { log: `ended (${how})`, says: `frames stopped (${how}) ${said}` }
+      if (ended === null) {
+        const { code, signal } = await stream.result
+        const how = signal ?? `exit ${code}`
+        ended = { log: `ended (${how})`, failure: `candybar: frames stopped (${how}) ${said}`, gone: true }
+      } else {
+        // [LAW:no-ambient-temporal-coupling] Its `result` is no end of the
+        // child's, so nothing waits on it: the engine's contract rejects it
+        // for a stream closed early, and Claude Code 2.1.299 settles it with
+        // nothing. [LAW:no-silent-failure] exception: that rejection is the
+        // contract's answer to the close, no fact about the child; a kill
+        // that failed threw at the break.
+        stream.result.catch(() => undefined)
+      }
     } catch (error) {
-      ended = { log: `failed: ${String(error)}`, says: `frames failed: ${String(error)}` }
+      // The stream failed, or a kill did: the child may still be running, so
+      // the session keeps it and starts no second one beside it.
+      ended = { log: `failed: ${String(error)}`, failure: `candybar: frames failed: ${String(error)}`, gone: false }
     }
     // [LAW:no-ambient-temporal-coupling] A child the band stopped ended as
     // asked, whenever the stop landed, and its stream's `result` is no end of
-    // the child's: the engine's contract rejects it for a stream closed early,
-    // and Claude Code 2.1.299 settles it with nothing.
+    // the child's.
     if (stopped) return
+    // [LAW:no-silent-failure] The debug log says why the band is blank, and a
+    // child that failed says so above it until the next follow answers it.
     $.ui.log(`candybar-band: frames for ${sessionId} ${ended.log}`, { to: 'debug' })
-    await draw(`candybar: ${ended.says}`)
+    if (ended.gone) release()
+    await draw(ended.failure)
   })().catch(error => {
     // [LAW:no-silent-failure] The band could not even say why its child
     // ended: the engine refused the write, as it does once a reload has
