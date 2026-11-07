@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-689",
+      "ref": "refs/pull/689/merge",
+      "sha": "6a8821155d72af86c405ff22320d302062877a31",
+      "timestamp": "2026-11-07T12:24:15.765Z",
+      "commits": [
+        {
+          "sha": "6a8821155d72af86c405ff22320d302062877a31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T12:22:31Z",
+          "message": "Merge 848c0b4f129556d6cdf0cb29ec2fac1123f3eeb0 into e5b0fe5cb0e0b514bcdc61157f7356ddfffc2b6b\n"
+        },
+        {
+          "sha": "848c0b4f129556d6cdf0cb29ec2fac1123f3eeb0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:58:57-07:00",
+          "message": "fix(daemon): a subscription the feed took after the connection moved on is ended, not dropped (brandon-unfiled-3248.df7i)\n\nThe subscribed cell unsubscribes from every state but answering, so the\ntable no longer depends on nothing interleaving with the feed's\nsubscribe. The connection builds a reply event through reply.ts's\nreplied, and the clientLeft comment says when a url frame's writer\ncounts as present.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "0986d5217e8e1666dcf414ca215fe6d95bc37145",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:50:24-07:00",
+          "message": "fix(daemon): a frame handler's synchronous throw is answered RENDER_FAILED, never an exception out of the socket's read (brandon-unfiled-3248.df7i)\n\nThe connection's frame handling runs inside one promise started in the\nread's turn, so a throw before its first await takes the handler-threw\npath. readOneFrame raising onFrame's throw would otherwise end the shared\ndaemon through uncaughtException.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "8b12af0e80ab9850e011ee0483778d185a4735bb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:44:06-07:00",
+          "message": "fix(daemon): a url frame read past the deadline stays unattended, a socket error is the peer leaving, and a frame handler's throw is heard (brandon-unfiled-3248.df7i)\n\n- The read carries who waits in every state: a url frame read after the\n  backstop answered is unattended and lapsed, so its forwarder's hang-up\n  no longer leaves in-flight or reads as a client gone mid-click.\n- A socket error moves the state to closed, so a click whose turn falls\n  between the destroy and the 'close' sees its client gone.\n- readOneFrame delivers its first outcome outside the reader's parse, so a\n  throw from onFrame reaches the stream instead of being dropped as a\n  second parse failure.\n- The connection uses reply.ts's stay-up reply instead of a copy.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "60a01f24a2c529b2d49af09e3c0c1f5e84950477",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:30:53-07:00",
+          "message": "fix(daemon): a connection's state is one value, and past waiting it reads no more frames (brandon-unfiled-3248.df7i)\n\nA connection's lifecycle is one state (awaiting, answering, unattended,\nanswered, held, streaming, closed) moved by one pure transition table; the\nconnection only performs the effects a step names. In-flight and the\nbackstop are columns of the table, so each moves once, on crossing its line.\n\nA connection reads exactly one frame: a second frame, a frame after the\nanswer, and the bytes behind an over-cap header or unparseable frame are\nnever handled or buffered. A reply that cannot be encoded is answered\nRENDER_FAILED and ends the stream, its exit still sequenced on that flush.\nA dropped exit's warning names its one cause: the client was told TIMEOUT.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-694",
       "ref": "refs/pull/694/merge",
       "sha": "52a77fd3f30e6d623f77bd5700ef0ef2a677118a",
@@ -86,49 +129,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:14:46-07:00",
           "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-689",
-      "ref": "refs/pull/689/merge",
-      "sha": "d3226a82a5209619e4b1de34bb1e5d0a94c61b43",
-      "timestamp": "2026-11-07T12:15:54.901Z",
-      "commits": [
-        {
-          "sha": "d3226a82a5209619e4b1de34bb1e5d0a94c61b43",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:15:01Z",
-          "message": "Merge e86cfa1cbc55321294878a75c0d3cc1fb9a2a6ee into 06ac017c63f4be865a8f33c02e0612d2eebddab5\n"
-        },
-        {
-          "sha": "e86cfa1cbc55321294878a75c0d3cc1fb9a2a6ee",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:58:57-07:00",
-          "message": "fix(daemon): a subscription the feed took after the connection moved on is ended, not dropped (brandon-unfiled-3248.df7i)\n\nThe subscribed cell unsubscribes from every state but answering, so the\ntable no longer depends on nothing interleaving with the feed's\nsubscribe. The connection builds a reply event through reply.ts's\nreplied, and the clientLeft comment says when a url frame's writer\ncounts as present.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "decaaad62f25dca555806570a1603f6cfd4611b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:50:24-07:00",
-          "message": "fix(daemon): a frame handler's synchronous throw is answered RENDER_FAILED, never an exception out of the socket's read (brandon-unfiled-3248.df7i)\n\nThe connection's frame handling runs inside one promise started in the\nread's turn, so a throw before its first await takes the handler-threw\npath. readOneFrame raising onFrame's throw would otherwise end the shared\ndaemon through uncaughtException.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "ba7d45e973b8c37917c05f7c5e76ac15a232199c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:44:06-07:00",
-          "message": "fix(daemon): a url frame read past the deadline stays unattended, a socket error is the peer leaving, and a frame handler's throw is heard (brandon-unfiled-3248.df7i)\n\n- The read carries who waits in every state: a url frame read after the\n  backstop answered is unattended and lapsed, so its forwarder's hang-up\n  no longer leaves in-flight or reads as a client gone mid-click.\n- A socket error moves the state to closed, so a click whose turn falls\n  between the destroy and the 'close' sees its client gone.\n- readOneFrame delivers its first outcome outside the reader's parse, so a\n  throw from onFrame reaches the stream instead of being dropped as a\n  second parse failure.\n- The connection uses reply.ts's stay-up reply instead of a copy.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "ab62e90096acb8776c443286973dcf6fa8222402",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:30:53-07:00",
-          "message": "fix(daemon): a connection's state is one value, and past waiting it reads no more frames (brandon-unfiled-3248.df7i)\n\nA connection's lifecycle is one state (awaiting, answering, unattended,\nanswered, held, streaming, closed) moved by one pure transition table; the\nconnection only performs the effects a step names. In-flight and the\nbackstop are columns of the table, so each moves once, on crossing its line.\n\nA connection reads exactly one frame: a second frame, a frame after the\nanswer, and the bytes behind an over-cap header or unparseable frame are\nnever handled or buffered. A reply that cannot be encoded is answered\nRENDER_FAILED and ends the stream, its exit still sequenced on that flush.\nA dropped exit's warning names its one cause: the client was told TIMEOUT.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
