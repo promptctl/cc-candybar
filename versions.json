@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-694",
+      "ref": "refs/pull/694/merge",
+      "sha": "38bf27caeda9f68d810e7464cfabdaf48a9a9292",
+      "timestamp": "2026-11-07T12:20:59.083Z",
+      "commits": [
+        {
+          "sha": "38bf27caeda9f68d810e7464cfabdaf48a9a9292",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:19:44-07:00",
+          "message": "Merge b0e963e58ad9f07d017ad78692a19484bfda09f7 into 06ac017c63f4be865a8f33c02e0612d2eebddab5\n"
+        },
+        {
+          "sha": "b0e963e58ad9f07d017ad78692a19484bfda09f7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:19:15-07:00",
+          "message": "fix(update-act): an act whose files can't be written is still ended after its budget (brandon-unfiled-3248.7cay)\n\nA look now judges its spend before it reports a write it could not make:\nspendLook returns the spend and its fault instead of throwing, and counts\non from the later of the act's files and this daemon's own last look of\nthe same job (the reader's job identity decides \"same job\"). endJob\nsignals the group even when its timeout verdict can't be written, as a\nnew `unrecorded` arm of JobEnding, and the watch keeps why it ended that\nact so the warning still says so once the group is gone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-693",
       "ref": "refs/pull/693/merge",
       "sha": "3843cf8b9b522b07d2471f73b65bddab963d37db",
