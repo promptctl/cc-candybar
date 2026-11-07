@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-693",
+      "ref": "refs/pull/693/merge",
+      "sha": "064cd754df8ebfda3b155bd60bca657c6d11d68f",
+      "timestamp": "2026-11-07T12:35:10.947Z",
+      "commits": [
+        {
+          "sha": "064cd754df8ebfda3b155bd60bca657c6d11d68f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T12:34:14Z",
+          "message": "Merge d58dd3af1b13c8f923f6c452b6fba1720c81cc00 into b21e989ab734befd8acc182d17139d743372d040\n"
+        },
+        {
+          "sha": "d58dd3af1b13c8f923f6c452b6fba1720c81cc00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:34:00-07:00",
+          "message": "fix(watchers): the daemon probes birth time at boot, in its state directory, and builds its disk over the verdict (brandon-unfiled-3248.0463)\n\nThe probe ran ambiently on any process's first stat, on the real clock and\nin the spawning shell's TMPDIR, behind two disabled lint rules. A process\nmain now probes once with its own clock in a folder it owns, logs the\nverdict (warn when unprobed), and hands the daemon a disk built over it; no\nCLI process or client tick pays for a probe. Jest's global hooks resolve a\n`.js` specifier to its TypeScript source as a test's registry does, so src\nkeeps one import spelling.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "36848c09d445bf8d7a1ce702698f8c157d6233c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:17:14-07:00",
+          "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-694",
       "ref": "refs/pull/694/merge",
       "sha": "b339f085c6a633c95014e79f98ce023142583e6a",
@@ -93,28 +122,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:24:50-07:00",
           "message": "fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (brandon-unfiled-3248.5bfl)\n\nEdit chrome spelled every insert slot, removal, configure entry, draft\nvariable and setting control from one walk counter shared over the preset\ntree, so adding, removing or moving a placement shifted the name of every\ncontrol after it, and an open + library, its page cursor or an open\nconfigure list landed on a neighbour after the reload. Every name is now\nspelled from the placement it serves through chromeIdent, an injective\nbase-36 spelling of the id that is a fixed point of ident, and the counter\nis gone.\n\nThe default-menu bytes snapshot regenerates for the new link names; its\nplain text is unchanged.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-693",
-      "ref": "refs/pull/693/merge",
-      "sha": "3843cf8b9b522b07d2471f73b65bddab963d37db",
-      "timestamp": "2026-11-07T12:20:41.128Z",
-      "commits": [
-        {
-          "sha": "3843cf8b9b522b07d2471f73b65bddab963d37db",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:18:34Z",
-          "message": "Merge 36848c09d445bf8d7a1ce702698f8c157d6233c0 into 06ac017c63f4be865a8f33c02e0612d2eebddab5\n"
-        },
-        {
-          "sha": "36848c09d445bf8d7a1ce702698f8c157d6233c0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:17:14-07:00",
-          "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },

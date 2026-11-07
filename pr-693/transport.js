@@ -52064,7 +52064,6 @@ var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open
 
 // src/disk/system-filesystem.ts
 init_globals();
-init_os();
 var import_node_path3 = __toESM(require_path_browserify(), 1);
 
 // src/disk/birthtime-probe.ts
@@ -52089,46 +52088,45 @@ var probeBirthtime = (steps2, clock) => {
       steps2.remove(folder);
     }
   } catch (e) {
-    return { kind: "unprobed", reason: e.message };
+    return {
+      kind: "unprobed",
+      reason: e instanceof Error ? e.message : String(e)
+    };
   }
 };
-var birthtimeOf = (verdict2, birthtimeNs) => verdict2.kind === "ctime" || birthtimeNs === 0n ? null : birthtimeNs;
+var birthtimeOf = (verdict, birthtimeNs) => verdict.kind === "ctime" || birthtimeNs === 0n ? null : birthtimeNs;
 
 // src/disk/system-filesystem.ts
 var kindOf = (st) => st.isSymbolicLink() ? "symlink" : st.isDirectory() ? "directory" : st.isFile() ? "file" : "other";
-var verdict;
-var birthtimeVerdict = () => verdict ??= probeBirthtime(
+var probeBirthtimeIn = (parent, clock) => probeBirthtime(
   {
-    makeFolder: () => (
-      // eslint-disable-next-line no-restricted-properties -- the exception at the clock's import
-      fs_default.mkdtempSync(import_node_path3.default.join(os_default.tmpdir(), "cc-candybar-birthtime-"))
-    ),
+    makeFolder: () => fs_default.mkdtempSync(import_node_path3.default.join(parent, "birthtime-")),
     stat: (at) => fs_default.statSync(at, { bigint: true }),
     // A chmod writes the folder's metadata, which moves its ctime and
     // nothing else.
     touch: (at) => fs_default.chmodSync(at, 448),
     remove: (at) => fs_default.rmdirSync(at)
   },
-  systemTimekeeper
+  clock
 );
-var statOf = (st) => ({
+var statOf = (birthtime, st) => ({
   kind: kindOf(st),
   size: Number(st.size),
   mtimeMs: Number(st.mtimeNs) / 1e6,
   mode: Number(st.mode),
   dev: st.dev,
   ino: st.ino,
-  birthtimeNs: birthtimeOf(birthtimeVerdict(), st.birthtimeNs)
+  birthtimeNs: birthtimeOf(birthtime, st.birthtimeNs)
 });
-var systemFilesystem = {
-  statSync: (p2) => statOf(fs_default.statSync(p2, { bigint: true })),
-  lstatSync: (p2) => statOf(fs_default.lstatSync(p2, { bigint: true })),
+var systemFilesystemFor = (birthtime) => ({
+  statSync: (p2) => statOf(birthtime, fs_default.statSync(p2, { bigint: true })),
+  lstatSync: (p2) => statOf(birthtime, fs_default.lstatSync(p2, { bigint: true })),
   readlinkSync: (p2) => fs_default.readlinkSync(p2),
   // The native realpath: the spelling the disk holds, letter case included.
   realpathSync: (p2) => fs_default.realpathSync.native(p2),
   mkdirSync: (p2) => void fs_default.mkdirSync(p2, { recursive: true }),
   opendirSync: (p2) => fs_default.opendirSync(p2).closeSync(),
-  stat: async (p2) => statOf(await fs_default.promises.stat(p2, { bigint: true })),
+  stat: async (p2) => statOf(birthtime, await fs_default.promises.stat(p2, { bigint: true })),
   readFile: (p2) => fs_default.promises.readFile(p2, "utf8"),
   writeFile: (p2, text4) => fs_default.promises.writeFile(p2, text4),
   readdir: async (p2) => (await fs_default.promises.readdir(p2, { withFileTypes: true })).map(
@@ -52146,7 +52144,11 @@ var systemFilesystem = {
       onError: (l) => void handle.on("error", l)
     };
   }
-};
+});
+var systemFilesystem = systemFilesystemFor({
+  kind: "unprobed",
+  reason: "no probe outside a daemon"
+});
 
 // src/daemon/cache/watchers.ts
 init_globals();
@@ -57356,7 +57358,7 @@ var daemon = {
     }
     const { pid: pid2, memory, limit, postMortems } = serving.value;
     const unread2 = unreadPostMortems(serving.value, read2);
-    const verdict2 = problemsVerdict([
+    const verdict = problemsVerdict([
       ...unread2.map(
         (m) => `the daemon ran out of memory and restarted (${m.identity}) \u2014 post-mortem: ${Object.values(m.artifacts).join(", ")}`
       ),
@@ -57380,12 +57382,12 @@ var daemon = {
         `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit \u2014 at the limit it records a post-mortem and restarts`
       ] : []
     ]);
-    if (verdict2.ok && memory.kind === "unmeasured") {
+    if (verdict.ok && memory.kind === "unmeasured") {
       return { ok: true, note: "the daemon has not measured its memory yet" };
     }
     const newest = unread2[0];
-    return verdict2.ok || newest === void 0 ? verdict2 : {
-      ...verdict2,
+    return verdict.ok || newest === void 0 ? verdict : {
+      ...verdict,
       fix: { kind: "post-mortems-read", through: newest.identity }
     };
   }
@@ -57924,21 +57926,21 @@ function rowReason(reason, more = []) {
   return more.length === 0 ? reason : `${reason} (+${more.length} more \u2014 run \`cc-candybar doctor\`)`;
 }
 function doctorReportPairs(reports) {
-  return reports.flatMap(({ check, verdict: verdict2 }) => {
+  return reports.flatMap(({ check, verdict }) => {
     const keys2 = doctorReportKeys(check.name);
-    return verdict2.ok ? [
+    return verdict.ok ? [
       { key: keys2.verdict, value: VERDICT_OK },
-      { key: keys2.reason, value: verdict2.note ?? "" },
+      { key: keys2.reason, value: verdict.note ?? "" },
       { key: keys2.fixable, value: BOOLEAN_FALSE },
       { key: keys2.sighting, value: "" }
     ] : [
       { key: keys2.verdict, value: VERDICT_FAILED },
-      { key: keys2.reason, value: rowReason(verdict2.reason, verdict2.more) },
+      { key: keys2.reason, value: rowReason(verdict.reason, verdict.more) },
       {
         key: keys2.fixable,
-        value: verdict2.fix === void 0 ? BOOLEAN_FALSE : BOOLEAN_TRUE
+        value: verdict.fix === void 0 ? BOOLEAN_FALSE : BOOLEAN_TRUE
       },
-      { key: keys2.sighting, value: verdict2.sighting?.glyphs ?? "" }
+      { key: keys2.sighting, value: verdict.sighting?.glyphs ?? "" }
     ];
   });
 }
@@ -58676,8 +58678,8 @@ function configuringDecl(members) {
   );
   return { kind: "template", template: `{{ or ${terms.join(" ")} false }}` };
 }
-function inNamesView(presetIdent, verdict2, when2) {
-  return `{{ if ${namesView(presetIdent)} }}${verdict2}{{ else }}${when2}{{ end }}`;
+function inNamesView(presetIdent, verdict, when2) {
+  return `{{ if ${namesView(presetIdent)} }}${verdict}{{ else }}${when2}{{ end }}`;
 }
 var PRESET_CUSTOMIZED_VAR = "preset.customized";
 var CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
@@ -69997,7 +69999,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.3";
+var PACKAGE_VERSION = "1.210.4";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -72085,19 +72087,19 @@ var DOCTOR_STEPS = {
   // away). Then re-run over the post-fix facts, so the row flips to the
   // truthful reason.
   fix: (ctx, sid, { check }, facts) => {
-    const verdict2 = check.probe(facts);
-    if (verdict2.ok || verdict2.fix === void 0) {
+    const verdict = check.probe(facts);
+    if (verdict.ok || verdict.fix === void 0) {
       throw new BadVerbArgs(
-        `doctor-fix: ${check.label} \u2014 ${verdict2.ok ? "nothing to fix" : verdict2.reason}`
+        `doctor-fix: ${check.label} \u2014 ${verdict.ok ? "nothing to fix" : verdict.reason}`
       );
     }
-    const after = applyFix(ctx.doctorStores, verdict2.fix, facts);
+    const after = applyFix(ctx.doctorStores, verdict.fix, facts);
     if (after.kind === "failed") {
       throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
     }
     ctx.log(
       "info",
-      `doctor-fix: ${check.name} \u2192 ${describeFix(verdict2.fix)} (session=${sid})`
+      `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
     );
     writeReport(ctx, sid, after.value);
   },
@@ -72106,21 +72108,21 @@ var DOCTOR_STEPS = {
   // that drew the ✓ and ✗, since the session's terminal or joiner may have
   // moved — then re-run over those same facts with the mark folded in.
   mark: (ctx, sid, { check, mark }, facts) => {
-    const verdict2 = check.probe(facts);
-    if (verdict2.ok || verdict2.sighting === void 0) {
+    const verdict = check.probe(facts);
+    if (verdict.ok || verdict.sighting === void 0) {
       throw new BadVerbArgs(
-        `doctor-mark: ${check.label} \u2014 ${verdict2.ok ? "nothing to mark" : "shows nothing to look at"}`
+        `doctor-mark: ${check.label} \u2014 ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`
       );
     }
     const marks = ctx.doctorStores.marks.update(
-      (book) => withMark(book, check.name, verdict2.sighting.id, mark)
+      (book) => withMark(book, check.name, verdict.sighting.id, mark)
     );
     if (marks.kind === "failed") {
       throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
     }
     ctx.log(
       "info",
-      `doctor-mark: ${check.name} ${mark} on ${verdict2.sighting.id} (session=${sid})`
+      `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
     );
     writeReport(ctx, sid, { ...facts, marks });
   }
@@ -79308,7 +79310,10 @@ var stay = (resp) => ({
   exitAfterFlush: null,
   delivered: NOTHING_DELIVERED
 });
-var replied = (reply) => ({ kind: "reply", ...reply });
+var replied = (reply) => ({
+  kind: "reply",
+  ...reply
+});
 var REPLY_KINDS = {
   render: true,
   "pane-session": true,
@@ -84964,8 +84969,8 @@ function sessionSource(deps) {
         const gate2 = deps.stateGates.gateFor(state.config);
         return Object.entries(deps.sessionState.values(sessionId2)).flatMap(
           ([key, held]) => {
-            const verdict2 = gate2.verdict(key, held);
-            return verdict2.kind === "foreign" ? [{ key, held, admits: verdict2.admits }] : [];
+            const verdict = gate2.verdict(key, held);
+            return verdict.kind === "foreign" ? [{ key, held, admits: verdict.admits }] : [];
           }
         );
       }
@@ -88908,7 +88913,7 @@ function create(file) {
 }
 
 // src/daemon/production-adapters.ts
-function productionAdapters(paths2, daemonLog, machine) {
+function productionAdapters(paths2, daemonLog, machine, birthtime) {
   return {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
@@ -88936,7 +88941,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     }),
     fetch,
     pricing: (own2) => livePricing({ ...own2, clock: machine }),
-    filesystem: systemFilesystem
+    filesystem: systemFilesystemFor(birthtime)
   };
 }
 
@@ -89262,7 +89267,12 @@ var WORLD = processWorld();
 var HOST = WORLD.host;
 var paths = daemonPaths(WORLD.home);
 var pageDaemon = createDaemon({
-  ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
+  ...productionAdapters(
+    paths,
+    new DaemonLog(paths.log, WORLD.clock),
+    WORLD.clock,
+    probeBirthtimeIn(paths.state, WORLD.clock)
+  ),
   gates: daemonGates(),
   home: WORLD.home,
   host: HOST,
