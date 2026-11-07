@@ -8,7 +8,7 @@
 
 import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
-import { describeLink, drawnClickOf, HOST_VERBS, linksOf } from "../src/click/read";
+import { describeLink, drawnClickOf, linksOf, notSentOnDrivenBar } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import { daemonGates } from "../src/daemon/update-keys";
@@ -223,21 +223,21 @@ function copy(text: string): Promise<string | null> {
   );
 }
 
-// A click carrying a verb that acts on the machine (HOST_VERBS) is never sent
-// to the daemon, as on any bar driven outside a real session. A click that only
-// copies is the page's own to do: its clipboard. A link the parse refuses
-// fires nothing on the machine; the daemon refuses its click, with the reason.
+// A click whose every step runs and copies is the page's own to do: its
+// clipboard. Any other click is held back or sent as on any bar driven outside
+// a real session (notSentOnDrivenBar); one sent that the daemon refuses, a
+// step or the whole link, comes back with the reason.
 async function click(url: string, size: Size) {
   const drawn = drawnClickOf(url);
-  const effects = drawn.ok ? drawn.effects : [];
-  const host = effects.filter((e) => HOST_VERBS.has(e.verb));
-  if (host.length > 0) {
-    const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
-    const refused = copiesOnly
-      ? await copy(effects.map(({ args: [, text] }) => text!).join("\n"))
-      : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
-    return { ...(await render(size)), refused };
+  const steps = drawn.ok ? drawn.steps : [];
+  const copies = steps.flatMap((step) =>
+    step.ok && step.verb === VERB_COPY ? [step.args[1]!] : [],
+  );
+  if (steps.length > 0 && copies.length === steps.length) {
+    return { ...(await render(size)), refused: await copy(copies.join("\n")) };
   }
+  const held = notSentOnDrivenBar({ text: "", url }, sessionId);
+  if (held !== null) return { ...(await render(size)), refused: held };
   let refused: string | null = null;
   try {
     await daemon({ v: PROTOCOL_VERSION, kind: "click", url });

@@ -77,6 +77,28 @@ describe("drive-bar", () => {
   });
 
 
+  // A step that copies runs beside a refused one, as a real click runs it, so
+  // the click is held back, naming both; one sent would come back as the
+  // daemon's answer instead.
+  test("a click with a step that acts on the machine is not sent, beside a refused step", async () => {
+    const link = "cc-candybar://to/main/dispatch/e=copy-text%2Fs%2Fx&e=bogus";
+    bar = await startBar(
+      {
+        width: 120,
+        rows: 40,
+        config: userConfig(`{ segments: { cp: { template: '{{ link "${link}" "cp" }}' } }, root: { h: ['cp'] } }`),
+        cwd: process.cwd(),
+        ssh: false,
+      },
+      startBarDaemon,
+    );
+    await bar.render();
+    const { refused } = await bar.click("cp");
+    expect(refused).toBe(
+      'not sent: on a real machine this copies to the clipboard: copy-text s x ; refused: unknown effect verb "bogus"',
+    );
+  });
+
   test("a render fits the size it was asked for", async () => {
     bar = await startBar(
       { width: 200, rows: 40, config: userConfig(WIDE_BAR), cwd: process.cwd(), ssh: false },

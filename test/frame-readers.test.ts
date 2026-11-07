@@ -2,8 +2,8 @@
 // from a Frame, with no bytes in between: its links, its text, and what stands
 // in for it.
 
-import { describeLink, drawnClickOf, linksOf } from "../src/click/read";
-import { effectsUrl, VERB_TOOLBAR_TOGGLE } from "../src/click/wire";
+import { describeLink, drawnClickOf, linksOf, notSentOnDrivenBar } from "../src/click/read";
+import { effectsUrl, VERB_COPY, VERB_RUN, VERB_SET_STATE, VERB_TOOLBAR_TOGGLE } from "../src/click/wire";
 import { MAIN_NAME } from "../src/daemon/home";
 import {
   composeBar,
@@ -154,24 +154,74 @@ describe("describeLink", () => {
     );
   });
 
-  test("a drawn link whose value carries a malformed escape reads as its refusal", () => {
+  // [LAW:one-source-of-truth] A link reads as the daemon reads it, step by
+  // step: a malformed escape spoils only the step it is in, refused in the
+  // daemon's own words.
+  test("a drawn step whose value carries a malformed escape reads as that step's refusal", () => {
     expect(
       describeLink({ text: "x", url: "cc-candybar://to/main/dispatch/e=toolbar-toggle%2F100%25" }, "s"),
-    ).toMatch(/^refused: the link's value does not decode .*: cc-candybar:\/\/to\/main\/dispatch\/e=toolbar-toggle%2F100%25$/);
+    ).toBe("refused: toolbar-toggle: session id has malformed wire encoding: URI malformed");
   });
 
-  // A frame an older daemon drew can name a verb this one retired; its click
+  // A frame an older daemon drew can name a verb this one retired; that step
   // is refused, so it reads as refused, never as the act it once was.
-  test("a link naming a verb the daemon has not reads as its refusal", () => {
+  test("a step naming a verb the daemon has not reads as its refusal", () => {
     const dispatched = `cc-candybar://to/main/dispatch/does=copy&e=${encodeURIComponent("copy/s")}`;
-    expect(describeLink({ text: "x", url: dispatched }, "s")).toBe(
-      `refused: the daemon has no verb "copy": ${dispatched}`,
-    );
+    expect(describeLink({ text: "x", url: dispatched }, "s")).toBe('refused: unknown effect verb "copy"');
     // Its value is never read, so a malformed escape in it is not the reason.
     const malformed = `cc-candybar://to/main/dispatch/e=${encodeURIComponent("copy/100%")}`;
-    expect(describeLink({ text: "x", url: malformed }, "s")).toBe(
-      `refused: the daemon has no verb "copy": ${malformed}`,
+    expect(describeLink({ text: "x", url: malformed }, "s")).toBe('refused: unknown effect verb "copy"');
+  });
+
+  test("a refused step reads in place, beside the steps that still run", () => {
+    const url = `${effectsUrl(MAIN_NAME, [{ verb: VERB_COPY, args: ["s", "x"] }])}&e=bogus`;
+    expect(drawnClickOf(url)).toEqual({
+      ok: true,
+      steps: [
+        { ok: true, verb: VERB_COPY, args: ["s", "x"] },
+        { ok: false, verb: "bogus", problem: 'unknown effect verb "bogus"' },
+      ],
+    });
+    expect(describeLink({ text: "x", url }, "s")).toBe(
+      `${VERB_COPY} <session> x ; refused: unknown effect verb "bogus"`,
     );
+  });
+
+  // The daemon lands adjacent writes for one session as one batch, so a link
+  // reads as that batch, never as the writes it was spelled in.
+  test("adjacent writes read as the one batch the daemon lands", () => {
+    const url = effectsUrl(MAIN_NAME, [
+      { verb: VERB_SET_STATE, args: ["s", "k1", "v1"] },
+      { verb: VERB_SET_STATE, args: ["s", "k2", "v2"] },
+    ]);
+    expect(describeLink({ text: "x", url }, "s")).toBe(`${VERB_SET_STATE} <session> k1 v1 k2 v2`);
+  });
+});
+
+describe("notSentOnDrivenBar", () => {
+  test("a click with a step that acts on the machine is held back, naming its refused steps too", () => {
+    const url = `${effectsUrl(MAIN_NAME, [{ verb: VERB_COPY, args: ["s", "x"] }])}&e=bogus`;
+    expect(notSentOnDrivenBar({ text: "x", url }, "s")).toBe(
+      `not sent: on a real machine this copies to the clipboard: ${VERB_COPY} <session> x ; refused: unknown effect verb "bogus"`,
+    );
+  });
+
+  // A refused step acts on nothing: the daemon refuses it, as a real click.
+  test("a click whose only machine step is refused is sent", () => {
+    const url = effectsUrl(MAIN_NAME, [
+      { verb: VERB_TOOLBAR_TOGGLE, args: ["s"] },
+      { verb: VERB_RUN, args: ["other", "act", "x", "y"] },
+    ]);
+    expect(describeLink({ text: "x", url }, "s")).toBe(
+      `${VERB_TOOLBAR_TOGGLE} <session> ; refused: ${VERB_RUN}: names session other, not the session its click is in`,
+    );
+    expect(notSentOnDrivenBar({ text: "x", url }, "s")).toBeNull();
+  });
+
+  test("a click acting only on the daemon, or a link that does not read, is sent", () => {
+    const url = effectsUrl(MAIN_NAME, [{ verb: VERB_TOOLBAR_TOGGLE, args: ["s"] }]);
+    expect(notSentOnDrivenBar({ text: "x", url }, "s")).toBeNull();
+    expect(notSentOnDrivenBar({ text: "x", url: "cc-candybar://hello" }, "s")).toBeNull();
   });
 
   // A drawn link names dispatch, and a leaf verb is only ever its effect: a
