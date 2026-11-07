@@ -22630,10 +22630,7 @@ var RESERVED_NAMESPACES = [
   SETTINGS_NS
 ];
 function isReservedName(name) {
-  return reservedNamespaceOfKey(name) !== void 0;
-}
-function reservedNamespaceOfKey(name) {
-  return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
+  return RESERVED_NAMESPACES.some((ns) => name.startsWith(ns));
 }
 
 // src/config/door.ts
@@ -59328,12 +59325,11 @@ function validateDiscriminatorKey(ctx, path47, raw, discriminator) {
     (v) => `${discriminator} key "${v}" contains "/" \u2014 keys must be slash-free`
   );
   if (value === null) return null;
-  const reserved = discriminator === "set" ? reservedNamespaceOfKey(value) : void 0;
-  if (reserved !== void 0) {
+  if (discriminator === "set" && value.startsWith(PLACEMENT_DRAFT_NS)) {
     issue2(
       ctx,
       `${path47}.set`,
-      `set key "${value}" lands in the reserved "${reserved}" namespace \u2014 the controls the loader synthesizes there are its only writers, so their reads can trust what it holds. Write a key outside it`
+      `set key "${value}" is a placement's draft, under "${PLACEMENT_DRAFT_NS}" \u2014 the setting control configure mode synthesizes is its only writer, so its read can trust what it holds. Write a key outside it`
     );
     return null;
   }
@@ -69916,7 +69912,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.209.0";
+var PACKAGE_VERSION = "1.210.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -73102,7 +73098,7 @@ var validateBoolean = (raw) => {
   if (BOOLEAN_FALSY2.has(raw)) return { ok: true, value: "" };
   return {
     ok: false,
-    reason: `expected boolean-ish (1, 0, true, false), got "${raw}"`
+    reason: `expected boolean-ish (1, 0, true, false, or empty), got "${raw}"`
   };
 };
 var BASELINE = {
@@ -73114,7 +73110,11 @@ var BASELINE = {
     validate: validateTheme,
     admits: describeMembers(RESOLVABLE_THEMES_LIST, "themes")
   },
-  "toolbar-expanded": { validate: validateBoolean, admits: "true or false" }
+  // What it admits as stored: the two values a click writes for true and false.
+  "toolbar-expanded": {
+    validate: validateBoolean,
+    admits: '"1" for true or "" for false'
+  }
 };
 function makeStateKeyspace() {
   return createKeyspace(BASELINE, "state", deriveActionValidators);
@@ -75076,15 +75076,19 @@ function segmentColorFuncs(ref) {
         drawnColour(fg, ColorDepth.TRUECOLOR),
         drawnColour(bg, ColorDepth.TRUECOLOR)
       );
-      const floor2 = Math.min(
-        TEXT_MIN_CONTRAST,
-        Math.max(held, QUIET_MIN_CONTRAST)
-      );
-      return (ensureDrawn(
+      const floor2 = Math.min(TEXT_MIN_CONTRAST, held);
+      const depth = ref.drawnAt();
+      const kept = ensureDrawn(
         fg,
-        ref.drawnAt(),
+        depth,
         (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor2
-      ) ?? fg).hex;
+      );
+      if (kept === void 0) {
+        throw new Error(
+          `keptOn: nothing drawn at ${ColorDepth[depth]} stands ${floor2.toFixed(2)}:1 off ${bg.hex} (drawn ${drawnColour(bg, depth).hex})`
+        );
+      }
+      return kept.hex;
     }),
     argTypes: ["string", "string"],
     arity: { kind: "exact" },
