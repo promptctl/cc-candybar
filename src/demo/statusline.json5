@@ -16,16 +16,17 @@
   // ── Variables: where each segment's data comes from ──────────────────────
   // Every `kind` maps to one runtime source. Templates reference these by name
   // with a leading dot (`.user`, `.cwd`, …). A referenced-but-undeclared name
-  // is a load-time error, not a silent blank.
+  // is a load-time error, not a silent blank. This file merges over the bundled
+  // default, so the default's variables (`.model.display_name`, `.session.id`)
+  // are readable here too. [LAW:one-source-of-truth] A fact the default
+  // already declares is read under its name, not declared again.
   variables: {
     // input — pulled from the JSON payload Claude Code sends each render tick.
     user: { kind: "input", path: "host.user", default: "anon" },
     cwd: { kind: "input", path: "workspace.current_dir", default: "?" },
-    model: { kind: "input", path: "model.display_name", default: "" },
-    session: { kind: "input", path: "session_id", default: "" },
 
     // template — derived from other vars; recomputed reactively when they move.
-    sid: { kind: "template", template: "{{ trunc 8 .session }}" },
+    sid: { kind: "template", template: "{{ trunc 8 .session.id }}" },
     here: { kind: "template", template: "{{ basename .cwd }}" },
 
     // shell — run a command, cache the result for a TTL window. Populates
@@ -68,10 +69,10 @@
       palette: "gruvbox", // this segment pulls its OWN palette (per-segment switch)
     },
     model: {
-      template: " {{ .model }} ",
+      template: " {{ .model.display_name }} ",
       bg: "secondary",
       fg: "{{ contrastOn (bgOf) }}",
-      when: '{{ ne .model "" }}',
+      when: '{{ ne .model.display_name "" }}',
     },
     session: {
       template: " ⌗{{ .sid }} ",

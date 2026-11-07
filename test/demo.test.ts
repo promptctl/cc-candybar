@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 // `pnpm demo` claims to print what production produces. That holds only while
 // its payload is the daemon's own (payloadOf over a faked hook event):
@@ -17,12 +18,17 @@ describe("pnpm demo", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  const runDemo = (config: string, env: Record<string, string> = {}) => {
-    const configPath = join(dir, "config.json5");
-    writeFileSync(configPath, config);
+  // No config runs the demo as `pnpm demo` does, over its bundled sample.
+  const runDemo = (config?: string, env: Record<string, string> = {}) => {
+    const configArgs: string[] = [];
+    if (config !== undefined) {
+      const configPath = join(dir, "config.json5");
+      writeFileSync(configPath, config);
+      configArgs.push(configPath);
+    }
     return spawnSync(
       join(process.cwd(), "node_modules", ".bin", "tsx"),
-      [join(process.cwd(), "src", "demo", "dsl.ts"), configPath],
+      [join(process.cwd(), "src", "demo", "dsl.ts"), ...configArgs],
       {
         // The demo reports the hints a client reads from its environment, so
         // the environment is stated here, not inherited: no tmux pane, no ssh
@@ -83,6 +89,19 @@ describe("pnpm demo", () => {
     expect(existsSync(join(dir, "state", "cc-candybar", "daemon.log"))).toBe(
       false,
     );
+  });
+
+  // The sample merges over the bundled default like any authored config, so
+  // nothing but a run of it keeps it loadable as the default grows names.
+  test("renders its bundled sample, reading the default's model and session", () => {
+    const r = runDemo(undefined, { COLUMNS: "1000" });
+    expect(r.stderr).not.toContain("error:");
+    expect(r.status).toBe(0);
+    // Each cell's glyph and value are separate styled runs, and the session id
+    // is also in the door's link, so the cells are read as drawn text.
+    const drawn = stripVTControlCharacters(r.stdout);
+    expect(drawn).toContain(" Opus 4.7 ");
+    expect(drawn).toContain(" ⌗demo0a1b ");
   });
 
   test("a config that does not load fails with the loader's message", () => {
