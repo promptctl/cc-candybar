@@ -2,6 +2,70 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-680",
+      "ref": "refs/pull/680/merge",
+      "sha": "c905e1f1159074bed899a87d80b7bf863b2ca08a",
+      "timestamp": "2026-11-07T11:40:09.761Z",
+      "commits": [
+        {
+          "sha": "c905e1f1159074bed899a87d80b7bf863b2ca08a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:36:24Z",
+          "message": "Merge 18961bb231e2ef93497c42a80bc6598ced8a0ccf into 37f5c35ff91a229f08869f5b34660301b699233a\n"
+        },
+        {
+          "sha": "18961bb231e2ef93497c42a80bc6598ced8a0ccf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:36:02-07:00",
+          "message": "fix(update-act): a spend is finite and not negative, a held boot is before any time, and the clock's uptime reads are banned by name (brandon-unfiled-3248.9eu3)\n\nFrom the medium review of the CI fix:\n- An act's spend file holding a negative or infinite spend is no act's\n  spend: it restarts loudly instead of ending a build at once or never.\n- A held clock's boot is before any wall time a case can set it to, so a\n  case at the epoch does not read every act as an earlier boot's.\n- `uptime` from os and `hrtime`/`uptime` from process are refused as\n  named imports outside src/time.ts, as their property reads already are.\n- The restart comment and the observe test's title and header say what\n  the code does.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "c646e598ea193d8392ba86ec6a06d2a7c3aecde4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:28:53-07:00",
+          "message": "fix(update-act): the boot an act is judged against is read off the reader's own clock (brandon-unfiled-3248.9eu3)\n\nA reader judged \"started before this boot\" as its clock's now less the\nmachine's real uptime. On a held clock the two disagree: the clock moves\non while uptime does not, so a daemon armed six held minutes into an act\non a runner up less than that read the act as an earlier boot's, never\nspent a look on it, and never ended it. That is the CI failure of \"a\ndaemon started mid-act carries on from what the one before it spent\".\n\nThe boot time is now a Timekeeper reading, beside now and monotonic: the\nsystem clock reads it from uptime, and a held clock's boot stands still.\nos.uptime joins the clock reads eslint keeps in src/time.ts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "56cdd30af04663fed7cf4bb1e46791a617220a2d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:10:21-07:00",
+          "message": "refactor(update-act): the spend file stages through stagedPath (brandon-unfiled-3248.9eu3)\n\nCloses brandon-unfiled-3248.9gmz: with wkh1 on main, the spend's staging\nname is the one spelling every writer uses, unique per write.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "7215c44444c422814fd12324580fa74f595e32c1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:41:44-07:00",
+          "message": "fix(update-act): a gap the loop could not have run spends nothing, and an unreadable spend restarts loudly (brandon-unfiled-3248.9eu3)\n\nA clamped gap charged every dark wake the cap, so a weekend's wakes still\nspent the budget; a gap longer than five polls now counts 0. A spend this\nversion can't read held the act unbounded while it held every restart;\nit is now replaced by one counted from that look and reported. A failed\nstage or rename removes its staged file.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "2b463e8391b8d73b92ce382aa9949eb6219b177c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:25:17-07:00",
+          "message": "fix(update-act): a look stages its spend in the act's own directory, never making one (brandon-unfiled-3248.9eu3)\n\nwriteAtomic made the act's directory when a newer claim had pruned it,\nflushed every 2 s look on the render loop, and staged at a name shared by\nevery daemon. A look now stages at a pid-named file inside the act and\nrenames it, unflushed: an act gone under the look spends nothing. The\nconcurrent-writer safety no longer waits on writeAtomic's staging change.\nReverts a formatter reflow of test/update-act.test.ts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "35af206bbc29fa511e6f08b735db60a7144c969a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:09:19-07:00",
+          "message": "fix(update-act): a look spends at most five polls, and a spend it can't read is an error (brandon-unfiled-3248.9eu3)\n\nA dark wake mid-sleep spent the 60 s cap, so forty of them overnight ended\nthe act and could tear the bundle; the cap now follows the poll interval,\nin the watch that owns both. awake.json is parsed: a missing number read\nas NaN, compared past the budget and ended a running build. Corrects the\nrace comment: concurrent looks lose nothing.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "239f5a2bbfa3f4d37c45b5f8d0ba3a7c0282ffe6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:56:43-07:00",
+          "message": "fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3)\n\nThe update act was ended once the wall clock passed the deadline in its\nrecord. Wall time runs while the machine sleeps, so closing the lid mid-build\nfor longer than ten minutes signalled the build's group at the first tick\nafter wake, possibly mid-write, which tears the bundle.\n\nThe budget is now spent in observed time: each tick that finds the act's group\nalive adds the span since the last look, whichever daemon took it, capped at\n60 s, into the act's awake.json, and the act ends once that passes ten\nminutes. A sleep of any length spends at most the cap, a clock set back spends\nnothing, and daemons looking in turn or restarting mid-act share one budget.\nThe record keeps its deadline for older daemons reading the same acts during\nan update.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-685",
       "ref": "refs/pull/685/merge",
       "sha": "e4a612737afe2fb4933ac67fdf8a739aa2f60bb1",
@@ -129,63 +193,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:30:53-07:00",
           "message": "fix(daemon): a connection's state is one value, and past waiting it reads no more frames (brandon-unfiled-3248.df7i)\n\nA connection's lifecycle is one state (awaiting, answering, unattended,\nanswered, held, streaming, closed) moved by one pure transition table; the\nconnection only performs the effects a step names. In-flight and the\nbackstop are columns of the table, so each moves once, on crossing its line.\n\nA connection reads exactly one frame: a second frame, a frame after the\nanswer, and the bytes behind an over-cap header or unparseable frame are\nnever handled or buffered. A reply that cannot be encoded is answered\nRENDER_FAILED and ends the stream, its exit still sequenced on that flush.\nA dropped exit's warning names its one cause: the client was told TIMEOUT.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-680",
-      "ref": "refs/pull/680/merge",
-      "sha": "1f31a5414e87b0644d196794e34337ff20f44626",
-      "timestamp": "2026-11-07T11:32:31.279Z",
-      "commits": [
-        {
-          "sha": "1f31a5414e87b0644d196794e34337ff20f44626",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:29:19Z",
-          "message": "Merge c646e598ea193d8392ba86ec6a06d2a7c3aecde4 into 3e574dde3244026257856ed4e675a0275bc287d1\n"
-        },
-        {
-          "sha": "c646e598ea193d8392ba86ec6a06d2a7c3aecde4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:28:53-07:00",
-          "message": "fix(update-act): the boot an act is judged against is read off the reader's own clock (brandon-unfiled-3248.9eu3)\n\nA reader judged \"started before this boot\" as its clock's now less the\nmachine's real uptime. On a held clock the two disagree: the clock moves\non while uptime does not, so a daemon armed six held minutes into an act\non a runner up less than that read the act as an earlier boot's, never\nspent a look on it, and never ended it. That is the CI failure of \"a\ndaemon started mid-act carries on from what the one before it spent\".\n\nThe boot time is now a Timekeeper reading, beside now and monotonic: the\nsystem clock reads it from uptime, and a held clock's boot stands still.\nos.uptime joins the clock reads eslint keeps in src/time.ts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "56cdd30af04663fed7cf4bb1e46791a617220a2d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:10:21-07:00",
-          "message": "refactor(update-act): the spend file stages through stagedPath (brandon-unfiled-3248.9eu3)\n\nCloses brandon-unfiled-3248.9gmz: with wkh1 on main, the spend's staging\nname is the one spelling every writer uses, unique per write.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "7215c44444c422814fd12324580fa74f595e32c1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:41:44-07:00",
-          "message": "fix(update-act): a gap the loop could not have run spends nothing, and an unreadable spend restarts loudly (brandon-unfiled-3248.9eu3)\n\nA clamped gap charged every dark wake the cap, so a weekend's wakes still\nspent the budget; a gap longer than five polls now counts 0. A spend this\nversion can't read held the act unbounded while it held every restart;\nit is now replaced by one counted from that look and reported. A failed\nstage or rename removes its staged file.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "2b463e8391b8d73b92ce382aa9949eb6219b177c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:25:17-07:00",
-          "message": "fix(update-act): a look stages its spend in the act's own directory, never making one (brandon-unfiled-3248.9eu3)\n\nwriteAtomic made the act's directory when a newer claim had pruned it,\nflushed every 2 s look on the render loop, and staged at a name shared by\nevery daemon. A look now stages at a pid-named file inside the act and\nrenames it, unflushed: an act gone under the look spends nothing. The\nconcurrent-writer safety no longer waits on writeAtomic's staging change.\nReverts a formatter reflow of test/update-act.test.ts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "35af206bbc29fa511e6f08b735db60a7144c969a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:09:19-07:00",
-          "message": "fix(update-act): a look spends at most five polls, and a spend it can't read is an error (brandon-unfiled-3248.9eu3)\n\nA dark wake mid-sleep spent the 60 s cap, so forty of them overnight ended\nthe act and could tear the bundle; the cap now follows the poll interval,\nin the watch that owns both. awake.json is parsed: a missing number read\nas NaN, compared past the budget and ended a running build. Corrects the\nrace comment: concurrent looks lose nothing.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "239f5a2bbfa3f4d37c45b5f8d0ba3a7c0282ffe6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:56:43-07:00",
-          "message": "fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3)\n\nThe update act was ended once the wall clock passed the deadline in its\nrecord. Wall time runs while the machine sleeps, so closing the lid mid-build\nfor longer than ten minutes signalled the build's group at the first tick\nafter wake, possibly mid-write, which tears the bundle.\n\nThe budget is now spent in observed time: each tick that finds the act's group\nalive adds the span since the last look, whichever daemon took it, capped at\n60 s, into the act's awake.json, and the act ends once that passes ten\nminutes. A sleep of any length spends at most the cap, a clock set back spends\nnothing, and daemons looking in turn or restarting mid-act share one budget.\nThe record keeps its deadline for older daemons reading the same acts during\nan update.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },

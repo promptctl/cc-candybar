@@ -69947,7 +69947,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.2";
+var PACKAGE_VERSION = "1.210.3";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -80063,7 +80063,7 @@ function readAwake(file) {
     return { ok: false, reason: `${err.message}: ${text4}` };
   }
   const { spentMs, lastSeen } = parsed2 ?? {};
-  return typeof spentMs === "number" && typeof lastSeen === "number" ? { ok: true, awake: { spentMs, lastSeen } } : { ok: false, reason: `not an act's spend: ${text4}` };
+  return typeof spentMs === "number" && typeof lastSeen === "number" && spentMs >= 0 && Number.isFinite(spentMs) && Number.isFinite(lastSeen) ? { ok: true, awake: { spentMs, lastSeen } } : { ok: false, reason: `not an act's spend: ${text4}` };
 }
 function spendLook(dir, facts, now2, longestMs) {
   const actDir = import_node_path40.default.join(dir, String(facts.act));
