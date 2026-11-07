@@ -71864,17 +71864,20 @@ function unknownVerb(verb) {
 function stepRefusal(verb, reason) {
   return { kind: "refused", reason, problem: stepProblem(verb, reason) };
 }
+function unknownVerbRefusal(verb) {
+  const problem = unknownVerb(verb);
+  return { kind: "refused", reason: problem, problem };
+}
 function refused({ verb }, args, reason) {
   return { ok: false, verb, args, refusal: stepRefusal(verb, reason) };
 }
 function readStep(effect, click2) {
   if (effect.leaf === void 0) {
-    const problem = unknownVerb(effect.verb);
     return {
       ok: false,
       verb: effect.verb,
       args: [],
-      refusal: { kind: "refused", reason: problem, problem }
+      refusal: unknownVerbRefusal(effect.verb)
     };
   }
   const { verb, leaf, session, args } = effect;
