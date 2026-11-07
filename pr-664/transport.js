@@ -69515,7 +69515,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.4";
+var PACKAGE_VERSION = "1.208.5";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -76472,7 +76472,6 @@ var FEED_PERIODS = {
 };
 var RATE_WINDOW_S = 1;
 var TIMER_RESOLUTION_S = 2e-3;
-var wokeAtOf = (at) => at === null ? "-" : String(Math.round(at * 1e3));
 var WAKE_CAUSES = ["data", "state", "reload", "visibility"];
 function feedsFact(feeds) {
   return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
@@ -76574,7 +76573,8 @@ var FrameFeeds = class {
     const feed2 = this.feeds.get(sessionId2);
     if (feed2 === void 0) return;
     feed2.woke[cause]++;
-    feed2.wokeAt[cause] = this.deps.instant();
+    if (feed2.phase.kind !== "drawing")
+      feed2.wokeSince ??= this.deps.clock.monotonic();
     if (!this.hasten(feed2)) feed2.coalesced++;
   }
   // Wake, for `cause`, every watched session whose latest request `match`
@@ -76667,7 +76667,8 @@ var FrameFeeds = class {
       evaluated: 0,
       cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
-      wokeAt: { data: null, state: null, reload: null, visibility: null },
+      wokeSince: null,
+      wakeToFrame: null,
       coalesced: 0,
       summarizedAt: now2,
       refreshesAtOpen: this.deps.refreshes()
@@ -76743,6 +76744,14 @@ var FrameFeeds = class {
       return;
     }
     feed2.lastStart = moment2;
+    if (feed2.wokeSince !== null) {
+      const span = started2 - feed2.wokeSince;
+      feed2.wakeToFrame = {
+        last: span,
+        max: Math.max(span, feed2.wakeToFrame?.max ?? 0)
+      };
+      feed2.wokeSince = null;
+    }
     const finished = this.deps.clock.monotonic();
     this.drawn++;
     feed2.drawn++;
@@ -76912,7 +76921,7 @@ var FrameFeeds = class {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} wokeAt=${WAKE_CAUSES.map((cause) => `${cause}:${wokeAtOf(feed2.wokeAt[cause])}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
+      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} wakeToFrame=${feed2.wakeToFrame === null ? "-" : `last:${feed2.wakeToFrame.last.toFixed(1)}ms,max:${feed2.wakeToFrame.max.toFixed(1)}ms`} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
     );
     feed2.summarizedAt = now2;
   }
