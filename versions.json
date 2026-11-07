@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-682",
+      "ref": "refs/pull/682/merge",
+      "sha": "246f7dfacbd2e51744ea5246d2cc010c77777aa7",
+      "timestamp": "2026-11-07T10:40:28.971Z",
+      "commits": [
+        {
+          "sha": "246f7dfacbd2e51744ea5246d2cc010c77777aa7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:39:12Z",
+          "message": "Merge b34cd1a36c02b875bfe35af41261adc088dad4d2 into 2a63ae55593d80d6590080431d83cf19e539622e\n"
+        },
+        {
+          "sha": "b34cd1a36c02b875bfe35af41261adc088dad4d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:20:01-07:00",
+          "message": "docs(demo): say padding is structural in the sample, and what the strip leaves in the test (brandon-unfiled-3248.0d5a)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "ecf6deba67af088d22f60f99b1b47e20d61cf44f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:14:45-07:00",
+          "message": "fix(demo): the bundled sample draws the default's session cell and no doubled padding (brandon-unfiled-3248.0d5a)\n\nThe sample re-derived the default's session-id cell without its `when`,\nso an empty id drew a bare glyph; it now places the default's\n`sessionId`. Its templates padded cells the layout already pads. The\nbundled-sample test now also fails on a loader advisory naming the\nsample and on a drawn warning indicator, not only on a refusal.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "c569836820d2f4945e368c845d29a7a1bd9b1439",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:00:45-07:00",
+          "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-676",
       "ref": "refs/pull/676/merge",
       "sha": "510a411c2fac3acb57f8d496fdff722363579563",
@@ -121,42 +157,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:31:15-07:00",
           "message": "fix(pricing): a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8)\n\nThe pricing held one promise for the daemon's life, so a daemon that\nstarted offline priced by the bundled rates until it was restarted, and\none that fetched kept its table past the disk copy's day.\n\nWhat a load settles is now a Landed table or a Failed load that carries\nthe last table that landed, if any. Each ask starts the one load when\nwhat is held is due, and answers with what is held: the first ask awaits,\nlater asks answer at once while the load lands behind them. A landed\ntable is due a day after it was read; a failed load after a backoff that\ndoubles per failure in a row up to an hour. The disk copy is a candidate\njudged by the same due predicate, so the day ends once. No timer is\narmed: the retry is the next ask after the due moment. A load that\nlanded nothing says so on the owner's log with the retry delay.\n\nThe test moves onto a held clock and drives the retry, the refresh, a\nrefresh that fails, a copy another daemon wrote, and a close mid-refresh.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-682",
-      "ref": "refs/pull/682/merge",
-      "sha": "34c14ce42e8f8387019ebf19ef85ab4c562f1e1d",
-      "timestamp": "2026-11-07T10:32:06.912Z",
-      "commits": [
-        {
-          "sha": "34c14ce42e8f8387019ebf19ef85ab4c562f1e1d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:30:28Z",
-          "message": "Merge 32978aa15c48ef46b8ce5640a197b620b9e86aa9 into 215f486db0c68765107dc69e715ccb26c5ac01d3\n"
-        },
-        {
-          "sha": "32978aa15c48ef46b8ce5640a197b620b9e86aa9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:20:01-07:00",
-          "message": "docs(demo): say padding is structural in the sample, and what the strip leaves in the test (brandon-unfiled-3248.0d5a)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "9416f1230a33e31a449113e635a1e148000d6364",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:14:45-07:00",
-          "message": "fix(demo): the bundled sample draws the default's session cell and no doubled padding (brandon-unfiled-3248.0d5a)\n\nThe sample re-derived the default's session-id cell without its `when`,\nso an empty id drew a bare glyph; it now places the default's\n`sessionId`. Its templates padded cells the layout already pads. The\nbundled-sample test now also fails on a loader advisory naming the\nsample and on a drawn warning indicator, not only on a refusal.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "c37d6befcc47a6e3507d98176016a2a9e3f811b4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:00:45-07:00",
-          "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
