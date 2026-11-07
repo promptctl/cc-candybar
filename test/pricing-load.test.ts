@@ -8,8 +8,10 @@ import {
   livePricing,
   offlinePricing,
   PRICING_PERIOD,
+  PRICING_RETRY_CEILING_MS,
   type PriceTable,
 } from "../src/segments/pricing";
+import { backedOffMs } from "../src/utils/period";
 import type { DaemonLogger } from "../src/utils/logger";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 import { jestTmpDir } from "./helpers/jest-tmp";
@@ -198,7 +200,9 @@ describe("a daemon's pricing", () => {
     expect(await live().table()).toEqual(await offlinePricing().table());
     expect(warnings).toEqual([
       "pricing load threw: Error: bad options",
-      expect.stringContaining("pricing table not loaded (1 in a row)"),
+      expect.stringContaining(
+        "pricing table not loaded: priced by the bundled rates",
+      ),
     ]);
   });
 
@@ -217,7 +221,7 @@ describe("a daemon's pricing", () => {
     asked[0]!.fail();
     expect(await first).toEqual(bundled);
     expect(warnings).toEqual([
-      `pricing table not loaded (1 in a row): priced by the bundled rates; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
+      `pricing table not loaded: priced by the bundled rates; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
     ]);
 
     // Before the backoff is up, an ask starts nothing.
@@ -233,7 +237,7 @@ describe("a daemon's pricing", () => {
     asked[1]!.fail();
     await until(() => warnings.length === 2, "the second failure said");
     expect(warnings[1]).toBe(
-      `pricing table not loaded (2 in a row): priced by the bundled rates; the next ask after ${2 * PRICING_PERIOD.failedMs}ms tries again`,
+      `pricing table not loaded: priced by the bundled rates; the next ask after ${2 * PRICING_PERIOD.failedMs}ms tries again`,
     );
 
     // The second backoff is twice the first.
@@ -288,7 +292,7 @@ describe("a daemon's pricing", () => {
     asked[1]!.fail();
     await until(() => warnings.length === 1, "the failed refresh said");
     expect(warnings[0]).toBe(
-      `pricing table not loaded (1 in a row): priced by the last table; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
+      `pricing table not loaded: priced by the last table; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
     );
     expect(await pricing.table()).toEqual(RATES);
 
@@ -347,7 +351,7 @@ describe("a daemon's pricing", () => {
     asked[0]!.fail();
     expect(await first).toEqual(RATES);
     expect(warnings).toEqual([
-      `pricing table not loaded (1 in a row): priced by the last table; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
+      `pricing table not loaded: priced by the last table; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
     ]);
 
     clock.advance(PRICING_PERIOD.failedMs);
@@ -358,6 +362,52 @@ describe("a daemon's pricing", () => {
       async () => "model-y" in (await pricing.table()),
       "the fetched table held",
     );
+  });
+
+  test("a machine with no network says each backoff once, and falls silent at the ceiling", async () => {
+    const pricing = live();
+    void pricing.table();
+    // The backoff grows for eight failures and stands at the ceiling from the
+    // eighth on.
+    for (let n = 1; n <= 8; n++) {
+      await asking(n);
+      asked[n - 1]!.fail();
+      await until(() => warnings.length === n, `failure ${n} said`);
+      clock.advance(backedOffMs(PRICING_PERIOD, n, PRICING_RETRY_CEILING_MS));
+      void pricing.table();
+    }
+    expect(warnings[7]).toBe(
+      `pricing table not loaded: priced by the bundled rates; the next ask after ${PRICING_RETRY_CEILING_MS}ms tries again`,
+    );
+    expect(new Set(warnings).size).toBe(8);
+
+    // The ninth says nothing new.
+    await asking(9);
+    asked[8]!.fail();
+    await throughout(
+      () => warnings.length === 8,
+      "the ninth failure said nothing",
+      200,
+    );
+  });
+
+  test("a close during the first load on a copy past its day prices by that copy, and says nothing", async () => {
+    fs.mkdirSync(path.join(cacheRoot, "usage"), { recursive: true });
+    fs.writeFileSync(
+      path.join(cacheRoot, "usage", "pricing.json"),
+      JSON.stringify({
+        data: RATES,
+        timestamp: clock.now() - PRICING_PERIOD.okMs,
+      }),
+    );
+
+    const pricing = live();
+    const first = pricing.table();
+    await asking(1);
+    closing.abort();
+    expect(await first).toEqual(RATES);
+    expect(await pricing.table()).toEqual(RATES);
+    expect(warnings).toEqual([]);
   });
 
   test("a refresh that lands nothing keeps the later of the held table and the copy on disk", async () => {

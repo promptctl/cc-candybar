@@ -4,7 +4,7 @@ import { URL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import type { Timekeeper } from "../time";
-import type { DaemonLogger } from "../utils/logger";
+import { changeLogger, type DaemonLogger } from "../utils/logger";
 import type { PrunedRaw } from "../utils/claude.js";
 import { stagedPath } from "../utils/staged-path.js";
 import { backedOffMs, type Every } from "../utils/period";
@@ -246,11 +246,16 @@ const due = (held: Held, now: number): boolean =>
 export function livePricing(owner: LiveOwner): Pricing {
   let held: Held | null = null;
   let loading: Promise<Held | null> | null = null;
+  // [LAW:one-type-per-behavior] A load that lands nothing is said once per
+  // backoff: the line names the backoff, so it changes while the backoff grows
+  // and falls silent at the ceiling, where a machine with no network would
+  // otherwise say the same thing every hour for as long as it stays offline.
+  const sayNotLoaded = changeLogger(owner.log);
   return {
     table: () => {
       const owed = held === null || due(held, owner.clock.now());
       if (owed && !owner.closing.aborted) {
-        loading ??= loadHeld(owner, held).then((settled) => {
+        loading ??= loadHeld(owner, held, sayNotLoaded).then((settled) => {
           held = settled;
           loading = null;
           return settled;
@@ -269,11 +274,13 @@ export function livePricing(owner: LiveOwner): Pricing {
 // day's, else what a fetch landed, else a failed load that keeps the last table
 // that landed anywhere, on disk or held. [LAW:no-silent-failure] Never rejects:
 // a throw anywhere in the load is a load that landed nothing, and is said, so a
-// fold never fails on its price. A load the close ended settles nothing: it is
-// no failure, nothing follows it, and what was held stands.
+// fold never fails on its price. A load the close ended settles nothing new:
+// it is no failure, nothing follows it, and what was held stands, or the copy
+// on disk before anything was.
 async function loadHeld(
   owner: LiveOwner,
   prev: Held | null,
+  sayNotLoaded: ReturnType<typeof changeLogger>,
 ): Promise<Held | null> {
   const copy = await readDisk(owner);
   if (copy !== null && !due(copy, owner.clock.now())) return copy;
@@ -282,17 +289,17 @@ async function loadHeld(
     return null;
   });
   if (landed !== null) return landed;
-  if (owner.closing.aborted) return prev;
+  if (owner.closing.aborted) return prev ?? copy;
   const failed: Failed = {
     kind: "failed",
     at: owner.clock.now(),
     failures: (prev === null ? 0 : failuresOf(prev)) + 1,
     last: later(copy, lastLanded(prev)),
   };
-  owner.log(
+  sayNotLoaded([
     "warn",
-    `pricing table not loaded (${failed.failures} in a row): priced by ${failed.last === null ? "the bundled rates" : "the last table"}; the next ask after ${standsMs(failed.failures)}ms tries again`,
-  );
+    `pricing table not loaded: priced by ${failed.last === null ? "the bundled rates" : "the last table"}; the next ask after ${standsMs(failed.failures)}ms tries again`,
+  ]);
   return failed;
 }
 
