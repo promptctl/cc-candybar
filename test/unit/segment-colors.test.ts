@@ -220,7 +220,7 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
     expect(contrastRatio(drawn(kept), drawn(STATE))).toBeGreaterThanOrEqual(held);
   });
 
-  test("at 256 colours a red that reads under the quiet floor in truecolor keeps that contrast, and is never lifted toward the floor", () => {
+  test("at 256 colours a red that reads under the quiet floor on its ground before rounding keeps that contrast, and is never lifted toward the floor", () => {
     // atom-one-dark's error-lighten-3 on primary-darken-2: the farthest named
     // red, accepted at 2.00:1. Lifted to the quiet floor it rounds to a yellow
     // (#ffff87, 3.65:1). Its own rounding (#ffaf87, 2.15:1) already keeps

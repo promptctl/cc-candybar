@@ -118,11 +118,11 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
   // does on `bg` unrounded, capped at the text floor. `bg` is the ground this
   // depth draws the door on, which can be another rung than truecolor's, and
   // the red was chosen for it. The floor is what the red has on that ground
-  // before rounding, and never more: a named red
-  // that reads faintly on its ground is accepted as it is, and a floor above
-  // it would hand rounding a non-red that clears. The cap is AA: past it the
-  // ✖ needs no more contrast, so rounding may spend the rest, and the drawn
-  // colour stays nearer the red.
+  // before rounding, and never more: a named red that reads faintly on its
+  // ground is accepted as it is, and a floor above it would hand rounding a
+  // non-red that clears. The cap is AA: past it the ✖ needs no more
+  // contrast, so rounding may spend the rest, and the drawn colour stays
+  // nearer the red.
   // [LAW:one-source-of-truth] rich-js measures and repairs; this only names
   // the floor.
   const keptOn: TemplateFunc = {
