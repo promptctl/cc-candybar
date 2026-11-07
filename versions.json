@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-668",
+      "ref": "refs/pull/668/merge",
+      "sha": "579d4e57b598e08102b8f2cd672f7b79ad543fe7",
+      "timestamp": "2026-11-07T05:51:17.607Z",
+      "commits": [
+        {
+          "sha": "579d4e57b598e08102b8f2cd672f7b79ad543fe7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:50:28Z",
+          "message": "Merge cced3be3e5de9f7738307cb3d7c1f6ff9b667e14 into c528b6a5b6526a191a75fddaa5dd0251b0889828\n"
+        },
+        {
+          "sha": "cced3be3e5de9f7738307cb3d7c1f6ff9b667e14",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T22:44:37-07:00",
+          "message": "test(click): the driven-bar hold beside a refused step is pinned by the reader's own case, not a new daemon boot (brandon-menus-sjhy.3c7)\n"
+        },
+        {
+          "sha": "443dae36438dca5ee841134a5ad0305a31554393",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T22:36:45-07:00",
+          "message": "refactor(click): an unknown verb's refusal has its own constructor beside a step's (brandon-menus-sjhy.3c7)\n"
+        },
+        {
+          "sha": "a332d186ebcaec69b0ac845b639193d32395ef53",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:27:36-07:00",
+          "message": "fix(site): a copy-only click starts its clipboard write before the render it awaits (brandon-menus-sjhy.3c7)\n\nA browser copies only while the click's gesture is live, and the spread\nawaited the render first. The fold's and the session read's comments say\nwhere a step is now refused, and the driven-bar hold names what its steps\ndo once each.\n"
+        },
+        {
+          "sha": "49dcc29795d4351abe17470df320104fdb77e10f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:19:57-07:00",
+          "message": "fix(click): a refused step and a handler's refusal are one Refusal, and a click is read once per reader (brandon-menus-sjhy.3c7)\n\nThe step's run takes only a step its read lets run, so the fold hands a\nrefused step's refusal straight to its owner. effectsOf throws a value\nthat does not decode with its link again, and spells the unknown verb and\nthe non-dispatch link as the daemon and drawnClickOf do. The driven-bar\nhold takes the click its caller already read.\n"
+        },
+        {
+          "sha": "169fab831a4517f89918c42b16672c4a142a343d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:57:41-07:00",
+          "message": "fix(click): a drawn link reads as the daemon's one read, step by step, and one gate holds back a driven bar's machine click (brandon-menus-sjhy.3c7)\n\nThe dispatch read stamps each step once: one that runs carries its leaf,\nsession and arguments; one refused carries the daemon's text for why and the\narguments that decoded. The fold is the one reader of step outcomes and the\none caller of the refusal owners. drawnClickOf and describeLink read through\nreadClick, so adjacent writes read as the batch that lands and a malformed\nstep as its own refusal beside the steps that run; effectsOf stays the wire\ncodec's inverse. The harness and the site hold a click back by one gate that\ncounts only steps that run, naming refused steps beside them.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c528b6a5b6526a191a75fddaa5dd0251b0889828",
@@ -20,56 +70,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-07T02:17:53Z",
           "message": "chore(release): set `package.json` to 1.208.9 [skip ci]\n\n## [1.208.9](https://github.com/promptctl/cc-candybar/compare/v1.208.8...v1.208.9) (2026-11-07)\n\n### Bug Fixes\n\n* **lanes:** a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom) ([#663](https://github.com/promptctl/cc-candybar/issues/663)) ([e91dc65](https://github.com/promptctl/cc-candybar/commit/e91dc65779794fd06d6ce4db8ec43c25efb26e07))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-668",
-      "ref": "refs/pull/668/merge",
-      "sha": "51a21af9216132e6040626c8d71664d381019069",
-      "timestamp": "2026-11-07T05:45:40.962Z",
-      "commits": [
-        {
-          "sha": "51a21af9216132e6040626c8d71664d381019069",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:44:53Z",
-          "message": "Merge e5b076ed49927f8075bd2b07b070d079996b4004 into fc49ff5db45144707ebd065b13c507d038867cde\n"
-        },
-        {
-          "sha": "e5b076ed49927f8075bd2b07b070d079996b4004",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:44:37-07:00",
-          "message": "test(click): the driven-bar hold beside a refused step is pinned by the reader's own case, not a new daemon boot (brandon-menus-sjhy.3c7)\n"
-        },
-        {
-          "sha": "efdf9557cb3f7b02cd4d04ef27593804f90a6683",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T22:36:45-07:00",
-          "message": "refactor(click): an unknown verb's refusal has its own constructor beside a step's (brandon-menus-sjhy.3c7)\n"
-        },
-        {
-          "sha": "e2aaa78d98e6fcddf8435647f0a256c882f30c68",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:27:36-07:00",
-          "message": "fix(site): a copy-only click starts its clipboard write before the render it awaits (brandon-menus-sjhy.3c7)\n\nA browser copies only while the click's gesture is live, and the spread\nawaited the render first. The fold's and the session read's comments say\nwhere a step is now refused, and the driven-bar hold names what its steps\ndo once each.\n"
-        },
-        {
-          "sha": "58a7b748e2d7af46db185b8ed5925b4b7bf52cb7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:19:57-07:00",
-          "message": "fix(click): a refused step and a handler's refusal are one Refusal, and a click is read once per reader (brandon-menus-sjhy.3c7)\n\nThe step's run takes only a step its read lets run, so the fold hands a\nrefused step's refusal straight to its owner. effectsOf throws a value\nthat does not decode with its link again, and spells the unknown verb and\nthe non-dispatch link as the daemon and drawnClickOf do. The driven-bar\nhold takes the click its caller already read.\n"
-        },
-        {
-          "sha": "0b50628cab5134e15175296f8065caf53baf3007",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:57:41-07:00",
-          "message": "fix(click): a drawn link reads as the daemon's one read, step by step, and one gate holds back a driven bar's machine click (brandon-menus-sjhy.3c7)\n\nThe dispatch read stamps each step once: one that runs carries its leaf,\nsession and arguments; one refused carries the daemon's text for why and the\narguments that decoded. The fold is the one reader of step outcomes and the\none caller of the refusal owners. drawnClickOf and describeLink read through\nreadClick, so adjacent writes read as the batch that lands and a malformed\nstep as its own refusal beside the steps that run; effectsOf stays the wire\ncodec's inverse. The harness and the site hold a click back by one gate that\ncounts only steps that run, naming refused steps beside them.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
         }
       ]
     },
