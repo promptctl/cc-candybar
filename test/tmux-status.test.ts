@@ -33,6 +33,8 @@ import { countedIds } from "./helpers/link-ids";
 import { TEST_SIGNER } from "./helpers/link-signer";
 
 const SOCKET = "/tmp/tmux-test/default";
+// The Claude Code whose record a confirmed or mismatched stamp read.
+const CLAUDE = { pid: 4242, configDir: undefined };
 // What the binding's URL carries for a click on `range` of pane `%<pane>`.
 const clickOn = (
   pane: string,
@@ -273,7 +275,7 @@ function harness(ids: readonly string[] = ["$1"], renderer: Renderer = {}) {
   });
   const hold = (sessionId: string, pane: string): void => {
     newest.set(pane, sessionId);
-    owner.observe(sessionId, { kind: "runs", tmux: { socket: SOCKET, pane, truecolor: null } }, true);
+    owner.observe(sessionId, { kind: "runs", tmux: { socket: SOCKET, pane, truecolor: null }, claude: CLAUDE }, true);
   };
   const answer = async (
     sessionOf: Record<string, string>,
@@ -346,7 +348,7 @@ describe("TmuxStatusLines", () => {
   // has no status line to draw in, so it keeps drawing in Claude Code's.
   test("a session switched on with no tmux pane holds no status line", async () => {
     const h = harness();
-    h.owner.observe("s1", { kind: "runs", tmux: null }, true);
+    h.owner.observe("s1", { kind: "runs", tmux: null, claude: CLAUDE }, true);
     await h.answer({}, {});
     expect(h.subs.has("s1")).toBe(false);
     expect([...session(h)]).toEqual([]);
@@ -398,7 +400,7 @@ describe("TmuxStatusLines", () => {
     session(h).set("status", "5");
     h.owner.observe(
       "s1",
-      { kind: "runs", tmux: { socket: SOCKET, pane: "%1", truecolor: null } },
+      { kind: "runs", tmux: { socket: SOCKET, pane: "%1", truecolor: null }, claude: CLAUDE },
       false,
     );
     await h.owner.settled();
@@ -421,7 +423,7 @@ describe("TmuxStatusLines", () => {
     const tmux = { socket: SOCKET, pane: "%1", truecolor: null };
     const notConfirmed = [
       { kind: "unconfirmed", why: "its parent keeps no record" },
-      { kind: "mismatched", why: "its Claude Code holds session s2" },
+      { kind: "mismatched", claude: CLAUDE, held: "s2", why: "its Claude Code holds session s2" },
     ] as const;
     for (const stamp of notConfirmed)
       for (const where of [tmux, null]) h.owner.observe("s1", { ...stamp, tmux: where }, true);
@@ -440,7 +442,7 @@ describe("TmuxStatusLines", () => {
     const h = harness();
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
-    h.owner.observe("s1", { kind: "runs", tmux: null }, true);
+    h.owner.observe("s1", { kind: "runs", tmux: null, claude: CLAUDE }, true);
     await h.owner.settled();
     expect(h.unsubscribed).toEqual(["s1"]);
   });

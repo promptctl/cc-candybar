@@ -31,6 +31,7 @@ import type { Launcher } from "../proc/launch";
 import type { EffectSessions } from "../render/effect.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { StoredRoot } from "./foundations/stored-path";
+import type { MismatchRuns } from "./mismatch-runs.js";
 import type { HeldSessionOf } from "./session-pane.js";
 
 // [LAW:one-source-of-truth] What one daemon holds, built once by `createDaemon`
@@ -56,6 +57,9 @@ export interface DaemonParts {
   readonly stats: RuntimeStats;
   readonly handlerProbes: ProbeArrivals;
   readonly renderSightings: RenderSightings;
+  // Each session's run of mismatched pane stamps: the request arm writes it,
+  // through the verb context's same instance, and the draw reads its verdict.
+  readonly mismatchRuns: MismatchRuns;
   readonly watcherRegistry: WatcherRegistry;
   readonly refreshLedger: RefreshLedger;
   readonly fileEvents: FileEventDelivery;

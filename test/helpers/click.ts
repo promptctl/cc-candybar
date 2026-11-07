@@ -33,6 +33,7 @@ import type { SessionStateRW } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { ProbeArrivals } from "../../src/doctor/handler-probe";
+import { MismatchRuns } from "../../src/daemon/mismatch-runs";
 import { RenderSightings } from "../../src/daemon/render-sightings";
 import { instantOf } from "../../src/utils/instant";
 import {
@@ -166,6 +167,7 @@ export function testVerbContext(
     gone: () => false,
     probes: new ProbeArrivals(),
     clients: new RenderSightings(),
+    mismatchRuns: new MismatchRuns(journalTurns),
     bundle: HEALTHY_BUNDLE,
     serving: () => HEALTHY_SERVING,
     // And for the Claude Code pane: a test that drives a slash click hands in

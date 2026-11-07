@@ -20,18 +20,42 @@ export type HeldSessionOf = (
   configDir: string | undefined,
 ) => HeldSession;
 
+// The Claude Code whose record was read: the process that ran the client, in
+// the configuration directory its environment names.
+export interface ClaudeProcess {
+  readonly pid: number;
+  readonly configDir: string | undefined;
+}
+
+// [LAW:one-source-of-truth] A Claude Code as a map key: what tells one
+// process's record from another's.
+export const claudeKey = (claude: ClaudeProcess): string =>
+  `${claude.pid}\0${claude.configDir ?? ""}`;
+
 // [LAW:types-are-the-program] Where a request's session runs, as the render
 // checkpoint stamps it: confirmed by the record of the Claude Code that ran its
-// client, in the tmux pane the client names or outside tmux (`tmux` null);
-// mismatched, when that Claude Code's record holds another session, as it does
-// on either side of a `/clear` or `/resume` rewriting it (the old session's
-// last tick can follow the rewrite, the new one's first can precede it); or not
-// known, with why, wherever the client ran. Only a confirmed stamp places the
-// session in a pane.
+// client (`claude`), in the tmux pane the client names or outside tmux (`tmux`
+// null); mismatched, when that Claude Code's record holds another session, as
+// it does on either side of a `/clear` or `/resume` rewriting it (the old
+// session's last tick can follow the rewrite, the new one's first can precede
+// it); or not known, with why, wherever the client ran. Only a confirmed stamp
+// places the session in a pane.
 export type SessionPane =
-  | { readonly kind: "runs"; readonly tmux: TmuxHint | null }
   | {
-      readonly kind: "mismatched" | "unconfirmed";
+      readonly kind: "runs";
+      readonly tmux: TmuxHint | null;
+      readonly claude: ClaudeProcess;
+    }
+  | {
+      readonly kind: "mismatched";
+      readonly tmux: TmuxHint | null;
+      readonly claude: ClaudeProcess;
+      // The session the record holds instead.
+      readonly held: string;
+      readonly why: string;
+    }
+  | {
+      readonly kind: "unconfirmed";
       readonly tmux: TmuxHint | null;
       readonly why: string;
     };
@@ -55,6 +79,7 @@ export function sessionPaneOf(
       tmux,
       why: "its client is too old to say which process ran it (reinstall it with `cc-candybar install`)",
     };
+  const claude = { pid: parentPid, configDir: hints.claudeConfigDir };
   const held = heldSession(parentPid, hints.claudeConfigDir);
   if (held.kind === "unread")
     return {
@@ -63,10 +88,12 @@ export function sessionPaneOf(
       why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}. A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`,
     };
   return held.sessionId === sessionId
-    ? { kind: "runs", tmux }
+    ? { kind: "runs", tmux, claude }
     : {
         kind: "mismatched",
         tmux,
+        claude,
+        held: held.sessionId,
         why: `the Claude Code that ran its statusline (pid ${parentPid}) holds session ${held.sessionId}`,
       };
 }
@@ -87,7 +114,7 @@ export function runsNowIn(
 }) => boolean {
   const reads = new Map<string, HeldSession>();
   const once: HeldSessionOf = (pid, configDir) => {
-    const key = `${pid}\0${configDir ?? ""}`;
+    const key = claudeKey({ pid, configDir });
     const read = reads.get(key) ?? heldSession(pid, configDir);
     reads.set(key, read);
     return read;
@@ -108,17 +135,24 @@ export const paneFact = (pane: SessionPane): string =>
 
 // [LAW:no-silent-failure] Why a lane that shows the session its pane runs
 // shows another bar than this one, while such a lane is on: null otherwise.
-// A mismatched stamp names nothing to fix: its client was run by the pane's
-// Claude Code, whose ticks of the session it holds are confirmed; its render
-// line still says why.
+// A mismatched stamp is the rewrite race until its session's run of them has
+// `lasted` past it (src/daemon/mismatch-runs.ts): the pane's Claude Code ran
+// its client, and that Claude Code's record goes on holding another session.
 export function sessionPaneError(
   pane: SessionPane,
   lanes: LaneSwitches,
+  lasted: boolean,
 ): string | null {
   const on = LANE_NAMES.filter(
     (lane) => lanes[lane] && LANES[lane].showsPaneSession,
   );
-  return pane.kind !== "unconfirmed" || pane.tmux === null || on.length === 0
+  const why =
+    pane.kind === "unconfirmed"
+      ? `this one is not known to be it: ${pane.why}`
+      : pane.kind === "mismatched" && lasted
+        ? `this one is not it: ${pane.why}, for longer than a \`/clear\` or \`/resume\` takes to rewrite it`
+        : null;
+  return why === null || pane.tmux === null || on.length === 0
     ? null
-    : `The ${on.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and this one is not known to be it: ${pane.why}`;
+    : `The ${on.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and ${why}`;
 }

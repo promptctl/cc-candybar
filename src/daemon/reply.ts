@@ -469,6 +469,7 @@ export async function replyTo(
             kind: "request",
             req: checked.req,
             at,
+            arrived: accepted,
             // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
             // fixed at its arrival: early enough before its client hangs up to
             // draw (src/daemon/request-deadline.ts).

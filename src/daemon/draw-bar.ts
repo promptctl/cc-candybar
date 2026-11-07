@@ -474,6 +474,7 @@ export function drawRender(
     effectSessions,
     menuIdle,
     launcher,
+    mismatchRuns,
   } = parts;
   const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
   // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
@@ -533,7 +534,16 @@ export function drawRender(
   const errors: SourcedText[] = [
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
-    said(sessionPaneError(req.pane, lanes)),
+    // About the session's pane, so a viewer open on it stays on it as the
+    // stamp's words move.
+    sourced(
+      "session-pane",
+      sessionPaneError(
+        req.pane,
+        lanes,
+        mismatchRuns.lasted(req.sessionId, req.pane),
+      ),
+    ),
     sourced("load", entry.lastError),
     sourced("update-act", updateWatch.error()),
     // [LAW:no-silent-failure] The home's link-id counter, faulted: no tmux
