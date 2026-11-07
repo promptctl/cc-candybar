@@ -69525,7 +69525,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.5";
+var PACKAGE_VERSION = "1.208.6";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -72268,8 +72268,8 @@ var import_node_path37 = __toESM(require_path_browserify(), 1);
 // src/daemon/session-pane.ts
 init_globals();
 function sessionPaneOf(hints, sessionId2, heldSession) {
-  const { tmux: tmux3, parentPid } = hints;
-  if (!inTmux(tmux3)) return { kind: "outside" };
+  const tmux3 = inTmux(hints.tmux) ? hints.tmux : null;
+  const { parentPid } = hints;
   if (parentPid === void 0)
     return {
       kind: "unconfirmed",
@@ -72289,14 +72289,22 @@ function sessionPaneOf(hints, sessionId2, heldSession) {
     why: `the Claude Code that ran its statusline (pid ${parentPid}) holds session ${held.sessionId}`
   };
 }
-var runningPane = (pane) => pane.kind === "runs" ? pane.tmux : null;
-var runsNowIn = (where, heldSession) => (req) => inTmux(req.hints.tmux) && samePane(req.hints.tmux, where) && sessionPaneOf(req.hints, req.sessionId, heldSession).kind === "runs";
-var paneFact = (pane) => pane.kind === "unconfirmed" ? `unconfirmed: ${pane.why}` : pane.kind;
+function runsNowIn(where, heldSession) {
+  const reads = /* @__PURE__ */ new Map();
+  const once2 = (pid2, configDir2) => {
+    const key = `${pid2}\0${configDir2 ?? ""}`;
+    const read2 = reads.get(key) ?? heldSession(pid2, configDir2);
+    reads.set(key, read2);
+    return read2;
+  };
+  return (req) => inTmux(req.hints.tmux) && samePane(req.hints.tmux, where) && sessionPaneOf(req.hints, req.sessionId, once2).kind === "runs";
+}
+var paneFact = (pane) => pane.kind === "unconfirmed" ? `unconfirmed: ${pane.why}` : pane.tmux === null ? "outside" : "runs";
 function sessionPaneError(pane, lanes) {
   const on2 = LANE_NAMES.filter(
     (lane) => lanes[lane] && LANES[lane].showsPaneSession
   );
-  return pane.kind !== "unconfirmed" || on2.length === 0 ? null : `The ${on2.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and this one is not known to be it: ${pane.why}`;
+  return pane.kind !== "unconfirmed" || pane.tmux === null || on2.length === 0 ? null : `The ${on2.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and this one is not known to be it: ${pane.why}`;
 }
 
 // src/daemon/update-keys.ts
@@ -76617,6 +76625,8 @@ var FrameFeeds = class {
     const feed2 = this.feeds.get(sessionId2);
     if (feed2 === void 0) return;
     feed2.woke[cause]++;
+    if (feed2.phase.kind !== "drawing")
+      feed2.wokeSince ??= this.deps.clock.monotonic();
     if (!this.hasten(feed2)) feed2.coalesced++;
   }
   // Wake, for `cause`, every watched session whose latest request `match`
@@ -76709,6 +76719,9 @@ var FrameFeeds = class {
       evaluated: 0,
       cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
+      wokeSince: null,
+      wakeToFrameLast: null,
+      wakeToFrameMax: 0,
       coalesced: 0,
       summarizedAt: now2,
       refreshesAtOpen: this.deps.refreshes()
@@ -76753,6 +76766,8 @@ var FrameFeeds = class {
   // one frame to the next. Its moment on the monotonic clock is that instant's.
   draw(feed2, due) {
     feed2.phase = { kind: "drawing" };
+    const woke = feed2.wokeSince;
+    feed2.wokeSince = null;
     const started2 = this.deps.clock.monotonic();
     const wall = this.deps.instant();
     const at = Math.min(
@@ -76761,7 +76776,7 @@ var FrameFeeds = class {
     );
     const moment2 = started2 + (at - wall) * 1e3;
     try {
-      this.step(feed2, started2, moment2, at);
+      this.step(feed2, woke, started2, moment2, at);
     } catch (error) {
       feed2.lastStart = moment2;
       this.deps.log(
@@ -76772,7 +76787,7 @@ var FrameFeeds = class {
       this.schedule(feed2, null, at);
     }
   }
-  step(feed2, started2, moment2, at) {
+  step(feed2, woke, started2, moment2, at) {
     const frame2 = this.deps.render(
       feed2.sessionId,
       paceOf(this.spacingOf(feed2)),
@@ -76785,6 +76800,10 @@ var FrameFeeds = class {
     }
     feed2.lastStart = moment2;
     const finished = this.deps.clock.monotonic();
+    if (woke !== null) {
+      feed2.wakeToFrameLast = finished - woke;
+      feed2.wakeToFrameMax = Math.max(feed2.wakeToFrameMax, finished - woke);
+    }
     this.drawn++;
     feed2.drawn++;
     feed2.drawMs += finished - started2;
@@ -76953,7 +76972,7 @@ var FrameFeeds = class {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
+      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} wakeToFrame=${feed2.wakeToFrameLast === null ? "-" : `last:${feed2.wakeToFrameLast.toFixed(1)}ms,max:${feed2.wakeToFrameMax.toFixed(1)}ms`} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
     );
     feed2.summarizedAt = now2;
   }
@@ -77856,11 +77875,7 @@ function requestArrived(parts, req) {
     req.sessionId,
     inTmux(req.hints.tmux)
   );
-  tmuxStatusLines.observe(
-    req.sessionId,
-    runningPane(req.pane),
-    lanes.tmuxStatus
-  );
+  tmuxStatusLines.observe(req.sessionId, req.pane, lanes.tmuxStatus);
   return laneSetups.noted(req.sessionId, lanes);
 }
 function drawForAnswer(parts, setup, arrival) {
@@ -77886,7 +77901,7 @@ function laneClicked(parts, sessionId2, before, after) {
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(
       sessionId2,
-      runningPane(latest.pane),
+      sessionPaneOf(latest.hints, sessionId2, parts.heldSession),
       after.tmuxStatus
     );
   return laneSetups.clicked(sessionId2, before, after);
@@ -85078,17 +85093,16 @@ var TmuxStatusLines = class {
   writes = 0;
   failedWrites = 0;
   // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
-  // arrival, a click's commit with its session's latest request — never at a
-  // draw: a session whose switch is on is held in the pane it runs in
-  // (`running`, as its request was stamped), and one switched off is not. A
-  // request not known to run in a pane (`running` null) says nothing of where
-  // its session runs — any client in the pane, or one outside tmux, can carry
-  // the session's id — so a session held already stays where it is. A daemon
-  // restart picks each session up at its next request.
-  observe(sessionId2, running, on2) {
+  // arrival, a click's commit — never at a draw: a session whose switch is on
+  // is held in the pane its Claude Code's record confirms it runs in (`pane`),
+  // and one switched off, or confirmed outside tmux, is not. An unconfirmed
+  // request says nothing of where its session runs, so a session held already
+  // stays where it is. A daemon restart picks each session up at its next
+  // request.
+  observe(sessionId2, pane, on2) {
     if (this.closed) return;
     const held = this.held.get(sessionId2);
-    const where = on2 ? running ?? held ?? null : null;
+    const where = !on2 ? null : pane.kind === "runs" ? pane.tmux : held ?? null;
     if (held !== void 0 && (where === null || !samePane(held, where)))
       this.release(held, "switched off or moved");
     if (where === null || this.held.has(sessionId2)) return;
