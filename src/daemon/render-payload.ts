@@ -1678,18 +1678,17 @@ export function projectDrawFields(
 // row. The walk over a config (src/config/payload-reads.ts) supplies the
 // paths, and the declaration is this set.
 export function builtinsReadAt(paths: Iterable<string>): DeclaredBuiltins {
-  const under = pathUnder;
   const read = new Set<BuiltinName>();
   for (const path of paths) {
     for (const [root, row] of ROWS) {
-      if (!under(root, path) && !under(path, root)) continue;
+      if (!pathUnder(root, path) && !pathUnder(path, root)) continue;
       for (const name of row.facts) read.add(name);
       for (const [name, fields] of Object.entries(row.parts) as Array<
         [BuiltinName, readonly string[]]
       >) {
         if (
-          under(path, root) ||
-          fields.some((field) => under(`${root}.${field}`, path))
+          pathUnder(path, root) ||
+          fields.some((field) => pathUnder(`${root}.${field}`, path))
         ) {
           read.add(name);
         }

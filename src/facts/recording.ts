@@ -30,6 +30,8 @@
 
 import {
   BUILTIN_FACTS,
+  type BuiltinName,
+  declaredBuiltins,
   FACTS_VERSION,
   type BuiltinFacts,
   type FactsDiagnostic,
@@ -283,6 +285,17 @@ export function parseSessionFacts(json: unknown, where: string): SessionFacts {
       return [name, parseFact(fact, `${where} builtins.${name}`)];
     }),
   ) as unknown as BuiltinFacts;
+  // [LAW:parse-dont-validate] The keys are a declaration, so they are closed
+  // as one is built (`declaredBuiltins`): a document holding the PR without
+  // the repository it is asked of is refused here, the one boundary a
+  // document crosses a process at.
+  const names = Object.keys(builtins) as BuiltinName[];
+  if (declaredBuiltins(names).size !== names.length) {
+    throw new FactParseError(
+      where,
+      "holds the PR without the repository it is asked of",
+    );
+  }
   if (!isPlainObject(json.sources)) {
     throw new FactParseError(where, "has no `sources`");
   }

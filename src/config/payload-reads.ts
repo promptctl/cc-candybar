@@ -30,7 +30,7 @@ export function segmentTemplates(config: DslConfig, name: string): string[] {
   if (!seg) return [];
   return [
     ...[seg.template, seg.when, seg.bg, seg.fg].flatMap((src) =>
-      src ? [src] : [],
+      src !== undefined ? [src] : [],
     ),
     ...Object.values(seg.partials ?? {}),
   ];
@@ -39,8 +39,9 @@ export function segmentTemplates(config: DslConfig, name: string): string[] {
 // [LAW:one-source-of-truth] Whether a dotted payload path is `outer` or lies
 // under it: the one spelling of containment the declaration walk, the rows and
 // the doctor's needs share.
-export const pathUnder = (outer: string, inner: string): boolean =>
-  inner === outer || inner.startsWith(`${outer}.`);
+export function pathUnder(outer: string, inner: string): boolean {
+  return inner === outer || inner.startsWith(`${outer}.`);
+}
 
 // [LAW:one-source-of-truth] The strings a preset's layout has the engine
 // evaluate besides its segments' own: each node's `when`, the `lead` and
@@ -119,14 +120,14 @@ export function segmentInputPaths(
 // it.
 export function configPayloadPaths(config: DslConfig): ReadonlySet<string> {
   const templates: string[] = [];
+  const placed = new Set<string>();
   for (const preset of presetNames(config.presets)) {
     templates.push(...layoutTemplates(config, preset));
     for (const node of walkNodes(presetRoot(config, preset).node)) {
-      if (node.kind === "segment") {
-        templates.push(...segmentTemplates(config, node.name));
-      }
+      if (node.kind === "segment") placed.add(node.name);
     }
   }
+  for (const name of placed) templates.push(...segmentTemplates(config, name));
   const roots = [...declaredVariables(config)]
     .filter(([, decl]) => runsUnread(decl))
     .map(([name]) => name);
