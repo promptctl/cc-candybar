@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-672",
+      "ref": "refs/pull/672/merge",
+      "sha": "c00fe717a29728f95e7f97fbcf697d8aad2cc9c4",
+      "timestamp": "2026-11-07T06:52:29.694Z",
+      "commits": [
+        {
+          "sha": "c00fe717a29728f95e7f97fbcf697d8aad2cc9c4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:51:34-07:00",
+          "message": "Merge 7ecff3e2de9185f41e9827285d63150706eb9d16 into f71e4018241defe5e52915caeb204883a59da539\n"
+        },
+        {
+          "sha": "7ecff3e2de9185f41e9827285d63150706eb9d16",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:51:15-07:00",
+          "message": "docs(ui-elements): the carousel and the settings menu are drawn as the bar draws them now (brandon-menus-sjhy.8zu)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f71e4018241defe5e52915caeb204883a59da539",
