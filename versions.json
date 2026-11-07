@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-669",
+      "ref": "refs/pull/669/merge",
+      "sha": "084fd3e90e025514eae37d12defc6a85f9ca18b3",
+      "timestamp": "2026-11-07T02:27:50.969Z",
+      "commits": [
+        {
+          "sha": "084fd3e90e025514eae37d12defc6a85f9ca18b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:27:01-07:00",
+          "message": "Merge 76972919abe9a32955039b19dc6bc0eb5e750ce1 into fc49ff5db45144707ebd065b13c507d038867cde\n"
+        },
+        {
+          "sha": "76972919abe9a32955039b19dc6bc0eb5e750ce1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:26:25-07:00",
+          "message": "fix(lanes): a cleared session's straggling tick has left its pane, and draws no ⚠ (candybar-gather-renderer-76bb.1dh.jw7)\n\nA request whose Claude Code's record holds another session is stamped\nleft, not unconfirmed: that Claude Code is alive and has moved on, so\nthe tick names nothing to fix. Only an unread record, or a client too old\nto name its parent, still draws the session-pane ⚠. The render line keeps\nthe why for both.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-668",
       "ref": "refs/pull/668/merge",
       "sha": "4f0a1df09c5f55baabe25c5c4247f3ca29ea36b1",
