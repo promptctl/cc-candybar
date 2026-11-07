@@ -11,7 +11,7 @@ pnpm bar --links 🍫                                  # …and list what every 
 
 `--ssh` makes the host segment show. Most drawings were taken on 2026-10-03, from a branch on top of `main` at `dff9dbb`, which is why their git cell reads `docs/ui-elements-inventory`. The toggle, the stepper, the carousel, the previews, the confirm step, the settings menu, the setting control and configure mode were redrawn on 2026-11-06 from `main` at `984751dd`, on the branch `brandon-menus-sjhy.8zu` and the host `bmf@u2`, which their cells read.
 
-**Since the first drawings:** the opt-in `themeSwitcher` segment is gone, and mentions of it below show the earlier design. A theme or style name is written in the text around it, and a swatch beside it carries the colour: `▀▀▀`, the palette's primary, secondary and accent over its background.
+**Since the first drawings:** every drawing not named above as redrawn shows the bar of 2026-10-03: no rate cell beside the door, and the host and git cells of that machine and branch. The opt-in `themeSwitcher` segment is gone, and mentions of it below show the earlier design. A theme or style name is written in the text around it, and a swatch beside it carries the colour: `▀▀▀`, the palette's primary, secondary and accent over its background.
 
 ## At a glance
 
@@ -341,12 +341,12 @@ The control a setting gets, chosen from its domain. The same generator serves th
 
 | Domain | Control | Example |
 |---|---|---|
-| `"bool"` | [Toggle](#toggle) | `☑ wrap ↺`, `☑ ahead/behind` |
-| A range `{ min, max }` | [Stepper](#stepper) | `◀ padding 1 ▶ ↺`, `◀ warning at % 50 ▶` |
+| `"bool"` | [Toggle](#toggle) | `☑ wrap`, `☑ ahead/behind` |
+| A range `{ min, max }` | [Stepper](#stepper) | `◀ padding 1 ▶`, `◀ warning at % 50 ▶` |
 | A word list or option domain | [Carousel](#carousel) | `◀ ✨ effect ▶`, `◀ renderer ▶` |
 | A domain of themes | The theme picker ([the first line](#the-first-line-and-the-save-cell)) | `🎨 theme ▀▀▀`, configure mode's `theme ▀▀▀` |
 
-Every control writes a session draft. In the settings menu, a control also has a `↺` while resetting it would change something (a draft, or a value the config file holds at a layer the reset clears), which resets that setting at every layer (`reset-config`); its tab is marked `•` while any control in it shows one. The drawings here show every `↺`.
+Every control writes a session draft. In the settings menu, a control also has a `↺` while resetting it would change something (a draft, or a value the config file holds at a layer the reset clears), which resets that setting at every layer (`reset-config`); its tab is marked `•` while any control in it shows one. The drawings here are of a fresh session, so only the `compact` pick shows one.
 
 - **Authored as:** `settingControl` in `src/config/setting-control.ts`. Which tab a global setting appears in is the `PLACE` table in `src/config/menu-places.ts`.
 
@@ -369,7 +369,7 @@ At 80 columns, then at 200:
  ✱ Opus 4.8  ◔ 48,000 (76%)  ⇲ auto −  ◱ 63% (2h 1m)  ◑ 21% (5d)
 ```
 
-Beside the door, `polled` says how the bar is redrawn: `polled` while Claude Code polls it, `≤N fps` while a [lane](#tabs) pushes it, N being the most frames a second the lane draws. It has no click.
+Beside the door, `polled` says how the bar is redrawn: `polled` while Claude Code polls it, `≤N fps` while a [lane](#tabs) pushes it. N is the most frames a second the lane draws it at: the moving rate while its pane is on a screen, one a second while it is not. It has no click.
 
 Clicking `🍫` opens the menu above the bar. The door rises with it as `✖`, in the theme's error colour, and the bar's rows stay as they were:
 
@@ -441,7 +441,7 @@ The theme picker at 80 columns, then at 200. While it is open, its label names t
 | `?` | applies a random theme other than the one in force, chosen when the bar is drawn |
 | `←` / `→` | the previous / next page of swatches; shown while there is one |
 | A swatch | applies that theme; the one in force is bracketed |
-| The open label | closes the picker |
+| `✕` / the open label | closes the picker |
 
 The gear's carousels:
 
@@ -799,7 +799,7 @@ Found while drawing the above. Each is for Brandon to decide; none is changed he
 4. **Two `✚` side by side.** Between `model` and `context`, edit mode draws adjacent `✚` with nothing between them, because `context` and `autocompact` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing leaves its two `✚` adjacent too.
 5. **`✖` means two things on one screen.** In edit mode with the menu open, `✖` closes the menu (the door) and `✖` removes a segment, both visible at once. Bodies close with `✕`.
 6. **Three ways to choose one value.** A [carousel](#carousel) whose label opens a list (`◀ ✨ effect ▶`), the theme picker's pages of swatches (`◀ ? ▶ ← ▀▀▀ [▀▀▀]`), and [library pages](#library-pages). The settings menu and configure mode use the carousel and the theme picker; edit mode's `✚` is a [menu](#menu) over the library. A carousel's list is a menu's picker grid too, so the two share one list; nothing bundled uses a bare menu over a plain list.
-7. **Resolved: every control names its field.** A carousel shows the setting, never its value (`◀ ▦ preset ▶`, `◀ speed ▶`), as do the theme picker (`🎨 theme ▀▀▀`), the toggles and the steppers. The labels differ only in their glyph: the settings menu's carry one (`✨ effect`), while some of its labels (`speed`, `renderer`, `menu timeout`) and every configure-mode label (`theme`, `effect`) carry none.
+7. **Resolved: every control names its field.** A carousel's label is the setting's name, not its value (`◀ ▦ preset ▶`, `◀ speed ▶`); over a colour domain a swatch of the value follows the name (`◀ ◐ style ▀▀▀ ▶`). The theme control reads `🎨 theme ▀▀▀` and names the theme in force only while its picker is open, a toggle is its name and a box, and a stepper shows its number after its name (`◀ padding 1 ▶`). The labels differ only in their glyph: the settings menu's carry one (`✨ effect`), while some of its labels (`speed`, `renderer`, `menu timeout`) and every configure-mode label (`theme`, `effect`) carry none.
 8. **Resolved (brandon-menu-ia-q30.nk8): `↺` shows only when it would do something**, as `⟲` does, and a tab holding one is marked `•`.
 9. **Two confirm phrasings.** `⟲ reset all? ✕` and `/clear ✓ confirm ✕` are the same [confirm step](#confirm-step) with different confirm labels.
 10. **Unused pieces.** The `toolbar-toggle` verb is in the verb table but nothing emits it, and it writes a session key nothing reads. `{{ picker }}` written by hand and `{{ gauge }}` have no bundled caller (both are author-facing).
