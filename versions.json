@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-683",
+      "ref": "refs/pull/683/merge",
+      "sha": "d6e43806d548470decbf6b3826f0ecd21124daa8",
+      "timestamp": "2026-11-07T10:32:31.507Z",
+      "commits": [
+        {
+          "sha": "d6e43806d548470decbf6b3826f0ecd21124daa8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:31:03Z",
+          "message": "Merge a6fa11dd097dd1c29d9386459571e5c94b499316 into 215f486db0c68765107dc69e715ccb26c5ac01d3\n"
+        },
+        {
+          "sha": "a6fa11dd097dd1c29d9386459571e5c94b499316",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:29:12-07:00",
+          "message": "docs(doctor): the gate comparison's completeness and the unproven count said as they hold (brandon-unfiled-3248.qo8j)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "daa6d3e07bc7fd1dc3d181c4a47ac685de3e9acd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:23:32-07:00",
+          "message": "fix(doctor): settled repositories ride the config row's text in either verdict (brandon-unfiled-3248.qo8j)\n\nA declined repository named only in a failed verdict's notes vanished\nfrom the bar while the row failed. It now rides the reason after the\nfirst problem, as it rides the note after the chain, so the bar and the\nCLI name it whatever the verdict and neither counts it. The doctor's log\nkeeps unproven worktrees in a field of their own, since each is also\nawaiting or declined.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "9a9affcc3b8bc29a4de5aa0e30d1488de3cc7ba4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:19:39-07:00",
+          "message": "fix(doctor): a repository answer during the probes refuses a stale report; settled lines count as no problem (brandon-unfiled-3248.qo8j)\n\nThe landing compares the gate by its lines, so an awaiting repository\ndeclined mid-run with the config unchanged gathers again. A failed\nverdict carries notes beside its problems, so a declined repository is\nlisted by the CLI and counted by neither the bar's row nor the log. The\ndoctor's log line carries the gate's counts, and one empty-gate fixture\nserves every test.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "1ae5712236902f578e4dc4a70d722ac4141e08ae",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:11:46-07:00",
+          "message": "fix(doctor): the config row names a repository config the load left out (brandon-unfiled-3248.qo8j)\n\nThe doctor's config load now carries the repository gate it ruled, so the\nconfig row says why a project's .cc-candybar.json5 is not in the chain. A\nrepository awaiting approval fails the row and names its directory. A\ndeclined repository, and a directory whose worktree claim is unproven, ride\nthe row's text without failing it: only reversing the user's own answer\nwould clear a declined one. repoGateLines is split into the awaiting and\nthe settled lines, so check, the demo and the doctor share one wording.\n\nAn unread answers book already reaches the row as the load's own advisory,\nso the doctor takes the awaiting lines alone and names that notice once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-682",
       "ref": "refs/pull/682/merge",
       "sha": "34c14ce42e8f8387019ebf19ef85ab4c562f1e1d",
@@ -56,49 +99,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-07T10:22:00Z",
           "message": "chore(release): set `package.json` to 1.210.0 [skip ci]\n\n## [1.210.0](https://github.com/promptctl/cc-candybar/compare/v1.209.0...v1.210.0) (2026-11-07)\n\n### Features\n\n* **facts:** a renderer declares the built-ins its config reads, and Gather gathers only those (candybar-gather-renderer-76bb.6pj.opl) ([#674](https://github.com/promptctl/cc-candybar/issues/674)) ([2e9ea2d](https://github.com/promptctl/cc-candybar/commit/2e9ea2dce98b1908a16f3ffa2128310350ebc817))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-683",
-      "ref": "refs/pull/683/merge",
-      "sha": "5e8f79e45cb8197a89a9751e3518b8622afbad5e",
-      "timestamp": "2026-11-07T10:30:23.192Z",
-      "commits": [
-        {
-          "sha": "5e8f79e45cb8197a89a9751e3518b8622afbad5e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:29:28Z",
-          "message": "Merge 9509804467f08d86f7f9f56d9c5f973c9d86c1ad into 1f5014d66591bcdbb9dac6e5fb1aa8619e0bf5fd\n"
-        },
-        {
-          "sha": "9509804467f08d86f7f9f56d9c5f973c9d86c1ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:29:12-07:00",
-          "message": "docs(doctor): the gate comparison's completeness and the unproven count said as they hold (brandon-unfiled-3248.qo8j)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "5e74f309c66bdb5160e50f73a3d3396a406fe9a0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:23:32-07:00",
-          "message": "fix(doctor): settled repositories ride the config row's text in either verdict (brandon-unfiled-3248.qo8j)\n\nA declined repository named only in a failed verdict's notes vanished\nfrom the bar while the row failed. It now rides the reason after the\nfirst problem, as it rides the note after the chain, so the bar and the\nCLI name it whatever the verdict and neither counts it. The doctor's log\nkeeps unproven worktrees in a field of their own, since each is also\nawaiting or declined.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "0ee0c4ad2bb81a11ff9a52e845d34181064ec98b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:19:39-07:00",
-          "message": "fix(doctor): a repository answer during the probes refuses a stale report; settled lines count as no problem (brandon-unfiled-3248.qo8j)\n\nThe landing compares the gate by its lines, so an awaiting repository\ndeclined mid-run with the config unchanged gathers again. A failed\nverdict carries notes beside its problems, so a declined repository is\nlisted by the CLI and counted by neither the bar's row nor the log. The\ndoctor's log line carries the gate's counts, and one empty-gate fixture\nserves every test.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "041c7d44ea2bc6cde3d989e5282816f9130101b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:11:46-07:00",
-          "message": "fix(doctor): the config row names a repository config the load left out (brandon-unfiled-3248.qo8j)\n\nThe doctor's config load now carries the repository gate it ruled, so the\nconfig row says why a project's .cc-candybar.json5 is not in the chain. A\nrepository awaiting approval fails the row and names its directory. A\ndeclined repository, and a directory whose worktree claim is unproven, ride\nthe row's text without failing it: only reversing the user's own answer\nwould clear a declined one. repoGateLines is split into the awaiting and\nthe settled lines, so check, the demo and the doctor share one wording.\n\nAn unread answers book already reaches the row as the load's own advisory,\nso the doctor takes the awaiting lines alone and names that notice once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
