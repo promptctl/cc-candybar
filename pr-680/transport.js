@@ -838,9 +838,9 @@ var require_buffer = __commonJS({
           'The "value" argument must not be of type number. Received type number'
         );
       }
-      const valueOf3 = value.valueOf && value.valueOf();
-      if (valueOf3 != null && valueOf3 !== value) {
-        return Buffer5.from(valueOf3, encodingOrOffset, length);
+      const valueOf4 = value.valueOf && value.valueOf();
+      if (valueOf4 != null && valueOf4 !== value) {
+        return Buffer5.from(valueOf4, encodingOrOffset, length);
       }
       const b = fromObject(value);
       if (b) return b;
@@ -3983,12 +3983,12 @@ var require_inspectBrand = __commonJS({
     exports.functionBase = functionBase;
     var boxedBase = (value, keys2, constructor, tag, indentation) => {
       const brand = exports.objectToString.call(value);
-      const valueOf3 = BOXED[brand];
-      if (valueOf3 === void 0)
+      const valueOf4 = BOXED[brand];
+      if (valueOf4 === void 0)
         return;
       let primitive;
       try {
-        primitive = valueOf3.call(value);
+        primitive = valueOf4.call(value);
       } catch {
         return;
       }
@@ -23039,8 +23039,8 @@ var systemTimekeeper = {
     return () => clearInterval(timer);
   },
   defer: (fire) => {
-    const turn = setImmediate(fire);
-    return () => clearImmediate(turn);
+    const turn2 = setImmediate(fire);
+    return () => clearImmediate(turn2);
   }
 };
 function sleep(clock, ms, signal) {
@@ -26452,8 +26452,8 @@ var Palette = class {
   constructor(name, dark, roles) {
     this.name = name;
     this.dark = dark;
-    const draw2 = drawnOn(name, roles.background);
-    this.vars = new Map(Object.entries(roles).map(([role, colour]) => [role, draw2(colour)]));
+    const draw3 = drawnOn(name, roles.background);
+    this.vars = new Map(Object.entries(roles).map(([role, colour]) => [role, draw3(colour)]));
   }
   get(role) {
     return this.vars.get(role);
@@ -31011,8 +31011,8 @@ function isThemeName(name) {
 function getThemeBaseColors(name) {
   const data = THEMES[name];
   const bg = parseHex(data.vars.background, data.name, "background");
-  const draw2 = drawnOn(data.name, bg);
-  const base = (key) => draw2(parseHex(data.vars[key], data.name, key));
+  const draw3 = drawnOn(data.name, bg);
+  const base = (key) => draw3(parseHex(data.vars[key], data.name, key));
   return {
     name: data.name,
     dark: data.dark,
@@ -32802,12 +32802,12 @@ function drawable2(value) {
     throw new TypeError("an Animation is drawn only when its values are renderables; place what it maps to (Animation.map)");
   return value;
 }
-function* placed(animation, options, draw2) {
+function* placed(animation, options, draw3) {
   const t2 = frameTimeOf(options);
   const shown = shownAt(animation, t2, options);
   const hold2 = holdOf(shown, t2);
   options.onHold?.(hold2);
-  yield* stampFrame(draw2(shown.value), hold2);
+  yield* stampFrame(draw3(shown.value), hold2);
 }
 function placedRender(animation, options) {
   return placed(animation, options, (value) => render(drawable2(value), options));
@@ -34181,8 +34181,8 @@ var RichText = class _RichText {
     const gaps = words2.length - 1;
     const spaces = new Array(gaps).fill(1);
     let filled2 = words2.reduce((total, word) => total + cellLen(word), 0) + gaps;
-    for (let turn = 0; filled2 < maxWidth && gaps > 0; turn = (turn + 1) % gaps) {
-      spaces[gaps - 1 - turn] += 1;
+    for (let turn2 = 0; filled2 < maxWidth && gaps > 0; turn2 = (turn2 + 1) % gaps) {
+      spaces[gaps - 1 - turn2] += 1;
       filled2 += 1;
     }
     const cuts = [];
@@ -35500,7 +35500,7 @@ function light(glow) {
 var lasts = (shape, k) => k * shape[shape.length - 1][0];
 function swell(shape, s, k) {
   const p2 = s / k;
-  const to = shape.findIndex(([turn]) => p2 < turn);
+  const to = shape.findIndex(([turn2]) => p2 < turn2);
   if (!(p2 > 0) || to < 0)
     return 0;
   const [t0, l0] = to === 0 ? [0, 0] : shape[to - 1];
@@ -35583,7 +35583,7 @@ function sparkle(curve, glow, z) {
   requireCurve(curve);
   requireZ("sparkle", z);
   const PER = 8;
-  const ROWS2 = 3;
+  const ROWS3 = 3;
   const HALO = 5;
   const HOP = 5;
   const GLIDE = 5;
@@ -35601,7 +35601,7 @@ function sparkle(curve, glow, z) {
     const s = u / TURN - n - at;
     return {
       x: left + home * PER + HOP * (2 * hash(n, id2 + 4) - 1) + GLIDE * strength * (2 * hash(n, id2 + 5) - 1) * given(FLASH, s, strength) + 1.5 * noise(id2, 0.1, t2 * 0.035),
-      y: top + k * ROWS2 + 0.6 * noise(id2, 2.2, t2 * 0.035),
+      y: top + k * ROWS3 + 0.6 * noise(id2, 2.2, t2 * 0.035),
       glow: lit * swell(FLASH, s, strength)
     };
   };
@@ -35610,7 +35610,7 @@ function sparkle(curve, glow, z) {
     const [left, right] = extent(cells.map((cell3) => cell3.col));
     const [top, bottom] = extent(cells.map((cell3) => cell3.row));
     const slot = (col) => (col - left) / PER - 0.5;
-    const band = (row2) => (row2 - top) / ROWS2;
+    const band = (row2) => (row2 - top) / ROWS3;
     const [i0, i1] = [Math.ceil(slot(left - REACH)), Math.floor(slot(right + REACH))];
     const [k0, k1] = [Math.ceil(band(top - REACH_ROWS)), Math.floor(band(bottom + REACH_ROWS))];
     const flies = Array.from({ length: k1 - k0 + 1 }, (_, k) => Array.from({ length: i1 - i0 + 1 }, (_2, i) => firefly(i0 + i, k0 + k, t2, left, top)));
@@ -35818,8 +35818,8 @@ function wheel(curve, z) {
     return Animation.continuous((t2) => {
       const written2 = /* @__PURE__ */ new Map();
       const choose = (color, bound, place) => {
-        const turn = hueTurned(color, turned(place, t2));
-        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf2(color, bound)) ?? UNBOUNDED);
+        const turn2 = hueTurned(color, turned(place, t2));
+        return nearestWithin(turn2.looks, color, depth === ColorDepth.TRUECOLOR ? turn2.either.map(measured2) : indexed, bounds.get(keyOf2(color, bound)) ?? UNBOUNDED);
       };
       const write = (color, bound, place) => {
         const key = `${keyOf2(color, bound)} ${place.row}:${place.centre}`;
@@ -35829,8 +35829,8 @@ function wheel(curve, z) {
       };
       return (shown, cell3) => {
         const mine = { fg: own2(cell3.terminal.fg, shown.fg), bg: own2(cell3.terminal.bg, shown.bg) };
-        const turn = (color, ours, other, theirs) => ours ? write(color, boundWith(color, other, theirs), placeOf3(cell3, color.hex)) : color;
-        return { ...shown, fg: turn(shown.fg, mine.fg, shown.bg, mine.bg), bg: turn(shown.bg, mine.bg, shown.fg, mine.fg) };
+        const turn2 = (color, ours, other, theirs) => ours ? write(color, boundWith(color, other, theirs), placeOf3(cell3, color.hex)) : color;
+        return { ...shown, fg: turn2(shown.fg, mine.fg, shown.bg, mine.bg), bg: turn2(shown.bg, mine.bg, shown.fg, mine.fg) };
       };
     });
   });
@@ -36625,8 +36625,8 @@ function decorEntryFor(palette, decor, address, drawnAt) {
 }
 function dealtAt(palette, decor, row2, cell3, drawnAt) {
   const { hues, run: run3, keystones } = decor.variation;
-  const turn = cell3 === void 0 ? 0 : Math.floor(cell3.index / run3);
-  const stepped2 = hues[(rowStart(decor.variation, row2) + turn) % hues.length];
+  const turn2 = cell3 === void 0 ? 0 : Math.floor(cell3.index / run3);
+  const stepped2 = hues[(rowStart(decor.variation, row2) + turn2) % hues.length];
   if (stepped2 === void 0) throw new Error("decorEntryFor: empty variation");
   const hue = keystones.some((at) => KEYSTONE_AT[at](row2, cell3)) ? KEYSTONE_HUE : stepped2;
   return {
@@ -50685,6 +50685,15 @@ var PENDINGS = {
 function pendingOf(why2) {
   return PENDINGS[why2];
 }
+function undeclaredOf(fact) {
+  return { kind: "undeclared", fact };
+}
+function isUndeclared(value) {
+  return typeof value === "object" && value !== null && value.kind === "undeclared";
+}
+function isUnanswered(value) {
+  return isPending(value) || isUndeclared(value);
+}
 function isPending(value) {
   return typeof value === "object" && value !== null && value.kind === "pending";
 }
@@ -53704,15 +53713,25 @@ function resolvePath(obj, path47) {
   let cur = obj;
   let inDocument = false;
   for (const part of path47.split(".")) {
-    if (!inDocument && isPending(cur)) return cur;
+    if (!inDocument && isUnanswered(cur)) return cur;
     if (cur == null || typeof cur !== "object") return found(void 0);
     inDocument ||= part === "value" && cur.kind === "ok";
     cur = cur[part];
   }
-  return !inDocument && isPending(cur) ? cur : found(cur);
+  return !inDocument && isUnanswered(cur) ? cur : found(cur);
 }
+var undeclaredRead = (variable, fact) => `variable "${variable}" reads ${fact}, which the declaration its facts were gathered under does not name`;
+var UndeclaredReadError = class extends Error {
+  constructor(variable, fact) {
+    super(undeclaredRead(variable, fact));
+    this.name = "UndeclaredReadError";
+  }
+};
 function sourceReading(name, resolved) {
   if (resolved.kind === "pending") return resolved;
+  if (resolved.kind === "undeclared") {
+    return failed(undeclaredRead(name, resolved.fact), "read");
+  }
   const raw = resolved.value;
   if (raw === void 0) {
     return failed(
@@ -53923,6 +53942,11 @@ var SourceRegistry = class _SourceRegistry {
         name,
         `variable "${name}" has no value yet: its source has not answered`
       );
+    }
+    if (resolved.kind === "undeclared") {
+      const error = new UndeclaredReadError(name, resolved.fact);
+      this.recordError(name, error.message);
+      throw error;
     }
     const raw = resolved.value;
     if (raw === void 0) {
@@ -59768,6 +59792,147 @@ function validateHelpers(ctx, raw) {
 // src/config/loader/cross-ref.ts
 init_globals();
 
+// src/config/payload-reads.ts
+init_globals();
+
+// src/config/loader/value-reads.ts
+init_globals();
+function valueReads({ names, helpers, actions }) {
+  const actionTexts = (name, seen) => {
+    const decl = Object.hasOwn(actions, name) ? actions[name] : void 0;
+    if (decl === void 0 || seen.has(name)) return [];
+    seen.add(name);
+    return [
+      ...[...actionTemplates(decl)].map(([, source]) => source),
+      ..."do" in decl ? decl.do.flatMap((m) => actionTexts(m, seen)) : []
+    ];
+  };
+  const texts = perTemplate((template) => {
+    const bound = bindsComputedAction(template, helpers) ? Object.keys(actions) : templateActionRefs(template, helpers).map((ref) => ref.name);
+    const seen = /* @__PURE__ */ new Set();
+    return [template, ...bound.flatMap((name) => actionTexts(name, seen))];
+  });
+  const ofTemplate = perTemplate(
+    (template) => texts(template).flatMap(
+      (text4) => [...templateReads(text4, helpers).keys()].map((path47) => ({
+        path: path47,
+        reaches: variableRead(path47, names)
+      }))
+    )
+  );
+  const calls = perTemplate(
+    (template) => new Set(
+      texts(template).flatMap((text4) => [
+        ...templateFunctions(text4, helpers)
+      ])
+    )
+  );
+  const ofVariable = (decl) => [
+    ...variableTemplates(decl).flatMap(
+      ([field, template]) => ofTemplate(template).map((read2) => ({ ...read2, field }))
+    ),
+    ...hasCacheField(decl) && "depends_on" in decl.cache ? decl.cache.depends_on.map((name) => ({
+      path: name,
+      reaches: names.has(name) ? [name] : [],
+      field: "cache.depends_on"
+    })) : []
+  ];
+  return { ofTemplate, calls, ofVariable };
+}
+function payloadPathOf(name, decl) {
+  switch (decl.kind) {
+    case "input":
+      return decl.path;
+    case "source":
+      return name;
+    default:
+      return void 0;
+  }
+}
+var FOLDS = /* @__PURE__ */ new WeakMap();
+function valueReadsOf(config2) {
+  let fold = FOLDS.get(config2);
+  if (fold === void 0) {
+    fold = valueReads({
+      names: new Set([...declaredVariables(config2)].map(([name]) => name)),
+      helpers: config2.helpers,
+      actions: config2.actions
+    });
+    FOLDS.set(config2, fold);
+  }
+  return fold;
+}
+
+// src/config/payload-reads.ts
+function segmentTemplates(config2, name) {
+  const seg2 = config2.segments[name];
+  if (!seg2) return [];
+  return [
+    ...[seg2.template, seg2.when, seg2.bg, seg2.fg].flatMap(
+      (src) => src !== void 0 ? [src] : []
+    ),
+    ...Object.values(seg2.partials ?? {})
+  ];
+}
+function pathUnder(outer, inner) {
+  return inner === outer || inner.startsWith(`${outer}.`);
+}
+function layoutTemplates(config2, preset) {
+  const templates = [];
+  for (const node of walkNodes(presetRoot(config2, preset).node)) {
+    if (node.when !== void 0) templates.push(node.when);
+    if (node.kind === "segment") {
+      if (node.lead !== void 0) templates.push(node.lead);
+      if (node.trail !== void 0) templates.push(node.trail);
+    }
+  }
+  const globals = presetGlobals(config2, preset);
+  for (const slot of EXPRESSION_SLOTS) {
+    const rule = globals[slot];
+    if (isExpression(rule)) templates.push(rule);
+  }
+  return templates;
+}
+var runsUnread = (decl) => decl.kind === "shell" || decl.kind === "file";
+function pathsReached(config2, templates, roots = []) {
+  const reads = valueReadsOf(config2);
+  const decls = new Map(declaredVariables(config2));
+  const frontier = [
+    ...roots,
+    ...templates.flatMap(
+      (template) => reads.ofTemplate(template).flatMap(({ reaches }) => reaches)
+    )
+  ];
+  const visited = /* @__PURE__ */ new Set();
+  const paths2 = /* @__PURE__ */ new Set();
+  while (frontier.length > 0) {
+    const reached = frontier.pop();
+    if (visited.has(reached)) continue;
+    visited.add(reached);
+    const decl = decls.get(reached);
+    const read2 = payloadPathOf(reached, decl);
+    if (read2 !== void 0) paths2.add(read2);
+    for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
+  }
+  return paths2;
+}
+function segmentInputPaths(config2, name, whens) {
+  return pathsReached(config2, [...segmentTemplates(config2, name), ...whens]);
+}
+function configPayloadPaths(config2) {
+  const templates = [];
+  const placed2 = /* @__PURE__ */ new Set();
+  for (const preset of presetNames(config2.presets)) {
+    templates.push(...layoutTemplates(config2, preset));
+    for (const node of walkNodes(presetRoot(config2, preset).node)) {
+      if (node.kind === "segment") placed2.add(node.name);
+    }
+  }
+  for (const name of placed2) templates.push(...segmentTemplates(config2, name));
+  const roots = [...declaredVariables(config2)].filter(([, decl]) => runsUnread(decl)).map(([name]) => name);
+  return pathsReached(config2, templates, roots);
+}
+
 // src/config/loader/unplaced.ts
 init_globals();
 function presenceOf(segments, rendering) {
@@ -59854,76 +60019,6 @@ var EMPTY_ROW = {
 
 // src/config/loader/projections.ts
 init_globals();
-
-// src/config/loader/value-reads.ts
-init_globals();
-function valueReads({ names, helpers, actions }) {
-  const actionTexts = (name, seen) => {
-    const decl = Object.hasOwn(actions, name) ? actions[name] : void 0;
-    if (decl === void 0 || seen.has(name)) return [];
-    seen.add(name);
-    return [
-      ...[...actionTemplates(decl)].map(([, source]) => source),
-      ..."do" in decl ? decl.do.flatMap((m) => actionTexts(m, seen)) : []
-    ];
-  };
-  const texts = perTemplate((template) => {
-    const bound = bindsComputedAction(template, helpers) ? Object.keys(actions) : templateActionRefs(template, helpers).map((ref) => ref.name);
-    const seen = /* @__PURE__ */ new Set();
-    return [template, ...bound.flatMap((name) => actionTexts(name, seen))];
-  });
-  const ofTemplate = perTemplate(
-    (template) => texts(template).flatMap(
-      (text4) => [...templateReads(text4, helpers).keys()].map((path47) => ({
-        path: path47,
-        reaches: variableRead(path47, names)
-      }))
-    )
-  );
-  const calls = perTemplate(
-    (template) => new Set(
-      texts(template).flatMap((text4) => [
-        ...templateFunctions(text4, helpers)
-      ])
-    )
-  );
-  const ofVariable = (decl) => [
-    ...variableTemplates(decl).flatMap(
-      ([field, template]) => ofTemplate(template).map((read2) => ({ ...read2, field }))
-    ),
-    ...hasCacheField(decl) && "depends_on" in decl.cache ? decl.cache.depends_on.map((name) => ({
-      path: name,
-      reaches: names.has(name) ? [name] : [],
-      field: "cache.depends_on"
-    })) : []
-  ];
-  return { ofTemplate, calls, ofVariable };
-}
-function payloadPathOf(name, decl) {
-  switch (decl.kind) {
-    case "input":
-      return decl.path;
-    case "source":
-      return name;
-    default:
-      return void 0;
-  }
-}
-var FOLDS = /* @__PURE__ */ new WeakMap();
-function valueReadsOf(config2) {
-  let fold = FOLDS.get(config2);
-  if (fold === void 0) {
-    fold = valueReads({
-      names: new Set([...declaredVariables(config2)].map(([name]) => name)),
-      helpers: config2.helpers,
-      actions: config2.actions
-    });
-    FOLDS.set(config2, fold);
-  }
-  return fold;
-}
-
-// src/config/loader/projections.ts
 function instantRead(template, basis) {
   for (const name of basis.reads.calls(template)) {
     if (basis.clock.has(name)) return `calls "${name}"`;
@@ -61179,7 +61274,7 @@ function checkRuleSlotReads(ctx, cfg) {
   const slotRead = (reads, seen) => {
     for (const { path: path47, reaches } of reads) {
       const atSlot = EXPRESSION_SLOTS.find(
-        (slot) => SLOT_PATHS[slot] === path47 || SLOT_PATHS[slot].startsWith(`${path47}.`)
+        (slot) => pathUnder(path47, SLOT_PATHS[slot])
       );
       if (atSlot !== void 0)
         return `reads "${SLOT_PATHS[atSlot]}", the ${atSlot}'s own name`;
@@ -67529,38 +67624,35 @@ function resumeCommand(workspace, sessionId2, configDir2) {
   });
 }
 
-// src/daemon/refresh-faults.ts
+// src/facts/session-facts.ts
 init_globals();
-var REFRESH_LANES = [
+var FACTS_VERSION = 3;
+var BUILTIN_FACTS = [
   "session",
   "today",
+  "speed",
   "context",
   "metrics",
   "activity",
   "cache",
-  "speed",
-  "autocompact"
+  "autocompact",
+  "git",
+  "pr",
+  "tmux",
+  "hostName",
+  "hostUser"
 ];
-var RefreshFaults = class {
-  bySession = observable.map(void 0, { deep: false });
-  // The lane's failure while its last refresh threw; none once one ran clean.
-  of(sessionId2, lane) {
-    const reason = this.bySession.get(sessionId2)?.get(lane);
-    return reason === void 0 ? void 0 : failed(reason, "read");
-  }
-  // What the lane's refresh just did: threw `reason`, or ran clean (null).
-  refreshed(sessionId2, lane, reason) {
-    const held = this.bySession.get(sessionId2);
-    if (reason === null && held?.has(lane) !== true) return;
-    const next = new Map(held);
-    if (reason === null) next.delete(lane);
-    else next.set(lane, reason);
-    runInAction(() => {
-      if (next.size === 0) this.bySession.delete(sessionId2);
-      else this.bySession.set(sessionId2, next);
-    });
-  }
-};
+function declaredBuiltins(names) {
+  const named3 = new Set(names);
+  if (named3.has("pr")) named3.add("git");
+  return new Set(
+    BUILTIN_FACTS.filter((name) => named3.has(name))
+  );
+}
+function builtinOf(facts, name) {
+  const fact = facts.builtins[name];
+  return fact ?? undeclaredOf(name);
+}
 
 // src/daemon/render-payload.ts
 function renderOptionsOf(effective, width) {
@@ -67594,8 +67686,10 @@ var PR_FIELDS = {
 };
 function prFactOf(git) {
   if (isPending(git)) return "pending";
+  if (isUndeclared(git)) return "undeclared";
   const { prState, prError, prEarlier } = git ?? {};
   if (isPending(prState)) return "pending";
+  if (isUndeclared(prState)) return "undeclared";
   if (prState !== void 0) return prState;
   if (prError !== void 0) return "failed";
   if (prEarlier !== void 0) return `earlier-${String(prEarlier)}`;
@@ -67674,60 +67768,213 @@ function settingsPathOf(hints, home) {
 function refreshedFact(refreshed) {
   return [...refreshed].map(([lane, ms]) => `${lane}:${ms === null ? "\u2026" : `${ms}ms`}`).join(",") || "-";
 }
+function laneEntries(lanes) {
+  return Object.entries(lanes);
+}
+function landingOf(current) {
+  return current.kind === "pending" && current.why === "unread" ? current.landed : null;
+}
+function keyedLane(lane) {
+  return {
+    current: () => lane.current(),
+    refresh: null,
+    landing: () => landingOf(lane.current()),
+    fault: () => null
+  };
+}
+var settledBuiltin = (outcome) => keyedLane(settledLane(outcome));
+function mapLane(lane, project) {
+  return {
+    current: () => {
+      const current = lane.current();
+      return current.kind === "ok" ? ok(project(current.value)) : current;
+    }
+  };
+}
+function sessionLane({ owners, facts }, lane, read2, run3) {
+  const sessionId2 = facts.hookData.session_id;
+  const standing = () => owners.faults.of(sessionId2, lane);
+  return {
+    current: () => {
+      const fault = standing();
+      if (fault !== void 0) return fault;
+      try {
+        return read2();
+      } catch (e) {
+        owners.log("error", `${lane} read threw: ${inspect(e)}`);
+        return failed(`${lane}: ${String(e)}`, "read");
+      }
+    },
+    refresh: { lane, run: run3 },
+    landing: () => null,
+    fault: () => {
+      const fault = standing();
+      return fault === void 0 ? null : { lane, reason: fault.reason };
+    }
+  };
+}
+function prOf(git) {
+  switch (git.kind) {
+    case "pending":
+    case "failed":
+      return git;
+    case "absent":
+      return ABSENT2;
+    case "ok":
+      return git.value.pullRequest ?? pendingOf("unread");
+  }
+}
+function gitFactsOf({
+  pullRequest: _pullRequest,
+  ...git
+}) {
+  return git;
+}
+var BUILTIN_LANES = {
+  session: (ctx) => sessionLane(
+    ctx,
+    "session",
+    () => ctx.owners.usageStore.usageOf(
+      ctx.facts.hookData.session_id,
+      ctx.facts.hookData
+    ),
+    (request2) => request2.usage().usage(ctx.facts.hookData)
+  ),
+  // Today holds its directory set's day sums and refreshes the session's own
+  // records: the sums land through their scan's store and are never waited
+  // on (waitsOf), the session's days through the request's refresh.
+  today: (ctx) => {
+    const sums = ctx.owners.usageStore.declareToday(
+      ctx.holds,
+      ctx.facts.hints.claudeConfigDir
+    );
+    return sessionLane(
+      ctx,
+      "today",
+      () => todayReading(
+        sums,
+        ctx.owners.usageStore,
+        ctx.facts.hookData.session_id
+      ),
+      (request2) => request2.usage().today()
+    );
+  },
+  // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
+  // lane reads, one sample per request: a frame takes none, so how often the
+  // bar is drawn moves no rate.
+  speed: (ctx) => sessionLane(
+    ctx,
+    "speed",
+    () => ctx.owners.usageStore.speedOf(ctx.facts.hookData.session_id),
+    (request2) => request2.usage().speed(dateOf(request2.at).getTime())
+  ),
+  context: (ctx) => sessionLane(
+    ctx,
+    "context",
+    () => ctx.owners.contextProvider.contextOf(ctx.facts.hookData),
+    () => ctx.owners.contextProvider.getContextInfo(ctx.facts.hookData)
+  ),
+  metrics: (ctx) => sessionLane(
+    ctx,
+    "metrics",
+    () => ctx.owners.metricsProvider.metricsOf(
+      ctx.facts.hookData.session_id,
+      ctx.facts.hookData
+    ),
+    () => ctx.owners.metricsProvider.getMetricsInfo(
+      ctx.facts.hookData.session_id,
+      ctx.facts.hookData
+    )
+  ),
+  activity: (ctx) => sessionLane(
+    ctx,
+    "activity",
+    () => ctx.owners.activityProvider.activityOf(ctx.facts.hookData.session_id),
+    () => ctx.owners.activityProvider.getActivityInfo(
+      ctx.facts.hookData.session_id,
+      ctx.facts.hookData
+    )
+  ),
+  // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
+  // seam, made only when the transcript's stamp moved.
+  cache: (ctx) => sessionLane(
+    ctx,
+    "cache",
+    () => ctx.owners.cacheExpiry.expiryOf(ctx.facts.hookData.session_id),
+    () => ctx.owners.cacheExpiry.refresh(
+      ctx.facts.hookData.session_id,
+      ctx.facts.hookData.transcript_path
+    )
+  ),
+  autocompact: (ctx) => {
+    const settings = () => settingsPathOf(ctx.facts.hints, ctx.owners.home);
+    return sessionLane(
+      ctx,
+      "autocompact",
+      () => ctx.owners.autoCompact.stored(settings()),
+      async () => ctx.owners.autoCompact.window(settings())
+    );
+  },
+  git: (ctx) => keyedLane(mapLane(ctx.repo(), gitFactsOf)),
+  // The PR lands through the repository's own source and is never waited on:
+  // a forge's network call would make every first bar as slow as it.
+  pr: (ctx) => {
+    const repo2 = ctx.repo();
+    return {
+      current: () => prOf(repo2.current()),
+      refresh: null,
+      landing: () => null,
+      fault: () => null
+    };
+  },
+  // [LAW:dataflow-not-control-flow] A session outside tmux has no pane to
+  // read: its lane answers `ABSENT` and takes no hold.
+  tmux: (ctx) => {
+    const pane = ctx.facts.hints.tmux ?? null;
+    return pane === null ? settledBuiltin(ABSENT2) : keyedLane(
+      mapLane(ctx.owners.tmuxService.declare(ctx.holds, pane), (name) => ({
+        session: name
+      }))
+    );
+  },
+  hostName: (ctx) => keyedLane(ctx.owners.hostService.declareName(ctx.holds)),
+  hostUser: (ctx) => keyedLane(ctx.owners.hostService.declareUser(ctx.holds))
+};
 async function refreshPayload(inputs, at, refreshed) {
-  const { hookData: hookData2, deps, hints } = inputs;
+  const { hookData: hookData2, deps } = inputs;
   const sessionId2 = hookData2.session_id;
-  const session = deps.usageStore.request(sessionId2, hookData2.transcript_path);
-  const lane = async (name, run3) => {
+  let usage;
+  const request2 = {
+    at,
+    usage: () => usage ??= deps.usageStore.request(sessionId2, hookData2.transcript_path)
+  };
+  const refresh = async ({ lane, run: run3 }) => {
     const startedAt = deps.clock.monotonic();
-    refreshed.set(name, null);
+    refreshed.set(lane, null);
     let threw2 = null;
     try {
-      await run3();
+      await run3(request2);
     } catch (e) {
-      deps.log("error", `${name} lane threw: ${inspect(e)}`);
-      threw2 = `${name}: ${String(e)}`;
+      deps.log("error", `${lane} lane threw: ${inspect(e)}`);
+      threw2 = `${lane}: ${String(e)}`;
     }
-    refreshed.set(name, elapsedMs(deps.clock, startedAt));
-    deps.faults.refreshed(sessionId2, name, threw2);
+    refreshed.set(lane, elapsedMs(deps.clock, startedAt));
+    deps.faults.refreshed(sessionId2, lane, threw2);
   };
-  await Promise.all([
-    lane("session", () => session.usage(hookData2)),
-    lane("today", () => session.today()),
-    lane("context", () => deps.contextProvider.getContextInfo(hookData2)),
-    lane(
-      "metrics",
-      () => deps.metricsProvider.getMetricsInfo(sessionId2, hookData2)
-    ),
-    lane(
-      "activity",
-      () => deps.activityProvider.getActivityInfo(sessionId2, hookData2)
-    ),
-    // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
-    // seam, made only when the transcript's stamp moved.
-    lane(
-      "cache",
-      () => deps.cacheExpiry.refresh(sessionId2, hookData2.transcript_path)
-    ),
-    // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
-    // lane reads, one sample per request: a frame takes none, so how often the
-    // bar is drawn moves no rate.
-    lane("speed", () => session.speed(dateOf(at).getTime())),
-    lane(
-      "autocompact",
-      async () => deps.autoCompact.window(settingsPathOf(hints, deps.home))
+  await Promise.all(
+    laneEntries(deps.lanes().builtins).flatMap(
+      ([, lane]) => lane.refresh === null ? [] : [refresh(lane.refresh)]
     )
-  ]);
+  );
 }
-function settledLanes(outcome, sources) {
-  const lane = settledLane(outcome);
+function settledLanes(outcome, { builtins, sources }) {
   return {
-    git: lane,
-    tmux: lane,
-    hostName: lane,
-    hostUser: lane,
-    today: lane,
-    sources: new Map(sources.map((name) => [name, lane]))
+    builtins: Object.fromEntries(
+      [...builtins].map((name) => [name, settledBuiltin(outcome)])
+    ),
+    sources: new Map(
+      [...sources.keys()].map((name) => [name, settledLane(outcome)])
+    )
   };
 }
 var GIT_READS = {
@@ -67738,41 +67985,49 @@ var GIT_READS = {
   showRepoName: true,
   showRepoUrl: true,
   showOperation: true,
-  showCommittedAt: true,
-  showPullRequest: true
+  showCommittedAt: true
 };
-function gitAt({
-  cwd: cwd2,
-  hookData: hookData2
-}) {
+function gitAt({ cwd: cwd2, hookData: hookData2 }, declared) {
   return [
     cwd2 ?? hookData2.workspace?.current_dir,
-    GIT_READS,
+    { ...GIT_READS, showPullRequest: declared.has("pr") },
     hookData2.workspace?.project_dir
   ];
 }
-function declareLanes(owners, holds2, facts, sources) {
-  const pane = facts.hints.tmux ?? null;
+function declareLanes(owners, holds2, facts, { builtins, sources }) {
   const faults = [];
-  const declare = (lane, take) => {
+  const declare = (lane, take, settled4) => {
     try {
       return take();
     } catch (e) {
       faults.push(`${lane}: ${inspect(e)}`);
-      return settledLane(failed(`${lane}: ${String(e)}`, "read"));
+      return settled4(failed(`${lane}: ${String(e)}`, "read"));
     }
   };
-  const lanes = {
-    git: declare(
+  let repo2;
+  const ctx = {
+    owners,
+    holds: holds2,
+    facts,
+    repo: () => repo2 ??= declare(
       "git",
-      () => owners.gitProvider.declare(holds2, ...gitAt(facts))
-    ),
-    tmux: pane === null ? settledLane(ABSENT2) : declare("tmux", () => owners.tmuxService.declare(holds2, pane)),
-    hostName: declare("host.name", () => owners.hostService.declareName(holds2)),
-    hostUser: declare("host.user", () => owners.hostService.declareUser(holds2)),
-    today: declare(
-      "today",
-      () => owners.usageStore.declareToday(holds2, facts.hints.claudeConfigDir)
+      () => owners.gitProvider.declare(holds2, ...gitAt(facts, builtins)),
+      settledLane
+    )
+  };
+  const lanes = {
+    // [LAW:types-are-the-program] Each declared name's lane from its own
+    // constructor: the one cast is that a name's constructor returns that
+    // name's lane.
+    builtins: Object.fromEntries(
+      [...builtins].map((name) => [
+        name,
+        declare(
+          name,
+          () => BUILTIN_LANES[name](ctx),
+          settledBuiltin
+        )
+      ])
     ),
     // [LAW:one-source-of-truth] Each source's hold at (its folder's storage
     // key, the session the checkpoint parsed).
@@ -67781,62 +68036,29 @@ function declareLanes(owners, holds2, facts, sources) {
         name,
         declare(
           name,
-          () => owners.managedStorage.declare(holds2, key, facts.sessionId)
+          () => owners.managedStorage.declare(holds2, key, facts.sessionId),
+          settledLane
         )
       ])
     )
   };
   return { lanes, faults };
 }
-function readingsOf(inputs) {
-  const { hookData: hookData2, deps } = inputs;
-  const sessionId2 = hookData2.session_id;
-  const lanes = deps.lanes();
-  const read2 = (lane, value) => {
-    const fault = deps.faults.of(sessionId2, lane);
-    if (fault !== void 0) return fault;
-    try {
-      return value();
-    } catch (e) {
-      deps.log("error", `${lane} read threw: ${inspect(e)}`);
-      return failed(`${lane}: ${String(e)}`, "read");
-    }
-  };
-  const laneReadings = {
-    git: lanes.git.current(),
-    usage: read2("session", () => deps.usageStore.usageOf(sessionId2, hookData2)),
-    context: read2("context", () => deps.contextProvider.contextOf(hookData2)),
-    metrics: read2(
-      "metrics",
-      () => deps.metricsProvider.metricsOf(sessionId2, hookData2)
-    ),
-    activity: read2(
-      "activity",
-      () => deps.activityProvider.activityOf(sessionId2)
-    ),
-    tmuxSession: lanes.tmux.current(),
-    hostName: lanes.hostName.current(),
-    hostUser: lanes.hostUser.current(),
-    cache: read2("cache", () => deps.cacheExpiry.expiryOf(sessionId2)),
-    speed: read2("speed", () => deps.usageStore.speedOf(sessionId2)),
-    autoCompact: read2(
-      "autocompact",
-      () => deps.autoCompact.stored(settingsPathOf(inputs.hints, deps.home))
+function readingsOf({
+  deps
+}) {
+  const { builtins, sources } = deps.lanes();
+  const lanes = laneEntries(builtins);
+  return {
+    builtins: Object.fromEntries(
+      lanes.map(([name, lane]) => [name, lane.current()])
     ),
     sources: new Map(
-      [...lanes.sources].map(([name, lane]) => [name, lane.current()])
-    )
-  };
-  return {
-    lanes: laneReadings,
-    today: read2(
-      "today",
-      () => todayReading(lanes.today, deps.usageStore, sessionId2)
+      [...sources].map(([name, lane]) => [name, lane.current()])
     ),
-    faults: REFRESH_LANES.flatMap((lane) => {
-      const fault = deps.faults.of(sessionId2, lane);
-      return fault === void 0 ? [] : [{ lane, reason: fault.reason }];
-    })
+    // [LAW:one-source-of-truth] The faults of what is declared: a lane a
+    // reload stops declaring takes its standing fault out of the document.
+    faults: lanes.flatMap(([, lane]) => lane.fault() ?? [])
   };
 }
 function todayReading(lane, usage, sessionId2) {
@@ -67848,18 +68070,9 @@ function todayReading(lane, usage, sessionId2) {
 }
 function waitsOf(lanes) {
   return [
-    lanes.git.current(),
-    lanes.tmux.current(),
-    lanes.hostName.current(),
-    lanes.hostUser.current(),
-    ...[...lanes.sources.values()].map((lane) => lane.current())
-  ].flatMap(
-    (lane) => lane.kind === "pending" && lane.why === "unread" ? [lane.landed] : []
-  );
-}
-function firstPending(...lanes) {
-  const lane = lanes.find((l) => l?.kind === "pending");
-  return lane?.kind === "pending" ? pendingOf(lane.why) : void 0;
+    ...laneEntries(lanes.builtins).map(([, lane]) => lane.landing()),
+    ...[...lanes.sources.values()].map((lane) => landingOf(lane.current()))
+  ].flatMap((landed) => landed === null ? [] : [landed]);
 }
 var unstamped = (fact) => {
   switch (fact.kind) {
@@ -67873,74 +68086,167 @@ var unstamped = (fact) => {
       return failed(fact.reason, fact.failedAt);
   }
 };
-function composePayload(facts, inputs, draw2) {
-  const { hookData: hookData2, hints } = inputs;
-  const { effective, configFacts: configFacts2 } = draw2;
-  const { configPath, ...settingCounts2 } = configFacts2;
-  const built = facts.builtins;
-  const lanes = {
-    usage: unstamped(built.session),
-    context: unstamped(built.context),
-    metrics: unstamped(built.metrics),
-    activity: unstamped(built.activity),
-    cache: unstamped(built.cache),
-    speed: unstamped(built.speed),
-    autoCompact: unstamped(built.autocompact),
-    git: unstamped(built.git),
-    pr: unstamped(built.pr),
-    tmux: unstamped(built.tmux),
-    hostName: unstamped(built.hostName),
-    hostUser: unstamped(built.hostUser)
-  };
-  const over2 = (reading, project) => {
-    switch (reading.kind) {
-      case "pending":
-        return pendingOf(reading.why);
-      case "failed":
-      case "absent":
-        return void 0;
-      case "ok":
-        return project(reading.value);
+function over(reading, project) {
+  switch (reading.kind) {
+    case "pending":
+      return pendingOf(reading.why);
+    case "failed":
+    case "absent":
+      return void 0;
+    case "ok":
+      return project(reading.value);
+  }
+}
+var valueOf2 = (reading) => reading.kind === "ok" ? reading.value : void 0;
+function firstPending(...readings) {
+  const reading = readings.find((r) => r.kind === "pending");
+  return reading?.kind === "pending" ? pendingOf(reading.why) : void 0;
+}
+var turn = (facts, compose, parts = {}) => ({ phase: "turn", facts, parts, compose });
+var draw2 = (facts, project) => ({ phase: "draw", facts, parts: {}, project });
+var PAYLOAD_ROWS = {
+  session: turn(
+    ["session"],
+    ({ session }) => over(
+      session,
+      (usage) => pickNonNull({ cost: usage.session.cost, tokens: usage.session.tokens })
+    )
+  ),
+  // [LAW:dataflow-not-control-flow] Absent cost/duration (provider empty)
+  // yields no rate, never a fabricated one, and a rate over a value not
+  // answered yet is not answered either.
+  burn: turn(
+    ["session", "metrics"],
+    ({ session, metrics }) => firstPending(session, metrics) ?? burnOf(valueOf2(session)?.session.cost, valueOf2(metrics)?.sessionDuration)
+  ),
+  // [LAW:dataflow-not-control-flow] The instantaneous rates and the burn-rate
+  // history fold independently from one observation — either can be present
+  // without the other — and the whole key drops only when both are absent.
+  speed: turn(["speed"], ({ speed: speed2 }) => over(speed2, speedPayloadOf)),
+  cache: turn(
+    ["cache"],
+    ({ cache: cache2 }) => over(cache2, (expiresAt) => ({ expiresAt }))
+  ),
+  context: turn(
+    ["context"],
+    ({ context }) => over(context, (info) => ({
+      totalTokens: info.totalTokens,
+      contextLeft: info.contextLeftPercentage
+    }))
+  ),
+  metrics: turn(
+    ["metrics"],
+    ({ metrics }) => over(
+      metrics,
+      (info) => pickNonNull({
+        lastResponseTime: info.lastResponseTime,
+        responseTime: info.responseTime,
+        sessionDuration: info.sessionDuration,
+        messageCount: info.messageCount,
+        nonPrompts: info.nonPrompts,
+        linesAdded: info.linesAdded,
+        linesRemoved: info.linesRemoved
+      })
+    )
+  ),
+  activity: turn(
+    ["activity"],
+    ({ activity }) => over(activity, projectActivity)
+  ),
+  // The controls are capped to the model's context window, so they are not
+  // answered while the window is not.
+  autocompact: turn(
+    ["autocompact", "context"],
+    ({ autocompact, context }) => firstPending(context) ?? projectAutoCompact(autocompact, valueOf2(context)?.maxTokens)
+  ),
+  // Git logs its own failures, once per refresh that failed
+  // (src/daemon/cache/git.ts): its value is stored, so logging one here would
+  // repeat a failure on every render. The PR is a part of the row: its fields
+  // read it, the rest of git does not.
+  git: turn(
+    ["git"],
+    ({ git, pr }) => git.kind === "pending" ? pendingOf(git.why) : git.kind === "ok" ? projectGitInfo(git.value, pr) : void 0,
+    { pr: Object.keys(PR_FIELDS) }
+  ),
+  "tmux.session": turn(
+    ["tmux"],
+    ({ tmux: tmux3 }) => tmux3.kind === "pending" ? pendingOf(tmux3.why) : valueOf2(tmux3)?.session
+  ),
+  "host.name": turn(
+    ["hostName"],
+    ({ hostName }) => hostName.kind === "pending" ? pendingOf(hostName.why) : valueOf2(hostName)
+  ),
+  "host.user": turn(
+    ["hostUser"],
+    ({ hostUser }) => hostUser.kind === "pending" ? pendingOf(hostUser.why) : valueOf2(hostUser)
+  ),
+  // [LAW:one-source-of-truth] `today` at a draw's instant: the day of the
+  // document's `today` fact the draw is at, a projection of the draw and never
+  // of the view's payload (DRAW_PROJECTIONS, src/config/payload-inputs.ts).
+  today: draw2(["today"], ({ today }, at) => todayOf(today, at))
+};
+var TURN_ROWS = PAYLOAD_ROWS;
+var DRAW_ROWS = PAYLOAD_ROWS;
+var ROWS2 = Object.entries({ ...TURN_ROWS, ...DRAW_ROWS });
+function rowFacts(document, row2) {
+  const facts = {};
+  for (const name of row2.facts) {
+    const fact = builtinOf(document, name);
+    if (fact.kind === "undeclared") return fact;
+    facts[name] = unstamped(fact);
+  }
+  for (const name of Object.keys(row2.parts)) {
+    const fact = builtinOf(document, name);
+    facts[name] = fact.kind === "undeclared" ? fact : unstamped(fact);
+  }
+  return facts;
+}
+function composeRow(document, path47) {
+  const facts = rowFacts(document, TURN_ROWS[path47]);
+  return isUndeclared(facts) ? facts : TURN_ROWS[path47].compose(facts);
+}
+function projectRow(document, path47, at) {
+  const facts = rowFacts(document, DRAW_ROWS[path47]);
+  return isUndeclared(facts) ? facts : DRAW_ROWS[path47].project(facts, at);
+}
+function projectDrawFields(document, at) {
+  return { today: projectRow(document, "today", at) };
+}
+function builtinsReadAt(paths2) {
+  const read2 = /* @__PURE__ */ new Set();
+  for (const path47 of paths2) {
+    for (const [root, row2] of ROWS2) {
+      if (!pathUnder(root, path47) && !pathUnder(path47, root)) continue;
+      for (const name of row2.facts) read2.add(name);
+      for (const [name, fields2] of Object.entries(row2.parts)) {
+        if (pathUnder(path47, root) || fields2.some((field) => pathUnder(`${root}.${field}`, path47))) {
+          read2.add(name);
+        }
+      }
     }
-  };
-  const valueOf3 = (reading) => reading.kind === "ok" ? reading.value : void 0;
+  }
+  return declaredBuiltins(read2);
+}
+function composePayload(facts, inputs, draw3) {
+  const { hookData: hookData2, hints } = inputs;
+  const { effective, configFacts: configFacts2 } = draw3;
+  const { configPath, ...settingCounts2 } = configFacts2;
+  const row2 = (path47) => composeRow(facts, path47);
   const tmuxPane = hints.tmux ?? null;
-  const git = lanes.git.kind === "pending" ? pendingOf(lanes.git.why) : lanes.git.kind === "ok" ? projectGitInfo(lanes.git.value, lanes.pr, pendingOf) : void 0;
-  const tmuxValue = lanes.tmux.kind === "pending" ? pendingOf(lanes.tmux.why) : valueOf3(lanes.tmux)?.session;
-  const hostName = lanes.hostName.kind === "pending" ? pendingOf(lanes.hostName.why) : valueOf3(lanes.hostName);
-  const hostUser = lanes.hostUser.kind === "pending" ? pendingOf(lanes.hostUser.why) : valueOf3(lanes.hostUser);
-  const autoCompactValue = firstPending(lanes.context) ?? projectAutoCompact(lanes.autoCompact, valueOf3(lanes.context)?.maxTokens);
+  const tmuxValue = row2("tmux.session");
+  const hostName = row2("host.name");
+  const hostUser = row2("host.user");
+  const git = row2("git");
+  const sessionPayload = row2("session");
+  const burn = row2("burn");
+  const speedPayload = row2("speed");
+  const cachePayload = row2("cache");
+  const contextPayload = row2("context");
+  const metricsPayload = row2("metrics");
+  const activityPayload = row2("activity");
+  const autoCompactValue = row2("autocompact");
   const fiveHour = hookData2.rate_limits?.five_hour;
   const sevenDay = hookData2.rate_limits?.seven_day;
-  const burn = firstPending(lanes.usage, lanes.metrics) ?? burnOf(
-    valueOf3(lanes.usage)?.session.cost,
-    valueOf3(lanes.metrics)?.sessionDuration
-  );
-  const speedPayload = over2(lanes.speed, speedPayloadOf);
-  const sessionPayload = over2(
-    lanes.usage,
-    (usage) => pickNonNull({ cost: usage.session.cost, tokens: usage.session.tokens })
-  );
-  const metricsPayload = over2(
-    lanes.metrics,
-    (metrics) => pickNonNull({
-      lastResponseTime: metrics.lastResponseTime,
-      responseTime: metrics.responseTime,
-      sessionDuration: metrics.sessionDuration,
-      messageCount: metrics.messageCount,
-      nonPrompts: metrics.nonPrompts,
-      linesAdded: metrics.linesAdded,
-      linesRemoved: metrics.linesRemoved
-    })
-  );
-  const activityPayload = over2(lanes.activity, projectActivity);
-  const contextPayload = over2(lanes.context, (context) => ({
-    totalTokens: context.totalTokens,
-    contextLeft: context.contextLeftPercentage
-  }));
-  const cachePayload = over2(lanes.cache, (expiresAt) => ({
-    expiresAt
-  }));
   const home = posixify(inputs.home);
   const workspace = hookData2.workspace ? {
     ...hookData2.workspace,
@@ -67983,8 +68289,8 @@ function composePayload(facts, inputs, draw2) {
     // are those exact values: each costs nothing (already in hand) and a config
     // reading e.g. `.padding.effective` must always find it.
     ...effectiveInputs(effective),
-    history: draw2.history,
-    navigation: { back: draw2.back },
+    history: draw3.history,
+    navigation: { back: draw3.back },
     // [LAW:one-source-of-truth] The width the bar is drawn to, as the client
     // measured it (`renderWidth`), the one value the draw's options carry.
     term: { cols: renderWidth(hints) },
@@ -68023,6 +68329,9 @@ function composePayload(facts, inputs, draw2) {
     })
   };
   return payload;
+}
+function builtinsFact(builtins) {
+  return [...builtins].join(",") || "-";
 }
 function sourcesFactOf(sources) {
   const named3 = Object.entries(sources);
@@ -68141,7 +68450,7 @@ function posixify(s) {
   if (import_node_path25.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
-function projectGitInfo(info, pullRequest, pending2) {
+function projectGitInfo(info, pullRequest) {
   const field = (oc) => oc?.kind === "ok" ? oc.value : void 0;
   const aheadBehind = field(info.aheadBehind);
   const sha = field(info.sha);
@@ -68152,11 +68461,12 @@ function projectGitInfo(info, pullRequest, pending2) {
   const tracking = info.upstream === void 0 ? void 0 : field(trackingOf(info.upstream, info.aheadBehind));
   const repoName = field(info.repoName);
   const repoUrl = field(info.repoUrl);
-  const pr = pullRequest.kind === "pending" ? pullRequest : prOfHead(pullRequest, info.head);
+  const pr = isUnanswered(pullRequest) ? pullRequest : prOfHead(pullRequest, info.head);
   let prFields = {};
   switch (pr.kind) {
-    case "pending": {
-      const p2 = pending2(pr.why);
+    case "pending":
+    case "undeclared": {
+      const p2 = pr.kind === "pending" ? pendingOf(pr.why) : pr;
       prFields = {
         prNumber: p2,
         prState: p2,
@@ -68209,44 +68519,11 @@ function projectGitInfo(info, pullRequest, pending2) {
 
 // src/doctor/data-needs.ts
 var READS = {
-  pullRequests: (paths2) => Object.keys(PR_FIELDS).some((field) => paths2.has(`git.${field}`)),
-  rateLimits: (paths2) => anyPathStartsWith(paths2, "block") || anyPathStartsWith(paths2, "weekly")
+  pullRequests: (paths2) => builtinsReadAt(paths2).has("pr"),
+  rateLimits: (paths2) => [...paths2].some(
+    (path47) => pathUnder("block", path47) || pathUnder("weekly", path47)
+  )
 };
-function anyPathStartsWith(paths2, prefix) {
-  for (const p2 of paths2) {
-    if (p2 === prefix || p2.startsWith(prefix + ".")) return true;
-  }
-  return false;
-}
-function segmentTemplates(config2, name) {
-  const seg2 = config2.segments[name];
-  if (!seg2) return [];
-  return [
-    ...[seg2.template, seg2.when, seg2.bg, seg2.fg].flatMap(
-      (src) => src ? [src] : []
-    ),
-    ...Object.values(seg2.partials ?? {})
-  ];
-}
-function segmentInputPaths(config2, name, whens) {
-  const reads = valueReadsOf(config2);
-  const decls = new Map(declaredVariables(config2));
-  const frontier = [...segmentTemplates(config2, name), ...whens].flatMap(
-    (template) => reads.ofTemplate(template).flatMap(({ reaches }) => reaches)
-  );
-  const visited = /* @__PURE__ */ new Set();
-  const inputPaths = /* @__PURE__ */ new Set();
-  while (frontier.length > 0) {
-    const reached = frontier.pop();
-    if (visited.has(reached)) continue;
-    visited.add(reached);
-    const decl = decls.get(reached);
-    const read2 = payloadPathOf(reached, decl);
-    if (read2 !== void 0) inputPaths.add(read2);
-    for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
-  }
-  return inputPaths;
-}
 function dataNeeds(config2, preset) {
   const placed2 = /* @__PURE__ */ new Map();
   for (const node of walkNodes(presetRoot(config2, preset).node)) {
@@ -69600,7 +69877,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.209.0";
+var PACKAGE_VERSION = "1.210.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -74157,7 +74434,7 @@ function pickerFuncs(runtime, activeSegment) {
           );
         }
         const drawnAt = activeSegment.drawnAt();
-        const draw2 = (ground) => renderPicker(
+        const draw3 = (ground) => renderPicker(
           applyName,
           apply2,
           { key: page2.key, stateVar: page2.stateVar },
@@ -74182,10 +74459,10 @@ function pickerFuncs(runtime, activeSegment) {
           closeOn(active2.palette, ground, drawnAt)
         );
         const band = bandFor(active2.palette, active2.disclosure, drawnAt);
-        const [, ...rows] = apply2.library === void 0 ? [] : draw2(band.plane);
-        if (rows.length === 0) return draw2(active2.bg)[0];
+        const [, ...rows] = apply2.library === void 0 ? [] : draw3(band.plane);
+        if (rows.length === 0) return draw3(active2.bg)[0];
         active2.drops.push(...rows);
-        return draw2(band.state)[0];
+        return draw3(band.state)[0];
       },
       argTypes: ["string", "string", "bool"],
       arity: { kind: "variadic" },
@@ -76584,7 +76861,7 @@ function drawView(view, handed, at, effects, idleSince, viewing, to, onRenderWar
       diagnostics: diagnosticsProjection(diagnostics),
       drawing: drawing2,
       feeds,
-      today: todayOf(source.facts().builtins.today, at)
+      ...projectDrawFields(source.facts(), at)
     },
     at,
     // [LAW:one-source-of-truth] The options drawDsl draws with are the SAME
@@ -77168,10 +77445,6 @@ init_globals();
 // src/facts/recording.ts
 init_globals();
 
-// src/facts/session-facts.ts
-init_globals();
-var FACTS_VERSION = 2;
-
 // src/facts/fact.ts
 init_globals();
 function restamp(prior, next, at) {
@@ -77275,7 +77548,41 @@ function resolvePath2(obj, dotPath) {
   return cur;
 }
 
+// src/daemon/refresh-faults.ts
+init_globals();
+var REFRESH_LANES = [
+  "session",
+  "today",
+  "context",
+  "metrics",
+  "activity",
+  "cache",
+  "speed",
+  "autocompact"
+];
+var RefreshFaults = class {
+  bySession = observable.map(void 0, { deep: false });
+  // The lane's failure while its last refresh threw; none once one ran clean.
+  of(sessionId2, lane) {
+    const reason = this.bySession.get(sessionId2)?.get(lane);
+    return reason === void 0 ? void 0 : failed(reason, "read");
+  }
+  // What the lane's refresh just did: threw `reason`, or ran clean (null).
+  refreshed(sessionId2, lane, reason) {
+    const held = this.bySession.get(sessionId2);
+    if (reason === null && held?.has(lane) !== true) return;
+    const next = new Map(held);
+    if (reason === null) next.delete(lane);
+    else next.set(lane, reason);
+    runInAction(() => {
+      if (next.size === 0) this.bySession.delete(sessionId2);
+      else this.bySession.set(sessionId2, next);
+    });
+  }
+};
+
 // src/facts/recording.ts
+var BUILTIN_NAMES = new Set(BUILTIN_FACTS);
 function sameClickState(a, b) {
   const depths = Object.keys(a.history);
   return a.revision === b.revision && a.back === b.back && depths.every((k) => a.history[k] === b.history[k]) && sameValues(a.values, b.values);
@@ -77373,12 +77680,12 @@ function sessionRecorder(views, log) {
   };
   const writeDraw = (sessionId2, rec, at, { view, state, drawing: drawing2, feeds, diagnostics }) => {
     const current = views.sessionView(sessionId2);
-    const draw2 = { at, drawing: drawing2, feeds, state, diagnostics };
+    const draw3 = { at, drawing: drawing2, feeds, state, diagnostics };
     const writes = [
       () => writeTurn(sessionId2, rec, view),
       () => writeDocument(sessionId2, rec, view, view.followed.stamped()),
       () => write(sessionId2, rec, { kind: "declared", request: view.facts() }),
-      () => write(sessionId2, rec, { kind: "draw", ...draw2 }),
+      () => write(sessionId2, rec, { kind: "draw", ...draw3 }),
       ...current === null ? [] : [() => writeTurn(sessionId2, rec, current)]
     ];
     for (const next of writes) {
@@ -77500,13 +77807,13 @@ var drawnFrom = (view, drawn) => ({
   state: { ...view.source.state(), idleSince: drawn.idleSince },
   ...drawn.handed
 });
-function drawRequest(recorder, view, arrival, draw2) {
-  const drawn = draw2();
+function drawRequest(recorder, view, arrival, draw3) {
+  const drawn = draw3();
   recorder.drew(view.sessionId, arrival, () => drawnFrom(view, drawn));
   return drawn;
 }
-function drawFeedFrame(recorder, view, at, draw2) {
-  const drawn = draw2();
+function drawFeedFrame(recorder, view, at, draw3) {
+  const drawn = draw3();
   recorder.fed(view.sessionId, at, () => drawnFrom(view, drawn));
   return drawn;
 }
@@ -77882,8 +78189,11 @@ function drawRender(parts, setup, drawing2) {
     feeds: frameFeeds.feedsOf(sessionId2, at),
     diagnostics
   };
-  const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
-  noteFacts(facts, sourcesFactOf(document.sources));
+  const metrics = isUnanswered(payload.metrics) ? void 0 : payload.metrics;
+  noteFacts(facts, {
+    builtins: builtinsFact(Object.keys(document.builtins)),
+    ...sourcesFactOf(document.sources)
+  });
   noteFacts(facts, runsFactOf(document.runs));
   noteFacts(facts, {
     factsSeq: String(document.seq),
@@ -78232,7 +78542,7 @@ var ARMS = {
   // request's line, the render event, which is its record and opens with the
   // session the edge noted.
   request: ({ req, arrived: arrived2, facts }, { verbCtx }) => {
-    const turn = verbCtx.journalTurns.take("request", () => {
+    const turn2 = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
       const mismatch = verbCtx.mismatchRuns.record(
         req.sessionId,
@@ -78246,11 +78556,11 @@ var ARMS = {
       };
     });
     noteFacts(facts, {
-      revision: String(turn.revision),
-      effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-",
-      mismatch: mismatchFact(turn.mismatch, arrived2)
+      revision: String(turn2.revision),
+      effects: turn2.effects.map((e) => describeEffect(e)).join(",") || "-",
+      mismatch: mismatchFact(turn2.mismatch, arrived2)
     });
-    return { answer: void 0, effects: turn.effects, facts: [] };
+    return { answer: void 0, effects: turn2.effects, facts: [] };
   },
   // The turn hands its effects over once it has committed (`described`), and
   // a refused step is answered beside them; a click whose client has left is
@@ -78685,7 +78995,7 @@ function introspectVars(state) {
   const out = [];
   for (const name of names) {
     const node = store2.getNode(name);
-    const value = valueOf2(node);
+    const value = valueOf3(node);
     const err = registry.getLastError(name);
     out.push({
       name,
@@ -78697,7 +79007,7 @@ function introspectVars(state) {
   }
   return out;
 }
-function valueOf2(node) {
+function valueOf3(node) {
   if (node.kind === "projection") {
     return { type: node.type, value: "(read at each frame's instant)" };
   }
@@ -79628,7 +79938,15 @@ function spendLook(dir, facts, now2, capMs) {
     now2,
     capMs
   );
-  writeAtomic(awakeOf(actDir), JSON.stringify(awake));
+  const file = awakeOf(actDir);
+  const staged = `${file}.${process_default.pid}.tmp`;
+  try {
+    fs_default.writeFileSync(staged, JSON.stringify(awake));
+    fs_default.renameSync(staged, file);
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
   return awake;
 }
 function endOverdue(dir, facts, jobs) {
@@ -79917,7 +80235,7 @@ function makeUpdateWatch(opts) {
   function endIfOverdue(facts) {
     if (!facts?.alive) return;
     const spent = spendLook(actsDir2, facts, clock.now(), LOOK_CAP_MS);
-    if (spent.spentMs <= ACT_TIMEOUT_MS) return;
+    if (spent === null || spent.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
     const why2 = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
@@ -82115,11 +82433,11 @@ function atBoundary(state, entry) {
 }
 function step3(state, entry) {
   if (entry.isSidechain) return state;
-  const turn = atBoundary(state, entry);
+  const turn2 = atBoundary(state, entry);
   const activity = entry.activity;
-  if (activity === void 0) return turn;
-  let pending2 = turn.pending;
-  let done2 = turn.done;
+  if (activity === void 0) return turn2;
+  let pending2 = turn2.pending;
+  let done2 = turn2.done;
   if (activity.started !== void 0) {
     pending2 = [...pending2, ...activity.started];
   }
@@ -82130,10 +82448,10 @@ function step3(state, entry) {
     pending2 = [...pending2.slice(0, at), ...pending2.slice(at + 1)];
   }
   return {
-    ...turn,
+    ...turn2,
     pending: pending2,
     done: done2,
-    todos: activity.todos ?? turn.todos
+    todos: activity.todos ?? turn2.todos
   };
 }
 function report(state) {
@@ -82851,21 +83169,11 @@ function* variablesOf(cfg) {
   }
 }
 function* templatesOf(config2) {
-  for (const seg2 of Object.values(config2.segments)) {
-    for (const t2 of [seg2.template, seg2.bg, seg2.fg, seg2.when]) {
-      if (t2 !== void 0) yield t2;
-    }
-    yield* Object.values(seg2.partials ?? {});
+  for (const name of Object.keys(config2.segments)) {
+    yield* segmentTemplates(config2, name);
   }
   for (const preset of presetNames(config2.presets)) {
-    for (const node of walkNodes(presetRoot(config2, preset).node)) {
-      if (node.when !== void 0) yield node.when;
-    }
-    const globals = presetGlobals(config2, preset);
-    for (const slot of EXPRESSION_SLOTS) {
-      const rule = globals[slot];
-      if (isExpression(rule)) yield rule;
-    }
+    yield* layoutTemplates(config2, preset);
   }
   for (const [, v] of variablesOf(config2)) {
     for (const [, t2] of variableTemplates(v)) yield t2;
@@ -83210,7 +83518,10 @@ function buildRenderState(load, deps) {
         reached: installed.reached,
         rendering: installed.rendering
       },
-      sources: load.sources
+      sources: load.sources,
+      // Walked over the config the state draws, so what it declares is what
+      // its draws read.
+      builtins: builtinsReadAt(configPayloadPaths(config2))
     }
   };
 }
@@ -83292,7 +83603,10 @@ var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
 function openView(state, cwd2, facts, { facts: factsSource, source: sourceOf, changed, log }) {
   const { sessionId: sessionId2 } = facts;
-  const declaration = { sources: state.sources };
+  const declaration = {
+    builtins: state.builtins,
+    sources: state.sources
+  };
   const followed = factsSource.follow(facts, declaration);
   const registry = state.registry.view(followed.runs);
   const declared = observable.box({ facts }, { deep: false });
@@ -84081,61 +84395,29 @@ init_globals();
 
 // src/daemon/facts-assembly.ts
 init_globals();
-var over = (reading, project) => reading.kind === "ok" ? ok(project(reading.value)) : reading;
-function prOf(git) {
-  switch (git.kind) {
-    case "pending":
-    case "failed":
-      return git;
-    case "absent":
-      return ABSENT2;
-    case "ok":
-      return git.value.pullRequest ?? pendingOf("unread");
-  }
-}
 var sameFacts = (now2, held) => {
   const entries = Object.entries(now2);
   return entries.length === Object.keys(held).length && entries.every(([key, fact]) => Object.is(fact, Reflect.get(held, key)));
 };
-function gitFactsOf({ pullRequest: _pullRequest, ...git }) {
-  return git;
-}
 function assembleFacts(prior, session, readings, update, at) {
-  const { lanes } = readings;
-  const git = lanes.git;
-  const stamp2 = (held2, reading) => restamp(held2, reading, at);
-  const held = prior?.builtins;
-  const builtins = {
-    session: stamp2(held?.session, lanes.usage),
-    today: stamp2(held?.today, readings.today),
-    speed: stamp2(held?.speed, lanes.speed),
-    context: stamp2(held?.context, lanes.context),
-    metrics: stamp2(held?.metrics, lanes.metrics),
-    activity: stamp2(held?.activity, lanes.activity),
-    cache: stamp2(held?.cache, lanes.cache),
-    autocompact: stamp2(held?.autocompact, lanes.autoCompact),
-    git: stamp2(held?.git, over(git, gitFactsOf)),
-    pr: stamp2(held?.pr, prOf(git)),
-    tmux: stamp2(
-      held?.tmux,
-      over(lanes.tmuxSession, (name) => ({ session: name }))
-    ),
-    hostName: stamp2(held?.hostName, lanes.hostName),
-    hostUser: stamp2(held?.hostUser, lanes.hostUser)
-  };
-  const sources = Object.fromEntries(
-    [...lanes.sources].map(([name, reading]) => [
+  const stampAll = (now2, held) => Object.fromEntries(
+    [...now2].map(([name, reading]) => [
       name,
-      stamp2(prior?.sources[name], reading)
+      restamp(held?.[name], reading, at)
     ])
   );
+  const builtins = stampAll(
+    Object.entries(readings.builtins),
+    prior?.builtins
+  );
+  const sources = stampAll(readings.sources, prior?.sources);
   const runs = Object.fromEntries(
     [...readings.runs].map(([digest2, { reading, fault }]) => {
-      const held2 = prior?.runs[digest2];
-      const fact = stamp2(held2?.reading, reading);
+      const held = prior?.runs[digest2];
+      const fact = restamp(held?.reading, reading, at);
       return [
         digest2,
-        held2 !== void 0 && held2.reading === fact && held2.fault === fault ? held2 : { reading: fact, fault }
+        held !== void 0 && held.reading === fact && held.fault === fault ? held : { reading: fact, fault }
       ];
     })
   );
@@ -84219,14 +84501,14 @@ function inProcessFacts({
         );
       };
       const sid = JSON.stringify(session);
-      const lanesFor = (facts2, { sources }) => {
+      const lanesFor = (facts2, declaration2) => {
         try {
           const {
             result: { lanes, faults },
             acquired,
             released
           } = holds2.declare(
-            () => declareLanes(providers, holds2, facts2, sources)
+            () => declareLanes(providers, holds2, facts2, declaration2)
           );
           for (const fault of faults) {
             log("error", `session view declaration threw sid=${sid} ${fault}`);
@@ -84234,7 +84516,7 @@ function inProcessFacts({
           if (acquired + released > 0) {
             log(
               "info",
-              `session view declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
+              `session view declared sid=${sid} builtins=${builtinsFact(declaration2.builtins)} acquired=${acquired} released=${released} held=${holds2.size}`
             );
           }
           return lanes;
@@ -84245,7 +84527,7 @@ function inProcessFacts({
           );
           return settledLanes(
             failed(`view declaration threw: ${String(e)}`, "read"),
-            [...sources.keys()]
+            declaration2
           );
         }
       };
@@ -84424,7 +84706,7 @@ function sessionSource(deps) {
         };
       }
     );
-    const draw2 = store2.derive(
+    const draw3 = store2.derive(
       "session.draw",
       "computed",
       () => ({
@@ -84442,13 +84724,13 @@ function sessionSource(deps) {
       revision: deps.sessionState.revision(sessionId2)
     });
     const opening = followed.failure();
-    const turn = observable.box(
+    const turn2 = observable.box(
       {
         stamped: followed.stamped(),
         request: declared().facts,
         picks: picks(),
         compose: compose.read(),
-        draw: draw2.read(),
+        draw: draw3.read(),
         failure: opening === null ? null : { cause: "facts", reason: opening }
       },
       { deep: false }
@@ -84463,7 +84745,7 @@ function sessionSource(deps) {
               facts: followed.failure(),
               request: declared().facts,
               compose: compose.read(),
-              draw: draw2.read()
+              draw: draw3.read()
             };
           } catch (e) {
             return {
@@ -84473,7 +84755,7 @@ function sessionSource(deps) {
           }
         },
         (moved) => runInAction(() => {
-          const prior = turn.get();
+          const prior = turn2.get();
           const next = taken(prior, moved, picks);
           if (moved.kind === "failed" && next !== prior) {
             deps.providers.log(
@@ -84481,7 +84763,7 @@ function sessionSource(deps) {
               `session turn sid=${JSON.stringify(sessionId2)}: ${moved.reason}`
             );
           }
-          turn.set(next);
+          turn2.set(next);
         }),
         {
           // The expression above cannot throw; the effect's catch is `taken`.
@@ -84493,31 +84775,31 @@ function sessionSource(deps) {
       )
     );
     const payload = store2.derive("session.payload", "computed", () => {
-      const { stamped: stamped2, compose: composed2, draw: drawn } = turn.get();
+      const { stamped: stamped2, compose: composed2, draw: drawn } = turn2.get();
       return composePayload(stamped2.facts, composed2, drawn);
     });
     return {
       payload: () => payload.read(),
-      effective: () => turn.get().draw.effective,
-      facts: () => turn.get().stamped.facts,
+      effective: () => turn2.get().draw.effective,
+      facts: () => turn2.get().stamped.facts,
       turn: () => {
-        const { stamped: stamped2, request: request2, picks: turnPicks, draw: drawn } = turn.get();
+        const { stamped: stamped2, request: request2, picks: turnPicks, draw: drawn } = turn2.get();
         return {
           document: stamped2,
           request: request2,
           state: { ...turnPicks, history: drawn.history, back: drawn.back }
         };
       },
-      held: () => turn.get().failure?.cause === "inputs",
-      home: () => turn.get().compose.home,
-      hints: () => turn.get().compose.hints,
-      failure: () => turn.get().failure,
-      selections: () => turn.get().draw.effective,
+      held: () => turn2.get().failure?.cause === "inputs",
+      home: () => turn2.get().compose.home,
+      hints: () => turn2.get().compose.hints,
+      failure: () => turn2.get().failure,
+      selections: () => turn2.get().draw.effective,
       state: () => ({
         values: deps.sessionState.values(sessionId2),
         revision: deps.sessionState.revision(sessionId2),
-        history: turn.get().draw.history,
-        back: turn.get().draw.back
+        history: turn2.get().draw.history,
+        back: turn2.get().draw.back
       })
     };
   };
@@ -84706,9 +84988,9 @@ var LinkIds = class {
   // [LAW:no-ambient-temporal-coupling] One frame drawn through the table:
   // `draw` names each link's range with `rangeOf`, and eviction waits until
   // the frame is drawn, so it never takes a link the frame holds.
-  frame(draw2) {
+  frame(draw3) {
     const drawn = /* @__PURE__ */ new Set();
-    const drawnAs = draw2((url) => {
+    const drawnAs = draw3((url) => {
       drawn.add(url);
       return this.rangeOf(url);
     });
@@ -86609,9 +86891,9 @@ var MenuIdle = class {
   // frame, then what the frame drew is observed. The instant handed is
   // returned with the draw, because the observe moves the start on a menu's
   // first frame, and a recording notes what the draw read.
-  drawn(sessionId2, at, timeoutS, draw2) {
+  drawn(sessionId2, at, timeoutS, draw3) {
     const idleSince = this.since(sessionId2, at);
-    const drawn = draw2(idleSince);
+    const drawn = draw3(idleSince);
     this.observe(
       sessionId2,
       at,

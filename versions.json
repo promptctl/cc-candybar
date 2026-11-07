@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-680",
+      "ref": "refs/pull/680/merge",
+      "sha": "cfc3783a194551ec01d78eb9b377d14869968ae2",
+      "timestamp": "2026-11-07T10:27:25.867Z",
+      "commits": [
+        {
+          "sha": "cfc3783a194551ec01d78eb9b377d14869968ae2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:25:47Z",
+          "message": "Merge a287815082f0ad238c0aa8c6f5aacc8dcd02c019 into 1f5014d66591bcdbb9dac6e5fb1aa8619e0bf5fd\n"
+        },
+        {
+          "sha": "a287815082f0ad238c0aa8c6f5aacc8dcd02c019",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:25:17-07:00",
+          "message": "fix(update-act): a look stages its spend in the act's own directory, never making one (brandon-unfiled-3248.9eu3)\n\nwriteAtomic made the act's directory when a newer claim had pruned it,\nflushed every 2 s look on the render loop, and staged at a name shared by\nevery daemon. A look now stages at a pid-named file inside the act and\nrenames it, unflushed: an act gone under the look spends nothing. The\nconcurrent-writer safety no longer waits on writeAtomic's staging change.\nReverts a formatter reflow of test/update-act.test.ts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "12eb650a9cee5ae0a196513bc4839615f241aa09",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:09:19-07:00",
+          "message": "fix(update-act): a look spends at most five polls, and a spend it can't read is an error (brandon-unfiled-3248.9eu3)\n\nA dark wake mid-sleep spent the 60 s cap, so forty of them overnight ended\nthe act and could tear the bundle; the cap now follows the poll interval,\nin the watch that owns both. awake.json is parsed: a missing number read\nas NaN, compared past the budget and ended a running build. Corrects the\nrace comment: concurrent looks lose nothing.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "87d211a918f2138408bb7b7974565298f42f147e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:56:43-07:00",
+          "message": "fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3)\n\nThe update act was ended once the wall clock passed the deadline in its\nrecord. Wall time runs while the machine sleeps, so closing the lid mid-build\nfor longer than ten minutes signalled the build's group at the first tick\nafter wake, possibly mid-write, which tears the bundle.\n\nThe budget is now spent in observed time: each tick that finds the act's group\nalive adds the span since the last look, whichever daemon took it, capped at\n60 s, into the act's awake.json, and the act ends once that passes ten\nminutes. A sleep of any length spends at most the cap, a clock set back spends\nnothing, and daemons looking in turn or restarting mid-act share one budget.\nThe record keeps its deadline for older daemons reading the same acts during\nan update.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-678",
       "ref": "refs/pull/678/merge",
       "sha": "607162b4541831022e837231098d7d6fa9388bd2",
@@ -207,35 +243,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:13:14-07:00",
           "message": "feat(facts): a renderer declares the built-ins its config reads, and Gather gathers only those (candybar-gather-renderer-76bb.6pj.opl) (#674)\n\n* feat(facts): a renderer declares the built-ins its config reads, and Gather gathers only those (candybar-gather-renderer-76bb.6pj.opl)\n\nThe facts document is complete over what the renderer declared, not total:\nevery declared built-in and source has a key, and nothing else does. The\ndeclaration is one walk over every preset's placements, templates, partials\nand globals rules, mapped through the payload's rows to the built-ins each\npath reads; the doctor asks the same walk. The declared set is consulted once,\nwhere the lanes are declared, and every later stage iterates the lanes it is\nhanded.\n\nThe payload is a table of rows, each composed from exactly the facts it names\n(a compile error to read another), in one of two phases the type carries: a\nturn row once per document, a draw row at the draw's instant (today). A read\nof an undeclared built-in throws naming the variable and the fact, so the\nsegment draws ⚠ and check fails, never a blank. The render event and the\nview-declared log line carry builtins=. FACTS_VERSION 2.\n\n* fix(facts): a shell or file source's key is a root of the declaration walk; one template enumeration; the undeclared read names what its site knows (candybar-gather-renderer-76bb.6pj.opl)\n\nReview (high) findings taken:\n- Every shell and file source is declared and its cache key evaluated whether\n  or not a template reads it, so the walk seeds from those variables too; a key\n  reading a built-in no placed segment read faulted the source before this.\n- The unused-declaration check and the walk enumerate a segment's and a\n  layout's templates through the same two functions.\n- The undeclared read's message states what the reading site knows: the\n  declaration its facts were gathered under does not name the fact, which is\n  also true of a replay under a wider config.\n- The rows' entries are built once, not per path.\n- EVERY_BUILTIN had no production caller and lives in the test helper.\n- Comments and docs: no socket arm exists yet; the declaration log line fires\n  when a hold moves and the render event carries builtins= on every frame;\n  §1 says each declared built-in; the memory paragraph said one thing twice.\n\nRejected, with reasons on the ticket: a whole-row read declares its parts\n(an Undeclared inside a found object would be the silent hole the ticket\nforbids); lead/trail are synthesis-only and never in the config the walk\nreads.\n\n* fix(facts): the walk reads a cell's lead and trail; one word for a node that is no value; one spelling of path containment (candybar-gather-renderer-76bb.6pj.opl)\n\nReview (medium) findings taken:\n- The loader synthesizes edit mode's lead and trail into the layout the walk\n  reads, so they are roots beside each node's when (and the unused check\n  sees them through the same function).\n- isUnanswered is the one test for pending-or-undeclared; sources.ts,\n  draw-bar.ts and the PR projection ask it.\n- pathUnder is the one spelling of a dotted path's containment; the rows and\n  the doctor's rate-limit need share it.\n- The undeclared read's message is one function, so no Error is built to\n  read its text.\n- A read of all of git declaring the PR is pinned by a test.\n- Memory: a session whose config reads no usage fact reaches other sessions'\n  today through the rescan, as a headless session does.\n\nRejected on the ticket: declaredBuiltins closing a set over pr's dependency\non git is the plan's decided normalization.\n\n* fix(facts): a recorded declaration is closed as one is built; one placed segment's templates once; pathUnder where the slot check spelled it (candybar-gather-renderer-76bb.6pj.opl)\n\nReview (second high) findings taken:\n- The recording parser refuses a document holding the PR without its\n  repository, through the one constructor that closes a declaration.\n- The walk pushes a placed segment's templates once however many presets\n  place it, and keeps an empty template as the engine's compile does.\n- The loader's slot-path check spells containment with pathUnder; the alias\n  in builtinsReadAt is gone.\n\nRejected on the ticket: the doctor's PR need for a whole-git read (the forge\nlookup does run for that config, so a missing CLI does fail it); memoising\nthe walk for check (a once-run CLI); a shared map over a Reading with one\ncaller."
-        }
-      ]
-    },
-    {
-      "version": "pr-680",
-      "ref": "refs/pull/680/merge",
-      "sha": "1c77b8473937ddc35899763d25fa95c3b8473c7d",
-      "timestamp": "2026-11-07T10:10:23.092Z",
-      "commits": [
-        {
-          "sha": "1c77b8473937ddc35899763d25fa95c3b8473c7d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:09:38Z",
-          "message": "Merge 12eb650a9cee5ae0a196513bc4839615f241aa09 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
-        },
-        {
-          "sha": "12eb650a9cee5ae0a196513bc4839615f241aa09",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:09:19-07:00",
-          "message": "fix(update-act): a look spends at most five polls, and a spend it can't read is an error (brandon-unfiled-3248.9eu3)\n\nA dark wake mid-sleep spent the 60 s cap, so forty of them overnight ended\nthe act and could tear the bundle; the cap now follows the poll interval,\nin the watch that owns both. awake.json is parsed: a missing number read\nas NaN, compared past the budget and ended a running build. Corrects the\nrace comment: concurrent looks lose nothing.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "87d211a918f2138408bb7b7974565298f42f147e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:56:43-07:00",
-          "message": "fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3)\n\nThe update act was ended once the wall clock passed the deadline in its\nrecord. Wall time runs while the machine sleeps, so closing the lid mid-build\nfor longer than ten minutes signalled the build's group at the first tick\nafter wake, possibly mid-write, which tears the bundle.\n\nThe budget is now spent in observed time: each tick that finds the act's group\nalive adds the span since the last look, whichever daemon took it, capped at\n60 s, into the act's awake.json, and the act ends once that passes ten\nminutes. A sleep of any length spends at most the cap, a clock set back spends\nnothing, and daemons looking in turn or restarting mid-act share one budget.\nThe record keeps its deadline for older daemons reading the same acts during\nan update.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
