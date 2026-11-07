@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-685",
+      "ref": "refs/pull/685/merge",
+      "sha": "891480c4545a46c13ca67b305b43b3ca7560082d",
+      "timestamp": "2026-11-07T10:43:38.477Z",
+      "commits": [
+        {
+          "sha": "891480c4545a46c13ca67b305b43b3ca7560082d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:42:02-07:00",
+          "message": "Merge 7ad563fc35b8033f6373911363a57236416d9114 into 2a63ae55593d80d6590080431d83cf19e539622e\n"
+        },
+        {
+          "sha": "7ad563fc35b8033f6373911363a57236416d9114",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:41:20-07:00",
+          "message": "fix(watchers): a storage folder's fault clears when its watch or stat recovers (brandon-unfiled-3248.tvhj)\n\nA refused or erroring watch, and a stat that failed during a judgment, are\nno longer terminal health. Each generation's fault is derived (unusable,\nthen the handle's deafness, then the last stat failure) and logged and\ncounted on a start, change or clear, so the registry's period reopen and the\nowner's period judgment clear it in the same generation. Deafness is\ncompared only when a window closes and at opening, so the result holds in\neither subscription order.\n\nThe registry's reopen now tells a failed window when a deaf directory ends\ndeaf another way (an error then a refusal, a refusal whose reason changes),\nreusing the comparison its refusal log already makes.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-680",
       "ref": "refs/pull/680/merge",
       "sha": "42277ce1474c6a7970ebcb7c14a05a6d65a2c841",
