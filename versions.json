@@ -4,15 +4,22 @@
     {
       "version": "pr-690",
       "ref": "refs/pull/690/merge",
-      "sha": "42ccdcfd2302e98dc722cbf0dc1dec02444e6108",
-      "timestamp": "2026-11-07T11:42:30.976Z",
+      "sha": "8a4fe62fb120d8e44866937359e5e1c2ea6e2738",
+      "timestamp": "2026-11-07T11:43:20.085Z",
       "commits": [
         {
-          "sha": "42ccdcfd2302e98dc722cbf0dc1dec02444e6108",
+          "sha": "8a4fe62fb120d8e44866937359e5e1c2ea6e2738",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:36:00Z",
-          "message": "Merge e8bac05493c5757e932b928618df4fe277b75432 into 37f5c35ff91a229f08869f5b34660301b699233a\n"
+          "timestamp": "2026-11-07T11:37:47Z",
+          "message": "Merge 3bfd887eee2e68288e6ce59de82aa0abdd253533 into 37f5c35ff91a229f08869f5b34660301b699233a\n"
+        },
+        {
+          "sha": "3bfd887eee2e68288e6ce59de82aa0abdd253533",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:37:36-07:00",
+          "message": "test(git): the real-git case for the daemon's environment is an adapter case, under test/integration (brandon-unfiled-3248.i3ek)\n\nIt drives real git through the system launcher, which the test lint\nadmits only in the adapter tiers; it reached it through worldOf, past the\nrule. What it proves is git's own behaviour, so it belongs with the\nadapters. [LAW:effects-at-boundaries]\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
           "sha": "e8bac05493c5757e932b928618df4fe277b75432",
