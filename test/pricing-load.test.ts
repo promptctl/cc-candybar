@@ -217,7 +217,7 @@ describe("a daemon's pricing", () => {
     asked[0]!.fail();
     expect(await first).toEqual(bundled);
     expect(warnings).toEqual([
-      `pricing table not loaded (1 in a row): priced by the bundled rates until a retry in ${PRICING_PERIOD.failedMs}ms`,
+      `pricing table not loaded (1 in a row): priced by the bundled rates; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
     ]);
 
     // Before the backoff is up, an ask starts nothing.
@@ -233,7 +233,7 @@ describe("a daemon's pricing", () => {
     asked[1]!.fail();
     await until(() => warnings.length === 2, "the second failure said");
     expect(warnings[1]).toBe(
-      `pricing table not loaded (2 in a row): priced by the bundled rates until a retry in ${2 * PRICING_PERIOD.failedMs}ms`,
+      `pricing table not loaded (2 in a row): priced by the bundled rates; the next ask after ${2 * PRICING_PERIOD.failedMs}ms tries again`,
     );
 
     // The second backoff is twice the first.
@@ -288,7 +288,7 @@ describe("a daemon's pricing", () => {
     asked[1]!.fail();
     await until(() => warnings.length === 1, "the failed refresh said");
     expect(warnings[0]).toBe(
-      `pricing table not loaded (1 in a row): priced by the last table until a retry in ${PRICING_PERIOD.failedMs}ms`,
+      `pricing table not loaded (1 in a row): priced by the last table; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
     );
     expect(await pricing.table()).toEqual(RATES);
 
@@ -314,7 +314,7 @@ describe("a daemon's pricing", () => {
     expect(asked).toHaveLength(1);
   });
 
-  test("a close during a refresh keeps the loaded table and writes nothing, and after it no load starts", async () => {
+  test("a close during a refresh keeps the loaded table, writes nothing and is no failure, and after it no load starts", async () => {
     const pricing = await loaded();
     const written = diskCopy();
 
@@ -322,13 +322,78 @@ describe("a daemon's pricing", () => {
     expect(await pricing.table()).toEqual(RATES);
     await asking(2);
     closing.abort();
-    await until(() => warnings.length === 1, "the ended refresh said");
 
     expect(await pricing.table()).toEqual(RATES);
     expect(diskCopy()).toEqual(written);
     clock.advance(PRICING_PERIOD.failedMs);
     expect(await pricing.table()).toEqual(RATES);
     await noFetchPast(2);
+    expect(warnings).toEqual([]);
+  });
+
+  test("a daemon that starts on a copy past its day with no network prices by that copy, not the bundled rates", async () => {
+    fs.mkdirSync(path.join(cacheRoot, "usage"), { recursive: true });
+    fs.writeFileSync(
+      path.join(cacheRoot, "usage", "pricing.json"),
+      JSON.stringify({
+        data: RATES,
+        timestamp: clock.now() - PRICING_PERIOD.okMs,
+      }),
+    );
+
+    const pricing = live();
+    const first = pricing.table();
+    await asking(1);
+    asked[0]!.fail();
+    expect(await first).toEqual(RATES);
+    expect(warnings).toEqual([
+      `pricing table not loaded (1 in a row): priced by the last table; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,
+    ]);
+
+    clock.advance(PRICING_PERIOD.failedMs);
+    expect(await pricing.table()).toEqual(RATES);
+    await asking(2);
+    asked[1]!.answer(NEXT_RATES);
+    await until(
+      async () => "model-y" in (await pricing.table()),
+      "the fetched table held",
+    );
+  });
+
+  test("a refresh that lands nothing keeps the later of the held table and the copy on disk", async () => {
+    const pricing = await loaded();
+    // A copy an earlier daemon wrote, left when this owner's write did not land.
+    fs.writeFileSync(
+      path.join(cacheRoot, "usage", "pricing.json"),
+      JSON.stringify({
+        data: NEXT_RATES,
+        timestamp: clock.now() - 2 * PRICING_PERIOD.okMs,
+      }),
+    );
+
+    clock.advance(PRICING_PERIOD.okMs);
+    expect(await pricing.table()).toEqual(RATES);
+    await asking(2);
+    asked[1]!.fail();
+    await until(() => warnings.length === 1, "the failed refresh said");
+    expect(await pricing.table()).toEqual(RATES);
+  });
+
+  test("a copy stamped ahead of the clock is no copy: the table is fetched and the copy rewritten", async () => {
+    fs.mkdirSync(path.join(cacheRoot, "usage"), { recursive: true });
+    fs.writeFileSync(
+      path.join(cacheRoot, "usage", "pricing.json"),
+      JSON.stringify({
+        data: RATES,
+        timestamp: clock.now() + 7 * PRICING_PERIOD.okMs,
+      }),
+    );
+
+    const table = live().table();
+    await asking(1);
+    asked[0]!.answer(NEXT_RATES);
+    expect(await table).toEqual(NEXT_RATES);
+    expect(diskCopy()).toEqual({ data: NEXT_RATES, timestamp: clock.now() });
   });
 
   test("an entry's cost is its usage at its model's rates", () => {

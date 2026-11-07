@@ -211,8 +211,14 @@ const lastLanded = (held: Held | null): Landed | null =>
   held === null ? null : held.kind === "landed" ? held : held.last;
 
 // The bundled rates price until a table lands.
-const tableOf = (held: Held): PriceTable =>
+const tableOf = (held: Held | null): PriceTable =>
   lastLanded(held)?.table ?? OFFLINE_PRICING_DATA;
+
+// [LAW:one-source-of-truth] Of two tables that landed, the one read later: the
+// disk copy and what the owner holds are both landings, and a copy another
+// daemon wrote may be the newer, or the older when this owner's write failed.
+const later = (a: Landed | null, b: Landed | null): Landed | null =>
+  a === null ? b : b === null ? a : a.at >= b.at ? a : b;
 
 const failuresOf = (held: Held): number =>
   held.kind === "landed" ? 0 : held.failures;
@@ -239,7 +245,7 @@ const due = (held: Held, now: number): boolean =>
 // ask after the due moment, so the close has nothing to cancel.
 export function livePricing(owner: LiveOwner): Pricing {
   let held: Held | null = null;
-  let loading: Promise<Held> | null = null;
+  let loading: Promise<Held | null> | null = null;
   return {
     table: () => {
       const owed = held === null || due(held, owner.clock.now());
@@ -259,24 +265,33 @@ export function livePricing(owner: LiveOwner): Pricing {
   };
 }
 
-// One load, and what the owner holds after it. [LAW:no-silent-failure] Never
-// rejects: a throw anywhere in the load is a load that landed nothing, and is
-// said, so a fold never fails on its price.
-async function loadHeld(owner: LiveOwner, prev: Held | null): Promise<Held> {
-  const landed = await loadTable(owner).catch((e: unknown) => {
+// One load, and what the owner holds after it: the disk copy while it is the
+// day's, else what a fetch landed, else a failed load that keeps the last table
+// that landed anywhere, on disk or held. [LAW:no-silent-failure] Never rejects:
+// a throw anywhere in the load is a load that landed nothing, and is said, so a
+// fold never fails on its price. A load the close ended settles nothing: it is
+// no failure, nothing follows it, and what was held stands.
+async function loadHeld(
+  owner: LiveOwner,
+  prev: Held | null,
+): Promise<Held | null> {
+  const copy = await readDisk(owner);
+  if (copy !== null && !due(copy, owner.clock.now())) return copy;
+  const landed = await fetchLanded(owner).catch((e: unknown) => {
     owner.log("error", `pricing load threw: ${String(e)}`);
     return null;
   });
   if (landed !== null) return landed;
+  if (owner.closing.aborted) return prev;
   const failed: Failed = {
     kind: "failed",
     at: owner.clock.now(),
     failures: (prev === null ? 0 : failuresOf(prev)) + 1,
-    last: lastLanded(prev),
+    last: later(copy, lastLanded(prev)),
   };
   owner.log(
     "warn",
-    `pricing table not loaded (${failed.failures} in a row): priced by ${failed.last === null ? "the bundled rates" : "the last table"} until a retry in ${standsMs(failed.failures)}ms`,
+    `pricing table not loaded (${failed.failures} in a row): priced by ${failed.last === null ? "the bundled rates" : "the last table"}; the next ask after ${standsMs(failed.failures)}ms tries again`,
   );
   return failed;
 }
@@ -284,11 +299,9 @@ async function loadHeld(owner: LiveOwner, prev: Held | null): Promise<Held> {
 const diskPath = (cacheRoot: string): string =>
   path.join(cacheRoot, "usage", "pricing.json");
 
-// The disk copy while it is the day's, else a fetch; null for a load that
+// What a fetch landed, written as the day's disk copy; null for one that
 // landed nothing.
-async function loadTable(owner: LiveOwner): Promise<Landed | null> {
-  const copy = await readDisk(owner);
-  if (copy !== null && !due(copy, owner.clock.now())) return copy;
+async function fetchLanded(owner: LiveOwner): Promise<Landed | null> {
   const fresh = owner.closing.aborted
     ? null
     : await fetchPricingData(owner.closing);
@@ -310,7 +323,15 @@ async function readDisk(owner: LiveOwner): Promise<Landed | null> {
     const { data, timestamp } = JSON.parse(
       await fs.promises.readFile(diskPath(owner.cacheRoot), "utf8"),
     ) as { data?: unknown; timestamp?: unknown };
-    if (typeof timestamp !== "number" || !validatePricingData(data)) {
+    // [LAW:parse-dont-validate] A stamp ahead of this clock (a cache another
+    // machine's clock wrote) is malformed like any other field: a moment that
+    // has not come is not when a copy was read, and a copy held on it would be
+    // the day's for as long as the stamp stood. The fetch rewrites it.
+    if (
+      typeof timestamp !== "number" ||
+      timestamp > owner.clock.now() ||
+      !validatePricingData(data)
+    ) {
       return null;
     }
     return { kind: "landed", table: data, at: timestamp };
