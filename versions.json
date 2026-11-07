@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-687",
+      "ref": "refs/pull/687/merge",
+      "sha": "dde0925541b018a9f14b21ece8909a40305e8f09",
+      "timestamp": "2026-11-07T11:36:25.446Z",
+      "commits": [
+        {
+          "sha": "dde0925541b018a9f14b21ece8909a40305e8f09",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:35:05Z",
+          "message": "Merge e1482d86851b144b5298783a3700df75db80b599 into 3e574dde3244026257856ed4e675a0275bc287d1\n"
+        },
+        {
+          "sha": "e1482d86851b144b5298783a3700df75db80b599",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:34:52-07:00",
+          "message": "refactor(cache): the cache's entry points take a render origin, its watch key is the entry's key (brandon-unfiled-3248.9cru)\n\nA LoadOrigin admits a target with no path, so an origin built by hand\nwithout its path was the search. The entry points take the RenderOrigin\nwhose source says whether a file is named; entries and loads keep the\nsource-free LoadOrigin. The config watch key reuses the cache key rather\nthan spelling the identity again. A test shows projectDir and cwd are\nseparate parts of the key.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "e46eb934910612bd1d9d72dc62d364fed3f8ee1d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:43:20-07:00",
+          "message": "refactor(cache): the render cache takes a render origin, not three positional strings (brandon-unfiled-3248.9cru)\n\nThe cache's entry points (getOrCreate, hold, holdSession, reload, the\nprivate load, and loadFromDisk) take one LoadOrigin, picked from\nRenderOrigin, so every caller passes the origin it already holds and a\nswapped or missing field is a type error. loadFromDisk is the one place\nthe origin is spelled out into the resolver's arguments. An entry holds\na copy of what resolution reads, never the caller's target source, so\norigins that name one file by different sources share one entry.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-689",
       "ref": "refs/pull/689/merge",
       "sha": "e7d6e201727066a1aff80a11d703126b343b6caf",
@@ -179,28 +208,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:00:01-07:00",
           "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-687",
-      "ref": "refs/pull/687/merge",
-      "sha": "60888e32e0da9c681a49dfc03036ae1ea4b5ea90",
-      "timestamp": "2026-11-07T11:14:57.750Z",
-      "commits": [
-        {
-          "sha": "60888e32e0da9c681a49dfc03036ae1ea4b5ea90",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:13:59Z",
-          "message": "Merge e46eb934910612bd1d9d72dc62d364fed3f8ee1d into 3bc07edfbe9d321a6fea2f6a74c80414ed0ef5e7\n"
-        },
-        {
-          "sha": "e46eb934910612bd1d9d72dc62d364fed3f8ee1d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:43:20-07:00",
-          "message": "refactor(cache): the render cache takes a render origin, not three positional strings (brandon-unfiled-3248.9cru)\n\nThe cache's entry points (getOrCreate, hold, holdSession, reload, the\nprivate load, and loadFromDisk) take one LoadOrigin, picked from\nRenderOrigin, so every caller passes the origin it already holds and a\nswapped or missing field is a type error. loadFromDisk is the one place\nthe origin is spelled out into the resolver's arguments. An entry holds\na copy of what resolution reads, never the caller's target source, so\norigins that name one file by different sources share one entry.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
