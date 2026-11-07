@@ -227,7 +227,7 @@ export interface DaemonInputs extends DaemonAdapters {
   // value, built by the root with `daemonGates` (the update notice's links need
   // the keys it holds), so two daemons in one process share none.
   readonly gates: Gates;
-  // What git named, at the process's start, as the variables that locate a
+  // What git named, at the process's start, as the variables local to one
   // repository, which `host.env` is already without (src/host.ts
   // daemonWorld): an ask that failed is on every bar this daemon draws.
   readonly gitEnv: GitEnvAsk;

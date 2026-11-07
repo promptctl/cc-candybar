@@ -1,8 +1,11 @@
-// What git names as the variables that locate a repository: `GIT_DIR`,
-// `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR` and the rest of
-// `git rev-parse --local-env-vars`. git honours them over its working
-// directory, so a process whose children must answer for the directory they
-// run in drops them from the environment it inherited. The daemon does (its
+// What git names as the variables local to one repository
+// (`git rev-parse --local-env-vars`): the ones that locate it (`GIT_DIR`,
+// `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`) and the settings that
+// hold only inside it (`GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, the object
+// and replace-ref variables). git honours them over its working directory and
+// drops them itself when it moves into another repository (a submodule), so a
+// process whose children must answer for the directory they run in drops
+// them, all of them, from the environment it inherited. The daemon does (its
 // environment is whichever shell spawned it, src/host.ts daemonWorld), and so
 // does a plugin install's clone (src/plugin-install.ts).
 

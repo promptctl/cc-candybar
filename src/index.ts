@@ -96,12 +96,11 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   },
   // The daemon owns its own lifecycle. [LAW:single-enforcer] Its environment is
   // cleaned once, here at its process edge, before anything it runs spawns a
-  // child: git names the variables that locate a repository, and the daemon's
+  // child: git names the variables local to one repository, and the daemon's
   // world is the process's without them (src/host.ts daemonWorld). The ask's
   // outcome goes in with it, so a failed ask is on every bar.
   daemon: async () => {
-    const gitEnv = askGitEnv(world.launcher);
-    runDaemon(daemonWorld(gitEnv), gitEnv);
+    runDaemon(daemonWorld(askGitEnv(world.launcher)));
   },
   "daemon-stats": async (args) => {
     await exitWith(await daemonStatsPlan(world, args));

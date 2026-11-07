@@ -39,7 +39,7 @@ import { MAIN_NAME } from "./home";
 import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
 import { gitEnvFault, type GitEnvAsk } from "../git-env";
-import type { World } from "../host";
+import type { DaemonWorld, World } from "../host";
 import type { OneShotLauncher } from "../proc/launch";
 import { runTmuxAtExit } from "../proc/tmux";
 import type { TmuxAtExit } from "./tmux-status";
@@ -118,7 +118,7 @@ function runningBundle(): RunningBundle {
   };
 }
 
-export function runDaemon(world: World, gitEnv: GitEnvAsk): void {
+export function runDaemon({ world, gitEnv }: DaemonWorld): void {
   const paths = daemonPaths(world.home);
   thisProcess = {
     world,
@@ -170,8 +170,6 @@ async function boot(): Promise<void> {
   const { world, gitEnv, paths, log: daemonLog } = daemonProcess();
   const { host, home } = world;
   const memoryLimit = memoryLimitBytes(host.env);
-  // [LAW:no-silent-failure] Said once in the log; every bar says it too.
-  if (gitEnv.kind === "failed") serverLog("warn", gitEnvFault(gitEnv.reason));
   // [LAW:no-mode-explosion] exception: the socket override is read for one
   // release and said so here; the ticket that retires it deletes this line
   // with the field it reads.
@@ -210,6 +208,9 @@ async function boot(): Promise<void> {
     return;
   }
   breakerRegistryPath = admission.registryPath;
+  // [LAW:no-silent-failure] Said once in the log, by the daemon the breaker
+  // admitted, so a refused candidate adds no line; every bar says it too.
+  if (gitEnv.kind === "failed") serverLog("warn", gitEnvFault(gitEnv.reason));
 
   fs.mkdirSync(paths.state, { recursive: true });
   // [LAW:single-enforcer] Verify the socket parent is uid==me + mode 0700 +

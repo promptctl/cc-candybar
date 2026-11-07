@@ -16,10 +16,17 @@ import { join } from "node:path";
 import { askGitEnv } from "../../src/git-env";
 import { daemonEnv } from "../../src/host";
 import { GitService } from "../../src/segments/git";
-import { HOST, hostOf, worldOf } from "../helpers/host";
+import { HOST, hostOf, processLauncher, worldOf } from "../helpers/host";
+
+// The worker's environment less git's repository variables, so a run from a
+// hook (the case this file is about) neither builds its fixtures in the
+// hook's repository nor reads it where a case means another.
+const workerAsk = askGitEnv(processLauncher);
+if (workerAsk.kind === "failed") throw new Error(`git rev-parse --local-env-vars failed: ${workerAsk.reason}`);
+const worker = daemonEnv(HOST.env, workerAsk);
 
 function run(cmd: string, cwd: string): void {
-  execSync(cmd, { cwd, stdio: "pipe" });
+  execSync(cmd, { cwd, stdio: "pipe", env: worker });
 }
 
 describe("a daemon spawned with GIT_DIR set", () => {
@@ -47,7 +54,7 @@ describe("a daemon spawned with GIT_DIR set", () => {
   });
 
   // The spawning shell's environment: the worker's, inside a hook of repo a.
-  const shellEnv = (): NodeJS.ProcessEnv => ({ ...HOST.env, GIT_DIR: join(a, ".git") });
+  const shellEnv = (): NodeJS.ProcessEnv => ({ ...worker, GIT_DIR: join(a, ".git") });
   const branchIn = async (env: NodeJS.ProcessEnv, dir: string) =>
     new GitService(worldOf(hostOf(env)).launcher).getGitInfo(dir);
 
