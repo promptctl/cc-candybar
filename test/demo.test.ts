@@ -101,8 +101,10 @@ describe("pnpm demo", () => {
     // unauthenticated gh) share stderr and name no config.
     expect(r.stderr).not.toContain(join("src", "demo", "statusline.json5"));
     expect(r.status).toBe(0);
-    // Each cell's glyph and value are separate styled runs, and the session id
-    // is also in the door's link, so the cells are read as drawn text.
+    // Each cell's glyph and value are separate styled runs, so the cells are
+    // read with the styling stripped. The strip leaves each link's target
+    // behind, and the door's target carries the session id, so a cell is
+    // matched with the padding only the cell draws.
     const drawn = stripVTControlCharacters(r.stdout);
     expect(drawn).not.toContain("⚠");
     expect(drawn).toContain(" Opus 4.7 ");

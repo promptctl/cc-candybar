@@ -48,7 +48,9 @@
   // `bg`/`fg` are palette spec strings, and either may also be a template
   // that computes a color — `fg: '{{ contrastOn (bgOf) }}'` below picks
   // black or white, whichever is readable against this segment's own
-  // background. `when` hides a segment when it evaluates false.
+  // background. `when` hides a segment when it evaluates false. A template
+  // draws content only: the layout pads every cell, so a space written at
+  // either end is drawn beside that padding.
   segments: {
     user: {
       template: "{{ .user }}",
