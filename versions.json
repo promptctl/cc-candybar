@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-679",
+      "ref": "refs/pull/679/merge",
+      "sha": "606c38136ea3d041b0b15ff7258d23b04920b840",
+      "timestamp": "2026-11-07T11:39:03.783Z",
+      "commits": [
+        {
+          "sha": "606c38136ea3d041b0b15ff7258d23b04920b840",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:37:13-07:00",
+          "message": "Merge 283798e10e1ca3cee51a203034f2add6d39e2fb0 into 37f5c35ff91a229f08869f5b34660301b699233a\n"
+        },
+        {
+          "sha": "283798e10e1ca3cee51a203034f2add6d39e2fb0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:13:32-07:00",
+          "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-690",
       "ref": "refs/pull/690/merge",
       "sha": "0d290a20e279090453d92c2c0e1ae0652a655732",
@@ -128,28 +150,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:56:43-07:00",
           "message": "fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3)\n\nThe update act was ended once the wall clock passed the deadline in its\nrecord. Wall time runs while the machine sleeps, so closing the lid mid-build\nfor longer than ten minutes signalled the build's group at the first tick\nafter wake, possibly mid-write, which tears the bundle.\n\nThe budget is now spent in observed time: each tick that finds the act's group\nalive adds the span since the last look, whichever daemon took it, capped at\n60 s, into the act's awake.json, and the act ends once that passes ten\nminutes. A sleep of any length spends at most the cap, a clock set back spends\nnothing, and daemons looking in turn or restarting mid-act share one budget.\nThe record keeps its deadline for older daemons reading the same acts during\nan update.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-679",
-      "ref": "refs/pull/679/merge",
-      "sha": "b26d6f73ab6755d8e3a5c984786d20d4c94a0e06",
-      "timestamp": "2026-11-07T11:31:15.355Z",
-      "commits": [
-        {
-          "sha": "b26d6f73ab6755d8e3a5c984786d20d4c94a0e06",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:29:24Z",
-          "message": "Merge 6cc452bca351498254c0b46340f04305c5e6ac7b into 3e574dde3244026257856ed4e675a0275bc287d1\n"
-        },
-        {
-          "sha": "6cc452bca351498254c0b46340f04305c5e6ac7b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:13:32-07:00",
-          "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
