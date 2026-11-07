@@ -580,7 +580,7 @@ describe("lane B, statusline", () => {
   });
 
   // A later process the kernel handed the read one's pid is not it either.
-  test.each([
+  test.each<[string, { pid?: number; startTime?: StartToken }]>([
     ["another pid", { pid: 5151 }],
     ["the same pid, started later", { startTime: "Sat Nov  7 09:30:00 2026" as StartToken }],
   ])("a Claude Code the pane no longer shows by the time of the kill (%s) is not killed", async (_case, later) => {
@@ -592,7 +592,9 @@ describe("lane B, statusline", () => {
     });
     await expect(
       finished(await LANE_SETUP.statusline.on(run(session()), HOST, edge)),
-    ).rejects.toThrow(/no longer the process the restart read \(pid 4242\)/);
+    ).rejects.toThrow(
+      `no longer the process the restart read (pid 4242, started ${first.startTime}; now pid ${later.pid ?? 4242}, started ${later.startTime ?? first.startTime})`,
+    );
     expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });
 

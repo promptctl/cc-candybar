@@ -28,6 +28,10 @@ import type { Timekeeper } from "../time";
 //   - Adding a new optional field that older parsers ignore safely.
 //   - Adding a new response variant produced only in response to a new kind
 //     or a new request field.
+//   - Replacing a client hint with another. Every hint is optional, and its
+//     absence is a state the daemon reports (`ClientHints`), so a client and
+//     a daemon of different shapes render and name the missing hint; they
+//     never fail to communicate.
 //
 // **Breaking** (bump):
 //   - Changing the semantics or required shape of an existing kind.
