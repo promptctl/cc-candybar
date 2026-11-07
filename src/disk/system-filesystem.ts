@@ -1,4 +1,17 @@
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+// [LAW:effects-at-boundaries] exception: the birth-time probe below answers a
+// fact of the process (libuv's), for an adapter its owners reach ambiently, so
+// it is handed no world. The clock only bounds its wait and the scratch folder
+// may be anywhere: neither changes the answer.
+// eslint-disable-next-line no-restricted-imports -- see the exception above
+import { systemTimekeeper } from "../time";
+import {
+  birthtimeOf,
+  probeBirthtime,
+  type BirthtimeVerdict,
+} from "./birthtime-probe";
 import type { DirectoryEntry, Filesystem, Stat } from "./filesystem.js";
 
 // [LAW:effects-at-boundaries] The disk, through Node's `fs`. Errors pass
@@ -18,6 +31,24 @@ const kindOf = (st: Kinded): Stat["kind"] =>
         ? "file"
         : "other";
 
+// [LAW:no-shared-mutable-globals] libuv's fallback is process-wide, so its
+// answer is read once, on the first stat, and this module alone holds it.
+let verdict: BirthtimeVerdict | undefined;
+export const birthtimeVerdict = (): BirthtimeVerdict =>
+  (verdict ??= probeBirthtime(
+    {
+      makeFolder: () =>
+        // eslint-disable-next-line no-restricted-properties -- the exception at the clock's import
+        fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-birthtime-")),
+      stat: (at) => fs.statSync(at, { bigint: true }),
+      // A chmod writes the folder's metadata, which moves its ctime and
+      // nothing else.
+      touch: (at) => fs.chmodSync(at, 0o700),
+      remove: (at) => fs.rmdirSync(at),
+    },
+    systemTimekeeper,
+  ));
+
 const statOf = (st: fs.BigIntStats): Stat => ({
   kind: kindOf(st),
   size: Number(st.size),
@@ -25,7 +56,7 @@ const statOf = (st: fs.BigIntStats): Stat => ({
   mode: Number(st.mode),
   dev: st.dev,
   ino: st.ino,
-  birthtimeNs: st.birthtimeNs,
+  birthtimeNs: birthtimeOf(birthtimeVerdict(), st.birthtimeNs),
 });
 
 export const systemFilesystem: Filesystem = {

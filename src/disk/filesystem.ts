@@ -12,6 +12,8 @@
 // [LAW:types-are-the-program] What is at a path. `dev`, `ino` and
 // `birthtimeNs` are bigint, because a folder's identity (src/utils/
 // folder-identity.ts) needs 64-bit inodes and nanosecond birth times.
+// `birthtimeNs` is null where the disk supplies none: a filesystem that keeps
+// none, or a host that copies ctime into it (src/disk/birthtime-probe.ts).
 export interface Stat {
   readonly kind: "file" | "directory" | "symlink" | "other";
   readonly size: number;
@@ -19,7 +21,7 @@ export interface Stat {
   readonly mode: number;
   readonly dev: bigint;
   readonly ino: bigint;
-  readonly birthtimeNs: bigint;
+  readonly birthtimeNs: bigint | null;
 }
 
 // [LAW:no-silent-failure] Every failure carries the errno `code` callers

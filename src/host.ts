@@ -53,7 +53,8 @@ export const TICK_PARENT_START_BUDGET_MS = 50;
 // The launcher holds the live `process.env`, not a copy, so a variable the
 // process sets after this still reaches the children it launches. This is also
 // the one file that names the real clock (src/time.ts): everything else is
-// handed the world's.
+// handed the world's, but for the disk adapter's birth-time probe
+// (src/disk/system-filesystem.ts), which no world reaches.
 export function processWorld(): World {
   const clock = systemTimekeeper;
   const launcher = systemOneShotLauncher({ inherited: process.env }, clock);

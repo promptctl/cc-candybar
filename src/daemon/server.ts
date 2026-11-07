@@ -44,6 +44,8 @@ import { runTmuxAtExit } from "../proc/tmux";
 import type { TmuxAtExit } from "./tmux-status";
 import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
 import { productionAdapters } from "./production-adapters.js";
+import { describeBirthtime } from "../disk/birthtime-probe.js";
+import { birthtimeVerdict } from "../disk/system-filesystem.js";
 import { daemonGates } from "./update-keys.js";
 import { handleConnection } from "./connection.js";
 import { REGISTRY_URL } from "../install/currency";
@@ -210,6 +212,10 @@ async function boot(): Promise<void> {
   // successful bind already proves the parent is trusted. Failure here surfaces
   // as a daemon exit; the client falls back to the last cached render.
   ensureSocketParentSafe(paths.socket);
+
+  // [LAW:nothing-unseen] Whether folder identity carries birth time on this
+  // host, so a host without statx can be read from its log.
+  serverLog("info", describeBirthtime(birthtimeVerdict()));
 
   // The daemon is built now that we know we are the daemon process: it loads
   // prior session state and becomes the sole writer of the state file.

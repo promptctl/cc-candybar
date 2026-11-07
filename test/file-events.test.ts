@@ -440,7 +440,7 @@ describe("FileEventDelivery", () => {
         const real = statIdentity(systemFilesystem, folder);
         return real === "gone" || !replaced
           ? real
-          : { ...real, birthtimeNs: real.birthtimeNs + 1n };
+          : { ...real, ino: real.ino + 1n };
       };
       const r = rig({ filesystem: identityBy(identityOf) });
       r.events.start(r.folder);
