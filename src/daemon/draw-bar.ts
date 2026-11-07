@@ -889,9 +889,9 @@ export function laneSessionOf(req: CheckedRenderRequest): LaneSession {
 // `before` and left them at `after`: each lane it moved is set up for the
 // session as its latest request reported it, or owed to its first request;
 // and a tmux status line switch it moved is followed in the pane that request
-// names, if its Claude Code's record holds the session at the commit. A click that left that switch alone holds nothing: the pane is
-// only remembered, and `answered` may have released it to the session that
-// took it since.
+// names, if its Claude Code's record holds the session at the commit. A click
+// that left that switch alone holds nothing: the pane is only remembered, and
+// `answered` may have released it to the session that took it since.
 export function laneClicked(
   parts: DaemonParts,
   sessionId: string,
