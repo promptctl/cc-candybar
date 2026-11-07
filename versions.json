@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-679",
+      "ref": "refs/pull/679/merge",
+      "sha": "9eb658cb6847592f24cec43b99979b9ff494e5cb",
+      "timestamp": "2026-11-07T11:21:54.688Z",
+      "commits": [
+        {
+          "sha": "9eb658cb6847592f24cec43b99979b9ff494e5cb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:20:55Z",
+          "message": "Merge 5ad256141c0a74c573474381040c9c6358e68806 into f92fb0e65423da82e8e6030b5d393e6c9369d852\n"
+        },
+        {
+          "sha": "5ad256141c0a74c573474381040c9c6358e68806",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:13:32-07:00",
+          "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-688",
       "ref": "refs/pull/688/merge",
       "sha": "0484954183c66c2fdc8f47514b8c886e737dd24d",
@@ -237,28 +259,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:37:49-07:00",
           "message": "fix(cache): a catch-up reloads one entry per turn, so requests are answered between entries (candybar-animation-wbxz.v24)\n\nWhen file events resumed after a stall, or the repo answers moved, the\nrender cache reloaded every entry in one synchronous turn. A reload that\nkeeps its state still resolves, validates and keys the whole chain, so\n105 entries held the live daemon's loop for 1.7s on a calm machine and\n11s on a loaded one, and every client waiting behind it hung up (the\nEPIPE bursts in daemon.log).\n\nThe walk now takes one due entry per turn of the loop. Any reload clears\nits entry's due mark, a drop clears a dropped entry's, a reload that\nthrows ends only its own turn, and close cancels the armed turn. The\nrender cache's stats count the entries still due.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-679",
-      "ref": "refs/pull/679/merge",
-      "sha": "c227cd4439188f73a052319b4272af9360536341",
-      "timestamp": "2026-11-07T09:52:57.965Z",
-      "commits": [
-        {
-          "sha": "c227cd4439188f73a052319b4272af9360536341",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:52:07-07:00",
-          "message": "Merge 8451687ec136e11eca3174bd64c1e934b90d5dc2 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
-        },
-        {
-          "sha": "8451687ec136e11eca3174bd64c1e934b90d5dc2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:51:44-07:00",
-          "message": "test(daemon): the tests that draw the daemon's bar in a worker build its parts from one helper (candybar-gather-renderer-76bb.1dh.5hr)\n\nsession-pane-draw, the facts-seam test's live session and frame-feed's\nfailed-open case take a whole, uncast DaemonParts from test/helpers/daemon-parts.ts.\nThe render cache's composition, the frame feed's wiring and the teardown move\ninto daemon.ts functions that createDaemon and the builder both call, so the\nbuilder closes everything the daemon closes, and its store is held by the\njournal turns.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
