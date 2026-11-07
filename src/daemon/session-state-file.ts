@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { stagedPath } from "../utils/atomic-write";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
 import type { SessionSnapshot, SessionStorage } from "./session-state";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
@@ -49,7 +50,9 @@ export class FileSessionStorage implements SessionStorage {
     // daemon.log: the daemon passes its log, every other caller stays quiet.
     private readonly logger: DaemonLogger = quietLogger,
   ) {
-    this.writingPath = `${filePath}.writing`;
+    // [LAW:one-type-per-behavior] Both staged names carry this process's pid
+    // (stagedPath), so another process writing this file never renames them.
+    this.writingPath = stagedPath(filePath, "writing");
   }
 
   load(): SessionSnapshot {
@@ -181,7 +184,7 @@ export class FileSessionStorage implements SessionStorage {
     const started = this.clock.monotonic();
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      const tmp = `${this.filePath}.tmp`;
+      const tmp = stagedPath(this.filePath);
       const body = JSON.stringify(snapshot);
       // [LAW:single-enforcer] Daemon runtime files are owner-only (0o600), like
       // pid/spawn.lock. Session state carries conversation identifiers, so it

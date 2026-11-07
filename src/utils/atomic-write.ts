@@ -3,6 +3,17 @@ import path from "node:path";
 import { systemFilesystem } from "../disk/system-filesystem.js";
 import { resolvedTarget } from "./link-chain.js";
 
+// [LAW:one-type-per-behavior] The one spelling of where a write stages its
+// bytes before the rename that publishes them. The name carries this process's
+// pid, because two processes write one file when they share a state directory
+// (a daemon and a CLI): under one shared name, one's rename publishes the
+// other's half-written bytes and the other's rename then finds nothing. Within
+// a process a writer stages one write of a file at a time, and a writer that
+// keeps two in flight tells them apart by suffix.
+export function stagedPath(file: string, suffix = "tmp"): string {
+  return `${file}.${process.pid}.${suffix}`;
+}
+
 // [LAW:single-enforcer] The one tmp+rename for every file a user may be
 // reading while we write it — the config file, the settings history, and Claude
 // Code's settings.json (the doctor fix and `install`), and the home's link-id
@@ -17,7 +28,7 @@ import { resolvedTarget } from "./link-chain.js";
 export function writeAtomic(at: string, text: string, mode?: number): void {
   const file = resolvedTarget(systemFilesystem, at);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
+  const tmp = stagedPath(file);
   const fileMode = mode ?? fs.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
     // Flushed before the rename, so a system crash leaves the old file or the

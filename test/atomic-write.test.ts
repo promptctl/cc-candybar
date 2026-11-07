@@ -1,9 +1,12 @@
 import { systemFilesystem } from "../src/disk/system-filesystem";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { setImmediate as turn } from "node:timers/promises";
 import { writeAtomic } from "../src/utils/atomic-write.js";
 import { linkChain, resolvedTarget } from "../src/utils/link-chain.js";
+import { until } from "./helpers/until";
 
 let dir: string;
 beforeEach(() => {
@@ -133,4 +136,100 @@ test("writeConfigText(null) through a link removes the target, keeps the link", 
   writeConfigText(link, null, () => {});
   expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
   expect(fs.existsSync(path.join(dir, "dotfiles-config.json5"))).toBe(false);
+});
+
+// Two processes write one file when they share a state directory (a daemon
+// and a CLI, a test and the daemon it spawned). Each stages under its own
+// name, so neither renames the other's bytes into place or away.
+describe("writeAtomic across processes", () => {
+  const TSX = path.join(__dirname, "..", "node_modules", ".bin", "tsx");
+  const CHILD = path.join(__dirname, "fixtures", "atomic-write-child.ts");
+  const WRITES = 200;
+  // Large enough that a write is still being staged when the other process
+  // renames, so a shared staging name tears or loses it.
+  const PAD_BYTES = 64 * 1024;
+
+  test("the staged file carries the writing process's pid", () => {
+    const file = path.join(dir, "state.json");
+    const rename = jest.spyOn(fs, "renameSync");
+    try {
+      writeAtomic(file, "{}");
+      expect(rename.mock.calls).toEqual([[`${file}.${process.pid}.tmp`, file]]);
+    } finally {
+      rename.mockRestore();
+    }
+  });
+
+  test("two writers of one file: neither fails, and every read is one complete write", async () => {
+    const file = path.join(dir, "repo-configs.json");
+    const go = path.join(dir, "go");
+    writeAtomic(file, JSON.stringify({ child: "seed", i: 0, pad: "" }));
+    const children = ["a", "b"].map((name) => {
+      const ready = path.join(dir, `ready-${name}`);
+      // The sandbox env, as cli-plan's children get: the worker's own
+      // NODE_OPTIONS is not the one test setup threads through.
+      const child = spawn(
+        TSX,
+        [CHILD, file, ready, go, name, String(WRITES), String(PAD_BYTES)],
+        { env: process.env },
+      );
+      let stderr = "";
+      child.stderr.setEncoding("utf8").on("data", (t: string) => (stderr += t));
+      const exited = new Promise<{ name: string; code: number | null; failure: string }>(
+        (resolve) =>
+          child.once("exit", (code) =>
+            resolve({ name, code, failure: /Error/.test(stderr) ? stderr : "" }),
+          ),
+      );
+      return { ready, exited };
+    });
+    await until(
+      () => children.every((c) => fs.existsSync(c.ready)),
+      "both writers ready",
+      20_000,
+    );
+    fs.writeFileSync(go, "");
+
+    // Every read while both write, and the one after, parses as a whole body
+    // one writer wrote.
+    const torn: string[] = [];
+    let running = true;
+    const ends = Promise.all(children.map((c) => c.exited)).finally(() => {
+      running = false;
+    });
+    const readWhole = () => {
+      const text = fs.readFileSync(file, "utf8");
+      try {
+        const body = JSON.parse(text) as { child: string; pad: string };
+        if (!["seed", "a", "b"].includes(body.child)) torn.push(text.slice(0, 80));
+      } catch {
+        torn.push(`${text.length} bytes: ${text.slice(0, 40)}`);
+      }
+    };
+    while (running) {
+      readWhole();
+      await turn();
+    }
+    const exits = await ends;
+    readWhole();
+
+    expect(exits).toEqual([
+      { name: "a", code: 0, failure: "" },
+      { name: "b", code: 0, failure: "" },
+    ]);
+    expect(torn).toEqual([]);
+    const last = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      child: string;
+      i: number;
+      pad: string;
+    };
+    expect({ i: last.i, pad: last.pad.length }).toEqual({
+      i: WRITES - 1,
+      pad: PAD_BYTES,
+    });
+    // Nothing staged is left beside the file.
+    expect(fs.readdirSync(dir).sort()).toEqual(
+      ["go", "ready-a", "ready-b", "repo-configs.json"],
+    );
+  });
 });
