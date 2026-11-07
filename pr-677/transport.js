@@ -83341,11 +83341,12 @@ var RenderCache = class {
   stopSweep = null;
   closed = false;
   // [LAW:one-source-of-truth] The entries an every-entry reload asked for that
-  // have not re-read the disk since, each with the cause it reloads for. Keyed
-  // by the entry itself, so an entry evicted and opened again is a new one,
+  // have not re-read the disk since, in the order they are walked. Keyed by
+  // the entry itself, so an entry evicted and opened again is a new one,
   // whose own first load read the disk after the span.
-  due = /* @__PURE__ */ new Map();
-  // What cancels the one turn armed to reload the next due entry, while one is.
+  due = /* @__PURE__ */ new Set();
+  // What cancels the one turn armed to reload the next due entry, while one
+  // is. The turn carries the cause of the latest every-entry reload.
   walk = null;
   // Every state the map serves or served, until reclaimed.
   holds = /* @__PURE__ */ new Map();
@@ -83863,38 +83864,49 @@ var RenderCache = class {
   // Every entry, re-read for `cause`: the answers on disk moved, and any
   // entry may draw from a repository; or file events resumed, and an edit to
   // any entry's files may have gone unheard. Each entry's load names the
-  // cause; the batch has no record of its own.
+  // cause it ran for; whatever started the batch logs it at its source.
   //
   // [LAW:no-ambient-temporal-coupling] One entry per turn of the loop. A
   // reload that keeps its state still resolves, validates and keys the whole
   // chain, so a walk over every entry in one turn holds the loop for seconds,
-  // and every client waiting behind it hangs up. A later batch's cause
-  // replaces an earlier one's for an entry still due: one re-read of the disk
-  // as it is now answers both.
+  // and every client waiting behind it hangs up. Most recently used first,
+  // so the bar someone is looking at is re-read on the first turn, not the
+  // last. [LAW:one-source-of-truth] A later batch re-walks every entry for
+  // its own cause: one re-read of the disk as it is now answers both.
   reloadEvery(cause) {
-    for (const entry of this.entries.values()) this.due.set(entry, cause);
-    this.armWalk();
+    this.walk?.();
+    this.due.clear();
+    for (const entry of [...this.entries.values()].reverse())
+      this.due.add(entry);
+    this.armWalk(cause);
   }
-  // [LAW:single-enforcer] The one place a walk turn is armed: at most one at
-  // a time, and one whenever an entry is due.
-  armWalk() {
-    if (this.walk !== null || this.due.size === 0) return;
-    this.walk = this.deps.clock.defer(() => this.walkOne());
+  // [LAW:single-enforcer] The one place a walk turn is armed: one at a time
+  // (every caller cleared the last), and one whenever an entry is due.
+  armWalk(cause) {
+    this.walk = this.due.size === 0 ? null : this.deps.clock.defer(() => this.walkOne(cause));
   }
-  // The turn takes the next due entry. The next turn is armed whatever the
-  // reload does, so a reload that throws ends only its own turn. Nothing is
-  // due when every entry left since the turn was armed: dropped, or re-read
-  // by its own reload.
-  walkOne() {
-    this.walk = null;
-    const next = this.due.entries().next();
-    if (next.done) return;
-    const [entry, cause] = next.value;
+  // The turn takes the next due entry. Nothing is due when every entry left
+  // since the turn was armed: dropped, or re-read by its own reload.
+  // [LAW:no-silent-failure] The turn runs outside any watcher's callback, so
+  // it is its own error boundary, as the watcher registry is for a reload a
+  // watch drives: a reload that throws is logged and ends only its own turn,
+  // where uncaught it would end the daemon.
+  walkOne(cause) {
+    const next = this.due.values().next();
+    if (next.done) {
+      this.walk = null;
+      return;
+    }
+    const entry = next.value;
     try {
       this.reloadInto(entry, cause);
-    } finally {
-      this.armWalk();
+    } catch (e) {
+      this.log(
+        "error",
+        `catch-up reload threw dir=${entry.projectDir} cause=${cause.kind}: ${e.message}`
+      );
     }
+    this.armWalk(cause);
   }
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch
   // target set is DERIVED from disk (which candidate resolved, which
