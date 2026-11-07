@@ -186,11 +186,7 @@ export function watchFault(
       // Every reason names the path it stopped at, the kernel's and the loop's.
       (u) => `cannot follow a link chain — ${u.reason}`,
     ),
-    ...watch.held.handle.deaf.map((d) =>
-      d.kind === "refused"
-        ? `cannot watch ${d.path} — ${d.reason}`
-        : `watching ${d.path} failed — ${d.reason}`,
-    ),
+    ...watch.held.handle.deaf.map(deafnessReason),
     ...(beyond === null ? [] : [beyond]),
   ];
   return reasons.length === 0 ? null : `${label}: ${reasons.join("; ")}`;
@@ -209,6 +205,13 @@ export interface Deafness {
   readonly path: string;
   readonly reason: string;
 }
+
+// [LAW:single-enforcer] The one phrasing of a deaf directory, for every
+// consumer that shows a watch's fault.
+export const deafnessReason = (d: Deafness): string =>
+  d.kind === "refused"
+    ? `cannot watch ${d.path} — ${d.reason}`
+    : `watching ${d.path} failed — ${d.reason}`;
 
 // [LAW:types-are-the-program] A directory watch listens or is deaf, never
 // both. A listening one holds its handle and the folder it bound, read before
@@ -332,6 +335,13 @@ const heldBy = (
   handle: Watch,
 ): state is Extract<DirState, { kind: "listening" }> =>
   state.kind === "listening" && state.handle === handle;
+
+// Whether a state is deaf in just this way, in kind and reason: the same
+// deafness again is no change, to the log or to a slot.
+const sameDeafness = (was: DirState | null, now: Deafness): boolean =>
+  was?.kind === "deaf" &&
+  was.deafness.kind === now.kind &&
+  was.deafness.reason === now.reason;
 
 const dirId = (target: DirTarget): string =>
   `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
@@ -511,16 +521,19 @@ export class WatcherRegistry {
   }
 
   // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, it hears the fault. Listening again, it hears an
-  // `unknown` window: whatever changed while the directory was deaf or bound
-  // to another folder went unheard, and a holder that re-derives on it reports
-  // its fault cleared. Deaf staying deaf is no change and tells nothing.
+  // state. Going deaf, or deaf another way (an error and then a refusal, a
+  // refusal whose reason changes), it hears the fault. Listening again, it
+  // hears an `unknown` window: whatever changed while the directory was deaf
+  // or bound to another folder went unheard, and a holder that re-derives on
+  // it reports its fault cleared. The same deafness again tells nothing.
+  // [LAW:one-source-of-truth] So a holder that keeps the deafness it last
+  // heard never drifts from the handle's.
   private reopen(dir: DirWatch, cause: string): void {
     const was = dir.state;
     if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
     dir.state = this.open(dir, () => dir, cause, was);
     if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening")
+    else if (!sameDeafness(was, dir.state.deafness))
       this.tell(dir, failedOf(dir.state.deafness));
   }
 
@@ -571,19 +584,17 @@ export class WatcherRegistry {
       );
       return { kind: "listening", handle, bound };
     } catch (e) {
-      const reason = (e as Error).message;
+      const deafness: Deafness = {
+        kind: "refused",
+        path: at,
+        reason: (e as Error).message,
+      };
       // [LAW:nothing-unseen] A refusal is logged when it starts or its reason
       // changes; every period retries a deaf directory, and the same refusal
       // repeated would bury the events around it.
-      const same =
-        was?.kind === "deaf" &&
-        was.deafness.kind === "refused" &&
-        was.deafness.reason === reason;
-      if (!same) this.logger("warn", `watch failed ${at}: ${reason}`);
-      return {
-        kind: "deaf",
-        deafness: { kind: "refused", path: at, reason },
-      };
+      if (!sameDeafness(was, deafness))
+        this.logger("warn", `watch failed ${at}: ${deafness.reason}`);
+      return { kind: "deaf", deafness };
     }
   }
 

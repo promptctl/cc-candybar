@@ -64,7 +64,15 @@ const identityBy =
     },
   });
 
-function rig(opts: { filesystem?: Filesystem } = {}): Rig {
+// The daemon wires the registry's `judge()` to the delivery owner's period,
+// in an order nothing owns: the registry's listener can come before the
+// storage owner's or after it (the daemon's order today).
+function rig(
+  opts: {
+    filesystem?: Filesystem;
+    judgeSubscribed?: "before" | "after";
+  } = {},
+): Rig {
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "managed-storage-")),
   );
@@ -86,12 +94,18 @@ function rig(opts: { filesystem?: Filesystem } = {}): Rig {
     logger,
   });
   const fileEvents = handDelivery();
+  const judged = () =>
+    fileEvents.subscribe((notice) => {
+      if (notice.kind === "period") watchers.judge();
+    });
+  if (opts.judgeSubscribed === "before") judged();
   const storage = new ManagedStorage({
     clock: systemTimekeeper,
     watchers,
     logger,
     fileEvents,
   });
+  if (opts.judgeSubscribed !== "before") judged();
   const made: Rig = {
     root,
     folder,
@@ -123,6 +137,17 @@ const answered = async <T>(lane: { current(): Current<T> }) => {
   await until(() => lane.current().kind !== "pending", "the lane's answer");
   return lane.current();
 };
+
+// Long enough for a debounce window to close and nothing to follow it: only
+// for asserting that something did not happen.
+const quiet = () =>
+  new Promise((resolve) => setTimeout(resolve, 3 * DEBOUNCE_MS));
+const reads = (r: Rig) =>
+  r.lines.filter((l) => l.includes("plugin storage refresh"));
+const faultLines = (r: Rig) =>
+  r.lines.filter((l) => l.startsWith("warn plugin storage fault "));
+const clearedLines = (r: Rig) =>
+  r.lines.filter((l) => l.startsWith("info plugin storage fault cleared "));
 
 const refreshes = (r: Rig, by: string): string[] =>
   r.lines.filter(
@@ -450,7 +475,7 @@ describe("ManagedStorage watches", () => {
     });
   });
 
-  test("a refused watch is a standing fault on every source in the folder; the next key request is a new generation", async () => {
+  test("a refused watch is a standing fault on every source in the folder, in the same generation", async () => {
     const r0 = rig();
     fakeWatches(new Set([r0.folder]));
     const key = r0.storage.keyFor(r0.folder);
@@ -460,7 +485,7 @@ describe("ManagedStorage watches", () => {
     expect(await answered(lane)).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r0.folder} EMFILE: too many open files, watch '${r0.folder}'; reload the config or restart the daemon`,
+      reason: `cannot refresh: ${r0.folder}: cannot watch ${r0.folder} — EMFILE: too many open files, watch '${r0.folder}'`,
     });
     expect(r0.counters.watchRefusals).toBe(1);
     expect(r0.storage.stats().faults).toEqual({
@@ -468,16 +493,10 @@ describe("ManagedStorage watches", () => {
       refused: 1,
       error: 0,
     });
-    jest.restoreAllMocks();
-    const next = r0.storage.keyFor(r0.folder);
-    expect(next.generation).toBe(1);
-    r0.storage.watch(next);
-    expect(await answered(r0.storage.declare(new Holds(), next, A))).toEqual(
-      ok("a"),
-    );
+    expect(r0.storage.keyFor(r0.folder)).toEqual(key);
   });
 
-  test("an error after open on a folder still there is the fault, and the held keys read it", async () => {
+  test("an error after open on a folder still there is the fault, and the held keys read it, in the same generation", async () => {
     const watches = fakeWatches();
     const r = rig();
     const key = r.storage.keyFor(r.folder);
@@ -490,7 +509,7 @@ describe("ManagedStorage watches", () => {
     expect(lane.current()).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; reload the config or restart the daemon`,
+      reason: `cannot refresh: ${r.folder}: watching ${r.folder} failed — EIO: i/o error`,
     });
     expect(r.counters.watchErrors).toBe(1);
     expect(r.storage.stats().faults).toEqual({
@@ -503,7 +522,7 @@ describe("ManagedStorage watches", () => {
         /^warn plugin storage fault folder=\S+ generation=0 cause=error reason=/,
       ),
     );
-    expect(r.storage.keyFor(r.folder).generation).toBe(1);
+    expect(r.storage.keyFor(r.folder)).toEqual(key);
   });
 });
 
@@ -519,14 +538,8 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     unreported: [],
     missedSince: null,
   };
-  // Long enough for a debounce window to close and nothing to follow it:
-  // only for asserting that something did not happen.
-  const quiet = () =>
-    new Promise((resolve) => setTimeout(resolve, 3 * DEBOUNCE_MS));
   const stallReason = (folder: string) =>
     `cannot refresh: ${folder}: file events stopped at 2026-10-27T04:00:00.000Z; the OS has delivered none since, not even for a file the daemon wrote to test it`;
-  const reads = (r: Rig) =>
-    r.lines.filter((l) => l.includes("plugin storage refresh"));
 
   async function stalledRig() {
     const watches = fakeWatches();
@@ -611,7 +624,7 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     expect(lane.current()).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; reload the config or restart the daemon`,
+      reason: `cannot refresh: ${r.folder}: watching ${r.folder} failed — EIO: i/o error`,
     });
     expect(r.storage.stats()).toMatchObject({
       faults: { unusable: 0, refused: 0, error: 1 },
@@ -703,6 +716,205 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     await quiet();
     expect(reads(r)).toHaveLength(before);
     expect(r.storage.stats()).toMatchObject({ lost: 0 });
+  });
+});
+
+// A watch's deafness is the registry's to retry, on the delivery owner's
+// period; a stat that failed is the next judgment's to ask again. Each period
+// here is one notice reaching both the registry and the owner, as the
+// daemon's does.
+describe("ManagedStorage when its folder's watch or stat recovers", () => {
+  const EIO = () => new Error("EIO: i/o error");
+  const period = (r: Rig) => r.fileEvents.notify({ kind: "period" });
+  const reading = (lane: { current(): Current<unknown> }, value: string) =>
+    until(
+      () => JSON.stringify(lane.current()) === JSON.stringify(ok(value)),
+      `the lane reading ${value}`,
+    );
+
+  test("a refused watch is the fault until a period's reopen listens; then the file lands, one clear logged, in the same generation", async () => {
+    const refuse = new Set<string>();
+    fakeWatches(refuse);
+    const r = rig();
+    refuse.add(r.folder);
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    const fault = await answered(lane);
+    expect(fault.kind === "failed" && fault.reason).toContain("EMFILE");
+    const before = reads(r).length;
+    for (let i = 0; i < 3; i++) {
+      period(r);
+      await quiet();
+    }
+    expect(reads(r)).toHaveLength(before);
+    expect(lane.current()).toEqual(fault);
+    expect(r.storage.stats().faults).toEqual({
+      unusable: 0,
+      refused: 1,
+      error: 0,
+    });
+    expect(faultLines(r)).toHaveLength(1);
+    refuse.delete(r.folder);
+    period(r);
+    await reading(lane, "a");
+    expect(clearedLines(r)).toEqual([
+      expect.stringMatching(
+        /^info plugin storage fault cleared folder=\S+ generation=0 cause=refused$/,
+      ),
+    ]);
+    expect(r.storage.keyFor(r.folder)).toEqual(key);
+  });
+
+  test("an erroring watch is reopened by the next period, and the lane reads the file again", async () => {
+    const watches = fakeWatches();
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    await answered(lane);
+    watches[0]!.emitter.emit("error", EIO());
+    await until(() => lane.current().kind === "failed", "the fault");
+    r.write(A, '"written while deaf"');
+    period(r);
+    await reading(lane, "written while deaf");
+    expect(r.storage.keyFor(r.folder)).toEqual(key);
+  });
+
+  test.each(["before", "after"] as const)(
+    "a watch that errors after every reopen is one fault, logged and counted once, with the registry's period listener added %s the owner's",
+    async (judgeSubscribed) => {
+      const watches = fakeWatches();
+      const r = rig({ judgeSubscribed });
+      const key = r.storage.keyFor(r.folder);
+      r.storage.watch(key);
+      watches.at(-1)!.emitter.emit("error", EIO());
+      await until(() => r.storage.stats().faults.error === 1, "the fault");
+      for (let i = 0; i < 3; i++) {
+        period(r);
+        // The reopened handle errors inside the reopen's debounce window.
+        watches.at(-1)!.emitter.emit("error", EIO());
+        await quiet();
+      }
+      expect(watches).toHaveLength(4);
+      expect(faultLines(r)).toHaveLength(1);
+      expect(clearedLines(r)).toEqual([]);
+      expect(r.storage.stats().faults).toEqual({
+        unusable: 0,
+        refused: 0,
+        error: 1,
+      });
+    },
+  );
+
+  test("an error, then a refused reopen: each is logged and counted once, the lane reads the refusal, and its lifting clears it", async () => {
+    const refuse = new Set<string>();
+    const watches = fakeWatches(refuse);
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    await answered(lane);
+    watches[0]!.emitter.emit("error", EIO());
+    await until(() => faultLines(r).length === 1, "the error's fault line");
+    refuse.add(r.folder);
+    period(r);
+    await until(() => faultLines(r).length === 2, "the refusal's fault line");
+    expect(faultLines(r)).toEqual([
+      expect.stringMatching(/ generation=0 cause=error reason=/),
+      expect.stringMatching(/ generation=0 cause=refused reason=/),
+    ]);
+    const refusal = `cannot refresh: ${r.folder}: cannot watch ${r.folder} — EMFILE: too many open files, watch '${r.folder}'`;
+    await until(() => {
+      const now = lane.current();
+      return now.kind === "failed" && now.reason === refusal;
+    }, "the lane reading the refusal");
+    period(r);
+    await quiet();
+    expect(faultLines(r)).toHaveLength(2);
+    expect(r.storage.stats().faults).toEqual({
+      unusable: 0,
+      refused: 1,
+      error: 1,
+    });
+    refuse.delete(r.folder);
+    r.write(A, '"after"');
+    period(r);
+    await reading(lane, "after");
+    expect(clearedLines(r)).toEqual([
+      expect.stringMatching(/ generation=0 cause=refused$/),
+    ]);
+  });
+
+  test("a stat that fails is the fault until a period's stat succeeds, counted once, in the same generation", async () => {
+    let failing = false;
+    const stand: Filesystem = {
+      ...systemFilesystem,
+      statSync: (p) => {
+        if (failing && p.endsWith(path.join("plug", "session")))
+          throw Object.assign(new Error(`EIO: i/o error, stat '${p}'`), {
+            code: "EIO",
+          });
+        return systemFilesystem.statSync(p);
+      },
+    };
+    fakeWatches();
+    const r = rig({ filesystem: stand });
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    await answered(lane);
+    failing = true;
+    period(r);
+    await until(() => lane.current().kind === "failed", "the stat's fault");
+    const fault = lane.current();
+    expect(fault.kind === "failed" && fault.reason).toContain(
+      "stat failed: EIO",
+    );
+    period(r);
+    await quiet();
+    expect(r.storage.stats().faults.error).toBe(1);
+    r.write(A, '"after"');
+    failing = false;
+    period(r);
+    await reading(lane, "after");
+    expect(r.storage.stats().faults).toEqual({
+      unusable: 0,
+      refused: 0,
+      error: 1,
+    });
+    expect(clearedLines(r)).toEqual([
+      expect.stringMatching(/ generation=0 cause=error$/),
+    ]);
+    expect(r.storage.keyFor(r.folder)).toEqual(key);
+  });
+
+  test("a lost generation whose watch errors reads the deafness, and the path again once a period reopens the watch", async () => {
+    const watches = fakeWatches();
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    await answered(lane);
+    fs.rmSync(r.folder, { recursive: true });
+    period(r);
+    await until(() => lane.current().kind === "absent", "the path's answer");
+    watches[0]!.emitter.emit("error", EIO());
+    await until(() => lane.current().kind === "failed", "the deafness");
+    expect(lane.current()).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason: `cannot refresh: ${r.folder}: watching ${r.folder} failed — EIO: i/o error`,
+    });
+    fs.mkdirSync(r.folder);
+    r.write(A, '"made again"');
+    period(r);
+    await reading(lane, "made again");
   });
 });
 
