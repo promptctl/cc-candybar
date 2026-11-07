@@ -521,6 +521,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     sessionState,
     stateDir: paths.state,
     filesystem: inputs.filesystem,
+    installedLayers: renderCache.installedLayers,
     storedRoot: paths.storedRoot,
     locations: locs,
     journalTurns,

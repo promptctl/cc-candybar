@@ -63,6 +63,9 @@ export function filesystemContract(name: string, make: () => Subject): void {
       }
       expect(missing).toMatchObject({ code: "ENOENT", path: at("nope") });
       expect(missing?.message).toMatch(/^ENOENT: no such file or directory/);
+      expect(codeOf(() => s.filesystem.statSync(at("f", "below")))).toBe(
+        "ENOTDIR",
+      );
     });
 
     it("follows a link for stat and realpath, and not for lstat", () => {

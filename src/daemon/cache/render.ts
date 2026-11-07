@@ -28,7 +28,6 @@ import {
   parseChain,
   readConfigLoad,
   type ConfigChain,
-  type ConfigLoad,
   type ParsedChain,
 } from "../../config/load.js";
 import { REPO_PLUGIN_DIR } from "../../config/loader/plugin-folders.js";
@@ -871,7 +870,7 @@ function declaredSources(
 
 // A parsed chain keyed: the storage key of every source its config declares,
 // and the identity of everything a build derives a state from.
-export function keyLoad(
+function keyLoad(
   cwd: string,
   chain: ConfigChain,
   parsed: Extract<ParsedChain, { kind: "parsed" }>,
@@ -1135,6 +1134,11 @@ function settleParsed(
 // so the state it built is never constructed-then-discarded and the no-file
 // default is built once, not twice; `cc-candybar doctor`, which has no cache,
 // reads the outcome and disposes the state it was handed.
+// [LAW:dataflow-not-control-flow] A failure at any step — parse,
+// registration, palette resolution — is the `failed` arm; the caller's prior
+// state stays untouched, so the daemon keeps rendering the last-known-good
+// config — the bundled default until one has loaded — and its diagnostics
+// count `lastError` and `lastWarning`.
 export function loadFromDisk(
   { projectDir, cwd, target }: LoadOrigin,
   deps: StateDeps,
@@ -1149,20 +1153,6 @@ export function loadFromDisk(
     configFile: target.path,
     memo: deps.memo,
   });
-  return stateFromLoad(load, started, deps, served);
-}
-
-// [LAW:dataflow-not-control-flow] A failure at any step — parse,
-// registration, palette resolution — is the `failed` arm; the caller's prior
-// state stays untouched, so the daemon keeps rendering the last-known-good
-// config — the bundled default until one has loaded — and its diagnostics
-// count `lastError` and `lastWarning`.
-export function stateFromLoad(
-  load: ConfigLoad,
-  started: Monotonic,
-  deps: StateDeps,
-  served: DslRenderState | null,
-): LoadOutcome {
   return settleParsed(
     { repos: load.repos, advisories: load.advisories, started },
     load.cwd,
@@ -2249,6 +2239,14 @@ export class RenderCache<
     key: string,
   ): string | undefined {
     return this.copies.get(sessionId)?.get(by)?.get(key);
+  }
+
+  // The installed layers every load of this cache shares, lent to a load
+  // outside it over the same disk (a click's proof), so that load checks no
+  // plugin this cache's loads already checked: the key is the definitions'
+  // text, so a lent memo serves no layer the borrower's disk does not hold.
+  get installedLayers(): InstalledLayerMemo {
+    return this.deps.memo;
   }
 
   // The renderer no longer draws the session's bar (its feed closed): what

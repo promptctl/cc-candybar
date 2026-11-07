@@ -33,6 +33,7 @@ import {
 } from "../src/config/dsl-loader";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
 import { systemFilesystem } from "../src/disk/system-filesystem";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
 
 // The answers with each of `dirs` approved: these cases are about how layers
 // resolve, so each approves the directories its layers live in.
@@ -250,7 +251,7 @@ describe("resolveDslConfig", () => {
         },
       });
       expect(
-        durableConfig(systemFilesystem, L, approving(proj), proj, dir),
+        durableConfig(systemFilesystem, new InstalledLayerMemo(), L, approving(proj), proj, dir),
       ).toEqual({
         path: xdgJson5,
         above: [{ path: projJson, scope: "repo" }],
@@ -258,6 +259,7 @@ describe("resolveDslConfig", () => {
         cwd: dir,
         locs: L,
         reads: systemFilesystem,
+        memo: expect.any(InstalledLayerMemo),
       });
     } finally {
       cleanup();
@@ -287,7 +289,7 @@ describe("resolveDslConfig", () => {
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
       expect(
-        durableConfig(systemFilesystem, L, approving(), undefined, dir),
+        durableConfig(systemFilesystem, new InstalledLayerMemo(), L, approving(), undefined, dir),
       ).toEqual({
         path: home,
         above: [],
@@ -295,6 +297,7 @@ describe("resolveDslConfig", () => {
         cwd: dir,
         locs: L,
         reads: systemFilesystem,
+        memo: expect.any(InstalledLayerMemo),
       });
     } finally {
       cleanup();
@@ -319,7 +322,7 @@ describe("resolveDslConfig", () => {
         repos: NO_REPOS,
       });
       expect(
-        durableConfig(systemFilesystem, L, approving(), dir, dir, named),
+        durableConfig(systemFilesystem, new InstalledLayerMemo(), L, approving(), dir, dir, named),
       ).toEqual({
         path: named,
         above: [],
@@ -327,6 +330,7 @@ describe("resolveDslConfig", () => {
         cwd: dir,
         locs: L,
         reads: systemFilesystem,
+        memo: expect.any(InstalledLayerMemo),
       });
     } finally {
       cleanup();
@@ -363,7 +367,7 @@ describe("resolveDslConfig", () => {
       );
       // A durable write creates the file the bar is waiting for.
       expect(
-        durableConfig(systemFilesystem, L, approving(), dir, dir, named),
+        durableConfig(systemFilesystem, new InstalledLayerMemo(), L, approving(), dir, dir, named),
       ).toEqual({
         path: named,
         above: [],
@@ -371,6 +375,7 @@ describe("resolveDslConfig", () => {
         cwd: dir,
         locs: L,
         reads: systemFilesystem,
+        memo: expect.any(InstalledLayerMemo),
       });
     } finally {
       cleanup();
@@ -467,7 +472,7 @@ describe("resolveDslConfig", () => {
         expect(notice).toContain(join(locked, ".cc-candybar.json"));
         expect(notice?.split("\n")).toHaveLength(2);
         expect(
-          durableConfig(systemFilesystem, L, approving(cwd), locked, cwd).above,
+          durableConfig(systemFilesystem, new InstalledLayerMemo(), L, approving(cwd), locked, cwd).above,
         ).toEqual([{ path: cwdFile, scope: "repo" }]);
         // The same directory as both project and cwd is still ONE location:
         // two unchecked entries (one per extension), two notice lines.

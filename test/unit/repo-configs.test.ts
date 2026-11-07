@@ -116,9 +116,16 @@ describe("the gate over a project's config file", () => {
 
   test("the durable writer's chain leaves out what the bar's leaves out", () => {
     write(".cc-candybar.json5", "{}");
-    expect(durableConfig(disk, locs, book({}), project, project).above).toEqual(
-      [],
-    );
+    expect(
+      durableConfig(
+        disk,
+        new InstalledLayerMemo(),
+        locs,
+        book({}),
+        project,
+        project,
+      ).above,
+    ).toEqual([]);
   });
 
   test("a book that cannot be read answers for nobody, asks nothing, and says so", () => {

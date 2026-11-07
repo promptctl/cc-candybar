@@ -39,8 +39,7 @@ export function bookIsFiled(reads: FilesystemReads, stateDir: string): boolean {
     reads.statSync(repoConfigsPath(stateDir));
     return true;
   } catch (e) {
-    if ((e as { code?: string }).code === "ENOENT") return false;
-    return true;
+    return (e as { code?: string }).code !== "ENOENT";
   }
 }
 

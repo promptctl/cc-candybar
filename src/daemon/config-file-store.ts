@@ -25,7 +25,6 @@
 // when the file already authors it.
 
 import { BadVerbArgs } from "./verb-error";
-import fs from "node:fs";
 import JSON5 from "json5";
 import { writeAtomic } from "../utils/atomic-write.js";
 import { resolvedTarget } from "../utils/link-chain.js";
@@ -36,7 +35,6 @@ import {
   RAW_DEFAULT_DSL_CONFIG,
 } from "../config/default-dsl-config.js";
 import {
-  InstalledLayerMemo,
   loadConfigChain,
   type ConfigHome,
   type LoadedChain,
@@ -127,11 +125,19 @@ export function persistValueText(key: string, raw: string): string {
 // ─── The file ────────────────────────────────────────────────────────────────
 
 /** The file's text, or null when it does not exist. */
+// [LAW:effects-at-boundaries] exception: the system disk, the one
+// writeConfigText writes, so undo reads back what it wrote.
 export function readConfigText(file: string): string | null {
+  return textOn(systemFilesystem, file);
+}
+
+// [LAW:one-source-of-truth] A click reads its home on the disk its proof
+// loads, so the text it splices and the chain it judges are one disk's.
+function textOn(reads: FilesystemReads, file: string): string | null {
   try {
-    return fs.readFileSync(file, "utf8");
+    return reads.readFileSync(file);
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if ((e as { code?: string }).code === "ENOENT") return null;
     throw e;
   }
 }
@@ -149,7 +155,7 @@ export function writeConfigText(
 ): void {
   try {
     if (text === null) {
-      fs.rmSync(resolvedTarget(systemFilesystem, file), { force: true });
+      systemFilesystem.rmSync(resolvedTarget(systemFilesystem, file));
       return;
     }
     writeAtomic(file, text);
@@ -462,16 +468,12 @@ function commit(
   after: string,
   refuse: (home: ConfigHome, was: Was, will: LoadedChain) => void,
 ): void {
-  // [LAW:one-source-of-truth] One memo for the click's loads: the file as it
-  // will be, and as it was when a refusal reads it.
-  const memo = new InstalledLayerMemo();
-  const will = loadOrRefuse(home, after, memo);
+  const will = loadOrRefuse(home, after);
   // [LAW:one-source-of-truth] The file before the click is loaded at most
   // once, and only by a refusal that reads it; every refusal judges against
   // that one load.
   let held: { readonly chain: LoadedChain | null } | undefined;
-  const was: Was = () =>
-    (held ??= { chain: loadedOrNull(home, before, memo) }).chain;
+  const was: Was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse(home, was, will);
   writeConfigText(home.path, after, store.logger);
@@ -528,10 +530,9 @@ function hiddenBy(
 function loadedOrNull(
   home: ConfigHome,
   text: string | null,
-  memo: InstalledLayerMemo,
 ): LoadedChain | null {
   try {
-    return chainOver(home, text, memo);
+    return chainOver(home, text);
   } catch (e) {
     if (e instanceof ConfigError) return null;
     throw e;
@@ -541,14 +542,10 @@ function loadedOrNull(
 // The chain the home's text — or its absence — loads to, read from the disk
 // above it, exactly as resolveDslConfig orders it: an existing file is a
 // layer whatever it holds.
-function chainOver(
-  home: ConfigHome,
-  text: string | null,
-  memo: InstalledLayerMemo,
-): LoadedChain {
+function chainOver(home: ConfigHome, text: string | null): LoadedChain {
   return loadConfigChain(
     text === null ? home.reads : withText(home.reads, home.path, text),
-    memo,
+    home.memo,
     home.locs,
     text !== null ? [homeLayer(home.path), ...home.above] : home.above,
     DEFAULT_DSL_CONFIG,
@@ -606,13 +603,9 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 // The config `text` loads to as the home, or the click's refusal naming why
 // it does not load.
-function loadOrRefuse(
-  home: ConfigHome,
-  text: string,
-  memo: InstalledLayerMemo,
-): LoadedChain {
+function loadOrRefuse(home: ConfigHome, text: string): LoadedChain {
   try {
-    return chainOver(home, text, memo);
+    return chainOver(home, text);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
@@ -649,13 +642,13 @@ function refuseNewDrops(home: ConfigHome, was: Was, will: LoadedChain): void {
   }
 }
 
-/** The scalar the file declares at a value target, or undefined. */
+/** The scalar the home declares at a value target, or undefined. */
 export function readValue(
-  file: string,
+  home: ConfigHome,
   key: string,
 ): string | number | boolean | undefined {
   const target = requireValueTarget(key);
-  const doc = docOf(readConfigText(file) ?? "");
+  const doc = docOf(textOn(home.reads, home.path) ?? "");
   const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
   return node !== undefined && "value" in node ? node.value : undefined;
 }
@@ -689,7 +682,7 @@ export function writeDrafts(
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
   placements: readonly PlacementValue[],
 ): void {
-  const before = readConfigText(home.path);
+  const before = textOn(home.reads, home.path);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
@@ -793,7 +786,7 @@ export function deleteValues(
   keys: readonly string[],
 ): void {
   const targets = keys.map(requireTarget);
-  const before = readConfigText(home.path);
+  const before = textOn(home.reads, home.path);
   if (before === null) return;
   const after = targets.reduce(
     (text, target) => deleteAtPath(text, resetPathOf(docOf(text), target)),
@@ -824,7 +817,7 @@ function freePresetName(doc: Node | null, home: ConfigHome): string {
       // all) — the editor refuses files the loader renders.
       ...home.above.flatMap((l) =>
         Object.keys(
-          (JSON5.parse(fs.readFileSync(l.path, "utf8")) as { presets?: object })
+          (JSON5.parse(home.reads.readFileSync(l.path)) as { presets?: object })
             .presets ?? {},
         ),
       ),
@@ -853,7 +846,7 @@ export function writePreset(
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
-  const before = readConfigText(home.path);
+  const before = textOn(home.reads, home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc, home);
   const own: ConfigPath = ["presets", name];
@@ -912,7 +905,7 @@ export function writeThemeDefault(
   theme: string,
   look: Readonly<Record<ThemeDefaultField, string>>,
 ): void {
-  const before = readConfigText(home.path);
+  const before = textOn(home.reads, home.path);
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme],
@@ -941,7 +934,7 @@ export function deletePreset(
     );
   }
   const own: ConfigPath = ["presets", name];
-  const before = readConfigText(home.path);
+  const before = textOn(home.reads, home.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
@@ -981,7 +974,7 @@ export function applyLayoutOp(
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = readConfigText(home.path);
+  const before = textOn(home.reads, home.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const placement = homeOnly(home, () =>
     layoutPlacementOf(docOf(before ?? ""), target.preset, subject),
@@ -991,11 +984,7 @@ export function applyLayoutOp(
     // [LAW:no-ambient-temporal-coupling] Minted over the text this click
     // splices, never a cached render of it: a hand edit, or a click an
     // instant earlier, is in the text before any watcher reloads it.
-    const config = loadOrRefuse(
-      home,
-      authored,
-      new InstalledLayerMemo(),
-    ).config;
+    const config = loadOrRefuse(home, authored).config;
     return presetNames(config.presets).map(
       (preset) => presetRoot(config, preset).node,
     );
