@@ -279,13 +279,13 @@ describe("a request takes its turn", () => {
     const mismatched: SessionPane = { kind: "mismatched", tmux: null, claude: CLAUDE, held: "session-b", why: "its Claude Code holds session-b" };
     const opened = r.clock.monotonic();
     await r.render(60, SID, mismatched, opened).answered;
-    expect(runs.of(SID)).toEqual({ claude: CLAUDE, since: opened, lasted: false });
+    expect(runs.of(SID, CLAUDE)).toEqual({ since: opened, lasted: false });
     const past = r.render(60, SID, mismatched, plusMs(opened, (MISMATCH_RACE_S + 1) * 1000));
     await past.answered;
-    expect(runs.lasted(SID)).toBe(true);
+    expect(runs.lasted(SID, CLAUDE)).toBe(true);
     expect(past.facts).toContainEqual(["mismatch", `lasted ${(MISMATCH_RACE_S + 1) * 1000}ms`]);
     await r.render(60).answered;
-    expect(runs.of(SID)).toBeNull();
+    expect(runs.of(SID, CLAUDE)).toBeNull();
   });
 });
 

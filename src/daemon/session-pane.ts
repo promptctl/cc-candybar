@@ -136,7 +136,7 @@ export const paneFact = (pane: SessionPane): string =>
 export function sessionPaneError(
   pane: SessionPane,
   lanes: LaneSwitches,
-  lasted: boolean,
+  lasted: (claude: ClaudeProcess) => boolean,
 ): string | null {
   const on = LANE_NAMES.filter(
     (lane) => lanes[lane] && LANES[lane].showsPaneSession,
@@ -144,7 +144,7 @@ export function sessionPaneError(
   const why =
     pane.kind === "unconfirmed"
       ? `this one is not known to be it: ${pane.why}`
-      : pane.kind === "mismatched" && lasted
+      : pane.kind === "mismatched" && lasted(pane.claude)
         ? `this one is not it: ${pane.why}, for longer than a \`/clear\` or \`/resume\` takes to rewrite it`
         : null;
   return why === null || pane.tmux === null || on.length === 0

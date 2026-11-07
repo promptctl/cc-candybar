@@ -538,7 +538,9 @@ export function drawRender(
     // stamp's words move.
     sourced(
       "session-pane",
-      sessionPaneError(req.pane, lanes, mismatchRuns.lasted(sessionId)),
+      sessionPaneError(req.pane, lanes, (claude) =>
+        mismatchRuns.lasted(sessionId, claude),
+      ),
     ),
     sourced("load", entry.lastError),
     sourced("update-act", updateWatch.error()),

@@ -37,31 +37,30 @@ describe("a session's run of mismatched stamps", () => {
     const owner = new MismatchRuns(SINGLE_RUN);
     owner.record("A", mismatched("B"), after(1));
     expect(owner.record("A", mismatched("B"), after(MISMATCH_RACE_S))).toEqual({
-      claude: PANE_CLAUDE,
       since: after(1),
       lasted: false,
     });
-    expect(owner.lasted("A")).toBe(false);
+    expect(owner.lasted("A", PANE_CLAUDE)).toBe(false);
   });
 
   test("a mismatched tick past the race after the run opened marks it lasted, however far apart its ticks", () => {
     const owner = new MismatchRuns(SINGLE_RUN);
     owner.record("B", mismatched("A"), after(0));
     owner.record("B", mismatched("A"), after(MISMATCH_RACE_S + 1));
-    expect(owner.lasted("B")).toBe(true);
+    expect(owner.lasted("B", PANE_CLAUDE)).toBe(true);
     // A Claude Code with no refresh interval ticks only on events.
-    expect(owner.record("B", mismatched("A"), after(3600))).toEqual({ claude: PANE_CLAUDE, since: after(0), lasted: true });
-    expect(owner.lasted("B")).toBe(true);
+    expect(owner.record("B", mismatched("A"), after(3600))).toEqual({ since: after(0), lasted: true });
+    expect(owner.lasted("B", PANE_CLAUDE)).toBe(true);
   });
 
   test("the new session's confirmed tick ends the cleared session's run, so its resume's forerunner opens a fresh one", () => {
     const owner = new MismatchRuns(SINGLE_RUN);
     owner.record("A", mismatched("B"), after(1));
     owner.record("B", runs(), after(2));
-    expect(owner.of("A")).toBeNull();
+    expect(owner.of("A", PANE_CLAUDE)).toBeNull();
     // An hour on, `/resume A` in the same Claude Code: its first tick beats
     // the record's rewrite, inside its own race.
-    expect(owner.record("A", mismatched("B"), after(3600))).toEqual({ claude: PANE_CLAUDE, since: after(3600), lasted: false });
+    expect(owner.record("A", mismatched("B"), after(3600))).toEqual({ since: after(3600), lasted: false });
   });
 
   test("a straggler after the new session's first confirmed tick is the race, so its resume's forerunner opens a fresh run", () => {
@@ -72,7 +71,7 @@ describe("a session's run of mismatched stamps", () => {
     owner.record("B", runs(), after(5));
     expect(owner.record("A", mismatched("B"), after(MISMATCH_RACE_S))).toBeNull();
     // An idle hour on, `/resume A` beats the record's rewrite.
-    expect(owner.record("A", mismatched("B"), after(3600))).toEqual({ claude: PANE_CLAUDE, since: after(3600), lasted: false });
+    expect(owner.record("A", mismatched("B"), after(3600))).toEqual({ since: after(3600), lasted: false });
     expect(owner.record("A", mismatched("B"), after(3600 + MISMATCH_RACE_S + 1))?.lasted).toBe(true);
   });
 
@@ -89,26 +88,28 @@ describe("a session's run of mismatched stamps", () => {
     owner.record("A", mismatched("B"), after(0));
     owner.record("C", runs(OTHER_CLAUDE), after(1));
     owner.record("A", mismatched("B"), after(MISMATCH_RACE_S + 1));
-    expect(owner.lasted("A")).toBe(true);
+    expect(owner.lasted("A", PANE_CLAUDE)).toBe(true);
   });
 
-  test("a run another Claude Code's ticks show opens afresh", () => {
+  test("a tick no readable Claude Code ran is in no run and leaves every run as it was", () => {
     const owner = new MismatchRuns(SINGLE_RUN);
     owner.record("A", mismatched("B"), after(0));
-    expect(owner.record("A", mismatched("D", OTHER_CLAUDE), after(MISMATCH_RACE_S + 1))).toEqual({
-      claude: OTHER_CLAUDE,
-      since: after(MISMATCH_RACE_S + 1),
-      lasted: false,
-    });
-  });
-
-  test("a tick no readable Claude Code ran leaves every run as it was", () => {
-    const owner = new MismatchRuns(SINGLE_RUN);
-    owner.record("A", mismatched("B"), after(0));
-    expect(owner.record("A", shell, after(1))).toEqual({ claude: PANE_CLAUDE, since: after(0), lasted: false });
-    expect(owner.record("B", shell, after(1))).toBeNull();
+    expect(owner.record("A", shell, after(1))).toBeNull();
     owner.record("A", mismatched("B"), after(MISMATCH_RACE_S + 1));
-    expect(owner.lasted("A")).toBe(true);
+    expect(owner.lasted("A", PANE_CLAUDE)).toBe(true);
+  });
+
+  test("two Claude Codes' runs of one session are each their own", () => {
+    const owner = new MismatchRuns(SINGLE_RUN);
+    for (let s = 0; s <= MISMATCH_RACE_S + 2; s += 2) {
+      owner.record("A", mismatched("B"), after(s));
+      owner.record("A", mismatched("D", OTHER_CLAUDE), after(s + 1));
+    }
+    expect(owner.lasted("A", PANE_CLAUDE)).toBe(true);
+    expect(owner.lasted("A", OTHER_CLAUDE)).toBe(true);
+    owner.record("B", runs(), after(20));
+    expect(owner.of("A", PANE_CLAUDE)).toBeNull();
+    expect(owner.lasted("A", OTHER_CLAUDE)).toBe(true);
   });
 
   test("refuses a write outside any turn", () => {
@@ -118,18 +119,19 @@ describe("a session's run of mismatched stamps", () => {
     );
   });
 
-  test("keeps the newest runs, so one whose Claude Code exited unconfirmed is dropped by age", () => {
+  test("keeps the Claude Codes heard from last, so one that exited is dropped by age", () => {
     const owner = new MismatchRuns(SINGLE_RUN);
     owner.record("first", mismatched("x"), after(0));
-    for (let i = 0; i < MISMATCH_RUNS_KEPT; i++) owner.record(`s${i}`, mismatched("x", { pid: 9000 + i, configDir: undefined }), after(1));
-    expect(owner.of("first")).toBeNull();
-    expect(owner.of("s0")).not.toBeNull();
-    expect(owner.of(`s${MISMATCH_RUNS_KEPT - 1}`)).not.toBeNull();
+    const other = (i: number): ClaudeProcess => ({ pid: 9000 + i, configDir: undefined });
+    for (let i = 0; i < MISMATCH_RUNS_KEPT; i++) owner.record(`s${i}`, mismatched("x", other(i)), after(1));
+    expect(owner.of("first", PANE_CLAUDE)).toBeNull();
+    expect(owner.of("s0", other(0))).not.toBeNull();
+    expect(owner.of(`s${MISMATCH_RUNS_KEPT - 1}`, other(MISMATCH_RUNS_KEPT - 1))).not.toBeNull();
   });
 
   test("the render line says whether there is a run, how long it has run, and whether it lasted", () => {
     expect(mismatchFact(null, after(1))).toBe("-");
-    expect(mismatchFact({ claude: PANE_CLAUDE, since: after(0), lasted: false }, after(1.5))).toBe("1500ms");
-    expect(mismatchFact({ claude: PANE_CLAUDE, since: after(0), lasted: true }, after(11))).toBe("lasted 11000ms");
+    expect(mismatchFact({ since: after(0), lasted: false }, after(1.5))).toBe("1500ms");
+    expect(mismatchFact({ since: after(0), lasted: true }, after(11))).toBe("lasted 11000ms");
   });
 });
