@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-671",
+      "ref": "refs/pull/671/merge",
+      "sha": "2c6372eb794ef84a223c0c97c1da53378f40ba59",
+      "timestamp": "2026-11-07T06:26:46.518Z",
+      "commits": [
+        {
+          "sha": "2c6372eb794ef84a223c0c97c1da53378f40ba59",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T06:25:30Z",
+          "message": "Merge 34d064b9804d76df795e07e0073998c27c595c67 into d8be82f47dab2890d335b8563bbfdc937aedba77\n"
+        },
+        {
+          "sha": "34d064b9804d76df795e07e0073998c27c595c67",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:24:32-07:00",
+          "message": "test(launch): the blocking timeout keeps its unread-input case, and the no-input one sits with launchSync (brandon-menus-sjhy.j5v)\n"
+        },
+        {
+          "sha": "07378a6190e23dff7fe5d3afcbb7569946a1264b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:20:54-07:00",
+          "message": "test(launch): the async timeout admits the escalated SIGKILL, and the armed-timeout signal and no-input timeout cases return (brandon-menus-sjhy.j5v)\n"
+        },
+        {
+          "sha": "e0791557d3b4e68781c6bc54960ec8167c4ed304",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:17:46-07:00",
+          "message": "test(launch): the timeout cases assert the whole verdict too, and every case feeds the unread input (brandon-menus-sjhy.j5v)\n"
+        },
+        {
+          "sha": "248ece7cb399af7f0500664567af4218db4251df",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:07:54-07:00",
+          "message": "test(launch): the unread-input cases assert each launch's whole verdict, so a failure prints its reason (brandon-menus-sjhy.j5v)\n\nThe blocking case failed once under a loaded worker tier at an `.ok`\nassertion, which printed only `false`. toMatchObject would not have\nhelped: its failure message cuts the received object down to the keys it\nwas given. toStrictEqual prints reason, error, exitCode and signal.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-670",
       "ref": "refs/pull/670/merge",
       "sha": "ec2f261edc18f14e31e605d6e2e0296acfbb290d",
@@ -34,49 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T23:08:44-07:00",
           "message": "fix(lanes): a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2)\n\nA request whose Claude Code's record holds another session is the rewrite\nrace at first. Each session's run of such stamps is now held in memory,\nkeyed by the Claude Code that ran its client. A confirmed tick from that\nprocess ends every run it opened, whatever the session. Once a run goes on\npast the race (10 s), the bar's session-pane ⚠ names the session the record\nholds, under a stable identity. The render line gains a mismatch fact.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-671",
-      "ref": "refs/pull/671/merge",
-      "sha": "458f9dca8aea44d3210754441c3ddee807cd769a",
-      "timestamp": "2026-11-07T06:25:42.671Z",
-      "commits": [
-        {
-          "sha": "458f9dca8aea44d3210754441c3ddee807cd769a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T06:24:46Z",
-          "message": "Merge ea429fd00d934107c552f4c27df56e0e6d5868ea into d8be82f47dab2890d335b8563bbfdc937aedba77\n"
-        },
-        {
-          "sha": "ea429fd00d934107c552f4c27df56e0e6d5868ea",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:24:32-07:00",
-          "message": "test(launch): the blocking timeout keeps its unread-input case, and the no-input one sits with launchSync (brandon-menus-sjhy.j5v)\n"
-        },
-        {
-          "sha": "ceb9169016bf4731eec58417e7e30c44b06c2655",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:20:54-07:00",
-          "message": "test(launch): the async timeout admits the escalated SIGKILL, and the armed-timeout signal and no-input timeout cases return (brandon-menus-sjhy.j5v)\n"
-        },
-        {
-          "sha": "f35d94e9966dd749dbe7738d3cfba41ea7953697",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:17:46-07:00",
-          "message": "test(launch): the timeout cases assert the whole verdict too, and every case feeds the unread input (brandon-menus-sjhy.j5v)\n"
-        },
-        {
-          "sha": "a174f1715327639f6b6bf7b2830f5457411ec24a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:07:54-07:00",
-          "message": "test(launch): the unread-input cases assert each launch's whole verdict, so a failure prints its reason (brandon-menus-sjhy.j5v)\n\nThe blocking case failed once under a loaded worker tier at an `.ok`\nassertion, which printed only `false`. toMatchObject would not have\nhelped: its failure message cuts the received object down to the keys it\nwas given. toStrictEqual prints reason, error, exitCode and signal.\n"
         }
       ]
     },
