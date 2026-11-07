@@ -69525,7 +69525,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.4";
+var PACKAGE_VERSION = "1.208.5";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -72290,7 +72290,7 @@ function sessionPaneOf(hints, sessionId2, heldSession) {
   };
 }
 var runningPane = (pane) => pane.kind === "runs" ? pane.tmux : null;
-var runsIn = (pane, where) => pane.kind === "runs" && samePane(pane.tmux, where);
+var runsNowIn = (where, heldSession) => (req) => inTmux(req.hints.tmux) && samePane(req.hints.tmux, where) && sessionPaneOf(req.hints, req.sessionId, heldSession).kind === "runs";
 var paneFact = (pane) => pane.kind === "unconfirmed" ? `unconfirmed: ${pane.why}` : pane.kind;
 function sessionPaneError(pane, lanes) {
   const on2 = LANE_NAMES.filter(
@@ -78748,7 +78748,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     return stay({
       ok: true,
       paneSession: frameFeeds.newestWhere(
-        (req2) => runsIn(req2.pane, { socket, pane })
+        runsNowIn({ socket, pane }, parts.heldSession)
       )
     });
   }
@@ -85079,18 +85079,18 @@ var TmuxStatusLines = class {
   failedWrites = 0;
   // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
   // arrival, a click's commit with its session's latest request — never at a
-  // draw: a session whose switch is on and that runs in a tmux pane
-  // (`running`, as its request was stamped) is held, any other is not. A
-  // daemon restart picks each session up at its next request.
+  // draw: a session whose switch is on is held in the pane it runs in
+  // (`running`, as its request was stamped), and one switched off is not. A
+  // request not known to run in a pane (`running` null) says nothing of where
+  // its session runs — any client in the pane, or one outside tmux, can carry
+  // the session's id — so a session held already stays where it is. A daemon
+  // restart picks each session up at its next request.
   observe(sessionId2, running, on2) {
     if (this.closed) return;
     const held = this.held.get(sessionId2);
-    const where = on2 ? running : null;
+    const where = on2 ? running ?? held ?? null : null;
     if (held !== void 0 && (where === null || !samePane(held, where)))
-      this.release(
-        held,
-        "switched off, moved, or no longer known to run in the pane"
-      );
+      this.release(held, "switched off or moved");
     if (where === null || this.held.has(sessionId2)) return;
     const entry = {
       sessionId: sessionId2,
@@ -86567,13 +86567,14 @@ function createDaemon(inputs) {
     log,
     clock
   });
+  const heldSession = inputs.heldSession(host.home);
   const laneSetups = new LaneSetups({
     edge: inputs.laneEdge(
       launcher,
       (sessionId2) => frameFeeds.following(sessionId2),
       closing.signal,
       probe3,
-      host.home
+      heldSession
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -86599,7 +86600,7 @@ function createDaemon(inputs) {
       run: (socket, args) => runTmuxAsync(launcher, { socket }, "tmux-status", args)
     },
     subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
-    sessionInPane: (where) => frameFeeds.newestWhere(({ pane }) => runsIn(pane, where)),
+    sessionInPane: (where) => frameFeeds.newestWhere(runsNowIn(where, heldSession)),
     // Run by tmux under its server's environment, so the renderer's home is
     // stated whole on the command, every variable of it.
     handler: [
@@ -86846,7 +86847,7 @@ function createDaemon(inputs) {
     home: host.home,
     storedRoot: paths2.storedRoot,
     tmp: host.tmp,
-    heldSession: inputs.heldSession(host.home),
+    heldSession,
     launcher,
     log,
     clock,
@@ -87670,11 +87671,15 @@ function heldSessionIn(file) {
   let record2;
   try {
     record2 = JSON.parse(text4);
-  } catch (e) {
-    return {
-      kind: "unread",
-      why: `its session record ${file} is not JSON (${e.message})`
-    };
+  } catch {
+    try {
+      record2 = JSON.parse(fs_default.readFileSync(file, "utf8"));
+    } catch (e) {
+      return {
+        kind: "unread",
+        why: `its session record ${file} is not JSON (${e.message})`
+      };
+    }
   }
   const sessionId2 = typeof record2 === "object" && record2 !== null && "sessionId" in record2 ? record2.sessionId : void 0;
   return typeof sessionId2 === "string" && sessionId2 !== "" ? { kind: "holds", sessionId: sessionId2 } : { kind: "unread", why: `its session record ${file} names no session` };
@@ -87683,7 +87688,7 @@ var heldSessionUnder = (home) => (pid2, configDir2) => heldSessionIn(
   import_node_path52.default.join(claudeConfigDir(configDir2, home), "sessions", `${pid2}.json`)
 );
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing, clock, probe3, home) {
+function productionLaneEdge(launcher, following, closing, clock, probe3, heldSession) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
     claudeInput: productionClaudeInputEdge(launcher),
@@ -87732,7 +87737,7 @@ function productionLaneEdge(launcher, following, closing, clock, probe3, home) {
     fileExists: (file) => fs_default.existsSync(file),
     presence,
     paneClaude: (hint) => paneClaude(launcher, hint),
-    heldSession: heldSessionUnder(home),
+    heldSession,
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the
     // shell's once the shell holds its terminal again: until it has reaped
     // Claude Code and taken the foreground back, tmux reads the directory of
@@ -87914,7 +87919,14 @@ function productionAdapters(paths2, daemonLog, machine) {
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe3, home) => productionLaneEdge(launcher, following, closing, machine, probe3, home),
+    laneEdge: (launcher, following, closing, probe3, heldSession) => productionLaneEdge(
+      launcher,
+      following,
+      closing,
+      machine,
+      probe3,
+      heldSession
+    ),
     heldSession: heldSessionUnder,
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {

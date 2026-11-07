@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-663",
+      "ref": "refs/pull/663/merge",
+      "sha": "a56b61b2bcbd3023247d47ae3e185d05dedf13a4",
+      "timestamp": "2026-11-07T00:50:08.671Z",
+      "commits": [
+        {
+          "sha": "a56b61b2bcbd3023247d47ae3e185d05dedf13a4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T00:49:11Z",
+          "message": "Merge e925248dab5bfa3ec31ff3abbf41114d207ea54e into 1c67112e8a6fe0cfc8d98ccf9ca7846a4a44830b\n"
+        },
+        {
+          "sha": "e925248dab5bfa3ec31ff3abbf41114d207ea54e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:48:59-07:00",
+          "message": "fix(lanes): a pane's session is read from its Claude Code's record at the asking, and a request not known to run in a pane releases nothing (candybar-gather-renderer-76bb.1dh.aom)\n\nHigh review of #663:\n- The takeover check and the pane-session reply read the record when they ask, so a stamp from before a /clear no longer answers for the pane.\n- A request whose parent is not the pane's Claude Code is no evidence about where its session runs: a held session stays where it is.\n- A record that fails to parse is read once more: Claude Code rewrites it in place.\n- One record reader: the lane edge is handed the daemon's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "2e2d9352b9f7678ccba37d370a4a10f7b1b500df",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:25:22-07:00",
+          "message": "fix(lanes): a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom)\n\nEvery process in a tmux pane inherits TMUX and TMUX_PANE, so a one-shot\n`cc-candybar` run from Claude Code's Bash tool, under any session id, became\n\"the pane's session\": the status line released the pane to it and a bar pane\nfollowed it.\n\nThe client now reports its parent pid (for a statusline, Claude Code itself,\nmeasured on 2.1.299). The render checkpoint reads that process's own record,\n`<config dir>/sessions/<pid>.json`, the one the restart already reads, and\nstamps the request with the pane its session runs in: outside, runs, or\nunconfirmed with why. The status line's holds and the pane-session reply read\nonly that stamp, so namesPane is gone. Every render event records it as\n`pane=`, and while the status line or a bar pane is on, an unconfirmed session's\nbar carries a ⚠ that says why.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-665",
       "ref": "refs/pull/665/merge",
       "sha": "79cfd855f8ec2152b35711f32e39cb30861c0ca3",
@@ -56,28 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:33:02-07:00",
           "message": "fix(feed): the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-663",
-      "ref": "refs/pull/663/merge",
-      "sha": "59b5f9c66d2e03b9b7754e7e5af86d1ed35f5d9e",
-      "timestamp": "2026-11-07T00:31:32.941Z",
-      "commits": [
-        {
-          "sha": "59b5f9c66d2e03b9b7754e7e5af86d1ed35f5d9e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:30:42Z",
-          "message": "Merge 2e2d9352b9f7678ccba37d370a4a10f7b1b500df into 52d7647ba197e389f78b91829e5591180ad2f2a3\n"
-        },
-        {
-          "sha": "2e2d9352b9f7678ccba37d370a4a10f7b1b500df",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:25:22-07:00",
-          "message": "fix(lanes): a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom)\n\nEvery process in a tmux pane inherits TMUX and TMUX_PANE, so a one-shot\n`cc-candybar` run from Claude Code's Bash tool, under any session id, became\n\"the pane's session\": the status line released the pane to it and a bar pane\nfollowed it.\n\nThe client now reports its parent pid (for a statusline, Claude Code itself,\nmeasured on 2.1.299). The render checkpoint reads that process's own record,\n`<config dir>/sessions/<pid>.json`, the one the restart already reads, and\nstamps the request with the pane its session runs in: outside, runs, or\nunconfirmed with why. The status line's holds and the pane-session reply read\nonly that stamp, so namesPane is gone. Every render event records it as\n`pane=`, and while the status line or a bar pane is on, an unconfirmed session's\nbar carries a ⚠ that says why.\n"
         }
       ]
     },
