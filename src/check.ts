@@ -611,6 +611,10 @@ export async function prepareConfig(
   // are drawn at.
   at: Instant,
   settleMs: number = SOURCE_SETTLE_MS,
+  // The keyspaces its session is judged by: the caller's own when it gates
+  // with them too (`check`), so its gate and its reads are one; a fresh
+  // set's for a caller that holds none.
+  gates: Gates = daemonGates(),
 ): Promise<PreparedConfig> {
   // Each file's own advisories (an editability notice naming a duplicate key)
   // land before its validation, so a fatal outcome still carries them.
@@ -634,7 +638,6 @@ export async function prepareConfig(
   const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
   // A fresh session that has never clicked, judged as the daemon judges its
   // sessions: by this config's gate over the keys the daemon holds.
-  const gates = daemonGates();
   const registry = new SourceRegistry(
     runs,
     store,
@@ -808,6 +811,7 @@ async function loadRegisterRender(
     warnings,
     at,
     settleMs,
+    gates,
   );
   const { config } = prepared;
   try {

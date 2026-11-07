@@ -614,9 +614,10 @@ export function drawRender(
     drawing.by,
     errors,
     [...updates, ...questions],
-    // A standing warning is one per kind whose words change as it does (a
-    // pipe event's counts), so its kind alone is what it is about: a viewer
-    // open on it stays open. A render warning is about its words.
+    // A standing warning's words change as it does (a pipe event's counts),
+    // so what it is about is its identity, `standingAbout`: its kind, or for a
+    // domain warning its kind and key, of which a session holds many. A
+    // viewer open on one stays on it. A render warning is about its words.
     [
       ...standing.map((w) => ({ about: standingAbout(w), message: w.message })),
       ...renderWarnings

@@ -8,14 +8,18 @@ import os from "node:os";
 import path from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveOptionDomain } from "../src/config/option-domain";
-import { configOptionDomains } from "../src/config/edit-chrome";
+import {
+  configOptionDomains,
+  placementDraftKey,
+} from "../src/config/edit-chrome";
 import { doctorReportKeys } from "../src/doctor/report";
 import { CHECKS } from "../src/doctor/checks";
 import { linksOf } from "../src/click/read";
 import { textOf } from "../src/render/frame";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { domainWarning, standingAbout } from "../src/daemon/draw-bar";
-import { effectsOf } from "./helpers/click";
+import { clicking, effectsOf, testVerbContext } from "./helpers/click";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { stateGate } from "./helpers/gates";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { buildRig } from "./helpers/rig";
@@ -160,5 +164,35 @@ describe("a domain warning", () => {
     expect(
       standingAbout(domainWarning({ key: "theme", held: "x", admits: "y" })),
     ).not.toBe(standingAbout(warning));
+  });
+});
+
+describe("a placement draft's writers", () => {
+  // A draft is read as its declaration parses it (placementSetting), which
+  // holds only while its synthesized control is the one writer of its key: an
+  // authored `set` there would widen the gate the judged read trusts, and the
+  // render would throw on the spelling it admitted.
+  test("an authored set of a key under a reserved namespace fails the load, naming the namespace", () => {
+    const key = placementDraftKey("default", "lean", "sha");
+    const source = `{
+      actions: { squat: { set: "${key}", to: "bogus" } },
+      segments: { plain: { template: 'X' } },
+      root: { rows: { identity: { h: ['plain'] }, status: { h: [] } } },
+    }`;
+    expect(() => parseAndValidate("<test>", source, THEMES)).toThrow(
+      /set key "edit\.draft\.default\.lean\.sha" lands in the reserved "edit\." namespace/,
+    );
+  });
+});
+
+describe("a session that has never rendered", () => {
+  // It renders with no config yet, so nothing of it is judged: a click on it
+  // reads, and closes what it closes by, the values as they were stored.
+  test("a toggle over a value it holds lands, through the closing view, and throws nothing", () => {
+    const state = new SessionState(SINGLE_RUN);
+    state.set(SESSION, "toolbar-expanded", "1");
+    const ctx = testVerbContext(state);
+    expect(() => clicking("toolbar-toggle")(SESSION, ctx)).not.toThrow();
+    expect(state.get(SESSION, "toolbar-expanded")).toBeNull();
   });
 });

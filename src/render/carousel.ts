@@ -44,9 +44,11 @@ export const CAROUSEL_NEXT = "▶";
 // domain but not on this list — is shown as itself, sitting between the last
 // option and the first: ▶ steps to the first, ◀ to the last. (A cycle's list
 // is the states of one thing, resting state first, so it reads such a value
-// as that resting state instead: render/action.ts cycleIndex.) A value
-// outside the key's domain never reaches a ring: the session's read refused
-// it (src/daemon/foundations/judged-state.ts). The carousel and a
+// as that resting state instead: render/action.ts cycleIndex.) A `set`
+// ring's session value outside the key's domain never reaches here, since
+// the session's read refused it (src/daemon/foundations/judged-state.ts). A
+// `persist` ring reads a config field, which no verdict judges, so such a
+// value can, and this same rule shows it as itself. The carousel and a
 // `{{ swatches }}` row's ◀ ▶ step through this one ring. Over a domain that
 // is not empty.
 export interface Ring {

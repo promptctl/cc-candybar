@@ -34,16 +34,20 @@ export interface JudgedState extends StoredReads {
 
 // `gateOf` names the gate of the config `sessionId` renders with, fetched at
 // each read: a daemon-wide registration hands the next read a gate with its
-// new members, with nothing captured here to go stale.
+// new members, with nothing captured here to go stale. It answers null for a
+// session that has never rendered: it renders with no config yet, so no key
+// of it is a control, and every value reads as it was stored
+// [LAW:types-are-the-program] — "never rendered" is a value here, not a throw
+// a write's closing view would trip over.
 export function judged(
   reads: StoredReads,
-  gateOf: (sessionId: string) => Gate,
+  gateOf: (sessionId: string) => Gate | null,
 ): JudgedState {
   const read = {
     get: (sessionId: string, key: string): string | null => {
       const stored = reads.get(sessionId, key);
       return stored === null ||
-        gateOf(sessionId).verdict(key, stored).kind === "foreign"
+        gateOf(sessionId)?.verdict(key, stored).kind === "foreign"
         ? null
         : stored;
     },

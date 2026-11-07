@@ -13,6 +13,7 @@
 // read this from the SAME functions, so "what does a range/allow-list/int
 // spec mean" cannot drift between session and config gates.
 
+import { createAtom } from "mobx";
 import { describeMembers } from "../../config/setting-control";
 
 // [LAW:types-are-the-program] Discriminated union — every legal return is
@@ -465,7 +466,17 @@ export function createKeyspace<C extends object>(
 ): Keyspace<C> {
   const daemonWide: DaemonWideKey[] = [];
   let epoch = 0;
+  // [LAW:one-source-of-truth] The epoch is observed by every `gateFor`, so a
+  // MobX computed that judges through a gate — the session's foreign list, a
+  // `state` variable's judged read — re-evaluates when a daemon-wide key
+  // changes, as a plain read after it does: nothing a derivation captured
+  // outlives the members it was judged by.
+  const changed = createAtom(`${noun}.keyspace`);
   const gates = new WeakMap<C, { epoch: number; gate: Gate }>();
+  const bump = (): void => {
+    epoch++;
+    changed.reportChanged();
+  };
 
   return {
     register(key, allowed) {
@@ -474,17 +485,18 @@ export function createKeyspace<C extends object>(
       // re-claimed throws with the keyspace exactly as it was.
       createGate(baseline, [contribution], [], noun);
       daemonWide.push(contribution);
-      epoch++;
+      bump();
       let active = true;
       return () => {
         if (!active) return;
         active = false;
         daemonWide.splice(daemonWide.indexOf(contribution), 1);
-        epoch++;
+        bump();
       };
     },
 
     gateFor(config) {
+      changed.reportObserved();
       const held = gates.get(config);
       if (held?.epoch === epoch) return held.gate;
       const gate = createGate(baseline, daemonWide, derive(config), noun);

@@ -573,8 +573,14 @@ const openVscode: VerbHandler = (_sid, [target = ""], ctx) => {
 // [LAW:one-source-of-truth] SessionState is the canonical store for
 // toolbar-expanded state (eir merge). Toggle via set/clear; the file-backed
 // storage owned by the daemon process persists the change automatically.
+// [LAW:single-enforcer] Whether it is expanded is an interpretation of the
+// stored value, so it reads as the bar draws it: a value the config refuses
+// is collapsed here as it is there, and the first click expands.
 const toolbarToggle: VerbHandler = (sessionId, _args, ctx) => {
-  const expanded = ctx.navigating.get(sessionId, "toolbar-expanded");
+  const expanded = judgedReads(ctx, ctx.navigating).get(
+    sessionId,
+    "toolbar-expanded",
+  );
   if (expanded) ctx.navigating.clear(sessionId, "toolbar-expanded");
   else ctx.navigating.set(sessionId, "toolbar-expanded", "1");
 };
@@ -896,10 +902,16 @@ function sessionConfig(ctx: Unbound, sid: string): DslConfig {
 // stored value reads. Raw reads stay where the stored bytes are the subject —
 // a read choosing what a write releases runs against the reloaded config,
 // under which the value it releases is foreign by definition.
+// A session that has never rendered has no config, so nothing of it is
+// judged: its writes close what they close by the stored values, as its nest
+// (`nestOf`) already reads it.
 function judgedReads(ctx: Unbound, store: SessionStateReader): JudgedState {
-  return judged(store, (sid) =>
-    ctx.gates.state.gateFor(sessionConfig(ctx, sid)),
-  );
+  return judged(store, (sid) => {
+    const origin = recordedOrigin(ctx, sid);
+    return origin === null
+      ? null
+      : ctx.gates.state.gateFor(ctx.configFor(origin));
+  });
 }
 
 // The pick a verb's settings helpers take, judged.
@@ -1169,9 +1181,13 @@ const saveThemeDefault: VerbHandler = (sid, _args, ctx) => {
   const home = originHome(ctx, origin);
   writeThemeDefault(editStore(ctx, sid), home, save.theme, save.look);
   ctx.reloadConfig(origin);
-  const pick = judgedPick(ctx, sid);
+  // [LAW:single-enforcer] A read choosing what a write releases stays raw
+  // (judgedReads): each settings row's parse is what refuses a pick the
+  // reloaded config no longer admits, so it is no draft and is released.
   const drafted = new Set(
-    settingDrafts(ctx.configFor(origin), pick).map((d) => d.sessionKey),
+    settingDrafts(ctx.configFor(origin), (key) =>
+      ctx.sessionState.get(sid, key),
+    ).map((d) => d.sessionKey),
   );
   const released = THEME_DEFAULT_FIELDS.map(
     (f) => SETTINGS[f].sessionKey,

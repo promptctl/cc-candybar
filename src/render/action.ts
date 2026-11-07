@@ -785,9 +785,11 @@ export function linkOver(
 // sibling's name on a shared key means this one is closed, and an unread key
 // reads "". It shows the first member's display and clicks to the second. (A
 // ring's options are peers with no resting state, so it shows such a value as
-// itself instead: render/carousel.ts ringAround.) A value outside the key's
-// domain never reaches here: the session's read refused it
-// (src/daemon/foundations/judged-state.ts).
+// itself instead: render/carousel.ts ringAround.) A `set` cycle's session
+// value outside the key's domain never reaches here, since the session's
+// read refused it (src/daemon/foundations/judged-state.ts). A `persist`
+// cycle reads a config field, which no verdict judges, so it can: this rule
+// is what it shows then, its resting member.
 function cycleIndex(
   c: Extract<CompiledActionDecl, { kind: "set-cycle" | "persist-cycle" }>,
   store: VariableStore,

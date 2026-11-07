@@ -26,6 +26,7 @@ import {
 } from "../action.js";
 import nodePath from "node:path";
 import { findKeyLine } from "./diagnostics.js";
+import { reservedNamespaceOf } from "./reserved-namespace.js";
 import {
   CHECKS,
   GLYPH_MARKS,
@@ -747,7 +748,25 @@ function validateDiscriminatorKey(
     `${discriminator} key must be non-empty (${noun})`,
     (v) => `${discriminator} key "${v}" contains "/" — keys must be slash-free`,
   );
-  return value === null ? null : { [discriminator]: value };
+  if (value === null) return null;
+  // [LAW:single-enforcer] A session key under a reserved namespace is written
+  // only by the control a synthesis pass mints for it, so its gate's domain is
+  // that control's own and every reader of it may trust it: a placement's
+  // draft parses as its declaration admits (placementSetting). An authored
+  // `set` there would widen the gate behind those readers' backs, so it is
+  // refused here, at load, as an authored accordion key there is
+  // (menu-synth.ts). Synthesized actions are built after this pass.
+  const reserved =
+    discriminator === "set" ? reservedNamespaceOf(value) : undefined;
+  if (reserved !== undefined) {
+    issue(
+      ctx,
+      `${path}.set`,
+      `set key "${value}" lands in the reserved "${reserved}" namespace — the controls the loader synthesizes there are its only writers, so their reads can trust what it holds. Write a key outside it`,
+    );
+    return null;
+  }
+  return { [discriminator]: value };
 }
 
 // [LAW:one-source-of-truth] The wire verb name a discriminator's writes

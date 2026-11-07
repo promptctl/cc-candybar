@@ -2,6 +2,7 @@
 // session renders with (Gate.verdict), and the judged reader every reader that
 // interprets a value reads through (src/daemon/foundations/judged-state.ts).
 
+import { computed } from "mobx";
 import { judged } from "../../src/daemon/foundations/judged-state";
 import { createGates } from "../../src/daemon/foundations/gates";
 import { SessionState, SINGLE_RUN } from "../../src/daemon/session-state";
@@ -117,6 +118,19 @@ describe("a stored value's verdict", () => {
     expect(gates.state.gateFor(controls).verdict("mode", "z").kind).toBe(
       "foreign",
     );
+  });
+
+  test("a kept computed over a verdict re-judges when a daemon-wide registration comes and goes", () => {
+    const gates = createGates({ state: [], config: [] });
+    const verdict = computed(
+      () => gates.state.gateFor(controls).verdict("mode", "z").kind,
+      { keepAlive: true },
+    );
+    expect(verdict.get()).toBe("foreign");
+    const dispose = gates.state.register("mode", ["z"]);
+    expect(verdict.get()).toBe("held");
+    dispose();
+    expect(verdict.get()).toBe("foreign");
   });
 });
 
