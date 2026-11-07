@@ -24128,7 +24128,7 @@ function judged(reads, gateOf3) {
   const read2 = {
     get: (sessionId2, key) => {
       const stored = reads.get(sessionId2, key);
-      return stored === null || gateOf3(sessionId2).verdict(key, stored).kind === "foreign" ? null : stored;
+      return stored === null || gateOf3(sessionId2)?.verdict(key, stored).kind === "foreign" ? null : stored;
     },
     revision: (sessionId2) => reads.revision(sessionId2)
   };
@@ -59300,7 +59300,17 @@ function validateDiscriminatorKey(ctx, path47, raw, discriminator) {
     `${discriminator} key must be non-empty (${noun})`,
     (v) => `${discriminator} key "${v}" contains "/" \u2014 keys must be slash-free`
   );
-  return value === null ? null : { [discriminator]: value };
+  if (value === null) return null;
+  const reserved = discriminator === "set" ? reservedNamespaceOf(value) : void 0;
+  if (reserved !== void 0) {
+    issue2(
+      ctx,
+      `${path47}.set`,
+      `set key "${value}" lands in the reserved "${reserved}" namespace \u2014 the controls the loader synthesizes there are its only writers, so their reads can trust what it holds. Write a key outside it`
+    );
+    return null;
+  }
+  return { [discriminator]: value };
 }
 function wireName(discriminator) {
   return discriminator === "set" ? "set-state" : "set-config";
@@ -69626,7 +69636,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.12";
+var PACKAGE_VERSION = "1.209.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71072,7 +71082,10 @@ var openVscode = (_sid, [target = ""], ctx) => {
   );
 };
 var toolbarToggle = (sessionId2, _args, ctx) => {
-  const expanded = ctx.navigating.get(sessionId2, "toolbar-expanded");
+  const expanded = judgedReads(ctx, ctx.navigating).get(
+    sessionId2,
+    "toolbar-expanded"
+  );
   if (expanded) ctx.navigating.clear(sessionId2, "toolbar-expanded");
   else ctx.navigating.set(sessionId2, "toolbar-expanded", "1");
 };
@@ -71224,10 +71237,10 @@ function sessionConfig(ctx, sid) {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
 function judgedReads(ctx, store2) {
-  return judged(
-    store2,
-    (sid) => ctx.gates.state.gateFor(sessionConfig(ctx, sid))
-  );
+  return judged(store2, (sid) => {
+    const origin = recordedOrigin(ctx, sid);
+    return origin === null ? null : ctx.gates.state.gateFor(ctx.configFor(origin));
+  });
 }
 function judgedPick(ctx, sid) {
   const reads = judgedReads(ctx, ctx.sessionState);
@@ -71406,9 +71419,11 @@ var saveThemeDefault = (sid, _args, ctx) => {
   const home = originHome(ctx, origin);
   writeThemeDefault(editStore(ctx, sid), home, save2.theme, save2.look);
   ctx.reloadConfig(origin);
-  const pick2 = judgedPick(ctx, sid);
   const drafted = new Set(
-    settingDrafts(ctx.configFor(origin), pick2).map((d) => d.sessionKey)
+    settingDrafts(
+      ctx.configFor(origin),
+      (key) => ctx.sessionState.get(sid, key)
+    ).map((d) => d.sessionKey)
   );
   const released = THEME_DEFAULT_FIELDS.map(
     (f) => SETTINGS[f].sessionKey
@@ -72639,22 +72654,28 @@ function createGate(baseline, daemonWide, derived3, noun) {
 function createKeyspace(baseline, noun, derive) {
   const daemonWide = [];
   let epoch = 0;
+  const changed = createAtom(`${noun}.keyspace`);
   const gates = /* @__PURE__ */ new WeakMap();
+  const bump3 = () => {
+    epoch++;
+    changed.reportChanged();
+  };
   return {
     register(key, allowed) {
       const contribution = { key, allowed };
       createGate(baseline, [contribution], [], noun);
       daemonWide.push(contribution);
-      epoch++;
+      bump3();
       let active2 = true;
       return () => {
         if (!active2) return;
         active2 = false;
         daemonWide.splice(daemonWide.indexOf(contribution), 1);
-        epoch++;
+        bump3();
       };
     },
     gateFor(config2) {
+      changed.reportObserved();
       const held = gates.get(config2);
       if (held?.epoch === epoch) return held.gate;
       const gate2 = createGate(baseline, daemonWide, derive(config2), noun);
@@ -77919,9 +77940,10 @@ function drawRender(parts, setup, drawing2) {
     drawing2.by,
     errors2,
     [...updates, ...questions],
-    // A standing warning is one per kind whose words change as it does (a
-    // pipe event's counts), so its kind alone is what it is about: a viewer
-    // open on it stays open. A render warning is about its words.
+    // A standing warning's words change as it does (a pipe event's counts),
+    // so what it is about is its identity, `standingAbout`: its kind, or for a
+    // domain warning its kind and key, of which a session holds many. A
+    // viewer open on one stays on it. A render warning is about its words.
     [
       ...standing.map((w) => ({ about: standingAbout(w), message: w.message })),
       ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message }))
