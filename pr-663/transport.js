@@ -72281,7 +72281,7 @@ function sessionPaneOf(hints, sessionId2, heldSession) {
     return {
       kind: "unconfirmed",
       tmux: tmux3,
-      why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}`
+      why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}. A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`
     };
   return held.sessionId === sessionId2 ? { kind: "runs", tmux: tmux3 } : {
     kind: "unconfirmed",
@@ -87673,30 +87673,42 @@ async function paneClaude(launcher, hint) {
   };
 }
 function heldSessionIn(file) {
+  const first2 = recordIn(file);
+  return first2.torn ? recordIn(file).held : first2.held;
+}
+function recordIn(file) {
   let text4;
   try {
     text4 = fs_default.readFileSync(file, "utf8");
   } catch (e) {
-    return e.code === "ENOENT" ? {
-      kind: "unread",
-      why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`
-    } : { kind: "unread", why: e.message };
+    return {
+      torn: false,
+      held: e.code === "ENOENT" ? {
+        kind: "unread",
+        why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`
+      } : { kind: "unread", why: e.message }
+    };
   }
   let record2;
   try {
     record2 = JSON.parse(text4);
-  } catch {
-    try {
-      record2 = JSON.parse(fs_default.readFileSync(file, "utf8"));
-    } catch (e) {
-      return {
+  } catch (e) {
+    return {
+      torn: true,
+      held: {
         kind: "unread",
         why: `its session record ${file} is not JSON (${e.message})`
-      };
-    }
+      }
+    };
   }
   const sessionId2 = typeof record2 === "object" && record2 !== null && "sessionId" in record2 ? record2.sessionId : void 0;
-  return typeof sessionId2 === "string" && sessionId2 !== "" ? { kind: "holds", sessionId: sessionId2 } : { kind: "unread", why: `its session record ${file} names no session` };
+  return {
+    torn: false,
+    held: typeof sessionId2 === "string" && sessionId2 !== "" ? { kind: "holds", sessionId: sessionId2 } : {
+      kind: "unread",
+      why: `its session record ${file} names no session`
+    }
+  };
 }
 var heldSessionUnder = (home) => (pid2, configDir2) => heldSessionIn(
   import_node_path52.default.join(claudeConfigDir(configDir2, home), "sessions", `${pid2}.json`)
