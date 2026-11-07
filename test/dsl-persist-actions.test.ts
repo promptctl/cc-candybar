@@ -66,6 +66,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -170,6 +171,8 @@ describe("persistValueText", () => {
           repo: null,
           cwd: null,
           locs: locations(durable.host, durable.home),
+          disk: systemFilesystem,
+          memo: new InstalledLayerMemo(),
         },
         [["palette", "nord"]],
       ),

@@ -3,8 +3,9 @@
 // resolver, the watchers, and the collision detector so none can disagree about
 // which files are candidates. This file changes when the resolution rules change.
 
-import fs from "node:fs";
 import path from "node:path";
+import type { Filesystem, FilesystemReads } from "../../disk/filesystem.js";
+import type { InstalledLayerMemo } from "../dsl-loader.js";
 import type { Locations } from "../../daemon/paths.js";
 import { presence, type Unchecked } from "../../utils/presence.js";
 import { listFolders, REPO_PLUGIN_DIR } from "./plugin-folders.js";
@@ -185,6 +186,7 @@ export type ConfigResolution = { readonly repos: RepoGate } & (
  * resolve here.
  */
 export function resolveDslConfig(
+  reads: FilesystemReads,
   locs: Locations,
   answers: RepoAnswers,
   projectDir?: string,
@@ -204,7 +206,7 @@ export function resolveDslConfig(
     cwd,
     configFile,
   )) {
-    const p = presence(candidate);
+    const p = presence(reads, candidate);
     if (p === "absent") continue;
     if (p !== "present") {
       unchecked.push(p);
@@ -215,7 +217,7 @@ export function resolveDslConfig(
     // at one location are one, the first enumerated winning.
     // [LAW:one-source-of-truth] The on-disk spelling: on a case-insensitive
     // volume one directory reached as `Code` and `code` is one answer's key.
-    const dir = fs.realpathSync.native(path.dirname(candidate));
+    const dir = reads.realpathSync(path.dirname(candidate));
     const location = path.join(
       dir,
       path.basename(candidate).replace(/\.(json5|json)$/, ""),
@@ -226,7 +228,7 @@ export function resolveDslConfig(
         repo:
           configFile !== undefined || isUserFile(locs, candidate)
             ? null
-            : { dir, link: worktreeLink(dir) },
+            : { dir, link: worktreeLink(reads, dir) },
       });
     }
   }
@@ -234,7 +236,7 @@ export function resolveDslConfig(
   const repos = gateRepos(
     answers,
     found.flatMap((f) => (f.repo === null ? [] : [f.repo])),
-    repoProject(projectDir),
+    repoProject(reads, projectDir),
   );
   const kept = found
     .filter((f) => f.repo === null || repos.approved.includes(f.repo.dir))
@@ -275,16 +277,17 @@ function isUserFile(locs: Locations, candidate: string): boolean {
 
 // The session's project, or null for none, or one that is not there.
 export function repoProject(
+  reads: FilesystemReads,
   projectDir: string | undefined,
 ): RepoProject | null {
-  if (projectDir === undefined || presence(projectDir) !== "present") {
+  if (projectDir === undefined || presence(reads, projectDir) !== "present") {
     return null;
   }
-  const listed = listFolders(path.join(projectDir, REPO_PLUGIN_DIR));
-  const dir = fs.realpathSync.native(projectDir);
+  const listed = listFolders(reads, path.join(projectDir, REPO_PLUGIN_DIR));
+  const dir = reads.realpathSync(projectDir);
   return {
     dir,
-    link: worktreeLink(dir),
+    link: worktreeLink(reads, dir),
     path: projectDir,
     ships: !("error" in listed) && listed.folders.length > 0,
   };
@@ -326,16 +329,30 @@ export interface ConfigHome {
   readonly cwd: string | null;
   // Where the installed plugins this chain loads over live.
   readonly locs: Locations;
+  // The disk the chain was found on, which a load of it reads and the write
+  // lands on, and the installed layers those loads share: the render cache's,
+  // so a click's proof checks no plugin the bar's last load already checked.
+  readonly disk: Filesystem;
+  readonly memo: InstalledLayerMemo;
 }
 
 export function durableConfig(
+  disk: Filesystem,
+  memo: InstalledLayerMemo,
   locs: Locations,
   answers: RepoAnswers,
   projectDir?: string,
   cwd?: string,
   configFile?: string,
 ): ConfigHome {
-  const resolved = resolveDslConfig(locs, answers, projectDir, cwd, configFile);
+  const resolved = resolveDslConfig(
+    disk,
+    locs,
+    answers,
+    projectDir,
+    cwd,
+    configFile,
+  );
   const layers = resolved.kind === "chain" ? resolved.layers : [];
   return {
     path: resolved.home,
@@ -343,6 +360,8 @@ export function durableConfig(
     repo: resolved.repos.plugins,
     cwd: cwd ?? null,
     locs,
+    disk,
+    memo,
   };
 }
 
@@ -401,6 +420,7 @@ function noticeLines(resolution: ConfigResolution): readonly string[] {
  * all exist. No special-case branches per extension.
  */
 export function detectConfigCollisions(
+  reads: FilesystemReads,
   locs: Locations,
   projectDir?: string,
   cwd?: string,
@@ -408,7 +428,7 @@ export function detectConfigCollisions(
   // The enumerator yields each path once, so an existing member here is a
   // file on disk, never the same candidate seen from two chain positions.
   const existing = dslConfigCandidatePaths(locs, projectDir, cwd).filter(
-    (candidate) => presence(candidate) === "present",
+    (candidate) => presence(reads, candidate) === "present",
   );
   // Group by (dir + base-without-extension). A group with > 1 existing
   // member is a collision at that logical location.

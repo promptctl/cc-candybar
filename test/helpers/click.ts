@@ -42,6 +42,8 @@ import {
 import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
 import { homeOf } from "../../src/daemon/home";
 import { locations, stateDir, storedRoot } from "../../src/daemon/paths";
+import { systemFilesystem } from "../../src/disk/system-filesystem";
+import { InstalledLayerMemo } from "../../src/config/dsl-loader";
 
 const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
@@ -85,10 +87,13 @@ export function testVerbContext(
 ): VerbContext {
   return {
     gates: bareGates(),
-    stateDir: stateDir(homeOf(host)), locations: locations(host, homeOf(host)),
+    stateDir: stateDir(homeOf(host)),
+    filesystem: systemFilesystem,
+    installedLayers: new InstalledLayerMemo(),
+    locations: locations(host, homeOf(host)),
     storedRoot: storedRoot(homeOf(host)),
     sessionState,
-    history: history ?? new SettingsHistory(sessionState, () => {}),
+    history: history ?? new SettingsHistory(systemFilesystem, sessionState, () => {}),
     navigation: new NavigationHistory(),
     journalTurns,
     // [LAW:no-silent-failure] A turn's effects go to the arm that ran it

@@ -24,6 +24,7 @@ import {
 import { repeat } from "../measure.js";
 import { measured, type Benchmark } from "../types.js";
 import fs from "node:fs";
+import { systemFilesystem } from "../../../src/disk/system-filesystem.js";
 
 const SESSION = "bench-usage";
 
@@ -59,7 +60,7 @@ const gitBenchmark = ([
     try {
       const repo = path.join(root, "repo");
       makeRepo(repo, shape);
-      const service = new GitService(processWorld().launcher);
+      const service = new GitService(processWorld().launcher, systemFilesystem);
       const ms = await repeat(plan.samples, async () => {
         const info = await service.getGitInfo(repo, EVERYTHING);
         // [LAW:no-silent-failure] A read that failed, or saw a tree other

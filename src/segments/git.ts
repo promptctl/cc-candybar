@@ -10,6 +10,7 @@ import {
   gitRootOf,
   holdsGit,
 } from "../utils/git-root";
+import type { FilesystemReads } from "../disk/filesystem";
 
 export interface WorkingTree {
   staged: number;
@@ -871,10 +872,14 @@ function configIdentity(configPath: string): ConfigIdentity | null {
 export class GitService {
   // [LAW:locality-or-seam] Who a read's program belongs to: the daemon's, so its
   // close refuses the next read of a pass under way.
-  constructor(private readonly launcher: Launcher) {}
+  constructor(
+    private readonly launcher: Launcher,
+    // The disk a checkout's `.git` is read from: the daemon's.
+    private readonly filesystem: FilesystemReads,
+  ) {}
 
   private isGitRepo(workingDir: string): boolean {
-    return holdsGit(workingDir);
+    return holdsGit(this.filesystem, workingDir);
   }
 
   // [LAW:types-are-the-program] args is a string[] so the boundary type
@@ -962,7 +967,7 @@ export class GitService {
   // through `classify(…, "absent")` — a state this never produced, so inventing
   // one here would be a new answer for an unchanged question.
   findGitRoot(workingDir: string): Outcome<string> {
-    const root = gitRootOf(workingDir);
+    const root = gitRootOf(this.filesystem, workingDir);
     return root === undefined ? ABSENT : ok(root);
   }
 
@@ -1088,7 +1093,10 @@ export class GitService {
   // A `.git` that names nothing readable (a directory, an unreadable or
   // malformed file) watches the dotGit path, so callers always get a string.
   resolveGitDir(workingDir: string): string {
-    return orElse(gitDirNamed(workingDir), path.join(workingDir, ".git"));
+    return orElse(
+      gitDirNamed(this.filesystem, workingDir),
+      path.join(workingDir, ".git"),
+    );
   }
 
   private getOngoingOperation(workingDir: string): Outcome<string> {
@@ -1251,7 +1259,7 @@ export class GitService {
     // No `commondir` file is the ordinary case: this already IS the common dir.
     // [LAW:no-silent-failure] exception: as resolveGitDir's, a read target —
     // an unreadable `commondir` reads the git dir itself.
-    return orElse(commonDirOf(gitDir), gitDir);
+    return orElse(commonDirOf(this.filesystem, gitDir), gitDir);
   }
 
   // [LAW:one-source-of-truth] `git stash list` counts REFLOG ENTRIES for

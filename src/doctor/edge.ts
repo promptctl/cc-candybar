@@ -101,7 +101,8 @@ import { shipsNative } from "../install/platforms.js";
 import { fileMarkBook } from "./mark-book.js";
 import { fileClickedTerminals } from "./clicked-terminals.js";
 import { filePostMortemsRead } from "./post-mortems-read.js";
-import type { StateFile } from "./state-file.js";
+import type { StateFile } from "../disk/state-file.js";
+import type { Filesystem, FilesystemReads } from "../disk/filesystem.js";
 import { laterIdentity, type ServingDaemon } from "../daemon/limits.js";
 import type { ClickArrival, SightedBar, SightingScope } from "./sightings.js";
 
@@ -203,10 +204,10 @@ export type StoresRead = {
   readonly [K in keyof DoctorStores]: ReturnType<DoctorStores[K]["read"]>;
 };
 
-export const fileStores = (dir: string): DoctorStores => ({
-  marks: fileMarkBook(dir),
-  clicked: fileClickedTerminals(dir),
-  postMortemsRead: filePostMortemsRead(dir),
+export const fileStores = (disk: Filesystem, dir: string): DoctorStores => ({
+  marks: fileMarkBook(disk, dir),
+  clicked: fileClickedTerminals(disk, dir),
+  postMortemsRead: filePostMortemsRead(disk, dir),
 });
 
 export const readStores = (stores: DoctorStores): StoresRead => ({
@@ -260,7 +261,7 @@ export interface DoctorEdge {
   // render-cache entry the session's bar is drawn from and answers from it
   // (so the doctor and the bar's strip report one load), the CLI runs one
   // load of its own. Both are the one `loadFromDisk`.
-  readonly loadConfig: (origin: RenderOrigin) => ConfigLoad;
+  readonly loadConfig: (origin: RenderOrigin) => LoadReport;
   // The directory Claude Code's managed settings live in
   // (`claudeManagedSettingsDir`) — a policy every session on the machine
   // reads, so the daemon's own environment may move it, which test/setup.ts
@@ -284,7 +285,7 @@ export interface DoctorEdge {
 // per line), and — for the config last loaded — what its file left unused.
 // `config` is the config the bar draws from: the one loaded, else what the
 // bar falls back to under the error.
-export interface ConfigLoad {
+export interface LoadReport {
   readonly layers: readonly string[];
   readonly error: string | null;
   readonly warning: string | null;
@@ -478,6 +479,7 @@ export function productionEdge(
   launcher: Launcher,
   loadConfig: DoctorEdge["loadConfig"],
   host: Host,
+  filesystem: FilesystemReads,
 ): DoctorEdge {
   return {
     probeTmux: (hint) => probeTmux(launcher, hint),
@@ -491,7 +493,7 @@ export function productionEdge(
       claudeManagedSettingsDir(process.platform),
     install: productionInstallEdge,
     daemons: () => daemons(launcher),
-    forge: (cwd) => forgeLogin(launcher, cwd),
+    forge: (cwd) => forgeLogin(launcher, filesystem, cwd),
     transcript: readTranscriptWindow,
   };
 }
@@ -591,9 +593,10 @@ const FORGE_PROBE: Readonly<
 // bar's lookup runs with — and the shell's for `cc-candybar doctor`.
 export async function forgeLogin(
   launcher: Launcher,
+  reads: FilesystemReads,
   cwd: string,
 ): Promise<Asked<ForgeLogin | null>> {
-  if (gitRootOf(cwd) === undefined) return { kind: "ok", value: null };
+  if (gitRootOf(reads, cwd) === undefined) return { kind: "ok", value: null };
   const remotes = remotesOf(
     await launcher.launch({
       bin: "git",
@@ -647,7 +650,7 @@ export function forgeLoginOf(
 
 // [LAW:dataflow-not-control-flow] The load's two arms become ConfigFacts'
 // two.
-function configFacts(load: ConfigLoad, target: ConfigTarget): ConfigFacts {
+function configFacts(load: LoadReport, target: ConfigTarget): ConfigFacts {
   const base = {
     layers: load.layers,
     target,

@@ -38,6 +38,7 @@ import { SettingsHistory } from "../src/daemon/settings-history";
 import type { VerbContext } from "../src/daemon/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -494,7 +495,7 @@ describe("settings history: a step lands whole, and records only what landed", (
       revision: (sid: string) => inner.revision(sid),
       values: (sid: string) => inner.values(sid),
     };
-    const history = new SettingsHistory(throwing, () => {});
+    const history = new SettingsHistory(systemFilesystem, throwing, () => {});
     const journal = history.begin();
     expect(() => journal.sessionState.set("s1", "theme", "nord")).toThrow(
       /store refused/,
@@ -518,7 +519,7 @@ describe("settings history: a step lands whole, and records only what landed", (
   });
 
   test("history is bounded by bytes: the session that changed least recently goes first", () => {
-    const history = new SettingsHistory(new SessionState(SINGLE_RUN), () => {});
+    const history = new SettingsHistory(systemFilesystem, new SessionState(SINGLE_RUN), () => {});
     const big = (c: string): string => c.repeat(2 * 1024 * 1024);
     const step = (sid: string, file: string, from: string, to: string): void => {
       const journal = history.begin();
@@ -541,7 +542,7 @@ describe("settings history: the step and its record land together", () => {
   function refusingHistory() {
     const sessionState = new SessionState(SINGLE_RUN);
     const gate = { refusing: false };
-    const history = new SettingsHistory(sessionState, () => {}, {
+    const history = new SettingsHistory(systemFilesystem, sessionState, () => {}, {
       load: () => ({}),
       save: () => {
         if (gate.refusing) throw new Error("history save refused");

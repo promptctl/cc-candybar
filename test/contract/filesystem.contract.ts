@@ -63,6 +63,9 @@ export function filesystemContract(name: string, make: () => Subject): void {
       }
       expect(missing).toMatchObject({ code: "ENOENT", path: at("nope") });
       expect(missing?.message).toMatch(/^ENOENT: no such file or directory/);
+      expect(codeOf(() => s.filesystem.statSync(at("f", "below")))).toBe(
+        "ENOTDIR",
+      );
     });
 
     it("follows a link for stat and realpath, and not for lstat", () => {
@@ -125,6 +128,37 @@ export function filesystemContract(name: string, make: () => Subject): void {
       await expect(s.filesystem.readFile(at("f.json"))).rejects.toMatchObject({
         code: "ENOENT",
       });
+    });
+
+    it("reads, lists, writes, renames and removes synchronously", () => {
+      s.world.mkdir(at("sub"));
+      s.filesystem.writeFileSync(at("f"), "one", { flush: true });
+      expect(s.filesystem.readFileSync(at("f"))).toBe("one");
+      expect(
+        [...s.filesystem.readdirSync(s.root)].sort((a, b) =>
+          a.name.localeCompare(b.name),
+        ),
+      ).toEqual([
+        { name: "f", kind: "file" },
+        { name: "sub", kind: "directory" },
+      ]);
+      s.filesystem.writeFileSync(at("g"), "two", { flush: false });
+      s.filesystem.renameSync(at("g"), at("f"));
+      expect(s.filesystem.readFileSync(at("f"))).toBe("two");
+      expect(codeOf(() => s.filesystem.readFileSync(at("g")))).toBe("ENOENT");
+      s.filesystem.rmSync(at("f"));
+      s.filesystem.rmSync(at("f"));
+      expect(codeOf(() => s.filesystem.statSync(at("f")))).toBe("ENOENT");
+      expect(codeOf(() => s.filesystem.rmSync(at("sub")))).toBeDefined();
+      expect(codeOf(() => s.filesystem.readdirSync(at("nope")))).toBe("ENOENT");
+    });
+
+    it("gives a new file the mode it was written with", () => {
+      s.filesystem.writeFileSync(at("secret"), "x", {
+        mode: 0o600,
+        flush: true,
+      });
+      expect(s.filesystem.statSync(at("secret")).mode & 0o777).toBe(0o600);
     });
 
     it("writes through a dangling link to create its target", async () => {

@@ -28,13 +28,14 @@
 
 import { linkKeyFile, linkSignerFromKeyFile } from "./daemon/link-key.js";
 import { locations, stateDir } from "./daemon/paths.js";
-import { repoConfigs } from "./daemon/repo-configs.js";
+import { readRepoAnswers } from "./config/loader/repo-book.js";
+import type { Stat } from "./disk/filesystem.js";
 import { repoGateLines } from "./config/loader/repo-gate.js";
 import type { ConfigResolution } from "./config/loader/discovery.js";
-import fs from "node:fs";
 import type { CliPlan } from "./cli-plan.js";
 import process from "node:process";
 import {
+  InstalledLayerMemo,
   loadConfigChain,
   resolveDslConfig,
   configResolutionNotice,
@@ -470,8 +471,9 @@ export async function checkConfig(
   // repository the bar would not run, `check` names and runs nothing of.
   const locs = locations(world.host, world.home);
   const resolution = resolveDslConfig(
+    world.filesystem,
     locs,
-    repoConfigs(stateDir(world.home)).read(),
+    readRepoAnswers(world.filesystem, stateDir(world.home)),
     cwd,
     cwd,
     configPath ?? undefined,
@@ -484,20 +486,21 @@ export async function checkConfig(
       ? searchedLayers(resolution, warnings)
       : [homeLayer(configPath)];
   if (configPath !== null) {
-    // throwIfNoEntry suppresses only ENOENT (left for the content read to
-    // classify); EACCES/EPERM on the probe itself is equally "could not read
-    // the named file" — same outcome, not an uncaught stack.
-    let st: fs.Stats | undefined;
+    // ENOENT is left for the content read to classify; EACCES/EPERM on the
+    // probe itself is equally "could not read the named file" — same
+    // outcome, not an uncaught stack.
+    let st: Stat | undefined;
     try {
-      st = fs.statSync(configPath, { throwIfNoEntry: false });
+      st = world.filesystem.statSync(configPath);
     } catch (e) {
-      return {
-        kind: "unreadable",
-        path: configPath,
-        message: e instanceof Error ? e.message : String(e),
-      };
+      if ((e as { code?: string }).code !== "ENOENT")
+        return {
+          kind: "unreadable",
+          path: configPath,
+          message: e instanceof Error ? e.message : String(e),
+        };
     }
-    if (st !== undefined && !st.isFile()) {
+    if (st !== undefined && st.kind !== "file") {
       return {
         kind: "unreadable",
         path: configPath,
@@ -509,7 +512,7 @@ export async function checkConfig(
   // [LAW:dataflow-not-control-flow] Collision detection runs independent of
   // load success: even if the .json5 fails to parse, the author still wants
   // to know a shadowed .json sibling exists.
-  const collision = detectConfigCollisions(locs, cwd, cwd);
+  const collision = detectConfigCollisions(world.filesystem, locs, cwd, cwd);
   if (collision !== null) warnings.push(collision);
 
   try {
@@ -603,6 +606,8 @@ export async function prepareConfig(
   // land before its validation, so a fatal outcome still carries them.
   const layers = chain.map((l) => l.path);
   const loaded = loadConfigChain(
+    world.filesystem,
+    new InstalledLayerMemo(),
     locations(world.host, world.home),
     chain,
     DEFAULT_DSL_CONFIG,

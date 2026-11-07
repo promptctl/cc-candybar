@@ -103,16 +103,10 @@ const PATHS = [
 const FILESYSTEM_FILE = "src/disk/system-filesystem.ts";
 const FS_READERS = [
   "src/attach-preload-exec.ts",
-  "src/check.ts",
   "src/claude-settings.ts",
   "src/config/cli.ts",
-  "src/config/dsl-loader.ts",
-  "src/config/loader/discovery.ts",
-  "src/config/loader/plugin-folders.ts",
-  "src/config/loader/plugins.ts",
   "src/daemon/acquire.ts",
   "src/daemon/build-currency.ts",
-  "src/daemon/config-file-store.ts",
   "src/daemon/fork-bomb-breaker.ts",
   "src/daemon/lane-edge.ts",
   "src/daemon/limits.ts",
@@ -121,7 +115,6 @@ const FS_READERS = [
   "src/daemon/log.ts",
   "src/daemon/memory-report.ts",
   "src/daemon/paths.ts",
-  "src/daemon/repo-configs.ts",
   "src/daemon/server.ts",
   "src/daemon/session-recorder.ts",
   "src/daemon/session-state-file.ts",
@@ -135,7 +128,6 @@ const FS_READERS = [
   "src/doctor/edge.ts",
   "src/doctor/font-edge.ts",
   "src/doctor/handler-probe.ts",
-  "src/doctor/state-file.ts",
   "src/index.ts",
   "src/install/index.ts",
   "src/path-search.ts",
@@ -145,10 +137,7 @@ const FS_READERS = [
   "src/segments/git.ts",
   "src/segments/pricing.ts",
   "src/source-digest.ts",
-  "src/utils/atomic-write.ts",
   "src/utils/claude.ts",
-  "src/utils/git-root.ts",
-  "src/utils/presence.ts",
   "src/utils/transcript-fs.ts",
   "src/var-system/source-runs.ts",
 ];
@@ -229,8 +218,8 @@ const OWNED_IMPORTS = {
     group: ["**/disk/system-filesystem", "**/disk/system-filesystem.js"],
     owners: [
       "src/daemon/production-adapters.ts",
+      "src/host.ts",
       "src/daemon/cache/git.ts",
-      "src/daemon/config-file-store.ts",
       "src/daemon/paths.ts",
       "src/demo/dsl.ts",
       "src/plugin-install.ts",
@@ -419,6 +408,21 @@ const FOUNDATIONS_IMPORTS = [
   },
 ];
 
+// [LAW:one-way-deps] Config (src/config/) resolves and parses a load, a row
+// above Sources, Drawing and every other piece that takes one, so it imports no
+// value from src/daemon but Foundations'. A type (`Locations`, the payload's)
+// crosses no row at run time and stays legal. The rule sees direct edges only:
+// docs/layered-test-plan.md names the transitive ones.
+const CONFIG_FILES = "src/config/**/*.ts";
+const CONFIG_IMPORTS = [
+  {
+    regex: "^(\\.\\./)+daemon/(?!foundations/)",
+    allowTypeImports: true,
+    message:
+      "Config sits above the daemon's pieces: import none of their values. [LAW:one-way-deps]",
+  },
+];
+
 // A file's whole rule: flat config replaces a rule per file rather than merging
 // it, so each block carries the child_process paths and every name but its own,
 // and the import edges its row forbids (`rowPatterns`).
@@ -484,6 +488,12 @@ function ownedImportBlocks() {
       files: [FOUNDATIONS_FILES],
       rules: {
         "no-restricted-imports": restrictedImports(null, FOUNDATIONS_IMPORTS),
+      },
+    },
+    {
+      files: [CONFIG_FILES],
+      rules: {
+        "no-restricted-imports": restrictedImports(null, CONFIG_IMPORTS),
       },
     },
   ];

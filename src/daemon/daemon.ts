@@ -327,6 +327,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const journalTurns = new JournalTurns();
   const sessionState = new SessionState(journalTurns, storage.session);
   const settingsHistory = new SettingsHistory(
+    inputs.filesystem,
     sessionState,
     log,
     storage.history,
@@ -715,6 +716,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     gates,
     sessionState,
     stateDir: paths.state,
+    filesystem: inputs.filesystem,
+    installedLayers: renderCache.installedLayers,
     storedRoot: paths.storedRoot,
     locations: locs,
     journalTurns,

@@ -153,7 +153,7 @@ function makeCache(
     throwOn?: string;
   } = {},
 ) {
-  const inner = new StubGitService(unscriptedLauncher);
+  const inner = new StubGitService(unscriptedLauncher, systemFilesystem);
   const logs: string[] = [];
   let throwOn = opts.throwOn;
   const svc = new GitDataProvider({
@@ -1498,7 +1498,7 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
 // never the watch.
 describe("GitDataProvider holds a repo's watch across its values", () => {
   function counted(opts: { maxRepos?: number; periodMs?: number } = {}) {
-    const inner = new StubGitService(unscriptedLauncher);
+    const inner = new StubGitService(unscriptedLauncher, systemFilesystem);
     const counters = {
       watchersOpened: 0,
       watchersClosed: 0,

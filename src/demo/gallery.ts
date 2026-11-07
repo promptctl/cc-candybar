@@ -51,7 +51,7 @@ const named =
   target === undefined
     ? undefined
     : resolveUserPath(process.cwd(), target, world.host.home);
-const repos = repoGateAt(stateDir(world.home), process.cwd());
+const repos = repoGateAt(world.filesystem, stateDir(world.home), process.cwd());
 warnings.push(...repoGateLines(repos));
 const prepared = await prepareConfig(
   world,

@@ -41,6 +41,7 @@ import { untilHeard } from "../../helpers/reload-signal";
 import { writeAtomic } from "../../../src/utils/atomic-write";
 import { valueOf } from "../../../src/utils/logfmt";
 import { until } from "../../helpers/until";
+import { systemFilesystem } from "../../../src/disk/system-filesystem";
 
 jest.setTimeout(30_000);
 

@@ -24,7 +24,8 @@ import {
 } from "../../helpers/spawn-isolated-daemon";
 import { VERB_REPO_CONFIG } from "../../../src/click/wire";
 import { logPath, configDir } from "../../../src/daemon/paths";
-import { repoConfigs, repoConfigsPath } from "../../../src/daemon/repo-configs";
+import { repoConfigs } from "../../../src/daemon/repo-configs";
+import { repoConfigsPath } from "../../../src/config/loader/repo-book";
 import { stateDir } from "../../../src/daemon/paths";
 import {
   indicatorOf,
@@ -32,6 +33,7 @@ import {
   type ViewerPage,
 } from "../../helpers/diagnostics-viewer";
 import { until } from "../../helpers/until";
+import { systemFilesystem } from "../../../src/disk/system-filesystem";
 
 jest.setTimeout(60_000);
 
@@ -267,7 +269,7 @@ describe("a repository's config waits for the user's one answer", () => {
     );
     // An answer kept under the worktree's own path, before answers were kept
     // by repository: it disagrees with the repository's, so it asks.
-    repoConfigs(stateDir(isolated.home)).update(() => ({
+    repoConfigs(systemFilesystem, stateDir(isolated.home)).update(() => ({
       [project]: "declined",
       [wt]: "approved",
     }));
@@ -303,7 +305,9 @@ describe("a repository's config waits for the user's one answer", () => {
             ),
         "the repo-config event naming the superseded worktree entry",
       );
-      expect(repoConfigs(stateDir(isolated.home)).read()).toEqual({
+      expect(
+        repoConfigs(systemFilesystem, stateDir(isolated.home)).read(),
+      ).toEqual({
         kind: "ok",
         value: { [project]: "approved" },
       });

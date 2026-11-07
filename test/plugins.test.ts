@@ -48,6 +48,7 @@ import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
 
 let dir: string;
 // The machine a test runs on: this worker's own unless its describe states another.
@@ -591,6 +592,8 @@ test("the daemon's load records the plugins it merged and dropped", () => {
   const loaded = loadFromDisk(dir, dir, good, {
     clock: systemTimekeeper,
     stateDir: stateDir(homeOf(host)),
+    filesystem: systemFilesystem,
+    memo: new InstalledLayerMemo(),
     locations: locations(host, homeOf(host)),
     storage: NO_PLUGIN_STORAGE,
     links: TEST_LINKS,
@@ -651,6 +654,8 @@ describe("a plugin's own variables", () => {
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
@@ -699,6 +704,8 @@ describe("a plugin's own variables", () => {
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
@@ -757,6 +764,8 @@ describe("a plugin's own variables", () => {
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
@@ -776,6 +785,8 @@ describe("a plugin's own variables", () => {
     const loaded = loadFromDisk(dir, dir, config(), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
@@ -825,7 +836,10 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [],
-      { repo: repoGateAt(stateDir(homeOf(host)), projectDir).plugins },
+      {
+        repo: repoGateAt(systemFilesystem, stateDir(homeOf(host)), projectDir)
+          .plugins,
+      },
       projectDir,
       [],
       instantOf(new Date()),
@@ -928,6 +942,8 @@ describe("an installed plugin", () => {
       {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
+        filesystem: systemFilesystem,
+        memo: new InstalledLayerMemo(),
         locations: locations(host, homeOf(host)),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
@@ -1071,6 +1087,8 @@ describe("an installed plugin", () => {
       const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, {
         clock: systemTimekeeper,
         stateDir: stateDir(homeOf(host)),
+        filesystem: systemFilesystem,
+        memo: new InstalledLayerMemo(),
         locations: locations(host, homeOf(host)),
         storage: NO_PLUGIN_STORAGE,
         links: TEST_LINKS,
@@ -1615,6 +1633,8 @@ describe("an installed plugin", () => {
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
@@ -1757,6 +1777,8 @@ describe("an installed plugin", () => {
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
@@ -1838,6 +1860,8 @@ describe("an installed plugin", () => {
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,
@@ -2000,6 +2024,8 @@ describe("a repo's plugin beside an installed one of its name", () => {
     const loaded = loadFromDisk(repo, repo, undefined, {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       storage: NO_PLUGIN_STORAGE,
       links: TEST_LINKS,

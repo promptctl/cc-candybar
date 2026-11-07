@@ -135,7 +135,10 @@ import {
   type EvaluatedRun,
 } from "../../click/wire";
 import type { RendererLinks } from "../../click/renderer-links";
-import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
+import { recordAnswer, repoAnswerFields } from "../repo-configs";
+import { readRepoAnswers } from "../../config/loader/repo-book";
+import type { Filesystem } from "../../disk/filesystem";
+import type { InstalledLayerMemo } from "../../config/dsl-loader";
 import type { RepoAnswer } from "../../config/loader/repo-gate";
 import type { Runs, RunRequest } from "../runs";
 import type { LaneSetups } from "../lane-setup";
@@ -210,6 +213,11 @@ export interface DaemonContext {
   readonly launcher: Launcher;
   // The state directory whose answers book a click reads and records in.
   readonly stateDir: string;
+  // The disk a click resolves its home over and records an answer on, and the
+  // installed layers the render cache's loads over it share, which a click's
+  // proof load shares too.
+  readonly filesystem: Filesystem;
+  readonly installedLayers: InstalledLayerMemo;
   // The directory a stored home path is relative to (paths.ts storedRoot):
   // what the session's recorded origin is read back against.
   readonly storedRoot: StoredRoot;
@@ -911,12 +919,17 @@ function nestOf(
 // [LAW:single-enforcer] The home as the render resolves it, under the same
 // answers: a click's chain leaves out what the bar's leaves out.
 function originHome(
-  ctx: Pick<ClickContext, "stateDir" | "locations">,
+  ctx: Pick<
+    ClickContext,
+    "stateDir" | "locations" | "filesystem" | "installedLayers"
+  >,
   origin: RenderOrigin,
 ): ConfigHome {
   return durableConfig(
+    ctx.filesystem,
+    ctx.installedLayers,
     ctx.locations,
-    repoConfigs(ctx.stateDir).read(),
+    readRepoAnswers(ctx.filesystem, ctx.stateDir),
     origin.projectDir,
     origin.cwd,
     origin.target.path,
@@ -997,7 +1010,7 @@ const stepConfig: VerbHandler = (sid, args, ctx) => {
     (k) => ctx.sessionState.get(sid, k),
     key,
   );
-  const stored = readValue(home.path, landing.key);
+  const stored = readValue(home, landing.key);
   const current =
     typeof stored === "number"
       ? clampTo(params, stored)
@@ -1894,7 +1907,7 @@ const repoConfig: VerbHandler = (sid, args, ctx) => {
       "the answer's signature does not match what it carries: it was not drawn by this daemon",
     );
   }
-  const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered);
+  const filed = recordAnswer(ctx.filesystem, ctx.stateDir, dir, answered);
   if (filed.kind === "failed") {
     throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
   }
