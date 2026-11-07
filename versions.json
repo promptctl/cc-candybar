@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "2a63ae55593d80d6590080431d83cf19e539622e",
+      "timestamp": "2026-11-07T10:38:53.349Z",
+      "commits": [
+        {
+          "sha": "2a63ae55593d80d6590080431d83cf19e539622e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:38:04-07:00",
+          "message": "fix(doctor): the config row names a repository config the load left out (#683)\n\n* fix(doctor): the config row names a repository config the load left out (brandon-unfiled-3248.qo8j)\n\nThe doctor's config load now carries the repository gate it ruled, so the\nconfig row says why a project's .cc-candybar.json5 is not in the chain. A\nrepository awaiting approval fails the row and names its directory. A\ndeclined repository, and a directory whose worktree claim is unproven, ride\nthe row's text without failing it: only reversing the user's own answer\nwould clear a declined one. repoGateLines is split into the awaiting and\nthe settled lines, so check, the demo and the doctor share one wording.\n\nAn unread answers book already reaches the row as the load's own advisory,\nso the doctor takes the awaiting lines alone and names that notice once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(doctor): a repository answer during the probes refuses a stale report; settled lines count as no problem (brandon-unfiled-3248.qo8j)\n\nThe landing compares the gate by its lines, so an awaiting repository\ndeclined mid-run with the config unchanged gathers again. A failed\nverdict carries notes beside its problems, so a declined repository is\nlisted by the CLI and counted by neither the bar's row nor the log. The\ndoctor's log line carries the gate's counts, and one empty-gate fixture\nserves every test.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(doctor): settled repositories ride the config row's text in either verdict (brandon-unfiled-3248.qo8j)\n\nA declined repository named only in a failed verdict's notes vanished\nfrom the bar while the row failed. It now rides the reason after the\nfirst problem, as it rides the note after the chain, so the bar and the\nCLI name it whatever the verdict and neither counts it. The doctor's log\nkeeps unproven worktrees in a field of their own, since each is also\nawaiting or declined.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* docs(doctor): the gate comparison's completeness and the unproven count said as they hold (brandon-unfiled-3248.qo8j)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+        }
+      ]
+    },
+    {
       "version": "pr-678",
       "ref": "refs/pull/678/merge",
       "sha": "8ac0ac9e592001cb0240d50c45f73fbd2b40b779",
@@ -110,49 +125,6 @@
       ]
     },
     {
-      "version": "pr-683",
-      "ref": "refs/pull/683/merge",
-      "sha": "d6e43806d548470decbf6b3826f0ecd21124daa8",
-      "timestamp": "2026-11-07T10:32:31.507Z",
-      "commits": [
-        {
-          "sha": "d6e43806d548470decbf6b3826f0ecd21124daa8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:31:03Z",
-          "message": "Merge a6fa11dd097dd1c29d9386459571e5c94b499316 into 215f486db0c68765107dc69e715ccb26c5ac01d3\n"
-        },
-        {
-          "sha": "a6fa11dd097dd1c29d9386459571e5c94b499316",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:29:12-07:00",
-          "message": "docs(doctor): the gate comparison's completeness and the unproven count said as they hold (brandon-unfiled-3248.qo8j)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "daa6d3e07bc7fd1dc3d181c4a47ac685de3e9acd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:23:32-07:00",
-          "message": "fix(doctor): settled repositories ride the config row's text in either verdict (brandon-unfiled-3248.qo8j)\n\nA declined repository named only in a failed verdict's notes vanished\nfrom the bar while the row failed. It now rides the reason after the\nfirst problem, as it rides the note after the chain, so the bar and the\nCLI name it whatever the verdict and neither counts it. The doctor's log\nkeeps unproven worktrees in a field of their own, since each is also\nawaiting or declined.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "9a9affcc3b8bc29a4de5aa0e30d1488de3cc7ba4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:19:39-07:00",
-          "message": "fix(doctor): a repository answer during the probes refuses a stale report; settled lines count as no problem (brandon-unfiled-3248.qo8j)\n\nThe landing compares the gate by its lines, so an awaiting repository\ndeclined mid-run with the config unchanged gathers again. A failed\nverdict carries notes beside its problems, so a declined repository is\nlisted by the CLI and counted by neither the bar's row nor the log. The\ndoctor's log line carries the gate's counts, and one empty-gate fixture\nserves every test.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "1ae5712236902f578e4dc4a70d722ac4141e08ae",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:11:46-07:00",
-          "message": "fix(doctor): the config row names a repository config the load left out (brandon-unfiled-3248.qo8j)\n\nThe doctor's config load now carries the repository gate it ruled, so the\nconfig row says why a project's .cc-candybar.json5 is not in the chain. A\nrepository awaiting approval fails the row and names its directory. A\ndeclined repository, and a directory whose worktree claim is unproven, ride\nthe row's text without failing it: only reversing the user's own answer\nwould clear a declined one. repoGateLines is split into the awaiting and\nthe settled lines, so check, the demo and the doctor share one wording.\n\nAn unread answers book already reaches the row as the load's own advisory,\nso the doctor takes the awaiting lines alone and names that notice once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "pr-682",
       "ref": "refs/pull/682/merge",
       "sha": "34c14ce42e8f8387019ebf19ef85ab4c562f1e1d",
@@ -185,28 +157,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:00:45-07:00",
           "message": "fix(demo): `pnpm demo` loads and renders its bundled sample (brandon-unfiled-3248.0d5a)\n\nThe sample declared `model` and `session` input variables, under which\nthe bundled default's `model.display_name` and `session.*` sit, so the\nloader's no-nesting check refused it and `pnpm demo` exited 1. The\nsample now reads the default's names instead of redeclaring them, and\nthe demo test runs the bundled sample so it cannot drift from the\nloader again.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "215f486db0c68765107dc69e715ccb26c5ac01d3",
-      "timestamp": "2026-11-07T10:31:08.149Z",
-      "commits": [
-        {
-          "sha": "215f486db0c68765107dc69e715ccb26c5ac01d3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:29:41-07:00",
-          "message": "fix(colour): the door's ✖ keeps the contrast its red has on its ground at lower depths, never lifted to the quiet floor (brandon-unfiled-3248.692p) (#681)\n\n* fix(colour): the door's ✖ keeps its truecolor contrast at lower depths, never lifted to the quiet floor (brandon-unfiled-3248.692p)\n\nkeptOn floored its lower-depth contrast at the quiet floor for a reason\nthat no longer holds: grounds are named shades, not repaired ones. The\nfloor only acted on the accepted farthest-red case, where it let rounding\npick a non-red that clears 3:1. The floor is now min(text floor, held),\nand the comment states the reasons that hold of named grounds.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(colour): keptOn names its floor as the red on this ground unrounded, and an empty search is loud (brandon-unfiled-3248.692p)\n\nThe floor is measured on the ground the cell is drawn on at this depth,\nwhich can be another rung than truecolor would press the door into, so\n\"what the red has in truecolor\" misread it. Comment, design doc and\ncolour memory now say \"on this ground before rounding\".\n\nThe `?? fg` fallback covered a search that cannot come back empty: with\nthe floor at most 4.5:1, truecolor accepts fg itself and every lower\ndepth draws black and white, one of which stands >= 4.58:1 off any\nground (0 misses over 120,000 random pairs at three depths). It now\nthrows, naming the floor and ground, instead of silently drawing fg.\n\nThe new unit case pins that the faint red is kept as itself, not only\nthat its contrast lies in a band.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(colour): keptOn's invariant names the depths it holds at, and its throw names the depth and drawn ground (brandon-unfiled-3248.692p)\n\nBlack and white are drawn at 256 colours and ansi, not at every lower\ndepth rich-js has: the Windows console table holds neither, so the claim\nis scoped to the depths a colour setting draws at. The error now names\nthe depth and the ground as drawn, the one the floor was measured on.\nThe comment says outright that `bg` is the ground this depth draws the\ndoor on, which can be another rung than truecolor's.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* docs(colour): the ✖'s hue is held only by the choice among named reds, and keptOn's wording drops \"in truecolor\" (brandon-unfiled-3248.692p)\n\nThe colour memory now names the trap the code hides: rounding and\nkeptOn's repair measure contrast alone, so at ansi the ✖ can be drawn\nsilver, yellow or purple. The new unit case's title and keptOn's comment\nsay \"before rounding\" like the rest of the change, and the comment is\nreflowed.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        },
-        {
-          "sha": "1f5014d66591bcdbb9dac6e5fb1aa8619e0bf5fd",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T10:22:00Z",
-          "message": "chore(release): set `package.json` to 1.210.0 [skip ci]\n\n## [1.210.0](https://github.com/promptctl/cc-candybar/compare/v1.209.0...v1.210.0) (2026-11-07)\n\n### Features\n\n* **facts:** a renderer declares the built-ins its config reads, and Gather gathers only those (candybar-gather-renderer-76bb.6pj.opl) ([#674](https://github.com/promptctl/cc-candybar/issues/674)) ([2e9ea2d](https://github.com/promptctl/cc-candybar/commit/2e9ea2dce98b1908a16f3ffa2128310350ebc817))\n"
         }
       ]
     },
