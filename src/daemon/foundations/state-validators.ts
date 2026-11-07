@@ -86,8 +86,8 @@ const validateEndcaps: KeyValidator = (raw) => {
   return { ok: true, value: raw };
 };
 
-// [LAW:dataflow-not-control-flow] Boolean-ish accepts exactly four canonical
-// inputs and normalizes to two canonical outputs: truthy ("1"/"true") → "1",
+// [LAW:dataflow-not-control-flow] Boolean-ish accepts four wire spellings
+// (and its own "", below) and normalizes to two canonical outputs: truthy ("1"/"true") → "1",
 // falsy ("0"/"false") → "" (empty). The empty falsy sentinel matches what
 // `toolbar-toggle` produces via `clear()` for the next render.
 // [LAW:types-are-the-program] "" is also an input: every validator accepts
@@ -102,7 +102,7 @@ const validateBoolean: KeyValidator = (raw) => {
   if (BOOLEAN_FALSY.has(raw)) return { ok: true, value: "" };
   return {
     ok: false,
-    reason: `expected boolean-ish (1, 0, true, false), got "${raw}"`,
+    reason: `expected boolean-ish (1, 0, true, false, or empty), got "${raw}"`,
   };
 };
 
@@ -119,7 +119,11 @@ const BASELINE: Readonly<Record<string, BuiltinKey>> = {
     validate: validateTheme,
     admits: describeMembers(RESOLVABLE_THEMES_LIST, "themes"),
   },
-  "toolbar-expanded": { validate: validateBoolean, admits: "true or false" },
+  // What it admits as stored: the two values a click writes for true and false.
+  "toolbar-expanded": {
+    validate: validateBoolean,
+    admits: '"1" for true or "" for false',
+  },
 };
 
 // [LAW:no-shared-mutable-globals] A SessionState keyspace is a value the root

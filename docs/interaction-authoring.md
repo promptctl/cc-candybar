@@ -2480,6 +2480,23 @@ Give the second its own id and each copy's menu opens on its own:
 "menus.mine" is in the reserved "menus." namespace (synthesized by {{ menu }} helpers) — rename it
 ```
 
+### Writing a placement's draft
+
+A `set` may write a key under a reserved namespace, such as a button that
+opens a `{{ menu }}` by its `menus.` key, but not a placement's draft. Only
+the setting control that configure mode synthesizes writes a draft, so the bar
+can read a draft as its setting's declaration admits.
+
+```json5 check:fail
+{
+  actions: { pin: { set: "edit.draft.default.git.theme", to: "nord" } },
+}
+```
+
+```error
+set key "edit.draft.default.git.theme" is a placement's draft, under "edit.draft." — the setting control configure mode synthesizes is its only writer, so its read can trust what it holds. Write a key outside it
+```
+
 ### A setting value the setting does not have
 
 A `set` on a setting's key (`theme`, `style`, `effect`, `preset`, `endcaps`,

@@ -172,7 +172,7 @@ describe("a placement draft's writers", () => {
   // holds only while its synthesized control is the one writer of its key: an
   // authored `set` there would widen the gate the judged read trusts, and the
   // render would throw on the spelling it admitted.
-  test("an authored set of a key under a reserved namespace fails the load, naming the namespace", () => {
+  test("an authored set of a placement's draft key fails the load, naming the drafts' namespace", () => {
     const key = placementDraftKey("default", "lean", "sha");
     const source = `{
       actions: { squat: { set: "${key}", to: "bogus" } },
@@ -180,14 +180,15 @@ describe("a placement draft's writers", () => {
       root: { rows: { identity: { h: ['plain'] }, status: { h: [] } } },
     }`;
     expect(() => parseAndValidate("<test>", source, THEMES)).toThrow(
-      /set key "edit\.draft\.default\.lean\.sha" lands in the reserved "edit\." namespace/,
+      /set key "edit\.draft\.default\.lean\.sha" is a placement's draft, under "edit\.draft\."/,
     );
   });
 
-  // A session key is compared as spelled, so a key that only collapses like
-  // one under a namespace is the author's own.
-  test.each(["edit-mode", "menus_open", "candybar-foo"])(
-    "an authored set of %s, spelled outside every reserved namespace, loads",
+  // Only the draft's read trusts its gate. A button that opens a menu writes
+  // a reserved key the author may write too, and a session key is compared
+  // as spelled, so a key that only collapses like a draft's is the author's.
+  test.each(["menus.tools", "edit-mode", "edit_draft_x", "candybar-foo"])(
+    "an authored set of %s, outside the placement drafts, loads",
     (key) => {
       const source = `{
         actions: { mine: { set: "${key}", to: "on" } },

@@ -26,7 +26,7 @@ import {
 } from "../action.js";
 import nodePath from "node:path";
 import { findKeyLine } from "./diagnostics.js";
-import { reservedNamespaceOfKey } from "../reserved-names.js";
+import { PLACEMENT_DRAFT_NS } from "./edit-mode.js";
 import {
   CHECKS,
   GLYPH_MARKS,
@@ -749,20 +749,20 @@ function validateDiscriminatorKey(
     (v) => `${discriminator} key "${v}" contains "/" — keys must be slash-free`,
   );
   if (value === null) return null;
-  // [LAW:single-enforcer] A session key under a reserved namespace is written
-  // only by the control a synthesis pass mints for it, so its gate's domain is
-  // that control's own and every reader of it may trust it: a placement's
-  // draft parses as its declaration admits (placementSetting). An authored
-  // `set` there would widen the gate behind those readers' backs, so it is
-  // refused here, at load, as an authored accordion key there is
-  // (menu-synth.ts). Synthesized actions are built after this pass.
-  const reserved =
-    discriminator === "set" ? reservedNamespaceOfKey(value) : undefined;
-  if (reserved !== undefined) {
+  // [LAW:single-enforcer] A placement's draft key is written only by the
+  // setting control configure mode mints for it, so its gate's domain is the
+  // declaration's and its read may trust it: a draft parses as its
+  // declaration admits (placementSetting). An authored `set` there would widen
+  // the gate behind that read's back, so it is refused here, at load.
+  // Synthesized actions are built after this pass. A key under another
+  // reserved namespace stays the author's to write too (a button that opens a
+  // `{{ menu }}`): a wider gate there only makes more values held, and its
+  // readers take a value that is none of their members as at rest.
+  if (discriminator === "set" && value.startsWith(PLACEMENT_DRAFT_NS)) {
     issue(
       ctx,
       `${path}.set`,
-      `set key "${value}" lands in the reserved "${reserved}" namespace — the controls the loader synthesizes there are its only writers, so their reads can trust what it holds. Write a key outside it`,
+      `set key "${value}" is a placement's draft, under "${PLACEMENT_DRAFT_NS}" — the setting control configure mode synthesizes is its only writer, so its read can trust what it holds. Write a key outside it`,
     );
     return null;
   }

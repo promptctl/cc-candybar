@@ -61,10 +61,14 @@ describe("a stored value's verdict", () => {
     const verdict = gate.verdict("theme", "no-such-theme");
     expect(verdict.kind).toBe("foreign");
     if (verdict.kind === "foreign") expect(verdict.admits).toMatch(/"themes"/);
-    expect(gate.verdict("toolbar-expanded", "maybe")).toEqual({
-      kind: "foreign",
-      admits: "true or false",
-    });
+    // A stored "true" is a wire spelling no click stores, so it is foreign,
+    // and the message names what a click does store.
+    for (const held of ["maybe", "true"]) {
+      expect(gate.verdict("toolbar-expanded", held)).toEqual({
+        kind: "foreign",
+        admits: '"1" for true or "" for false',
+      });
+    }
   });
 
   test("a key no `set` action of the config writes is the daemon's own, held whatever it holds", () => {
