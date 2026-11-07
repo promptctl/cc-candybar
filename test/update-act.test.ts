@@ -10,18 +10,14 @@ import { processLauncher, processProbe } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  readJobEnd,
-  type JobFiles,
-  type LaunchResult,
-  type Launcher,
-} from "../src/proc/launch";
+import { readJobEnd, type JobFiles, type LaunchResult, type Launcher } from "../src/proc/launch";
 import {
   actsDir,
   claimAct,
   isRecordedJob,
   judgeAct,
   makeActReader,
+  spendLook,
   type ActFacts,
   type ActRecord,
 } from "../src/daemon/update-act";
@@ -193,10 +189,9 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     if (!quick.ok) throw new Error(quick.error);
     quick.release();
     await until(() => readJobEnd(exited.status) !== null, "the job's verdict");
-    expect(
-      processLauncher.endJob(quick.pid, exited.status, { kind: "timeout" })
-        .stands,
-    ).toBe(false);
+    expect(processLauncher.endJob(quick.pid, exited.status, { kind: "timeout" }).stands).toBe(
+      false,
+    );
     expect(readJobEnd(exited.status)).toEqual({ kind: "exit", code: 0 });
 
     const ended = {
@@ -209,10 +204,9 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     );
     if (!slow.ok) throw new Error(slow.error);
     slow.release();
-    expect(
-      processLauncher.endJob(slow.pid, ended.status, { kind: "timeout" })
-        .stands,
-    ).toBe(true);
+    expect(processLauncher.endJob(slow.pid, ended.status, { kind: "timeout" }).stands).toBe(
+      true,
+    );
     await until(() => !groupAlive(slow.pid), "the ended job's group to go");
     expect(readJobEnd(ended.status)).toEqual({ kind: "timeout" });
   });
@@ -231,9 +225,9 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     job.release();
     await until(() => readJobEnd(files.status) !== null, "the job's verdict");
     expect(groupAlive(job.pid)).toBe(true);
-    expect(
-      processLauncher.endJob(job.pid, files.status, { kind: "timeout" }).stands,
-    ).toBe(false);
+    expect(processLauncher.endJob(job.pid, files.status, { kind: "timeout" }).stands).toBe(
+      false,
+    );
     await until(() => !groupAlive(job.pid), "the left-behind child to end");
     expect(readJobEnd(files.status)).toEqual({ kind: "exit", code: 0 });
   });
@@ -245,9 +239,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     });
     jest.useFakeTimers();
     try {
-      expect(
-        processLauncher.endJob(424242, files.status, { kind: "timeout" }),
-      ).toEqual({
+      expect(processLauncher.endJob(424242, files.status, { kind: "timeout" })).toEqual({
         stands: true,
         signalled: false,
       });
@@ -267,9 +259,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     });
     jest.useFakeTimers();
     try {
-      expect(
-        processLauncher.endJob(424242, files.status, { kind: "timeout" }),
-      ).toEqual({
+      expect(processLauncher.endJob(424242, files.status, { kind: "timeout" })).toEqual({
         stands: true,
         signalled: true,
       });
@@ -283,9 +273,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
 
   test("ending a job whose files are gone is a no-op, not an error", async () => {
     const status = path.join(scratch, "gone", "status");
-    expect(
-      processLauncher.endJob(process.pid, status, { kind: "timeout" }),
-    ).toEqual({
+    expect(processLauncher.endJob(process.pid, status, { kind: "timeout" })).toEqual({
       stands: false,
       signalled: false,
     });
@@ -338,32 +326,18 @@ describe("claimAct: one act per bundle", () => {
       sameLeader,
     );
     expect(claim).toEqual({ ok: true, act: 1 });
-    const reader = makeActReader(
-      dir,
-      sameLeader,
-      processLauncher,
-      systemTimekeeper,
-    );
+    const reader = makeActReader(dir, sameLeader, processLauncher, systemTimekeeper);
     const running = (await reader.read())!;
     ended.push(running.record.pid);
     expect(judgeAct(running)).toEqual({ kind: "running", act: 1 });
-    expect(
-      (await makeActReader(
-        dir,
-        sameLeader,
-        processLauncher,
-        systemTimekeeper,
-      ).read())!.record.identity,
-    ).toBe("id-1");
+    expect((await makeActReader(dir, sameLeader, processLauncher, systemTimekeeper).read())!.record.identity).toBe(
+      "id-1",
+    );
 
     expect(
-      processLauncher.endJob(
-        running.record.pid,
-        path.join(dir, "1", "status"),
-        {
-          kind: "timeout",
-        },
-      ),
+      processLauncher.endJob(running.record.pid, path.join(dir, "1", "status"), {
+        kind: "timeout",
+      }),
     ).toMatchObject({ stands: true, signalled: true });
     await until(
       async () => judgeAct(await reader.read()).kind === "failed",
@@ -385,14 +359,7 @@ describe("claimAct: one act per bundle", () => {
       sameLeader,
     );
     expect(first.ok).toBe(true);
-    ended.push(
-      (await makeActReader(
-        dir,
-        sameLeader,
-        processLauncher,
-        systemTimekeeper,
-      ).read())!.record.pid,
-    );
+    ended.push((await makeActReader(dir, sameLeader, processLauncher, systemTimekeeper).read())!.record.pid);
     // A second daemon that judged the bundle idle from the same empty read.
     const second = await claimAct(
       processLauncher,
@@ -451,12 +418,7 @@ describe("claimAct: one act per bundle", () => {
         sameLeader,
       ),
     ).toEqual({ ok: true, act: 1 });
-    const reader = makeActReader(
-      dir,
-      sameLeader,
-      processLauncher,
-      systemTimekeeper,
-    );
+    const reader = makeActReader(dir, sameLeader, processLauncher, systemTimekeeper);
     await until(
       async () => judgeAct(await reader.read()).kind === "succeeded",
       "the first act to succeed",
@@ -498,12 +460,7 @@ describe("claimAct: one act per bundle", () => {
         unreadable,
       ),
     ).toEqual({ ok: true, act: 1 });
-    const reader = makeActReader(
-      dir,
-      unreadable,
-      processLauncher,
-      systemTimekeeper,
-    );
+    const reader = makeActReader(dir, unreadable, processLauncher, systemTimekeeper);
     expect((await reader.read())!.record.startTime).toBeNull();
     await until(
       async () => judgeAct(await reader.read()).kind === "succeeded",
@@ -524,24 +481,12 @@ describe("claimAct: one act per bundle", () => {
       Date.now(),
       sameLeader,
     );
-    const { record } = (await makeActReader(
-      dir,
-      sameLeader,
-      processLauncher,
-      systemTimekeeper,
-    ).read())!;
+    const { record } = (await makeActReader(dir, sameLeader, processLauncher, systemTimekeeper).read())!;
     ended.push(record.pid);
-    expect(await isRecordedJob(record, sameLeader, processLauncher, 0)).toBe(
-      true,
+    expect(await isRecordedJob(record, sameLeader, processLauncher, 0)).toBe(true);
+    expect(await isRecordedJob({ ...record, started: 0 }, sameLeader, processLauncher, 0)).toBe(
+      false,
     );
-    expect(
-      await isRecordedJob(
-        { ...record, started: 0 },
-        sameLeader,
-        processLauncher,
-        0,
-      ),
-    ).toBe(false);
   });
 
   test("an act pruned under a read gives way to the newer act that pruned it", async () => {
@@ -569,12 +514,7 @@ describe("claimAct: one act per bundle", () => {
       }
       return real(file, ...rest);
     }) as typeof fs.readFileSync);
-    const facts = (await makeActReader(
-      dir,
-      sameLeader,
-      processLauncher,
-      systemTimekeeper,
-    ).read())!;
+    const facts = (await makeActReader(dir, sameLeader, processLauncher, systemTimekeeper).read())!;
     expect(facts.act).toBe(2);
     expect(facts.record.identity).toBe("id-2");
   });
@@ -591,12 +531,7 @@ describe("claimAct: one act per bundle", () => {
       Date.now(),
       sameLeader,
     );
-    const reader = makeActReader(
-      dir,
-      sameLeader,
-      processLauncher,
-      systemTimekeeper,
-    );
+    const reader = makeActReader(dir, sameLeader, processLauncher, systemTimekeeper);
     await until(
       async () => judgeAct(await reader.read()).kind === "succeeded",
       "the first act to succeed",
@@ -688,12 +623,7 @@ describe("claimAct: one act per bundle", () => {
 
     expect(admits("999.0.0")).toBe(false);
     expect(
-      watch.notice({
-        to: MAIN_NAME,
-        sessionId: "s",
-        dismissed: null,
-        enabled: true,
-      }),
+      watch.notice({ to: MAIN_NAME, sessionId: "s", dismissed: null, enabled: true }),
     ).toEqual([]);
   });
 
@@ -823,12 +753,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     });
     closers.push(() => watch.close());
     const notice = () =>
-      watch.notice({
-        to: MAIN_NAME,
-        sessionId: "s",
-        dismissed: null,
-        enabled: true,
-      });
+      watch.notice({ to: MAIN_NAME, sessionId: "s", dismissed: null, enabled: true });
     return {
       dir,
       ps,
@@ -861,12 +786,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       read,
     );
     expect(claim.ok).toBe(true);
-    const { pid } = (await makeActReader(
-      dir,
-      read,
-      processLauncher,
-      systemTimekeeper,
-    ).read())!.record;
+    const { pid } = (await makeActReader(dir, read, processLauncher, systemTimekeeper).read())!.record;
     jobs.push(pid);
     return pid;
   }
@@ -891,10 +811,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     // The tick holds a read from before the claim; the click arrives behind it.
     const acting = h.watch.act();
     fs.writeFileSync(stop, "");
-    await until(
-      () => !processLauncher.jobGroupAlive(pid),
-      "the first act to end",
-    );
+    await until(() => !processLauncher.jobGroupAlive(pid), "the first act to end");
     h.ps[0]!(PS_OK);
     await h.asked(2);
     h.ps[1]!(PS_OK);
@@ -914,8 +831,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     let exits = 0;
     const target = marker("bundle");
     fs.writeFileSync(target, "");
-    const binary = makeBinaryWatch({
-      clock: systemTimekeeper,
+    const binary = makeBinaryWatch({ clock: systemTimekeeper,
       targets: [target],
       intervalMs: 60_000,
       filesystem: systemFilesystem,
@@ -949,8 +865,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     let exits = 0;
     const target = marker("bundle");
     fs.writeFileSync(target, "");
-    const binary = makeBinaryWatch({
-      clock: systemTimekeeper,
+    const binary = makeBinaryWatch({ clock: systemTimekeeper,
       targets: [target],
       intervalMs: 60_000,
       filesystem: systemFilesystem,
@@ -1000,10 +915,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     // judge running -> succeeded.
     const stop2 = marker("stop2");
     process.kill(-first, "SIGKILL");
-    await until(
-      () => !processLauncher.jobGroupAlive(first),
-      "the first act to end",
-    );
+    await until(() => !processLauncher.jobGroupAlive(first), "the first act to end");
     const second = await claimAct(
       processLauncher,
       h.dir,
@@ -1016,18 +928,10 @@ describe("the update watch: one turn at a time on the act files", () => {
     );
     expect(second.ok).toBe(true);
     await h.asked(2);
-    const { pid } = (await makeActReader(
-      h.dir,
-      sameLeader,
-      processLauncher,
-      systemTimekeeper,
-    ).read())!.record;
+    const { pid } = (await makeActReader(h.dir, sameLeader, processLauncher, systemTimekeeper).read())!.record;
     jobs.push(pid);
     fs.writeFileSync(stop2, "");
-    await until(
-      () => !processLauncher.jobGroupAlive(pid),
-      "the second act to end",
-    );
+    await until(() => !processLauncher.jobGroupAlive(pid), "the second act to end");
 
     h.watch.close();
     h.ps[1]!(PS_ABORTED);
@@ -1053,10 +957,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     h.ps[0]!(PS_ABORTED);
 
     await expect(acting).rejects.toThrow(DaemonClosing);
-    await until(
-      () => !processLauncher.jobGroupAlive(pid),
-      "the gated job to end",
-    );
+    await until(() => !processLauncher.jobGroupAlive(pid), "the gated job to end");
     expect(fs.existsSync(h.ran)).toBe(false);
     expect(fs.existsSync(h.dir)).toBe(false);
   });
@@ -1091,12 +992,7 @@ describe("the update watch: an act's budget is the time it was watched running",
     const started = clock.now();
     fs.writeFileSync(
       path.join(dir, "1", "record.json"),
-      JSON.stringify({
-        ...RECORD,
-        pid,
-        started,
-        deadline: started + 10 * MINUTE,
-      }),
+      JSON.stringify({ ...RECORD, pid, started, deadline: started + 10 * MINUTE }),
     );
     const logged: string[] = [];
     // A daemon on the bundle, watching from now.
@@ -1212,5 +1108,30 @@ describe("the update watch: an act's budget is the time it was watched running",
     expect(b.verdict()).toBeNull();
     await b.awake(3 * POLL);
     expect(b.verdict()).toEqual({ kind: "timeout" });
+  });
+});
+
+describe("spendLook: one look written for the daemons after it", () => {
+  test("a look at an act a newer claim pruned spends nothing and makes no directory", () => {
+    const dir = actsDir(scratch, "/some/bundle/index.mjs");
+    fs.mkdirSync(dir, { recursive: true });
+
+    const spent = spendLook(dir, facts({ act: 3, alive: true }), 2_000, 10_000);
+
+    expect(spent).toBeNull();
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+
+  test("a look leaves the act holding its spend and no staged file", () => {
+    const dir = actsDir(scratch, "/some/bundle/index.mjs");
+    fs.mkdirSync(path.join(dir, "3"), { recursive: true });
+
+    spendLook(dir, facts({ act: 3, alive: true }), 2_000, 10_000);
+
+    expect(fs.readdirSync(path.join(dir, "3"))).toEqual(["awake.json"]);
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "3", "awake.json"), "utf8"))).toEqual({
+      spentMs: 2_000,
+      lastSeen: 2_000,
+    });
   });
 });

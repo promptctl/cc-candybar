@@ -28,7 +28,6 @@ import {
   type LaunchOpts,
   type Launcher,
 } from "../proc/launch";
-import { writeAtomic } from "../utils/atomic-write";
 import { readTailSync } from "../utils/transcript-fs";
 import type { StartTimeRead } from "./process-fingerprint";
 import type { Timekeeper } from "../time.js";
@@ -423,23 +422,33 @@ function readAwake(actDir: string): ActAwake | null {
 // at `now`, and writes what it has spent for every daemon after this one: a
 // daemon started mid-act carries on from it. Two daemons racing one look lose
 // nothing whichever write lands: each moves spend and last look on together,
-// so the next look counts from the last look the file names. A look landing
-// after a newer claim pruned the act leaves its directory holding only this
-// file; it is older than the act that pruned it, so no reader takes it for the
-// newest, and the next claim's prune removes it.
+// so the next look counts from the last look the file names. Null when the act
+// is gone: a newer claim pruned it under this look, and a look never makes an
+// act's directory.
 export function spendLook(
   dir: string,
   facts: ActFacts,
   now: number,
   capMs: number,
-): ActAwake {
+): ActAwake | null {
   const actDir = path.join(dir, String(facts.act));
   const awake = observe(
     readAwake(actDir) ?? unwatched(facts.record),
     now,
     capMs,
   );
-  writeAtomic(awakeOf(actDir), JSON.stringify(awake));
+  // Staged at a name of this process's own, so two daemons' looks never write
+  // one file. Not flushed: a crash ends the act's group with the boot it ran
+  // in, and its spend with it.
+  const file = awakeOf(actDir);
+  const staged = `${file}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(staged, JSON.stringify(awake));
+    fs.renameSync(staged, file);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
   return awake;
 }
 

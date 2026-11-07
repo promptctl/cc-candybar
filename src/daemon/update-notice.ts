@@ -524,7 +524,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   function endIfOverdue(facts: ActFacts | null): void {
     if (!facts?.alive) return;
     const spent = spendLook(actsDir, facts, clock.now(), LOOK_CAP_MS);
-    if (spent.spentMs <= ACT_TIMEOUT_MS) return;
+    if (spent === null || spent.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir, facts, launcher);
     const why = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
