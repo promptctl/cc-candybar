@@ -69949,7 +69949,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.2";
+var PACKAGE_VERSION = "1.210.3";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -82963,20 +82963,22 @@ var ManagedStorage = class {
   // session reads it, and stats it. The generation moves when the folder was
   // marked lost or is no longer the folder its watch opened on; so whichever
   // of a removal's events comes first, a recreated folder is a new key.
-  // [LAW:no-silent-failure] A folder that cannot be created or read is its
+  // [LAW:no-silent-failure] A folder that cannot be created is its
   // generation's standing fault, read by every source in it, never a throw:
-  // one plugin's folder fails only that plugin's sources, not the build.
+  // one plugin's folder fails only that plugin's sources, not the build. A
+  // stat that fails names no folder, so only a loss moves the generation; the
+  // watch's own stat reports the failure, which clears when a stat answers.
   keyFor(folder) {
     const known = this.folders.get(folder) ?? this.recorded(folder);
-    let now2 = "gone";
     known.unusable = null;
     try {
       this.watchers.filesystem.mkdirSync(folder);
-      now2 = statIdentity(this.watchers.filesystem, folder);
     } catch (e) {
-      known.unusable = `could not be created or read: ${e.message}`;
+      known.unusable = `could not be created: ${e.message}`;
     }
-    const moved = known.lost || known.identity !== null && (now2 === "gone" || !sameIdentity(now2, known.identity));
+    const stat3 = known.unusable === null ? this.statOf(folder) : { now: "gone" };
+    const now2 = "now" in stat3 ? stat3.now : null;
+    const moved = known.lost || known.identity !== null && now2 !== null && (now2 === "gone" || !sameIdentity(now2, known.identity));
     if (moved) {
       known.generation++;
       known.lost = false;
@@ -83042,9 +83044,9 @@ var ManagedStorage = class {
     }
     const unusable = key.generation === folder.generation ? folder.unusable : null;
     const stat3 = unusable === null ? this.statOf(key.folder) : { now: "gone" };
-    const identity2 = "now" in stat3 ? stat3.now : "gone";
+    const identity2 = "now" in stat3 ? stat3.now : "unnamed";
     if (key.generation === folder.generation) {
-      folder.identity = identity2 === "gone" ? null : identity2;
+      folder.identity = typeof identity2 === "string" ? null : identity2;
     }
     if (unusable !== null) folder.lost = true;
     const watched = {
@@ -83086,11 +83088,11 @@ var ManagedStorage = class {
   // held files it names re-read; the folder's own name, an unnamed event or
   // an error is judged against the disk. An `unknown` window may hold the
   // folder's own event (an unnamed one, or a named one the window folded), and
-  // a `failed` one may have missed it. A folder still there re-reads every held
-  // file on the folder's own name or an unnamed event; on an error its files
-  // read the fault, re-read only when the fault moves, so a watch that errors
-  // after every reopen reads nothing on each period. The OS reports a change to
-  // the watched folder itself under the folder's own name, as though it were a
+  // a `failed` one may have missed it, so a folder still there re-reads every
+  // held file, unless a fault stands when the window closes: its files read
+  // the fault, re-read only when it moves, so a watch that errors after every
+  // reopen reads nothing on each period. The OS reports a change to the
+  // watched folder itself under the folder's own name, as though it were a
   // child, so that path is the folder joined with its own name. The window
   // hears the handle's deafness first, since the registry tells one on every
   // move of it, so the judgment and the deafness report as one fault.
@@ -83104,8 +83106,7 @@ var ManagedStorage = class {
       reread = (f) => paths2.has(fileOf(f));
     } else {
       const found2 = this.judged(watched);
-      const all2 = found2 === "lost" || found2 === "present" && invalidation.kind !== "failed";
-      reread = () => all2;
+      reread = (_f, fault) => found2 === "lost" || found2 === "present" && fault === null;
     }
     this.settled(watched, reread);
   }
@@ -83133,7 +83134,10 @@ var ManagedStorage = class {
     watched.statFailure = "failed" in stat3 ? stat3.failed : null;
     if ("failed" in stat3) return "none";
     const { now: now2 } = stat3;
-    const opened = watched.identity;
+    const opened = watched.identity === "unnamed" ? now2 : watched.identity;
+    watched.identity = opened;
+    if (key.generation === folder.generation && opened !== "gone")
+      folder.identity = opened;
     if (now2 !== "gone" && opened !== "gone" && sameIdentity(now2, opened))
       return "present";
     watched.health = { kind: "lost" };
@@ -83154,14 +83158,16 @@ var ManagedStorage = class {
     }
   }
   // [LAW:single-enforcer] The one re-read a window, a period or an opening
-  // earns: the held files `reread` names, and every held file in the folder
-  // when the fault moved. One call, so a fault that moves on a window that
-  // re-reads queues no second read behind the first.
+  // earns: the held files `reread` names given the fault now standing, and
+  // every held file in the folder when the fault moved. One call, so a fault
+  // that moves on a window that re-reads queues no second read behind the
+  // first.
   settled(watched, reread) {
     const { key } = watched;
     const moved = this.reported(watched);
+    const fault = watched.reported;
     this.sessions.changed(
-      (f) => sameKey(f.storage, key) && (moved || reread(f))
+      (f) => sameKey(f.storage, key) && (moved || reread(f, fault))
     );
   }
   // [LAW:no-silent-failure] A generation's fault is a standing failure of
@@ -83216,8 +83222,8 @@ var ManagedStorage = class {
     }
   }
   // The generation's standing failure, which every source in it reads first:
-  // its fault, with the deafness read live from the handle, then a stall. A
-  // lost generation reads them too: its held files are refreshed only through
+  // its fault as last reported, the one the log and the counts hold, then a
+  // stall. A lost generation reads them too: its held files are refreshed only through
   // its watch, so while the watch is deaf or file events are stalled a file
   // read once from the path would freeze there unreported. While delivery is
   // unmeasured its files read as usual: the bar's row already says it cannot
@@ -83226,11 +83232,7 @@ var ManagedStorage = class {
   standing(storage) {
     const watched = this.watched.get(keyString(storage));
     if (watched === void 0) return null;
-    const fault = faultOf(
-      watched.health,
-      watched.handle.deaf[0] ?? null,
-      watched.statFailure
-    );
+    const fault = watched.reported;
     if (fault?.cause === "unusable")
       return `cannot refresh: ${storage.folder} ${fault.reason}; reload the config or restart the daemon`;
     const reason = fault?.reason ?? stallReason(this.fileEvents.delivery());
