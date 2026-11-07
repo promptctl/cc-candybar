@@ -1,3 +1,10 @@
+## [1.208.10](https://github.com/promptctl/cc-candybar/compare/v1.208.9...v1.208.10) (2026-11-07)
+
+### Bug Fixes
+
+* **click:** a drawn link reads as the daemon's one read, step by step (brandon-menus-sjhy.3c7) ([#668](https://github.com/promptctl/cc-candybar/issues/668)) ([0ef9c4d](https://github.com/promptctl/cc-candybar/commit/0ef9c4da61959281fbf7cfad5a299221a3c2d732))
+* **lanes:** a /clear's mismatched tick draws no ⚠, and its render line names it (candybar-gather-renderer-76bb.1dh.jw7) ([#669](https://github.com/promptctl/cc-candybar/issues/669)) ([c528b6a](https://github.com/promptctl/cc-candybar/commit/c528b6a5b6526a191a75fddaa5dd0251b0889828))
+
 ## [1.208.9](https://github.com/promptctl/cc-candybar/compare/v1.208.8...v1.208.9) (2026-11-07)
 
 ### Bug Fixes
