@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-668",
+      "ref": "refs/pull/668/merge",
+      "sha": "0105f8154c2d88966e17e3b3d633a855a56e3234",
+      "timestamp": "2026-11-07T01:59:00.663Z",
+      "commits": [
+        {
+          "sha": "0105f8154c2d88966e17e3b3d633a855a56e3234",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:58:14-07:00",
+          "message": "Merge f93228c810eabf24a9995a9f42a04d04a8818b34 into 30386afe1d6f69b407d95bb4159aebbc3d9217d6\n"
+        },
+        {
+          "sha": "f93228c810eabf24a9995a9f42a04d04a8818b34",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:57:41-07:00",
+          "message": "fix(click): a drawn link reads as the daemon's one read, step by step, and one gate holds back a driven bar's machine click (brandon-menus-sjhy.3c7)\n\nThe dispatch read stamps each step once: one that runs carries its leaf,\nsession and arguments; one refused carries the daemon's text for why and the\narguments that decoded. The fold is the one reader of step outcomes and the\none caller of the refusal owners. drawnClickOf and describeLink read through\nreadClick, so adjacent writes read as the batch that lands and a malformed\nstep as its own refusal beside the steps that run; effectsOf stays the wire\ncodec's inverse. The harness and the site hold a click back by one gate that\ncounts only steps that run, naming refused steps beside them.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-667",
       "ref": "refs/pull/667/merge",
       "sha": "7a5f3eb09f63be6bcfd6e0f68452fbe00f9be9a1",
