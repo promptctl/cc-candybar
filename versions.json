@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-673",
-      "ref": "refs/pull/673/merge",
-      "sha": "89312bf85282e0878741af871c1e172e578eb90d",
-      "timestamp": "2026-11-07T08:16:59.351Z",
-      "commits": [
-        {
-          "sha": "89312bf85282e0878741af871c1e172e578eb90d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T08:16:04Z",
-          "message": "Merge 4f1629b100c99b6003bd77e57fe986202bd17171 into 1bd51ef3f44ff8c49821b7b309e85764c97b024e\n"
-        },
-        {
-          "sha": "4f1629b100c99b6003bd77e57fe986202bd17171",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:15:54-07:00",
-          "message": "fix(lanes): a process that reads its parent once reads it with a daemon read's budget; an unread start says the launcher's why (candybar-gather-renderer-76bb.1dh.ycm)\n"
-        },
-        {
-          "sha": "a7a1ac3b39dd95de56da6b81b57e5ea20544c9a8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T01:01:13-07:00",
-          "message": "fix(lanes): a restart refused at the kill names both processes by their starts; a replaced client hint is additive (candybar-gather-renderer-76bb.1dh.ycm)\n"
-        },
-        {
-          "sha": "3079149fd31c1401ed7d216e97ad9a4dbd04839a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:54:29-07:00",
-          "message": "fix(lanes): a record that cannot be judged is not said as a wrapper's, and a start not read says why (candybar-gather-renderer-76bb.1dh.ycm)\n\nReview fixes, step 10 (/code-review high):\n- A held-session read says `none` when no record is the process's (none\n  kept, or an exited Claude Code's under a reused pid) and `unread` when the\n  record under the pid cannot be judged; only `none` gets the\n  shell-or-wrapper fix.\n- The parent hint carries `why` beside a null start, from both clients,\n  through one fold of a start read into an identity.\n- The restart's check before the kill compares the process's start, not\n  its pid alone.\n- `frames` reads its parent once, not per forwarded hook.\n"
-        },
-        {
-          "sha": "dc331e0cf27fe60ab01b75b8d7b97000120a813b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:37:53-07:00",
-          "message": "fix(lanes): a session record an exited Claude Code left under a reused pid is not the live process's (candybar-gather-renderer-76bb.1dh.ycm)\n\nThe record reader took sessions/<pid>.json as the live process's without\nchecking that the process wrote it, so a shell or wrapper that reused an\nexited Claude Code's pid read as a Claude Code holding the old session: its\nrequests were stamped mismatched, and a lasting mismatch blamed a Claude Code\nthat no longer exists instead of naming the wrapper fix.\n\nA process is now its pid with its kernel start, the token `ps -o lstart=`\nprints under LC_ALL=C TZ=UTC, which Claude Code writes as its record's\nprocStart (its own pid-reuse check reads the same token). The client reports\nits parent as one value, `parent: {pid, startTime}`, replacing `parentPid`;\nthe reader holds the record to that start, so a record another process left\nreads unread, naming both starts, and the request is unconfirmed with the\nexisting wrapper fix. The mismatch runs key a Claude Code on its start too,\nso a later one under the same pid inherits none of its runs.\n\nThe native client reads its parent's start from the kernel with no spawn and\nrenders the token; a Rust test holds that rendering equal to `ps` on the same\nprocess, now run on macOS in CI as well as Linux. The Node client reads it at\nits edge, only where it reports hints, bounded like a connect.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "1bd51ef3f44ff8c49821b7b309e85764c97b024e",
-      "timestamp": "2026-11-07T07:11:35.421Z",
+      "sha": "583ae6d50351c0a6103cc959b6994201e0ad538f",
+      "timestamp": "2026-11-07T08:25:39.767Z",
       "commits": [
         {
-          "sha": "1bd51ef3f44ff8c49821b7b309e85764c97b024e",
+          "sha": "583ae6d50351c0a6103cc959b6994201e0ad538f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:10:38-07:00",
-          "message": "docs(ui-elements): the carousel and the settings menu are drawn as the bar draws them now (brandon-menus-sjhy.8zu) (#672)\n\n* docs(ui-elements): the carousel and the settings menu are drawn as the bar draws them now (brandon-menus-sjhy.8zu)\n\n* docs(ui-elements): the proposal notes, the gear, the door's rate cell and the lane readouts say what the bar does now (brandon-menus-sjhy.8zu)\n\n* docs(ui-elements): un-redrawn drawings are flagged, and the rate cell, the picker's ✕ and gap 7 say what the bar draws (brandon-menus-sjhy.8zu)"
-        },
-        {
-          "sha": "82a8be34cbd5540ea30fe1ddb7709b50c4568b1f",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T06:58:32Z",
-          "message": "chore(release): set `package.json` to 1.208.11 [skip ci]\n\n## [1.208.11](https://github.com/promptctl/cc-candybar/compare/v1.208.10...v1.208.11) (2026-11-07)\n\n### Bug Fixes\n\n* **lanes:** a mismatch that outlasts the /clear rewrite race draws the session-pane ⚠ (candybar-gather-renderer-76bb.1dh.2d2) ([#670](https://github.com/promptctl/cc-candybar/issues/670)) ([f71e401](https://github.com/promptctl/cc-candybar/commit/f71e4018241defe5e52915caeb204883a59da539))\n"
+          "timestamp": "2026-11-07T01:24:48-07:00",
+          "message": "fix(lanes): a session record an exited Claude Code left under a reused pid is not the live process's (candybar-gather-renderer-76bb.1dh.ycm) (#673)\n\n* fix(lanes): a session record an exited Claude Code left under a reused pid is not the live process's (candybar-gather-renderer-76bb.1dh.ycm)\n\nThe record reader took sessions/<pid>.json as the live process's without\nchecking that the process wrote it, so a shell or wrapper that reused an\nexited Claude Code's pid read as a Claude Code holding the old session: its\nrequests were stamped mismatched, and a lasting mismatch blamed a Claude Code\nthat no longer exists instead of naming the wrapper fix.\n\nA process is now its pid with its kernel start, the token `ps -o lstart=`\nprints under LC_ALL=C TZ=UTC, which Claude Code writes as its record's\nprocStart (its own pid-reuse check reads the same token). The client reports\nits parent as one value, `parent: {pid, startTime}`, replacing `parentPid`;\nthe reader holds the record to that start, so a record another process left\nreads unread, naming both starts, and the request is unconfirmed with the\nexisting wrapper fix. The mismatch runs key a Claude Code on its start too,\nso a later one under the same pid inherits none of its runs.\n\nThe native client reads its parent's start from the kernel with no spawn and\nrenders the token; a Rust test holds that rendering equal to `ps` on the same\nprocess, now run on macOS in CI as well as Linux. The Node client reads it at\nits edge, only where it reports hints, bounded like a connect.\n\n* fix(lanes): a record that cannot be judged is not said as a wrapper's, and a start not read says why (candybar-gather-renderer-76bb.1dh.ycm)\n\nReview fixes, step 10 (/code-review high):\n- A held-session read says `none` when no record is the process's (none\n  kept, or an exited Claude Code's under a reused pid) and `unread` when the\n  record under the pid cannot be judged; only `none` gets the\n  shell-or-wrapper fix.\n- The parent hint carries `why` beside a null start, from both clients,\n  through one fold of a start read into an identity.\n- The restart's check before the kill compares the process's start, not\n  its pid alone.\n- `frames` reads its parent once, not per forwarded hook.\n\n* fix(lanes): a restart refused at the kill names both processes by their starts; a replaced client hint is additive (candybar-gather-renderer-76bb.1dh.ycm)\n\n* fix(lanes): a process that reads its parent once reads it with a daemon read's budget; an unread start says the launcher's why (candybar-gather-renderer-76bb.1dh.ycm)"
         }
       ]
     },

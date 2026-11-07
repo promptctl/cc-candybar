@@ -22945,63 +22945,7 @@ function verbOf(rest2, to) {
 init_globals();
 init_os();
 
-// src/dial/system-dialer.ts
-init_globals();
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse("net.connect");
-var createServer = refuse("net.createServer");
-var createConnection = refuse("net.createConnection");
-var get = refuse("https.get");
-var request = refuse("https.request");
-var createInterface = refuse("readline.createInterface");
-var createRequire = refuse("module.createRequire");
-var json = refuse("stream/consumers.json");
-var text = refuse("stream/consumers.text");
-var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
-
-// src/dial/system-dialer.ts
-var UNREACHABLE = /* @__PURE__ */ new Set(["ECONNREFUSED", "ENOENT", "ENOTSOCK"]);
-var failureOf = (err) => ({
-  cause: UNREACHABLE.has(err.code ?? "") ? "unreachable" : "io_error",
-  message: err.message
-});
-var systemDialer = {
-  dial(sockPath) {
-    const sock = unavailable_default.createConnection({ path: sockPath });
-    let settledYet = false;
-    const settled4 = new Promise((resolve) => {
-      const onError = (err) => {
-        sock.off("connect", onConnect);
-        settledYet = true;
-        resolve({ ok: false, failure: failureOf(err) });
-      };
-      const onConnect = () => {
-        sock.off("error", onError);
-        settledYet = true;
-        resolve({ ok: true, conn: sock });
-      };
-      sock.once("error", onError);
-      sock.once("connect", onConnect);
-    });
-    return {
-      settled: settled4,
-      abandon: () => {
-        if (settledYet) return;
-        sock.removeAllListeners();
-        sock.destroy();
-      }
-    };
-  }
-};
-
-// src/proc/system-launcher.ts
+// src/daemon/process-fingerprint.ts
 init_globals();
 
 // src/proc/launch.ts
@@ -23897,6 +23841,116 @@ function launcherWithState(owner, clock, spawner) {
   return { launcher, state };
 }
 
+// src/daemon/process-fingerprint.ts
+var START_TOKEN = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [ 123]\d \d\d:\d\d:\d\d \d{4}$/;
+var parseStartToken = (v) => typeof v === "string" && START_TOKEN.test(v) ? v : void 0;
+var START_TIME_READ_BUDGET_MS = 2e3;
+async function readStartTime(pid2, launch2) {
+  return startTimeOf(await launch2(startTimeLaunch(pid2)));
+}
+var startTimeLaunch = (pid2, budgetMs = START_TIME_READ_BUDGET_MS) => ({
+  bin: "ps",
+  args: ["-o", "lstart=", "-p", String(pid2)],
+  category: "process-fingerprint",
+  timeoutMs: budgetMs,
+  // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+  // deterministic across daemons — the writer and reader must render the same
+  // process identically for opaque string equality to be sound. LC_ALL=C fixes
+  // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+  // can't make one live process render two different start-time strings.
+  envOverlay: { LC_ALL: "C", TZ: "UTC" }
+});
+function processIdentityOf(pid2, read2) {
+  if (read2.kind === "unavailable")
+    return { pid: pid2, startTime: null, why: read2.detail };
+  const startTime = parseStartToken(read2.token);
+  return startTime === void 0 ? {
+    pid: pid2,
+    startTime: null,
+    why: `ps printed ${JSON.stringify(read2.token)}, not a start in the form \`ps -o lstart=\` prints`
+  } : { pid: pid2, startTime };
+}
+function startTimeOf(res) {
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  return { kind: "unavailable", detail: `ps ${whyFailed(res)}` };
+}
+function systemProbe(launcher) {
+  return {
+    alive: (pid2) => {
+      try {
+        process_default.kill(pid2, 0);
+        return true;
+      } catch (e) {
+        return e.code === "EPERM";
+      }
+    },
+    startTime: (pid2) => readStartTime(pid2, launcher.launch)
+  };
+}
+
+// src/dial/system-dialer.ts
+init_globals();
+
+// site/shims/unavailable.ts
+init_globals();
+var refuse = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
+};
+var connect = refuse("net.connect");
+var createServer = refuse("net.createServer");
+var createConnection = refuse("net.createConnection");
+var get = refuse("https.get");
+var request = refuse("https.request");
+var createInterface = refuse("readline.createInterface");
+var createRequire = refuse("module.createRequire");
+var json = refuse("stream/consumers.json");
+var text = refuse("stream/consumers.text");
+var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
+
+// src/dial/system-dialer.ts
+var UNREACHABLE = /* @__PURE__ */ new Set(["ECONNREFUSED", "ENOENT", "ENOTSOCK"]);
+var failureOf = (err) => ({
+  cause: UNREACHABLE.has(err.code ?? "") ? "unreachable" : "io_error",
+  message: err.message
+});
+var systemDialer = {
+  dial(sockPath) {
+    const sock = unavailable_default.createConnection({ path: sockPath });
+    let settledYet = false;
+    const settled4 = new Promise((resolve) => {
+      const onError = (err) => {
+        sock.off("connect", onConnect);
+        settledYet = true;
+        resolve({ ok: false, failure: failureOf(err) });
+      };
+      const onConnect = () => {
+        sock.off("error", onError);
+        settledYet = true;
+        resolve({ ok: true, conn: sock });
+      };
+      sock.once("error", onError);
+      sock.once("connect", onConnect);
+    });
+    return {
+      settled: settled4,
+      abandon: () => {
+        if (settledYet) return;
+        sock.removeAllListeners();
+        sock.destroy();
+      }
+    };
+  }
+};
+
+// src/proc/system-launcher.ts
+init_globals();
+
 // src/proc/spawner.ts
 init_globals();
 
@@ -24024,19 +24078,29 @@ var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock
 
 // src/host.ts
 function processWorld() {
+  const clock = systemTimekeeper;
+  const launcher = systemOneShotLauncher({ inherited: process_default.env }, clock);
   const host = {
     env: process_default.env,
     home: os_default.homedir(),
-    tmp: os_default.tmpdir(),
-    parentPid: process_default.ppid
+    tmp: os_default.tmpdir()
   };
-  const clock = systemTimekeeper;
   return {
     host,
     home: processHome(host),
-    launcher: systemOneShotLauncher({ inherited: process_default.env }, clock),
+    launcher,
     clock,
-    dialer: systemDialer
+    dialer: systemDialer,
+    // [LAW:no-silent-failure] Bounded by its caller, so a slow `ps` costs a
+    // tick no more than a slow daemon would: one that runs out reads as a
+    // start not known, with why, which the daemon says
+    // (src/daemon/session-pane.ts).
+    parent: (budgetMs) => processIdentityOf(
+      process_default.ppid,
+      startTimeOf(
+        launcher.launchSync(startTimeLaunch(process_default.ppid, budgetMs))
+      )
+    )
   };
 }
 function processHome(host) {
@@ -66316,7 +66380,7 @@ var CLIENT_HINT_FIELDS = Object.keys({
   configEnv: true,
   claudeConfigDir: true,
   terminalEnv: true,
-  parentPid: true,
+  parent: true,
   client: true
 });
 function parseClientHints(req) {
@@ -66327,7 +66391,7 @@ function parseClientHints(req) {
   const configEnv = sanitizeAbsolutePath(req.configEnv);
   const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
   const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
-  const parentPid = sanitizePid(req.parentPid);
+  const parent = sanitizeParent(req.parent);
   const client = sanitizeClient(req.client);
   return {
     ...termCols !== void 0 && { termCols },
@@ -66337,7 +66401,7 @@ function parseClientHints(req) {
     ...configEnv !== void 0 && { configEnv },
     ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
     ...terminalEnv !== void 0 && { terminalEnv },
-    ...parentPid !== void 0 && { parentPid },
+    ...parent !== void 0 && { parent },
     ...client !== void 0 && { client }
   };
 }
@@ -66396,8 +66460,14 @@ function sanitizeTermExtent(v) {
 function sanitizeSsh(v) {
   return typeof v === "boolean" ? v : void 0;
 }
-function sanitizePid(v) {
-  return Number.isSafeInteger(v) && v > 0 ? v : void 0;
+function sanitizeParent(v) {
+  if (typeof v !== "object" || v === null) return void 0;
+  const { pid: pid2, startTime, why: why2 } = v;
+  if (!Number.isSafeInteger(pid2) || pid2 <= 0) return void 0;
+  if (startTime === null)
+    return typeof why2 === "string" && why2 !== "" ? { pid: pid2, startTime: null, why: why2 } : void 0;
+  const token = parseStartToken(startTime);
+  return token === void 0 ? void 0 : { pid: pid2, startTime: token };
 }
 var URL_FRAME_VERSION = 1;
 var EARLIER_URL_FRAME_VERSIONS = [];
@@ -72295,23 +72365,40 @@ var import_node_path37 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/session-pane.ts
 init_globals();
-var claudeKey = (claude) => `${claude.pid}\0${claude.configDir ?? ""}`;
+var claudeKey = (claude) => `${claude.pid}\0${claude.startTime}\0${claude.configDir ?? ""}`;
 function sessionPaneOf(hints, sessionId2, heldSession) {
   const tmux3 = inTmux(hints.tmux) ? hints.tmux : null;
-  const { parentPid } = hints;
-  if (parentPid === void 0)
+  const { parent } = hints;
+  if (parent === void 0)
     return {
       kind: "unconfirmed",
       tmux: tmux3,
       why: "its client is too old to say which process ran it (reinstall it with `cc-candybar install`)"
     };
-  const claude = { pid: parentPid, configDir: hints.claudeConfigDir };
-  const held = heldSession(parentPid, hints.claudeConfigDir);
-  if (held.kind === "unread")
+  const parentPid = parent.pid;
+  if (parent.startTime === null)
+    return {
+      kind: "unconfirmed",
+      tmux: tmux3,
+      why: `its client could not read when the process that ran it (pid ${parentPid}) started: ${parent.why}`
+    };
+  const claude = {
+    pid: parentPid,
+    startTime: parent.startTime,
+    configDir: hints.claudeConfigDir
+  };
+  const held = heldSession(claude);
+  if (held.kind === "none")
     return {
       kind: "unconfirmed",
       tmux: tmux3,
       why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}. A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`
+    };
+  if (held.kind === "unread")
+    return {
+      kind: "unconfirmed",
+      tmux: tmux3,
+      why: `the session of the process that ran its statusline (pid ${parentPid}) cannot be read: ${held.why}`
     };
   return held.sessionId === sessionId2 ? { kind: "runs", tmux: tmux3, claude } : {
     kind: "mismatched",
@@ -72323,9 +72410,9 @@ function sessionPaneOf(hints, sessionId2, heldSession) {
 }
 function runsNowIn(where, heldSession) {
   const reads = /* @__PURE__ */ new Map();
-  const once2 = (pid2, configDir2) => {
-    const key = claudeKey({ pid: pid2, configDir: configDir2 });
-    const read2 = reads.get(key) ?? heldSession(pid2, configDir2);
+  const once2 = (claude) => {
+    const key = claudeKey(claude);
+    const read2 = reads.get(key) ?? heldSession(claude);
     reads.set(key, read2);
     return read2;
   };
@@ -86047,9 +86134,9 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
     );
   }
   const now2 = await edge.paneClaude(tmux3);
-  if (now2.pid !== claude.pid) {
+  if (now2.pid !== claude.pid || now2.startTime !== claude.startTime) {
     throw new Error(
-      `Claude Code in ${tmux3.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`
+      `Claude Code in ${tmux3.pane} is no longer the process the restart read (pid ${claude.pid}, started ${claude.startTime}; now pid ${now2.pid}, started ${now2.startTime}), so it was not restarted under the attach launcher`
     );
   }
   const loses = endingLoses(await edge.claudeInput.read(tmux3));
@@ -86087,11 +86174,12 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
     program,
     args: [...place.args, ...carried.args, ...sessionArgs(start2)]
   });
-  const held = edge.heldSession(
-    claude.pid,
-    detectClaudeConfigDir(Object.fromEntries(started2), claude.cwd)
-  );
-  if (held.kind === "unread") {
+  const held = edge.heldSession({
+    pid: claude.pid,
+    startTime: claude.startTime,
+    configDir: detectClaudeConfigDir(Object.fromEntries(started2), claude.cwd)
+  });
+  if (held.kind !== "holds") {
     throw new Error(
       `Claude Code in ${tmux3.pane} was left running: ${held.why}, so which session it runs is unknown`
     );
@@ -87403,44 +87491,6 @@ var DaemonLog = class {
 // src/daemon/production-adapters.ts
 init_globals();
 
-// src/daemon/process-fingerprint.ts
-init_globals();
-var START_TIME_READ_BUDGET_MS = 2e3;
-async function readStartTime(pid2, launch2) {
-  const res = await launch2({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: START_TIME_READ_BUDGET_MS,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    envOverlay: { LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
-function systemProbe(launcher) {
-  return {
-    alive: (pid2) => {
-      try {
-        process_default.kill(pid2, 0);
-        return true;
-      } catch (e) {
-        return e.code === "EPERM";
-      }
-    },
-    startTime: (pid2) => readStartTime(pid2, launcher.launch)
-  };
-}
-
 // src/daemon/file-storage.ts
 init_globals();
 
@@ -87792,8 +87842,18 @@ async function paneClaude(launcher, hint) {
   if (parent === void 0) {
     throw new Error(`pane ${hint.pane}'s foreground job ${pid2} is gone`);
   }
+  const job = processIdentityOf(
+    pid2,
+    await readStartTime(pid2, (opts) => launcher.launch(opts))
+  );
+  if (job.startTime === null) {
+    throw new Error(
+      `the start of pane ${hint.pane}'s foreground job ${pid2} could not be read (${job.why})`
+    );
+  }
   return {
     pid: pid2,
+    startTime: job.startTime,
     // The installed binary itself, as cc-extra's own `bin/cc-attach` hands it
     // to the launcher (`readlink -f`): `~/.local/bin/claude` is a link to the
     // release it runs.
@@ -87806,11 +87866,11 @@ async function paneClaude(launcher, hint) {
     attached: runsAttached(table, pid2, panePid)
   };
 }
-function heldSessionIn(file) {
-  const first2 = recordIn(file);
-  return first2.torn ? recordIn(file).held : first2.held;
+function heldSessionIn(file, claude) {
+  const first2 = recordIn(file, claude);
+  return first2.torn ? recordIn(file, claude).held : first2.held;
 }
-function recordIn(file) {
+function recordIn(file, claude) {
   let text4;
   try {
     text4 = fs_default.readFileSync(file, "utf8");
@@ -87818,7 +87878,7 @@ function recordIn(file) {
     return {
       torn: false,
       held: e.code === "ENOENT" ? {
-        kind: "unread",
+        kind: "none",
         why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`
       } : { kind: "unread", why: e.message }
     };
@@ -87835,17 +87895,32 @@ function recordIn(file) {
       }
     };
   }
-  const sessionId2 = typeof record2 === "object" && record2 !== null && "sessionId" in record2 ? record2.sessionId : void 0;
+  const { sessionId: sessionId2, procStart } = typeof record2 === "object" && record2 !== null ? record2 : {};
+  const start = parseStartToken(procStart);
   return {
     torn: false,
-    held: typeof sessionId2 === "string" && sessionId2 !== "" ? { kind: "holds", sessionId: sessionId2 } : {
+    held: typeof sessionId2 !== "string" || sessionId2 === "" ? {
       kind: "unread",
       why: `its session record ${file} names no session`
-    }
+    } : procStart === void 0 ? {
+      kind: "unread",
+      why: `its session record ${file} names no process start (update Claude Code with \`claude update\`: recent releases name one)`
+    } : start === void 0 ? {
+      kind: "unread",
+      why: `its session record ${file} names its process start as ${JSON.stringify(procStart)}, not in the form \`ps -o lstart=\` prints it`
+    } : start !== claude.startTime ? {
+      kind: "none",
+      why: `its session record ${file} was left by a Claude Code that has exited: the record names a process started ${start}, and pid ${claude.pid} is a process started ${claude.startTime}`
+    } : { kind: "holds", sessionId: sessionId2 }
   };
 }
-var heldSessionUnder = (home) => (pid2, configDir2) => heldSessionIn(
-  import_node_path52.default.join(claudeConfigDir(configDir2, home), "sessions", `${pid2}.json`)
+var heldSessionUnder = (home) => (claude) => heldSessionIn(
+  import_node_path52.default.join(
+    claudeConfigDir(claude.configDir, home),
+    "sessions",
+    `${claude.pid}.json`
+  ),
+  claude
 );
 var FOLLOW_POLL_MS = 200;
 function productionLaneEdge(launcher, following, closing, clock, probe3, heldSession) {
