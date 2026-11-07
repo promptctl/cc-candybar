@@ -104,6 +104,7 @@ import {
 import { EffectSessions, SessionEffects } from "../src/render/effect";
 import { type Lane } from "../src/config/lanes";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
+import { MismatchRuns } from "../src/daemon/mismatch-runs";
 import {
   drawForAnswer,
   renderFrame,
@@ -483,6 +484,7 @@ function liveSession({ runsMs, stepMs }: Pace = HELD) {
     clock,
     recorder: live.recorder,
     sessionState: live.sessionState,
+    mismatchRuns: new MismatchRuns(SINGLE_RUN),
     renderCache: live.cache,
     payloadProviders: live.providers,
     menuIdle: live.menuIdle,

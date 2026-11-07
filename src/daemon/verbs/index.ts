@@ -142,6 +142,7 @@ import type { LaneSetups } from "../lane-setup";
 import type { DeclaredSources } from "../render-payload";
 import { sessionEnv } from "../session-env";
 import { runDeclaration, type SlashAction } from "../../config/action";
+import type { MismatchRuns } from "../mismatch-runs.js";
 import type { RenderSightings } from "../render-sightings";
 import type { ServingDaemon } from "../limits";
 import { parseClientHints } from "../protocol";
@@ -231,6 +232,9 @@ export interface DaemonContext {
   // Which client drew each session's bar, as this process saw it render, and
   // the bundle this daemon runs.
   readonly clients: RenderSightings;
+  // Each session's run of mismatched pane stamps, which its requests write in
+  // their turns and its draws read (src/daemon/mismatch-runs.ts).
+  readonly mismatchRuns: MismatchRuns;
   readonly bundle: string;
   // This daemon as the doctor's daemon row judges it (src/daemon/limits.ts).
   readonly serving: () => ServingDaemon;

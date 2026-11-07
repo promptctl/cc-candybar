@@ -50,6 +50,7 @@ import {
 import { eventLine, noteFacts, type RequestFacts } from "./request-event.js";
 import type { CheckedRenderRequest } from "./render-checkpoint.js";
 import type { SessionStateRW } from "./session-state.js";
+import { mismatchFact } from "./mismatch-runs.js";
 import { BadVerbArgs, DaemonClosing } from "./verb-error.js";
 import {
   CLICK_PROGRAM_TIMEOUT_MS,
@@ -169,7 +170,8 @@ const NO_EFFECTS: readonly Effect[] = [];
 export const ARMS: ApplyArms<Event> = {
   // [LAW:single-enforcer] The request's writes take their turn as a click's
   // do: what it said of its client and the config inputs it named land in one
-  // batch in a journal turn, with what its arrival settles (the lane setups
+  // batch in a journal turn, and so does its session's run of mismatched pane
+  // stamps, with what its arrival settles (the lane setups
   // its session's clicks owed, described as the turn's effects), and its draw
   // begins once the turn is over (`applyRequest`). A turn is synchronous
   // (src/daemon/journal-turns.ts), so the request waits behind no other
@@ -177,17 +179,20 @@ export const ARMS: ApplyArms<Event> = {
   // landed. The revision its turn left and the effects it described go on the
   // request's line, the render event, which is its record and opens with the
   // session the edge noted.
-  request: ({ req, facts }, { verbCtx }) => {
+  request: ({ req, at, facts }, { verbCtx }) => {
     const turn = verbCtx.journalTurns.take("request", () => {
       recordRequest(verbCtx.sessionState, req);
+      const mismatch = verbCtx.mismatchRuns.record(req.sessionId, req.pane, at);
       return {
         effects: verbCtx.lanes.arrived(req),
         revision: verbCtx.sessionState.revision(req.sessionId),
+        mismatch,
       };
     });
     noteFacts(facts, {
       revision: String(turn.revision),
       effects: turn.effects.map((e) => describeEffect(e)).join(",") || "-",
+      mismatch: mismatchFact(turn.mismatch),
     });
     return { answer: undefined, effects: turn.effects, facts: [] };
   },

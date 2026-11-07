@@ -33,7 +33,9 @@ import type { Effect } from "../src/daemon/effect";
 import { doctorReportKeys } from "../src/doctor/report";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DoctorEdge } from "../src/doctor/edge";
-import { instantOf } from "../src/utils/instant";
+import { instantOf, type Instant } from "../src/utils/instant";
+import { MISMATCH_RACE_S } from "../src/daemon/mismatch-runs";
+import type { SessionPane } from "../src/daemon/session-pane";
 import { applyClick, recordRender, TEST_STORED_ROOT, testVerbContext } from "./helpers/click";
 import {
   emptyStores,
@@ -73,12 +75,15 @@ async function drain(): Promise<void> {
 // A render request past the checkpoint, as the arm reads it: its session,
 // its hints and the config inputs it named.
 const REQUESTED = { projectDir: DIR, cwd: DIR, target: { source: "search" } } as const;
-const request = (termCols: number, sid = SID): CheckedRenderRequest =>
+const CLAUDE = { pid: 4242, configDir: undefined };
+const RUNS: SessionPane = { kind: "runs", tmux: null, claude: CLAUDE };
+const request = (termCols: number, sid = SID, pane: SessionPane = RUNS): CheckedRenderRequest =>
   ({
     sessionId: sessionIdOf(sid),
     hints: { termCols },
     requested: REQUESTED,
     originRecord: encodeRenderOrigin(REQUESTED, TEST_STORED_ROOT),
+    pane,
   }) as unknown as CheckedRenderRequest;
 
 const toggle = { verb: VERB_TOOLBAR_TOGGLE, args: [SID] } as const;
@@ -159,13 +164,13 @@ function rig() {
       return ANSWER;
     },
   };
-  const render = (termCols: number, sid = SID) => {
+  const render = (termCols: number, sid = SID, pane: SessionPane = RUNS, at = AT) => {
     const facts: RequestFacts = [];
     const answered = applyRequest(
       {
         kind: "request",
-        req: request(termCols, sid),
-        at: AT,
+        req: request(termCols, sid, pane),
+        at,
         waitEndsAt: clock.monotonic(),
         facts,
       },
@@ -198,6 +203,7 @@ describe("a request takes its turn", () => {
     expect(facts).toEqual([
       ["revision", String(r.sessionState.revision(SID))],
       ["effects", "-"],
+      ["mismatch", "-"],
     ]);
     r.parked.open();
     await click.performed;
@@ -261,7 +267,22 @@ describe("a request takes its turn", () => {
     expect(facts).toEqual([
       ["revision", String(revision)],
       ["effects", "-"],
+      ["mismatch", "-"],
     ]);
+  });
+
+  test("a request's run of mismatched pane stamps lands in its turn, and its line says so", async () => {
+    const r = rig();
+    const runs = r.ctx.mismatchRuns;
+    const mismatched: SessionPane = { kind: "mismatched", tmux: null, claude: CLAUDE, why: "its Claude Code holds session-b" };
+    await r.render(60, SID, mismatched).answered;
+    expect(runs.of(SID)).toEqual({ claude: CLAUDE, since: AT, lasted: false });
+    const past = r.render(60, SID, mismatched, (AT + MISMATCH_RACE_S + 1) as Instant);
+    await past.answered;
+    expect(runs.lasted(SID)).toBe(true);
+    expect(past.facts).toContainEqual(["mismatch", `lasted since ${START.toISOString()}`]);
+    await r.render(60).answered;
+    expect(runs.of(SID)).toBeNull();
   });
 });
 

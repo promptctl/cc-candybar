@@ -91,6 +91,7 @@ import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
 import { MenuIdle } from "./menu-idle.js";
+import { MismatchRuns } from "./mismatch-runs.js";
 import { runsNowIn, type HeldSessionOf } from "./session-pane.js";
 
 // How this daemon's node runs the bundle it was loaded from.
@@ -711,6 +712,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
   });
 
+  const mismatchRuns = new MismatchRuns(journalTurns);
   const verbCtx = {
     gates,
     sessionState,
@@ -747,6 +749,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     doctorStores,
     probes: handlerProbes,
     clients: renderSightings,
+    mismatchRuns,
     bundle: bundle.path,
     serving: () => limits.serving(),
     claudeInput: inputs.claudeInput(launcher),
@@ -793,6 +796,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     stats,
     handlerProbes,
     renderSightings,
+    mismatchRuns,
     watcherRegistry,
     refreshLedger,
     fileEvents,
