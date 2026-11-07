@@ -5,15 +5,13 @@ Every element the bar can draw today: how it looks in each state, what each clic
 Every drawing is a live render from `pnpm bar` (`scripts/drive-bar.ts`). The script drives an isolated real daemon through the same clicks a user makes, with the bundled default config. The drawings are plain text, so colour is described in words. Each drawing was taken at 80 and 200 columns; where the two differ, both are shown. To reproduce one, pass the clicks that reach it:
 
 ```
-pnpm bar --ssh --width 80 🍫 "🎨 look" "▸#2"    # open the menu, the look tab, then the theme ring
-pnpm bar --links 🍫                             # …and list what every link on the last render does
+pnpm bar --ssh --width 80 🍫 "🎨 look" "✨ effect"    # open the menu, the look tab, then the effect list
+pnpm bar --links 🍫                                  # …and list what every link on the last render does
 ```
 
-`--ssh` makes the host segment show. The drawings were taken on 2026-10-03, from this branch on top of `main` at `dff9dbb`, which is why the git cell reads `docs/ui-elements-inventory`.
+`--ssh` makes the host segment show. Most drawings were taken on 2026-10-03, from a branch on top of `main` at `dff9dbb`, which is why their git cell reads `docs/ui-elements-inventory`. The toggle, the stepper, the carousel, the previews, the confirm step, the settings menu, the setting control and configure mode were redrawn on 2026-11-06 from `main` at `984751dd`, on the branch `brandon-menus-sjhy.8zu` and the host `bmf@u2`, which their cells read.
 
-**Since then (brandon-menu-ia-q30.jl1, 2026-10-04):** every option-valued control in the settings menu and configure mode is `label ◀ value ▶` rather than a ring row opening a carousel: the arrows step, and the value opens a plain list of every choice with the previews under it (`🎨 ◀ tokyo-night ▶`). A theme or style in a list is written in its own colour on the background every option shares. Drawings below of ring rows (`▦ default ▸`) and of carousels in the settings menu show the earlier design. The `{{ carousel }}` is now `◀ label ▶` everywhere: the label names the setting and opens the list, and the opt-in `themeSwitcher` segment is gone. Mentions below of neighbours, caps or that segment show the earlier design.
-
-**And since then (brandon-theme-swatch-8v9r, 2026-10-15):** the theme picker of the proposal is built. A theme or style name is written in the text around it, and a swatch beside it carries the colour: `▀▀▀`, the palette's primary, secondary and accent over its background. The theme control is `🎨 theme ▀▀▀` with a `⚙` beside it; its label opens `◀ ? ▶ ← ▀▀▀ [▀▀▀] ▀▀▀ →` (previous, random, next, then pages of swatches with the one in force bracketed) over a two-row demo, and the gear opens the style, variation and shade controls. Configure mode's placement theme is the same picker. A list opens on the page holding the current value.
+**Since the first drawings:** every drawing not named above as redrawn shows the bar of 2026-10-03: no rate cell beside the door, and the host and git cells of that machine and branch. The opt-in `themeSwitcher` segment is gone, and mentions of it below show the earlier design. A theme or style name is written in the text around it, and a swatch beside it carries the colour: `▀▀▀`, the palette's primary, secondary and accent over its background.
 
 ## At a glance
 
@@ -22,13 +20,13 @@ pnpm bar --links 🍫                             # …and list what every link 
 | [Action region](#action-region) | One clickable span that does one thing | Everywhere | `{{ action "name" … }}` |
 | [Toggle](#toggle) | Flip a value between two or more states | Settings, edit mode, git detail | `{ set, cycle }` action |
 | [Stepper](#stepper) | Nudge a number up or down | Padding, configure-mode thresholds | `{ set, min, max, by }` action |
-| [Disclosure](#disclosure-and-the--close) | Show or hide a body under (or above) a trigger | Menu door, tabs, rings, groups, help | `disclosureNode`, group sugar |
+| [Disclosure](#disclosure-and-the--close) | Show or hide a body under (or above) a trigger | Menu door, tabs, a control's list, groups, help | `disclosureNode`, group sugar |
 | [Group](#group) | A collapsible chunk of layout | Author configs | `{ kind: "group" }` in `root` |
 | [Menu](#menu) | A trigger that drops a picker below the row | Edit mode's `✚` | `{{ menu "apply" "▸" "▾" }}` |
 | [Picker grid](#picker-grid) | Choose one option from a list | Inside every menu | `{{ picker }}` (never authored directly) |
 | [Library pages](#library-pages) | A picker over a catalogue: one group per page, one row per item | Edit mode's `✚` | A domain that declares groups |
 | [Carousel](#carousel) | Step through options under a named label | Settings controls, configure mode | `{{ carousel "apply" "open" "label" }}` |
-| [Theme and layout previews](#theme-and-layout-previews) | Show what a pick will look like | Under the theme, style, preset, variation rings | `{{ themePreview }}`, `{{ layoutPreview }}` |
+| [Theme and layout previews](#theme-and-layout-previews) | Show what a pick will look like | Under the theme, style, preset, variation and shade lists | `{{ themePreview }}`, `{{ layoutPreview }}` |
 | [Confirm step](#confirm-step) | Two clicks for a destructive act | `⟲ reset all`, `/clear` | `confirmStep` |
 | [Setting control](#setting-control) | The control a setting gets, chosen by its domain | Settings menu, configure mode | `settingControl` |
 | [Settings menu](#the-settings-menu) | The door to every session and config setting | Every bar | Synthesized |
@@ -42,16 +40,16 @@ pnpm bar --links 🍫                             # …and list what every link 
 
 These are the existing pieces each part of the proposal touches. They are facts about today, not recommendations.
 
-- **General picker, state 1 (`[Preset]`, the field's name).** Nothing names its field today. A ring row shows a glyph and the current value (`▦ default ▸`, `🎨 tokyo-night ▸`), and the tabs are glyph-labelled. Configure mode is the one place controls carry words (`warning at %`, `theme`).
-- **State 2 (`< CurrentPresetName >`).** This is a [carousel](#carousel): `{{ carousel "apply" "open" "label" }}`, drawn as `◀ preset ▶`. Each arrow applies the previous or next value. Clicking the label fires `open`.
+- **General picker, state 1 (`[Preset]`, the field's name).** Every control names its field: a [carousel](#carousel) is `◀ ▦ preset ▶`, the theme control `🎨 theme ▀▀▀`, a toggle `☑ wrap`, a stepper `◀ padding 1 ▶`. The value is read in the list the label opens, and on the bar itself.
+- **State 2 (`< CurrentPresetName >`).** This is a [carousel](#carousel): `{{ carousel "apply" "open" "label" }}`, drawn as `◀ ▦ preset ▶`. Each arrow applies the previous or next value. Clicking the label fires `open`.
 - **State 3 (the list below, with `X`).** This is a [menu](#menu) body: a picker grid dropped below the row, led by `✕`, with `←`/`→` paging when it does not fit. Picking applies the value; whether the list stays open is the `closeOnPick` option (default: stays open).
 - **"The colour changes to show a menu is attached."** That is already the rule for every trigger: an open trigger wears its band's state colour, and the body below sits on a plane of the same hue ([disclosure](#disclosure-and-the--close)).
-- **Theme swatches.** `{{ themePreview }}` draws swatches of the current theme as one row of sample cells. It is the only swatch-like element today. There is no per-theme swatch next to a name.
-- **"Each theme name has the same colour and background as the rest of the UI, unlike today."** Today an option in the theme picker is painted in that theme's own background and primary colour, and an option in the style picker is painted in the base theme with that style applied. Every other picker's options wear the band's colours.
-- **The gear (`[⚙️]`) opening a separate menu.** This is how configure mode works today: `🔧` on a placement opens a body of that placement's settings.
+- **Theme swatches.** A theme or style carries a `▀▀▀` swatch beside its name (`🎨 theme ▀▀▀`, `◐ style ▀▀▀`), and the theme picker's pages are swatches alone. `{{ themePreview }}` samples the selected theme under the list.
+- **"Each theme name has the same colour and background as the rest of the UI, unlike today."** Built: every option in every list wears the band's colours, and a theme's or style's own colours are in its swatch.
+- **The gear (`[⚙️]`) opening a separate menu.** Built: the theme control's `⚙` opens style, variation and shade. Configure mode's `🔧` on a placement opens a body of that placement's settings the same way.
 - **`[Done]`.** Edit mode's `✓ done` / `✓ save` is the nearest element. Every other open body closes with `✕`.
-- **`(random)`.** No element today picks a random value.
-- **Moving style and variation into the theme picker.** Today theme, style, endcaps and variation are four sibling rings in the `🎨 look` tab.
+- **`(random)`.** The theme picker's `?` applies a random theme other than the one in force.
+- **Moving style and variation into the theme picker.** The theme control's `⚙` opens style, variation and shade; endcaps stays in the `🎨 look` tab.
 
 ## How a click works
 
@@ -98,10 +96,10 @@ What a click does depends on the action's kind:
 
 ### Toggle
 
-A [cycle action](#action-region) with one display per member. A click writes the next member, wrapping, so a two-member cycle is an on/off switch. The settings menu's layout tab, with `☑ wrap`, and edit mode's top row, with `☐ live`:
+A [cycle action](#action-region) with one display per member. A click writes the next member, wrapping, so a two-member cycle is an on/off switch. The first row of the settings menu's [`⚙ config` tab](#tabs) at 80 columns, with `☑ wrap` and `☑ update notice`, and edit mode's top row, with `☐ live`:
 
 ```
- ✕  + preset  ✎ arrange  ☑ wrap ↺  ◀ padding 1 ▶ ↺
+ ✕  ☑ wrap  ◀ padding 1 ▶  ☑ update notice  🧪 toggles
 ```
 
 ```
@@ -117,10 +115,10 @@ A [cycle action](#action-region) with one display per member. A click writes the
 
 ### Stepper
 
-Two [action regions](#action-region) on either side of a value. In the settings menu's layout tab, then in configure mode for `block`:
+Two [action regions](#action-region) on either side of a value. In the first row of the settings menu's `⚙ config` tab at 80 columns, then in configure mode for `block`:
 
 ```
- ✕  + preset  ✎ arrange  ☑ wrap ↺  ◀ padding 1 ▶ ↺
+ ✕  ☑ wrap  ◀ padding 1 ▶  ☑ update notice  🧪 toggles
 ```
 
 ```
@@ -135,12 +133,12 @@ Two [action regions](#action-region) on either side of a value. In the settings 
 
 The step is applied when the click lands, not when the bar was drawn, so several quick clicks add up.
 
-- **Use cases:** `padding`; the warning and error thresholds of `block`, `weekly`, `session`, `today` and `burnrate`, in configure mode.
+- **Use cases:** `padding` and `menu timeout`; the warning and error thresholds of `block`, `weekly`, `session`, `today` and `burnrate`, in configure mode.
 - **Authored as:** two `{ set, min, max, by }` actions; [setting control](#setting-control) generates them for a `{ min, max }` setting.
 
 ### Disclosure and the ✕ close
 
-A trigger that shows or hides a body. It is one primitive behind the settings door, every tab and ring, groups, edit-mode help and configure mode (`src/config/disclosure.ts`, `disclosureNode`). The trigger is a two-member [toggle](#toggle) over the body's key. The [group](#group) drawings below show one closed and open: the open body's first row is led by `✕`, and each later row by a blank of the same width, so the rows read as one panel.
+A trigger that shows or hides a body. It is one primitive behind the settings door, every tab and every list a control opens, groups, edit-mode help and configure mode (`src/config/disclosure.ts`, `disclosureNode`). The trigger is a two-member [toggle](#toggle) over the body's key. The [group](#group) drawings below show one closed and open: the open body's first row is led by `✕`, and each later row by a blank of the same width, so the rows read as one panel.
 
 | Region | Click |
 |---|---|
@@ -148,7 +146,7 @@ A trigger that shows or hides a body. It is one primitive behind the settings do
 | `✕` on the body's first row | session key ← `closed` |
 
 - **Placement:** a body either drops below its trigger's row, or rises above the whole bar. Only the settings door rises. When it does, the trigger rises with it and becomes the body's close (the door shows `✖` instead of a `✕`).
-- **Accordion:** triggers that share one key hold one open body between them: opening one closes the others. The settings tabs and rings work this way.
+- **Accordion:** triggers that share one key hold one open body between them: opening one closes the others. The settings tabs work this way, and so do the lists the menu's controls open.
 - **Colour:** an open trigger wears its band's state colour; the body sits on a plane of that hue, one band deeper per nesting level (`src/themes/decor.ts`, `bandFor`). The `✕` close is the trigger's own state colour (`src/render/disclosure-close.ts`).
 
 ### Group
@@ -249,67 +247,71 @@ At 200 columns the descriptions are cut later:
 
 ### Carousel
 
-A ring of options centred on the current value: neighbours in symmetric pairs, as many as fit the row, then `◀ CURRENT ▶`. It keeps no position of its own; its centre is whatever the setting currently is.
-
-The theme ring at 80 columns, then at 200:
+`◀ label ▶`: the label names the setting, never its value, and the arrows step the value either side of the one in force, wrapping at each end. It keeps no position of its own. The `🎨 look` tab's three carousels, then the theme gear's, whose style carries a swatch of the style in force:
 
 ```
- ✕  textual-light ◀ tokyo-night ▶ atom-one-dark
+ ✕  ◀ ✨ effect ▶  ◀ ✦ endcaps ▶  ☐ fade in/out  ◀ speed ▶
 ```
 
 ```
- ✕  solarized-light svg-export textual-ansi textual-dark textual-light ◀ tokyo-night ▶ atom-one-dark atom-one-light catppuccin-frappe catppuccin-latte catppuccin-macchiato
+ ✕  ◀ ◐ style ▀▀▀ ▶  ◀ 🎼 variation ▶  ◀ 🔆 shade ▶
 ```
 
-Short domains fit whole at either width: style, endcaps, variation and colour depth, in that order. The last line is charset, whose two members leave no symmetric pair to show:
+The label opens a [picker grid](#picker-grid) of every option under the control's row, on the page holding the value in force. The effect list fits either width; the endcaps list pages at 80 columns and fits at 200:
 
 ```
- ✕  bright inverted ◀ none ▶ vivid muted
- ✕  plain ◀ powerline ▶ capsule
- ✕  mono ◀ accent ▶ duo
- ✕  none ◀ truecolor ▶ 256
- ✕  ◀ unicode ▶
+ ✕  none shimmer pulse sparkle wheel
 ```
+
+```
+ ✕  powerline prism slant backslant flame pixel ice bubble capsule →
+```
+
+```
+ ✕  powerline prism slant backslant flame pixel ice bubble capsule wrapper metro stitch torn plain
+```
+
+The lists the settings menu's carousels open share one key, so one is open at a time. Picking an option leaves its list open.
 
 | Region | Click |
 |---|---|
 | `◀` / `▶` | applies the previous / next option |
 | The label | fires `open`, which shows the list of options |
 
-- **Use cases:** every option-valued setting in the settings menu; a placement's `theme` in configure mode.
+- **Use cases:** every option-valued setting in the settings menu but the theme, which has its own picker ([the first line](#the-first-line-and-the-save-cell)); a placement's `effect` in configure mode.
 - **Width:** the arrows and the label, whatever the domain holds.
 - **Authored as:** `{{ carousel "apply" "open" "label" }}` over a `{ set, from }` action. `src/render/carousel.ts`. A colour-valued domain adds a swatch of the applied value beside the label.
 
 ### Theme and layout previews
 
-Read-only rows under a ring, showing what the current pick looks like. Neither has a click.
+Read-only rows under a list, showing what the current pick looks like. Neither has a click.
 
 `{{ themePreview }}`, under the style list (and, as `{{ themePreview "apply" }}`, under the theme picker's swatches, sampling the selected theme): two rows of sample cells, each drawn by the function that draws that kind of cell on the bar (decoration tones; an open trigger and its plane, warning, error):
 
 ```
-    ~/code  main  opus  42%  5m  $1.20
-    ▾ open  menu   warn  error
+     ~/code  main  opus  42%  5m  $1.20
+     ▾ open  menu   warn  error
 ```
 
-`{{ layoutPreview }}`, under the preset and variation rings: one block per segment of the current preset's rows, in that row's colours, labelled with the segment's name:
+`{{ layoutPreview }}`, under the preset, variation and shade lists: one block per segment of the current preset's rows, in that row's colours, labelled with the segment's name:
 
 ```
-    menu  host  directory  gitaculous
-    model  context  autocompact  block  weekly
+     menu  fps  host  directory  gitaculous
+     model  context  autocompact  block  weekly
 ```
 
 - **Authored as:** `src/render/theme-preview.ts` (`themePreviewFuncs`), `src/render/layout-preview.ts` (`layoutPreviewFuncs`). Both fit the row: the theme preview drops trailing swatches, the layout preview shortens labels.
 
 ### Confirm step
 
-Two clicks for an act that cannot be cleanly undone. The first click arms; the armed state shows the confirm label and a `✕`. The save cell, disarmed and armed:
+Two clicks for an act that cannot be cleanly undone. The first click arms; the armed state shows the confirm label and a `✕`. The save cell, disarmed and armed, at 200 columns (at 80 it sits on its own row under the menu's first line):
 
 ```
-  ✖    ◁    ▦ default ▸ ↺    💾 save 1 ↶ ⟲
+  ✖    ◁    🎨 theme ▀▀▀    ⚙    ◀ ▦ preset ▶    ✎ arrange    💾 save 1 ↶ ⟲
 ```
 
 ```
-  ✖    ◁    ▦ default ▸ ↺    💾 save 1 ↶ ⟲ reset all? ✕
+  ✖    ◁    🎨 theme ▀▀▀    ⚙    ◀ ▦ preset ▶    ✎ arrange    💾 save 1 ↶ ⟲ reset all? ✕
 ```
 
 The command tray, disarmed and armed:
@@ -339,11 +341,12 @@ The control a setting gets, chosen from its domain. The same generator serves th
 
 | Domain | Control | Example |
 |---|---|---|
-| `"bool"` | [Toggle](#toggle) | `☑ wrap ↺`, `☑ ahead/behind` |
-| A range `{ min, max }` | [Stepper](#stepper) | `◀ padding 1 ▶ ↺`, `◀ warning at % 50 ▶` |
-| A word list or option domain | [Carousel](#carousel); in the settings menu, behind a ring row | `🎨 tokyo-night ▸ ↺`, `theme … ◀ bar ▶ …` |
+| `"bool"` | [Toggle](#toggle) | `☑ wrap`, `☑ ahead/behind` |
+| A range `{ min, max }` | [Stepper](#stepper) | `◀ padding 1 ▶`, `◀ warning at % 50 ▶` |
+| A word list or option domain | [Carousel](#carousel) | `◀ ✨ effect ▶`, `◀ renderer ▶` |
+| A domain of themes | The theme picker ([the first line](#the-first-line-and-the-save-cell)) | `🎨 theme ▀▀▀`, configure mode's `theme ▀▀▀` |
 
-Every control writes a session draft. In the settings menu, a control also has a `↺` while resetting it would change something (a draft, or a value the config file holds at a layer the reset clears), which resets that setting at every layer (`reset-config`); its tab is marked `•` while any control in it shows one. The drawings here show every `↺`.
+Every control writes a session draft. In the settings menu, a control also has a `↺` while resetting it would change something (a draft, or a value the config file holds at a layer the reset clears), which resets that setting at every layer (`reset-config`); its tab is marked `•` while any control in it shows one. The drawings here are of a fresh session, so only the `compact` pick shows one.
 
 - **Authored as:** `settingControl` in `src/config/setting-control.ts`. Which tab a global setting appears in is the `PLACE` table in `src/config/menu-places.ts`.
 
@@ -353,87 +356,136 @@ Every control writes a session draft. In the settings menu, a control also has a
 
 ### Door
 
+At 80 columns, then at 200:
+
 ```
- 🍫  ⇄ bmf@mmu  ~/c/cc-candybar  ⎇ docs/ui-elements-inventory +1 ? ▸
+ 🍫   polled  ⇄ bmf@u2  ~/c/cc-candybar (⊫ menus-8zu)
+ ⎇ brandon-menus-sjhy.8zu ▸
  ✱ Opus 4.8  ◔ 48,000 (76%)  ⇲ auto −  ◱ 63% (2h 1m)  ◑ 21% (5d)
 ```
+
+```
+ 🍫   polled  ⇄ bmf@u2  ~/c/cc-candybar (⊫ menus-8zu)  ⎇ brandon-menus-sjhy.8zu ▸
+ ✱ Opus 4.8  ◔ 48,000 (76%)  ⇲ auto −  ◱ 63% (2h 1m)  ◑ 21% (5d)
+```
+
+Beside the door, `polled` says how the bar is redrawn: `polled` while Claude Code polls it, `≤N fps` while a [lane](#tabs) pushes it. N is the most frames a second the lane draws it at: the moving rate while its pane is on a screen, one a second while it is not. It has no click.
 
 Clicking `🍫` opens the menu above the bar. The door rises with it as `✖`, in the theme's error colour, and the bar's rows stay as they were:
 
 ```
- ✖  ◁  ▦ default ▸ ↺
-    ▾ ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
- ✕  ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config
-    /compact /model /clear
- ⇄ bmf@mmu  ~/c/cc-candybar  ⎇ docs/ui-elements-inventory +1 ? ▸
+ ✖  ◁  🎨 theme ▀▀▀  ⚙  ◀ ▦ preset ▶  ✎ arrange
+    ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
+  polled  ⇄ bmf@u2  ~/c/cc-candybar (⊫ menus-8zu)
+ ⎇ brandon-menus-sjhy.8zu ▸
  ✱ Opus 4.8  ◔ 48,000 (76%)  ⇲ auto −  ◱ 63% (2h 1m)  ◑ 21% (5d)
 ```
 
-Same at 80 and 200 columns. The menu is two lines, then the open tab's body.
+The menu's two lines are the same at 200 columns; only the bar's own rows differ. No tab is open until one is clicked.
 
 | Region | Click |
 |---|---|
-| `🍫` / `✖` | session `candybar.menu` ← `open` / `closed`. Closing also disarms every confirm, closes any open ring, and returns the tab to `session`, so the menu reopens at its top |
+| `🍫` / `✖` | session `candybar.menu` ← `open` / `closed`. Closing also disarms every confirm and closes every list and tab open in the menu, so it reopens with only its two lines |
 | `◁` | `back`: undoes the last navigating click (what was open, which tab). Drawn muted and inert while there is nothing to go back to |
 
 - **Glyph:** `globals.menuGlyph` (default `🍫`). An author may place the `candybar.menu` segment elsewhere, but never under a `when` or inside a disclosure body: the menu is visible under every condition.
 
-### Preset control and save cell
+### The first line and the save cell
 
 The first line's controls. On a fresh session:
 
 ```
- ✖  ◁  ▦ default ▸ ↺
+ ✖  ◁  🎨 theme ▀▀▀  ⚙  ◀ ▦ preset ▶  ✎ arrange
 ```
 
-With a draft (here, padding stepped to 2), the save cell appears; its parts show only while each has something to do:
+With a draft (here, padding stepped to 2), the save cell appears; its parts show only while each has something to do. At 80 columns it takes a row of its own:
 
 ```
-  ✖    ◁    ▦ default ▸ ↺    💾 save 1 ↶ ⟲
+  ✖    ◁    🎨 theme ▀▀▀    ⚙    ◀ ▦ preset ▶    ✎ arrange
+  💾 save 1 ↶ ⟲
+```
+
+At 200 it ends the first line:
+
+```
+  ✖    ◁    🎨 theme ▀▀▀    ⚙    ◀ ▦ preset ▶    ✎ arrange    💾 save 1 ↶ ⟲
 ```
 
 | Region | Click |
 |---|---|
-| `▦ default ▸` | opens the preset ring (below) |
-| `↺` | resets the preset pick at every layer |
+| `🎨 theme ▀▀▀` | opens the theme picker (below); the swatch is the theme in force |
+| `⚙` | opens style, variation and shade, three [carousels](#carousel) |
+| `◀ ▦ preset ▶` | [carousel](#carousel) over the presets; the label opens the preset list (below) |
+| `✎ arrange` | enters [edit mode](#edit-mode); reads `✎ done` while in it |
+| `↺` | after a control: resets that setting at every layer; shown while that would change something |
 | `💾 save N` | writes the N drafts to the config file; shown while N > 0 |
 | `↶` / `↷` | undo / redo a settings change; shown while the history has a step |
 | `⟲` | [confirm step](#confirm-step) for reset all: every control's `↺` in one click; shown while a reset would change something |
 
-The preset ring, with the layout preview under it:
+The theme picker at 80 columns, then at 200. While it is open, its label names the theme in force. Under the swatches, the [theme preview](#theme-and-layout-previews) samples the selected theme:
 
 ```
- ✖  ◁  ▦ default ▾ ↺
- ✕  git usage dense ◀ default ▶ compact verbose zen
-     menu  host  directory  gitaculous
+ ✖  ◁  tokyo-night ▀▀▀  ⚙  ◀ ▦ preset ▶  ✎ arrange
+ ✕  ◀ ? ▶ ←  ▀▀▀   ▀▀▀  [▀▀▀]
+     ~/code  main  opus  42%  5m  $1.20
+     ▾ open  menu   warn  error
+```
+
+```
+ ✕  ◀ ? ▶  ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀  [▀▀▀]
+```
+
+| Region | Click |
+|---|---|
+| `◀` / `▶` | applies the previous / next theme, turning to its page |
+| `?` | applies a random theme other than the one in force, chosen when the bar is drawn |
+| `←` / `→` | the previous / next page of swatches; shown while there is one |
+| A swatch | applies that theme; the one in force is bracketed |
+| `✕` / the open label | closes the picker |
+
+The gear's carousels:
+
+```
+ ✕  ◀ ◐ style ▀▀▀ ▶  ◀ 🎼 variation ▶  ◀ 🔆 shade ▶
+```
+
+The style list carries the theme preview; the variation and shade lists carry the layout preview. While the look these make differs from the theme's own default, a cell after them, `⤓ default for <theme> ▀▀▀`, saves it as that theme's default in the config file.
+
+The preset list, with the layout preview under it, the same at 80 and 200 columns:
+
+```
+ ✖  ◁  🎨 theme ▀▀▀  ⚙  ◀ ▦ preset ▶  ✎ arrange
+ ✕  default compact verbose zen git usage dense
+     menu  fps  host  directory  gitaculous
      model  context  autocompact  block  weekly
-    ▾ ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
+    ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
 ```
 
-Picking `compact` changes the whole bar, including its padding, which the preset sets to 0:
+Picking `compact` changes the whole bar, including its padding, which the preset sets to 0, and the list stays open:
 
 ```
-✖◁▦ compact ▾ ↺💾 save 1 ↶ ⟲
-✕usage dense default ◀ compact ▶ verbose zen git
-  menu  directory  gitaculous  context
- ▾ ⚡ session🎨 look📐 layout⚙ config🧰 tools
+✖◁🎨 theme ▀▀▀⚙◀ ▦ preset ▶ ↺✎ arrange💾 save 1 ↶ ⟲
+✕default compact verbose zen git usage dense
+  menu  fps  directory  gitaculous  context
+ ⚡ session🎨 look📐 layout⚙ config🧰 tools
 ```
 
-On a preset the user authored, the ring's body also holds `🚮 delete <name>`.
+On a preset the user authored, a row under the list holds `🚮 delete <name>`.
 
 ### Tabs
 
 ```
+    ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
+```
+
+One tab is open at a time; it leads with `▾`. A tab click writes `candybar.tab` and disarms the command tray's confirm; clicking the open tab closes it. The open tab's body drops below, led by `✕`. Each body below is the same at 80 and 200 columns unless both are shown.
+
+**`⚡ session`:**
+
+```
     ▾ ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
-```
-
-One tab is open at a time; it leads with `▾`. A tab click writes `candybar.tab` and disarms the command tray's confirm; clicking the open tab closes it. The open tab's body drops below, led by `✕`.
-
-**`⚡ session`**, the default:
-
-```
  ✕  ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config
-    /compact /model /clear
+    /compact /model /clear  ⇲ auto −
 ```
 
 | Region | Click |
@@ -445,45 +497,64 @@ One tab is open at a time; it leads with `▾`. A tab click writes `candybar.tab
 | `↗ config` | opens the config file the bar renders from in VS Code (shown when there is one) |
 | `/compact` / `/model` | types the command into this session's Claude Code pane |
 | `/clear` | [confirm step](#confirm-step), then types `/clear` |
+| `⇲ auto −` | the [autocompact](#bundled-segments-with-clicks) control the bar draws |
 
-These are the same trays the opt-in `toolbar` and `commands` segments draw (`src/config/quick-actions.ts`, `src/config/command-tray.ts`).
+The copy-and-open cells and the slash commands are the same trays the opt-in `toolbar` and `commands` segments draw (`src/config/quick-actions.ts`, `src/config/command-tray.ts`); `⇲ auto −` is the autocompact control, laid beside the command tray.
 
 **`🎨 look`:**
 
 ```
- ✕  🎨 tokyo-night ▸ ↺  ◐ none ▸ ↺  ✦ powerline ▸ ↺  🎼 accent ▸ ↺
-```
-
-Each is a ring row: glyph, current value, `▸` to open its [carousel](#carousel), `↺` to reset. The rings share one accordion key, so one is open at a time. Open theme ring, at 80 columns:
-
-```
- ✕  🎨 tokyo-night ▾ ↺  ◐ none ▸ ↺  ✦ powerline ▸ ↺  🎼 accent ▸ ↺
- ✕  textual-light ◀ tokyo-night ▶ atom-one-dark
-     ~/code  main  opus  42%  5m  $1.20   ▾ open  menu   warn  error
-```
-
-The style ring also carries the theme preview; the variation ring carries the layout preview; endcaps carries none.
-
-**`📐 layout`:**
-
-```
- ✕  + preset  ✎ arrange  ☑ wrap ↺  ◀ padding 1 ▶ ↺
+ ✕  ◀ ✨ effect ▶  ◀ ✦ endcaps ▶  ☐ fade in/out  ◀ speed ▶
 ```
 
 | Region | Click |
 |---|---|
-| `+ preset` | saves the active preset, with this session's settings, as `custom-N` in the config file, and switches to it |
-| `✎ arrange` | enters [edit mode](#edit-mode); reads `✎ done` while in it |
+| `◀ ✨ effect ▶` | [carousel](#carousel) over the bar's effects |
+| `◀ ✦ endcaps ▶` | carousel over the endcap styles |
+| `☐ fade in/out` | toggles `transitions` |
+| `◀ speed ▶` | carousel over the animation speeds, `1x` to `20x` |
+
+**`📐 layout`:**
+
+```
+ ✕  + preset
+```
+
+`+ preset` saves the active preset, with this session's settings, as `custom-N` in the config file, and switches to it.
+
+**`⚙ config`**, at 80 columns, then at 200:
+
+```
+ ✕  ☑ wrap  ◀ padding 1 ▶  ☑ update notice  🧪 toggles
+ ◀ menu timeout 120 ▶  ◀ renderer ▶  (?)
+```
+
+```
+ ✕  ☑ wrap  ◀ padding 1 ▶  ☑ update notice  🧪 toggles  ◀ menu timeout 120 ▶  ◀ renderer ▶  (?)
+```
+
+| Region | Click |
+|---|---|
 | `☑ wrap` | toggles `autoWrap` |
 | `◀ padding 1 ▶` | [stepper](#stepper) for padding |
+| `☑ update notice` | toggles the update notice |
+| `🧪 toggles` | opens the lane toggles (below) |
+| `◀ menu timeout 120 ▶` | stepper for the seconds a menu stays open with no click, by 15 |
+| `◀ renderer ▶` | carousel over where the bar is drawn; its list explains each. Offered only inside tmux, as in these drawings |
+| `(?)` | help for the renderer |
 
-**`⚙ config`:**
+The lane toggles, at 80 columns, then at 200:
 
 ```
- ✕  🔣 unicode ▸ ↺  🌈 truecolor ▸ ↺  ☑ update notice ↺
+ ✕  ☐ 🧪 band (A)  (?)  ☐ 🧪 statusline (B)  (?)  ☐ 🧪 tmux pane (C)
+ (?)
 ```
 
-Charset and colour depth are rings; update notice is a toggle.
+```
+ ✕  ☐ 🧪 band (A)  (?)  ☐ 🧪 statusline (B)  (?)  ☐ 🧪 tmux pane (C)  (?)
+```
+
+Each is a toggle, and its `(?)` says what its lane does. While a lane is on, its toggle (and the renderer, set to tmux) is followed by what the lane is doing: a spinner and `N fps` while something is subscribed to it, with `· off screen` when its pane is not on a screen, or `no subscriber`.
 
 **`🧰 tools`:**
 
@@ -561,12 +632,12 @@ The `(?)` body:
 
 ## Configure mode
 
-`🔧` on a placement opens that placement's settings below its name, one [setting control](#setting-control) per setting. While a placement is configured, the bar shows live output rather than names, so a change is visible as it is made. Configuring `gitaculous`, at 80 columns:
+`🔧` on a placement opens that placement's settings below its name, one [setting control](#setting-control) per setting. While a placement is configured, the bar shows live output rather than names, so a change is visible as it is made. Configuring `gitaculous`, at 80 columns, under the menu's two lines:
 
 ```
  ✓ done  |  ☐ live
- 🍫  |  ✚  |  ✖ ⇄ bmf@mmu 🔧  |  ✚  |  ✖ ~/c/cc-candybar 🔧  |  ✚
- ✖ gitaculous 🔧  |  ✖ ⎇ docs/ui-elements-inventory +1 ? ▸ 🔧  |  ✚
+  polled  |  ✚  |  ✖ ⇄ bmf@u2 🔧  |  ✚  |  ✖ ~/c/cc-candybar (⊫ menus-8zu) 🔧
+ ✚  |  ✖ gitaculous 🔧  |  ✖ ⎇ brandon-menus-sjhy.8zu ▸ 🔧  |  ✚
  ✕  |  ☑ ahead/behind
     |  ☑ dirty flags
     |  ☑ operation
@@ -575,23 +646,23 @@ The `(?)` body:
     |  ☑ stash
     |  ☑ upstream
     |  ☑ time since commit
-    |  theme textual-light tokyo-night ◀ bar ▶ atom-one-dark atom-one-light
+    |  theme ▀▀▀
+    |  ◀ effect ▶
+ ✚  |  ✖ ✱ Opus 4.8 🔧  |  ✚  |  ✚  |  ✖ ◔ 48,000 (76%) 🔧  |  ✚
 ```
 
-At 200 columns the theme ring is wider and sits under an empty row:
+`theme ▀▀▀` is the [theme picker](#the-first-line-and-the-save-cell); `◀ effect ▶` is a [carousel](#carousel). At 200 columns the bar's rows are wider and the body is the same.
+
+Configuring `block`, at 80 columns. Its row wraps, and the body hangs under the row's last line:
 
 ```
-    |  ☑ time since commit
-
- theme solarized-light svg-export textual-ansi textual-dark textual-light tokyo-night ◀ bar ▶ atom-one-dark atom-one-light catppuccin-frappe catppuccin-latte catppuccin-macchiato catppuccin-mocha
-```
-
-Configuring `block`:
-
-```
+ ✚  |  ✖ ✱ Opus 4.8 🔧  |  ✚  |  ✚  |  ✖ ◔ 48,000 (76%) 🔧  |  ✚
+ ✖ ⇲ auto − 🔧  |  ✚  |  ✚  |  ✖ block 🔧  |  ✖ ◱ 63% (2h 1m) 🔧  |  ✚
+ ✖ ◑ 21% (5d) 🔧  |  ✚  |  ✚  |  (?)
  ✕  |  ◀ warning at % 50 ▶
     |  ◀ error at % 80 ▶
-    |  theme textual-light tokyo-night ◀ bar ▶ atom-one-dark atom-one-light
+    |  theme ▀▀▀
+    |  ◀ effect ▶
 ```
 
 | Region | Click |
@@ -600,7 +671,7 @@ Configuring `block`:
 | `✕` | closes configure mode, back to arranging |
 | Another `🔧` | configures that placement instead (one at a time) |
 
-- **Settings:** every placement has `theme` (`bar` follows the bar's theme; any installed theme pins this placement). Bundled segments declare more: `gitaculous` has eight toggles; `block` and `weekly` have warning and error thresholds; `session` and `today` have a budget and a warning threshold; `burnrate` has two time thresholds.
+- **Settings:** every placement has `theme` (`bar` follows the bar's theme; any installed theme pins this placement) and `effect`. Bundled segments declare more: `gitaculous` has eight toggles; `block` and `weekly` have warning and error thresholds; `session` and `today` have a budget and a warning threshold; `burnrate` has two time thresholds.
 - **Saving:** `✓ save` writes each draft into the placement in the config file, turning a bare `"block"` into `{ seg: "block", settings: { … } }`.
 
 ## Bundled segments with clicks
@@ -724,11 +795,11 @@ Found while drawing the above. Each is for Brandon to decide; none is changed he
 
 1. **A value outside a carousel's domain counts as its first member.** A stale value steps from the first member, so `▶` skips that member, and a colour-valued domain shows the first member's swatch.
 2. **The doctor's result row does not fit 80 columns.** It is 113 cells, under an empty row; at 200 columns it sits on its own indented row with no empty row.
-3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ docs/… ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`. At 200 columns the theme control also moves under an empty row and loses the body's `|` lead.
+3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ brandon-menus-sjhy.8zu ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`.
 4. **Two `✚` side by side.** Between `model` and `context`, edit mode draws adjacent `✚` with nothing between them, because `context` and `autocompact` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing leaves its two `✚` adjacent too.
 5. **`✖` means two things on one screen.** In edit mode with the menu open, `✖` closes the menu (the door) and `✖` removes a segment, both visible at once. Bodies close with `✕`.
-6. **Four ways to choose one value.** A [menu](#menu)'s grid (`✕ asc desc`), a [carousel](#carousel) (`◀ none ▶`), a ring row that opens a carousel (`◐ none ▸`), and [library pages](#library-pages). The settings menu uses the ring row and carousel; edit mode uses the menu and library; nothing bundled uses a bare menu over a plain list.
-7. **No control names its field.** The settings rings and tabs are labelled by glyph (`🎨`, `◐`, `✦`, `🎼`, `🔣`, `🌈`), while configure mode labels controls with words (`theme`, `warning at %`). This is the proposal's state 1 complaint, and the two conventions differ today.
+6. **Three ways to choose one value.** A [carousel](#carousel) whose label opens a list (`◀ ✨ effect ▶`), the theme picker's pages of swatches (`◀ ? ▶ ← ▀▀▀ [▀▀▀]`), and [library pages](#library-pages). The settings menu and configure mode use the carousel and the theme picker; edit mode's `✚` is a [menu](#menu) over the library. A carousel's list is a menu's picker grid too, so the two share one list; nothing bundled uses a bare menu over a plain list.
+7. **Resolved: every control names its field.** A carousel's label is the setting's name, not its value (`◀ ▦ preset ▶`, `◀ speed ▶`); over a colour domain a swatch of the value follows the name (`◀ ◐ style ▀▀▀ ▶`). The theme control reads `🎨 theme ▀▀▀` and names the theme in force only while its picker is open, a toggle is its name and a box, and a stepper shows its number after its name (`◀ padding 1 ▶`). The labels differ only in their glyph: the settings menu's carry one (`✨ effect`), while some of its labels (`speed`, `renderer`, `menu timeout`) and every configure-mode label (`theme`, `effect`) carry none.
 8. **Resolved (brandon-menu-ia-q30.nk8): `↺` shows only when it would do something**, as `⟲` does, and a tab holding one is marked `•`.
 9. **Two confirm phrasings.** `⟲ reset all? ✕` and `/clear ✓ confirm ✕` are the same [confirm step](#confirm-step) with different confirm labels.
 10. **Unused pieces.** The `toolbar-toggle` verb is in the verb table but nothing emits it, and it writes a session key nothing reads. `{{ picker }}` written by hand and `{{ gauge }}` have no bundled caller (both are author-facing).
