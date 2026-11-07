@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-662",
+      "ref": "refs/pull/662/merge",
+      "sha": "ec29b12af75cebe7cfb40fba7f212644e4b09149",
+      "timestamp": "2026-11-07T00:17:04.767Z",
+      "commits": [
+        {
+          "sha": "ec29b12af75cebe7cfb40fba7f212644e4b09149",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T00:16:18Z",
+          "message": "Merge f57af33ee2d7e8ef3b941b7d3a9238eaa258fecc into 71d231b7b17cb286ba143c6b7c09d3046d2af023\n"
+        },
+        {
+          "sha": "f57af33ee2d7e8ef3b941b7d3a9238eaa258fecc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:15:53-07:00",
+          "message": "fix(recording): a state write that ends the recording offers no document after it; tests prove the old run shows until the new one lands (candybar-gather-renderer-76bb.6pj.09q)\n"
+        },
+        {
+          "sha": "d1954c4706ec91671ff0d225411acf040992cc27",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:08:39-07:00",
+          "message": "fix(recording): a click's state crosses the recording ahead of the document it keyed, so a replay keeps the old run's value until the new one lands (candybar-gather-renderer-76bb.6pj.09q)\n\nA recording now writes a state line whenever the session's clicks' state moved\nbefore a document; the replay restores it there instead of only at the next\ndraw. RECORDING_VERSION 6 -> 7.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "71d231b7b17cb286ba143c6b7c09d3046d2af023",
@@ -20,28 +49,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-07T00:03:48Z",
           "message": "chore(release): set `package.json` to 1.208.3 [skip ci]\n\n## [1.208.3](https://github.com/promptctl/cc-candybar/compare/v1.208.2...v1.208.3) (2026-11-07)\n\n### Bug Fixes\n\n* **lanes:** a restart refuses a Claude Code that now holds another session, instead of resuming the old one over it (candybar-gather-renderer-76bb.1dh.9ix) ([#660](https://github.com/promptctl/cc-candybar/issues/660)) ([873a8e0](https://github.com/promptctl/cc-candybar/commit/873a8e0e0be2d843b7d0b4c308831e2d20b5bde1))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-662",
-      "ref": "refs/pull/662/merge",
-      "sha": "03d6633e98865b8c6778c25ed2e23aab5778df91",
-      "timestamp": "2026-11-07T00:09:49.397Z",
-      "commits": [
-        {
-          "sha": "03d6633e98865b8c6778c25ed2e23aab5778df91",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:08:53-07:00",
-          "message": "Merge d1954c4706ec91671ff0d225411acf040992cc27 into 43914609cbef3cd0bb0f7de0964d65ebd7265c59\n"
-        },
-        {
-          "sha": "d1954c4706ec91671ff0d225411acf040992cc27",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:08:39-07:00",
-          "message": "fix(recording): a click's state crosses the recording ahead of the document it keyed, so a replay keeps the old run's value until the new one lands (candybar-gather-renderer-76bb.6pj.09q)\n\nA recording now writes a state line whenever the session's clicks' state moved\nbefore a document; the replay restores it there instead of only at the next\ndraw. RECORDING_VERSION 6 -> 7.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },

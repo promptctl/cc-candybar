@@ -77149,7 +77149,6 @@ function sessionRecorder(views, log) {
     rec.sink.end(how);
   };
   const write = (sessionId2, rec, line) => {
-    if (line.kind === "facts" && line.facts === rec.document) return;
     if (line.kind === "declared" && line.request === rec.declaration) return;
     try {
       rec.sink.write(line);
@@ -77172,7 +77171,9 @@ function sessionRecorder(views, log) {
     if (rec.state === null || !sameClickState(rec.state, state)) {
       write(sessionId2, rec, { kind: "state", state });
     }
-    write(sessionId2, rec, { kind: "facts", ...line });
+    if (open2.get(sessionId2)?.has(rec)) {
+      write(sessionId2, rec, { kind: "facts", ...line });
+    }
   };
   const writeTurn = (sessionId2, rec, view) => {
     const held = view.source.held();
@@ -87189,12 +87190,13 @@ init_globals();
 
 // src/daemon/process-fingerprint.ts
 init_globals();
+var START_TIME_READ_BUDGET_MS = 2e3;
 async function readStartTime(pid2, launch2) {
   const res = await launch2({
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid2)],
     category: "process-fingerprint",
-    timeoutMs: 2e3,
+    timeoutMs: START_TIME_READ_BUDGET_MS,
     // [FRAMING:representation] Pin BOTH locale and timezone so the token is
     // deterministic across daemons — the writer and reader must render the same
     // process identically for opaque string equality to be sound. LC_ALL=C fixes
