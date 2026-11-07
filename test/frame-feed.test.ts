@@ -814,8 +814,8 @@ describe("a feed's draws and its summary", () => {
     clock.advance(1);
     close();
     expect(state.renders).toBe(2);
-    expect(log.at(-1)).toContain(
-      " woke=data:1,state:0,reload:0,visibility:0 coalesced=1 ",
+    expect(log.at(-1)).toMatch(
+      / woke=data:1,state:0,reload:0,visibility:0 wokeAt=data:\d+,state:-,reload:-,visibility:- coalesced=1 /u,
     );
   });
 
