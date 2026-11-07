@@ -57109,13 +57109,8 @@ var config = {
       ...configProblems(config2),
       ...repoAwaitingLines(config2.repos)
     ];
-    const settled4 = repoSettledLines(config2.repos);
-    return reason === void 0 ? { ok: true, note: [judged, ...settled4].join("; ") } : {
-      ok: false,
-      reason: `${judged}: ${reason}`,
-      more,
-      notes: settled4
-    };
+    const said = (head) => [head, ...repoSettledLines(config2.repos)].join("; ");
+    return reason === void 0 ? { ok: true, note: said(judged) } : { ok: false, reason: said(`${judged}: ${reason}`), more };
   }
 };
 var REINSTALL = "re-run `cc-candybar install`";
@@ -57721,7 +57716,7 @@ function doctorReportKeys(checkName) {
   };
 }
 function configFields({ target, repos }) {
-  return `configTarget=${target.source} repos=${repos.awaiting.length}/${repos.declined.length}/${repos.unproven.length}`;
+  return `configTarget=${target.source} repos=${repos.awaiting.length}/${repos.declined.length} unproven=${repos.unproven.length}`;
 }
 function linkFields(terminal, clicked) {
   const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
@@ -69909,7 +69904,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.209.0";
+var PACKAGE_VERSION = "1.210.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {

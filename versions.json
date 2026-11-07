@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-683",
+      "ref": "refs/pull/683/merge",
+      "sha": "c58308a733ebb147cef7dd8d321c3aadad4d72fc",
+      "timestamp": "2026-11-07T10:25:06.556Z",
+      "commits": [
+        {
+          "sha": "c58308a733ebb147cef7dd8d321c3aadad4d72fc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:23:45Z",
+          "message": "Merge 5e74f309c66bdb5160e50f73a3d3396a406fe9a0 into 1f5014d66591bcdbb9dac6e5fb1aa8619e0bf5fd\n"
+        },
+        {
+          "sha": "5e74f309c66bdb5160e50f73a3d3396a406fe9a0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:23:32-07:00",
+          "message": "fix(doctor): settled repositories ride the config row's text in either verdict (brandon-unfiled-3248.qo8j)\n\nA declined repository named only in a failed verdict's notes vanished\nfrom the bar while the row failed. It now rides the reason after the\nfirst problem, as it rides the note after the chain, so the bar and the\nCLI name it whatever the verdict and neither counts it. The doctor's log\nkeeps unproven worktrees in a field of their own, since each is also\nawaiting or declined.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "0ee0c4ad2bb81a11ff9a52e845d34181064ec98b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:19:39-07:00",
+          "message": "fix(doctor): a repository answer during the probes refuses a stale report; settled lines count as no problem (brandon-unfiled-3248.qo8j)\n\nThe landing compares the gate by its lines, so an awaiting repository\ndeclined mid-run with the config unchanged gathers again. A failed\nverdict carries notes beside its problems, so a declined repository is\nlisted by the CLI and counted by neither the bar's row nor the log. The\ndoctor's log line carries the gate's counts, and one empty-gate fixture\nserves every test.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "041c7d44ea2bc6cde3d989e5282816f9130101b1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:11:46-07:00",
+          "message": "fix(doctor): the config row names a repository config the load left out (brandon-unfiled-3248.qo8j)\n\nThe doctor's config load now carries the repository gate it ruled, so the\nconfig row says why a project's .cc-candybar.json5 is not in the chain. A\nrepository awaiting approval fails the row and names its directory. A\ndeclined repository, and a directory whose worktree claim is unproven, ride\nthe row's text without failing it: only reversing the user's own answer\nwould clear a declined one. repoGateLines is split into the awaiting and\nthe settled lines, so check, the demo and the doctor share one wording.\n\nAn unread answers book already reaches the row as the load's own advisory,\nso the doctor takes the awaiting lines alone and names that notice once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-682",
       "ref": "refs/pull/682/merge",
       "sha": "cf3fad5f4978a0cb9df71f8b0d4fc1516ba9b572",
@@ -77,35 +113,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:58:53-07:00",
           "message": "fix(colour): the door's ✖ keeps its truecolor contrast at lower depths, never lifted to the quiet floor (brandon-unfiled-3248.692p)\n\nkeptOn floored its lower-depth contrast at the quiet floor for a reason\nthat no longer holds: grounds are named shades, not repaired ones. The\nfloor only acted on the accepted farthest-red case, where it let rounding\npick a non-red that clears 3:1. The floor is now min(text floor, held),\nand the comment states the reasons that hold of named grounds.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-683",
-      "ref": "refs/pull/683/merge",
-      "sha": "0b5e55e4e037958d56869265310891bb9c9bcdb0",
-      "timestamp": "2026-11-07T10:21:56.082Z",
-      "commits": [
-        {
-          "sha": "0b5e55e4e037958d56869265310891bb9c9bcdb0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T10:19:50Z",
-          "message": "Merge 0ee0c4ad2bb81a11ff9a52e845d34181064ec98b into 2e9ea2dce98b1908a16f3ffa2128310350ebc817\n"
-        },
-        {
-          "sha": "0ee0c4ad2bb81a11ff9a52e845d34181064ec98b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:19:39-07:00",
-          "message": "fix(doctor): a repository answer during the probes refuses a stale report; settled lines count as no problem (brandon-unfiled-3248.qo8j)\n\nThe landing compares the gate by its lines, so an awaiting repository\ndeclined mid-run with the config unchanged gathers again. A failed\nverdict carries notes beside its problems, so a declined repository is\nlisted by the CLI and counted by neither the bar's row nor the log. The\ndoctor's log line carries the gate's counts, and one empty-gate fixture\nserves every test.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "041c7d44ea2bc6cde3d989e5282816f9130101b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:11:46-07:00",
-          "message": "fix(doctor): the config row names a repository config the load left out (brandon-unfiled-3248.qo8j)\n\nThe doctor's config load now carries the repository gate it ruled, so the\nconfig row says why a project's .cc-candybar.json5 is not in the chain. A\nrepository awaiting approval fails the row and names its directory. A\ndeclined repository, and a directory whose worktree claim is unproven, ride\nthe row's text without failing it: only reversing the user's own answer\nwould clear a declined one. repoGateLines is split into the awaiting and\nthe settled lines, so check, the demo and the doctor share one wording.\n\nAn unread answers book already reaches the row as the load's own advisory,\nso the doctor takes the awaiting lines alone and names that notice once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
