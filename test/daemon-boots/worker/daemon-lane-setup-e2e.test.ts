@@ -294,7 +294,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     expect(await paneSession()).toEqual({ ok: true, paneSession: sid });
     expect(await paneFactOf("lane-shell")).toBe(
       valueOf(
-        `unconfirmed: the process that ran its statusline (pid ${shell}) is no Claude Code whose session can be read: it keeps no session record at ${path.join(pane.claudeConfigDir!, "sessions", `${shell}.json`)} (update Claude Code with \`claude update\`: recent releases keep one)`,
+        `unconfirmed: the process that ran its statusline (pid ${shell}) is no Claude Code whose session can be read: it keeps no session record at ${path.join(pane.claudeConfigDir!, "sessions", `${shell}.json`)} (update Claude Code with \`claude update\`: recent releases keep one). A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`,
       ),
     );
     expect(await paneFactOf("lane-stranger")).toBe(

@@ -260,42 +260,60 @@ async function paneClaude(
 // process holds (measured on 2.1.299: `{pid, sessionId, cwd, status, ...}`,
 // rewritten when a `/clear` changes the session). One synchronous read, so a
 // restart judges it and kills with no wait between.
+// [LAW:no-silent-failure] Claude Code rewrites its record in place (the file
+// keeps the birth time of its process), so a read can land between the
+// truncate and the write: a record that does not parse is read once more, and
+// that read says what it found.
 export function heldSessionIn(file: string): HeldSession {
+  const first = recordIn(file);
+  return first.torn ? recordIn(file).held : first.held;
+}
+
+function recordIn(file: string): {
+  readonly held: HeldSession;
+  readonly torn: boolean;
+} {
   let text: string;
   try {
     text = fs.readFileSync(file, "utf8");
   } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "ENOENT"
-      ? {
-          kind: "unread",
-          why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`,
-        }
-      : { kind: "unread", why: (e as Error).message };
+    return {
+      torn: false,
+      held:
+        (e as NodeJS.ErrnoException).code === "ENOENT"
+          ? {
+              kind: "unread",
+              why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`,
+            }
+          : { kind: "unread", why: (e as Error).message },
+    };
   }
   let record: unknown;
   try {
     record = JSON.parse(text);
-  } catch {
-    // [LAW:no-silent-failure] Claude Code rewrites its record in place (the
-    // file keeps the birth time of its process), so a read can land between
-    // the truncate and the write: a record that does not parse is read once
-    // more before it is called unreadable.
-    try {
-      record = JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch (e) {
-      return {
+  } catch (e) {
+    return {
+      torn: true,
+      held: {
         kind: "unread",
         why: `its session record ${file} is not JSON (${(e as Error).message})`,
-      };
-    }
+      },
+    };
   }
   const sessionId =
     typeof record === "object" && record !== null && "sessionId" in record
       ? record.sessionId
       : undefined;
-  return typeof sessionId === "string" && sessionId !== ""
-    ? { kind: "holds", sessionId }
-    : { kind: "unread", why: `its session record ${file} names no session` };
+  return {
+    torn: false,
+    held:
+      typeof sessionId === "string" && sessionId !== ""
+        ? { kind: "holds", sessionId }
+        : {
+            kind: "unread",
+            why: `its session record ${file} names no session`,
+          },
+  };
 }
 
 // [LAW:single-enforcer] The one place a record's file is found: `home` is the

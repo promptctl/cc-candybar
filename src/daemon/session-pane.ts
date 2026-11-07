@@ -57,7 +57,7 @@ export function sessionPaneOf(
     return {
       kind: "unconfirmed",
       tmux,
-      why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}`,
+      why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}. A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`,
     };
   return held.sessionId === sessionId
     ? { kind: "runs", tmux }

@@ -17,6 +17,8 @@ import type { TmuxHint } from "../../src/tmux-hint";
 
 const TMUX: TmuxHint = { socket: "/tmp/tmux-501/default", pane: "%7", truecolor: null };
 const CLAUDE = 4242;
+// What every unread parent's why ends with: the likely cause and its fix.
+const WRAPPED = ". A statusline command that runs the client through a shell or a wrapper (a script, `pnpm dlx`) hands it that process instead: `cc-candybar install` writes one that runs it directly";
 
 // Claude Code's records, by pid and configuration directory, as a fake of
 // the port: every read it is asked for is kept, so a case can say none was.
@@ -74,7 +76,7 @@ describe("sessionPaneOf", () => {
     const pane = sessionPaneOf(hints({ parentPid: 999 }), "test-1", of);
     expect(pane.kind).toBe("unconfirmed");
     expect(paneFact(pane)).toBe(
-      "unconfirmed: the process that ran its statusline (pid 999) is no Claude Code whose session can be read: it keeps no session record for 999",
+      `unconfirmed: the process that ran its statusline (pid 999) is no Claude Code whose session can be read: it keeps no session record for 999${WRAPPED}`,
     );
   });
 
@@ -130,7 +132,7 @@ describe("sessionPaneError", () => {
 
   test("says why while a lane that shows the pane's session is on", () => {
     expect(sessionPaneError(unconfirmed, lanes("tmuxStatus"))).toBe(
-      "The tmux status line of pane %7 shows the session the pane's Claude Code holds, and this one is not known to be it: the process that ran its statusline (pid 999) is no Claude Code whose session can be read: it keeps no session record for 999",
+      `The tmux status line of pane %7 shows the session the pane's Claude Code holds, and this one is not known to be it: the process that ran its statusline (pid 999) is no Claude Code whose session can be read: it keeps no session record for 999${WRAPPED}`,
     );
     expect(sessionPaneError(unconfirmed, lanes("pane", "tmuxStatus"))).toMatch(
       /^The 🧪 tmux pane \(C\) and tmux status line of pane %7 /,
