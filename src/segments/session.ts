@@ -10,6 +10,18 @@ export interface TokenBreakdown {
   cacheRead: number;
 }
 
+// [LAW:one-source-of-truth] The tokens a breakdown counts: its four lanes,
+// summed here and nowhere else, so the session's total and the day's are one
+// sum of one shape.
+export function totalTokens(breakdown: TokenBreakdown): number {
+  return (
+    breakdown.input +
+    breakdown.output +
+    breakdown.cacheCreation +
+    breakdown.cacheRead
+  );
+}
+
 export interface SessionInfo {
   cost: number | null;
   calculatedCost: number | null;

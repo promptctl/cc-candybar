@@ -3,7 +3,7 @@ import { get } from "node:https";
 import { URL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
-import { observable, runInAction } from "mobx";
+import { computed, observable, runInAction } from "mobx";
 import type { Timekeeper } from "../time";
 import { changeLogger, type DaemonLogger } from "../utils/logger";
 import type { PrunedRaw } from "../utils/claude.js";
@@ -225,10 +225,6 @@ type Held = Landed | Failed;
 const lastLanded = (held: Held | null): Landed | null =>
   held === null ? null : held.kind === "landed" ? held : held.last;
 
-// The bundled rates price until a table lands.
-const tableOf = (held: Held | null): PriceTable =>
-  lastLanded(held)?.table ?? OFFLINE_PRICING_DATA;
-
 // [LAW:one-source-of-truth] Of two tables that landed, the one read later: the
 // disk copy and what the owner holds are both landings, and a copy another
 // daemon wrote may be the newer, or the older when this owner's write failed.
@@ -261,6 +257,15 @@ const due = (held: Held, now: number): boolean =>
 // derived from it on each read.
 export function livePricing(owner: LiveOwner): Pricing {
   const held = observable.box<Held | null>(null, { deep: false });
+  // [LAW:one-source-of-truth] The landing the table is read off, told apart by
+  // its moment and not its object, so a derivation over the table moves only
+  // when a table does: a load that lands nothing, and a refresh that finds the
+  // day's copy already on disk, each settle a holding whose last landing is
+  // the one already priced by, read from disk again as a new object. A machine
+  // with no network retries once per backoff, and a retry prices nothing again.
+  const landed = computed(() => lastLanded(held.get()), {
+    equals: (a, b) => a?.at === b?.at,
+  });
   let loading: Promise<void> | null = null;
   // [LAW:one-type-per-behavior] A load that lands nothing is said once per
   // backoff: the line names the backoff, so it changes while the backoff grows
@@ -268,15 +273,21 @@ export function livePricing(owner: LiveOwner): Pricing {
   // otherwise say the same thing every hour for as long as it stays offline.
   const sayNotLoaded = changeLogger(owner.log);
   return {
-    table: () => tableOf(held.get()),
+    // The bundled rates price until a table lands.
+    table: () => landed.get()?.table ?? OFFLINE_PRICING_DATA,
     ask: () => {
       const prev = held.get();
       const owed = prev === null || due(prev, owner.clock.now());
       if (!owed || owner.closing.aborted) return;
-      loading ??= loadHeld(owner, prev, sayNotLoaded).then((settled) => {
-        loading = null;
-        runInAction(() => held.set(settled));
-      });
+      // [LAW:dataflow-not-control-flow] The one load out is let go however it
+      // ends, so a load that rejects, against loadHeld's contract, is said by
+      // the daemon's unhandled-rejection line and the next ask starts another,
+      // never a daemon priced by the bundled rates for its whole life.
+      loading ??= loadHeld(owner, prev, sayNotLoaded)
+        .then((settled) => runInAction(() => held.set(settled)))
+        .finally(() => {
+          loading = null;
+        });
     },
   };
 }

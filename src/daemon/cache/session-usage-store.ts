@@ -6,6 +6,7 @@ import {
   type SessionInfo,
   type UsageInfo,
   type TokenBreakdown,
+  totalTokens,
 } from "../../segments/session";
 import type { Host } from "../../host";
 import {
@@ -117,11 +118,15 @@ const SPEED_RING_CAPACITY = 64;
 
 function speedSampleOf(breakdown: TokenBreakdown, atMs: number): SpeedSample {
   // Prompt-side = raw input plus both cache lanes (all tokens fed to the model);
-  // output = generated. total = the same sum the store's `tokens` projection
-  // uses, so `total === input + output`. [LAW:one-source-of-truth]
+  // output = generated; total = the one sum the `tokens` projection reads too,
+  // so `total === input + output`. [LAW:one-source-of-truth]
   const input = breakdown.input + breakdown.cacheCreation + breakdown.cacheRead;
-  const output = breakdown.output;
-  return { input, output, total: input + output, atMs };
+  return {
+    input,
+    output: breakdown.output,
+    total: totalTokens(breakdown),
+    atMs,
+  };
 }
 
 interface SessionRecord {
@@ -347,11 +352,7 @@ function sessionInfoOf(
     cost,
     calculatedCost: cost,
     officialCost: null,
-    tokens:
-      tokenBreakdown.input +
-      tokenBreakdown.output +
-      tokenBreakdown.cacheCreation +
-      tokenBreakdown.cacheRead,
+    tokens: totalTokens(tokenBreakdown),
     tokenBreakdown,
   };
 }
@@ -362,6 +363,8 @@ function sessionInfoOf(
 // is the `Folded` pair's, never a field of its own here.
 // The session aggregate is the MERGE of its files' folds (mergeFolds), so a file
 // rewritten by /compact re-folds in isolation without disturbing the others.
+// [LAW:one-type-per-behavior] That merge is a fold of the same shape: the
+// parts every projection is priced from, summed over files instead of lines.
 interface FileFold {
   entries: number; // usage-bearing entries folded (0 ⇒ empty session, all-null)
   usage: Usage;
@@ -374,16 +377,9 @@ const EMPTY_FILE_FOLD: FileFold = {
   days: new Map(),
 };
 
-// A session's files' folds merged: the parts every projection is priced from.
-interface Merged {
-  entries: number;
-  usage: Usage;
-  days: Map<string, Usage>;
-}
-
 // What one refold of a session answers: its files' folds, their merge, and
 // the main transcript's stamp as folded.
-interface Refolded extends Merged {
+interface Refolded extends FileFold {
   files: Map<string, Folded<FileFold>>;
   mainStamp: string;
 }
@@ -434,7 +430,7 @@ function foldFile(
 // [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
 // record's derived parts. `entries === 0` across all files is the empty
 // session, which `sessionInfoOf` answers all-null.
-function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): Merged {
+function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): FileFold {
   let entries = 0;
   const usage = summing();
   const days = new Map<string, Summing>();
