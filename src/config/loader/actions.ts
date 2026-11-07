@@ -26,7 +26,7 @@ import {
 } from "../action.js";
 import nodePath from "node:path";
 import { findKeyLine } from "./diagnostics.js";
-import { reservedNamespaceOf } from "./reserved-namespace.js";
+import { reservedNamespaceOfKey } from "../reserved-names.js";
 import {
   CHECKS,
   GLYPH_MARKS,
@@ -757,7 +757,7 @@ function validateDiscriminatorKey(
   // refused here, at load, as an authored accordion key there is
   // (menu-synth.ts). Synthesized actions are built after this pass.
   const reserved =
-    discriminator === "set" ? reservedNamespaceOf(value) : undefined;
+    discriminator === "set" ? reservedNamespaceOfKey(value) : undefined;
   if (reserved !== undefined) {
     issue(
       ctx,

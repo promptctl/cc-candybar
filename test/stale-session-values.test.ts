@@ -153,7 +153,7 @@ describe("a domain warning", () => {
       admits: 'one of "none", "flat"',
     });
     expect(warning.message).toBe(
-      `"style" holds "no-such-style", which this config does not admit (it admits one of "none", "flat"), so the bar draws its default instead`,
+      `"style" holds "no-such-style", which this config does not admit (it admits one of "none", "flat"), so the bar ignores it and draws as if nothing were picked`,
     );
     // Its identity is the key's: a viewer open on it stays on it while the
     // words change, and clearing another key never moves it.
@@ -183,6 +183,20 @@ describe("a placement draft's writers", () => {
       /set key "edit\.draft\.default\.lean\.sha" lands in the reserved "edit\." namespace/,
     );
   });
+
+  // A session key is compared as spelled, so a key that only collapses like
+  // one under a namespace is the author's own.
+  test.each(["edit-mode", "menus_open", "candybar-foo"])(
+    "an authored set of %s, spelled outside every reserved namespace, loads",
+    (key) => {
+      const source = `{
+        actions: { mine: { set: "${key}", to: "on" } },
+        segments: { plain: { template: 'X' } },
+        root: { rows: { identity: { h: ['plain'] }, status: { h: [] } } },
+      }`;
+      expect(() => parseAndValidate("<test>", source, THEMES)).not.toThrow();
+    },
+  );
 });
 
 describe("a session that has never rendered", () => {

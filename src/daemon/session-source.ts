@@ -53,7 +53,7 @@ import { settingCounts } from "./setting-drafts.js";
 // payload's `.effective` fields).
 // [LAW:types-are-the-program] A value the session holds for one of its
 // config's controls that the control's gate calls foreign (Gate.verdict):
-// written under an older config, drawn as the key's default, and reported.
+// written under an older config, read as absent, and reported.
 export interface ForeignValue {
   readonly key: string;
   readonly held: string;

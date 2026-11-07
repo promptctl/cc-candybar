@@ -36,5 +36,14 @@ export const RESERVED_NAMESPACES = [
 // delta-able segment set (a delta targets an authorable name), and the test
 // helpers all read from here rather than re-spelling the prefix list.
 export function isReservedName(name: string): boolean {
-  return RESERVED_NAMESPACES.some((ns) => name.startsWith(ns));
+  return reservedNamespaceOfKey(name) !== undefined;
+}
+
+// The reserved namespace a name lies in, as spelled. A session key is
+// compared as spelled, so only a key spelled under a namespace can meet one
+// a synthesis pass mints there: `edit-mode` is no `edit.` key. A name that
+// `ident()` collapses before it becomes a key asks in that space instead
+// (loader/reserved-namespace.ts).
+export function reservedNamespaceOfKey(name: string): string | undefined {
+  return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
 }

@@ -818,7 +818,7 @@ interface FactsWarning {
 
 // [LAW:no-silent-failure] A value the session holds for one of its config's
 // controls that the config no longer admits (src/daemon/session-source.ts
-// ForeignValue): drawn as the key's default, and said so, one per key.
+// ForeignValue): read as absent, and said so, one per key.
 interface DomainWarning {
   readonly kind: "domain";
   readonly key: string;
@@ -833,7 +833,7 @@ export const domainWarning = ({
 }: ForeignValue): DomainWarning => ({
   kind: "domain",
   key,
-  message: `"${key}" holds ${JSON.stringify(held)}, which this config does not admit (it admits ${admits}), so the bar draws its default instead`,
+  message: `"${key}" holds ${JSON.stringify(held)}, which this config does not admit (it admits ${admits}), so the bar ignores it and draws as if nothing were picked`,
 });
 
 // What stands before a draw, whatever the draw then meets.
