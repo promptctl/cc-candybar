@@ -5,8 +5,8 @@ import { plusMs, type Timekeeper } from "../time";
 // trying for the life of the process and copies ctime into birth time, and a
 // directory's ctime moves on every child create, remove or rename. A ctime
 // copy in a folder's identity (src/utils/folder-identity.ts) would make every
-// write in a folder read as another folder, so the adapter asks once which
-// host it is on.
+// write in a folder read as another folder, so a process main asks once which
+// host it is on, and builds its daemon's disk over the answer.
 //
 // `supplied`: birth time stayed put while ctime moved, or ctime never moved
 // within the bound, which is no evidence against it. `ctime`: birth time moved
@@ -27,8 +27,8 @@ export interface ProbeStat {
 }
 
 // [LAW:effects-at-boundaries] The probe's steps, as the adapter binds them to
-// `fs`: a scratch folder, its stat, a metadata write that moves its ctime, and
-// its removal.
+// `fs` (src/disk/system-filesystem.ts): a scratch folder, its stat, a metadata
+// write that moves its ctime, and its removal.
 export interface ProbeSteps {
   makeFolder(): string;
   stat(folder: string): ProbeStat;
@@ -36,8 +36,8 @@ export interface ProbeSteps {
   remove(folder: string): void;
 }
 
-// The probe runs synchronously inside the process's first stat, so it waits
-// for ctime to tick for this long at most. Linux stamps ctime from a coarse
+// The probe runs synchronously at the daemon's boot, so it waits for ctime to
+// tick for this long at most. Linux stamps ctime from a coarse
 // clock that ticks every 1 to 10 ms, so a few ticks fit well inside it.
 export const CTIME_WAIT_MS = 50;
 
@@ -73,7 +73,10 @@ export const probeBirthtime = (
   } catch (e) {
     // [LAW:no-silent-failure] The reason rides the verdict to the daemon's
     // startup line; birth time stays as read, which is no worse than before.
-    return { kind: "unprobed", reason: (e as Error).message };
+    return {
+      kind: "unprobed",
+      reason: e instanceof Error ? e.message : String(e),
+    };
   }
 };
 

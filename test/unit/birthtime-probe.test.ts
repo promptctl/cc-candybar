@@ -6,7 +6,7 @@ import {
   type ProbeSteps,
 } from "../../src/disk/birthtime-probe";
 import type { Monotonic } from "../../src/time";
-import { identityKey } from "../../src/utils/folder-identity";
+import { identityKey, sameIdentity } from "../../src/utils/folder-identity";
 
 // A scratch folder on a stubbed host: `tickEvery` is how many metadata writes
 // it takes for ctime to move (a coarse clock), and Infinity is one that never
@@ -90,15 +90,24 @@ describe("the birth-time probe", () => {
 });
 
 describe("a folder's identity from the birth time the probe allows", () => {
+  const identity = (verdict: BirthtimeVerdict, ino: bigint, birthtimeNs: bigint) => ({
+    dev: 7n,
+    ino,
+    birthtimeNs: birthtimeOf(verdict, birthtimeNs),
+  });
   const key = (verdict: BirthtimeVerdict, ino: bigint, birthtimeNs: bigint) =>
-    identityKey({ dev: 7n, ino, birthtimeNs: birthtimeOf(verdict, birthtimeNs) });
+    identityKey(identity(verdict, ino, birthtimeNs));
 
   test("under the fallback, stays put across a child write that moved ctime", () => {
     expect(key(ctime, 42n, 1_000n)).toBe(key(ctime, 42n, 9_000n));
+    expect(sameIdentity(identity(ctime, 42n, 1_000n), identity(ctime, 42n, 9_000n))).toBe(true);
   });
 
   test("with a real birth time, a folder made again on a reused inode is another folder", () => {
     expect(key(supplied, 42n, 1_000n)).not.toBe(key(supplied, 42n, 9_000n));
+    expect(sameIdentity(identity(supplied, 42n, 1_000n), identity(supplied, 42n, 9_000n))).toBe(
+      false,
+    );
   });
 
   test("statx's 0 is no birth time, as the fallback's copy is", () => {

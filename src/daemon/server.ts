@@ -45,7 +45,7 @@ import type { TmuxAtExit } from "./tmux-status";
 import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
 import { productionAdapters } from "./production-adapters.js";
 import { describeBirthtime } from "../disk/birthtime-probe.js";
-import { birthtimeVerdict } from "../disk/system-filesystem.js";
+import { probeBirthtimeIn } from "../disk/system-filesystem.js";
 import { daemonGates } from "./update-keys.js";
 import { handleConnection } from "./connection.js";
 import { REGISTRY_URL } from "../install/currency";
@@ -214,13 +214,19 @@ async function boot(): Promise<void> {
   ensureSocketParentSafe(paths.socket);
 
   // [LAW:nothing-unseen] Whether folder identity carries birth time on this
-  // host, so a host without statx can be read from its log.
-  serverLog("info", describeBirthtime(birthtimeVerdict()));
+  // host, so a host without statx can be read from its log. The probe's
+  // scratch folder is the state directory's, which this daemon owns, never the
+  // spawning shell's TMPDIR.
+  const birthtime = probeBirthtimeIn(paths.state, world.clock);
+  serverLog(
+    birthtime.kind === "unprobed" ? "warn" : "info",
+    describeBirthtime(birthtime),
+  );
 
   // The daemon is built now that we know we are the daemon process: it loads
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
-    ...productionAdapters(paths, daemonLog, world.clock),
+    ...productionAdapters(paths, daemonLog, world.clock, birthtime),
     bundle: runningBundle(),
     host,
     home,

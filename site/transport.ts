@@ -15,6 +15,7 @@ import { daemonGates } from "../src/daemon/update-keys";
 import { DaemonLog } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
+import { probeBirthtimeIn } from "../src/disk/system-filesystem";
 import { EPHEMERAL_SESSION_STORAGE } from "../src/daemon/session-state";
 import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/settings-history";
 import { PROTOCOL_VERSION, type ClickRequest, type ReaderRenderRequest, type Response } from "../src/daemon/protocol";
@@ -72,7 +73,12 @@ const WORLD = processWorld();
 const HOST = WORLD.host;
 const paths = daemonPaths(WORLD.home);
 const pageDaemon = createDaemon({
-  ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
+  ...productionAdapters(
+    paths,
+    new DaemonLog(paths.log, WORLD.clock),
+    WORLD.clock,
+    probeBirthtimeIn(paths.state, WORLD.clock),
+  ),
   gates: daemonGates(),
   home: WORLD.home,
   host: HOST,

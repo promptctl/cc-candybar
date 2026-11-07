@@ -25,6 +25,7 @@ import { DaemonLog } from "../../src/daemon/log";
 import { homeOf, type RendererHome } from "../../src/daemon/home";
 import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
+import { probeBirthtimeIn } from "../../src/disk/system-filesystem";
 import { PROTOCOL_VERSION, sendOne, type Request } from "../../src/daemon/protocol";
 import { systemTimekeeper } from "../../src/time";
 import type { StatsSnapshot } from "../../src/daemon/stats";
@@ -84,7 +85,12 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
   try {
     const daemon = createDaemon({
-      ...productionAdapters(paths, daemonLog, systemTimekeeper),
+      ...productionAdapters(
+        paths,
+        daemonLog,
+        systemTimekeeper,
+        probeBirthtimeIn(paths.state, systemTimekeeper),
+      ),
       // [LAW:effects-at-boundaries] A daemon under test prices by the bundled
       // rates: it reaches no network, and leaves no load out at its close.
       pricing: () => offlinePricing(),
