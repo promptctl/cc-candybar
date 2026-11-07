@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-683",
+      "ref": "refs/pull/683/merge",
+      "sha": "0b5e55e4e037958d56869265310891bb9c9bcdb0",
+      "timestamp": "2026-11-07T10:21:56.082Z",
+      "commits": [
+        {
+          "sha": "0b5e55e4e037958d56869265310891bb9c9bcdb0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T10:19:50Z",
+          "message": "Merge 0ee0c4ad2bb81a11ff9a52e845d34181064ec98b into 2e9ea2dce98b1908a16f3ffa2128310350ebc817\n"
+        },
+        {
+          "sha": "0ee0c4ad2bb81a11ff9a52e845d34181064ec98b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:19:39-07:00",
+          "message": "fix(doctor): a repository answer during the probes refuses a stale report; settled lines count as no problem (brandon-unfiled-3248.qo8j)\n\nThe landing compares the gate by its lines, so an awaiting repository\ndeclined mid-run with the config unchanged gathers again. A failed\nverdict carries notes beside its problems, so a declined repository is\nlisted by the CLI and counted by neither the bar's row nor the log. The\ndoctor's log line carries the gate's counts, and one empty-gate fixture\nserves every test.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "041c7d44ea2bc6cde3d989e5282816f9130101b1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:11:46-07:00",
+          "message": "fix(doctor): the config row names a repository config the load left out (brandon-unfiled-3248.qo8j)\n\nThe doctor's config load now carries the repository gate it ruled, so the\nconfig row says why a project's .cc-candybar.json5 is not in the chain. A\nrepository awaiting approval fails the row and names its directory. A\ndeclined repository, and a directory whose worktree claim is unproven, ride\nthe row's text without failing it: only reversing the user's own answer\nwould clear a declined one. repoGateLines is split into the awaiting and\nthe settled lines, so check, the demo and the doctor share one wording.\n\nAn unread answers book already reaches the row as the load's own advisory,\nso the doctor takes the awaiting lines alone and names that notice once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-682",
       "ref": "refs/pull/682/merge",
       "sha": "5bf123502c0ad71d886a69d80afd57c8a8c214fe",
@@ -171,28 +200,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T03:13:14-07:00",
           "message": "feat(facts): a renderer declares the built-ins its config reads, and Gather gathers only those (candybar-gather-renderer-76bb.6pj.opl) (#674)\n\n* feat(facts): a renderer declares the built-ins its config reads, and Gather gathers only those (candybar-gather-renderer-76bb.6pj.opl)\n\nThe facts document is complete over what the renderer declared, not total:\nevery declared built-in and source has a key, and nothing else does. The\ndeclaration is one walk over every preset's placements, templates, partials\nand globals rules, mapped through the payload's rows to the built-ins each\npath reads; the doctor asks the same walk. The declared set is consulted once,\nwhere the lanes are declared, and every later stage iterates the lanes it is\nhanded.\n\nThe payload is a table of rows, each composed from exactly the facts it names\n(a compile error to read another), in one of two phases the type carries: a\nturn row once per document, a draw row at the draw's instant (today). A read\nof an undeclared built-in throws naming the variable and the fact, so the\nsegment draws ⚠ and check fails, never a blank. The render event and the\nview-declared log line carry builtins=. FACTS_VERSION 2.\n\n* fix(facts): a shell or file source's key is a root of the declaration walk; one template enumeration; the undeclared read names what its site knows (candybar-gather-renderer-76bb.6pj.opl)\n\nReview (high) findings taken:\n- Every shell and file source is declared and its cache key evaluated whether\n  or not a template reads it, so the walk seeds from those variables too; a key\n  reading a built-in no placed segment read faulted the source before this.\n- The unused-declaration check and the walk enumerate a segment's and a\n  layout's templates through the same two functions.\n- The undeclared read's message states what the reading site knows: the\n  declaration its facts were gathered under does not name the fact, which is\n  also true of a replay under a wider config.\n- The rows' entries are built once, not per path.\n- EVERY_BUILTIN had no production caller and lives in the test helper.\n- Comments and docs: no socket arm exists yet; the declaration log line fires\n  when a hold moves and the render event carries builtins= on every frame;\n  §1 says each declared built-in; the memory paragraph said one thing twice.\n\nRejected, with reasons on the ticket: a whole-row read declares its parts\n(an Undeclared inside a found object would be the silent hole the ticket\nforbids); lead/trail are synthesis-only and never in the config the walk\nreads.\n\n* fix(facts): the walk reads a cell's lead and trail; one word for a node that is no value; one spelling of path containment (candybar-gather-renderer-76bb.6pj.opl)\n\nReview (medium) findings taken:\n- The loader synthesizes edit mode's lead and trail into the layout the walk\n  reads, so they are roots beside each node's when (and the unused check\n  sees them through the same function).\n- isUnanswered is the one test for pending-or-undeclared; sources.ts,\n  draw-bar.ts and the PR projection ask it.\n- pathUnder is the one spelling of a dotted path's containment; the rows and\n  the doctor's rate-limit need share it.\n- The undeclared read's message is one function, so no Error is built to\n  read its text.\n- A read of all of git declaring the PR is pinned by a test.\n- Memory: a session whose config reads no usage fact reaches other sessions'\n  today through the rescan, as a headless session does.\n\nRejected on the ticket: declaredBuiltins closing a set over pr's dependency\non git is the plan's decided normalization.\n\n* fix(facts): a recorded declaration is closed as one is built; one placed segment's templates once; pathUnder where the slot check spelled it (candybar-gather-renderer-76bb.6pj.opl)\n\nReview (second high) findings taken:\n- The recording parser refuses a document holding the PR without its\n  repository, through the one constructor that closes a declaration.\n- The walk pushes a placed segment's templates once however many presets\n  place it, and keeps an empty template as the engine's compile does.\n- The loader's slot-path check spells containment with pathUnder; the alias\n  in builtinsReadAt is gone.\n\nRejected on the ticket: the doctor's PR need for a whole-git read (the forge\nlookup does run for that config, so a missing CLI does fail it); memoising\nthe walk for check (a once-run CLI); a shared map over a Reading with one\ncaller."
-        }
-      ]
-    },
-    {
-      "version": "pr-683",
-      "ref": "refs/pull/683/merge",
-      "sha": "77548b723d1cf0437db87779036bf23c7c4aa406",
-      "timestamp": "2026-11-07T10:13:27.117Z",
-      "commits": [
-        {
-          "sha": "77548b723d1cf0437db87779036bf23c7c4aa406",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:12:27-07:00",
-          "message": "Merge 041c7d44ea2bc6cde3d989e5282816f9130101b1 into caff813e34090cb361f74867fbc7e70dd4c11663\n"
-        },
-        {
-          "sha": "041c7d44ea2bc6cde3d989e5282816f9130101b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:11:46-07:00",
-          "message": "fix(doctor): the config row names a repository config the load left out (brandon-unfiled-3248.qo8j)\n\nThe doctor's config load now carries the repository gate it ruled, so the\nconfig row says why a project's .cc-candybar.json5 is not in the chain. A\nrepository awaiting approval fails the row and names its directory. A\ndeclined repository, and a directory whose worktree claim is unproven, ride\nthe row's text without failing it: only reversing the user's own answer\nwould clear a declined one. repoGateLines is split into the awaiting and\nthe settled lines, so check, the demo and the doctor share one wording.\n\nAn unread answers book already reaches the row as the load's own advisory,\nso the doctor takes the awaiting lines alone and names that notice once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
