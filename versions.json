@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-671",
+      "ref": "refs/pull/671/merge",
+      "sha": "c806b1c5086b4928d959d3abfa304e1b2c443c73",
+      "timestamp": "2026-11-07T06:14:30.342Z",
+      "commits": [
+        {
+          "sha": "c806b1c5086b4928d959d3abfa304e1b2c443c73",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:13:29-07:00",
+          "message": "Merge a174f1715327639f6b6bf7b2830f5457411ec24a into d8be82f47dab2890d335b8563bbfdc937aedba77\n"
+        },
+        {
+          "sha": "a174f1715327639f6b6bf7b2830f5457411ec24a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:07:54-07:00",
+          "message": "test(launch): the unread-input cases assert each launch's whole verdict, so a failure prints its reason (brandon-menus-sjhy.j5v)\n\nThe blocking case failed once under a loaded worker tier at an `.ok`\nassertion, which printed only `false`. toMatchObject would not have\nhelped: its failure message cuts the received object down to the keys it\nwas given. toStrictEqual prints reason, error, exitCode and signal.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-670",
       "ref": "refs/pull/670/merge",
       "sha": "5641d316e8105489f28eb0ca229ff0e292c398e3",
