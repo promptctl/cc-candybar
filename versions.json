@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-684",
+      "ref": "refs/pull/684/merge",
+      "sha": "0667f06a6920294d110e6f89add5aff7a11f81e4",
+      "timestamp": "2026-11-07T11:07:08.539Z",
+      "commits": [
+        {
+          "sha": "0667f06a6920294d110e6f89add5aff7a11f81e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T11:06:22Z",
+          "message": "Merge 04a192bb4a2334207d632081273374719ece8ac3 into ed8e8640a86e8dc128a0f9adda4f04821a89b8ab\n"
+        },
+        {
+          "sha": "04a192bb4a2334207d632081273374719ece8ac3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:57:44-07:00",
+          "message": "fix(pricing): a failing load says each backoff once, and a close during a first load keeps the disk copy (candybar-gather-renderer-76bb.1p8)\n\nFrom the medium review. A load that landed nothing warned on every retry, so a machine with no network wrote the same line every hour for as long as it stayed offline: the line now goes through the change-only logger and names the backoff rather than the count, so it changes while the backoff grows and falls silent at the ceiling. A close during the first load on a copy past its day returned nothing held and priced the awaiting fold by the bundled rates: the copy stands before anything was held.\n"
+        },
+        {
+          "sha": "0cc293a93ea4835273cc988dad8c677e4ff5fbd6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:46:14-07:00",
+          "message": "fix(pricing): a failed load keeps the last table that landed anywhere, and a close is no failure (candybar-gather-renderer-76bb.1p8)\n\nFrom the high review. A daemon that starts on a day-old disk copy with no network priced by the bundled rates, because the due copy was passed over and the fetch landed nothing: the failed load now keeps the later of the disk copy and the held table, so one rule covers the cold start and the refresh. A load the close ended was recorded as a failure in a row and warned of a retry that could not happen: it now settles nothing and says nothing. A copy stamped ahead of the clock was held past its day for as long as the stamp stood: it is malformed like any other field and the fetch rewrites it. The warning says what the code does, that the next ask after the backoff tries again, since nothing is armed. The architecture memory no longer says the table is loaded once.\n"
+        },
+        {
+          "sha": "5af0d020e87ae74aa092b2040023e3164462c633",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:31:15-07:00",
+          "message": "fix(pricing): a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8)\n\nThe pricing held one promise for the daemon's life, so a daemon that\nstarted offline priced by the bundled rates until it was restarted, and\none that fetched kept its table past the disk copy's day.\n\nWhat a load settles is now a Landed table or a Failed load that carries\nthe last table that landed, if any. Each ask starts the one load when\nwhat is held is due, and answers with what is held: the first ask awaits,\nlater asks answer at once while the load lands behind them. A landed\ntable is due a day after it was read; a failed load after a backoff that\ndoubles per failure in a row up to an hour. The disk copy is a candidate\njudged by the same due predicate, so the day ends once. No timer is\narmed: the retry is the next ask after the due moment. A load that\nlanded nothing says so on the owner's log with the retry delay.\n\nThe test moves onto a held clock and drives the retry, the refresh, a\nrefresh that fails, a copy another daemon wrote, and a close mid-refresh.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-678",
       "ref": "refs/pull/678/merge",
       "sha": "ff8f69a7af8d0198f56e1e876a6096d941c74ab7",
@@ -34,42 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:40:04-07:00",
           "message": "fix(state): concurrent writers of one file stage at their own names (brandon-unfiled-3248.wkh1)\n\nTwo processes sharing a state directory both staged a write at\n`<file>.tmp`, so one's rename published or moved the other's bytes and\nthe other's rename failed ENOENT. Every staged name now carries the\nwriting process's pid, spelled once by `stagedPath` in\nsrc/utils/atomic-write.ts: writeAtomic, both session-state-file stages\nand the socket lease use it. The fork-bomb breaker stages by an\ninjected identity's pid and is left as it is.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-684",
-      "ref": "refs/pull/684/merge",
-      "sha": "b2ff4c52e9633b6b796f8cbaab552d69f6626917",
-      "timestamp": "2026-11-07T11:02:33.671Z",
-      "commits": [
-        {
-          "sha": "b2ff4c52e9633b6b796f8cbaab552d69f6626917",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:01:31-07:00",
-          "message": "Merge 0fb491e8ecc4d63a76e2aea4656c4f0edadda542 into ed8e8640a86e8dc128a0f9adda4f04821a89b8ab\n"
-        },
-        {
-          "sha": "0fb491e8ecc4d63a76e2aea4656c4f0edadda542",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:57:44-07:00",
-          "message": "fix(pricing): a failing load says each backoff once, and a close during a first load keeps the disk copy (candybar-gather-renderer-76bb.1p8)\n\nFrom the medium review. A load that landed nothing warned on every retry, so a machine with no network wrote the same line every hour for as long as it stayed offline: the line now goes through the change-only logger and names the backoff rather than the count, so it changes while the backoff grows and falls silent at the ceiling. A close during the first load on a copy past its day returned nothing held and priced the awaiting fold by the bundled rates: the copy stands before anything was held.\n"
-        },
-        {
-          "sha": "45de7e8e5b22808bc163101e06109c6e5507cee0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:46:14-07:00",
-          "message": "fix(pricing): a failed load keeps the last table that landed anywhere, and a close is no failure (candybar-gather-renderer-76bb.1p8)\n\nFrom the high review. A daemon that starts on a day-old disk copy with no network priced by the bundled rates, because the due copy was passed over and the fetch landed nothing: the failed load now keeps the later of the disk copy and the held table, so one rule covers the cold start and the refresh. A load the close ended was recorded as a failure in a row and warned of a retry that could not happen: it now settles nothing and says nothing. A copy stamped ahead of the clock was held past its day for as long as the stamp stood: it is malformed like any other field and the fetch rewrites it. The warning says what the code does, that the next ask after the backoff tries again, since nothing is armed. The architecture memory no longer says the table is loaded once.\n"
-        },
-        {
-          "sha": "96d9d7c5d22f529d61eb934ecac0a07b5d0ed2bb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:31:15-07:00",
-          "message": "fix(pricing): a load that landed nothing is tried again after a backoff, and a landed table is fetched again when its day is up (candybar-gather-renderer-76bb.1p8)\n\nThe pricing held one promise for the daemon's life, so a daemon that\nstarted offline priced by the bundled rates until it was restarted, and\none that fetched kept its table past the disk copy's day.\n\nWhat a load settles is now a Landed table or a Failed load that carries\nthe last table that landed, if any. Each ask starts the one load when\nwhat is held is due, and answers with what is held: the first ask awaits,\nlater asks answer at once while the load lands behind them. A landed\ntable is due a day after it was read; a failed load after a backoff that\ndoubles per failure in a row up to an hour. The disk copy is a candidate\njudged by the same due predicate, so the day ends once. No timer is\narmed: the retry is the next ask after the due moment. A load that\nlanded nothing says so on the owner's log with the retry delay.\n\nThe test moves onto a held clock and drives the retry, the refresh, a\nrefresh that fails, a copy another daemon wrote, and a close mid-refresh.\n"
         }
       ]
     },
