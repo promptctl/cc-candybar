@@ -57,7 +57,14 @@ import {
   arrangedSegment,
 } from "../src/config/edit-chrome";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-glyphs";
-import { walkNodes, type RootFragment } from "../src/config/dsl-types";
+import {
+  placementIds,
+  walkNodes,
+  type RootFragment,
+  type ValidatedConfig,
+} from "../src/config/dsl-types";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { presetNames } from "../src/config/presets";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { contrastRatio } from "@promptctl/rich-js";
@@ -571,6 +578,96 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       "utf8",
     );
     expect(src).not.toMatch(/edit\.mode|editMode|EDIT_MODE/);
+  });
+});
+
+// ─── chrome names: spelled from the placement, never its walk position ─────
+
+// Every name the splice minted for placement `id` in the floor preset, read
+// off the spliced tree: the segments of its unit (its row's leading `+`
+// included) and of the configure body its label hangs, the actions its `✖`
+// and `🔧` and those segments' templates call, and its drafts' variables.
+function chromeNamesOf(config: ValidatedConfig, id: string): string[] {
+  const unit = [...walkNodes(fragmentNode(config.presets.default!.root!))].find(
+    (n) =>
+      n.kind === "container" &&
+      n.unit === true &&
+      n.children.some(
+        (c) => c.kind === "segment" && c.name.startsWith(`edit.label:${id}:`),
+      ),
+  );
+  expect(unit).toBeDefined();
+  const names = new Set<string>();
+  const called = (template: string | undefined): void => {
+    for (const [, name] of (template ?? "").matchAll(/(?:action|menu) "([^"]+)"/g)) {
+      names.add(name!);
+    }
+  };
+  for (const node of walkNodes(unit!)) {
+    if (node.kind !== "segment") continue;
+    names.add(node.name);
+    called(node.lead);
+    called(node.trail);
+    called(config.segments[node.name]?.template);
+    for (const slot of Object.values(node.drafts ?? {})) names.add(slot.variable);
+  }
+  return [...names].filter((name) => name.startsWith("edit.")).sort();
+}
+
+const withRow = (row: string): string =>
+  BASE.replace("{ h: ['directory', 'git'] }", row);
+
+describe("edit chrome: a placement's names are its own, whatever happens beside it", () => {
+  test("an add in an earlier row renames no later placement's chrome", () => {
+    const before = parseAndValidate("<test>", BASE, ALLOWED);
+    const after = parseAndValidate(
+      "<test>",
+      withRow("{ h: ['directory', 'gitPr', 'git'] }"),
+      ALLOWED,
+    );
+    for (const id of ["git", "trigger"]) {
+      const names = chromeNamesOf(before, id);
+      // A remove, a configure, a `+` after it, a setting control at least.
+      expect(names.length).toBeGreaterThan(4);
+      expect([id, chromeNamesOf(after, id)]).toEqual([id, names]);
+    }
+  });
+
+  test("a removal before a placement keeps every name it had; becoming its row's first only adds the leading `+`", () => {
+    const before = chromeNamesOf(parseAndValidate("<test>", BASE, ALLOWED), "git");
+    const after = chromeNamesOf(
+      parseAndValidate("<test>", withRow("{ h: ['git'] }"), ALLOWED),
+      "git",
+    );
+    expect(after).toEqual(expect.arrayContaining(before));
+    const gained = after.filter((name) => !before.includes(name));
+    expect(gained.length).toBeGreaterThan(0);
+    for (const name of gained) expect(name).toMatch(/\.insert(Seg)?\.before\./);
+  });
+
+  test("two ids `ident` collapses together keep distinct chrome names", () => {
+    const config = parseAndValidate(
+      "<test>",
+      withRow("{ h: ['directory', { seg: 'git', id: 'git-2' }, { seg: 'git', id: 'git_2' }] }"),
+      ALLOWED,
+    );
+    const dash = chromeNamesOf(config, "git-2");
+    const under = chromeNamesOf(config, "git_2");
+    const labels = (names: string[]) => names.filter((n) => n.startsWith("edit.label:"));
+    const minted = (names: string[]) => names.filter((n) => !labels(names).includes(n));
+    expect(minted(dash).length).toBeGreaterThan(4);
+    expect(minted(dash).filter((name) => minted(under).includes(name))).toEqual([]);
+  });
+
+  test("every placement id in the default config's preset trees is distinct, chrome spliced in", () => {
+    // The premise every chrome name stands on: one id is one placement in the
+    // tree a preset renders.
+    const config = parseAndValidate("<user>", "{}", ALLOWED, DEFAULT_DSL_CONFIG);
+    for (const name of presetNames(config.presets)) {
+      const ids = placementIds(fragmentNode(config.presets[name]!.root!));
+      const repeated = ids.filter((id, i) => ids.indexOf(id) !== i);
+      expect([name, repeated]).toEqual([name, []]);
+    }
   });
 });
 
