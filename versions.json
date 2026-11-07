@@ -4,39 +4,39 @@
     {
       "version": "pr-689",
       "ref": "refs/pull/689/merge",
-      "sha": "dfbb28c8d1db28366eaddbb09c52ed5553d8971f",
-      "timestamp": "2026-11-07T12:00:46.687Z",
+      "sha": "b99c27273d97568940529a65b426dae4f8283be1",
+      "timestamp": "2026-11-07T12:02:26.995Z",
       "commits": [
         {
-          "sha": "dfbb28c8d1db28366eaddbb09c52ed5553d8971f",
+          "sha": "b99c27273d97568940529a65b426dae4f8283be1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:59:07Z",
-          "message": "Merge c33b179b6f6a3e9e162d53ad486f3df42d0e9d08 into fa8e87c85367b73007971b034e493d8b29912a51\n"
+          "timestamp": "2026-11-07T12:00:17Z",
+          "message": "Merge decb8e4eb897d1c5bad7637e45949dd0ce48a1d5 into fa8e87c85367b73007971b034e493d8b29912a51\n"
         },
         {
-          "sha": "c33b179b6f6a3e9e162d53ad486f3df42d0e9d08",
+          "sha": "decb8e4eb897d1c5bad7637e45949dd0ce48a1d5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:58:57-07:00",
           "message": "fix(daemon): a subscription the feed took after the connection moved on is ended, not dropped (brandon-unfiled-3248.df7i)\n\nThe subscribed cell unsubscribes from every state but answering, so the\ntable no longer depends on nothing interleaving with the feed's\nsubscribe. The connection builds a reply event through reply.ts's\nreplied, and the clientLeft comment says when a url frame's writer\ncounts as present.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
-          "sha": "b06fe470176ef7dcd6c1d28783367a0a1a872e46",
+          "sha": "dc13395af574cb45c82cf7f49fa45c8683f96d72",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:50:24-07:00",
           "message": "fix(daemon): a frame handler's synchronous throw is answered RENDER_FAILED, never an exception out of the socket's read (brandon-unfiled-3248.df7i)\n\nThe connection's frame handling runs inside one promise started in the\nread's turn, so a throw before its first await takes the handler-threw\npath. readOneFrame raising onFrame's throw would otherwise end the shared\ndaemon through uncaughtException.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
-          "sha": "7cd320bc9e0a04d8fa2145485773bb893d4efaf2",
+          "sha": "443f5edb434db414d84d307966e8c9efc520dce3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:44:06-07:00",
           "message": "fix(daemon): a url frame read past the deadline stays unattended, a socket error is the peer leaving, and a frame handler's throw is heard (brandon-unfiled-3248.df7i)\n\n- The read carries who waits in every state: a url frame read after the\n  backstop answered is unattended and lapsed, so its forwarder's hang-up\n  no longer leaves in-flight or reads as a client gone mid-click.\n- A socket error moves the state to closed, so a click whose turn falls\n  between the destroy and the 'close' sees its client gone.\n- readOneFrame delivers its first outcome outside the reader's parse, so a\n  throw from onFrame reaches the stream instead of being dropped as a\n  second parse failure.\n- The connection uses reply.ts's stay-up reply instead of a copy.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
-          "sha": "fe4bfaf6f9f3ab466e116ca775c1878e15e1bf94",
+          "sha": "411256d23737b707143b79c6fbd01f3e39c596e7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:30:53-07:00",
