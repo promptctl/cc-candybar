@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-688",
+      "ref": "refs/pull/688/merge",
+      "sha": "8d614ea37c8f6afc431891682b33400cc0c1b479",
+      "timestamp": "2026-11-07T12:05:43.268Z",
+      "commits": [
+        {
+          "sha": "8d614ea37c8f6afc431891682b33400cc0c1b479",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T12:04:29Z",
+          "message": "Merge 096d7cb871a77cebf445653da13905ea64eb5efb into fa8e87c85367b73007971b034e493d8b29912a51\n"
+        },
+        {
+          "sha": "096d7cb871a77cebf445653da13905ea64eb5efb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:55:35-07:00",
+          "message": "fix(watchers): a polled name whose read fails fires as it starts and stops failing, never a deaf directory; the sweep's loop drops its polled check (brandon-unfiled-3248.iywk)\n\nSecond high review of #688: taking the directory deaf for one refused read failed every other name on it and told a fresh `failed` window each period while the fault lasted. The holder's own read of the name is what fails loudly, and the poll hears the read recover. The stats test now asserts the polled line.\n"
+        },
+        {
+          "sha": "76ac2ba96074852b7d9ca90809fe675f6d270ba0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:46:05-07:00",
+          "message": "fix(watchers): a polled name the disk refuses to read is a deaf directory, judged open again on the period; the sweep re-arms before it reads; a released name is forgotten at the release (brandon-unfiled-3248.iywk)\n\nReview of #688 (medium): a folder that lost its search permission left the poll silent with no fault, a throw in a sweep left every polled name unheard, and a name re-acquired within a period fired for a change from before its acquire. Comments that called every directory watch an OS watch now name the polled kind.\n"
+        },
+        {
+          "sha": "75e022e4baccb1d7aab1b1941a3c44b3fb8b09df",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:38:41-07:00",
+          "message": "fix(watchers): a disk says how far its directory watch reaches, so poll mode follows the disk; a named directory polls its identity alone; the last polled folder released disarms the sweep (brandon-unfiled-3248.iywk)\n\nReview of #688 (high):\n- The poll choice was a registry option beside the disk it describes, so the check command, the demo and every darwin test ran a mode macOS production never does. It is now the filesystem port's watchReach.\n- A named directory's size and mtime are its children's, which a parent watch never hears; its entry is now identity and mode.\n- The sweep timer outlived the last polled folder by up to a period, against close leaving no timer armed.\n- Memory: the one-stream paragraph now covers OS watches only; counters doc counts polled slots as opened.\n"
+        },
+        {
+          "sha": "1605fef07aa7aa51e40330845d677c86ad30138e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:17:59-07:00",
+          "message": "docs(watchers): a macOS watch close waits on fseventsd and registers a new client; tests on the disk add to its backlog (brandon-unfiled-3248.iywk)\n"
+        },
+        {
+          "sha": "1ad947dfa73d81dfcf1698be7ae6912c421434dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T04:00:01-07:00",
+          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-689",
       "ref": "refs/pull/689/merge",
       "sha": "b99c27273d97568940529a65b426dae4f8283be1",
@@ -56,99 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T04:58:12-07:00",
           "message": "fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3) (#680)\n\n* fix(update-act): an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3)\n\nThe update act was ended once the wall clock passed the deadline in its\nrecord. Wall time runs while the machine sleeps, so closing the lid mid-build\nfor longer than ten minutes signalled the build's group at the first tick\nafter wake, possibly mid-write, which tears the bundle.\n\nThe budget is now spent in observed time: each tick that finds the act's group\nalive adds the span since the last look, whichever daemon took it, capped at\n60 s, into the act's awake.json, and the act ends once that passes ten\nminutes. A sleep of any length spends at most the cap, a clock set back spends\nnothing, and daemons looking in turn or restarting mid-act share one budget.\nThe record keeps its deadline for older daemons reading the same acts during\nan update.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(update-act): a look spends at most five polls, and a spend it can't read is an error (brandon-unfiled-3248.9eu3)\n\nA dark wake mid-sleep spent the 60 s cap, so forty of them overnight ended\nthe act and could tear the bundle; the cap now follows the poll interval,\nin the watch that owns both. awake.json is parsed: a missing number read\nas NaN, compared past the budget and ended a running build. Corrects the\nrace comment: concurrent looks lose nothing.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(update-act): a look stages its spend in the act's own directory, never making one (brandon-unfiled-3248.9eu3)\n\nwriteAtomic made the act's directory when a newer claim had pruned it,\nflushed every 2 s look on the render loop, and staged at a name shared by\nevery daemon. A look now stages at a pid-named file inside the act and\nrenames it, unflushed: an act gone under the look spends nothing. The\nconcurrent-writer safety no longer waits on writeAtomic's staging change.\nReverts a formatter reflow of test/update-act.test.ts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(update-act): a gap the loop could not have run spends nothing, and an unreadable spend restarts loudly (brandon-unfiled-3248.9eu3)\n\nA clamped gap charged every dark wake the cap, so a weekend's wakes still\nspent the budget; a gap longer than five polls now counts 0. A spend this\nversion can't read held the act unbounded while it held every restart;\nit is now replaced by one counted from that look and reported. A failed\nstage or rename removes its staged file.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* refactor(update-act): the spend file stages through stagedPath (brandon-unfiled-3248.9eu3)\n\nCloses brandon-unfiled-3248.9gmz: with wkh1 on main, the spend's staging\nname is the one spelling every writer uses, unique per write.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(update-act): the boot an act is judged against is read off the reader's own clock (brandon-unfiled-3248.9eu3)\n\nA reader judged \"started before this boot\" as its clock's now less the\nmachine's real uptime. On a held clock the two disagree: the clock moves\non while uptime does not, so a daemon armed six held minutes into an act\non a runner up less than that read the act as an earlier boot's, never\nspent a look on it, and never ended it. That is the CI failure of \"a\ndaemon started mid-act carries on from what the one before it spent\".\n\nThe boot time is now a Timekeeper reading, beside now and monotonic: the\nsystem clock reads it from uptime, and a held clock's boot stands still.\nos.uptime joins the clock reads eslint keeps in src/time.ts.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(update-act): a spend is finite and not negative, a held boot is before any time, and the clock's uptime reads are banned by name (brandon-unfiled-3248.9eu3)\n\nFrom the medium review of the CI fix:\n- An act's spend file holding a negative or infinite spend is no act's\n  spend: it restarts loudly instead of ending a build at once or never.\n- A held clock's boot is before any wall time a case can set it to, so a\n  case at the epoch does not read every act as an earlier boot's.\n- `uptime` from os and `hrtime`/`uptime` from process are refused as\n  named imports outside src/time.ts, as their property reads already are.\n- The restart comment and the observe test's title and header say what\n  the code does.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        }
-      ]
-    },
-    {
-      "version": "pr-685",
-      "ref": "refs/pull/685/merge",
-      "sha": "b57cb04dde10f0011e158158beca48a6bfc64de9",
-      "timestamp": "2026-11-07T11:59:53.601Z",
-      "commits": [
-        {
-          "sha": "b57cb04dde10f0011e158158beca48a6bfc64de9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:58:20Z",
-          "message": "Merge 46e91d18709017275cb80393d4a7f43c2e606857 into fa8e87c85367b73007971b034e493d8b29912a51\n"
-        },
-        {
-          "sha": "46e91d18709017275cb80393d4a7f43c2e606857",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:47:50-07:00",
-          "message": "fix(watchers): a key request's stat names the folder its watch opened on (brandon-unfiled-3248.tvhj)\n\nEvery stat of a folder that answers, a key request's included, records the\ncurrent generation's folder. A watch whose opening stat fails takes that\nrecord, so a folder replaced before a stat answers again is found lost, and a\nlater failed mkdir moves the generation instead of returning the watched key.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "c4ee7f1c6e04eb89aa26d583ddd170c0f0b817be",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:37:44-07:00",
-          "message": "fix(watchers): a storage stat failure is one fault wherever it is taken (brandon-unfiled-3248.tvhj)\n\nA key request's failed stat no longer marks the folder unusable: only a\nfailed mkdir waits on a reload. A watch that opened on a folder no stat could\nname takes the first answer, so it is not found lost. A failed window that\ncloses on a listening watch re-reads the folder's held files, which it may\nhave missed. Sources read the fault as last reported, the one the log and the\ncounts hold.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "33953e40812aa18f2c4a953a291d19c791991330",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:28:34-07:00",
-          "message": "fix(watchers): one window reports one storage fault and re-reads once (brandon-unfiled-3248.tvhj)\n\nA failed window re-read every held file even when its fault had not moved,\nso a watch that errors after every reopen logged a failed refresh per file on\nevery period. A window now takes the handle's deafness before judging, reports\nonce, and makes one re-read: the files it names, every file on the folder's\nown name or an unnamed event, and every file when the fault moves. A stat that\nfails as the watch opens is the generation's stat failure, never a throw out\nof the build.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "5110c4b7eb2f748dea01f75153cc6368674bea4e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:41:20-07:00",
-          "message": "fix(watchers): a storage folder's fault clears when its watch or stat recovers (brandon-unfiled-3248.tvhj)\n\nA refused or erroring watch, and a stat that failed during a judgment, are\nno longer terminal health. Each generation's fault is derived (unusable,\nthen the handle's deafness, then the last stat failure) and logged and\ncounted on a start, change or clear, so the registry's period reopen and the\nowner's period judgment clear it in the same generation. Deafness is\ncompared only when a window closes and at opening, so the result holds in\neither subscription order.\n\nThe registry's reopen now tells a failed window when a deaf directory ends\ndeaf another way (an error then a refusal, a refusal whose reason changes),\nreusing the comparison its refusal log already makes.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-688",
-      "ref": "refs/pull/688/merge",
-      "sha": "f13ae4d6c395148368019d88c8bc74f18c7e4767",
-      "timestamp": "2026-11-07T11:58:00.341Z",
-      "commits": [
-        {
-          "sha": "f13ae4d6c395148368019d88c8bc74f18c7e4767",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T11:55:46Z",
-          "message": "Merge 5e2fbd52cd14aae4a94db119d76f864d038374b8 into c3eb590e336d3dfbc8184093e0fe9c489121c59e\n"
-        },
-        {
-          "sha": "5e2fbd52cd14aae4a94db119d76f864d038374b8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:55:35-07:00",
-          "message": "fix(watchers): a polled name whose read fails fires as it starts and stops failing, never a deaf directory; the sweep's loop drops its polled check (brandon-unfiled-3248.iywk)\n\nSecond high review of #688: taking the directory deaf for one refused read failed every other name on it and told a fresh `failed` window each period while the fault lasted. The holder's own read of the name is what fails loudly, and the poll hears the read recover. The stats test now asserts the polled line.\n"
-        },
-        {
-          "sha": "60b18194b7f7b78ec4e221671295a53e715389d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:46:05-07:00",
-          "message": "fix(watchers): a polled name the disk refuses to read is a deaf directory, judged open again on the period; the sweep re-arms before it reads; a released name is forgotten at the release (brandon-unfiled-3248.iywk)\n\nReview of #688 (medium): a folder that lost its search permission left the poll silent with no fault, a throw in a sweep left every polled name unheard, and a name re-acquired within a period fired for a change from before its acquire. Comments that called every directory watch an OS watch now name the polled kind.\n"
-        },
-        {
-          "sha": "1ed036f50924f0e19743fe7f495dccce12dc1be0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:38:41-07:00",
-          "message": "fix(watchers): a disk says how far its directory watch reaches, so poll mode follows the disk; a named directory polls its identity alone; the last polled folder released disarms the sweep (brandon-unfiled-3248.iywk)\n\nReview of #688 (high):\n- The poll choice was a registry option beside the disk it describes, so the check command, the demo and every darwin test ran a mode macOS production never does. It is now the filesystem port's watchReach.\n- A named directory's size and mtime are its children's, which a parent watch never hears; its entry is now identity and mode.\n- The sweep timer outlived the last polled folder by up to a period, against close leaving no timer armed.\n- Memory: the one-stream paragraph now covers OS watches only; counters doc counts polled slots as opened.\n"
-        },
-        {
-          "sha": "68e4584151d31b1e8d148a464668eee16faaf18d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:17:59-07:00",
-          "message": "docs(watchers): a macOS watch close waits on fseventsd and registers a new client; tests on the disk add to its backlog (brandon-unfiled-3248.iywk)\n"
-        },
-        {
-          "sha": "544aac91d39631dba9e6011a37420c607bfa5bb8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:00:01-07:00",
-          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\nAn FSEvents stream has no depth: Node's non-recursive fs.watch on a\ndirectory subscribes the process to every file event beneath it, and\nlibuv drops the deeper ones only after fseventsd has routed each here.\nConfig candidates are watched by name in their nearest existing\ndirectory, so the daemon held watches on repository roots, worktree\nroots, .git directories and, for a session started in ~, the home\ndirectory: every build, install and test run on the machine went\nthrough fseventsd to the daemon, 246 paths on one stream.\n\nThe daemon on macOS now hears a directory watched only for named\nentries by one registry-wide sweep that lstats those entries each\nsecond, with no OS watch. Directories watched for every child or as a\ntree stay on FSEvents, and the file-event probe watches its folder for\nevery child so it still measures the stream those ride. Linux keeps\ninotify. daemon-stats shows the polled count.\n"
         }
       ]
     },
