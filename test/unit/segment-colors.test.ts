@@ -215,11 +215,23 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
 
   test("at 256 colours it stands as far off its ground as the truecolor pair does, where rounding alone would cost it", () => {
     const held = contrastRatio(parseRgbHex(RED.slice(1)), parseRgbHex(STATE.slice(1)));
-    // The pair holds more than the quiet floor, so keeping only that floor fails here.
-    expect(held).toBeGreaterThan(QUIET_MIN_CONTRAST);
     expect(contrastRatio(drawn(RED), drawn(STATE))).toBeLessThan(held);
     const kept = at(ColorDepth.EIGHT_BIT)(RED, STATE);
     expect(contrastRatio(drawn(kept), drawn(STATE))).toBeGreaterThanOrEqual(held);
+  });
+
+  test("at 256 colours a red that reads under the quiet floor in truecolor keeps that contrast, and is never lifted toward the floor", () => {
+    // atom-one-dark's error-lighten-3 on primary-darken-2: the farthest named
+    // red, accepted at 2.00:1. Lifted to the quiet floor it rounds to a yellow
+    // (#ffff87, 3.65:1); kept at what it had it stays a red (#ffaf87, 2.15:1).
+    const FAINT_RED = "#ffa09b";
+    const GROUND = "#2c87c4";
+    const held = contrastRatio(parseRgbHex(FAINT_RED.slice(1)), parseRgbHex(GROUND.slice(1)));
+    expect(held).toBeLessThan(QUIET_MIN_CONTRAST);
+    const kept = at(ColorDepth.EIGHT_BIT)(FAINT_RED, GROUND);
+    const keptContrast = contrastRatio(drawn(kept), drawn(GROUND));
+    expect(keptContrast).toBeGreaterThanOrEqual(held);
+    expect(keptContrast).toBeLessThan(QUIET_MIN_CONTRAST);
   });
 
   test("a translucent colour is measured as the terminal draws it, over black — never laid over its ground", () => {
