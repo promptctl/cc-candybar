@@ -54,7 +54,9 @@ describe("a daemon aimed by its home", () => {
     const ambient = homeNamed("ambient");
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
     try {
-      const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
+      const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper, {
+        kind: "supplied",
+      });
 
       daemonLog.log("info", "a line");
       await daemonLog.drained();

@@ -27,6 +27,19 @@ describe("folder identity as a watch's key", () => {
     expect(boundKey(boundOf(systemFilesystem, path.join(dir, "missing")))).toBe("gone");
   });
 
+  test("a directory's key stays put across a child write, and moves when it is made again", () => {
+    const at = path.join(dir, "watched");
+    fs.mkdirSync(at);
+    const before = identityKey(statIdentity(systemFilesystem, at));
+    fs.writeFileSync(path.join(at, "child"), "x");
+    fs.rmSync(path.join(at, "child"));
+    expect(identityKey(statIdentity(systemFilesystem, at))).toBe(before);
+    // The old folder is kept aside, so the new one cannot take its inode.
+    fs.renameSync(at, path.join(dir, "held"));
+    fs.mkdirSync(at);
+    expect(identityKey(statIdentity(systemFilesystem, at))).not.toBe(before);
+  });
+
   test("a directory that cannot be stat'd is thrown to a judge and spelled to a key", () => {
     const loop = path.join(dir, "loop");
     fs.symlinkSync(loop, loop);

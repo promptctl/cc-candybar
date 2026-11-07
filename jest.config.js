@@ -1,3 +1,5 @@
+import module from "node:module";
+
 // Jest reports through its "agent" reporter when an agent runs it and its
 // "default" one otherwise, but only while no reporter list is configured.
 // [LAW:one-source-of-truth] exception: the list below copies the one
@@ -32,6 +34,27 @@ export function reportersFor(run) {
   ];
 }
 
+// src spells a TypeScript module's import with `.js`, the name its build emits.
+// A test's module registry maps that spelling to the source (moduleNameMapper
+// below), but jest loads the global setup and teardown through Node's own
+// resolver, which the mapper never reaches. So this process resolves the same
+// spelling the same way, when no file has the name: whatever src the global
+// hooks import resolves as it does in a test.
+// [LAW:one-source-of-truth] One pattern for both resolvers.
+const SOURCE_SPECIFIER = /^(\.{1,2}\/.*)\.js$/;
+const NOT_FOUND = new Set(["MODULE_NOT_FOUND", "ERR_MODULE_NOT_FOUND"]);
+module.registerHooks({
+  resolve(specifier, context, nextResolve) {
+    try {
+      return nextResolve(specifier, context);
+    } catch (error) {
+      const source = SOURCE_SPECIFIER.exec(specifier);
+      if (source === null || !NOT_FOUND.has(error.code)) throw error;
+      return nextResolve(`${source[1]}.ts`, context);
+    }
+  },
+});
+
 // [LAW:single-enforcer] This file holds what every run shares and selects no
 // test, so a bare `jest`, `--watch` or `--coverage` finds nothing and says so
 // instead of running a file outside the checks of its own tier: the unit
@@ -63,7 +86,7 @@ export default {
     "^@promptctl/rich-js/themes/data$": "<rootDir>/node_modules/@promptctl/rich-js/dist/themes/data/index.js",
     "^@promptctl/rich-js/template-bindings$": "<rootDir>/node_modules/@promptctl/rich-js/dist/template-bindings/index.js",
     "^@promptctl/go-template-js$": "<rootDir>/node_modules/@promptctl/go-template-js/dist/index.js",
-    "^(\\.{1,2}/.*)\\.js$": "$1",
+    [SOURCE_SPECIFIER.source]: "$1",
   },
   transformIgnorePatterns: [
     // pnpm reroutes file: deps through node_modules/.pnpm/<spec>/node_modules/<pkg>,

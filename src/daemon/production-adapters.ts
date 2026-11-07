@@ -5,7 +5,8 @@
 
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import { fileStores, productionEdge } from "../doctor/edge";
-import { systemFilesystem } from "../disk/system-filesystem";
+import type { BirthtimeVerdict } from "../disk/birthtime-probe";
+import { systemFilesystemFor } from "../disk/system-filesystem";
 import { systemLauncher } from "../proc/system-launcher";
 import { systemProbe } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
@@ -22,11 +23,14 @@ import type { DaemonPaths } from "./paths";
 // is given, so a daemon built over a temporary directory touches nothing else.
 // `machine` is the clock the machine's side runs on: real children, real files
 // and the log's blocking wait live in real time, whatever clock the daemon
-// itself is held on.
+// itself is held on. `birthtime` is the process's probe of its disk
+// (src/disk/birthtime-probe.ts), which every folder identity the daemon's
+// watches judge reads.
 export function productionAdapters(
   paths: DaemonPaths,
   daemonLog: DaemonLog,
   machine: Timekeeper,
+  birthtime: BirthtimeVerdict,
 ): DaemonAdapters {
   return {
     daemonLog,
@@ -57,6 +61,6 @@ export function productionAdapters(
       }),
     fetch,
     pricing: (own) => livePricing({ ...own, clock: machine }),
-    filesystem: systemFilesystem,
+    filesystem: systemFilesystemFor(birthtime),
   };
 }
