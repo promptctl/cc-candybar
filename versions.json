@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-676",
+      "ref": "refs/pull/676/merge",
+      "sha": "d81fb28dd6ea77854f1c7bb32ae79925c5a8340a",
+      "timestamp": "2026-11-07T09:09:03.882Z",
+      "commits": [
+        {
+          "sha": "d81fb28dd6ea77854f1c7bb32ae79925c5a8340a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:08:04-07:00",
+          "message": "Merge 068bb06a15f6b8fd80b8552e296311403abf7731 into c8e21dd0a0271567df669f0c7b81bc241551c07a\n"
+        },
+        {
+          "sha": "068bb06a15f6b8fd80b8552e296311403abf7731",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T02:07:39-07:00",
+          "message": "fix(state): a session value its config no longer admits draws the default and warns (brandon-menus-sjhy.46w)\n\nSession state outlives the config that wrote it. A stale value was swallowed\nsilently: the globals resolution dropped it, a placement's bar drew the saved\nvalue while its carousel sat on its first option, and a carousel or cycle\nfolded an author key's stale value to its first member.\n\n- The gate judges a stored value (Gate.verdict): a key one of the config's\n  own `set` actions writes, holding a value its validator refuses or changes,\n  is foreign. A key no `set` writes is the daemon's own and is held.\n- JudgedState (src/daemon/foundations/judged-state.ts) is the branded reader\n  every interpretive reader demands: the registry's `state` variables, step-\n  state (which now steps from the seed instead of clamping), the verbs'\n  settings picks, the closing view's closeNested, and the idle close's\n  openRoots. Back admits a value only if the verdict holds it. Release reads\n  after a reload stay raw.\n- session.foreign (the session view) lists foreign values; the draw stands one\n  amber `domain` warning per key, identified by its key.\n- The ring shows a held non-option between the last and first options; the\n  cycle keeps its rest-first reading, with the reason stated.\n- validateBoolean accepts its own canonical false, \"\".\n- placementSetting drops its fallback for a refused draft.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-674",
       "ref": "refs/pull/674/merge",
       "sha": "0e9b28eaec6817b19679dd8fb9e2f1531443d5c6",
