@@ -53,7 +53,11 @@ const EVENTS: readonly ConnectionEvent[] = [
   { kind: "unreadable", answer: ANSWER },
   { kind: "deadline", answer: ANSWER },
   { kind: "reply", ...reply(0) },
-  { kind: "subscribe", sessionId: sessionIdOf("a-session"), lane: "statusline" },
+  {
+    kind: "subscribe",
+    sessionId: sessionIdOf("a-session"),
+    lane: "statusline",
+  },
   { kind: "subscribed", unsubscribe },
   { kind: "held", start },
   { kind: "threw", answer: ANSWER },
@@ -89,7 +93,10 @@ describe("the read", () => {
   // The forwarder hangs up by design, so its close is no departure even once
   // the backstop has fired: the frame stays in flight until it is handled.
   test("a url frame read after the backstop answered is unattended and lapsed", () => {
-    const { next, effects } = step(TOLD_TIMEOUT, { kind: "read", waits: false });
+    const { next, effects } = step(TOLD_TIMEOUT, {
+      kind: "read",
+      waits: false,
+    });
     expect(next).toEqual(LAPSED);
     expect(effects).toEqual([]);
     expect(step(next, { kind: "close" }).next).toEqual(LAPSED);
@@ -101,10 +108,7 @@ describe("the read", () => {
     const bad: ConnectionEvent = { kind: "unreadable", answer: ANSWER };
     expect(step(AWAITING, bad)).toEqual({
       next: REPLIED,
-      effects: [
-        { kind: "clear-backstop" },
-        { kind: "answer", answer: ANSWER },
-      ],
+      effects: [{ kind: "clear-backstop" }, { kind: "answer", answer: ANSWER }],
     });
     expect(step(ANSWERING, bad)).toEqual({ next: ANSWERING, effects: [] });
   });
@@ -185,9 +189,7 @@ describe("a reply", () => {
 
   test("a throw is answered from answering or held, and from nothing else", () => {
     const threw: ConnectionEvent = { kind: "threw", answer: ANSWER };
-    const answering = STATES.filter((s) =>
-      kinds(s, threw).includes("answer"),
-    );
+    const answering = STATES.filter((s) => kinds(s, threw).includes("answer"));
     expect(answering).toEqual([ANSWERING, HELD]);
     expect(step(HELD, threw).next).toEqual(REPLIED);
   });
@@ -295,17 +297,20 @@ test("an unattended frame's settled handling closes it, lapsed or not", () => {
 // table: a step leaves either only by crossing its line, and nothing returns
 // across it, so each moves once in a connection's life.
 describe.each(STATES)("from %o", (s) => {
-  test.each(EVENTS)("on %o, in-flight and the backstop move only across their lines", (e) => {
-    const { next, effects } = step(s, e);
-    const count = (kind: string): number =>
-      effects.filter((effect) => effect.kind === kind).length;
-    expect(count("leave-in-flight")).toBe(
-      Number(inFlight(s)) - Number(inFlight(next)),
-    );
-    expect(count("clear-backstop")).toBe(
-      Number(backstopArmed(s)) - Number(backstopArmed(next)),
-    );
-  });
+  test.each(EVENTS)(
+    "on %o, in-flight and the backstop move only across their lines",
+    (e) => {
+      const { next, effects } = step(s, e);
+      const count = (kind: string): number =>
+        effects.filter((effect) => effect.kind === kind).length;
+      expect(count("leave-in-flight")).toBe(
+        Number(inFlight(s)) - Number(inFlight(next)),
+      );
+      expect(count("clear-backstop")).toBe(
+        Number(backstopArmed(s)) - Number(backstopArmed(next)),
+      );
+    },
+  );
 });
 
 test("timedOut reads the deadline's fact, and nothing else", () => {

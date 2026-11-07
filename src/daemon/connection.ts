@@ -17,7 +17,7 @@ import {
   readOneFrame,
 } from "./protocol";
 import type { Response } from "./protocol";
-import { stay, type Reply } from "./reply.js";
+import { stay, type HandledRequest, type Reply } from "./reply.js";
 import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
 import { REQUEST_TIMEOUT_MS } from "./request-deadline.js";
@@ -212,17 +212,25 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   readOneFrame(
     sock,
     (frame) => {
-      const inbound = classifyInbound(frame);
-      // [LAW:dataflow-not-control-flow] Whether a client waits for the answer
-      // is a fact of what it sent, and the read carries it into the state.
-      on({ kind: "read", waits: inbound.kind === "request" });
-      void daemon
-        .handle(
-          inbound,
-          () => timedOut(state),
-          accepted,
-          () => clientLeft(state),
-        )
+      // [LAW:no-silent-failure] The frame's handling runs inside one promise,
+      // started in the read's own turn, so a throw before its first await is
+      // the daemon's failure, answered RENDER_FAILED like any later one, and
+      // never an exception out of the socket's read that ends every session.
+      void new Promise<HandledRequest>((resolve) => {
+        const inbound = classifyInbound(frame);
+        // [LAW:dataflow-not-control-flow] Whether a client waits for the
+        // answer is a fact of what it sent, and the read carries it into the
+        // state.
+        on({ kind: "read", waits: inbound.kind === "request" });
+        resolve(
+          daemon.handle(
+            inbound,
+            () => timedOut(state),
+            accepted,
+            () => clientLeft(state),
+          ),
+        );
+      })
         .then(on)
         .catch((err: unknown) => {
           daemon.log("error", `handler threw: ${inspect(err)}`);

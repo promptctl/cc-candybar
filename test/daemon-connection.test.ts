@@ -476,6 +476,31 @@ describe("a connection over a stream", () => {
     expect(ended()).toBe(true);
   });
 
+  // A throw before the handler's first await is the same failure as one after
+  // it: answered and logged, never an exception out of the socket's read.
+  test("a handler that throws before it returns a promise is answered RENDER_FAILED", async () => {
+    const log = jest.fn();
+    const daemon = standIn({
+      log,
+      handle: () => {
+        throw new Error("the handler broke at once");
+      },
+    });
+    const { send, received, ended } = open(daemon);
+    send(STATS);
+    await settled();
+    expect(received).toMatchObject([
+      { ok: false, code: "RENDER_FAILED", error: "the handler broke at once" },
+    ]);
+    expect(ended()).toBe(true);
+    expect(daemon.stats.inFlight).toBe(0);
+    expect(
+      log.mock.calls.some(([, line]) =>
+        String(line).startsWith("handler threw"),
+      ),
+    ).toBe(true);
+  });
+
   test("a handler that throws is answered RENDER_FAILED", async () => {
     const { send, received } = open(
       standIn({
