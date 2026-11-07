@@ -757,7 +757,7 @@ describe("a feed's draws and its summary", () => {
   });
 
   test("a feed whose pane nobody can see, woken at 1 ms intervals, draws at most once a still period", () => {
-    const { feeds, note, state, clock } = harness({ motion: "unseen" });
+    const { feeds, note, state, log, clock } = harness({ motion: "unseen" });
     note("s", "bar");
     const close = feeds.subscribe(
       "s",
@@ -771,6 +771,9 @@ describe("a feed's draws and its summary", () => {
     close();
     // The first frame, and one a still period after it, at 400 and 800 ms.
     expect(state.renders).toBe(3);
+    // Each later frame answers the wake waiting since the instant the frame
+    // before it was drawn, so every wake → frame is a still period.
+    expect(log.at(-1)).toContain(" wakeToFrame=last:400.0ms,max:400.0ms ");
   });
 
   // [LAW:nothing-unseen] Beside the frames a feed drew, its summary counts the
@@ -814,8 +817,8 @@ describe("a feed's draws and its summary", () => {
     clock.advance(1);
     close();
     expect(state.renders).toBe(2);
-    expect(log.at(-1)).toMatch(
-      / woke=data:1,state:0,reload:0,visibility:0 wokeAt=data:\d+,state:-,reload:-,visibility:- coalesced=1 /u,
+    expect(log.at(-1)).toContain(
+      " woke=data:1,state:0,reload:0,visibility:0 wakeToFrame=- coalesced=1 ",
     );
   });
 

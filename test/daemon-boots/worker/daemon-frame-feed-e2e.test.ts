@@ -484,9 +484,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       config,
     ]);
     let wrote = 0;
-    // The wall instant `wrote` was read at, so the feed's wake, which its
-    // summary prints on the wall clock, is read on the frames' clock.
-    let wroteWall = 0;
     const frames = await framesOf(
       sid,
       async ({ received, elapsed, waitFor, untilHeard }) => {
@@ -501,7 +498,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
           "the value that proves the watch live",
         );
         wrote = elapsed();
-        wroteWall = Date.now();
         writeAtomic(statusFile, "red");
         await waitFor(
           () => shows(received, "status red"),
@@ -519,21 +515,18 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // load, and the feed drawing after that wake, which is the feed's promise.
     // The still bar's next frame falls due a still period after the last one
     // started, just before the write, so a frame in by half of one after the
-    // wake is the wake's. Write → wake is reported, never bounded.
+    // wake is the wake's. The feed times wake → frame on its own clock, for
+    // the last frame a wake brought forward; write → frame is reported, never
+    // bounded.
     const summary = await closedSummary(sid);
     expect(summary).toMatch(/ woke=data:[1-9]\d*,/u);
-    const wokeAt = / wokeAt=data:(\d+),/u.exec(summary);
-    expect(wokeAt).not.toBeNull();
-    const woke = Number(wokeAt![1]) - wroteWall + wrote;
-    const spans = `write → wake ${woke - wrote} ms, wake → frame ${frames[2]!.at - woke} ms`;
-    expect({ wakeAfterWrite: woke >= wrote, spans }).toEqual({
-      wakeAfterWrite: true,
-      spans,
-    });
+    const timed = / wakeToFrame=last:([\d.]+)ms,/u.exec(summary);
+    expect(timed).not.toBeNull();
+    const wakeToFrame = Number(timed![1]);
     expect({
-      frameInHalfAStill: frames[2]!.at - woke < FEED_PERIODS.still / 2,
-      spans,
-    }).toEqual({ frameInHalfAStill: true, spans });
+      frameInHalfAStill: wakeToFrame < FEED_PERIODS.still / 2,
+      spans: `write → frame ${frames[2]!.at - wrote} ms, wake → frame ${wakeToFrame} ms`,
+    }).toMatchObject({ frameInHalfAStill: true });
   });
 
   test("a config saved under an open feed is pushed with no request after it, woken by the reload", async () => {

@@ -172,11 +172,6 @@ export interface FeedDeps<Req> {
 // Why a feed's next frame was brought forward: a value its bar reads changed
 // (`data`), its session's own state moved (`state`), its config reloaded
 // (`reload`), or which panes are on a screen changed (`visibility`).
-// A wake's wall instant on the summary line, in epoch milliseconds, or `-`
-// for a cause that never woke the feed.
-const wokeAtOf = (at: Instant | null): string =>
-  at === null ? "-" : String(Math.round(at * 1000));
-
 const WAKE_CAUSES = ["data", "state", "reload", "visibility"] as const;
 export type WakeCause = (typeof WAKE_CAUSES)[number];
 
@@ -253,9 +248,14 @@ interface Feed {
   // The wakes of each cause, and how many of them found the next frame
   // already as early as the feed's spacing allows.
   readonly woke: Record<WakeCause, number>;
-  // The wall instant of each cause's latest wake, so a frame that came late
-  // says whether its wake did: null while that cause has not woken it.
-  readonly wokeAt: Record<WakeCause, Instant | null>;
+  // [LAW:no-ambient-temporal-coupling] The moment, on the monotonic clock, of
+  // the earliest wake no frame has answered yet, null while none waits: the
+  // frame drawn next is that wake's, so wake → frame is measured where both
+  // happen and never rebuilt from another clock.
+  wokeSince: number | null;
+  // Wake → frame of the last frame that answered a wake, and the longest:
+  // the feed's own promise, apart from how long the wake took to arrive.
+  wakeToFrame: { last: number; max: number } | null;
   coalesced: number;
   summarizedAt: number;
   // The ledger's refreshes when the feed opened.
@@ -441,7 +441,9 @@ export class FrameFeeds<Req> {
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
     feed.woke[cause]++;
-    feed.wokeAt[cause] = this.deps.instant();
+    // A wake while a frame draws is that frame's, read by it: nothing waits.
+    if (feed.phase.kind !== "drawing")
+      feed.wokeSince ??= this.deps.clock.monotonic();
     if (!this.hasten(feed)) feed.coalesced++;
   }
 
@@ -541,7 +543,8 @@ export class FrameFeeds<Req> {
       evaluated: 0,
       cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
-      wokeAt: { data: null, state: null, reload: null, visibility: null },
+      wokeSince: null,
+      wakeToFrame: null,
       coalesced: 0,
       summarizedAt: now,
       refreshesAtOpen: this.deps.refreshes(),
@@ -633,6 +636,16 @@ export class FrameFeeds<Req> {
       return;
     }
     feed.lastStart = moment;
+    // A frame drawn answers the wake waiting for it; one that found no view
+    // answered nothing, and the wake waits on for the frame its view opens.
+    if (feed.wokeSince !== null) {
+      const span = started - feed.wokeSince;
+      feed.wakeToFrame = {
+        last: span,
+        max: Math.max(span, feed.wakeToFrame?.max ?? 0),
+      };
+      feed.wokeSince = null;
+    }
     const finished = this.deps.clock.monotonic();
     this.drawn++;
     feed.drawn++;
@@ -845,7 +858,7 @@ export class FrameFeeds<Req> {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} wokeAt=${WAKE_CAUSES.map((cause) => `${cause}:${wokeAtOf(feed.wokeAt[cause])}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} wakeToFrame=${feed.wakeToFrame === null ? "-" : `last:${feed.wakeToFrame.last.toFixed(1)}ms,max:${feed.wakeToFrame.max.toFixed(1)}ms`} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }
