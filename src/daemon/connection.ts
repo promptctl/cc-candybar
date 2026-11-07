@@ -17,7 +17,7 @@ import {
   readOneFrame,
 } from "./protocol";
 import type { Response } from "./protocol";
-import { stay, type HandledRequest, type Reply } from "./reply.js";
+import { replied, stay, type HandledRequest, type Reply } from "./reply.js";
 import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
 import { REQUEST_TIMEOUT_MS } from "./request-deadline.js";
@@ -198,7 +198,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // started, as a stream's close ends its subscription.
   const start = (work: (left: AbortSignal) => Promise<Reply>): void => {
     work(left.signal).then(
-      (r) => on({ kind: "reply", ...r }),
+      (r) => on(replied(r)),
       (err: unknown) => {
         daemon.log("error", `held request threw: ${inspect(err)}`);
         on({ kind: "threw", answer: stay(renderFailed(err)) });

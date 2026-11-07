@@ -228,6 +228,15 @@ describe("a subscribe", () => {
       effects: [{ kind: "clear-backstop" }, { kind: "leave-in-flight" }],
     });
   });
+
+  test("one the feed took after the connection moved on is ended", () => {
+    for (const s of STATES.filter((s) => s !== ANSWERING)) {
+      expect(step(s, { kind: "subscribed", unsubscribe })).toEqual({
+        next: s,
+        effects: [{ kind: "unsubscribe", unsubscribe }],
+      });
+    }
+  });
 });
 
 describe("a held request", () => {

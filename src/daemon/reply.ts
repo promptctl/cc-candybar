@@ -98,7 +98,10 @@ export const stay = (resp: Response): Reply => ({
   exitAfterFlush: null,
   delivered: NOTHING_DELIVERED,
 });
-const replied = (reply: Reply): HandledRequest => ({ kind: "reply", ...reply });
+export const replied = (reply: Reply): HandledRequest => ({
+  kind: "reply",
+  ...reply,
+});
 
 // [LAW:types-are-the-program] Every request kind answered with a reply: all
 // but a subscribe and a record, the compiler naming one added to the protocol

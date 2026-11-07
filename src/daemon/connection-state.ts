@@ -92,8 +92,8 @@ export const timedOut = (s: ConnectionState): boolean =>
   (s.kind === "answered" && s.by === "backstop") ||
   ((s.kind === "unattended" || s.kind === "closed") && s.lapsed);
 
-// The peer left: a url frame's writer never does, because its hang-up is the
-// forwarder's design and keeps it unattended until its frame is handled.
+// The peer left. A url frame's writer has not while its frame is handled,
+// because its hang-up is the forwarder's design and keeps it unattended.
 export const clientLeft = (s: ConnectionState): boolean => s.kind === "closed";
 
 // A move to `next` with no effects of its own.
@@ -176,9 +176,14 @@ const cell = (s: ConnectionState, e: ConnectionEvent): Step => {
           }
         : to(s);
     case "subscribed":
+      // [LAW:no-ambient-temporal-coupling] A subscription the feed took after
+      // the connection moved on is ended, not dropped, whatever moved it.
       return s.kind === "answering"
         ? to({ kind: "streaming", unsubscribe: e.unsubscribe })
-        : to(s);
+        : {
+            next: s,
+            effects: [{ kind: "unsubscribe", unsubscribe: e.unsubscribe }],
+          };
     case "held":
       return s.kind === "answering"
         ? {
