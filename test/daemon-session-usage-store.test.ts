@@ -1,7 +1,11 @@
-import { offlinePricing } from "../src/segments/pricing";
+import {
+  offlinePricing,
+  type Pricing,
+  type PriceTable,
+} from "../src/segments/pricing";
 import { homeOf } from "../src/daemon/home";
 import { systemTimekeeper } from "../src/time";
-import { reaction } from "mobx";
+import { observable, reaction, runInAction } from "mobx";
 import { HOST } from "./helpers/host";
 // [LAW:verifiable-goals] The architectural fix (brandon-daemon-memory-leak-5qh):
 // the `today` aggregate is a fold over daemon-owned per-session records, NOT a
@@ -1170,5 +1174,115 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     expect(store.declareToday(new Holds(), undefined).current()).toEqual(
       failed("usage store closed", "read"),
     );
+  });
+});
+
+// ─── Pricing: a price is read, never stored ───────────────────────────────────
+
+// One transcript line of `model-x` usage with no cost of its own: priced by
+// whatever table the read holds.
+function unpricedLine(tag: string, day: Date): string {
+  return (
+    JSON.stringify({
+      timestamp: day.toISOString(),
+      requestId: `req-${tag}`,
+      message: {
+        id: `msg-${tag}`,
+        model: "model-x",
+        usage: { input_tokens: 1_000_000, output_tokens: 0 },
+      },
+    }) + "\n"
+  );
+}
+
+const rates = (input: number): PriceTable => ({
+  "model-x": {
+    name: "X",
+    input,
+    output: 0,
+    cache_read: 0,
+    cache_write_5m: 0,
+    cache_write_1h: 0,
+  },
+});
+
+describe("SessionUsageStore — pricing", () => {
+  let holds: Holds;
+  let dir: string;
+  beforeEach(() => {
+    holds = new Holds();
+    dir = mkdtempSync(join(tmpdir(), "cc-candybar-store-pricing-"));
+  });
+  afterEach(() => {
+    holds.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a table that lands after entries were folded prices them, with no transcript read and no refresh", async () => {
+    const t = join(dir, "A.jsonl");
+    const at = new Date();
+    writeFileSync(t, unpricedLine("a", at) + unpricedLine("b", at));
+    // The one seam: a table the test lands, and the asks the store makes.
+    const table = observable.box<PriceTable>(rates(1), { deep: false });
+    let asks = 0;
+    const pricing: Pricing = {
+      table: () => table.get(),
+      ask: () => void asks++,
+    };
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      pricing,
+      sweepIntervalMs: 0,
+    });
+    try {
+      const hd = hook("A", t);
+      const first = await store.getUsageInfo("A", hd);
+      expect(first).toMatchObject({ value: { session: { cost: 2 } } });
+      expect(asks).toBe(1);
+      const today = await todayInfo(store, holds, hd, dir, instantOf(at));
+      expect(today).toMatchObject({ kind: "ok", value: { cost: 2 } });
+
+      // The table lands at ten times the rate. The draw prices by it in the
+      // same turn, and nothing is read for it.
+      const ops = await countFsOps(async () => {
+        runInAction(() => table.set(rates(10)));
+        expect(store.usageOf("A", hd)).toMatchObject({
+          value: { session: { cost: 20 } },
+        });
+        expect(todayNow(store, holds, hd, dir, instantOf(at))).toMatchObject({
+          value: { cost: 20 },
+        });
+      });
+      expect(ops).toBe(0);
+      expect(store.getStats()).toMatchObject({ misses: 1 });
+    } finally {
+      store.close();
+    }
+  });
+
+  test("an entry that carries its own cost keeps it under any table", async () => {
+    const t = join(dir, "A.jsonl");
+    const at = new Date();
+    writeFileSync(t, usageLine("a", at, 0.25) + unpricedLine("b", at));
+    const table = observable.box<PriceTable>(rates(1), { deep: false });
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      pricing: { table: () => table.get(), ask: () => {} },
+      sweepIntervalMs: 0,
+    });
+    try {
+      const hd = hook("A", t);
+      expect(await store.getUsageInfo("A", hd)).toMatchObject({
+        value: { session: { cost: 1.25, tokens: 1_000_015 } },
+      });
+      runInAction(() => table.set(rates(10)));
+      expect(store.usageOf("A", hd)).toMatchObject({
+        value: { session: { cost: 10.25, tokens: 1_000_015 } },
+      });
+    } finally {
+      store.close();
+    }
   });
 });

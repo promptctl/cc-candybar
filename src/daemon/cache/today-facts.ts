@@ -1,4 +1,4 @@
-import type { TokenBreakdown } from "../../segments/session";
+import { totalTokens, type TokenBreakdown } from "../../segments/session";
 import { ABSENT, ok, type Outcome } from "../../utils/outcome";
 import { dateOf, type Instant } from "../../utils/instant";
 
@@ -89,7 +89,7 @@ export function projectToday(
   if (own !== undefined) addDay(total, own);
   return ok({
     cost: total.cost,
-    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
+    tokens: totalTokens(total),
     tokenBreakdown: {
       input: total.input,
       output: total.output,

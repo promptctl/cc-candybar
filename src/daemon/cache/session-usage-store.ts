@@ -6,9 +6,15 @@ import {
   type SessionInfo,
   type UsageInfo,
   type TokenBreakdown,
+  totalTokens,
 } from "../../segments/session";
 import type { Host } from "../../host";
-import { costOf, type Pricing, type PriceTable } from "../../segments/pricing";
+import {
+  modelIdOf,
+  priceOf,
+  type Pricing,
+  type PriceTable,
+} from "../../segments/pricing";
 import {
   getClaudePaths,
   findProjectPaths,
@@ -19,6 +25,7 @@ import {
   type ClaudeHookData,
   type Folded,
   type ParsedEntry,
+  type UsageCounts,
 } from "../../utils/claude";
 // [LAW:single-enforcer] The once-per-day seed's directory walk shares the same
 // in-flight-I/O budget (gn4.2) as every other transcript scan.
@@ -50,7 +57,7 @@ import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
 import { elapsedMs, type Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
-import { addDay, dayKey, EMPTY_DAY, type DayUsage } from "./today-facts";
+import { dayKey, type DayUsage } from "./today-facts";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
 // Per-session records are canonical; the `session` projection (whole-session
@@ -109,27 +116,29 @@ export interface SpeedObservation {
 // draws is a tail slice of this (the `width` arg), so this only sets the ceiling.
 const SPEED_RING_CAPACITY = 64;
 
-function speedSampleOf(
-  breakdown: TokenBreakdown | null,
-  atMs: number,
-): SpeedSample {
+function speedSampleOf(breakdown: TokenBreakdown, atMs: number): SpeedSample {
   // Prompt-side = raw input plus both cache lanes (all tokens fed to the model);
-  // output = generated. total = the same sum the store's `tokens` projection
-  // uses, so `total === input + output`. [LAW:one-source-of-truth]
-  const input = breakdown
-    ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead
-    : 0;
-  const output = breakdown ? breakdown.output : 0;
-  return { input, output, total: input + output, atMs };
+  // output = generated; total = the one sum the `tokens` projection reads too,
+  // so `total === input + output`. [LAW:one-source-of-truth]
+  const input = breakdown.input + breakdown.cacheCreation + breakdown.cacheRead;
+  return {
+    input,
+    output: breakdown.output,
+    total: totalTokens(breakdown),
+    atMs,
+  };
 }
 
 interface SessionRecord {
   // [LAW:one-source-of-truth] `files` is canonical (main transcript + agent
-  // sidechains, each its own incremental FileFold); `sessionInfo`/`days` are
-  // derived from mergeFolds and re-synced on every ingest — the single writer.
+  // sidechains, each its own incremental FileFold); `entries`, `usage` and
+  // `days` are derived from mergeFolds and re-synced on every ingest — the
+  // single writer. Nothing priced is stored: a price is read off `usage` with
+  // the table held at the read (`sessionInfoOf`, `dayUsageOf`).
   files: Map<string, Folded<FileFold>>;
-  sessionInfo: SessionInfo;
-  days: Map<string, DayUsage>;
+  entries: number;
+  usage: Usage;
+  days: Map<string, Usage>;
   transcriptStamp: string;
   transcriptPath: string | undefined;
 }
@@ -229,117 +238,208 @@ function emptyBreakdown(): TokenBreakdown {
   return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
 }
 
+function addTokens(into: TokenBreakdown, t: TokenBreakdown): void {
+  into.input += t.input;
+  into.output += t.output;
+  into.cacheCreation += t.cacheCreation;
+  into.cacheRead += t.cacheRead;
+}
+
+// An entry's counts as the breakdown every sum here is made of.
+function breakdownOf(counts: UsageCounts): TokenBreakdown {
+  return {
+    input: counts.input_tokens || 0,
+    output: counts.output_tokens || 0,
+    cacheCreation: counts.cache_creation_input_tokens || 0,
+    cacheRead: counts.cache_read_input_tokens || 0,
+  };
+}
+
+// [LAW:types-are-the-program] Usage folded from entries, kept as the parts a
+// price is read from and nothing derived from them: the entries that carried
+// a cost of their own (Claude Code's `costUSD`, authoritative where present),
+// as the sum of their cost and of their tokens; and the tokens of the entries
+// that carried none, by the model they are priced as. No total stands beside
+// the parts, so none can disagree with them: the token total and the cost are
+// read off the parts (`tokensOf`, `costOf`), the cost with the table held at
+// the read. [LAW:one-source-of-truth] That read is what lets a table that
+// lands after a fold price the entries folded before it, in the turn it lands
+// and with no byte read again: the table is the price's one input that moves,
+// and it is never frozen into a record.
+interface Usage {
+  readonly carried: { readonly cost: number; readonly tokens: TokenBreakdown };
+  readonly unpriced: ReadonlyMap<string, TokenBreakdown>;
+}
+
+// A usage being summed: the same parts, writable by `addUsage` alone.
+interface Summing {
+  readonly carried: { cost: number; tokens: TokenBreakdown };
+  readonly unpriced: Map<string, TokenBreakdown>;
+}
+
+const EMPTY_USAGE: Usage = {
+  carried: { cost: 0, tokens: emptyBreakdown() },
+  unpriced: new Map(),
+};
+
+// A fresh sum to add to: nothing it is given is ever written.
+function summing(): Summing {
+  return {
+    carried: { cost: 0, tokens: emptyBreakdown() },
+    unpriced: new Map(),
+  };
+}
+
+// [LAW:single-enforcer] The one writer of a sum: each part added to its own.
+function addUsage(into: Summing, u: Usage): void {
+  into.carried.cost += u.carried.cost;
+  addTokens(into.carried.tokens, u.carried.tokens);
+  for (const [model, tokens] of u.unpriced) {
+    const held = into.unpriced.get(model);
+    if (held === undefined) into.unpriced.set(model, { ...tokens });
+    else addTokens(held, tokens);
+  }
+}
+
+// One entry's usage: carried when the entry priced itself, else its tokens
+// under the model they are priced as.
+function usageOfEntry(entry: ParsedEntry, counts: UsageCounts): Usage {
+  const tokens = breakdownOf(counts);
+  return entry.costUSD === undefined
+    ? {
+        carried: EMPTY_USAGE.carried,
+        unpriced: new Map([[modelIdOf(entry.raw), tokens]]),
+      }
+    : {
+        carried: { cost: entry.costUSD, tokens },
+        unpriced: EMPTY_USAGE.unpriced,
+      };
+}
+
+// [LAW:one-source-of-truth] The token total, read off the parts.
+function tokensOf(usage: Usage): TokenBreakdown {
+  const total = { ...usage.carried.tokens };
+  for (const tokens of usage.unpriced.values()) addTokens(total, tokens);
+  return total;
+}
+
+// [LAW:one-source-of-truth] The cost at a table: what the entries carried,
+// plus each model's tokens at its rates in the table.
+function costOf(usage: Usage, table: PriceTable): number {
+  let cost = usage.carried.cost;
+  for (const [model, tokens] of usage.unpriced) {
+    cost += priceOf(table, model, tokens);
+  }
+  return cost;
+}
+
+// A day's usage as the `today` fact carries it, priced at `table`.
+function dayUsageOf(usage: Usage, table: PriceTable): DayUsage {
+  return { cost: costOf(usage, table), ...tokensOf(usage) };
+}
+
+// The `session` projection's totals, priced at `table`. A record with no
+// usage-bearing entry, or no record, is the empty session (all-null
+// SessionInfo, whose fields the payload drops).
+function sessionInfoOf(
+  record: SessionRecord | undefined,
+  table: PriceTable,
+): SessionInfo {
+  if (record === undefined || record.entries === 0) return EMPTY_SESSION_INFO;
+  const tokenBreakdown = tokensOf(record.usage);
+  const cost = costOf(record.usage, table);
+  return {
+    cost,
+    calculatedCost: cost,
+    officialCost: null,
+    tokens: totalTokens(tokenBreakdown),
+    tokenBreakdown,
+  };
+}
+
 // [LAW:one-source-of-truth] The incremental fold of ONE append-only transcript
-// file (a session's main transcript or one agent sidechain): the sums over
+// file (a session's main transcript or one agent sidechain): the usage of
 // every usage-bearing entry seen so far. The cursor marking the bytes folded
 // is the `Folded` pair's, never a field of its own here.
 // The session aggregate is the MERGE of its files' folds (mergeFolds), so a file
 // rewritten by /compact re-folds in isolation without disturbing the others.
+// [LAW:one-type-per-behavior] That merge is a fold of the same shape: the
+// parts every projection is priced from, summed over files instead of lines.
 interface FileFold {
   entries: number; // usage-bearing entries folded (0 ⇒ empty session, all-null)
-  cost: number;
-  breakdown: TokenBreakdown;
-  days: Map<string, DayUsage>; // keys >= seed cutoff only (pruned on fold)
+  usage: Usage;
+  days: Map<string, Usage>; // keys >= seed cutoff only (pruned on fold)
 }
 
 const EMPTY_FILE_FOLD: FileFold = {
   entries: 0,
-  cost: 0,
-  breakdown: emptyBreakdown(),
+  usage: EMPTY_USAGE,
   days: new Map(),
 };
 
+// What one refold of a session answers: its files' folds, their merge, and
+// the main transcript's stamp as folded.
+interface Refolded extends FileFold {
+  files: Map<string, Folded<FileFold>>;
+  mainStamp: string;
+}
+
+// Usage summed per key: `u` into the sum under `key`, started when none is.
+function sumInto(sums: Map<string, Summing>, key: string, u: Usage): void {
+  let sum = sums.get(key);
+  if (sum === undefined) {
+    sum = summing();
+    sums.set(key, sum);
+  }
+  addUsage(sum, u);
+}
+
 // [LAW:effects-at-boundaries] The fold step: NEW entries onto a file fold.
-// Returns a FRESH FileFold (the state is never mutated) so two concurrent
-// refolds sharing one prior snapshot can't corrupt each other. A rewritten
-// file is foldAppended's to start over from EMPTY_FILE_FOLD.
-//
-// [LAW:one-source-of-truth] Session cost and day cost use the SAME priced value:
-// an entry lacking costUSD is priced once (by the store's pricing) and that figure feeds
-// BOTH the session total and its day bucket, so `today` is not silently
-// under-counted for un-costed entries.
-async function foldFile(
+// Pure, and returns a FRESH FileFold (the state is never mutated) so two
+// concurrent refolds sharing one prior snapshot can't corrupt each other. A
+// rewritten file is foldAppended's to start over from EMPTY_FILE_FOLD. `keep`
+// is the day key the retained days are cut at, the caller's clock's, so the
+// fold reads none. [LAW:one-source-of-truth] The session's usage and the
+// day's are two sums of the same entries, so the session total and `today`
+// are one price of one usage.
+function foldFile(
   state: FileFold,
   entries: readonly ParsedEntry[],
-  pricing: Pricing,
-  clock: Pick<Timekeeper, "now" | "monotonic" | "after">,
-): Promise<FileFold> {
-  // dayKey strings sort lexically == chronologically, so "keep recent" is a
-  // string comparison against yesterday's key.
-  const keep = dayKey(new Date(seedCutoffMs(clock.now())));
+  keep: string,
+): FileFold {
   let count = state.entries;
-  let cost = state.cost;
-  const breakdown = { ...state.breakdown };
-  // Loaded by the first entry that has no cost of its own, so a fold of
-  // costed entries never waits on it.
-  let table: PriceTable | null = null;
-  const days = new Map<string, DayUsage>();
-  for (const [k, v] of state.days) if (k >= keep) days.set(k, { ...v });
+  const usage = summing();
+  addUsage(usage, state.usage);
+  // dayKey strings sort lexically == chronologically, so "keep recent" is a
+  // string comparison against the cutoff's key.
+  const days = new Map<string, Summing>();
+  for (const [k, v] of state.days) if (k >= keep) sumInto(days, k, v);
   for (const entry of entries) {
-    const u = entry.message?.usage;
-    if (!u) continue;
+    const counts = entry.message?.usage;
+    if (!counts) continue;
     count++;
-    const priced =
-      entry.costUSD ?? costOf((table ??= await pricing.table()), entry.raw);
-    cost += priced;
-    breakdown.input += u.input_tokens || 0;
-    breakdown.output += u.output_tokens || 0;
-    breakdown.cacheCreation += u.cache_creation_input_tokens || 0;
-    breakdown.cacheRead += u.cache_read_input_tokens || 0;
+    const u = usageOfEntry(entry, counts);
+    addUsage(usage, u);
     const key = dayKey(new Date(entry.timestamp));
     if (key < keep) continue;
-    const d = days.get(key) ?? { ...EMPTY_DAY };
-    // [LAW:one-source-of-truth] Day cost uses the PRICED value, same as session
-    // cost — the old path mutated entry.costUSD to the priced cost before
-    // bucketByDay read it, so an un-costed entry contributed its priced value to
-    // `today`, not 0. Using `priced` here preserves that (session and day agree).
-    d.cost += priced;
-    d.input += u.input_tokens || 0;
-    d.output += u.output_tokens || 0;
-    d.cacheCreation += u.cache_creation_input_tokens || 0;
-    d.cacheRead += u.cache_read_input_tokens || 0;
-    days.set(key, d);
+    sumInto(days, key, u);
   }
-  return { entries: count, cost, breakdown, days };
+  return { entries: count, usage, days };
 }
 
 // [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
-// derived record shape the read path serves. `entries === 0` across all files is
-// the empty session (all-null SessionInfo, whose fields the payload drops) — the
-// same distinction the old `entries.length === 0` arm carried.
-function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
-  sessionInfo: SessionInfo;
-  days: Map<string, DayUsage>;
-} {
-  let count = 0;
-  let cost = 0;
-  const bd = emptyBreakdown();
-  const days = new Map<string, DayUsage>();
+// record's derived parts. `entries === 0` across all files is the empty
+// session, which `sessionInfoOf` answers all-null.
+function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): FileFold {
+  let entries = 0;
+  const usage = summing();
+  const days = new Map<string, Summing>();
   for (const { value: f } of files.values()) {
-    count += f.entries;
-    cost += f.cost;
-    bd.input += f.breakdown.input;
-    bd.output += f.breakdown.output;
-    bd.cacheCreation += f.breakdown.cacheCreation;
-    bd.cacheRead += f.breakdown.cacheRead;
-    for (const [k, v] of f.days) {
-      const d = days.get(k) ?? { ...EMPTY_DAY };
-      addDay(d, v);
-      days.set(k, d);
-    }
+    entries += f.entries;
+    addUsage(usage, f.usage);
+    for (const [k, v] of f.days) sumInto(days, k, v);
   }
-  if (count === 0) return { sessionInfo: EMPTY_SESSION_INFO, days };
-  const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
-  return {
-    sessionInfo: {
-      cost,
-      calculatedCost: cost,
-      officialCost: null,
-      tokens,
-      tokenBreakdown: bd,
-    },
-    days,
-  };
+  return { entries, usage, days };
 }
 
 // Whether a transcript path lies under one of a directory set's `projects/`
@@ -349,25 +449,32 @@ function under(path: string | undefined, roots: readonly string[]): boolean {
 }
 
 // [LAW:effects-at-boundaries] One directory set's day sums: each day some
-// record under its roots holds a bucket for, the sum of those buckets. Keyed
-// by the records' own days, so it reads no clock — the day `today` reads off
-// it is the frame's.
+// record under its roots holds usage for, the sum of that usage priced at
+// `table`. Keyed by the records' own days, so it reads no clock — the day
+// `today` reads off it is the frame's.
 function daySumsOver(
   slots: Iterable<SessionSlot>,
   roots: readonly string[],
+  table: PriceTable,
 ): Readonly<Record<string, DayUsage>> {
-  const sums = new Map<string, DayUsage>();
+  const sums = new Map<string, Summing>();
   for (const { record } of slots) {
     if (record === undefined || !under(record.transcriptPath, roots)) continue;
-    for (const [day, d] of record.days) {
-      const sum = sums.get(day) ?? { ...EMPTY_DAY };
-      addDay(sum, d);
-      sums.set(day, sum);
-    }
+    for (const [day, usage] of record.days) sumInto(sums, day, usage);
   }
-  // [LAW:types-are-the-program] A record, not a Map: the day sums are a fact
-  // that crosses a process as JSON (src/facts/session-facts.ts).
-  return Object.fromEntries(sums);
+  return priced(sums, table);
+}
+
+// Days of usage as the `today` fact carries them, priced at `table`.
+// [LAW:types-are-the-program] A record, not a Map: the day sums are a fact
+// that crosses a process as JSON (src/facts/session-facts.ts).
+function priced(
+  days: ReadonlyMap<string, Usage>,
+  table: PriceTable,
+): Readonly<Record<string, DayUsage>> {
+  const out: Record<string, DayUsage> = {};
+  for (const [day, usage] of days) out[day] = dayUsageOf(usage, table);
+  return out;
 }
 
 // A directory set's `today` state beside its scan: its roots, and its day
@@ -583,9 +690,10 @@ export class SessionUsageStore {
         if (record.kind === "failed") return record;
         return ok(
           usageOver(
-            record.kind === "ok"
-              ? record.value.sessionInfo
-              : EMPTY_SESSION_INFO,
+            sessionInfoOf(
+              record.kind === "ok" ? record.value : undefined,
+              this.pricing.table(),
+            ),
             hookData,
           ),
         );
@@ -603,16 +711,17 @@ export class SessionUsageStore {
   }
 
   // The `session` projection as the session's last refresh left it, for a
-  // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
-  // dropped) is not answered yet; one whose refresh found no transcript is the
-  // empty record its refresh answers for it.
+  // draw: no I/O, no fold, priced at the table held now. A session no refresh
+  // has answered (or one the sweep dropped) is not answered yet; one whose
+  // refresh found no transcript is the empty record its refresh answers for
+  // it.
   usageOf(sessionId: string, hookData: ClaudeHookData): Reading<UsageInfo> {
     const slot = this.sessions.get(sessionId);
     if (slot === undefined) return pendingOf("unread");
     const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
     return ok(
-      usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData),
+      usageOver(sessionInfoOf(slot.record, this.pricing.table()), hookData),
     );
   }
 
@@ -624,6 +733,12 @@ export class SessionUsageStore {
     stamp: string,
   ): Promise<Outcome<SessionRecord>> {
     return this.requestFlight.run(`${sessionId}:${stamp}`, async () => {
+      // [LAW:effects-at-boundaries] The request's refresh is where the table
+      // is asked for: it runs on every statusline tick of every session
+      // whose config reads session, today or speed, so the pricing's loads
+      // are driven by the one effect that already runs then, and never by a
+      // read, which a derivation makes.
+      this.pricing.ask();
       // [LAW:no-ambient-temporal-coupling] This refresh's own tally, so
       // whether IT read is its own fact, never another session's refresh
       // landing in the same await.
@@ -716,7 +831,7 @@ export class SessionUsageStore {
     if (record === undefined || under(record.transcriptPath, roots)) {
       return ABSENT;
     }
-    return ok(Object.fromEntries(record.days));
+    return ok(priced(record.days, this.pricing.table()));
   }
 
   // Take one tok/s observation of the active session: ingest its current
@@ -757,7 +872,7 @@ export class SessionUsageStore {
         return record;
       }
       const breakdown =
-        record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
+        record.kind === "ok" ? tokensOf(record.value.usage) : emptyBreakdown();
       const cur = speedSampleOf(breakdown, nowMs);
       const { ring } = this.hold(sessionId);
       // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the render
@@ -834,18 +949,12 @@ export class SessionUsageStore {
     // prior can't corrupt. Pinned by the concurrency test in
     // test/transcript-incremental.test.ts.
     // [LAW:no-silent-failure] ingest MUST stay total — every caller reads
-    // `.kind`, so a rejected promise (e.g. the pricing table's load
-    // throwing on a bad rate table or network hiccup inside foldFile) would
-    // escape the Outcome contract entirely. The deleted getSessionUsageFromPath
-    // wrapped this; keep that guarantee by mapping any throw to `failed`.
+    // `.kind`, so a rejected promise (a reader or a fold step throwing on a
+    // line it did not expect) would escape the Outcome contract entirely.
+    // Keep that guarantee by mapping any throw to `failed`.
     let refolded: {
       prior: SessionRecord | undefined;
-      outcome: Outcome<{
-        files: Map<string, Folded<FileFold>>;
-        sessionInfo: SessionInfo;
-        days: Map<string, DayUsage>;
-        mainStamp: string;
-      }>;
+      outcome: Outcome<Refolded>;
     };
     try {
       refolded = await this.flight.run(`${sessionId}:${stamp}`, async () => {
@@ -863,11 +972,10 @@ export class SessionUsageStore {
     }
     const { prior, outcome } = refolded;
     if (outcome.kind !== "ok") return outcome;
+    const { mainStamp, ...folded } = outcome.value;
     const record: SessionRecord = {
-      files: outcome.value.files,
-      sessionInfo: outcome.value.sessionInfo,
-      days: outcome.value.days,
-      transcriptStamp: outcome.value.mainStamp,
+      ...folded,
+      transcriptStamp: mainStamp,
       transcriptPath,
     };
     // Store only over the record this fold started from. A sweep of that
@@ -925,10 +1033,12 @@ export class SessionUsageStore {
     const known = this.daySets.get(key);
     if (known !== undefined) return known;
     const roots = claudePaths.map((dir) => join(dir, "projects") + sep);
+    // [LAW:one-source-of-truth] The table is read inside the derivation, so a
+    // table that lands recomputes the sums as a record landing does.
     const set: DaySet = {
       roots,
       sums: new Kept(`today over ${claudePaths.join(",")}`, () =>
-        daySumsOver(this.sessions.values(), roots),
+        daySumsOver(this.sessions.values(), roots, this.pricing.table()),
       ),
     };
     this.daySets.set(key, set);
@@ -946,14 +1056,7 @@ export class SessionUsageStore {
     sessionId: string,
     transcriptPath: string,
     prior: SessionRecord | undefined,
-  ): Promise<
-    Outcome<{
-      files: Map<string, Folded<FileFold>>;
-      sessionInfo: SessionInfo;
-      days: Map<string, DayUsage>;
-      mainStamp: string;
-    }>
-  > {
+  ): Promise<Outcome<Refolded>> {
     // File set for this fold: the main transcript plus the session's current
     // agent sidechains. Files no longer in the set (a removed sidechain) drop
     // out of `newFiles`, so a rewritten/renamed file cannot linger in the merge.
@@ -965,6 +1068,10 @@ export class SessionUsageStore {
       prior === undefined ? undefined : new Set(prior.files.keys()),
     );
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
+    // Files modified before the seed cutoff hold no entry that lands in
+    // `today`, and neither does a day bucket before it: one cutoff, read once
+    // per refold, prunes every file's days.
+    const keep = dayKey(new Date(seedCutoffMs(this.clock.now())));
     const newFiles = new Map<string, Folded<FileFold>>();
     let mainStamp = "";
     for (const filePath of [transcriptPath, ...agents.paths]) {
@@ -973,7 +1080,7 @@ export class SessionUsageStore {
         filePath,
         priorFold,
         EMPTY_FILE_FOLD,
-        (state, entries) => foldFile(state, entries, this.pricing, this.clock),
+        (state, entries) => foldFile(state, entries, keep),
       );
       if (read.kind === "failed") return read;
       if (read.kind === "absent") {
