@@ -74,17 +74,23 @@ export const unwatched = (record: ActRecord): ActAwake => ({
 
 // [LAW:one-source-of-truth] The look a daemon counts on from: the latest one
 // known, as the act's files hold it (`shared`) or as this daemon took it
-// (`own`), the later `lastSeen` deciding, else the act's start. One fact, two
-// copies: the files are every daemon's, so another daemon's later look wins,
-// and a daemon's own is how its looks still add up while the files can't take
-// a write.
+// (`own`), else the act's start. One fact, two copies: the files are every
+// daemon's, so another daemon's later look wins, and a daemon's own is how its
+// looks still add up while the files can't take a write. Latest is the larger
+// spend, since a job's spend only grows; a `lastSeen` is the wall clock's, and
+// a clock set back would hand a stale copy the win. Equal spends go to the
+// later look, which a span already counted from.
 export const latestLook = (
   record: ActRecord,
   shared: ActAwake | null,
   own: ActAwake | null,
 ): ActAwake => {
   if (own === null) return shared ?? unwatched(record);
-  return shared === null || own.lastSeen > shared.lastSeen ? own : shared;
+  if (shared === null) return own;
+  const ownLater =
+    own.spentMs > shared.spentMs ||
+    (own.spentMs === shared.spentMs && own.lastSeen > shared.lastSeen);
+  return ownLater ? own : shared;
 };
 
 // [LAW:dataflow-not-control-flow] One more look at the act running, at `now`:
@@ -441,24 +447,28 @@ const CLAIMED_FIRST: Claim = {
 };
 
 // [LAW:parse-dont-validate] What an act's spend file says: a spend, none yet
-// (no daemon has watched the act), or why this version can't read it.
+// (no daemon has watched the act), bytes this version can't parse, or a read
+// that failed. Unparsed bytes are replaced, since nothing else repairs them;
+// a failed read is left in place, since the spend it holds may be every
+// daemon's and still good, and a transient fault must not hand it back.
 type SpendRead =
-  | { readonly ok: true; readonly awake: ActAwake | null }
-  | { readonly ok: false; readonly reason: string };
+  | { readonly kind: "spend"; readonly awake: ActAwake | null }
+  | { readonly kind: "unparsed"; readonly reason: string }
+  | { readonly kind: "unread"; readonly reason: string };
 
 function readAwake(file: string): SpendRead {
   let text: string | null;
   try {
     text = readActFile(file);
   } catch (err) {
-    return { ok: false, reason: (err as Error).message };
+    return { kind: "unread", reason: (err as Error).message };
   }
-  if (text === null) return { ok: true, awake: null };
+  if (text === null) return { kind: "spend", awake: null };
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (err) {
-    return { ok: false, reason: `${(err as Error).message}: ${text}` };
+    return { kind: "unparsed", reason: `${(err as Error).message}: ${text}` };
   }
   const { spentMs, lastSeen } = (parsed ?? {}) as Partial<
     Record<keyof ActAwake, unknown>
@@ -469,8 +479,8 @@ function readAwake(file: string): SpendRead {
     spentMs >= 0 &&
     Number.isFinite(spentMs) &&
     Number.isFinite(lastSeen)
-    ? { ok: true, awake: { spentMs, lastSeen } }
-    : { ok: false, reason: `not an act's spend: ${text}` };
+    ? { kind: "spend", awake: { spentMs, lastSeen } }
+    : { kind: "unparsed", reason: `not an act's spend: ${text}` };
 }
 
 // [LAW:parse-dont-validate] One look: what the act has spent as of it, and
@@ -501,16 +511,26 @@ export function spendLook(
   const file = awakeOf(actDir);
   const read = readAwake(file);
   const awake = observe(
-    latestLook(facts.record, read.ok ? read.awake : null, own),
+    latestLook(facts.record, read.kind === "spend" ? read.awake : null, own),
     now,
     longestMs,
   );
+  // [LAW:no-silent-failure] A spend that can't be read is left as it is, and
+  // this look counts on from the latest look this daemon knows of, then says
+  // so.
+  if (read.kind === "unread") {
+    const base = own === null ? "the act's start" : "this daemon's last look";
+    return {
+      awake,
+      fault: `${file}: ${read.reason}; left in place, this look counts on from ${base}`,
+    };
+  }
   const faults: string[] = [];
-  // [LAW:no-silent-failure] A spend this version can't read is replaced by the
-  // latest look this daemon knows of, then reported. Read as spent, it ends a
-  // build mid-write; left in place, nothing repairs it, and the act runs
+  // [LAW:no-silent-failure] A spend this version can't parse is replaced by
+  // the latest look this daemon knows of, then reported. Read as spent, it
+  // ends a build mid-write; left in place, nothing repairs it, and the act runs
   // unbounded while it holds every restart.
-  if (!read.ok) {
+  if (read.kind === "unparsed") {
     const carried =
       own === null
         ? "its spend restarts"
@@ -525,9 +545,15 @@ export function spendLook(
     fs.writeFileSync(staged, JSON.stringify(awake));
     fs.renameSync(staged, file);
   } catch (err) {
-    fs.rmSync(staged, { force: true });
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-    faults.push(`${file}: ${(err as Error).message}`);
+    // Only a staging that is there is removed: a directory that can't be
+    // searched, where none could be staged, answers a removal with EACCES, a
+    // throw that would stand between the act and its end.
+    if (fs.existsSync(staged)) fs.rmSync(staged, { force: true });
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return null;
+    // The code, not the message: that names the staging, a new path each look,
+    // and the fault would read as a new one at every look.
+    faults.push(`${file}: not written: ${code ?? (err as Error).message}`);
   }
   return { awake, fault: faults.length === 0 ? null : faults.join("; ") };
 }

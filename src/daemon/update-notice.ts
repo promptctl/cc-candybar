@@ -325,7 +325,7 @@ export interface UpdateWatch {
   // every restart on a file nothing repairs would hold them for good.
   running(): Promise<boolean>;
   // Why this bundle's act files can't be read, as of the last look, else why
-  // the act last seen was ended with no verdict to say so; null when neither.
+  // the act last read was ended with no verdict to say so; null when neither.
   error(): string | null;
 }
 
@@ -505,6 +505,9 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     | { readonly ok: false; readonly error: string };
   let unreadable: string | null = null;
   const logUnreadable = changeLogger(log);
+  // The one spelling of the ⚠ text an act-file fault shows.
+  const actsFault = (why: string): string =>
+    `update act files (${actsDir}): ${why}`;
   async function touchActs<T>(touch: () => Promise<T>): Promise<ActsTouch<T>> {
     try {
       const value = await touch();
@@ -514,7 +517,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       if (err instanceof DaemonClosing) {
         return { ok: false, error: err.message };
       }
-      unreadable = `update act files (${actsDir}): ${(err as Error).message}`;
+      unreadable = actsFault((err as Error).message);
       logUnreadable(["error", unreadable]);
       return { ok: false, error: unreadable };
     }
@@ -530,9 +533,10 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     null;
   // [LAW:no-silent-failure] Why the watch ended an act whose verdict it could
   // not write. Readers judge that act lost, and the touch that next succeeds
-  // clears the fault that said why, so the reason is kept while the act is the
-  // one last seen.
-  let unrecorded: { readonly act: number; readonly reason: string } | null =
+  // clears the fault that said why, so the reason is kept while the act last
+  // read is that job. Keyed by job, not act number: a number is taken again
+  // once the acts directory is emptied.
+  let unrecorded: { readonly job: ActJob; readonly reason: string } | null =
     null;
 
   // Spends a look on the act if its group is alive, and ends it once that has
@@ -553,8 +557,16 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
 
   function endAct(facts: ActFacts): void {
     const ending = endOverdue(actsDir, facts, launcher);
-    // A newer claim pruned the act under this look: there is nothing to end.
-    if (ending.verdict === "gone") return;
+    // [LAW:no-silent-failure] The act's files went between the look and its
+    // end: a newer claim pruned it, or the state directory was removed. Either
+    // way a group this look proved alive is left unsignalled, so it is said.
+    if (ending.verdict === "gone") {
+      log(
+        "error",
+        `apply-update: act ${facts.act} timed out, but its files were removed before it could be ended; its group (pid ${facts.record.pid}) was not signalled`,
+      );
+      return;
+    }
     const signal = ending.signalled ? "ending it" : "its group took no signal";
     if (ending.verdict !== "unrecorded") {
       const why =
@@ -568,8 +580,10 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     );
     const end = ending.signalled ? "was ended" : "its group took no signal";
     unrecorded = {
-      act: facts.act,
-      reason: `update act files (${actsDir}): act ${facts.act} spent its budget and ${end}; its timeout verdict could not be written: ${ending.error}`,
+      job: facts.job,
+      reason: actsFault(
+        `act ${facts.act} spent its budget and ${end}; its timeout verdict could not be written: ${ending.error}`,
+      ),
     };
   }
 
@@ -583,6 +597,9 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       return facts;
     });
     if (closed || !read.ok) return;
+    if (unrecorded !== null && read.value?.job !== unrecorded.job) {
+      unrecorded = null;
+    }
     const next = judgeAct(read.value);
     if (seen === null && next.kind === "running") {
       log("info", `apply-update: act ${next.act} is running; watching it`);
@@ -633,14 +650,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         const read = await touchActs(() => acts.read());
         return read.ok && judgeAct(read.value).kind === "running";
       }),
-    error: () =>
-      unreadable ??
-      (unrecorded !== null &&
-      seen !== null &&
-      seen.kind !== "idle" &&
-      seen.act === unrecorded.act
-        ? unrecorded.reason
-        : null),
+    error: () => unreadable ?? unrecorded?.reason ?? null,
     act: () =>
       actTurn(async () => {
         if (closed) throw new DaemonClosing("apply-update");
@@ -680,6 +690,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
           `apply-update: act ${claim.act}: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
         );
         seen = { kind: "running", act: claim.act };
+        unrecorded = null;
       }),
   };
 }

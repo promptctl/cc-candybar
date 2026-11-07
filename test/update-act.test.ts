@@ -276,7 +276,10 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
   });
 
   // Root ignores directory permissions, so the condition cannot be built.
-  unlessRoot("a verdict that can't be written still ends the group, and says why", async () => {
+  unlessRoot.each([
+    ["can't be written to", 0o555],
+    ["can't be searched", 0o000],
+  ])("a verdict whose directory %s still ends the group, and says why", async (_, mode) => {
     const dir = path.join(scratch, "job");
     fs.mkdirSync(dir);
     const files = {
@@ -287,19 +290,19 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     const job = processLauncher.launchJobSync(SLEEP, files);
     if (!job.ok) throw new Error(job.error);
     job.release();
-    fs.chmodSync(dir, 0o555);
+    fs.chmodSync(dir, mode);
     try {
       expect(processLauncher.endJob(job.pid, files.status, { kind: "timeout" })).toEqual({
         verdict: "unrecorded",
-        error: expect.stringMatching(/EACCES/),
+        error: `${files.status}: EACCES`,
         signalled: true,
       });
       await until(() => !groupAlive(job.pid), "the ended job's group to go");
-      // No verdict, and no staged one left behind.
-      expect(fs.readdirSync(dir).filter((n) => n.startsWith("status"))).toEqual([]);
     } finally {
       fs.chmodSync(dir, 0o755);
     }
+    // No verdict, and no staged one left behind.
+    expect(fs.readdirSync(dir).filter((n) => n.startsWith("status"))).toEqual([]);
   });
 
   test("ending a job whose files are gone is a no-op, not an error", async () => {
@@ -1207,22 +1210,46 @@ describe("spendLook: one look written for the daemons after it", () => {
     });
   });
 
-  unlessRoot("a look whose act can't be written returns what it spent and the write's fault, and leaves no staged file", () => {
+  unlessRoot("a look whose act can't be written returns what it spent and the write's fault, the same fault at every look, and leaves no staged file", () => {
     const dir = actsDir(scratch, "/some/bundle/index.mjs");
     const actDir = path.join(dir, "3");
     fs.mkdirSync(actDir, { recursive: true });
     fs.chmodSync(actDir, 0o555);
     try {
-      const look = spendLook(dir, facts({ act: 3, alive: true }), null, 2_000, 10_000);
+      const first = spendLook(dir, facts({ act: 3, alive: true }), null, 2_000, 10_000);
+      if (first === null) throw new Error("the act read as gone");
+      const second = spendLook(dir, facts({ act: 3, alive: true }), first.awake, 4_000, 10_000);
 
-      expect(look).toEqual({
+      expect(first).toEqual({
         awake: { spentMs: 2_000, lastSeen: 2_000 },
-        fault: expect.stringMatching(/awake\.json: .*EACCES/),
+        fault: `${path.join(actDir, "awake.json")}: not written: EACCES`,
       });
+      expect(second).toEqual({ awake: { spentMs: 4_000, lastSeen: 4_000 }, fault: first.fault });
       expect(fs.readdirSync(actDir)).toEqual([]);
     } finally {
       fs.chmodSync(actDir, 0o755);
     }
+  });
+
+  unlessRoot("a spend that can't be read is left as it is, and the look counts on from this daemon's own", () => {
+    const dir = actsDir(scratch, "/some/bundle/index.mjs");
+    const file = path.join(dir, "3", "awake.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const held = { spentMs: 540_000, lastSeen: 540_000 };
+    fs.writeFileSync(file, JSON.stringify(held));
+    fs.chmodSync(file, 0o000);
+    try {
+      const own = { spentMs: 30_000, lastSeen: 30_000 };
+      expect(spendLook(dir, facts({ act: 3, alive: true }), own, 32_000, 10_000)).toEqual({
+        awake: { spentMs: 32_000, lastSeen: 32_000 },
+        fault: expect.stringMatching(
+          /awake\.json: .*EACCES.*; left in place, this look counts on from this daemon's last look$/,
+        ),
+      });
+    } finally {
+      fs.chmodSync(file, 0o644);
+    }
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual(held);
   });
 
   test.each([
