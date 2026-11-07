@@ -178,7 +178,7 @@ export type WakeCause = (typeof WAKE_CAUSES)[number];
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
 // state: no view to draw yet; the next frame due `at` a timer, on the
 // monotonic clock; a frame's render, which reads the bar's values; or that
-// frame going out after the render read them, which a wake marks `woke`.
+// frame going out after the render read them.
 type Phase =
   | { readonly kind: "waiting" }
   | {
@@ -187,7 +187,7 @@ type Phase =
       readonly clear: () => void;
     }
   | { readonly kind: "rendering" }
-  | { readonly kind: "pushing"; woke: boolean };
+  | { readonly kind: "pushing" };
 
 // A lane some subscriber of the session follows: kept from the lane's first
 // subscriber joining to its last leaving, which is how long the renderer holds
@@ -652,7 +652,7 @@ export class FrameFeeds<Req> {
     // [LAW:no-ambient-temporal-coupling] The render has read the bar's
     // values: a wake from here on, a sink's or a refused lane's, is the next
     // frame's.
-    feed.phase = { kind: "pushing", woke: false };
+    feed.phase = { kind: "pushing" };
     feed.lastStart = moment;
     const finished = this.deps.clock.monotonic();
     if (woke !== null) {
@@ -683,21 +683,23 @@ export class FrameFeeds<Req> {
   // frame took to draw comes off the wait and the rate holds whatever a render
   // costs. A frame step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
-  // next change is Infinity, an unseen bar's spacing is the still period, and
-  // a frame woken after its render read its values is followed a spacing on.
+  // next change is Infinity, and an unseen bar's spacing is the still period.
+  // A wake while the frame went out has already set the timer, and the frame
+  // never sets it later than that.
   private schedule(feed: Feed, frame: FeedFrame | null, at: Instant): void {
     const { moving, still } = this.deps.periods;
-    const woken =
-      feed.phase.kind === "pushing" && feed.phase.woke
-        ? this.spacingOf(feed)
-        : Infinity;
     const until = ((frame?.bar.nextChange ?? Infinity) - at) * 1000;
     const shownPeriod = Math.min(Math.max(until, moving), still);
     const shown = this.shown(feed);
     if (shownPeriod < still && shown) feed.moving++;
     if (shownPeriod < still && !shown) feed.unseen++;
-    const period = Math.min(shown ? shownPeriod : still, woken);
-    this.arm(feed, (at + period / 1000) as Instant, this.deps.instant());
+    const period = shown ? shownPeriod : still;
+    const due = (at + period / 1000) as Instant;
+    const wall = this.deps.instant();
+    const dueMoment =
+      this.deps.clock.monotonic() + Math.max(0, (due - wall) * 1000);
+    if (feed.phase.kind === "due" && feed.phase.at <= dueMoment) return;
+    this.arm(feed, due, wall);
   }
 
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
@@ -718,15 +720,10 @@ export class FrameFeeds<Req> {
   // [LAW:no-ambient-temporal-coupling] A frame renders in one synchronous
   // turn and opens nothing, so a wake while it renders is the render's own,
   // and the frame reads what that moved: it is coalesced into that frame. A
-  // wake after the render read its values marks the frame, whose schedule
-  // brings the next forward.
+  // wake after the render read its values is the next frame's.
   private hasten(feed: Feed): boolean {
     const { phase } = feed;
     if (phase.kind === "rendering") return false;
-    if (phase.kind === "pushing") {
-      phase.woke = true;
-      return true;
-    }
     const now = this.deps.clock.monotonic();
     const at = Math.max(now, feed.lastStart + this.spacingOf(feed));
     if (phase.kind === "due" && phase.at <= at) return false;
