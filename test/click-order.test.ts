@@ -313,7 +313,7 @@ describe("a gather is a snapshot of what it read", () => {
     expect(gathers).toEqual(["holder=null", "holder=null"]);
     expect(reports()).toHaveLength(1);
     expect(reports()[0]).toContain(" config=ok ");
-    expect(reports()[0]).toContain(" repos=0/1/0 ");
+    expect(reports()[0]).toContain(" repos=0/1 unproven=0 ");
   });
 
   test("a gate built again with the same rulings moves nothing: one gather, and its report lands", async () => {
@@ -327,7 +327,7 @@ describe("a gather is a snapshot of what it read", () => {
     expect(gathers).toEqual(["holder=null"]);
     expect(reports()).toHaveLength(1);
     expect(reports()[0]).toContain(" config=failed(1) ");
-    expect(reports()[0]).toContain(" repos=1/0/0 ");
+    expect(reports()[0]).toContain(" repos=1/0 unproven=0 ");
   });
 
   test("a resize during the probes moves nothing the doctor reads: one gather, and its report lands", async () => {

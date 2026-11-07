@@ -599,12 +599,10 @@ export interface Sighting {
 export type Verdict<S extends Sighting = Sighting> =
   // `note`: what a pass rests on, where the user would otherwise wonder.
   | { readonly ok: true; readonly note?: string }
-  // `notes`: what a failure says beside its problems, counted as none of them.
   | {
       readonly ok: false;
       readonly reason: string;
       readonly more?: readonly string[];
-      readonly notes?: readonly string[];
       readonly fix?: Fix;
       readonly sighting?: S;
     };
@@ -838,9 +836,9 @@ function configProblems(config: ConfigFacts): readonly string[] {
 // those. Either verdict names the file or chain it judged and what named it.
 // A repository the load left out is named on the row. One awaiting an answer
 // is a problem, which either answer clears. A declined one is the user's own
-// answer, so it rides the verdict's text, never counted as a problem: only
-// reversing that answer would clear it, and the doctor would become a prompt
-// to un-decline. An unproven worktree goes with it, since its directory's own
+// answer, so it rides the verdict's text in either arm, after the chain or
+// the first problem, and is never counted as one: only reversing that answer
+// would clear it, and the doctor would become a prompt to un-decline. An unproven worktree goes with it, since its directory's own
 // standing is on a line of its own. A book that cannot be read is already the
 // load's own advisory, as the bar's strip shows it.
 // [LAW:dataflow-not-control-flow] The gate is always folded in: an empty one
@@ -855,15 +853,11 @@ const config: Check = {
       ...configProblems(config),
       ...repoAwaitingLines(config.repos),
     ];
-    const settled = repoSettledLines(config.repos);
+    const said = (head: string) =>
+      [head, ...repoSettledLines(config.repos)].join("; ");
     return reason === undefined
-      ? { ok: true, note: [judged, ...settled].join("; ") }
-      : {
-          ok: false,
-          reason: `${judged}: ${reason}`,
-          more,
-          notes: settled,
-        };
+      ? { ok: true, note: said(judged) }
+      : { ok: false, reason: said(`${judged}: ${reason}`), more };
   },
 };
 

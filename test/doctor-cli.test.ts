@@ -424,16 +424,15 @@ describe("doctorPlan over a real config", () => {
       );
     });
 
-    // The bar's row counts problems only, so a declined repository beside a
-    // failing row adds nothing to its count; the CLI lists it after them.
-    test("declined beside a failing row is listed after its problems and counted as none", async () => {
+    // A declined repository rides the row's text whatever its verdict, on the
+    // bar as in the CLI, and is never counted among the row's problems.
+    test("declined beside a failing row rides its first problem and is counted as none", async () => {
       answerRepo(other, "declined", world.host.env);
       const user = path.join(dir, "xdg", "cc-candybar", "config.json5");
       fs.mkdirSync(path.dirname(user), { recursive: true });
       fs.writeFileSync(user, `{ helpers: { h: "x" } }`);
       expect((await planIn()).stdout).toContain(
-        `✗ config — ${user} (searched): helper "h" is never called\n` +
-          `    declined: ${real()} — its cc-candybar config does not run\n`,
+        `✗ config — ${user} (searched): helper "h" is never called; declined: ${real()} — its cc-candybar config does not run\n✓ install\n`,
       );
       const reports = runDoctor({
         ...(await gatherFacts(
@@ -456,7 +455,7 @@ describe("doctorPlan over a real config", () => {
         doctorReportPairs(reports).map((p) => [p.key, p.value]),
       );
       expect(pairs.get(doctorReportKeys("config").reason)).toBe(
-        `${user} (searched): helper "h" is never called`,
+        `${user} (searched): helper "h" is never called; declined: ${real()} — its cc-candybar config does not run`,
       );
     });
   });

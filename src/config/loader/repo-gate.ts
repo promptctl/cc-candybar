@@ -185,10 +185,11 @@ export function repoUnreadNotice(gate: RepoGate): string | null {
     : `Repository config answers could not be read: ${gate.unread} — no repository's config runs until they can be`;
 }
 
-// What a verdict outside the bar (`check`, the demo) says of each repository
-// it did not run. The bar asks instead.
-// [LAW:one-source-of-truth] One wording, split by what each line asks of the
-// user, so the doctor reads these sentences rather than a copy of them.
+// What a verdict says of each repository a load did not run: `check` and the
+// demo print every line, and the doctor's config row reads them split by what
+// each asks of the user. The bar asks instead.
+// [LAW:one-source-of-truth] One wording, so the doctor reads these sentences
+// rather than a copy of them, and its stale-report check compares them.
 export function repoGateLines(gate: RepoGate): readonly string[] {
   const unread = repoUnreadNotice(gate);
   return [
