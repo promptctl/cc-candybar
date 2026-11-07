@@ -22,13 +22,15 @@ export type HeldSessionOf = (
 
 // [LAW:types-are-the-program] Where a request's session runs, as the render
 // checkpoint stamps it: confirmed by the record of the Claude Code that ran its
-// client, in the tmux pane the client names or outside tmux (`tmux` null), or
-// not known, with why, wherever the client ran. Only a confirmed stamp says
+// client, in the tmux pane the client names or outside tmux (`tmux` null); left,
+// when that Claude Code's record holds another session, so the request is a
+// tick of a session it has moved on from (a `/clear` can be followed by one);
+// or not known, with why, wherever the client ran. Only a confirmed stamp says
 // anything of where the session is.
 export type SessionPane =
   | { readonly kind: "runs"; readonly tmux: TmuxHint | null }
   | {
-      readonly kind: "unconfirmed";
+      readonly kind: "left" | "unconfirmed";
       readonly tmux: TmuxHint | null;
       readonly why: string;
     };
@@ -62,7 +64,7 @@ export function sessionPaneOf(
   return held.sessionId === sessionId
     ? { kind: "runs", tmux }
     : {
-        kind: "unconfirmed",
+        kind: "left",
         tmux,
         why: `the Claude Code that ran its statusline (pid ${parentPid}) holds session ${held.sessionId}`,
       };
@@ -97,7 +99,7 @@ export function runsNowIn(
 
 // [LAW:nothing-unseen] The stamp as the render event's `pane` field.
 export const paneFact = (pane: SessionPane): string =>
-  pane.kind === "unconfirmed"
+  pane.kind !== "runs"
     ? `unconfirmed: ${pane.why}`
     : pane.tmux === null
       ? "outside"
@@ -105,6 +107,8 @@ export const paneFact = (pane: SessionPane): string =>
 
 // [LAW:no-silent-failure] Why a lane that shows the session its pane runs
 // shows another bar than this one, while such a lane is on: null otherwise.
+// A session its Claude Code has left names nothing to fix, since that Claude
+// Code's next tick is the pane's session; its render line still says why.
 export function sessionPaneError(
   pane: SessionPane,
   lanes: LaneSwitches,
