@@ -33,7 +33,11 @@ import {
 import { homeOf } from "../src/daemon/home";
 import { locations, stateDir } from "../src/daemon/paths";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
-import { PROTOCOL_VERSION, type ReaderRenderRequest } from "../src/daemon/protocol";
+import {
+  PROTOCOL_VERSION,
+  TOTAL_BUDGET_MS,
+  type ReaderRenderRequest,
+} from "../src/daemon/protocol";
 import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import {
   recordedCache,
@@ -115,6 +119,7 @@ import { TEST_LINKS } from "./helpers/link-signer";
 import { until } from "./helpers/until";
 import { daemonParts } from "./helpers/daemon-parts";
 import { CLAUDE_START, claudeHolds } from "./helpers/claude-record";
+import { configFlag } from "./helpers/daemon-e2e";
 
 jest.setTimeout(30_000);
 
@@ -256,21 +261,22 @@ function scriptPrograms(
 const CLAUDE_PID = 4242;
 
 // The request a statusline client that Claude Code's process CLAUDE_PID ran
-// sends from `cwd` with `--config <configFile>`, in its wire form, raw hints
-// and all: what the daemon's checkpoint takes.
+// sends from `cwd` with `--config <configFile>` at the epoch instant `now`, in
+// its wire form, raw hints and all: what the daemon's checkpoint takes. Its
+// deadline is the one a client states, its budget past the instant it sends.
 function wireRequest(
   cwd: string,
   home: string,
   claudeConfigDir: string,
   configFile: string,
-  deadline: number,
+  now: number,
   model = "Opus 4.7",
 ): ReaderRenderRequest {
   return {
     v: PROTOCOL_VERSION,
     kind: "render",
     encoding: "frame",
-    deadline,
+    deadline: now + TOTAL_BUDGET_MS,
     hookData: {
       hook_event_name: "Status",
       session_id: SID,
@@ -279,7 +285,7 @@ function wireRequest(
       model: { id: "claude-opus-4-7", display_name: model },
       workspace: { current_dir: cwd, project_dir: cwd },
     },
-    args: ["cc-candybar", "--config", configFile],
+    args: configFlag(configFile),
     cwd,
     termCols: WIDTH,
     termRows: 40,
@@ -535,6 +541,7 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     if (!checked.ok) {
       throw new Error(`the checkpoint refused the request: ${checked.problems.join("; ")}`);
     }
+    expect(checked.req.pane).toMatchObject({ kind: "runs", claude: { pid: CLAUDE_PID } });
     const setup = setUpRender(parts, checked.req, at, []);
     const settling = settleRequest(live.recorder, setup.view, at);
     return {
