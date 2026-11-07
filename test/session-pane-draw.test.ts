@@ -7,7 +7,8 @@
 //
 // The draw's parts are composed as the daemon composes them
 // (src/daemon/daemon.ts), in this worker on a held clock, because the boot
-// ratchet admits no new booting case (.claude/memory/testing.md). The list a
+// ratchet admits no new booting case (.claude/memory/testing.md), and each
+// tick is the daemon's reply to a render request (src/daemon/reply.ts). The list a
 // draw built is read from the session's recording, which carries the list the
 // door's indicator counts and its viewer pages.
 //
@@ -18,8 +19,6 @@ import os from "node:os";
 import path from "node:path";
 import { reaction } from "mobx";
 
-import { LANES } from "../src/config/lanes";
-import { applyRequest } from "../src/daemon/apply";
 import { NO_FILE_EVENTS } from "../src/daemon/cache/file-events";
 import { RenderCache } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -36,15 +35,15 @@ import { MISMATCH_RACE_S } from "../src/daemon/mismatch-runs";
 import { locations, stateDir, storedRoot } from "../src/daemon/paths";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
 import { PROTOCOL_VERSION, type ClientHints } from "../src/daemon/protocol";
-import {
-  checkRenderRequest,
-  type CheckedRenderRequest,
-} from "../src/daemon/render-checkpoint";
+import type { CheckedRenderRequest } from "../src/daemon/render-checkpoint";
+import { RenderSightings } from "../src/daemon/render-sightings";
 import { RenderWarningRecords } from "../src/daemon/render-warnings";
+import { replyTo } from "../src/daemon/reply";
 import { sessionIdOf } from "../src/daemon/session-id";
 import { recordedCache } from "../src/daemon/session-recorder";
 import { sessionSource, type SessionSource } from "../src/daemon/session-source";
-import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
+import { SessionState } from "../src/daemon/session-state";
+import { RuntimeStats } from "../src/daemon/stats";
 import { newUpdateFact } from "../src/daemon/update-fact";
 import { NEVER_CLICKED } from "../src/demo/play";
 import { systemFilesystem } from "../src/disk/system-filesystem";
@@ -116,7 +115,10 @@ function daemonDraw() {
     logger: log,
     ledger: new RefreshLedger(log),
   });
-  const sessionState = new SessionState(SINGLE_RUN);
+  // [LAW:single-enforcer] The store is held by the journal's turns, as the
+  // daemon's is, so a write outside the request arm's turn throws here too.
+  const turns = new JournalTurns();
+  const sessionState = new SessionState(turns);
   const update = newUpdateFact();
   const runs = new SourceRuns({ launcher, clock });
   const source = sessionSource({
@@ -151,7 +153,6 @@ function daemonDraw() {
       ),
     log,
   );
-  const turns = new JournalTurns();
   const { arrival: _arrival, described: _described, ...verbCtx } = testVerbContext(
     sessionState,
     undefined,
@@ -161,16 +162,19 @@ function daemonDraw() {
   );
   const heldSession = heldSessionUnder(home);
   let feeds: FrameFeeds<CheckedRenderRequest> | null = null;
-  // [LAW:single-enforcer] The parts the daemon's draw reads, its run of
-  // mismatched stamps the one the request arm writes, and a stand-in for each
-  // that has nothing to warn of here (no update, no link-id fault, no launch).
+  // [LAW:single-enforcer] The parts the daemon's reply and draw read, its run
+  // of mismatched stamps the one the request arm writes, and a stand-in for
+  // each that has nothing to warn of here (no update, no link-id fault, no
+  // launch).
   const parts: DaemonParts = {
-    home: rendererHome,
+    home,
     storedRoot: storedRoot(rendererHome),
     heldSession,
     rendererName: "pane-draw",
     clock,
     log,
+    stats: new RuntimeStats(clock),
+    renderSightings: new RenderSightings(),
     recorder,
     sessionState,
     mismatchRuns: verbCtx.mismatchRuns,
@@ -183,7 +187,7 @@ function daemonDraw() {
     effectSessions: new EffectSessions<RenderedLine>(),
     updateWatch: { notice: () => [], error: () => null },
     linkIds: { error: () => null },
-    launcher: { launcherWarnings: () => [] },
+    launcher: { launcherWarnings: () => [], answeredPipeEvent: () => {} },
     verbCtx,
     draw: (...request: Parameters<DaemonParts["draw"]>) => drawAnswer(parts, ...request),
     get frameFeeds() {
@@ -217,7 +221,10 @@ function daemonDraw() {
     providers.usageStore.close();
     providers.tmuxService.close();
     providers.managedStorage.close();
+    providers.hostService.close();
     watchers.closeAll();
+    turns.close();
+    sessionState.close();
   });
 
   // The client hints of a tick run in tmux pane PANE by the process `pid`,
@@ -228,36 +235,29 @@ function daemonDraw() {
     parent: { pid, startTime: CLAUDE_START },
     claudeConfigDir,
   });
-  // One statusline tick of `sid` from the process `pid`, as the daemon's
-  // request path takes it: through the checkpoint, the arm's turn, and the
-  // draw, at the clock's instant, with no time to wait on its sources.
+  // One statusline tick of `sid` from the process `pid`, as the daemon
+  // replies to it: through the checkpoint, the arm's turn, and the draw, at
+  // the clock's instant. Its client's deadline is that instant, so it leaves
+  // no time to wait on its sources and the held clock never has to move.
+  // [LAW:no-silent-failure] An error the tick only logs fails it.
   const tick = async (sid: string, pid: number): Promise<void> => {
-    const checked = checkRenderRequest(
+    const before = said.length;
+    const { resp } = await replyTo(
+      parts,
       {
         v: PROTOCOL_VERSION,
         kind: "render",
         encoding: "frame",
+        deadline: clock.now(),
         ...renderBody(sid, home, hintsOf(pid), ["cc-candybar", "--config", configFile]),
-      } as unknown as Parameters<typeof checkRenderRequest>[0],
-      { firstSightOfUnknownHookField: () => false },
-      log,
-      home,
-      parts.storedRoot,
-      heldSession,
+      } as unknown as Parameters<typeof replyTo>[1],
+      () => false,
+      clock.monotonic(),
+      () => false,
     );
-    if (!checked.ok) throw new Error(`the checkpoint refused the tick: ${checked.problems.join("; ")}`);
-    const answer = await applyRequest(
-      {
-        kind: "request",
-        req: checked.req,
-        at: instantAt(clock),
-        arrived: clock.monotonic(),
-        waitEndsAt: clock.monotonic(),
-        facts: [],
-      },
-      parts,
-    );
-    if (!answer.resp.ok) throw new Error(`the tick drew no bar: ${JSON.stringify(answer.resp)}`);
+    if (!resp.ok) throw new Error(`the tick drew no bar: ${JSON.stringify(resp)}`);
+    const errors = said.slice(before).filter((line) => line.startsWith("error "));
+    if (errors.length > 0) throw new Error(`the tick logged errors:\n${errors.join("\n")}`);
   };
   // A session whose first tick from `pid` opened its view, recorded from
   // there on: each later tick returns the list its draw built.
@@ -270,9 +270,9 @@ function daemonDraw() {
     });
     cleanups.push(stop);
     return {
-      tick: async (from = pid): Promise<DiagnosticList> => {
+      tick: async (): Promise<DiagnosticList> => {
         const before = written.length;
-        await tick(sid, from);
+        await tick(sid, pid);
         const draws = written.slice(before).flatMap((line) => (line.kind === "draw" ? [line] : []));
         if (draws.length !== 1) throw new Error(`the tick drew ${draws.length} recorded answers`);
         return draws[0]!.diagnostics;
@@ -281,7 +281,6 @@ function daemonDraw() {
   };
   return {
     clock,
-    said,
     opened,
     // The stand-in Claude Code at `pid` holds `sid` now: a `/clear` when
     // written again.
@@ -294,16 +293,17 @@ function daemonDraw() {
 const panePart = (list: DiagnosticList): string | undefined =>
   list.find((m) => m.about === "session-pane")?.message;
 
-const LANE = `The ${LANES.pane.label} of pane ${PANE} shows the session the pane's Claude Code holds, and`;
-
 test("a tick whose stamp is unconfirmed draws a bar whose list holds the session-pane message", async () => {
   const d = daemonDraw();
   // No Claude Code record names pid 4300: the process that ran the client
-  // is no Claude Code whose session can be read.
+  // is no Claude Code whose session can be read. The message's wording is
+  // test/unit/session-pane.test.ts's; here it is the unconfirmed stamp's.
   const s = await d.opened(SID, 4300);
-  expect(panePart(await s.tick())).toBe(
-    `${LANE} this one is not known to be it: the process that ran its statusline (pid 4300) is no Claude Code whose session can be read: it keeps no session record at ${d.recordAt(4300)} (update Claude Code with \`claude update\`: recent releases keep one). A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`,
-  );
+  const message = panePart(await s.tick());
+  expect(message).toContain(`pane ${PANE}`);
+  expect(message).toContain("this one is not known to be it");
+  expect(message).toContain(`(pid 4300) is no Claude Code`);
+  expect(message).toContain(d.recordAt(4300));
 });
 
 test("a confirmed tick's bar lists no session-pane message", async () => {
@@ -321,19 +321,28 @@ test("a mismatch draws no session-pane message inside the rewrite race, and draw
   d.clock.advance((MISMATCH_RACE_S * 1000) / 2);
   expect(panePart(await s.tick())).toBeUndefined();
   d.clock.advance(MISMATCH_RACE_S * 1000);
-  expect(panePart(await s.tick())).toBe(
-    `${LANE} this one is not it: the Claude Code that ran its statusline (pid 4302) holds session ${CLEARED}, for longer than a \`/clear\` or \`/resume\` takes to rewrite it`,
-  );
+  const message = panePart(await s.tick());
+  expect(message).toContain(`pane ${PANE}`);
+  expect(message).toContain("this one is not it");
+  expect(message).toContain(`(pid 4302) holds session ${CLEARED}`);
 });
 
-test("a /clear's straggling tick of the old session draws no session-pane message", async () => {
+test("a /clear's straggling ticks of the old session draw no session-pane message", async () => {
   const d = daemonDraw();
   d.holds(4303, SID);
   const s = await d.opened(SID, 4303);
   // The `/clear`: the record now holds the new session, whose first tick is
-  // confirmed, and the old session's last tick lands after it.
+  // confirmed, and the old session's ticks land after it.
   d.holds(4303, CLEARED);
   const cleared = await d.opened(CLEARED, 4303);
   expect(panePart(await cleared.tick())).toBeUndefined();
+  // Stragglers inside the race of the new session's first tick are the race
+  // and open no run, so one landing past it opens a run of its own, and a
+  // race measured from the first straggler would have lasted by then.
+  d.clock.advance(1000);
+  expect(panePart(await s.tick())).toBeUndefined();
+  d.clock.advance(MISMATCH_RACE_S * 1000 - 2000);
+  expect(panePart(await s.tick())).toBeUndefined();
+  d.clock.advance(3000);
   expect(panePart(await s.tick())).toBeUndefined();
 });
