@@ -68,8 +68,9 @@ export const DISCLOSURE_GLYPH_CLOSE = "✕";
 // panel — and the risen door's ✖ is `error` — it dismisses the whole menu. A
 // ✕ keeps the role's hue and moves only its lightness, until it reads on the
 // ground it is drawn on (`closeOn`, render/band-style.ts); the door's ✖ is
-// always one of the colours the theme names for the role, never moved
-// (`roleTextOn`, render/segment-color.ts), so it is that theme's red.
+// always one of the colours the render's depth draws as the role, never moved
+// (`roleTextOn`, render/segment-color.ts), so it is that theme's red, and at
+// ansi the terminal's.
 export const DISCLOSURE_CLOSE_ROLE: SemanticRole = "warning";
 export const DOOR_CLOSE_ROLE: SemanticRole = "error";
 
