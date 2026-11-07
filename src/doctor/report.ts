@@ -72,7 +72,8 @@ export function doctorReportKeys(checkName: string): ReportKeys {
 // [LAW:nothing-unseen] What the config check reasoned over beside the load:
 // which spelling named the config it judged, how many repositories the gate
 // left out awaiting an answer and declined, and how many directories claim a
-// worktree their repository does not vouch for (each also among the first).
+// worktree their repository does not vouch for: a count of its own, since
+// such a directory answers for itself under any standing, approved included.
 export function configFields({ target, repos }: ConfigFacts): string {
   return `configTarget=${target.source} repos=${repos.awaiting.length}/${repos.declined.length} unproven=${repos.unproven.length}`;
 }

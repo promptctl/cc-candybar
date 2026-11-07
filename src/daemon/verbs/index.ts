@@ -1493,7 +1493,10 @@ function movedSince(
 // [LAW:one-source-of-truth] The gate as the doctor reads it: every load builds
 // a new one, so it is compared by what its lines say. An answer that moves no
 // layer (an awaiting repository declined) keeps the config as it was, and only
-// the gate tells the report it would write is stale.
+// the gate tells the report it would write is stale. The lines carry every
+// ruling: each directory reached stands in one list (or the book is unread,
+// which has a line), and every list but the approved one has lines, so no
+// reached directory's standing moves without a line moving.
 const sameGate = (a: RepoGate, b: RepoGate): boolean =>
   repoGateLines(a).join("\n") === repoGateLines(b).join("\n");
 
