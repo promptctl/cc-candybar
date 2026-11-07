@@ -3,7 +3,7 @@
 // the socket uses, closed with nothing left running, and built again over the
 // same storage to see a restart.
 
-import { NO_TMUX_AT_EXIT } from "../../helpers/in-worker-daemon";
+import { NO_TMUX_AT_EXIT, bundleAt } from "../../helpers/worker-edges";
 import { hostOf } from "../../helpers/host";
 import { HOME_ENV, NAME_ENV, homeOf } from "../../../src/daemon/home";
 import type { Host } from "../../../src/host";
@@ -42,7 +42,7 @@ import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
 import { hookData } from "../../helpers/daemon-e2e";
 import { linkUrls } from "../../helpers/frame";
-import { buildDaemon, bundleAt, statsOf } from "../../helpers/in-worker-daemon";
+import { buildDaemon, statsOf } from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
 import { until } from "../../helpers/until";
 

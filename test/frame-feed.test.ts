@@ -4,11 +4,16 @@
 // frame forward to the earliest the feed's spacing allows, two subscribers
 // share each render, and a feed with no subscriber draws nothing.
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import type { Monotonic } from "../src/time";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { ok } from "../src/utils/outcome";
-import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { renderFrame } from "../src/daemon/draw-bar";
+import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import { replyTo } from "../src/daemon/reply";
 import {
   feedsFact,
   FrameFeeds,
@@ -30,6 +35,9 @@ import {
 } from "../src/config/lanes";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { heldClock } from "./helpers/held-clock";
+import { daemonParts } from "./helpers/daemon-parts";
+import { renderBody } from "./helpers/daemon-e2e";
+import { hostOf } from "./helpers/host";
 
 // Where every harness's held clock stands at the start, in wall ms: a boundary
 // of every beat and period the cases use, so a case counts turns from a known
@@ -1552,21 +1560,45 @@ describe("a feed draws when its bar next changes", () => {
 });
 
 // [LAW:no-silent-failure] A feed's render that threw reaches a lane as a Frame
-// saying so, with no failure branch in the lane.
-test("a frame whose render threw is the failure's Frame, a still bar in the error glyph's words", () => {
-  const parts = {
-    clock: { monotonic: () => 0 },
-    renderCache: {
-      holdView: () => null,
-      openFailure: () => ({ error: new Error("the view would not open") }),
+// saying so, with no failure branch in the lane. The view is opened by the
+// daemon's reply to a render request, over the daemon's parts, and its source
+// throws as it opens.
+test("a frame whose render threw is the failure's Frame, a still bar in the error glyph's words", async () => {
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-feed-failed-")));
+  const { parts, close } = daemonParts({
+    host: hostOf({}, { home, tmp: home }),
+    clock: heldClock(new Date(START_MS)),
+    log: () => {},
+    source: () => () => {
+      throw new Error("the view would not open");
     },
-  } as unknown as DaemonParts;
-  const frame = renderFrame(parts, "s", 30, instantOf(new Date(START_MS)))!;
-  expect(frame.bar).toEqual(renderFailedFrame("the view would not open"));
-  expect(frame.bar.nextChange).toBe(Infinity);
-  expect(frame.resp).toMatchObject({
-    ok: false,
-    code: "RENDER_FAILED",
-    error: "the view would not open",
   });
+  try {
+    const sid = "f0f0f0f0-1111-4222-8333-444444444444";
+    const { resp } = await replyTo(
+      parts,
+      {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        encoding: "frame",
+        deadline: parts.clock.now(),
+        ...renderBody(sid, home),
+      } as unknown as Parameters<typeof replyTo>[1],
+      () => false,
+      parts.clock.monotonic(),
+      () => false,
+    );
+    expect(resp).toMatchObject({ ok: false, code: "RENDER_FAILED" });
+    const frame = renderFrame(parts, sid, 30, instantOf(new Date(START_MS)))!;
+    expect(frame.bar).toEqual(renderFailedFrame("the view would not open"));
+    expect(frame.bar.nextChange).toBe(Infinity);
+    expect(frame.resp).toMatchObject({
+      ok: false,
+      code: "RENDER_FAILED",
+      error: "the view would not open",
+    });
+  } finally {
+    close();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
