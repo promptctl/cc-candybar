@@ -23496,8 +23496,8 @@ function feed(input, text4) {
 }
 async function launchWaited(state, opts) {
   const { stats, clock } = state.scope;
-  const refused2 = admit(state, opts.category, opts.signal);
-  if (refused2 !== null) return refused2;
+  const refused3 = admit(state, opts.category, opts.signal);
+  if (refused3 !== null) return refused3;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   return new Promise((resolve) => {
@@ -23669,8 +23669,8 @@ async function launchWaited(state, opts) {
 }
 function launchBlocking(state, opts) {
   const { stats, clock } = state.scope;
-  const refused2 = admit(state, opts.category);
-  if (refused2 !== null) return refused2;
+  const refused3 = admit(state, opts.category);
+  if (refused3 !== null) return refused3;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   try {
@@ -23725,8 +23725,8 @@ function launchBlocking(state, opts) {
 }
 function launchOrphan(state, opts) {
   const { stats, clock } = state.scope;
-  const refused2 = admit(state, opts.category);
-  if (refused2 !== null) return refused2;
+  const refused3 = admit(state, opts.category);
+  if (refused3 !== null) return refused3;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(state, opts);
@@ -23773,9 +23773,9 @@ var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout"
 var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
 function launchJob(state, opts, files) {
   const { stats, clock } = state.scope;
-  const refused2 = admit(state, opts.category);
-  if (refused2 !== null)
-    return { ok: false, reason: refused2.reason, error: refused2.error };
+  const refused3 = admit(state, opts.category);
+  if (refused3 !== null)
+    return { ok: false, reason: refused3.reason, error: refused3.error };
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   let child;
@@ -24074,7 +24074,8 @@ function processWorld() {
   const host = {
     env: process_default.env,
     home: os_default.homedir(),
-    tmp: os_default.tmpdir()
+    tmp: os_default.tmpdir(),
+    parentPid: process_default.ppid
   };
   const clock = systemTimekeeper;
   return {
@@ -38295,19 +38296,22 @@ var LANES = {
     switch: { setting: "experimentalBand", on: true, inTmux: false },
     label: "\u{1F9EA} band (A)",
     handsOff: true,
-    rows: null
+    rows: null,
+    showsPaneSession: false
   },
   statusline: {
     switch: { setting: "experimentalStatusline", on: true, inTmux: false },
     label: "\u{1F9EA} statusline (B)",
     handsOff: false,
-    rows: null
+    rows: null,
+    showsPaneSession: false
   },
   pane: {
     switch: { setting: "experimentalPane", on: true, inTmux: false },
     label: "\u{1F9EA} tmux pane (C)",
     handsOff: true,
-    rows: null
+    rows: null,
+    showsPaneSession: true
   },
   tmuxStatus: {
     switch: {
@@ -38318,7 +38322,8 @@ var LANES = {
     label: "tmux status line",
     handsOff: true,
     // tmux draws at most five status rows (`status` takes on, off, 2…5).
-    rows: 5
+    rows: 5,
+    showsPaneSession: true
   }
 };
 var LANE_NAMES = Object.keys(LANES);
@@ -55104,7 +55109,6 @@ var TMUX_ENV = {
 var paneName = (tmux3) => JSON.stringify([tmux3.socket, tmux3.pane]);
 var samePane = (a, b) => paneName(a) === paneName(b);
 var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
-var namesPane = (tmux3, where) => inTmux(tmux3) && samePane(tmux3, where);
 
 // src/config-hint.ts
 init_globals();
@@ -62295,7 +62299,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     beneath,
     presence2
   );
-  const judge = (cells, refused2) => {
+  const judge = (cells, refused3) => {
     const inserted = placeInserts(
       authoredConfig.config,
       cells,
@@ -62309,7 +62313,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       inserted.config,
       presence2,
       written2.dropped,
-      [...inserted.notices, ...refused2]
+      [...inserted.notices, ...refused3]
     );
   };
   try {
@@ -62320,7 +62324,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     const own2 = new Set(
       bare.dropped.flatMap((d) => d.issues.map((i) => i.message))
     );
-    const { taken: taken2, refused: refused2 } = written2.cells.reduce(
+    const { taken: taken2, refused: refused3 } = written2.cells.reduce(
       (acc, cell3) => {
         try {
           judge([...acc.taken, cell3], []);
@@ -62342,7 +62346,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       },
       { taken: [], refused: [] }
     );
-    return judge(taken2, refused2);
+    return judge(taken2, refused3);
   }
 }
 function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
@@ -64535,11 +64539,9 @@ function writeAtomicOn(disk, at, text4, mode) {
   const file = resolvedTarget(disk, at);
   disk.mkdirSync(import_node_path18.default.dirname(file));
   const tmp = `${file}.tmp`;
+  const fileMode = mode ?? existingMode(disk, file);
   try {
-    disk.writeFileSync(tmp, text4, {
-      mode: mode ?? existingMode(disk, file),
-      flush: true
-    });
+    disk.writeFileSync(tmp, text4, { mode: fileMode, flush: true });
     disk.renameSync(tmp, file);
   } catch (e) {
     disk.rmSync(tmp);
@@ -64608,10 +64610,7 @@ function persistValueText(key, raw) {
     `persistValueText: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`
   );
 }
-function readConfigText(file) {
-  return textOn3(systemFilesystem, file);
-}
-function textOn3(reads, file) {
+function readConfigText(reads, file) {
   try {
     return reads.readFileSync(file);
   } catch (e) {
@@ -64619,10 +64618,7 @@ function textOn3(reads, file) {
     throw e;
   }
 }
-function writeConfigText(file, text4, logger) {
-  writeOn(systemFilesystem, file, text4, logger);
-}
-function writeOn(disk, file, text4, logger) {
+function writeConfigText(disk, file, text4, logger) {
   try {
     if (text4 === null) {
       disk.rmSync(resolvedTarget(disk, file));
@@ -64788,7 +64784,7 @@ function commit2(store2, home, before, after, refuse4) {
   const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse4(home, was, will);
-  writeOn(home.disk, home.path, after, store2.logger);
+  writeConfigText(home.disk, home.path, after, store2.logger);
   store2.record(home.path, before, after);
 }
 function refuseHidden(home, was, will) {
@@ -64896,7 +64892,7 @@ function refuseNewDrops(home, was, will) {
 }
 function readValue(home, key) {
   const target = requireValueTarget(key);
-  const doc = docOf(textOn3(home.disk, home.path) ?? "");
+  const doc = docOf(readConfigText(home.disk, home.path) ?? "");
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
   return node !== void 0 && "value" in node ? node.value : void 0;
 }
@@ -64904,7 +64900,7 @@ function writeValues(store2, home, pairs2) {
   writeDrafts(store2, home, pairs2, []);
 }
 function writeDrafts(store2, home, pairs2, placements) {
-  const before = textOn3(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   const valued = pairs2.reduce(
     (text4, [key, raw]) => setValue(
       text4,
@@ -64969,7 +64965,7 @@ function deleteAtPath(text4, path47) {
 }
 function deleteValues(store2, home, keys2) {
   const targets = keys2.map(requireTarget);
-  const before = textOn3(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   if (before === null) return;
   const after = targets.reduce(
     (text4, target) => deleteAtPath(text4, resetPathOf(docOf(text4), target)),
@@ -65003,7 +64999,7 @@ function freePresetName(doc, home) {
   ).find((candidate) => !taken2.has(ident(candidate)));
 }
 function writePreset(store2, home, from, globals, picks, placements) {
-  const before = textOn3(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc, home);
   const own2 = ["presets", name];
@@ -65041,7 +65037,7 @@ function writePreset(store2, home, from, globals, picks, placements) {
   return name;
 }
 function writeThemeDefault(store2, home, theme24, look) {
-  const before = textOn3(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme24],
@@ -65057,7 +65053,7 @@ function deletePreset(store2, home, name) {
     );
   }
   const own2 = ["presets", name];
-  const before = textOn3(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own2) === void 0) {
     throw new BadVerbArgs(
@@ -65082,7 +65078,7 @@ function applyLayoutOp(store2, home, key, op) {
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = textOn3(home.disk, home.path);
+  const before = readConfigText(home.disk, home.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const placement = homeOnly(
     home,
@@ -65467,12 +65463,14 @@ var MAX_BYTES = 8 * 1024 * 1024;
 var EMPTY = { past: [], future: [] };
 var identity = (c) => c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
 var SettingsHistory = class {
-  constructor(sessionState, logger, storage = EPHEMERAL_HISTORY_STORAGE) {
+  constructor(disk, sessionState, logger, storage = EPHEMERAL_HISTORY_STORAGE) {
+    this.disk = disk;
     this.sessionState = sessionState;
     this.logger = logger;
     this.storage = storage;
     this.state = new Map(Object.entries(storage.load()));
   }
+  disk;
   sessionState;
   logger;
   storage;
@@ -65677,11 +65675,11 @@ var SettingsHistory = class {
     }
   }
   read(sessionId2, change) {
-    return change.kind === "session" ? this.sessionState.get(sessionId2, change.key) : readConfigText(change.file);
+    return change.kind === "session" ? this.sessionState.get(sessionId2, change.key) : readConfigText(this.disk, change.file);
   }
   write(sessionId2, change, value) {
     if (change.kind === "file") {
-      writeConfigText(change.file, value, this.logger);
+      writeConfigText(this.disk, change.file, value, this.logger);
     } else if (value === null) {
       this.sessionState.clear(sessionId2, change.key);
     } else {
@@ -66409,6 +66407,7 @@ var CLIENT_HINT_FIELDS = Object.keys({
   configEnv: true,
   claudeConfigDir: true,
   terminalEnv: true,
+  parentPid: true,
   client: true
 });
 function parseClientHints(req) {
@@ -66419,6 +66418,7 @@ function parseClientHints(req) {
   const configEnv = sanitizeAbsolutePath(req.configEnv);
   const claudeConfigDir2 = sanitizeAbsolutePath(req.claudeConfigDir);
   const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
+  const parentPid = sanitizePid(req.parentPid);
   const client = sanitizeClient(req.client);
   return {
     ...termCols !== void 0 && { termCols },
@@ -66428,6 +66428,7 @@ function parseClientHints(req) {
     ...configEnv !== void 0 && { configEnv },
     ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 },
     ...terminalEnv !== void 0 && { terminalEnv },
+    ...parentPid !== void 0 && { parentPid },
     ...client !== void 0 && { client }
   };
 }
@@ -66436,8 +66437,8 @@ function refusedHints(req, hints) {
     (k) => req[k] !== void 0 && hints[k] === void 0
   ).map((hint) => ({ hint, sent: req[hint] }));
 }
-function refusedHintsError(refused2) {
-  return refused2.length === 0 ? null : `Client hints refused: ${refused2.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
+function refusedHintsError(refused3) {
+  return refused3.length === 0 ? null : `Client hints refused: ${refused3.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
     ", "
   )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
 }
@@ -66448,9 +66449,9 @@ var REFUSAL_LINES = {
   "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
   positional: (args) => `Unexpected arguments: ${args}`
 };
-function refusedArgsError(refused2) {
+function refusedArgsError(refused3) {
   const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused2.filter((r) => r.why === why2).map((r) => r.arg);
+    const args = refused3.filter((r) => r.why === why2).map((r) => r.arg);
     return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
   });
   return lines2.length === 0 ? null : lines2.join("\n");
@@ -66485,6 +66486,9 @@ function sanitizeTermExtent(v) {
 }
 function sanitizeSsh(v) {
   return typeof v === "boolean" ? v : void 0;
+}
+function sanitizePid(v) {
+  return Number.isSafeInteger(v) && v > 0 ? v : void 0;
 }
 var URL_FRAME_VERSION = 1;
 var EARLIER_URL_FRAME_VERSIONS = [];
@@ -69628,7 +69632,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.208.7";
+var PACKAGE_VERSION = "1.208.10";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -71590,7 +71594,7 @@ function describeDoctor(ctx, sid, step4) {
   ctx.effect({ kind: "doctor", session: sid, step: step4, arrival: ctx.arrival });
 }
 function recordingReads(store2, reads) {
-  const refused2 = (what) => {
+  const refused3 = (what) => {
     throw new Error(`doctor: the gather ${what}; a gather writes nothing`);
   };
   return {
@@ -71606,11 +71610,11 @@ function recordingReads(store2, reads) {
     // [LAW:no-silent-failure] A gather reads keys by name, so each is stamped
     // as it is read: the whole record read as one would stamp every write the
     // session takes during the probes, a resize's hints among them.
-    values: () => refused2("read every key; a gather reads keys by name"),
+    values: () => refused3("read every key; a gather reads keys by name"),
     revision: (sid) => store2.revision(sid),
-    set: (_sid, key) => refused2(`set ${key}`),
-    setBatch: () => refused2("wrote a batch"),
-    clear: (_sid, key) => refused2(`cleared ${key}`)
+    set: (_sid, key) => refused3(`set ${key}`),
+    setBatch: () => refused3("wrote a batch"),
+    clear: (_sid, key) => refused3(`cleared ${key}`)
   };
 }
 function movedSince(ctx, sid, stamp2) {
@@ -71956,6 +71960,61 @@ function readEffect({ verb, value }) {
 function sessionOf(effects) {
   return effects.find((e) => e.leaf !== void 0)?.session ?? null;
 }
+function stepProblem(verb, reason) {
+  return `${verb}: ${reason}`;
+}
+function unknownVerb(verb) {
+  return `unknown effect verb "${verb}"`;
+}
+function stepRefusal(verb, reason) {
+  return { kind: "refused", reason, problem: stepProblem(verb, reason) };
+}
+function unknownVerbRefusal(verb) {
+  const problem = unknownVerb(verb);
+  return { kind: "refused", reason: problem, problem };
+}
+function refused({ verb }, args, reason) {
+  return { ok: false, verb, args, refusal: stepRefusal(verb, reason) };
+}
+function readStep(effect, click2) {
+  if (effect.leaf === void 0) {
+    return {
+      ok: false,
+      verb: effect.verb,
+      args: [],
+      refusal: unknownVerbRefusal(effect.verb)
+    };
+  }
+  const { verb, leaf, session, args } = effect;
+  const decoded = args.ok ? args.value : [];
+  if (!session.ok) {
+    return refused(effect, decoded, `session id ${session.problem}`);
+  }
+  if (!click2?.ok) {
+    return refused(
+      effect,
+      decoded,
+      "its click's own session is refused, so no step of it runs"
+    );
+  }
+  if (click2.id !== session.id) {
+    return refused(
+      effect,
+      decoded,
+      `names session ${session.id}, not the session its click is in`
+    );
+  }
+  if (!args.ok) return refused(effect, decoded, args.problem);
+  const [min2, max2] = leaf.takes;
+  if (args.value.length < min2 || args.value.length > max2) {
+    return refused(
+      effect,
+      decoded,
+      `reads ${min2 === max2 ? min2 : `${min2} to ${max2}`} after its session, and the link carries ${args.value.length}`
+    );
+  }
+  return { ok: true, verb, leaf, sid: session.id, args: args.value };
+}
 function readProbe(value) {
   const decoded = parseWire(() => decodeURIComponent(value));
   if (!decoded.ok) return decoded;
@@ -71965,7 +72024,12 @@ function readProbe(value) {
 var CLICK_READERS = {
   [VERB_DISPATCH]: (value) => {
     const effects = batchAdjacentWrites(parseEffects(value)).map(readEffect);
-    return { kind: VERB_DISPATCH, effects, session: sessionOf(effects) };
+    const session = sessionOf(effects);
+    return {
+      kind: VERB_DISPATCH,
+      steps: effects.map((effect) => readStep(effect, session)),
+      session
+    };
   },
   [VERB_PROBE]: (value) => ({ kind: VERB_PROBE, nonce: readProbe(value) })
 };
@@ -71975,39 +72039,19 @@ function readClick(verb, value) {
 function clickSession(click2) {
   return click2.kind === VERB_DISPATCH && click2.session?.ok ? click2.session.id : null;
 }
-function perform({ verb, leaf, session, args }, click2, ctx) {
+function perform(step4, ctx) {
   const described = [];
   try {
-    if (!session.ok) throw new BadVerbArgs(`session id ${session.problem}`);
-    if (!click2?.ok)
-      throw new BadVerbArgs(
-        "its click's own session is refused, so no step of it runs"
-      );
-    if (click2.id !== session.id)
-      throw new BadVerbArgs(
-        `names session ${session.id}, not the session its click is in`
-      );
-    if (!args.ok) throw new BadVerbArgs(args.problem);
-    const [min2, max2] = leaf.takes;
-    if (args.value.length < min2 || args.value.length > max2)
-      throw new BadVerbArgs(
-        `reads ${min2 === max2 ? min2 : `${min2} to ${max2}`} after its session, and the link carries ${args.value.length}`
-      );
-    leaf.handler(session.id, args.value, {
+    step4.leaf.handler(step4.sid, step4.args, {
       ...ctx,
       effect: (effect) => void described.push(effect)
     });
   } catch (e) {
-    if (e instanceof BadVerbArgs) {
-      REFUSAL_OWNERS.get(verb)?.(ctx, {
-        sid: click2?.ok ? click2.id : "-",
-        args: args.ok ? args.value : [],
-        reason: e.message
-      });
-    }
-    throw e;
+    const reason = e instanceof Error ? e.message : String(e);
+    return e instanceof BadVerbArgs ? stepRefusal(step4.verb, reason) : { kind: "failed", problem: stepProblem(step4.verb, reason) };
   }
   for (const effect of described) ctx.effect(effect);
+  return { kind: "ran" };
 }
 var REFUSAL_OWNERS = /* @__PURE__ */ new Map([
   [
@@ -72015,22 +72059,22 @@ var REFUSAL_OWNERS = /* @__PURE__ */ new Map([
     (ctx, { sid, args: [action2], reason }) => ctx.runs.refused(sid, action2 || "-", reason)
   ]
 ]);
-function foldEffects(effects, session, ctx) {
+function foldEffects(steps2, session, ctx) {
   const errors2 = [];
   let operational = false;
-  for (const effect of effects) {
-    if (effect.leaf === void 0) {
-      errors2.push(`unknown effect verb "${effect.verb}"`);
-      continue;
+  for (const step4 of steps2) {
+    const outcome = step4.ok ? perform(step4, ctx) : step4.refusal;
+    if (outcome.kind === "ran") continue;
+    if (outcome.kind === "refused") {
+      REFUSAL_OWNERS.get(step4.verb)?.(ctx, {
+        sid: session?.ok ? session.id : "-",
+        args: step4.args,
+        reason: outcome.reason
+      });
+    } else {
+      operational = true;
     }
-    try {
-      perform(effect, session, ctx);
-    } catch (e) {
-      if (!(e instanceof BadVerbArgs)) operational = true;
-      errors2.push(
-        `${effect.verb}: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
+    errors2.push(outcome.problem);
   }
   if (errors2.length > 0) {
     if (session?.ok) {
@@ -72106,7 +72150,7 @@ function dispatch(click2, ctx) {
     VERB_DISPATCH,
     () => journaled(sid, ctx, (c) => {
       try {
-        foldEffects(click2.effects, click2.session, c);
+        foldEffects(click2.steps, click2.session, c);
       } finally {
         if (sid !== null) ctx.clickLanded(sid);
       }
@@ -72162,44 +72206,33 @@ function linksOf({ rows }) {
     );
   });
 }
+function namesNotDispatch(verb, url) {
+  return `a drawn link names ${VERB_DISPATCH}, and this names "${verb}": ${url}`;
+}
 function drawnClickOf(url) {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
-  if (link.verb !== VERB_DISPATCH) {
-    return {
-      ok: false,
-      problem: `a drawn link names ${VERB_DISPATCH}, and this names "${link.verb}": ${url}`
-    };
+  const click2 = readClick(link.verb, link.value);
+  if (click2?.kind !== VERB_DISPATCH) {
+    return { ok: false, problem: namesNotDispatch(link.verb, url) };
   }
-  try {
-    const raw = parseEffects(link.value);
-    const unknown = raw.find((e) => !LEAF_VERB_NAMES.has(e.verb));
-    if (unknown !== void 0) {
-      return {
-        ok: false,
-        problem: `the daemon has no verb "${unknown.verb}": ${url}`
-      };
-    }
-    return {
-      ok: true,
-      effects: raw.map((e) => ({
-        verb: e.verb,
-        args: decodeSegments(e.value)
-      }))
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      problem: `the link's value does not decode (${error.message}): ${url}`
-    };
-  }
+  return {
+    ok: true,
+    steps: click2.steps.map(
+      (step4) => step4.ok ? { ok: true, verb: step4.verb, args: [step4.sid, ...step4.args] } : { ok: false, verb: step4.verb, problem: step4.refusal.problem }
+    )
+  };
 }
 function describeLink(link, sessionId2) {
-  if (!isBarLink(link.url)) return `opens ${link.url}`;
-  const click2 = drawnClickOf(link.url);
+  return isBarLink(link.url) ? describeClick(drawnClickOf(link.url), sessionId2) : `opens ${link.url}`;
+}
+function describeClick(click2, sessionId2) {
   if (!click2.ok) return `refused: ${click2.problem}`;
-  return click2.effects.map(
-    ({ verb, args }) => [verb, ...args.map((a) => a === sessionId2 ? "<session>" : a)].join(" ")
+  return click2.steps.map(
+    (step4) => step4.ok ? [
+      step4.verb,
+      ...step4.args.map((a) => a === sessionId2 ? "<session>" : a)
+    ].join(" ") : `refused: ${step4.problem}`
   ).join(" ; ");
 }
 var HOST_VERBS = /* @__PURE__ */ new Map([
@@ -72209,6 +72242,13 @@ var HOST_VERBS = /* @__PURE__ */ new Map([
   [VERB_APPLY_UPDATE, "rebuilds cc-candybar"],
   [VERB_RUN, "runs a program the config declares"]
 ]);
+function notSentOnDrivenBar(click2, sessionId2) {
+  const acts = (click2.ok ? click2.steps : []).flatMap((step4) => {
+    const does = step4.ok ? HOST_VERBS.get(step4.verb) : void 0;
+    return does === void 0 ? [] : [does];
+  });
+  return acts.length === 0 ? null : `not sent: on a real machine this ${[...new Set(acts)].join(", ")}: ${describeClick(click2, sessionId2)}`;
+}
 
 // src/daemon/daemon.ts
 init_globals();
@@ -72357,6 +72397,48 @@ var Runs = class {
 // src/daemon/draw-bar.ts
 init_globals();
 var import_node_path37 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/session-pane.ts
+init_globals();
+function sessionPaneOf(hints, sessionId2, heldSession) {
+  const tmux3 = inTmux(hints.tmux) ? hints.tmux : null;
+  const { parentPid } = hints;
+  if (parentPid === void 0)
+    return {
+      kind: "unconfirmed",
+      tmux: tmux3,
+      why: "its client is too old to say which process ran it (reinstall it with `cc-candybar install`)"
+    };
+  const held = heldSession(parentPid, hints.claudeConfigDir);
+  if (held.kind === "unread")
+    return {
+      kind: "unconfirmed",
+      tmux: tmux3,
+      why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}. A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`
+    };
+  return held.sessionId === sessionId2 ? { kind: "runs", tmux: tmux3 } : {
+    kind: "mismatched",
+    tmux: tmux3,
+    why: `the Claude Code that ran its statusline (pid ${parentPid}) holds session ${held.sessionId}`
+  };
+}
+function runsNowIn(where, heldSession) {
+  const reads = /* @__PURE__ */ new Map();
+  const once2 = (pid2, configDir2) => {
+    const key = `${pid2}\0${configDir2 ?? ""}`;
+    const read2 = reads.get(key) ?? heldSession(pid2, configDir2);
+    reads.set(key, read2);
+    return read2;
+  };
+  return (req) => inTmux(req.hints.tmux) && samePane(req.hints.tmux, where) && sessionPaneOf(req.hints, req.sessionId, once2).kind === "runs";
+}
+var paneFact = (pane) => pane.kind !== "runs" ? `${pane.kind}: ${pane.why}` : pane.tmux === null ? "outside" : "runs";
+function sessionPaneError(pane, lanes) {
+  const on2 = LANE_NAMES.filter(
+    (lane) => lanes[lane] && LANES[lane].showsPaneSession
+  );
+  return pane.kind !== "unconfirmed" || pane.tmux === null || on2.length === 0 ? null : `The ${on2.map((lane) => LANES[lane].label).join(" and ")} of pane ${pane.tmux.pane} shows the session the pane's Claude Code holds, and this one is not known to be it: ${pane.why}`;
+}
 
 // src/daemon/update-keys.ts
 init_globals();
@@ -77626,16 +77708,20 @@ function switchesAt(parts, origin, sessionId2, tmux3) {
 function requestFacts(req, at, facts, renderer) {
   noteFacts(facts, { renderer, at: at.toFixed(3) });
   const hints = req.hints;
-  const refused2 = refusedHints(req, hints);
-  const hintsError = refusedHintsError(refused2);
+  const refused3 = refusedHints(req, hints);
+  const hintsError = refusedHintsError(refused3);
   noteFacts(facts, {
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
-    refused: refused2.map((r) => r.hint).join(",") || "-",
+    refused: refused3.map((r) => r.hint).join(",") || "-",
     badArgs: req.refusedArgs.map((r) => `${r.arg}:${r.why}`).join(",") || "-",
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
+    // Whether the session runs in the tmux pane its client names, as the
+    // checkpoint stamped it: the status line and a bar pane follow only one
+    // that does.
+    pane: paneFact(req.pane),
     // What the sighting recorded of the rate-limit windows — the fact the
     // doctor's segment-data check reads (RenderSightings).
     rateLimits: req.rateLimits
@@ -77744,6 +77830,7 @@ function drawRender(parts, setup, drawing2) {
   const errors2 = [
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
+    said(sessionPaneError(req.pane, lanes)),
     sourced("load", entry.lastError),
     sourced("update-act", updateWatch.error()),
     // [LAW:no-silent-failure] The home's link-id counter, faulted: no tmux
@@ -77929,7 +78016,7 @@ function requestArrived(parts, req) {
     req.sessionId,
     inTmux(req.hints.tmux)
   );
-  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
+  tmuxStatusLines.observe(req.sessionId, req.pane, lanes.tmuxStatus);
   return laneSetups.noted(req.sessionId, lanes);
 }
 function drawForAnswer(parts, setup, arrival) {
@@ -77953,7 +78040,11 @@ function laneClicked(parts, sessionId2, before, after) {
   const { frameFeeds, laneSetups, tmuxStatusLines } = parts;
   const latest = frameFeeds.latest(sessionId2);
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
-    tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
+    tmuxStatusLines.observe(
+      sessionId2,
+      sessionPaneOf(latest.hints, sessionId2, parts.heldSession),
+      after.tmuxStatus
+    );
   return laneSetups.clicked(sessionId2, before, after);
 }
 async function drawAnswer(parts, req, at, waitEndsAt, facts) {
@@ -78220,7 +78311,7 @@ async function applyRequest(event, parts) {
   return parts.draw(event.req, event.at, event.waitEndsAt, event.facts);
 }
 var APPLIED = { level: "info", facts: [["outcome", "ok"]] };
-var refused = ({ error }) => ({
+var refused2 = ({ error }) => ({
   level: "info",
   facts: [
     ["outcome", "refused"],
@@ -78233,7 +78324,7 @@ var OUTCOME_LEVEL = {
 };
 var LINE = {
   request: () => null,
-  click: (_event, { answer: answer2 }) => answer2 === null ? APPLIED : refused(answer2),
+  click: (_event, { answer: answer2 }) => answer2 === null ? APPLIED : refused2(answer2),
   "menu-idle": () => APPLIED,
   answered: () => APPLIED,
   "effect-done": ({ done: done2 }, { answer: answer2 }) => ({
@@ -78394,7 +78485,7 @@ function parseRenderArgs(args, cwd2, home) {
   const config2 = (tokens ?? []).filter(
     (t2) => t2.kind === "option" && t2.name === "config"
   ).at(-1);
-  const refused2 = (tokens ?? []).flatMap((t2) => {
+  const refused3 = (tokens ?? []).flatMap((t2) => {
     switch (t2.kind) {
       case "option":
         return t2.name !== "config" ? [{ arg: t2.rawName, why: "unknown" }] : t2 === config2 && t2.value === void 0 ? [{ arg: t2.rawName, why: "no-value" }] : [];
@@ -78408,8 +78499,8 @@ function parseRenderArgs(args, cwd2, home) {
   return {
     configFile: explicitConfigPath(cwd2, config2?.value, home),
     // In argv order, each refusal once.
-    refusedArgs: refused2.filter(
-      (r, i) => refused2.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
+    refusedArgs: refused3.filter(
+      (r, i) => refused3.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
     )
   };
 }
@@ -78421,7 +78512,7 @@ function parseRenderEncoding(raw) {
     problem: `request 'encoding' is not one of ${RENDER_ENCODINGS.join(", ")}: ${JSON.stringify(raw)}`
   };
 }
-function checkRenderRequest(req, stats, log, home, storedRoot2) {
+function checkRenderRequest(req, stats, log, home, storedRoot2, heldSession) {
   const { report: report2 } = validateHookData(req.hookData);
   const wireProblems = [];
   for (const path47 of report2.missingRequired) {
@@ -78481,7 +78572,10 @@ function checkRenderRequest(req, stats, log, home, storedRoot2) {
       rateLimits: rateLimitsSeen(req.hookData),
       requested,
       originRecord: encodeRenderOrigin(requested, asked2),
-      refusedArgs
+      refusedArgs,
+      // [LAW:effects-at-boundaries] Read once, as the request arrives: what
+      // holds a pane for a session is that request's arrival.
+      pane: sessionPaneOf(hints, sessionId2.id, heldSession)
     }
   };
 }
@@ -78810,7 +78904,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     return stay({
       ok: true,
       paneSession: frameFeeds.newestWhere(
-        ({ hints: { tmux: tmux3 } }) => namesPane(tmux3, { socket, pane })
+        runsNowIn({ socket, pane }, parts.heldSession)
       )
     });
   }
@@ -78861,7 +78955,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       stats,
       parts.log,
       parts.home,
-      parts.storedRoot
+      parts.storedRoot,
+      parts.heldSession
     );
     const sighted = (req2, frame2) => renderSightings.see(
       req2.sessionId,
@@ -79208,12 +79303,12 @@ function clickReply(outcome) {
 }
 async function statusLineClick(parts, value, facts, clientGone) {
   const { tmuxStatusLines } = parts;
-  const refused2 = (problem) => ({
+  const refused3 = (problem) => ({
     kind: "bad-request",
     problems: [problem]
   });
   const click2 = tmuxStatusLines.linkAt(value);
-  if (click2.kind === "refused") return refused2(click2.reason);
+  if (click2.kind === "refused") return refused3(click2.reason);
   noteFacts(facts, { link: click2.url });
   if (isBarLink(click2.url)) {
     return linkClick(
@@ -85176,14 +85271,16 @@ var TmuxStatusLines = class {
   writes = 0;
   failedWrites = 0;
   // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
-  // arrival with its own hints, a click's commit with its session's latest —
-  // never at a draw: a session whose switch is on and that reported a tmux
-  // pane is held, any other is not. A daemon restart picks each session up at
-  // its next request.
-  observe(sessionId2, tmux3, on2) {
+  // arrival, a click's commit — never at a draw: a session whose switch is on
+  // is held in the pane its Claude Code's record confirms it runs in (`pane`),
+  // and one switched off, or confirmed outside tmux, is not. A request not
+  // confirmed places its session nowhere, so a session held already stays
+  // where it is until the session its pane confirms takes the pane. A daemon
+  // restart picks each session up at its next request.
+  observe(sessionId2, pane, on2) {
     if (this.closed) return;
     const held = this.held.get(sessionId2);
-    const where = on2 && tmux3 !== null && tmux3 !== void 0 ? tmux3 : null;
+    const where = !on2 ? null : pane.kind === "runs" ? pane.tmux : held ?? null;
     if (held !== void 0 && (where === null || !samePane(held, where)))
       this.release(held, "switched off or moved");
     if (where === null || this.held.has(sessionId2)) return;
@@ -86587,6 +86684,7 @@ function createDaemon(inputs) {
   const journalTurns = new JournalTurns();
   const sessionState = new SessionState(journalTurns, storage.session);
   const settingsHistory = new SettingsHistory(
+    inputs.filesystem,
     sessionState,
     log,
     storage.history
@@ -86662,13 +86760,14 @@ function createDaemon(inputs) {
     log,
     clock
   });
+  const heldSession = inputs.heldSession(host.home);
   const laneSetups = new LaneSetups({
     edge: inputs.laneEdge(
       launcher,
       (sessionId2) => frameFeeds.following(sessionId2),
       closing.signal,
       probe3,
-      host.home
+      heldSession
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -86694,7 +86793,7 @@ function createDaemon(inputs) {
       run: (socket, args) => runTmuxAsync(launcher, { socket }, "tmux-status", args)
     },
     subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
-    sessionInPane: (where) => frameFeeds.newestWhere(({ hints: { tmux: tmux3 } }) => namesPane(tmux3, where)),
+    sessionInPane: (where) => frameFeeds.newestWhere(runsNowIn(where, heldSession)),
     // Run by tmux under its server's environment, so the renderer's home is
     // stated whole on the command, every variable of it.
     handler: [
@@ -86943,6 +87042,7 @@ function createDaemon(inputs) {
     home: host.home,
     storedRoot: paths2.storedRoot,
     tmp: host.tmp,
+    heldSession,
     launcher,
     log,
     clock,
@@ -87754,29 +87854,48 @@ async function paneClaude(launcher, hint) {
   };
 }
 function heldSessionIn(file) {
+  const first2 = recordIn(file);
+  return first2.torn ? recordIn(file).held : first2.held;
+}
+function recordIn(file) {
   let text4;
   try {
     text4 = fs_default.readFileSync(file, "utf8");
   } catch (e) {
-    return e.code === "ENOENT" ? {
-      kind: "unread",
-      why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`
-    } : { kind: "unread", why: e.message };
+    return {
+      torn: false,
+      held: e.code === "ENOENT" ? {
+        kind: "unread",
+        why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`
+      } : { kind: "unread", why: e.message }
+    };
   }
   let record2;
   try {
     record2 = JSON.parse(text4);
   } catch (e) {
     return {
-      kind: "unread",
-      why: `its session record ${file} is not JSON (${e.message})`
+      torn: true,
+      held: {
+        kind: "unread",
+        why: `its session record ${file} is not JSON (${e.message})`
+      }
     };
   }
   const sessionId2 = typeof record2 === "object" && record2 !== null && "sessionId" in record2 ? record2.sessionId : void 0;
-  return typeof sessionId2 === "string" && sessionId2 !== "" ? { kind: "holds", sessionId: sessionId2 } : { kind: "unread", why: `its session record ${file} names no session` };
+  return {
+    torn: false,
+    held: typeof sessionId2 === "string" && sessionId2 !== "" ? { kind: "holds", sessionId: sessionId2 } : {
+      kind: "unread",
+      why: `its session record ${file} names no session`
+    }
+  };
 }
+var heldSessionUnder = (home) => (pid2, configDir2) => heldSessionIn(
+  import_node_path52.default.join(claudeConfigDir(configDir2, home), "sessions", `${pid2}.json`)
+);
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing, clock, probe3, home, filesystem) {
+function productionLaneEdge(launcher, following, closing, clock, probe3, heldSession, filesystem) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
     claudeInput: productionClaudeInputEdge(launcher),
@@ -87826,9 +87945,7 @@ function productionLaneEdge(launcher, following, closing, clock, probe3, home, f
     fileExists: (file) => presence(filesystem, file) === "present",
     presence: (file) => presence(filesystem, file),
     paneClaude: (hint) => paneClaude(launcher, hint),
-    heldSession: (pid2, configDir2) => heldSessionIn(
-      import_node_path52.default.join(claudeConfigDir(configDir2, home), "sessions", `${pid2}.json`)
-    ),
+    heldSession,
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the
     // shell's once the shell holds its terminal again: until it has reaped
     // Claude Code and taken the foreground back, tmux reads the directory of
@@ -87883,8 +88000,8 @@ function productionLaneEdge(launcher, following, closing, clock, probe3, home, f
         timeoutMs: 2e4,
         category: "lane.process"
       });
-      const refused2 = !result.ok && result.reason === "non-zero" ? refusalOf2(result.stdout) : null;
-      if (refused2 !== null) return { ok: false, reason: refused2 };
+      const refused3 = !result.ok && result.reason === "non-zero" ? refusalOf2(result.stdout) : null;
+      if (refused3 !== null) return { ok: false, reason: refused3 };
       ran(`reading ${executable}'s module graph`, result);
       return { ok: true };
     },
@@ -88010,15 +88127,16 @@ function productionAdapters(paths2, daemonLog, machine) {
     doctorEdge: (launcher, loadConfig, host) => productionEdge(launcher, loadConfig, host, systemFilesystem),
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe3, home) => productionLaneEdge(
+    laneEdge: (launcher, following, closing, probe3, heldSession) => productionLaneEdge(
       launcher,
       following,
       closing,
       machine,
       probe3,
-      home,
+      heldSession,
       systemFilesystem
     ),
+    heldSession: heldSessionUnder,
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
@@ -88498,20 +88616,23 @@ function copy2(text4) {
 }
 async function click(url, size) {
   const drawn = drawnClickOf(url);
-  const effects = drawn.ok ? drawn.effects : [];
-  const host = effects.filter((e) => HOST_VERBS.has(e.verb));
-  if (host.length > 0) {
-    const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
-    const refused3 = copiesOnly ? await copy2(effects.map(({ args: [, text4] }) => text4).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
-    return { ...await render2(size), refused: refused3 };
+  const steps2 = drawn.ok ? drawn.steps : [];
+  const copies = steps2.flatMap(
+    (step4) => step4.ok && step4.verb === VERB_COPY ? [step4.args[1]] : []
+  );
+  if (steps2.length > 0 && copies.length === steps2.length) {
+    const copied = copy2(copies.join("\n"));
+    return { ...await render2(size), refused: await copied };
   }
-  let refused2 = null;
+  const held = notSentOnDrivenBar(drawn, sessionId);
+  if (held !== null) return { ...await render2(size), refused: held };
+  let refused3 = null;
   try {
     await daemon2({ v: PROTOCOL_VERSION, kind: "click", url });
   } catch (e) {
-    refused2 = e instanceof Error ? e.message : String(e);
+    refused3 = e instanceof Error ? e.message : String(e);
   }
-  return { ...await render2(size), refused: refused2 };
+  return { ...await render2(size), refused: refused3 };
 }
 var listeners = [];
 var notify = () => {
