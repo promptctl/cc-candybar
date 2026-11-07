@@ -1,3 +1,9 @@
+## [1.210.0](https://github.com/promptctl/cc-candybar/compare/v1.209.0...v1.210.0) (2026-11-07)
+
+### Features
+
+* **facts:** a renderer declares the built-ins its config reads, and Gather gathers only those (candybar-gather-renderer-76bb.6pj.opl) ([#674](https://github.com/promptctl/cc-candybar/issues/674)) ([2e9ea2d](https://github.com/promptctl/cc-candybar/commit/2e9ea2dce98b1908a16f3ffa2128310350ebc817))
+
 ## [1.209.0](https://github.com/promptctl/cc-candybar/compare/v1.208.12...v1.209.0) (2026-11-07)
 
 ### Features
