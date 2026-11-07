@@ -186,6 +186,32 @@ describe("a daemon's pricing", () => {
     }
   });
 
+  test("a derivation over the table is left standing by a refresh that lands nothing", async () => {
+    const pricing = await loaded();
+    const seen: PriceTable[] = [];
+    const stop = reaction(
+      () => pricing.table(),
+      (table) => seen.push(table),
+    );
+    try {
+      clock.advance(PRICING_PERIOD.okMs);
+      pricing.ask();
+      await asking(2);
+      asked[1]!.fail();
+      await until(() => warnings.length === 1, "the failed refresh said");
+      // What the failed load holds is the day's copy of the table already
+      // priced by, read from disk again: no table moved, so nothing over it.
+      await throughout(
+        () => seen.length === 0,
+        "the derivation left standing",
+        200,
+      );
+      expect(pricing.table()).toEqual(RATES);
+    } finally {
+      stop();
+    }
+  });
+
   test("the day's copy on disk is read by the next daemon, which fetches nothing", async () => {
     await loaded();
 
