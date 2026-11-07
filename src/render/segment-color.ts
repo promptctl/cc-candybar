@@ -23,7 +23,6 @@ import {
   type Palette,
 } from "@promptctl/rich-js";
 import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
-import { QUIET_MIN_CONTRAST } from "../config/quiet-text.js";
 import { renderGauge } from "../template-engine/gauge.js";
 import { TEXT_MIN_CONTRAST, type RoleShade } from "../themes/decor.js";
 import {
@@ -116,9 +115,14 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
   // itself in truecolor, and at a depth that draws other colours (rich-js
   // `ensureDrawn`, which has nothing to replace a truecolor colour with) the
   // nearest drawn colour that stands on `bg` as drawn at least as far as `fg`
-  // does on `bg` — and at least the quiet floor, since a ground repaired at
-  // that depth no longer measures what truecolor drew — capped at the text
-  // floor. Where the depth draws nothing that clears, `fg` itself.
+  // does on `bg` unrounded, capped at the text floor. `bg` is the ground this
+  // depth draws the door on, which can be another rung than truecolor's, and
+  // the red was chosen for it. The floor is what the red has on that ground
+  // before rounding, and never more: a named red that reads faintly on its
+  // ground is accepted as it is, and a floor above it would hand rounding a
+  // non-red that clears. The cap is AA: past it the ✖ needs no more
+  // contrast, so rounding may spend the rest, and the drawn colour stays
+  // nearer the red.
   // [LAW:one-source-of-truth] rich-js measures and repairs; this only names
   // the floor.
   const keptOn: TemplateFunc = {
@@ -133,17 +137,25 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
         drawnColour(fg, ColorDepth.TRUECOLOR),
         drawnColour(bg, ColorDepth.TRUECOLOR),
       );
-      const floor = Math.min(
-        TEXT_MIN_CONTRAST,
-        Math.max(held, QUIET_MIN_CONTRAST),
+      const floor = Math.min(TEXT_MIN_CONTRAST, held);
+      const depth = ref.drawnAt();
+      const kept = ensureDrawn(
+        fg,
+        depth,
+        (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor,
       );
-      return (
-        ensureDrawn(
-          fg,
-          ref.drawnAt(),
-          (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor,
-        ) ?? fg
-      ).hex;
+      // [LAW:no-silent-failure] At every depth a colour setting draws at,
+      // some colour clears: truecolor accepts `fg` itself, which stands at
+      // `held`, and 256 colours and ansi draw black and white, one of which
+      // stands at least 4.58:1 off any ground. No answer means that stopped
+      // holding, and drawing `fg` anyway would hide a ✖ that may not read.
+      if (kept === undefined) {
+        throw new Error(
+          `keptOn: nothing drawn at ${ColorDepth[depth]} stands ` +
+            `${floor.toFixed(2)}:1 off ${bg.hex} (drawn ${drawnColour(bg, depth).hex})`,
+        );
+      }
+      return kept.hex;
     }) as TemplateFunc["fn"],
     argTypes: ["string", "string"],
     arity: { kind: "exact" },
