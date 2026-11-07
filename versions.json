@@ -2,52 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-663",
-      "ref": "refs/pull/663/merge",
-      "sha": "338d3ce46af27673f5fc5cc29b8360734973b2c6",
-      "timestamp": "2026-11-07T02:02:13.863Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "e91dc65779794fd06d6ce4db8ec43c25efb26e07",
+      "timestamp": "2026-11-07T02:10:41.030Z",
       "commits": [
         {
-          "sha": "338d3ce46af27673f5fc5cc29b8360734973b2c6",
+          "sha": "e91dc65779794fd06d6ce4db8ec43c25efb26e07",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:01:13Z",
-          "message": "Merge 5210b3a3bd0597560eeed69e82b13b8f3ad474b7 into 30386afe1d6f69b407d95bb4159aebbc3d9217d6\n"
+          "timestamp": "2026-11-06T19:09:45-07:00",
+          "message": "fix(lanes): a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom) (#663)\n\n* fix(lanes): a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom)\n\nEvery process in a tmux pane inherits TMUX and TMUX_PANE, so a one-shot\n`cc-candybar` run from Claude Code's Bash tool, under any session id, became\n\"the pane's session\": the status line released the pane to it and a bar pane\nfollowed it.\n\nThe client now reports its parent pid (for a statusline, Claude Code itself,\nmeasured on 2.1.299). The render checkpoint reads that process's own record,\n`<config dir>/sessions/<pid>.json`, the one the restart already reads, and\nstamps the request with the pane its session runs in: outside, runs, or\nunconfirmed with why. The status line's holds and the pane-session reply read\nonly that stamp, so namesPane is gone. Every render event records it as\n`pane=`, and while the status line or a bar pane is on, an unconfirmed session's\nbar carries a ⚠ that says why.\n\n* fix(lanes): a pane's session is read from its Claude Code's record at the asking, and a request not known to run in a pane releases nothing (candybar-gather-renderer-76bb.1dh.aom)\n\nHigh review of #663:\n- The takeover check and the pane-session reply read the record when they ask, so a stamp from before a /clear no longer answers for the pane.\n- A request whose parent is not the pane's Claude Code is no evidence about where its session runs: a held session stays where it is.\n- A record that fails to parse is read once more: Claude Code rewrites it in place.\n- One record reader: the lane edge is handed the daemon's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* fix(lanes): a stamp says where its session runs, outside tmux included, and a lookup reads each record once (candybar-gather-renderer-76bb.1dh.aom)\n\nMedium review of #663:\n- The record is read for every request, so a session its Claude Code holds outside tmux releases the pane it was held in; an unconfirmed one releases nothing.\n- One lookup reads each record once, however many of its sessions it weighs.\n- A click's commit judges by the record as it reads then.\n- The bar pane's waiting line says what it waits for, and where a rendered statusline says why it isn't the pane's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* fix(lanes): a torn record's re-read reports what it found, and an unread parent's warning names the wrapper fix (candybar-gather-renderer-76bb.1dh.aom)\n\nSecond high review of #663.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* docs(lanes): rewrap the click's comment (candybar-gather-renderer-76bb.1dh.aom)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>"
         },
         {
-          "sha": "5210b3a3bd0597560eeed69e82b13b8f3ad474b7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:23:15-07:00",
-          "message": "docs(lanes): rewrap the click's comment (candybar-gather-renderer-76bb.1dh.aom)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "cdbd15915c4c13623de2820d9a47a2f88ac22ce5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:22:14-07:00",
-          "message": "fix(lanes): a torn record's re-read reports what it found, and an unread parent's warning names the wrapper fix (candybar-gather-renderer-76bb.1dh.aom)\n\nSecond high review of #663.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "9e7c0f061da18279e1566afd0fbf4417bee0a45f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:12:47-07:00",
-          "message": "fix(lanes): a stamp says where its session runs, outside tmux included, and a lookup reads each record once (candybar-gather-renderer-76bb.1dh.aom)\n\nMedium review of #663:\n- The record is read for every request, so a session its Claude Code holds outside tmux releases the pane it was held in; an unconfirmed one releases nothing.\n- One lookup reads each record once, however many of its sessions it weighs.\n- A click's commit judges by the record as it reads then.\n- The bar pane's waiting line says what it waits for, and where a rendered statusline says why it isn't the pane's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "705574231061dc4f3d211b038482066c3cf49309",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:48:59-07:00",
-          "message": "fix(lanes): a pane's session is read from its Claude Code's record at the asking, and a request not known to run in a pane releases nothing (candybar-gather-renderer-76bb.1dh.aom)\n\nHigh review of #663:\n- The takeover check and the pane-session reply read the record when they ask, so a stamp from before a /clear no longer answers for the pane.\n- A request whose parent is not the pane's Claude Code is no evidence about where its session runs: a held session stays where it is.\n- A record that fails to parse is read once more: Claude Code rewrites it in place.\n- One record reader: the lane edge is handed the daemon's.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "2991a1d86cad14bb28ce617e08c301a4ffe5c20b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:25:22-07:00",
-          "message": "fix(lanes): a pane's status line and bar pane follow the session its Claude Code holds, not any client run in the pane (candybar-gather-renderer-76bb.1dh.aom)\n\nEvery process in a tmux pane inherits TMUX and TMUX_PANE, so a one-shot\n`cc-candybar` run from Claude Code's Bash tool, under any session id, became\n\"the pane's session\": the status line released the pane to it and a bar pane\nfollowed it.\n\nThe client now reports its parent pid (for a statusline, Claude Code itself,\nmeasured on 2.1.299). The render checkpoint reads that process's own record,\n`<config dir>/sessions/<pid>.json`, the one the restart already reads, and\nstamps the request with the pane its session runs in: outside, runs, or\nunconfirmed with why. The status line's holds and the pane-session reply read\nonly that stamp, so namesPane is gone. Every render event records it as\n`pane=`, and while the status line or a bar pane is on, an unconfirmed session's\nbar carries a ⚠ that says why.\n"
+          "sha": "30386afe1d6f69b407d95bb4159aebbc3d9217d6",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-07T01:56:23Z",
+          "message": "chore(release): set `package.json` to 1.208.8 [skip ci]\n\n## [1.208.8](https://github.com/promptctl/cc-candybar/compare/v1.208.7...v1.208.8) (2026-11-07)\n\n### Bug Fixes\n\n* **feed:** a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0) ([#666](https://github.com/promptctl/cc-candybar/issues/666)) ([fff2581](https://github.com/promptctl/cc-candybar/commit/fff258104584a230d2eb90386e7f1e306eed5c5a))\n"
         }
       ]
     },
@@ -106,28 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:33:52-07:00",
           "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "fff258104584a230d2eb90386e7f1e306eed5c5a",
-      "timestamp": "2026-11-07T01:47:36.134Z",
-      "commits": [
-        {
-          "sha": "fff258104584a230d2eb90386e7f1e306eed5c5a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:46:27-07:00",
-          "message": "fix(feed): a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0) (#666)\n\n* fix(feed): a wake after a frame's render brings the next frame forward (candybar-gather-renderer-76bb.6pj.1s0)\n\nThe feed's phase splits drawing into rendering, whose wakes the frame\nreads, and pushing, whose wakes mark the frame so its schedule draws the\nnext a spacing on. No sink wakes synchronously today; a lane refused\nmid-push did, and waited out the still period untimed.\n\n* fix(feed): a wake while a frame goes out arms the timer through hasten, and the frame's schedule never sets it later (candybar-gather-renderer-76bb.6pj.1s0)\n\nReview (high): one way to bring a frame forward; the pushing phase is readonly;\na wake that moved nothing is coalesced. Adds the refused-lane-mid-push test.\n\n* refactor(feed): arm is the one rule that a timer is never set later than it falls due (candybar-gather-renderer-76bb.6pj.1s0)"
-        },
-        {
-          "sha": "6d361f430dc9f1a6399706bec94946f0bc8b68f3",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T01:36:40Z",
-          "message": "chore(release): set `package.json` to 1.208.7 [skip ci]\n\n## [1.208.7](https://github.com/promptctl/cc-candybar/compare/v1.208.6...v1.208.7) (2026-11-07)\n\n### Bug Fixes\n\n* **click:** a click is read once at the daemon's edge, and its event carries that read (brandon-menus-sjhy.ovq) ([#665](https://github.com/promptctl/cc-candybar/issues/665)) ([1806d37](https://github.com/promptctl/cc-candybar/commit/1806d3735da43b2aaeceb9ca12a48cce517d6201))\n"
         }
       ]
     },
