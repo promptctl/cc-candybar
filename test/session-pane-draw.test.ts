@@ -59,7 +59,7 @@ import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { SourceRuns } from "../src/var-system/source-runs";
 import { CLAUDE_START, claudeHolds } from "./helpers/claude-record";
 import { testVerbContext } from "./helpers/click";
-import { renderBody } from "./helpers/daemon-e2e";
+import { configFlag, renderBody } from "./helpers/daemon-e2e";
 import { fakeLauncher } from "./helpers/fake-launcher";
 import { bareGates } from "./helpers/gates";
 import { heldClock } from "./helpers/held-clock";
@@ -69,6 +69,8 @@ import { TEST_LINKS } from "./helpers/link-signer";
 const SID = "a0a0a0a0-1111-4222-8333-444444444444";
 // The session a `/clear` in SID's Claude Code leaves it holding.
 const CLEARED = "b0b0b0b0-1111-4222-8333-444444444444";
+// A session in the same pane whose client no Claude Code ran.
+const OTHER = "c0c0c0c0-1111-4222-8333-444444444444";
 const PANE = "%7";
 // The tmux pane lane switched on: a lane that shows the session its pane's
 // Claude Code holds.
@@ -153,13 +155,14 @@ function daemonDraw() {
       ),
     log,
   );
-  const { arrival: _arrival, described: _described, ...verbCtx } = testVerbContext(
+  const { arrival: _arrival, described: _described, ...testCtx } = testVerbContext(
     sessionState,
     undefined,
     undefined,
     host,
     turns,
   );
+  const verbCtx = { ...testCtx, log };
   const heldSession = heldSessionUnder(home);
   let feeds: FrameFeeds<CheckedRenderRequest> | null = null;
   // [LAW:single-enforcer] The parts the daemon's reply and draw read, its run
@@ -177,6 +180,7 @@ function daemonDraw() {
     renderSightings: new RenderSightings(),
     recorder,
     sessionState,
+    journalTurns: turns,
     mismatchRuns: verbCtx.mismatchRuns,
     renderCache: cache,
     payloadProviders: providers,
@@ -249,7 +253,7 @@ function daemonDraw() {
         kind: "render",
         encoding: "frame",
         deadline: clock.now(),
-        ...renderBody(sid, home, hintsOf(pid), ["cc-candybar", "--config", configFile]),
+        ...renderBody(sid, home, hintsOf(pid), configFlag(configFile)),
       } as unknown as Parameters<typeof replyTo>[1],
       () => false,
       clock.monotonic(),
@@ -297,12 +301,12 @@ test("a tick whose stamp is unconfirmed draws a bar whose list holds the session
   const d = daemonDraw();
   // No Claude Code record names pid 4300: the process that ran the client
   // is no Claude Code whose session can be read. The message's wording is
-  // test/unit/session-pane.test.ts's; here it is the unconfirmed stamp's.
+  // test/unit/session-pane.test.ts's; here it names the pane, the process,
+  // and the record it looked for.
   const s = await d.opened(SID, 4300);
   const message = panePart(await s.tick());
   expect(message).toContain(`pane ${PANE}`);
-  expect(message).toContain("this one is not known to be it");
-  expect(message).toContain(`(pid 4300) is no Claude Code`);
+  expect(message).toContain("pid 4300");
   expect(message).toContain(d.recordAt(4300));
 });
 
@@ -311,6 +315,9 @@ test("a confirmed tick's bar lists no session-pane message", async () => {
   d.holds(4301, SID);
   const s = await d.opened(SID, 4301);
   expect(panePart(await s.tick())).toBeUndefined();
+  // The lane is on in this daemon: a session no Claude Code ran lists it.
+  const other = await d.opened(OTHER, 4304);
+  expect(panePart(await other.tick())).toContain("pid 4304");
 });
 
 test("a mismatch draws no session-pane message inside the rewrite race, and draws it once its run has lasted past the race", async () => {
@@ -323,11 +330,11 @@ test("a mismatch draws no session-pane message inside the rewrite race, and draw
   d.clock.advance(MISMATCH_RACE_S * 1000);
   const message = panePart(await s.tick());
   expect(message).toContain(`pane ${PANE}`);
-  expect(message).toContain("this one is not it");
-  expect(message).toContain(`(pid 4302) holds session ${CLEARED}`);
+  expect(message).toContain("pid 4302");
+  expect(message).toContain(CLEARED);
 });
 
-test("a /clear's straggling ticks of the old session draw no session-pane message", async () => {
+test("a /clear's straggling ticks of the old session draw no session-pane message until a run of their own outlasts the race", async () => {
   const d = daemonDraw();
   d.holds(4303, SID);
   const s = await d.opened(SID, 4303);
@@ -345,4 +352,8 @@ test("a /clear's straggling ticks of the old session draw no session-pane messag
   expect(panePart(await s.tick())).toBeUndefined();
   d.clock.advance(3000);
   expect(panePart(await s.tick())).toBeUndefined();
+  // Ticks of the old session that go on past the race of their own run are
+  // a pane that never follows it.
+  d.clock.advance(MISMATCH_RACE_S * 1000 + 1000);
+  expect(panePart(await s.tick())).toContain(CLEARED);
 });
