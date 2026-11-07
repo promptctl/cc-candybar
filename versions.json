@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-671",
+      "ref": "refs/pull/671/merge",
+      "sha": "f3f290e1d40ee4de21590ddc1acdcbce3f2c8e43",
+      "timestamp": "2026-11-07T06:18:57.086Z",
+      "commits": [
+        {
+          "sha": "f3f290e1d40ee4de21590ddc1acdcbce3f2c8e43",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T06:17:56Z",
+          "message": "Merge f35d94e9966dd749dbe7738d3cfba41ea7953697 into d8be82f47dab2890d335b8563bbfdc937aedba77\n"
+        },
+        {
+          "sha": "f35d94e9966dd749dbe7738d3cfba41ea7953697",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:17:46-07:00",
+          "message": "test(launch): the timeout cases assert the whole verdict too, and every case feeds the unread input (brandon-menus-sjhy.j5v)\n"
+        },
+        {
+          "sha": "a174f1715327639f6b6bf7b2830f5457411ec24a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T23:07:54-07:00",
+          "message": "test(launch): the unread-input cases assert each launch's whole verdict, so a failure prints its reason (brandon-menus-sjhy.j5v)\n\nThe blocking case failed once under a loaded worker tier at an `.ok`\nassertion, which printed only `false`. toMatchObject would not have\nhelped: its failure message cuts the received object down to the keys it\nwas given. toStrictEqual prints reason, error, exitCode and signal.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-667",
       "ref": "refs/pull/667/merge",
       "sha": "63f9b09976d026c9fb7606f5ff1227becb4e3b17",
@@ -41,28 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-06T17:33:52-07:00",
           "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-671",
-      "ref": "refs/pull/671/merge",
-      "sha": "c806b1c5086b4928d959d3abfa304e1b2c443c73",
-      "timestamp": "2026-11-07T06:14:30.342Z",
-      "commits": [
-        {
-          "sha": "c806b1c5086b4928d959d3abfa304e1b2c443c73",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:13:29-07:00",
-          "message": "Merge a174f1715327639f6b6bf7b2830f5457411ec24a into d8be82f47dab2890d335b8563bbfdc937aedba77\n"
-        },
-        {
-          "sha": "a174f1715327639f6b6bf7b2830f5457411ec24a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:07:54-07:00",
-          "message": "test(launch): the unread-input cases assert each launch's whole verdict, so a failure prints its reason (brandon-menus-sjhy.j5v)\n\nThe blocking case failed once under a loaded worker tier at an `.ok`\nassertion, which printed only `false`. toMatchObject would not have\nhelped: its failure message cuts the received object down to the keys it\nwas given. toStrictEqual prints reason, error, exitCode and signal.\n"
         }
       ]
     },
