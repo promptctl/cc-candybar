@@ -246,6 +246,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       source: sessionSource({
         providers,
         sessionState,
+        stateGates: bareGates().state,
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),

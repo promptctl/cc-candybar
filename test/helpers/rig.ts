@@ -16,6 +16,7 @@
 // the rigs one file builds, never two files.
 
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
+import { judgedBy } from "./judged";
 import type { DslConfig, ValidatedConfig } from "../../src/config/dsl-types";
 import {
   knownOptionDomainNames,
@@ -208,7 +209,7 @@ export function buildRig(init: RigInit = {}): Rig {
     unscriptedRuns(),
     store,
     "",
-    sessionState,
+    judgedBy(sessionState, config),
   );
   const registered = registerCompiled(
     config,

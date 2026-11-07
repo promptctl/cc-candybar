@@ -198,7 +198,9 @@ describe("the global settings menu is reachable from a user config", () => {
     // a menu the gate did not admit would throw here, not silently no-op.
     const pickerUrl = linkUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1]?.startsWith("menus.candybar_") && e.args[2] !== DISCLOSURE_CLOSED,
+        (e) =>
+          e.args[1]?.startsWith("menus.candybar_") &&
+          e.args[2] === "candybar.apply.preset",
       ),
     );
     expect(pickerUrl).toBeDefined();

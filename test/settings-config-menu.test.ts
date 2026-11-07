@@ -68,6 +68,7 @@ import { LANE_HELP } from "../src/help-text";
 import { settingMenuPath } from "../src/config/menu-places";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "settings-ui-aok-3";
@@ -126,7 +127,7 @@ function rig(
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
     // What the render cache reads off the file's raw parse (render.ts).
     const fileHeld = fileHeldSettings(

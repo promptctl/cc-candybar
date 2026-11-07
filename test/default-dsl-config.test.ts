@@ -67,6 +67,7 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // The powerline cap glyphs, which visible segment text is read without.
 const CAPS = /[\u{E0B0}-\u{E0BC}]/gu;
@@ -206,7 +207,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(SINGLE_RUN),
+      readAsWritten(new SessionState(SINGLE_RUN)),
     );
     try {
       const compiled = registerDslConfig(parsed, registry, {
@@ -281,7 +282,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(SINGLE_RUN),
+        readAsWritten(new SessionState(SINGLE_RUN)),
       );
       const compiled = registerDslConfig(config, registry, {
         links: TEST_LINKS,
@@ -508,7 +509,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
     const compiled = registerDslConfig(parsed, registry, { links: TEST_LINKS, cwd: "/tmp" });
     // A click is gated by the config its session renders: record the render
     // and hand the click that config, so the clicks below pass through the
@@ -643,7 +644,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(SINGLE_RUN),
+        readAsWritten(new SessionState(SINGLE_RUN)),
       );
       try {
         const compiled = registerDslConfig(parsed, registry, { links: TEST_LINKS, cwd: "/tmp" });
@@ -707,7 +708,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(SINGLE_RUN),
+        readAsWritten(new SessionState(SINGLE_RUN)),
       );
       try {
         const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });
@@ -765,7 +766,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(SINGLE_RUN),
+        readAsWritten(new SessionState(SINGLE_RUN)),
       );
       try {
         const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });
@@ -795,7 +796,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(SINGLE_RUN),
+        readAsWritten(new SessionState(SINGLE_RUN)),
       );
       try {
         const compiled = registerDslConfig(toolbarOnly, registry, {
@@ -920,7 +921,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(SINGLE_RUN),
+        readAsWritten(new SessionState(SINGLE_RUN)),
       );
       try {
         const compiled = registerDslConfig(dirOnly, registry, {
@@ -1069,7 +1070,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         variables: { ...narrowed.variables, ...variables },
       };
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+      const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
       try {
         const compiled = registerDslConfig(cfg, registry, { links: TEST_LINKS, cwd: "/tmp" });
         const basePalette = paletteForThemeName(
@@ -1387,7 +1388,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(SINGLE_RUN),
+        readAsWritten(new SessionState(SINGLE_RUN)),
       );
       try {
         const compiled = registerDslConfig(metricsOnly, registry, {
@@ -1479,7 +1480,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const registry = new SourceRegistry(unscriptedRuns(),
           store,
           "",
-          new SessionState(SINGLE_RUN),
+          readAsWritten(new SessionState(SINGLE_RUN)),
         );
         try {
           const compiled = registerDslConfig(blockOnly, registry, {
@@ -1558,7 +1559,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(unscriptedRuns(),
         store,
         "",
-        new SessionState(SINGLE_RUN),
+        readAsWritten(new SessionState(SINGLE_RUN)),
       );
       try {
         const compiled = registerDslConfig(sessionOnly, registry, {
@@ -1705,10 +1706,15 @@ describe("bundled preset library renders clean at every width — brandon-preset
     // the `state` vars the templates read (edit.mode gating the chrome, the
     // ↺ banner) and the globals resolved above answer from one session, not
     // from a fresh SessionState that disagrees with it about edit mode.
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", {
-      get: (_sessionId, key) => sessionPick(key, name),
-      revision: () => 0,
-    });
+    const registry = new SourceRegistry(
+      unscriptedRuns(),
+      store,
+      "",
+      readAsWritten({
+        get: (_sessionId, key) => sessionPick(key, name),
+        revision: () => 0,
+      }),
+    );
     try {
       const compiled = registerDslConfig(VALIDATED, registry, {
         links: TEST_LINKS,

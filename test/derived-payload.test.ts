@@ -29,6 +29,7 @@ import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { diagnosticsProjection } from "../src/render/diagnostics";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { readAsWritten } from "./helpers/judged";
 
 const AT = instantOf(new Date(2026, 9, 25, 12, 0, 0));
 const RUN_WITHIN_MS = 5_000;
@@ -49,7 +50,7 @@ function viewOver(
   runs: string,
 ) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: os.tmpdir() });
   const answer = observable.box(payload, { deep: false });
   const selections = resolveEffectiveGlobals(

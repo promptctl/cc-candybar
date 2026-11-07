@@ -56,6 +56,7 @@ import {
   settled,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
 
@@ -463,7 +464,7 @@ function renderSpeed(payload: Record<string, unknown>): Frame {
   const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
-    new SessionState(SINGLE_RUN),
+    readAsWritten(new SessionState(SINGLE_RUN)),
   );
   try {
     const compiled = registerDslConfig(cfg, registry, {

@@ -20,6 +20,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // Fires every interior-colored branch: staged→green "S", unstaged→red "U",
 // ahead→green "+1", behind→red "-1".
@@ -64,7 +65,7 @@ function render(): Frame {
   );
 
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   try {
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
     return drawPayload(config, compiled, store, registry, GIT_PAYLOAD, instantOf(new Date()), {

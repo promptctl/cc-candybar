@@ -40,6 +40,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { ABSENT, pendingOf, failed, ok } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ function buildPopulatedState(): DaemonDslState {
   const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
-    new SessionState(SINGLE_RUN),
+    readAsWritten(new SessionState(SINGLE_RUN)),
   );
   const compiled = registerDslConfig(config, registry, {
     links: TEST_LINKS,

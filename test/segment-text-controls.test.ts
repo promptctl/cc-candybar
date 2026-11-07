@@ -20,6 +20,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -40,7 +41,7 @@ const CONFIG = parseAndValidate(
 
 function render(s: string): Frame {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   try {
     const compiled = registerDslConfig(CONFIG, registry, { links: TEST_LINKS, cwd: "/tmp" });
     return drawPayload(CONFIG, compiled, store, registry, { s }, instantOf(new Date()), OPTS).frame;

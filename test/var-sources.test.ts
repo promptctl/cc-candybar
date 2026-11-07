@@ -43,6 +43,7 @@ import { pendingOf, undeclaredOf } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 import { buildScope } from "../src/template-engine/scope";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // [LAW:one-source-of-truth] Tests pin to the production constant so a future
 // MIN_SHELL_TTL_MS bump doesn't silently desync test timings.
@@ -99,7 +100,7 @@ function registryOver(
     runs,
     store,
     defaultEmptyValue,
-    sessionState,
+    sessionState === undefined ? undefined : readAsWritten(sessionState),
     parent,
   );
   live.add(registry);

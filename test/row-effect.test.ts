@@ -37,6 +37,7 @@ import {
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // A frame that fades nothing in: what the effects under test here draw alone.
 const STILL_FRAME = {
@@ -85,7 +86,7 @@ function renderer(
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

@@ -25,6 +25,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -62,7 +63,7 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
-    new SessionState(SINGLE_RUN),
+    readAsWritten(new SessionState(SINGLE_RUN)),
   );
   const compiled = registerDslConfig(config, registry, {
     links: TEST_LINKS,

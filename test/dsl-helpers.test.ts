@@ -24,6 +24,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // [LAW:single-enforcer] One strip-opts shape across the file; Infinity width keeps
 // each render a single line so substring assertions are stable.
@@ -56,7 +57,7 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
   return { config, compiled, store, registry };
 }

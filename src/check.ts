@@ -67,6 +67,7 @@ import {
 import { ansiOf, type Frame } from "./render/frame.js";
 import type { Gates } from "./daemon/foundations/gates.js";
 import { daemonGates } from "./daemon/update-keys.js";
+import { judged } from "./daemon/foundations/judged-state.js";
 import { instantOf, type Instant } from "./utils/instant.js";
 import { perSetting } from "./config/setting-projections.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
@@ -631,11 +632,14 @@ export async function prepareConfig(
   // daemon shares them, and the check closes them with the registry that
   // holds them.
   const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
+  // A fresh session that has never clicked, judged as the daemon judges its
+  // sessions: by this config's gate over the keys the daemon holds.
+  const gates = daemonGates();
   const registry = new SourceRegistry(
     runs,
     store,
     config.globals.default_empty_value ?? "",
-    new SessionState(SINGLE_RUN),
+    judged(new SessionState(SINGLE_RUN), () => gates.state.gateFor(config)),
   );
   try {
     // [LAW:single-enforcer] check draws links as the daemon under its home

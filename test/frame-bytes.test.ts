@@ -35,6 +35,7 @@ import type { RenderedLine } from "../src/dsl/node-registry";
 import type { BuildLineOptions } from "../src/render/strip";
 import type { Instant } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const SID = "s1";
 const START = 1_800_000_000;
@@ -90,7 +91,7 @@ function rig(
   );
   const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, {
     links: TEST_LINKS,
     cwd: "/tmp/proj",

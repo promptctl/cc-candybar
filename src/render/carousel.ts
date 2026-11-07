@@ -38,20 +38,35 @@ import { assemble, requireOptionKind, type OptionAction } from "./picker.js";
 export const CAROUSEL_PREV = "◀";
 export const CAROUSEL_NEXT = "▶";
 
-// [LAW:one-source-of-truth] A ring over a domain, centred on the value a key
-// holds: the index `offset` steps from the centre, wrapping. The centre is
-// THE "unknown current counts as the first member" rule every enumerated
-// control folds over (render/action.ts cycleIndex), so a value outside the
-// domain rotates exactly as a cycle over it would. The carousel and a
+// [LAW:types-are-the-program] A ring over a domain's options, around the
+// value its key holds. A ring's options are peers with no resting state, so a
+// held value that is none of them — another writer's value, in the key's
+// domain but not on this list — is shown as itself, sitting between the last
+// option and the first: ▶ steps to the first, ◀ to the last. (A cycle's list
+// is the states of one thing, resting state first, so it reads such a value
+// as that resting state instead: render/action.ts cycleIndex.) A value
+// outside the key's domain never reaches a ring: the session's read refused
+// it (src/daemon/foundations/judged-state.ts). The carousel and a
 // `{{ swatches }}` row's ◀ ▶ step through this one ring. Over a domain that
 // is not empty.
-export function ringAround(
-  options: readonly string[],
-  current: string,
-): (offset: number) => number {
+export interface Ring {
+  // The held value's index, or undefined when it is no option.
+  readonly at: number | undefined;
+  readonly next: number;
+  readonly prev: number;
+}
+
+export function ringAround(options: readonly string[], current: string): Ring {
   const count = options.length;
-  const centre = Math.max(options.indexOf(current), 0);
-  return (offset) => (((centre + offset) % count) + count) % count;
+  const found = options.indexOf(current);
+  const at = found === -1 ? undefined : found;
+  return {
+    at,
+    // Between the last and the first: -1 steps forward to the first, and
+    // `count` steps back to the last.
+    next: ((at ?? -1) + 1) % count,
+    prev: ((at ?? count) - 1 + count) % count,
+  };
 }
 
 export function renderCarousel(
@@ -83,15 +98,15 @@ export function renderCarousel(
   // [LAW:dataflow-not-control-flow] An empty domain holds nothing to step to
   // or show, so the ring is empty, as a grid over it has no cells.
   if (options.length === 0) return assemble([]);
-  const indexAt = ringAround(options, readVar(store, apply.stateVar));
-  const ring = (offset: number): string => options[indexAt(offset)]!;
-  const step = (offset: number): string =>
+  const held = readVar(store, apply.stateVar);
+  const ring = ringAround(options, held);
+  const step = (to: number): string =>
     effectsUrl(
       runtime.links.to,
       realize(
         declared,
-        ring(offset),
-        ring(offset),
+        options[to]!,
+        options[to]!,
         store,
         sessionId,
         runtime.links.signer,
@@ -99,22 +114,24 @@ export function renderCarousel(
     );
 
   return assemble([
-    linkFragment(CAROUSEL_PREV, step(-1), false),
+    linkFragment(CAROUSEL_PREV, step(ring.prev), false),
     linkOver(
       // Drawn as the arrows are, in the segment's own colours (Brandon: "The
       // name loses its styling"), beside the swatch of the value in force
-      // when the domain is colour-valued.
+      // when the domain is colour-valued. A domain's palette answers only for
+      // its own options, so a held value that is none of them draws the
+      // label alone.
       labelPaint(
         renderLook(runtime, "{{ carousel }}"),
-        apply.paletteOf,
-        ring(0),
+        ring.at === undefined ? undefined : apply.paletteOf,
+        held,
         label,
       ),
       effectsUrl(
         runtime.links.to,
         realize(
           runtime.compiled.get(openName)!,
-          ring(0),
+          held,
           undefined,
           store,
           sessionId,
@@ -122,7 +139,7 @@ export function renderCarousel(
         ).effects,
       ),
     ),
-    linkFragment(CAROUSEL_NEXT, step(1), false),
+    linkFragment(CAROUSEL_NEXT, step(ring.next), false),
   ]);
 }
 

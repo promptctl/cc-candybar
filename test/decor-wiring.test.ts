@@ -92,7 +92,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const store = new VariableStore(systemTimekeeper);
   const sessionState = new SessionState(SINGLE_RUN);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame =>
@@ -412,6 +412,7 @@ import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 import { selectionFor } from "./helpers/selection";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // [LAW:types-are-the-program] Keyed on the SemanticRole union, so a role added
 // to (or removed from) the type is a compile error here, not a silent gap.

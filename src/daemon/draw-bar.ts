@@ -48,7 +48,7 @@ import {
   sourcesFactOf,
   refreshedFact,
 } from "./render-payload.js";
-import { type SessionSource } from "./session-source.js";
+import { type ForeignValue, type SessionSource } from "./session-source.js";
 import { drawnLanes, drawView, type Handed } from "./draw-view.js";
 import { isUnanswered } from "../utils/outcome.js";
 import {
@@ -597,6 +597,9 @@ export function drawRender(
                 : `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure.reason}`,
           },
         ]),
+    // Every value the session holds that its config no longer admits, while
+    // it holds it.
+    ...view.source.foreign().map(domainWarning),
   ];
   // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
   // indicator reads it as the `diagnostics` projection and the viewer pages
@@ -615,7 +618,7 @@ export function drawRender(
     // pipe event's counts), so its kind alone is what it is about: a viewer
     // open on it stays open. A render warning is about its words.
     [
-      ...standing.map((w) => ({ about: w.kind, message: w.message })),
+      ...standing.map((w) => ({ about: standingAbout(w), message: w.message })),
       ...renderWarnings
         .ofSession(sessionId, drawing.by, scope)
         .map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message })),
@@ -719,6 +722,8 @@ export function drawRender(
         return `refresh:${w.variable}`;
       case "file-events":
         return `${w.kind}:${w.state}`;
+      case "domain":
+        return `domain:${w.key}`;
       case "load":
       case "facts":
       case "config-watch":
@@ -810,13 +815,41 @@ interface FactsWarning {
   readonly message: string;
 }
 
+// [LAW:no-silent-failure] A value the session holds for one of its config's
+// controls that the config no longer admits (src/daemon/session-source.ts
+// ForeignValue): drawn as the key's default, and said so, one per key.
+interface DomainWarning {
+  readonly kind: "domain";
+  readonly key: string;
+  readonly message: string;
+}
+
+// Exported for unit testing.
+export const domainWarning = ({
+  key,
+  held,
+  admits,
+}: ForeignValue): DomainWarning => ({
+  kind: "domain",
+  key,
+  message: `"${key}" holds ${JSON.stringify(held)}, which this config does not admit (it admits ${admits}), so the bar draws its default instead`,
+});
+
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
   | FileEventsWarning
   | LauncherWarning
   | ConfigWatchWarning
   | LoadWarning
-  | FactsWarning;
+  | FactsWarning
+  | DomainWarning;
+
+// [LAW:types-are-the-program] What a standing warning is about, which a
+// viewer open on it follows: its kind, for the kinds that stand once and
+// whose words change as they do; its kind and key for a domain warning, one
+// of many, so clearing one key never moves a viewer open on another.
+export const standingAbout = (w: StandingWarning): string =>
+  w.kind === "domain" ? `${w.kind}\0${w.key}` : w.kind;
 
 // What one render drew: the body — the bar, or the viewer in its place — and
 // what the statusline's handoff line is drawn from: whether the body is the

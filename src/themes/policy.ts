@@ -81,11 +81,13 @@ export const THEME_FLOOR = "textual-dark";
 //
 // [LAW:parse-dont-validate] `parseSession` is the boundary between an untyped
 // SessionState string and this field's domain: it returns the typed value or
-// null, and null means "no session pick" — indistinguishable, on purpose, from
-// never having clicked. That is what makes a stale entry from a prior config's
-// vocabulary (or a value a since-narrowed gate would now refuse) resolve to the
-// default rather than throw or render something the label disagrees with
-// [LAW:no-silent-failure] — the caller publishes what this returns as
+// null, and null means "no session pick". A stale entry from a prior config's
+// vocabulary (a value a since-narrowed gate would now refuse) therefore
+// resolves to the default rather than throw or render something the label
+// disagrees with, and the refusal is not silent [LAW:no-silent-failure]: the
+// gate the field's row contributes judges the same value foreign, and the
+// session's view reports it beside the door (src/daemon/session-source.ts,
+// `session.foreign`). The caller publishes what this returns as
 // `<field>.effective`, so bar and label always trace to one value.
 //
 // [LAW:one-source-of-truth] `staged` is the RIGHTMOST rung of the precedence

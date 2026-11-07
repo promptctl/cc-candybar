@@ -53,6 +53,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "../test/helpers/judged";
 
 // About one just-noticeable step: how near a drawn background must sit to a
 // colour its palette names (the ticket's own bound).
@@ -130,7 +131,7 @@ const CALM = {
 // over between renders but the compiled config itself. One instant for every
 // render, so the renders differ only in the pick.
 const STORE = new VariableStore(systemTimekeeper);
-const REGISTRY = new SourceRegistry(unscriptedRuns(), STORE, "", new SessionState(SINGLE_RUN));
+const REGISTRY = new SourceRegistry(unscriptedRuns(), STORE, "", readAsWritten(new SessionState(SINGLE_RUN)));
 const COMPILED = registerDslConfig(CONFIG, REGISTRY, { links: TEST_LINKS, cwd: process.cwd() });
 const AT = instantOf(new Date());
 afterAll(() => REGISTRY.dispose());

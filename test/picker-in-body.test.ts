@@ -22,6 +22,7 @@ import { contrastRatio } from "@promptctl/rich-js";
 import { truecolorOf } from "./helpers/frame";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const OPTS = {
   endcaps: "plain" as const,
@@ -54,7 +55,7 @@ function renderOf(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   return drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
     ...OPTS,
@@ -102,10 +103,11 @@ describe("{{ carousel }} names what it sets", () => {
     }
   });
 
-  test("an unset key steps from the first option", () => {
+  test("a key holding none of the options sits between the last and the first", () => {
+    // Nothing held is no option, never the first one: ▶ steps to the first.
     const out = renderOf('{{ carousel "pick" "hello" "zoom" }}', "");
     const next = linksOf(out).find((l) => l.text === "▶")!;
-    expect(effectsOf(next.url)[0]!.args.slice(1)).toEqual(["zoom", "mid"]);
+    expect(effectsOf(next.url)[0]!.args.slice(1)).toEqual(["zoom", "low"]);
   });
 
   test("a label computed at render is drawn like a spelled one", () => {
@@ -134,7 +136,7 @@ describe("{{ picker }} over a catalogue", () => {
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
     const compiled = registerDslConfig(config, registry, {
       links: TEST_LINKS,
       cwd: "/tmp/proj",

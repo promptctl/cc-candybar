@@ -49,6 +49,7 @@ import {
   requestPayload,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
@@ -633,7 +634,7 @@ describe("the bundled activity segment renders the payload", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(SINGLE_RUN),
+      readAsWritten(new SessionState(SINGLE_RUN)),
     );
     try {
       const compiled = registerDslConfig(narrowed, registry, {

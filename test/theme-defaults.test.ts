@@ -42,6 +42,7 @@ import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const load = (source: string): ValidatedConfig =>
@@ -260,7 +261,7 @@ const SID = "theme-defaults";
 function cellBg(source: string): { daemon: string; compileOnly: string } {
   const config = load(source);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
   const sink = new Map<string, readonly RichText[]>();
   const bg = (): string => {

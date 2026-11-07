@@ -35,6 +35,7 @@ import { selectionFor } from "./helpers/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { readAsWritten } from "./helpers/judged";
 
 const AT = 1_800_000_000 as Instant;
 
@@ -70,7 +71,7 @@ function renderer(cfg: ValidatedConfig) {
   spawner.program(shell("sleep 0.2; printf ''"), runsFor(200, exits(0)));
   const store = new VariableStore(clock);
   const session = new SessionState(SINGLE_RUN);
-  const registry = new SourceRegistry(new SourceRuns({ launcher: launcher, clock: systemTimekeeper }), store, "", session);
+  const registry = new SourceRegistry(new SourceRuns({ launcher: launcher, clock: systemTimekeeper }), store, "", readAsWritten(session));
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {

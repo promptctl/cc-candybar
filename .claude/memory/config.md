@@ -40,6 +40,10 @@ Every write first loads and validates the text it's about to write, and refuses 
 
 Precedence, lowest to highest: bundled default < file < active preset < session pick < edit-mode staging.
 
+## Session values outlive their config
+
+Session state persists across reloads and restarts, so a session can hold a value that an older config's control wrote and the current config no longer admits. Every read that interprets a control key's stored value reads it the way the session's config judges it: such a value reads as absent, the bar draws the key's default, and a ⚠ names it until the session lets it go. Otherwise the bar draws one value while its control steps from another. A read that chooses what a click releases stays raw, because it runs after the click reloaded the config: under that config, the value it exists to release is the one that reads as absent. A key no `set` action of the config writes holds the daemon's own state (the doctor's report, the update dismissal), and is never judged.
+
 ## Settings are rows
 
 Every globals field is one row of the fields table. The schema, the resolved globals, the menu control, the option domain, the payload field and the save format all derive from that row. A new setting is a row, the code that uses its value, and its tests. Controls are generated from the row's domain. A field no control fits is text-only. A field only the file sets has no control and no session pick; colour depth is one of these.

@@ -53,6 +53,7 @@ import {
   requestPayload,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
@@ -219,7 +220,7 @@ describe("the bundled host segment", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(SINGLE_RUN),
+      readAsWritten(new SessionState(SINGLE_RUN)),
     );
     try {
       const compiled = registerDslConfig(CONFIG, registry, {

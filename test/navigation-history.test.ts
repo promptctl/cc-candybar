@@ -113,6 +113,29 @@ describe("back", () => {
     dispose();
   });
 
+  test("a value the key's gate admits only by clamping it is never restored", async () => {
+    const { sessionState, depth, reload, set, back, dispose } = setup();
+    const WIDTH = "nav-test.width";
+    const withWidth = (max: number): DslConfig => {
+      const base = configWithTabs("a", "b");
+      return {
+        ...base,
+        actions: { ...base.actions, wider: { set: WIDTH, min: 1, max, by: 1 } },
+      };
+    };
+    reload(withWidth(5));
+    await set(WIDTH, "5");
+    await set(WIDTH, "2");
+    // The range narrowed: `5` would be admitted only as `3`, a value the bar
+    // would draw as the key's default, so the step writing it back is
+    // discarded rather than replayed.
+    reload(withWidth(3));
+    expect(depth()).toBe(0);
+    await expect(back).rejects.toThrow(BadVerbArgs);
+    expect(sessionState.get("s1", WIDTH)).toBe("2");
+    dispose();
+  });
+
   test("a key one click writes twice goes back to its value before the click, unset included", () => {
     const store = new SessionState(SINGLE_RUN);
     const history = new NavigationHistory();

@@ -12,13 +12,19 @@ import {
   type DisclosureNest,
   type StateWrite,
 } from "../config/disclosure-nest";
+import type { JudgedState } from "./foundations/judged-state";
 import type { SessionStateRW } from "./session-state";
 
+// `judge` reads `store` as the session's config reads it: which menu is open
+// is an interpretation of the stored values, so a member written under an
+// older config is no open menu here, as it is none on the bar.
 export function closingView(
   store: SessionStateRW,
+  judge: (store: SessionStateRW) => JudgedState,
   nestOf: (sessionId: string) => DisclosureNest,
   log: (line: string) => void,
 ): SessionStateRW {
+  const reads = judge(store);
   // [LAW:dataflow-not-control-flow] Every write lands with the clears it
   // implies, read before any of it lands; a write that closes nothing clears
   // an empty list.
@@ -29,7 +35,7 @@ export function closingView(
   ): void => {
     const folds = closeNested(
       nestOf(sessionId),
-      (key) => store.get(sessionId, key),
+      (key) => reads.get(sessionId, key),
       writes,
     );
     runInAction(() => {

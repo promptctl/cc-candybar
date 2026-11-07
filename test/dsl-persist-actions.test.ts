@@ -66,6 +66,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -418,7 +419,7 @@ function buildPersistRuntime(
   const sessionState = new SessionState(SINGLE_RUN);
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, {
     links: TEST_LINKS,
     cwd: process.cwd(),
@@ -570,7 +571,7 @@ describe("persist action click → the config file", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      sessionState,
+      readAsWritten(sessionState),
     );
     const compiled = registerDslConfig(config, registry, {
       links: TEST_LINKS,

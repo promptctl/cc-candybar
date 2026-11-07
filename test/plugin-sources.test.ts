@@ -191,6 +191,7 @@ function rig(): Rig {
       source: sessionSource({
         providers,
         sessionState,
+        stateGates: bareGates().state,
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),

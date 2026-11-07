@@ -20,6 +20,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { instantOf } from "../src/utils/instant";
 import { configDisposeLine } from "../src/daemon/cache/render";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const SID = "s1";
 
@@ -63,7 +64,7 @@ function renderedEntry(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp/proj" });
   if (drawn) {
     drawPayload(
@@ -137,7 +138,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
   it("a never-rendered registry subscribes nothing, and its dispose changes nothing", () => {
     const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
     registerDslConfig(
       parseAndValidate(
         "<test>",

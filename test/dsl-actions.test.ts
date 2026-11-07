@@ -133,9 +133,16 @@ describe("2de.12 — set on a baseline key derives nothing", () => {
     root: 'bar',
   }`;
 
-  test("the theme literal reuses the permanent theme validator (no derived spec)", () => {
+  test("the theme literal reuses the permanent theme validator, and makes theme this config's control key", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(ownValidators(config, deriveActionValidators(config))).toEqual([]);
+    const gate = stateGate(config);
+    // The built-in validator gates the key, not an allow-list of the literal:
+    // any installed theme is admitted, an uninstalled one refused.
+    expect(gate.validate("theme", "dracula")).toEqual({ ok: true, value: "dracula" });
+    expect(gate.validate("theme", "no-such-theme").ok).toBe(false);
+    // A stored theme the gate refuses is foreign to this config.
+    expect(gate.verdict("theme", "no-such-theme").kind).toBe("foreign");
+    expect(gate.verdict("theme", "dracula")).toEqual({ kind: "held" });
   });
 
   test("the click still passes the baseline theme gate end-to-end", async () => {

@@ -18,6 +18,7 @@ import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { configurePlacement } from "./helpers/configure";
+import { linksOf } from "../src/click/read";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -388,6 +389,25 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(
       placementDrafts(rt.config, (k) => rt.sessionState.get(SID, k)),
     ).toEqual([]);
+  });
+
+  test("its control centres on the saved value the bar draws, never on its first option", () => {
+    durable.write(SRC);
+    const rt = configureBar(SRC);
+    configurePlacement(rt.sessionState, SID, "default", "vcs2");
+    rt.sessionState.set(SID, draftKey("vcs2", "form"), "medium");
+    const out = rt.render();
+    expect(textOf(out)).toContain("d-long-2");
+    // Centred on `long`, the saved value: ▶ steps on to `short`. Centred on
+    // the first option, it would step to `long`, which the bar already draws.
+    const next = linksOf(out).find(
+      (l) =>
+        l.text === "▶" &&
+        effectsOf(l.url).some((e) => e.args[1] === draftKey("vcs2", "form")),
+    )!;
+    expect(effectsOf(next.url).map((e) => e.args.slice(1))).toEqual([
+      [draftKey("vcs2", "form"), "short"],
+    ]);
   });
 });
 

@@ -117,6 +117,20 @@ export function controlDomainAdmits(
 const LISTED_MEMBERS = 8;
 const SAMPLED_MEMBERS = 3;
 
+// [LAW:single-enforcer] How a list of members reads in a message, wherever
+// the list comes from — a control's domain here, a session key's gate in
+// src/daemon/foundations/validator-registry.ts. `named` is the domain's
+// registered name, when it has one.
+export function describeMembers(
+  members: readonly string[],
+  named?: string,
+): string {
+  const quoted = members.map((m) => JSON.stringify(m));
+  if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
+  const name = named === undefined ? "" : ` "${named}"`;
+  return `one of the ${members.length}${name} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+}
+
 // How a control's domain reads in a message.
 export function describeControlDomain(
   domain: ControlDomain,
@@ -126,10 +140,10 @@ export function describeControlDomain(
   if (!("min" in domain)) {
     const from = optionsOf(domain);
     const { members } = resolveOptionDomain(from, perConfigDomains);
-    const quoted = members.map((m) => JSON.stringify(m));
-    if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
-    const named = typeof from === "string" ? ` "${from}"` : "";
-    return `one of the ${members.length}${named} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+    return describeMembers(
+      members,
+      typeof from === "string" ? from : undefined,
+    );
   }
   return `an integer from ${domain.min} to ${domain.max}`;
 }

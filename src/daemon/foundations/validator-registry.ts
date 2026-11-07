@@ -13,6 +13,8 @@
 // read this from the SAME functions, so "what does a range/allow-list/int
 // spec mean" cannot drift between session and config gates.
 
+import { describeMembers } from "../../config/setting-control";
+
 // [LAW:types-are-the-program] Discriminated union — every legal return is
 // either an accepted-and-canonicalized string or a structured rejection
 // reason. There is no third state (no `null`, no thrown exception path
@@ -281,12 +283,42 @@ export interface RangeParams {
   readonly max: number;
 }
 
+// [LAW:types-are-the-program] A built-in key: its validator, and what it
+// admits as a message says it, so a gate can describe every key it judges.
+export interface BuiltinKey {
+  readonly validate: KeyValidator;
+  readonly admits: string;
+}
+
+// [LAW:parse-dont-validate] What a stored value is to the config a session
+// renders with. `held`: the value is one this config's controls can hold, or
+// the key is no control's — the daemon's own state, which no `set` action
+// writes. `foreign`: a control's key holding a value its gate refuses, or
+// accepts only by changing it (a range clamp) — a value written under an
+// older config, which every reader that interprets it reads as absent.
+export type Verdict =
+  | { readonly kind: "held" }
+  | { readonly kind: "foreign"; readonly admits: string };
+
+// How a settled spec's domain reads in a message.
+function describeSpec(spec: DerivedValidatorSpec): string {
+  if (spec.kind === "int") return "an integer";
+  if (spec.kind === "range") {
+    return `an integer from ${spec.min} to ${spec.max}`;
+  }
+  return describeMembers(spec.allowed);
+}
+
 // [LAW:types-are-the-program] What ONE config's sessions may write: built
 // whole from a set of contributions and never changed after, so a session's
 // click is gated — and its stepper wrapped — by the config that session
 // renders and by no other the daemon happens to hold.
 export interface Gate {
   validate(key: string, rawValue: string): ValidateResult;
+  // [LAW:single-enforcer] THE judgement of a stored value, beside the
+  // judgement of an incoming one: every reader that interprets a session's
+  // value (src/daemon/foundations/judged-state.ts) asks here.
+  verdict(key: string, stored: string): Verdict;
   listKeys(): readonly string[];
   rangeParamsFor(key: string): RangeParams | null;
 }
@@ -302,15 +334,32 @@ export interface Gate {
 // list holds at the time, so a config that built its gate once builds it under
 // every later change to the members.
 function createGate(
-  baseline: Readonly<Record<string, KeyValidator>>,
+  baseline: Readonly<Record<string, BuiltinKey>>,
   daemonWide: readonly DaemonWideKey[],
   derived: readonly KeySpecContribution[],
   noun: string,
 ): Gate {
-  const validators = new Map<string, KeyValidator>(Object.entries(baseline));
+  const validators = new Map<string, KeyValidator>(
+    Object.entries(baseline).map(([key, b]) => [key, b.validate]),
+  );
+  const admits = new Map<string, string>(
+    Object.entries(baseline).map(([key, b]) => [key, b.admits]),
+  );
+  // [LAW:one-source-of-truth] The keys this config's own actions write: its
+  // controls' keys, which the verdict judges. Taken before a built-in key's
+  // allow-list contributions are dropped below, so a config's theme action
+  // makes `theme` its control's key.
+  const written = new Set(derived.map((c) => c.key));
+  // [LAW:single-enforcer] An ALLOW-LIST contribution to a built-in key is the
+  // click reusing the built-in gate, so it is dropped; a STRUCTURAL one (a
+  // paged cursor, a stepper's range) is kept, so a collision throws loudly
+  // below rather than silently shadowing the built-in gate.
+  const gated = derived.filter(
+    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(baseline, c.key),
+  );
   const ranges = new Map<string, RangeParams>();
   const daemonKeys = new Set(daemonWide.map((d) => d.key));
-  for (const { key, spec } of derived) {
+  for (const { key, spec } of gated) {
     if (daemonKeys.has(key) && spec.kind !== "allow-list") {
       throw new Error(
         `${noun} gate: key "${key}" is written by the daemon's own links as ` +
@@ -325,7 +374,7 @@ function createGate(
       key,
       spec: { kind: "allow-list" as const, allowed },
     })),
-    ...derived,
+    ...gated,
   ];
   for (const { key, spec } of mergeContributions(contributions, noun)) {
     if (!key) throw new Error(`${noun} gate: key is required`);
@@ -345,6 +394,7 @@ function createGate(
       );
     }
     validators.set(key, validatorForSpec(key, spec, noun));
+    admits.set(key, describeSpec(spec));
     if (spec.kind === "range") {
       ranges.set(key, { min: spec.min, max: spec.max });
     }
@@ -359,6 +409,17 @@ function createGate(
         };
       }
       return validator(rawValue);
+    },
+    verdict(key, stored) {
+      if (!written.has(key)) return { kind: "held" };
+      // [LAW:no-defensive-null-guards] A written key is gated by construction:
+      // its merged spec built a validator above, or it is a built-in key.
+      const result = validators.get(key)!(stored);
+      // [LAW:types-are-the-program] Every validator accepts its own output
+      // unchanged, so a value a click wrote through this gate reads back held.
+      return result.ok && result.value === stored
+        ? { kind: "held" }
+        : { kind: "foreign", admits: admits.get(key)! };
     },
     listKeys: () => [...validators.keys()],
     rangeParamsFor: (key) => ranges.get(key) ?? null,
@@ -382,10 +443,11 @@ export interface Keyspace<C extends object> {
 }
 
 // [LAW:one-type-per-behavior] ONE keyspace implementation, instantiated once
-// per wire. `baseline` seeds the built-in keys (raw KeyValidator functions,
-// never re-claimable — SessionState's theme/endcaps/toolbar-expanded; none
-// for the config file). `derive` is what a config contributes: its action
-// table's writes. `noun` names the keyspace in every message
+// per wire. `baseline` seeds the built-in keys (each a validator and what it
+// admits, never re-claimable — SessionState's theme/endcaps/toolbar-expanded;
+// none for the config file). `derive` is what a config contributes: every
+// write its action table declares, a built-in key's included. `noun` names
+// the keyspace in every message
 // ("state"/"config").
 //
 // [LAW:one-source-of-truth] A gate is DERIVED from its config, so there is
@@ -397,7 +459,7 @@ export interface Keyspace<C extends object> {
 // mutable thing here, owned by the keyspace and written only through
 // `register` and the disposer it returns.
 export function createKeyspace<C extends object>(
-  baseline: Readonly<Record<string, KeyValidator>>,
+  baseline: Readonly<Record<string, BuiltinKey>>,
   noun: string,
   derive: (config: C) => readonly KeySpecContribution[],
 ): Keyspace<C> {

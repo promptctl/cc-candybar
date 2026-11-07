@@ -26,9 +26,11 @@ import {
   type ResolvedDomain,
 } from "../../config/option-domain";
 import type { DslConfig } from "../../config/dsl-types";
+import { describeMembers } from "../../config/setting-control";
 import {
   createKeyspace,
   mergeContributions,
+  type BuiltinKey,
   type Keyspace,
   type KeySpecContribution,
   type KeyValidator,
@@ -41,6 +43,7 @@ export type {
   KeyValidator,
   RangeParams,
   ValidateResult,
+  Verdict,
 } from "./validator-registry";
 // [LAW:locality-or-seam] Re-exported for existing test/consumer imports — the
 // builder is generic (validator-registry.ts owns it), but state-validators.ts
@@ -87,8 +90,13 @@ const validateEndcaps: KeyValidator = (raw) => {
 // inputs and normalizes to two canonical outputs: truthy ("1"/"true") → "1",
 // falsy ("0"/"false") → "" (empty). The empty falsy sentinel matches what
 // `toolbar-toggle` produces via `clear()` for the next render.
+// [LAW:types-are-the-program] "" is also an input: every validator accepts
+// its own output unchanged, so a stored false reads back as held
+// (Gate.verdict). That makes this the one validator that admits an empty
+// value — it is its own canonical false, where "0" would read as true in a
+// template — and it stores exactly what "0" and "false" store.
 const BOOLEAN_TRUTHY = new Set(["1", "true"]);
-const BOOLEAN_FALSY = new Set(["0", "false"]);
+const BOOLEAN_FALSY = new Set(["", "0", "false"]);
 const validateBoolean: KeyValidator = (raw) => {
   if (BOOLEAN_TRUTHY.has(raw)) return { ok: true, value: "1" };
   if (BOOLEAN_FALSY.has(raw)) return { ok: true, value: "" };
@@ -102,10 +110,16 @@ const validateBoolean: KeyValidator = (raw) => {
 // legacy widget-era targets that predate the action-table-driven world and
 // stay writable in every session; every other SessionState key is derived
 // from the session's config's action table.
-const BASELINE: Readonly<Record<string, KeyValidator>> = {
-  endcaps: validateEndcaps,
-  theme: validateTheme,
-  "toolbar-expanded": validateBoolean,
+const BASELINE: Readonly<Record<string, BuiltinKey>> = {
+  endcaps: {
+    validate: validateEndcaps,
+    admits: describeMembers(ENDCAPS_SHAPES),
+  },
+  theme: {
+    validate: validateTheme,
+    admits: describeMembers(RESOLVABLE_THEMES_LIST, "themes"),
+  },
+  "toolbar-expanded": { validate: validateBoolean, admits: "true or false" },
 };
 
 // [LAW:no-shared-mutable-globals] A SessionState keyspace is a value the root
@@ -151,28 +165,13 @@ function actionKeySpecs(
   ];
 }
 
-// [LAW:single-enforcer] A STRUCTURAL spec (menu int / stepper range) is
-// always kept — even on a built-in key — so a collision throws loudly when
-// the gate is built rather than silently shadowing the built-in gate. Only an
-// ALLOW-LIST contribution to a built-in key is dropped (the click reuses the
-// built-in gate as intended).
-function dropBaselineAllowLists(
-  contributions: readonly KeySpecContribution[],
-): KeySpecContribution[] {
-  return contributions.filter(
-    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key),
-  );
-}
-
 // [LAW:one-source-of-truth] The writable-key surface a config's `set` actions
 // need, DERIVED from the action table — the same declarations the
 // `{{ action }}` fn realizes a click from are the gate the wire enforces.
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const perConfigDomains = configOptionDomains(config);
-  return dropBaselineAllowLists(
-    Object.values(config.actions).flatMap((a) =>
-      actionKeySpecs(a, perConfigDomains),
-    ),
+  return Object.values(config.actions).flatMap((a) =>
+    actionKeySpecs(a, perConfigDomains),
   );
 }
 

@@ -61,6 +61,7 @@ import { presetNames } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "ef6";
@@ -92,7 +93,7 @@ function rig(
   );
   const sessionState = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" });
   recordRender(sessionState, SID);
   const ctx = testVerbContext(sessionState, undefined, config);
@@ -287,12 +288,18 @@ describe("the carousel rotates by applying", () => {
     rt.dispose();
   });
 
-  test("a value outside the domain counts as the first option", async () => {
+  test("a held value that is none of the options sits between the last and the first", async () => {
+    // Another writer's value on the key: shown as itself, never as the first
+    // option, so ▶ steps to the first and ◀ to the last.
     const rt = rig(CAROUSEL_ONLY);
     rt.sessionState.set(SID, "pick", "x");
     rt.render();
     await rt.clickText(CAROUSEL_NEXT);
-    expect(rt.sessionState.get(SID, "pick")).toBe("b");
+    expect(rt.sessionState.get(SID, "pick")).toBe("a");
+    rt.sessionState.set(SID, "pick", "x");
+    rt.render();
+    await rt.clickText(CAROUSEL_PREV);
+    expect(rt.sessionState.get(SID, "pick")).toBe("e");
     rt.dispose();
   });
 
@@ -629,6 +636,16 @@ describe("randomOther", () => {
     }
     // One option has no other: the pick is that option.
     expect(randomOther(12345, 1, 0)).toBe(0);
+  });
+
+  test("with no option in force, reaches every option", () => {
+    for (const count of [1, 2, 7]) {
+      const seen = new Set<number>();
+      for (let seed = 0; seed < 4000; seed++) {
+        seen.add(randomOther(Date.UTC(2026, 9, 15) + seed * 1000, count, undefined));
+      }
+      expect([count, seen.size]).toEqual([count, count]);
+    }
   });
 });
 

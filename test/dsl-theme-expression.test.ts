@@ -48,6 +48,7 @@ import {
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const SID = "s-theme-expr";
 // Four visibly different installed themes: the floor, plus three the expression
@@ -311,7 +312,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(SINGLE_RUN),
+      readAsWritten(new SessionState(SINGLE_RUN)),
     );
     try {
       const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
@@ -340,7 +341,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(SINGLE_RUN),
+      readAsWritten(new SessionState(SINGLE_RUN)),
     );
     try {
       const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
@@ -406,7 +407,7 @@ describe("globals.palette as an expression — loader", () => {
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
-      new SessionState(SINGLE_RUN),
+      readAsWritten(new SessionState(SINGLE_RUN)),
     );
     try {
       expect(() => registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() })).toThrow(
@@ -531,7 +532,7 @@ describe("a rule inside a preset's globals", () => {
   ): R => {
     const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
     try {
       return body(config, registry, store);
     } finally {

@@ -11,6 +11,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // [LAW:verifiable-goals] The 2026-09-03 outage in numbers: the helper preamble
 // re-parsed into every template cost ~30 MB per registered config; the daemon
@@ -39,7 +40,7 @@ function registerStdlib() {
     "<default>",
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   return { registry, compiled: registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/tmp" }) };
 }
 

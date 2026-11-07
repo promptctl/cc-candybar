@@ -24,6 +24,7 @@ import { VariableStore } from "../../src/var-system/store";
 import { TEST_LINKS } from "./link-signer";
 import { parseAndValidate } from "./parse-and-validate";
 import { systemTimekeeper } from "../../src/time";
+import { judgedBy } from "./judged";
 
 const SID = "bar00a1b-2c3d-4e5f-8a7b-8c9d0e1f2a3b";
 
@@ -60,7 +61,12 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
   );
   const session = new SessionState(SINGLE_RUN);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
+  const registry = new SourceRegistry(
+    unscriptedRuns(),
+    store,
+    "",
+    judgedBy(session, config),
+  );
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: "/home/tester/code/project" });
   return {
     pick: (key, value) => session.set(SID, key, value),

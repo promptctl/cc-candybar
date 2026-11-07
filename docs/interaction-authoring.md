@@ -1836,8 +1836,13 @@ key, without the `state` variable the carousel could never see what its last
 click wrote, so it is a render error naming the variable to declare,
 `carousel references action "choose", whose key "pick" no variable reads
 back…`. An `insertSegmentFrom` action inserts a segment and holds nothing, so a
-carousel over one is a render error naming the action. A current value outside
-the domain counts as the domain's first option.
+carousel over one is a render error naming the action. A key can hold a value
+that is none of the carousel's options, written by another action on the same
+key: the carousel shows it as it is, between the last option and the first, so
+`▶` steps to the first and `◀` to the last, and the label draws no swatch. A
+value the session holds from an older config, one no action of this config
+writes to the key, reads as the variable's `default`, and a ⚠ beside the door
+names the key, the value and what the key admits.
 
 ## `styles`: named theme adaptations (the third option domain)
 

@@ -40,6 +40,7 @@ import { projectAutoCompact } from "../src/daemon/render-payload";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -78,7 +79,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
   const registry = new SourceRegistry(unscriptedRuns(),
     store,
     "",
-    sessionState,
+    readAsWritten(sessionState),
   );
   const compiled = registerDslConfig(config, registry, {
     links: TEST_LINKS,

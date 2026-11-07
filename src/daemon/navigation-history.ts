@@ -84,10 +84,15 @@ export class NavigationHistory {
       state.has(key) ? state.get(key)! : store.get(sessionId, key);
     const kept: NavigationStep[] = [];
     for (const step of [...(this.past.get(sessionId) ?? [])].reverse()) {
+      // [LAW:single-enforcer] Admitted as the bar reads it: a key the config
+      // still gates, holding a value its verdict calls held — never one it
+      // would admit only by clamping, which the bar would draw as its default.
       const holds = step.every(
         (c) =>
           read(c.key) === c.after &&
-          (c.before === null || gate.validate(c.key, c.before).ok),
+          (c.before === null ||
+            (gate.validate(c.key, c.before).ok &&
+              gate.verdict(c.key, c.before).kind === "held")),
       );
       if (!holds) continue;
       kept.unshift(step);

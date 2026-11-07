@@ -25,7 +25,8 @@
 import { observable, reaction, runInAction } from "mobx";
 import type { EffectiveGlobals } from "../config/effective-globals.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
-import type { ValidatedConfig } from "../config/dsl-types.js";
+import type { DslConfig, ValidatedConfig } from "../config/dsl-types.js";
+import type { Keyspace } from "./foundations/validator-registry.js";
 import type { ViewSource } from "../dsl/view-source.js";
 import type { SourceOf } from "./cache/render.js";
 import type {
@@ -50,9 +51,20 @@ import { settingCounts } from "./setting-drafts.js";
 // payload its inputs read, as ViewSource names them, the globals the session's
 // picks resolve to (what the draw's options are built from, beside the
 // payload's `.effective` fields).
+// [LAW:types-are-the-program] A value the session holds for one of its
+// config's controls that the control's gate calls foreign (Gate.verdict):
+// written under an older config, drawn as the key's default, and reported.
+export interface ForeignValue {
+  readonly key: string;
+  readonly held: string;
+  readonly admits: string;
+}
+
 export interface SessionSource extends ViewSource {
   readonly payload: () => ViewPayload;
   readonly effective: () => EffectiveGlobals;
+  // The session's foreign values, as its config judges them now.
+  readonly foreign: () => readonly ForeignValue[];
   // The session's facts document (src/facts/session-facts.ts), as the turn
   // holds it.
   readonly facts: () => SessionFacts;
@@ -165,6 +177,8 @@ export interface SessionSourceDeps {
   // turn that fails.
   readonly providers: Pick<RenderPayloadDeps, "home" | "log">;
   readonly sessionState: SessionStateReader;
+  // The state gates a session's config judges its stored values by.
+  readonly stateGates: Pick<Keyspace<DslConfig>, "gateFor">;
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: string) => HistoryDepth;
   // The session's back depth, measured against the gate of the config its
@@ -190,6 +204,26 @@ export function sessionSource(
       resolveEffectiveGlobals(state.config, pick, (preset) =>
         state.authoredRoots.has(preset),
       ),
+    );
+    // [LAW:one-source-of-truth] The session's foreign values, judged once per
+    // change of session state or config — never per frame — by the same
+    // verdict every reader that interprets a value reads through. It reads
+    // the raw values because its job is to report the foreign arm, not to
+    // draw a value from it: the one reader that sees that arm.
+    const foreign = store.derive(
+      "session.foreign",
+      "computed",
+      (): readonly ForeignValue[] => {
+        const gate = deps.stateGates.gateFor(state.config);
+        return Object.entries(deps.sessionState.values(sessionId)).flatMap(
+          ([key, held]) => {
+            const verdict = gate.verdict(key, held);
+            return verdict.kind === "foreign"
+              ? [{ key, held, admits: verdict.admits }]
+              : [];
+          },
+        );
+      },
     );
     // Derivations, so each keeps its identity until an input of it moves, and
     // a turn that moved nothing of them is the turn before.
@@ -293,6 +327,7 @@ export function sessionSource(
     return {
       payload: () => payload.read(),
       effective: () => turn.get().draw.effective,
+      foreign: () => foreign.read(),
       facts: () => turn.get().stamped.facts,
       turn: () => {
         const { stamped, request, picks: turnPicks, draw: drawn } = turn.get();

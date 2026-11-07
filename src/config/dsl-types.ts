@@ -1068,22 +1068,32 @@ export function parseSettingSpelling(
   return inSettingDomain(decl, value) ? value : undefined;
 }
 
-// [LAW:single-enforcer] What one setting of a placement holds: the session's
-// pick through the setting's draft slot (SegmentNode.drafts) when the
-// declaration admits it, else the placement's own value, else the
-// declaration's default. `pick` reads a slot — the render through its draft
-// variable, the doctor through the session's state — so the bar and the
-// doctor cannot disagree about what a placement wears.
+// [LAW:single-enforcer] What one setting of a placement holds: its draft slot
+// (SegmentNode.drafts) when configure mode can change it, else the
+// placement's own value, else the declaration's default. `read` reads the
+// slot's draft variable, a `state` variable judged by the config's gate
+// (src/daemon/foundations/judged-state.ts) whose default IS the saved
+// spelling — so a pick written under an older declaration reads as the saved
+// value, as an unpicked slot does.
 export function placementSetting(
   node: SegmentNode,
   name: string,
   decl: SettingDecl,
-  pick: (draft: DraftSlot) => string | null,
+  read: (draft: DraftSlot) => string,
 ): SettingValue {
-  const saved = node.settings?.[name] ?? decl.default;
   const draft = node.drafts?.[name];
-  const raw = draft === undefined ? null : pick(draft);
-  return (raw === null ? undefined : parseSettingSpelling(decl, raw)) ?? saved;
+  if (draft === undefined) return node.settings?.[name] ?? decl.default;
+  const spelled = read(draft);
+  const value = parseSettingSpelling(decl, spelled);
+  // [LAW:no-silent-failure] The judged read hands only a spelling the gate —
+  // built from this declaration's domain — admits, so a refusal here is a
+  // broken invariant, never a stale pick.
+  if (value === undefined) {
+    throw new Error(
+      `placement setting "${name}": its draft reads ${JSON.stringify(spelled)}, which its declaration does not admit (${describeSettingDomain(decl)})`,
+    );
+  }
+  return value;
 }
 
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or

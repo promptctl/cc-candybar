@@ -65,6 +65,7 @@ import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { menuMember, menuStateKey } from "../src/config/menu-keys";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 // The colours drawn at `text`'s first character, as hex; either is undefined
 // when none is (a cell drawn with no fill has no bg).
@@ -158,7 +159,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   const sessionState = new SessionState(SINGLE_RUN);
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   // The daemon publishes the session's history depth into every render's
@@ -812,7 +813,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const config = parseAndValidate("<test>", BASE, ALLOWED);
     const sessionState = new SessionState(SINGLE_RUN);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+    const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(sessionState));
     const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);

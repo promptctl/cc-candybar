@@ -23,6 +23,7 @@ import { resolvedStyle } from "../src/render/rich-theme.js";
 import { NO_FILL } from "../src/template-engine/colors";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { readAsWritten } from "./helpers/judged";
 
 const THEME = "textual-dark";
 
@@ -46,7 +47,7 @@ function render() {
     new Set(listResolvablePaletteNames()),
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState(SINGLE_RUN));
+  const registry = new SourceRegistry(unscriptedRuns(), store, "", readAsWritten(new SessionState(SINGLE_RUN)));
   const compiled = registerDslConfig(config, registry, { links: TEST_LINKS, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const out = drawPayload(

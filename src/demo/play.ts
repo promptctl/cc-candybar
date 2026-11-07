@@ -399,6 +399,7 @@ export async function playDemo({
       source: sessionSource({
         providers: { home, log },
         sessionState,
+        stateGates: daemonGates().state,
         history: turnInput(() => depths.get().history),
         navigation: turnInput(() => depths.get().back),
       }),
