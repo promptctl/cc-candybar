@@ -22774,11 +22774,16 @@ var VERB_DOCTOR_RUN = "doctor-run";
 var VERB_DOCTOR_FIX = "doctor-fix";
 var VERB_DOCTOR_MARK = "doctor-mark";
 var VERB_PROBE = "probe";
+var CLICK_VERBS = [VERB_DISPATCH, VERB_PROBE];
+function isClickVerb(verb) {
+  return CLICK_VERBS.includes(verb);
+}
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var VERB_RANGE = "range";
+var LINK_VERBS = [...CLICK_VERBS, VERB_RANGE];
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
 function sayWrite(key, value) {
@@ -22909,10 +22914,14 @@ function parseHandlerUrl(rawUrl) {
     return { ok: false, problem: error.message };
   }
 }
-function spellsUnaddressedLink(text4) {
-  if (!isBarLink(text4)) return false;
+function deadLinkOf(text4) {
+  if (!isBarLink(text4)) return null;
   const head = text4.slice(LINK_PREFIX.length).split("%")[0];
-  return !head.startsWith(ADDRESS) && !ADDRESS.startsWith(head);
+  if (!head.startsWith(ADDRESS)) {
+    return ADDRESS.startsWith(head) ? null : "in a grammar older than names, which names no renderer";
+  }
+  const [, , verb, ...tail] = head.split("/");
+  return verb === void 0 || tail.length === 0 || LINK_VERBS.includes(verb) ? null : `naming the verb "${verb}", which a link never names: a link names ${LINK_VERBS.join(", ")}`;
 }
 function verbOf(rest2, to) {
   const slash2 = rest2.indexOf("/");
@@ -46362,14 +46371,15 @@ function templateActionRefs(template, helpers) {
   }
   return [...refs.values()];
 }
-function templateUnaddressedLinks(template, helpers) {
+function templateDeadLinks(template, helpers) {
   const refs = /* @__PURE__ */ new Map();
   for (const { code, via } of callGraph(template, helpers)) {
     for (const s of code.matchAll(STRING_LITERAL_RE)) {
       const literal = s[0].slice(1, -1);
-      if (!spellsUnaddressedLink(literal)) continue;
+      const problem = deadLinkOf(literal);
+      if (problem === null) continue;
       const key = `${literal}\0${via ?? "\0"}`;
-      if (!refs.has(key)) refs.set(key, { literal, via });
+      if (!refs.has(key)) refs.set(key, { literal, problem, via });
     }
   }
   return [...refs.values()];
@@ -61234,12 +61244,12 @@ function checkTemplateRefs(ctx, declPath, template, scope, opts) {
     const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
     report2(`Template references unknown variable ".${ref}"${hint}`, via);
   }
-  for (const { literal, via } of templateUnaddressedLinks(
+  for (const { literal, problem, via } of templateDeadLinks(
     template,
     scope.helpers
   )) {
     report2(
-      `Template spells a link in a grammar older than names, which names no renderer: "${literal}". Bind an action instead ({{ action "name" \u2026 }}): its link names the renderer that draws it`,
+      `Template spells a link ${problem}: "${literal}". Bind an action instead ({{ action "name" \u2026 }}): the bar draws its link`,
       via
     );
   }
@@ -61816,7 +61826,8 @@ function presence(reads, path47) {
     reads.statSync(path47);
     return "present";
   } catch (e) {
-    return e.code === "ENOENT" ? "absent" : { path: path47, error: e.message };
+    const code = e.code;
+    return code === "ENOENT" || code === "ENOTDIR" ? "absent" : { path: path47, error: e.message };
   }
 }
 
@@ -61986,7 +61997,7 @@ function repoProject(reads, projectDir) {
 function userHome(locs, layers) {
   return layers.find((l) => isUserFile(locs, l.path))?.path ?? `${userConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`;
 }
-function durableConfig(reads, locs, answers, projectDir, cwd2, configFile) {
+function durableConfig(reads, memo, locs, answers, projectDir, cwd2, configFile) {
   const resolved = resolveDslConfig(
     reads,
     locs,
@@ -62002,7 +62013,8 @@ function durableConfig(reads, locs, answers, projectDir, cwd2, configFile) {
     repo: resolved.repos.plugins,
     cwd: cwd2 ?? null,
     locs,
-    reads
+    reads,
+    memo
   };
 }
 function configResolutionNotice(resolution) {
@@ -64515,11 +64527,6 @@ function parseWire(decode) {
     throw err;
   }
 }
-function decodeWire(decode) {
-  const parsed2 = parseWire(decode);
-  if (!parsed2.ok) throw new BadVerbArgs(parsed2.problem);
-  return parsed2.value;
-}
 
 // src/daemon/config-file-store.ts
 var import_json54 = __toESM(require_dist(), 1);
@@ -64605,8 +64612,11 @@ function persistValueText(key, raw) {
   );
 }
 function readConfigText(file) {
+  return textOn3(systemFilesystem, file);
+}
+function textOn3(reads, file) {
   try {
-    return fs_default.readFileSync(file, "utf8");
+    return reads.readFileSync(file);
   } catch (e) {
     if (e.code === "ENOENT") return null;
     throw e;
@@ -64615,7 +64625,7 @@ function readConfigText(file) {
 function writeConfigText(file, text4, logger) {
   try {
     if (text4 === null) {
-      fs_default.rmSync(resolvedTarget(systemFilesystem, file), { force: true });
+      systemFilesystem.rmSync(resolvedTarget(systemFilesystem, file));
       return;
     }
     writeAtomic(file, text4);
@@ -64773,10 +64783,9 @@ function requireValueTarget(key) {
   return target;
 }
 function commit2(store2, home, before, after, refuse4) {
-  const memo = new InstalledLayerMemo();
-  const will = loadOrRefuse(home, after, memo);
+  const will = loadOrRefuse(home, after);
   let held;
-  const was = () => (held ??= { chain: loadedOrNull(home, before, memo) }).chain;
+  const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse4(home, was, will);
   writeConfigText(home.path, after, store2.logger);
@@ -64809,18 +64818,18 @@ function hiddenBy(home, was, will) {
     (p2) => !drawn.has(p2)
   );
 }
-function loadedOrNull(home, text4, memo) {
+function loadedOrNull(home, text4) {
   try {
-    return chainOver(home, text4, memo);
+    return chainOver(home, text4);
   } catch (e) {
     if (e instanceof ConfigError) return null;
     throw e;
   }
 }
-function chainOver(home, text4, memo) {
+function chainOver(home, text4) {
   return loadConfigChain(
     text4 === null ? home.reads : withText(home.reads, home.path, text4),
-    memo,
+    home.memo,
     home.locs,
     text4 !== null ? [homeLayer(home.path), ...home.above] : home.above,
     DEFAULT_DSL_CONFIG,
@@ -64856,9 +64865,9 @@ function changedPaths(a, b, at = "") {
 function isPlainObject4(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
-function loadOrRefuse(home, text4, memo) {
+function loadOrRefuse(home, text4) {
   try {
-    return chainOver(home, text4, memo);
+    return chainOver(home, text4);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
@@ -64885,9 +64894,9 @@ function refuseNewDrops(home, was, will) {
     );
   }
 }
-function readValue(file, key) {
+function readValue(home, key) {
   const target = requireValueTarget(key);
-  const doc = docOf(readConfigText(file) ?? "");
+  const doc = docOf(textOn3(home.reads, home.path) ?? "");
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
   return node !== void 0 && "value" in node ? node.value : void 0;
 }
@@ -64895,7 +64904,7 @@ function writeValues(store2, home, pairs2) {
   writeDrafts(store2, home, pairs2, []);
 }
 function writeDrafts(store2, home, pairs2, placements) {
-  const before = readConfigText(home.path);
+  const before = textOn3(home.reads, home.path);
   const valued = pairs2.reduce(
     (text4, [key, raw]) => setValue(
       text4,
@@ -64960,7 +64969,7 @@ function deleteAtPath(text4, path47) {
 }
 function deleteValues(store2, home, keys2) {
   const targets = keys2.map(requireTarget);
-  const before = readConfigText(home.path);
+  const before = textOn3(home.reads, home.path);
   if (before === null) return;
   const after = targets.reduce(
     (text4, target) => deleteAtPath(text4, resetPathOf(docOf(text4), target)),
@@ -64983,7 +64992,7 @@ function freePresetName(doc, home) {
       // all) — the editor refuses files the loader renders.
       ...home.above.flatMap(
         (l) => Object.keys(
-          import_json54.default.parse(fs_default.readFileSync(l.path, "utf8")).presets ?? {}
+          import_json54.default.parse(home.reads.readFileSync(l.path)).presets ?? {}
         )
       )
     ].map(ident)
@@ -64994,7 +65003,7 @@ function freePresetName(doc, home) {
   ).find((candidate) => !taken2.has(ident(candidate)));
 }
 function writePreset(store2, home, from, globals, picks, placements) {
-  const before = readConfigText(home.path);
+  const before = textOn3(home.reads, home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc, home);
   const own2 = ["presets", name];
@@ -65032,7 +65041,7 @@ function writePreset(store2, home, from, globals, picks, placements) {
   return name;
 }
 function writeThemeDefault(store2, home, theme24, look) {
-  const before = readConfigText(home.path);
+  const before = textOn3(home.reads, home.path);
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme24],
@@ -65048,7 +65057,7 @@ function deletePreset(store2, home, name) {
     );
   }
   const own2 = ["presets", name];
-  const before = readConfigText(home.path);
+  const before = textOn3(home.reads, home.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own2) === void 0) {
     throw new BadVerbArgs(
@@ -65073,7 +65082,7 @@ function applyLayoutOp(store2, home, key, op) {
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = readConfigText(home.path);
+  const before = textOn3(home.reads, home.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const placement = homeOnly(
     home,
@@ -65081,11 +65090,7 @@ function applyLayoutOp(store2, home, key, op) {
   );
   const authored = ensureAuthored(before ?? "", placement);
   const { after, placed: placed2 } = spliceOp(authored, placement.path, op, () => {
-    const config2 = loadOrRefuse(
-      home,
-      authored,
-      new InstalledLayerMemo()
-    ).config;
+    const config2 = loadOrRefuse(home, authored).config;
     return presetNames(config2.presets).map(
       (preset) => presetRoot(config2, preset).node
     );
@@ -66024,8 +66029,7 @@ function bookIsFiled(reads, stateDir2) {
     reads.statSync(repoConfigsPath(stateDir2));
     return true;
   } catch (e) {
-    if (e.code === "ENOENT") return false;
-    return true;
+    return e.code !== "ENOENT";
   }
 }
 function readRepoAnswers(reads, stateDir2) {
@@ -70960,9 +70964,6 @@ function parseSessionId(raw) {
 }
 
 // src/daemon/verbs/index.ts
-function oneArg(value) {
-  return decodeWire(() => decodeURIComponent(value));
-}
 var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
 function clickFailed(r, what, log) {
   if (r.reason === "rate-limited") {
@@ -71247,6 +71248,7 @@ function nestOf(ctx, sid) {
 function originHome(ctx, origin) {
   return durableConfig(
     ctx.filesystem,
+    ctx.installedLayers,
     ctx.locations,
     readRepoAnswers(ctx.filesystem, ctx.stateDir),
     origin.projectDir,
@@ -71313,7 +71315,7 @@ var stepConfig = (sid, args, ctx) => {
     (k) => ctx.sessionState.get(sid, k),
     key
   );
-  const stored = readValue(home.path, landing.key);
+  const stored = readValue(home, landing.key);
   const current = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
     "step-config",
     key,
@@ -71785,11 +71787,9 @@ function landStep(ctx, sid, step4, facts) {
 var doctorRun = (sid, _args, ctx) => {
   describeDoctor(ctx, sid, { kind: "run" });
 };
-var probe2 = (value, ctx) => {
-  const nonce = parseProbeNonce(oneArg(value));
-  if (nonce === null) {
-    throw new BadVerbArgs("probe: the value is not a probe nonce");
-  }
+var probe2 = (read2, ctx) => {
+  if (!read2.ok) throw new BadVerbArgs(`probe: ${read2.problem}`);
+  const nonce = read2.value;
   if (ctx.arrival.via !== "link")
     throw new BadVerbArgs("probe: a probe arrives only as a link");
   const { delivery } = ctx.arrival;
@@ -71958,26 +71958,37 @@ function readEffect({ verb, value }) {
   const leaf = LEAF_VERBS.get(verb);
   return leaf === void 0 ? { verb, leaf } : readLeaf(verb, leaf, value);
 }
-function readDispatch(value) {
-  return batchAdjacentWrites(parseEffects(value)).map(readEffect);
-}
 function sessionOf(effects) {
   return effects.find((e) => e.leaf !== void 0)?.session ?? null;
 }
-function clickSessionOf(verb, value) {
-  return sessionOf(
-    verb === VERB_DISPATCH ? readDispatch(value) : [readEffect({ verb, value })]
-  );
+function readProbe(value) {
+  const decoded = parseWire(() => decodeURIComponent(value));
+  if (!decoded.ok) return decoded;
+  const nonce = parseProbeNonce(decoded.value);
+  return nonce === null ? { ok: false, problem: "the value is not a probe nonce" } : { ok: true, value: nonce };
 }
-function perform({ verb, leaf, session, args }, click3, ctx) {
+var CLICK_READERS = {
+  [VERB_DISPATCH]: (value) => {
+    const effects = batchAdjacentWrites(parseEffects(value)).map(readEffect);
+    return { kind: VERB_DISPATCH, effects, session: sessionOf(effects) };
+  },
+  [VERB_PROBE]: (value) => ({ kind: VERB_PROBE, nonce: readProbe(value) })
+};
+function readClick(verb, value) {
+  return isClickVerb(verb) ? CLICK_READERS[verb](value) : null;
+}
+function clickSession(click2) {
+  return click2.kind === VERB_DISPATCH && click2.session?.ok ? click2.session.id : null;
+}
+function perform({ verb, leaf, session, args }, click2, ctx) {
   const described = [];
   try {
     if (!session.ok) throw new BadVerbArgs(`session id ${session.problem}`);
-    if (!click3?.ok)
+    if (!click2?.ok)
       throw new BadVerbArgs(
         "its click's own session is refused, so no step of it runs"
       );
-    if (click3.id !== session.id)
+    if (click2.id !== session.id)
       throw new BadVerbArgs(
         `names session ${session.id}, not the session its click is in`
       );
@@ -71994,7 +72005,7 @@ function perform({ verb, leaf, session, args }, click3, ctx) {
   } catch (e) {
     if (e instanceof BadVerbArgs) {
       REFUSAL_OWNERS.get(verb)?.(ctx, {
-        sid: click3?.ok ? click3.id : "-",
+        sid: click2?.ok ? click2.id : "-",
         args: args.ok ? args.value : [],
         reason: e.message
       });
@@ -72093,49 +72104,29 @@ function journaled(sid, ctx, handler) {
   ctx.described(effects);
   throwAll(failures);
 }
-function click(verb, read2, handler) {
-  return (value, ctx) => {
-    if (ctx.gone()) throw new ClickAbandoned(verb);
-    const effects = read2(value);
-    const session = sessionOf(effects);
-    const sid = session?.ok ? session.id : null;
-    ctx.journalTurns.take(
-      verb,
-      () => journaled(sid, ctx, (c) => {
-        try {
-          handler(effects, session, c);
-        } finally {
-          if (sid !== null) ctx.clickLanded(sid);
-        }
-      })
-    );
-  };
+function dispatch(click2, ctx) {
+  if (ctx.gone()) throw new ClickAbandoned(VERB_DISPATCH);
+  const sid = clickSession(click2);
+  ctx.journalTurns.take(
+    VERB_DISPATCH,
+    () => journaled(sid, ctx, (c) => {
+      try {
+        foldEffects(click2.effects, click2.session, c);
+      } finally {
+        if (sid !== null) ctx.clickLanded(sid);
+      }
+    })
+  );
 }
-var VERBS = new Map([
-  ...[...LEAF_VERBS].map(
-    ([verb, leaf]) => [
-      verb,
-      click(
-        verb,
-        (value) => [readLeaf(verb, leaf, value)],
-        (effects, session, ctx) => {
-          for (const effect of effects) perform(effect, session, ctx);
-        }
-      )
-    ]
-  ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, readDispatch, foldEffects)],
-  // A link kind, never a leaf, so no dispatch can carry it as an effect: a
-  // probe writes no journal, so nothing may refuse it for a turn, and it
-  // describes nothing.
-  [VERB_PROBE, probe2]
-]);
-var VERB_NAMES = Object.freeze([
-  ...VERBS.keys()
-]);
-function clickVerb(name) {
-  const run3 = VERBS.get(name);
-  return run3 === void 0 ? null : { name, run: run3 };
+function runClick(click2, ctx) {
+  switch (click2.kind) {
+    case VERB_DISPATCH:
+      return dispatch(click2, ctx);
+    case VERB_PROBE:
+      return probe2(click2.nonce, ctx);
+    default:
+      return click2;
+  }
 }
 function closeIdleMenus(sid, idle, ctx) {
   ctx.journalTurns.take(
@@ -72176,17 +72167,18 @@ function linksOf({ rows }) {
     );
   });
 }
-function decodeArgs(verb, value) {
-  return LEAF_VERB_NAMES.has(verb) ? decodeSegments(value) : [decodeURIComponent(value)];
-}
 function drawnClickOf(url) {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
-  const { verb, value } = link;
-  const known = verb === VERB_DISPATCH ? LEAF_VERB_NAMES : VERBS;
+  if (link.verb !== VERB_DISPATCH) {
+    return {
+      ok: false,
+      problem: `a drawn link names ${VERB_DISPATCH}, and this names "${link.verb}": ${url}`
+    };
+  }
   try {
-    const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    const unknown = raw.find((e) => !known.has(e.verb));
+    const raw = parseEffects(link.value);
+    const unknown = raw.find((e) => !LEAF_VERB_NAMES.has(e.verb));
     if (unknown !== void 0) {
       return {
         ok: false,
@@ -72197,7 +72189,7 @@ function drawnClickOf(url) {
       ok: true,
       effects: raw.map((e) => ({
         verb: e.verb,
-        args: decodeArgs(e.verb, e.value)
+        args: decodeSegments(e.value)
       }))
     };
   } catch (error) {
@@ -72209,9 +72201,9 @@ function drawnClickOf(url) {
 }
 function describeLink(link, sessionId2) {
   if (!isBarLink(link.url)) return `opens ${link.url}`;
-  const click3 = drawnClickOf(link.url);
-  if (!click3.ok) return `refused: ${click3.problem}`;
-  return click3.effects.map(
+  const click2 = drawnClickOf(link.url);
+  if (!click2.ok) return `refused: ${click2.problem}`;
+  return click2.effects.map(
     ({ verb, args }) => [verb, ...args.map((a) => a === sessionId2 ? "<session>" : a)].join(" ")
   ).join(" ; ");
 }
@@ -78087,11 +78079,11 @@ var ARMS = {
   // a refused step is answered beside them; a click whose client has left is
   // refused by the verb, where it would land (src/daemon/verbs/index.ts). A
   // turn is synchronous, so no idle timer can close a menu under one.
-  click: ({ verb, value, arrival, gone }, { verbCtx }) => {
+  click: ({ click: click2, arrival, gone }, { verbCtx }) => {
     const effects = [];
     let answer2 = null;
     try {
-      verb.run(value, {
+      runClick(click2, {
         ...verbCtx,
         arrival,
         gone,
@@ -78254,7 +78246,7 @@ var LINE = {
 };
 var ORIGIN = {
   request: ({ req }) => ({ verb: "request", session: req.sessionId }),
-  click: ({ verb, session }) => ({ verb: verb.name, session }),
+  click: ({ click: click2 }) => ({ verb: click2.kind, session: clickSession(click2) }),
   "menu-idle": ({ session }) => ({ verb: "menu-idle", session }),
   "effect-done": ({ of }) => of,
   answered: ({ session }) => ({ verb: "answered", session })
@@ -79133,9 +79125,9 @@ async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
     }
   );
 }
-async function clickRan(click3) {
+async function clickRan(click2) {
   try {
-    return await click3();
+    return await click2();
   } catch (error) {
     return thrownOutcome(error);
   }
@@ -79183,23 +79175,14 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
-  const resolved = clickVerb(verb);
-  if (resolved === null) {
+  const click2 = readClick(verb, value);
+  if (click2 === null) {
     return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
-  const named3 = clickSessionOf(verb, value);
-  const session = named3?.ok ? named3.id : null;
-  noteFacts(facts, { sid: session ?? "-" });
+  noteFacts(facts, { sid: clickSession(click2) ?? "-" });
   const { answer: answer2 } = await apply(
-    {
-      kind: "click",
-      verb: resolved,
-      value,
-      arrival,
-      session,
-      gone: clientGone
-    },
+    { kind: "click", click: click2, arrival, gone: clientGone },
     parts
   );
   if (answer2 !== null) throw answer2.error;
@@ -79228,13 +79211,13 @@ async function statusLineClick(parts, value, facts, clientGone) {
     kind: "bad-request",
     problems: [problem]
   });
-  const click3 = tmuxStatusLines.linkAt(value);
-  if (click3.kind === "refused") return refused2(click3.reason);
-  noteFacts(facts, { link: click3.url });
-  if (isBarLink(click3.url)) {
+  const click2 = tmuxStatusLines.linkAt(value);
+  if (click2.kind === "refused") return refused2(click2.reason);
+  noteFacts(facts, { link: click2.url });
+  if (isBarLink(click2.url)) {
     return linkClick(
       parts,
-      click3.url,
+      click2.url,
       { via: "tmux-status" },
       facts,
       clientGone
@@ -79244,10 +79227,10 @@ async function statusLineClick(parts, value, facts, clientGone) {
     parts.launcher,
     {
       bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-      args: [click3.url],
+      args: [click2.url],
       category: "click.open"
     },
-    `opening ${click3.url}`,
+    `opening ${click2.url}`,
     parts.log,
     CLICK_PROGRAM_TIMEOUT_MS,
     parts.tmp
@@ -83103,9 +83086,6 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
     configFile,
     memo: deps.memo
   });
-  return stateFromLoad(load, started2, deps, served);
-}
-function stateFromLoad(load, started2, deps, served) {
   return settleParsed(
     { repos: load.repos, advisories: load.advisories, started: started2 },
     load.cwd,
@@ -83798,6 +83778,13 @@ var RenderCache = class {
   // did not list it. Reads, never opens, like latestView.
   drawnCopy(sessionId2, by, key) {
     return this.copies.get(sessionId2)?.get(by)?.get(key);
+  }
+  // The installed layers every load of this cache shares, lent to a load
+  // outside it over the same disk (a click's proof), so that load checks no
+  // plugin this cache's loads already checked: the key is the definitions'
+  // text, so a lent memo serves no layer the borrower's disk does not hold.
+  get installedLayers() {
+    return this.deps.memo;
   }
   // The renderer no longer draws the session's bar (its feed closed): what
   // its last frame listed is on no surface now, so a click naming it is
@@ -86895,6 +86882,7 @@ function createDaemon(inputs) {
     sessionState,
     stateDir: paths2.state,
     filesystem: inputs.filesystem,
+    installedLayers: renderCache.installedLayers,
     storedRoot: paths2.storedRoot,
     locations: locs,
     journalTurns,
@@ -87833,7 +87821,8 @@ function productionLaneEdge(launcher, following, closing, clock, probe3, home, f
         category: "lane.claude"
       })
     ),
-    fileExists: (file) => fs_default.existsSync(file),
+    // [LAW:one-source-of-truth] Both existence questions ask the one disk.
+    fileExists: (file) => presence(filesystem, file) === "present",
     presence: (file) => presence(filesystem, file),
     paneClaude: (hint) => paneClaude(launcher, hint),
     heldSession: (pid2, configDir2) => heldSessionIn(
@@ -88506,7 +88495,7 @@ function copy2(text4) {
     (e) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text4}`
   );
 }
-async function click2(url, size) {
+async function click(url, size) {
   const drawn = drawnClickOf(url);
   const effects = drawn.ok ? drawn.effects : [];
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
@@ -88558,7 +88547,7 @@ var transport = {
   landscape: "landscape/",
   frame,
   render: render2,
-  click: click2,
+  click,
   // A new session over the bundled config: what the visitor's clicks wrote is
   // undone, and the daemon re-reads the config now, as a save's click does after it writes.
   restart: async (size) => {

@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-667",
+      "ref": "refs/pull/667/merge",
+      "sha": "9140279bf05f301135fb6d37807cb87a5f776f6e",
+      "timestamp": "2026-11-07T01:34:27.107Z",
+      "commits": [
+        {
+          "sha": "9140279bf05f301135fb6d37807cb87a5f776f6e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T01:33:33Z",
+          "message": "Merge cd8e26b4ff14dc4af5df62a1584818e8c0d2e502 into 1806d3735da43b2aaeceb9ca12a48cce517d6201\n"
+        },
+        {
+          "sha": "cd8e26b4ff14dc4af5df62a1584818e8c0d2e502",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:27:28-07:00",
+          "message": "fix(config): a click's proof shares the render cache's installed layers and reads its home's disk (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the installed-layer memo its loads share; the render\n  cache lends its own through the verb context, so a click's proof checks no\n  plugin the bar's last load already checked. The memo keys on definition\n  text, so a lent memo serves no layer the borrower's disk does not hold.\n- presence() reads ENOTDIR as absent, as the stat it replaced did: a path\n  through a regular file holds nothing. The filesystem contract pins ENOTDIR.\n- A click reads its home's text and the layers above on the disk its proof\n  loads; config-file-store leaves FS_READERS.\n- The lane edge's fileExists asks the same disk as its presence.\n- stateFromLoad folds into loadFromDisk; keyLoad is module-private.\n"
+        },
+        {
+          "sha": "97eef3f912a48117db644a175cefe3d4266e6fdb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:33:52-07:00",
+          "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-666",
       "ref": "refs/pull/666/merge",
       "sha": "dbb3e233d32982c917b1769c5ca3c89223ecde8d",
@@ -106,28 +135,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-07T01:05:04Z",
           "message": "chore(release): set `package.json` to 1.208.6 [skip ci]\n\n## [1.208.6](https://github.com/promptctl/cc-candybar/compare/v1.208.5...v1.208.6) (2026-11-07)\n\n### Bug Fixes\n\n* **feed:** the data-wake case bounds the feed's wake → frame, and reports the watch's write → wake from the summary's wokeAt (candybar-gather-renderer-76bb.6pj.qbv) ([#664](https://github.com/promptctl/cc-candybar/issues/664)) ([536561c](https://github.com/promptctl/cc-candybar/commit/536561c3a05d572669c0b7bd7a2830dd6ab3bcc6))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-667",
-      "ref": "refs/pull/667/merge",
-      "sha": "358a74fa4d3641b0ac9035ebbb6d718823780ece",
-      "timestamp": "2026-11-07T01:10:36.543Z",
-      "commits": [
-        {
-          "sha": "358a74fa4d3641b0ac9035ebbb6d718823780ece",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:09:42-07:00",
-          "message": "Merge 95ebf21b18416f95c3beaf5c7d72629f37117670 into aa9da2bd2f5cf3f7d2d4a21a63a06bbd69ac00b8\n"
-        },
-        {
-          "sha": "95ebf21b18416f95c3beaf5c7d72629f37117670",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:33:52-07:00",
-          "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
