@@ -236,7 +236,7 @@ async function click(url: string, size: Size) {
   if (steps.length > 0 && copies.length === steps.length) {
     return { ...(await render(size)), refused: await copy(copies.join("\n")) };
   }
-  const held = notSentOnDrivenBar({ text: "", url }, sessionId);
+  const held = notSentOnDrivenBar(drawn, sessionId);
   if (held !== null) return { ...(await render(size)), refused: held };
   let refused: string | null = null;
   try {

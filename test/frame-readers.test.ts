@@ -201,7 +201,7 @@ describe("describeLink", () => {
 describe("notSentOnDrivenBar", () => {
   test("a click with a step that acts on the machine is held back, naming its refused steps too", () => {
     const url = `${effectsUrl(MAIN_NAME, [{ verb: VERB_COPY, args: ["s", "x"] }])}&e=bogus`;
-    expect(notSentOnDrivenBar({ text: "x", url }, "s")).toBe(
+    expect(notSentOnDrivenBar(drawnClickOf(url), "s")).toBe(
       `not sent: on a real machine this copies to the clipboard: ${VERB_COPY} <session> x ; refused: unknown effect verb "bogus"`,
     );
   });
@@ -215,13 +215,13 @@ describe("notSentOnDrivenBar", () => {
     expect(describeLink({ text: "x", url }, "s")).toBe(
       `${VERB_TOOLBAR_TOGGLE} <session> ; refused: ${VERB_RUN}: names session other, not the session its click is in`,
     );
-    expect(notSentOnDrivenBar({ text: "x", url }, "s")).toBeNull();
+    expect(notSentOnDrivenBar(drawnClickOf(url), "s")).toBeNull();
   });
 
   test("a click acting only on the daemon, or a link that does not read, is sent", () => {
     const url = effectsUrl(MAIN_NAME, [{ verb: VERB_TOOLBAR_TOGGLE, args: ["s"] }]);
-    expect(notSentOnDrivenBar({ text: "x", url }, "s")).toBeNull();
-    expect(notSentOnDrivenBar({ text: "x", url: "cc-candybar://hello" }, "s")).toBeNull();
+    expect(notSentOnDrivenBar(drawnClickOf(url), "s")).toBeNull();
+    expect(notSentOnDrivenBar(drawnClickOf("cc-candybar://hello"), "s")).toBeNull();
   });
 
   // A drawn link names dispatch, and a leaf verb is only ever its effect: a

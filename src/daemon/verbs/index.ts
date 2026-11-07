@@ -2025,61 +2025,75 @@ function sessionOf(effects: readonly ReadEffect[]): ParsedSessionId | null {
   return effects.find((e) => e.leaf !== undefined)?.session ?? null;
 }
 
-// [LAW:parse-dont-validate] A dispatch's step as its read judges it, once. One
-// that runs carries its leaf, its click's session and the arguments its leaf
-// takes, so its run checks nothing. One refused carries why, as the click's
-// error and every reader of the link show it (`problem`), as its verb's
-// refusal owner counts it (`reason`), and the arguments that decoded, which
-// the owner names it by. A step is refused as bad input when its session
-// fails the checkpoint or is not its click's, so a dispatch cannot act on one
-// session and report to another's bar.
+// Why a step did not run: as its verb's refusal owner counts it (`reason`),
+// and as its click's error holds it on the bar and every reader of the link
+// shows it (`problem`).
+interface Refusal {
+  readonly kind: "refused";
+  readonly reason: string;
+  readonly problem: string;
+}
+
+// A step its read lets run: its leaf, its click's session and the arguments
+// its leaf takes, so its run checks nothing.
+interface RunnableStep {
+  readonly ok: true;
+  readonly verb: string;
+  readonly leaf: Leaf;
+  readonly sid: SessionId;
+  readonly args: readonly string[];
+}
+
+// [LAW:parse-dont-validate] A dispatch's step as its read judges it, once: one
+// that runs, or one refused with why and the arguments that decoded, which
+// its refusal owner names it by.
 export type ClickStep =
-  | {
-      readonly ok: true;
-      readonly verb: string;
-      readonly leaf: Leaf;
-      readonly sid: SessionId;
-      readonly args: readonly string[];
-    }
+  | RunnableStep
   | {
       readonly ok: false;
       readonly verb: string;
       readonly args: readonly string[];
-      readonly reason: string;
-      readonly problem: string;
+      readonly refusal: Refusal;
     };
 
-// [LAW:one-source-of-truth] The one spelling of a step that did not run, as
-// its click's error holds it on the bar and every reader of the link shows it.
-function stepProblem(
-  verb: string,
-  leaf: Leaf | undefined,
-  reason: string,
-): string {
-  return leaf === undefined
-    ? `unknown effect verb "${verb}"`
-    : `${verb}: ${reason}`;
+// [LAW:one-source-of-truth] The one spelling of a step that did not run, and
+// of a verb the daemon has not.
+function stepProblem(verb: string, reason: string): string {
+  return `${verb}: ${reason}`;
+}
+export function unknownVerb(verb: string): string {
+  return `unknown effect verb "${verb}"`;
+}
+
+function stepRefusal(verb: string, reason: string): Refusal {
+  return { kind: "refused", reason, problem: stepProblem(verb, reason) };
 }
 
 function refused(
-  { verb, leaf }: ReadEffect,
+  { verb }: ReadEffect,
   args: readonly string[],
   reason: string,
 ): ClickStep {
-  return {
-    ok: false,
-    verb,
-    args,
-    reason,
-    problem: stepProblem(verb, leaf, reason),
-  };
+  return { ok: false, verb, args, refusal: stepRefusal(verb, reason) };
 }
 
+// [LAW:single-enforcer] A step is refused as bad input here, the one place,
+// when its session fails the checkpoint or is not its click's, so a dispatch
+// cannot act on one session and report to another's bar. A verb the daemon
+// has not has no refusal owner, so its reason is its problem.
 function readStep(
   effect: ReadEffect,
   click: ParsedSessionId | null,
 ): ClickStep {
-  if (effect.leaf === undefined) return refused(effect, [], "no such verb");
+  if (effect.leaf === undefined) {
+    const problem = unknownVerb(effect.verb);
+    return {
+      ok: false,
+      verb: effect.verb,
+      args: [],
+      refusal: { kind: "refused", reason: problem, problem },
+    };
+  }
   const { verb, leaf, session, args } = effect;
   const decoded = args.ok ? args.value : [];
   if (!session.ok) {
@@ -2182,11 +2196,7 @@ export function clickSession(click: Click): SessionId | null {
 // read, or by its handler's own BadVerbArgs), or it failed operationally.
 type StepOutcome =
   | { readonly kind: "ran" }
-  | {
-      readonly kind: "refused";
-      readonly reason: string;
-      readonly problem: string;
-    }
+  | Refusal
   | { readonly kind: "failed"; readonly problem: string };
 
 // A step's run in the turn. [LAW:single-enforcer] The one place a handler's
@@ -2195,10 +2205,7 @@ type StepOutcome =
 // nothing, so no effect performs for a step the bar reports as refused. Held
 // here, in the one runner every leaf passes through, rather than as a rule
 // each leaf keeps.
-function perform(step: ClickStep, ctx: ClickContext): StepOutcome {
-  if (!step.ok) {
-    return { kind: "refused", reason: step.reason, problem: step.problem };
-  }
+function perform(step: RunnableStep, ctx: ClickContext): StepOutcome {
   const described: Effect[] = [];
   try {
     step.leaf.handler(step.sid, step.args, {
@@ -2207,10 +2214,9 @@ function perform(step: ClickStep, ctx: ClickContext): StepOutcome {
     });
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e);
-    const problem = stepProblem(step.verb, step.leaf, reason);
     return e instanceof BadVerbArgs
-      ? { kind: "refused", reason, problem }
-      : { kind: "failed", problem };
+      ? stepRefusal(step.verb, reason)
+      : { kind: "failed", problem: stepProblem(step.verb, reason) };
   }
   for (const effect of described) ctx.effect(effect);
   return { kind: "ran" };
@@ -2270,7 +2276,7 @@ function foldEffects(
   const errors: string[] = [];
   let operational = false;
   for (const step of steps) {
-    const outcome = perform(step, ctx);
+    const outcome = step.ok ? perform(step, ctx) : step.refusal;
     if (outcome.kind === "ran") continue;
     if (outcome.kind === "refused") {
       REFUSAL_OWNERS.get(step.verb)?.(ctx, {

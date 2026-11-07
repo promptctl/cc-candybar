@@ -45,6 +45,7 @@ import { hostOf } from "./host";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
 import {
   describeLink as describeWith,
+  drawnClickOf,
   linksOf,
   notSentOnDrivenBar,
   type DrawnLink,
@@ -205,7 +206,7 @@ export async function startBar(
     }
     // A link the parse refuses, or a step it refuses, acts on nothing here: the
     // daemon refuses it, with the reason.
-    const held = notSentOnDrivenBar(hit, SESSION_ID);
+    const held = notSentOnDrivenBar(drawnClickOf(hit.url), SESSION_ID);
     if (held !== null) return { refused: held, rendered: await render() };
     const resp = await sendClick(daemon.target, hit.url, REPLY_BUDGET_MS);
     if (!resp.ok && resp.code === "TIMEOUT") {

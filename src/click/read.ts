@@ -16,7 +16,7 @@ import {
   VERB_OPEN_VSCODE,
 } from "./wire";
 import { isBarLink } from "./scheme";
-import { LEAF_VERB_NAMES, readClick } from "../daemon/verbs";
+import { LEAF_VERB_NAMES, readClick, unknownVerb } from "../daemon/verbs";
 
 /** One link the bar drew: its visible text and its URL. */
 export interface DrawnLink {
@@ -66,27 +66,30 @@ export type DrawnClick =
   | { readonly ok: true; readonly steps: readonly DrawnStep[] }
   | { readonly ok: false; readonly problem: string };
 
-// [LAW:one-source-of-truth] A drawn link's click as the daemon reads it, by
-// the daemon's one read: its steps, adjacent writes as the one batch that
-// lands, each that runs beside each refused with why. Or why the link does
-// not read as a click at all: a config can compute a link at the draw that the
-// parse refuses, and a link the bar draws names `dispatch`.
+// A drawn link names `dispatch`: the one spelling of one that names anything
+// else, for each reader that refuses it.
+function namesNotDispatch(verb: string, url: string): string {
+  return `a drawn link names ${VERB_DISPATCH}, and this names "${verb}": ${url}`;
+}
+
+// [LAW:parse-dont-validate] [LAW:one-source-of-truth] A drawn link's click as
+// the daemon reads it, by the daemon's one read: its steps, adjacent writes as
+// the one batch that lands, each that runs beside each refused with why. Or
+// why the link does not read as a click at all: a config can compute a link at
+// the draw that the parse refuses, and a link the bar draws names `dispatch`.
 export function drawnClickOf(url: string): DrawnClick {
   const link = parseHandlerUrl(url);
   if (!link.ok) return link;
   const click = readClick(link.verb, link.value);
   if (click?.kind !== VERB_DISPATCH) {
-    return {
-      ok: false,
-      problem: `a drawn link names ${VERB_DISPATCH}, and this names "${link.verb}": ${url}`,
-    };
+    return { ok: false, problem: namesNotDispatch(link.verb, url) };
   }
   return {
     ok: true,
     steps: click.steps.map((step) =>
       step.ok
         ? { ok: true, verb: step.verb, args: [step.sid, ...step.args] }
-        : { ok: false, verb: step.verb, problem: step.problem },
+        : { ok: false, verb: step.verb, problem: step.refusal.problem },
     ),
   };
 }
@@ -94,28 +97,38 @@ export function drawnClickOf(url: string): DrawnClick {
 // [LAW:no-silent-failure] A drawn link's effects as the link carries them,
 // one per effect the renderer encoded, unbatched: the wire codec's inverse,
 // for a test asserting what the renderer wrote, so a link that does not read
-// is a bug in the draw, thrown here. What a click on the link does is
-// `drawnClickOf`'s to say.
+// is a bug in the draw, thrown here with the link. What a click on the link
+// does is `drawnClickOf`'s to say.
 export function effectsOf(url: string): DecodedEffect[] {
   const link = parseHandlerUrl(url);
   if (!link.ok) throw new Error(link.problem);
   if (link.verb !== VERB_DISPATCH) {
-    throw new Error(
-      `a drawn link names ${VERB_DISPATCH}, and this names "${link.verb}": ${url}`,
-    );
+    throw new Error(namesNotDispatch(link.verb, url));
   }
   return parseEffects(link.value).map(({ verb, value }) => {
     if (!LEAF_VERB_NAMES.has(verb)) {
-      throw new Error(`the daemon has no verb "${verb}": ${url}`);
+      throw new Error(`${unknownVerb(verb)}: ${url}`);
     }
-    return { verb, args: decodeSegments(value) };
+    try {
+      return { verb, args: decodeSegments(value) };
+    } catch (error) {
+      throw new Error(
+        `the link's value does not decode (${(error as Error).message}): ${url}`,
+        { cause: error },
+      );
+    }
   });
 }
 
-/** The steps a click on `link` runs, `verb arg…` each, a refused one as `refused: why`, `;` between, or the parse's refusal; `sessionId` reads as `<session>`. */
+/** What a click on `link` does: a link not the bar's is the terminal's to open, and one that is runs `describeClick`'s steps. */
 export function describeLink(link: DrawnLink, sessionId: string): string {
-  if (!isBarLink(link.url)) return `opens ${link.url}`;
-  const click = drawnClickOf(link.url);
+  return isBarLink(link.url)
+    ? describeClick(drawnClickOf(link.url), sessionId)
+    : `opens ${link.url}`;
+}
+
+/** The steps `click` runs, `verb arg…` each, a refused one as `refused: why`, `;` between, or the read's refusal; `sessionId` reads as `<session>`. */
+export function describeClick(click: DrawnClick, sessionId: string): string {
   if (!click.ok) return `refused: ${click.problem}`;
   return click.steps
     .map((step) =>
@@ -150,20 +163,19 @@ export const HOST_VERBS: ReadonlyMap<string, string> = new Map([
 ]);
 
 // [LAW:single-enforcer] Why a bar driven anywhere but a real session does not
-// send a click on `link`, or null to send it: a step it runs acts on the
-// machine. A refused step acts on nothing, so it never holds a click back:
-// the daemon refuses it, as it refuses a real click. The reason names what
-// each such step does, then the whole click, its refused steps included.
+// send `click`, or null to send it: a step it runs acts on the machine. A
+// refused step acts on nothing, so it never holds a click back: the daemon
+// refuses it, as it refuses a real click. The reason names what each such
+// step does, then the whole click, its refused steps included.
 export function notSentOnDrivenBar(
-  link: DrawnLink,
+  click: DrawnClick,
   sessionId: string,
 ): string | null {
-  const click = drawnClickOf(link.url);
   const acts = (click.ok ? click.steps : []).flatMap((step) => {
     const does = step.ok ? HOST_VERBS.get(step.verb) : undefined;
     return does === undefined ? [] : [does];
   });
   return acts.length === 0
     ? null
-    : `not sent: on a real machine this ${acts.join(", ")}: ${describeLink(link, sessionId)}`;
+    : `not sent: on a real machine this ${acts.join(", ")}: ${describeClick(click, sessionId)}`;
 }
