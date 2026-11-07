@@ -52260,13 +52260,12 @@ function watchFault(label2, watch2, beyond) {
       // Every reason names the path it stopped at, the kernel's and the loop's.
       (u) => `cannot follow a link chain \u2014 ${u.reason}`
     ),
-    ...watch2.held.handle.deaf.map(
-      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
-    ),
+    ...watch2.held.handle.deaf.map(deafnessReason),
     ...beyond === null ? [] : [beyond]
   ];
   return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
 }
+var deafnessReason = (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`;
 function folded(window2, next) {
   if (next.kind === "failed") return next;
   if (window2.kind !== "changed") return window2;
@@ -52280,6 +52279,7 @@ var failedOf = (d) => ({
   reason: `${d.path}: ${d.reason}`
 });
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var sameDeafness = (was, now2) => was?.kind === "deaf" && was.deafness.kind === now2.kind && was.deafness.reason === now2.reason;
 var dirId = (target, polled) => `${polled ? "names" : target.recursive === true ? "tree" : "dir"}:${target.path}`;
 function entryAt(filesystem, dir, name) {
   try {
@@ -52445,17 +52445,20 @@ var WatcherRegistry = class {
     for (const dir of this.dirs.values()) this.judged(dir, "period");
   }
   // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, it hears the fault. Listening again, it hears an
-  // `unknown` window: whatever changed while the directory was deaf or bound
-  // to another folder went unheard, and a holder that re-derives on it reports
-  // its fault cleared. Deaf staying deaf is no change and tells nothing.
+  // state. Going deaf, or deaf another way (an error and then a refusal, a
+  // refusal whose reason changes), it hears the fault. Listening again, it
+  // hears an `unknown` window: whatever changed while the directory was deaf
+  // or bound to another folder went unheard, and a holder that re-derives on
+  // it reports its fault cleared. The same deafness again tells nothing.
+  // [LAW:one-source-of-truth] So a holder that keeps the deafness it last
+  // heard never drifts from the handle's.
   reopen(dir, cause) {
     const was = dir.state;
     if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
     dir.state = this.open(dir, () => dir, cause, was);
     this.baseline(dir);
     if (dir.state.kind !== "deaf") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening")
+    else if (!sameDeafness(was, dir.state.deafness))
       this.tell(dir, failedOf(dir.state.deafness));
   }
   // `dirOf` names the watch the handle belongs to; its callbacks run only
@@ -52499,13 +52502,14 @@ var WatcherRegistry = class {
       );
       return { kind: "listening", handle, bound };
     } catch (e) {
-      const reason = e.message;
-      const same2 = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
-      if (!same2) this.logger("warn", `watch failed ${at}: ${reason}`);
-      return {
-        kind: "deaf",
-        deafness: { kind: "refused", path: at, reason }
+      const deafness = {
+        kind: "refused",
+        path: at,
+        reason: e.message
       };
+      if (!sameDeafness(was, deafness))
+        this.logger("warn", `watch failed ${at}: ${deafness.reason}`);
+      return { kind: "deaf", deafness };
     }
   }
   // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
@@ -78212,11 +78216,7 @@ function lanesAt(parts, origin, sessionId2) {
 function switchesAt(parts, origin, sessionId2, tmux3) {
   var _stack = [];
   try {
-    const hold2 = __using(_stack, parts.renderCache.hold(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path
-    ));
+    const hold2 = __using(_stack, parts.renderCache.hold(origin));
     return laneSwitches(sessionGlobals2(parts, sessionId2, hold2.state), tmux3);
   } catch (_) {
     var _error = _, _hasError = true;
@@ -78260,12 +78260,7 @@ function setUpRender(parts, arrived2, at, facts) {
   const hintsError = requestFacts(req, at, facts, parts.rendererName);
   noteFacts(facts, { encoding: req.encoding });
   const origin = req.requested;
-  const hold2 = renderCache.holdSession(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-    req
-  );
+  const hold2 = renderCache.holdSession(origin, req);
   return setUpDraw(hold2, req, hintsError, at, facts);
 }
 function setUpFrame(parts, sessionId2, at, facts) {
@@ -83071,6 +83066,17 @@ var fileName = (sessionId2) => sessionFileName(sessionId2);
 var fileOf = (f) => import_node_path44.default.join(f.storage.folder, fileName(f.sessionId));
 var keyString = (key) => JSON.stringify([key.folder, key.generation]);
 var sameKey = (a, b) => a.folder === b.folder && a.generation === b.generation;
+var faultOf = (health, deafness, statFailure) => {
+  if (health.kind === "unusable")
+    return { cause: "unusable", reason: health.reason };
+  if (deafness !== null)
+    return {
+      cause: deafness.kind === "refused" ? "refused" : "error",
+      reason: deafnessReason(deafness)
+    };
+  if (statFailure !== null) return { cause: "error", reason: statFailure };
+  return null;
+};
 var ManagedStorage = class {
   sessions;
   folders = /* @__PURE__ */ new Map();
@@ -83115,24 +83121,27 @@ var ManagedStorage = class {
   // session reads it, and stats it. The generation moves when the folder was
   // marked lost or is no longer the folder its watch opened on; so whichever
   // of a removal's events comes first, a recreated folder is a new key.
-  // [LAW:no-silent-failure] A folder that cannot be created or read is its
+  // [LAW:no-silent-failure] A folder that cannot be created is its
   // generation's standing fault, read by every source in it, never a throw:
-  // one plugin's folder fails only that plugin's sources, not the build.
+  // one plugin's folder fails only that plugin's sources, not the build. A
+  // stat that fails names no folder, so only a loss moves the generation; the
+  // watch's own stat reports the failure, which clears when a stat answers.
   keyFor(folder) {
     const known = this.folders.get(folder) ?? this.recorded(folder);
-    let now2 = "gone";
     known.unusable = null;
     try {
       this.watchers.filesystem.mkdirSync(folder);
-      now2 = statIdentity(this.watchers.filesystem, folder);
     } catch (e) {
-      known.unusable = `could not be created or read: ${e.message}`;
+      known.unusable = `could not be created: ${e.message}`;
     }
-    const moved = known.lost || known.identity !== null && (now2 === "gone" || !sameIdentity(now2, known.identity));
+    const stat3 = known.unusable === null ? this.statOf(folder) : { now: "gone" };
+    const now2 = "now" in stat3 ? stat3.now : null;
+    const moved = known.lost || known.identity !== null && now2 !== null && (now2 === "gone" || !sameIdentity(now2, known.identity));
+    const kept = moved ? null : known.identity;
+    known.identity = now2 === null ? kept : now2 === "gone" ? null : now2;
     if (moved) {
       known.generation++;
       known.lost = false;
-      known.identity = now2 === "gone" ? null : now2;
       this.logger(
         "info",
         `plugin storage generation folder=${valueOf(folder)} generation=${known.generation}`
@@ -83193,10 +83202,13 @@ var ManagedStorage = class {
       throw new Error(`plugin storage: no key was asked for ${key.folder}`);
     }
     const unusable = key.generation === folder.generation ? folder.unusable : null;
-    const identity2 = unusable === null ? statIdentity(this.watchers.filesystem, key.folder) : "gone";
+    const stat3 = unusable === null ? this.statOf(key.folder) : { now: "gone" };
+    const recorded = key.generation === folder.generation ? folder.identity : null;
+    const identity2 = "now" in stat3 ? stat3.now : recorded ?? "unnamed";
     if (key.generation === folder.generation) {
-      folder.identity = identity2 === "gone" ? null : identity2;
+      folder.identity = typeof identity2 === "string" ? null : identity2;
     }
+    if (unusable !== null) folder.lost = true;
     const watched = {
       key,
       folder,
@@ -83214,13 +83226,14 @@ var ManagedStorage = class {
         () => void this.sweep(key),
         { unref: true }
       ),
-      health: { kind: "watching" }
+      health: unusable === null ? { kind: "watching" } : { kind: "unusable", reason: unusable },
+      deafness: null,
+      statFailure: "failed" in stat3 ? stat3.failed : null,
+      reported: null
     };
     this.watched.set(keyString(key), watched);
-    if (unusable !== null) this.faulted(watched, "unusable", unusable);
-    for (const refusal of watched.handle.deaf) {
-      this.faulted(watched, "refused", refusal.reason);
-    }
+    this.heard(watched);
+    this.settled(watched, () => false);
     void this.sweep(key);
     return watched;
   }
@@ -83232,86 +83245,121 @@ var ManagedStorage = class {
     watched.handle.release();
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
-  // held files it names re-read; the folder's own name or an error is judged
-  // against the disk. An `unknown` window may hold the folder's own event (an
-  // unnamed one, or a named one the window folded), so it is judged as the
-  // folder's own name is, re-reading every held file in the folder still
-  // there. The OS reports a change to the watched folder itself under the
-  // folder's own name, as though it were a child, so that path is the folder
-  // joined with its own name.
+  // held files it names re-read; the folder's own name, an unnamed event or
+  // an error is judged against the disk. An `unknown` window may hold the
+  // folder's own event (an unnamed one, or a named one the window folded), and
+  // a `failed` one may have missed it, so a folder still there re-reads every
+  // held file, unless a fault stands when the window closes: its files read
+  // the fault, re-read only when it moves, so a watch that errors after every
+  // reopen reads nothing on each period. The OS reports a change to the
+  // watched folder itself under the folder's own name, as though it were a
+  // child, so that path is the folder joined with its own name. The window
+  // hears the handle's deafness first, since the registry tells one on every
+  // move of it, so the judgment and the deafness report as one fault.
   invalidated(watched, invalidation) {
     const { key } = watched;
-    const inFolder = (f) => sameKey(f.storage, key);
-    switch (invalidation.kind) {
-      case "unknown":
-        this.judged(watched, () => this.sessions.changed(inFolder));
-        return;
-      case "changed": {
-        const { paths: paths2 } = invalidation;
-        if (paths2.has(import_node_path44.default.join(key.folder, import_node_path44.default.basename(key.folder)))) {
-          this.judged(watched, () => this.sessions.changed(inFolder));
-        } else {
-          this.sessions.changed((f) => inFolder(f) && paths2.has(fileOf(f)));
-        }
-        return;
-      }
-      case "failed":
-        this.judged(
-          watched,
-          () => this.faulted(watched, "error", invalidation.reason)
-        );
-        return;
+    const own2 = import_node_path44.default.join(key.folder, import_node_path44.default.basename(key.folder));
+    this.heard(watched);
+    let reread;
+    if (invalidation.kind === "changed" && !invalidation.paths.has(own2)) {
+      const { paths: paths2 } = invalidation;
+      reread = (f) => paths2.has(fileOf(f));
+    } else {
+      const found2 = this.judged(watched);
+      reread = (_f, fault) => found2 === "lost" || found2 === "present" && fault === null;
     }
+    this.settled(watched, reread);
+  }
+  // [LAW:no-ambient-temporal-coupling] The handle's deafness, taken only when
+  // a window closes and at the watch's opening, never on a period: the
+  // registry's period reopen and this owner's period judgment are two
+  // listeners to one notice in an order nothing owns, and a handle that errors
+  // after every reopen listens for an instant between them.
+  heard(watched) {
+    watched.deafness = watched.handle.deaf[0] ?? null;
   }
   // [LAW:one-source-of-truth] Whether the folder is gone is the disk's to
   // say: a chmod, a utimes or an xattr reports the folder's own name exactly
-  // as a removal does. Lost only if the path is gone or holds another folder;
-  // otherwise `present` runs. A lost folder's held files are re-read from the
-  // path, so no draw shows a value from a folder no longer there while the
-  // config's reload opens the next generation. A generation already ended has
-  // nothing left to judge.
-  judged(watched, present) {
+  // as a removal does. Lost only if the path is gone or holds another folder.
+  // A lost folder's held files are re-read from the path, so no draw shows a
+  // value from a folder no longer there while the config's reload opens the
+  // next generation. A generation already ended has nothing left to judge. A
+  // stat that fails is this judgment's answer, the fault until a judgment's
+  // stat succeeds.
+  judged(watched) {
     const { health } = watched;
-    if (health.kind !== "watching") return;
+    if (health.kind !== "watching") return "none";
     const { key, folder } = watched;
-    let now2;
-    try {
-      now2 = statIdentity(this.watchers.filesystem, key.folder);
-    } catch (e) {
-      this.faulted(watched, "error", `stat failed: ${e.message}`);
-      return;
-    }
-    const opened = watched.identity;
-    if (now2 !== "gone" && opened !== "gone" && sameIdentity(now2, opened)) {
-      present();
-      return;
-    }
+    const stat3 = this.statOf(key.folder);
+    watched.statFailure = "failed" in stat3 ? stat3.failed : null;
+    if ("failed" in stat3) return "none";
+    const { now: now2 } = stat3;
+    const opened = watched.identity === "unnamed" ? now2 : watched.identity;
+    watched.identity = opened;
+    if (key.generation === folder.generation && opened !== "gone")
+      folder.identity = opened;
+    if (now2 !== "gone" && opened !== "gone" && sameIdentity(now2, opened))
+      return "present";
     watched.health = { kind: "lost" };
-    if (key.generation !== folder.generation) return;
+    if (key.generation !== folder.generation) return "none";
     folder.lost = true;
     this.lost++;
     this.logger(
       "info",
       `plugin storage lost folder=${valueOf(key.folder)} generation=${key.generation} now=${now2 === "gone" ? "gone" : "replaced"}`
     );
-    this.sessions.changed((f) => sameKey(f.storage, key));
+    return "lost";
   }
-  // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
-  // folder still there, is a standing fault: every source read from the
-  // generation reads it, and the folder is marked lost, so the next config
-  // load opens a fresh generation. No retry here: the OS refusing a watch
-  // (limits, permissions) refuses an immediate retry the same way.
-  faulted(watched, cause, reason) {
-    const { key, folder } = watched;
-    if (watched.health.kind !== "watching") return;
-    watched.health = { kind: "faulted", reason };
-    this.faultCounts[cause]++;
-    if (key.generation === folder.generation) folder.lost = true;
-    this.logger(
-      "warn",
-      `plugin storage fault folder=${valueOf(key.folder)} generation=${key.generation} cause=${cause} reason=${JSON.stringify(reason)}`
+  statOf(folder) {
+    try {
+      return { now: statIdentity(this.watchers.filesystem, folder) };
+    } catch (e) {
+      return { failed: `stat failed: ${e.message}` };
+    }
+  }
+  // [LAW:single-enforcer] The one re-read a window, a period or an opening
+  // earns: the held files `reread` names given the fault now standing, and
+  // every held file in the folder when the fault moved. One call, so a fault
+  // that moves on a window that re-reads queues no second read behind the
+  // first.
+  settled(watched, reread) {
+    const { key } = watched;
+    const moved = this.reported(watched);
+    const fault = watched.reported;
+    this.sessions.changed(
+      (f) => sameKey(f.storage, key) && (moved || reread(f, fault))
     );
-    this.sessions.changed((f) => sameKey(f.storage, key));
+  }
+  // [LAW:no-silent-failure] A generation's fault is a standing failure of
+  // every source read from it, for as long as the OS or the disk gives that
+  // answer: the registry's period reopens a deaf watch, and the owner's period
+  // judges the folder again. [LAW:nothing-unseen] Each start, change of
+  // reason, or clear is logged once and moves the fault, which re-reads the
+  // folder's held files; a start or change counts under its cause. The same
+  // fault again is no change: every period asks again, and repeating it would
+  // bury the events around it.
+  reported(watched) {
+    const { key } = watched;
+    const was = watched.reported;
+    const now2 = faultOf(watched.health, watched.deafness, watched.statFailure);
+    watched.reported = now2;
+    const at = `folder=${valueOf(key.folder)} generation=${key.generation}`;
+    if (now2 !== null && (was === null || was.cause !== now2.cause || was.reason !== now2.reason)) {
+      this.faultCounts[now2.cause]++;
+      this.logger(
+        "warn",
+        `plugin storage fault ${at} cause=${now2.cause} reason=${JSON.stringify(now2.reason)}`
+      );
+      return true;
+    }
+    if (now2 === null && was !== null) {
+      this.logger(
+        "info",
+        `plugin storage fault cleared ${at} cause=${was.cause}`
+      );
+      return true;
+    }
+    return false;
   }
   // [LAW:one-source-of-truth] What the delivery owner says reaches every
   // folder. Each period judges every folder against the disk: the event naming
@@ -83322,9 +83370,10 @@ var ManagedStorage = class {
   noticed(notice) {
     switch (notice.kind) {
       case "period":
-        for (const watched of [...this.watched.values()])
-          this.judged(watched, () => {
-          });
+        for (const watched of [...this.watched.values()]) {
+          const lost = this.judged(watched) === "lost";
+          this.settled(watched, () => lost);
+        }
         return;
       case "moved":
       case "caught-up":
@@ -83332,28 +83381,22 @@ var ManagedStorage = class {
         return;
     }
   }
-  // The generation's standing failure, which every source in it reads first.
-  // A generation no render state watches has none: its files read the path.
+  // The generation's standing failure, which every source in it reads first:
+  // its fault as last reported, the one the log and the counts hold, then a
+  // stall. A lost generation reads them too: its held files are refreshed only through
+  // its watch, so while the watch is deaf or file events are stalled a file
+  // read once from the path would freeze there unreported. While delivery is
+  // unmeasured its files read as usual: the bar's row already says it cannot
+  // be checked. A generation no render state watches has none: its files read
+  // the path.
   standing(storage) {
     const watched = this.watched.get(keyString(storage));
     if (watched === void 0) return null;
-    const { health } = watched;
-    switch (health.kind) {
-      case "faulted":
-        return `cannot refresh: ${storage.folder} ${health.reason}; reload the config or restart the daemon`;
-      // A lost folder's watch is still open, and the reload that would move
-      // it on rides the same file events, so while they are stalled its
-      // sources read the stall, never a file read once from the path and then
-      // left unrefreshed. While delivery is unmeasured its files read as
-      // usual: the bar's row already says it cannot be checked.
-      case "watching":
-      case "lost": {
-        const stall = stallReason(this.fileEvents.delivery());
-        return stall === null ? null : `cannot refresh: ${storage.folder}: ${stall}`;
-      }
-      case "closed":
-        return null;
-    }
+    const fault = watched.reported;
+    if (fault?.cause === "unusable")
+      return `cannot refresh: ${storage.folder} ${fault.reason}; reload the config or restart the daemon`;
+    const reason = fault?.reason ?? stallReason(this.fileEvents.delivery());
+    return reason === null ? null : `cannot refresh: ${storage.folder}: ${reason}`;
   }
   async read(f) {
     const fault = this.standing(f.storage);
@@ -83599,13 +83642,16 @@ var causeField = (cause) => {
 };
 function configLoadedLine(entry, cause, settled4) {
   const dirs = (ds) => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled4} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.origin.projectDir)} cwd=${valueOf(entry.origin.cwd)} cause=${valueOf(causeField(cause))} state=${settled4} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
 }
-function cacheKey(projectDir, cwd2, configFile) {
-  return projectDir + "\0" + cwd2 + "\0" + (configFile ?? "");
+function loadOriginOf({ projectDir, cwd: cwd2, target }) {
+  return { projectDir, cwd: cwd2, target: { path: target.path } };
+}
+function cacheKey(origin) {
+  return JSON.stringify(loadOriginOf(origin));
 }
 function authoredRoots(config2, raw) {
   return new Set(
@@ -83619,16 +83665,16 @@ function watchTargetsFor(filesystem, entry, locs) {
   const roots = [
     .../* @__PURE__ */ new Set([
       ...entry.state.plugins.roots,
-      import_node_path45.default.join(entry.projectDir, REPO_PLUGIN_DIR)
+      import_node_path45.default.join(entry.origin.projectDir, REPO_PLUGIN_DIR)
     ])
   ];
   return watchTargetsOf(filesystem, {
     named: [
       ...dslConfigCandidatePaths(
         locs,
-        entry.projectDir,
-        entry.cwd,
-        entry.configFile
+        entry.origin.projectDir,
+        entry.origin.cwd,
+        entry.origin.target.path
       ),
       ...roots,
       ...loaded.map((d) => d.path),
@@ -83854,14 +83900,14 @@ function loadChain(frame2, cwd2, chain2, deps, served = null) {
   const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
   return settle2(frame2, chain2, resolved.warnings, attempt4, deps.clock);
 }
-function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
+function loadFromDisk({ projectDir, cwd: cwd2, target }, deps, served = null) {
   const started2 = deps.clock.monotonic();
   const resolution = resolveDslConfig(
     deps.locations,
     repoConfigs(deps.stateDir).read(),
     projectDir,
     cwd2,
-    configFile
+    target.path
   );
   const { repos } = resolution;
   const chain2 = {
@@ -84052,27 +84098,25 @@ var RenderCache = class {
   // same fields and a renderable state. The renderer reads the data; no
   // special-case branches between "first load", "reload",
   // "reload-after-error".
-  getOrCreate(projectDir, cwd2, configFile) {
-    const key = cacheKey(projectDir, cwd2, configFile);
+  getOrCreate(origin) {
+    const key = cacheKey(origin);
     const existing = this.entries.get(key);
     if (existing) {
       this.entries.delete(key);
       this.entries.set(key, existing);
       return existing;
     }
-    const loaded = this.load(projectDir, cwd2, configFile, null);
+    const loaded = this.load(origin, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     const entry = {
-      projectDir,
-      cwd: cwd2,
-      configFile,
+      origin: loadOriginOf(origin),
       configLayers: [],
       configHome: "",
       repos: loaded.repos,
       lastError: loaded.error,
       lastWarning: loaded.warning,
-      state: loaded.state ?? fallbackState(cwd2, loaded.repos.plugins, this.deps),
+      state: loaded.state ?? fallbackState(origin.cwd, loaded.repos.plugins, this.deps),
       watch: null
     };
     this.serve(entry.state);
@@ -84080,7 +84124,7 @@ var RenderCache = class {
     this.fit(entry);
     this.log(
       "info",
-      `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
+      `render-cache entry projectDir=${origin.projectDir} cwd=${origin.cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
     );
     this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
@@ -84093,8 +84137,8 @@ var RenderCache = class {
   // released, so the render finishes on the state it resolved its payload
   // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
   // every exit, a throw included.
-  hold(projectDir, cwd2, configFile) {
-    const entry = this.getOrCreate(projectDir, cwd2, configFile);
+  hold(origin) {
+    const entry = this.getOrCreate(origin);
     return this.holdState(entry, entry.state);
   }
   // The hold on `entry`'s state that `hold` and `holdView` hand out.
@@ -84122,8 +84166,8 @@ var RenderCache = class {
   // [LAW:single-enforcer] `facts` is the request the render is drawn for: the
   // view is declared with it here, opened (openView) or kept (`requested`),
   // so no view is drawn declared for another request.
-  holdSession(projectDir, cwd2, configFile, facts) {
-    const held = this.hold(projectDir, cwd2, configFile);
+  holdSession(origin, facts) {
+    const held = this.hold(origin);
     let view;
     let lease;
     try {
@@ -84217,7 +84261,7 @@ var RenderCache = class {
     const { sessionId: sessionId2 } = facts;
     let view;
     try {
-      view = openView(state, entry.cwd, facts, {
+      view = openView(state, entry.origin.cwd, facts, {
         facts: this.deps.facts,
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),
@@ -84232,7 +84276,7 @@ var RenderCache = class {
     this.placeView(sessionId2, view);
     this.log(
       "info",
-      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
+      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.origin.cwd} views=${this.views.size}`
     );
     return view;
   }
@@ -84321,9 +84365,9 @@ var RenderCache = class {
   // config watch firing after the close.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  load(projectDir, cwd2, configFile, served) {
+  load(origin, served) {
     if (this.closed) throw new Error("render cache used after close");
-    return loadFromDisk(projectDir, cwd2, configFile, this.deps, served);
+    return loadFromDisk(origin, this.deps, served);
   }
   // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
   // goes, the map stops serving it, and its state is retired.
@@ -84448,8 +84492,8 @@ var RenderCache = class {
   // config until the reload has landed (a save releasing the picks the file
   // now holds, a doctor verdict on the files as they are). The watcher still
   // fires after a write, and its reload of the same bytes keeps the state.
-  reload(projectDir, cwd2, configFile, cause) {
-    this.reloadInto(this.getOrCreate(projectDir, cwd2, configFile), cause);
+  reload(origin, cause) {
+    this.reloadInto(this.getOrCreate(origin), cause);
   }
   // Re-populate `entry` from the current state of disk, for `cause`.
   //
@@ -84469,12 +84513,7 @@ var RenderCache = class {
   reloadInto(entry, cause) {
     const sessions = this.sessionsOn(entry);
     const served = entry.state;
-    const loaded = this.load(
-      entry.projectDir,
-      entry.cwd,
-      entry.configFile,
-      served
-    );
+    const loaded = this.load(entry.origin, served);
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null)
@@ -84518,7 +84557,7 @@ var RenderCache = class {
       this.deps.locations
     );
     const { targets, unresolved } = paths2;
-    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${paths2.key}`;
+    const key = `config:${cacheKey(entry.origin)}:${paths2.key}`;
     const { watch: watch2, move } = this.deps.watchers.follow(
       entry.watch?.held ?? null,
       { ...paths2, key },
@@ -84528,12 +84567,12 @@ var RenderCache = class {
     if (move === "kept") return;
     this.log(
       "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch2.handle.deaf.length}`
+      `config watch bound projectDir=${entry.origin.projectDir} cwd=${entry.origin.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch2.handle.deaf.length}`
     );
     for (const { path: at, reason } of unresolved)
       this.log(
         "warn",
-        `config watch unresolved projectDir=${entry.projectDir} path=${at} reason=${reason}`
+        `config watch unresolved projectDir=${entry.origin.projectDir} path=${at} reason=${reason}`
       );
   }
   get size() {
@@ -87499,9 +87538,8 @@ function createDaemon(inputs) {
     doctor: inputs.doctorEdge(
       launcher,
       (origin) => {
-        const at = [origin.projectDir, origin.cwd, origin.target.path];
-        renderCache.reload(...at, { kind: "doctor" });
-        const entry = renderCache.getOrCreate(...at);
+        renderCache.reload(origin, { kind: "doctor" });
+        const entry = renderCache.getOrCreate(origin);
         return {
           layers: entry.configLayers,
           error: entry.lastError,
@@ -87897,23 +87935,10 @@ function verbsOverParts(parts) {
     serving: () => parts().limits.serving(),
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
-    configFor: (origin) => parts().renderCache.getOrCreate(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path
-    ).state.config,
-    reloadConfig: (origin) => parts().renderCache.reload(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path,
-      { kind: "write" }
-    ),
+    configFor: (origin) => parts().renderCache.getOrCreate(origin).state.config,
+    reloadConfig: (origin) => parts().renderCache.reload(origin, { kind: "write" }),
     // The storage keys of the same entry `configFor` reads the config of.
-    sourcesFor: (origin) => parts().renderCache.getOrCreate(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path
-    ).state.sources,
+    sourcesFor: (origin) => parts().renderCache.getOrCreate(origin).state.sources,
     lanes: {
       of: (origin, sessionId2) => lanesAt(parts(), origin, sessionId2),
       clicked: (sessionId2, before, after) => laneClicked(parts(), sessionId2, before, after),
