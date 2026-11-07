@@ -15,6 +15,8 @@ import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
 import { closingView } from "../src/daemon/closing-view";
+import { chromeIdent } from "../src/config/edit-chrome";
+import { menuStateKey } from "../src/config/menu-keys";
 
 const SID = "s1";
 const TAB = "candybar.tab";
@@ -54,6 +56,14 @@ function nestBar(src: string) {
 }
 
 const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
+// The `+` before the row's first content, `directory`: its menu's apply action
+// and the state key that holds the library open.
+const LIBRARY_APPLY = `edit.default.insert.before.${chromeIdent("directory")}`;
+const LIBRARY = menuStateKey(
+  `edit.default.insertSeg.before.${chromeIdent("directory")}`,
+  LIBRARY_APPLY,
+  undefined,
+);
 const openDoor = async (rt: ReturnType<typeof nestBar>): Promise<void> =>
   await rt.clickWriting(SETTINGS_ANCHOR, "open");
 
@@ -124,12 +134,11 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
   test("case 4: a ✚'s segment library", async () => {
     const rt = nestBar(BUNDLED);
     await arrange(rt);
-    await rt.clickWriting("menus.edit_default_insertSeg_0.*", "edit.default.insert.0");
-    const key = "menus.edit_default_insertSeg_0.edit_default_insert_0";
-    expect(rt.held(key)).toBe("edit.default.insert.0");
+    await rt.clickWriting(LIBRARY, LIBRARY_APPLY);
+    expect(rt.held(LIBRARY)).toBe(LIBRARY_APPLY);
     await rt.clickWriting(EDIT_MODE_KEY, DISCLOSURE_CLOSED);
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    expect(rt.held(key)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.held(LIBRARY)).toBe(DISCLOSURE_CLOSED);
   });
 
   test("case 5: edit mode's (?)", async () => {
