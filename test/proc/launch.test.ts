@@ -1053,8 +1053,12 @@ describe("a launcher's scope", () => {
   });
 });
 
+// Every case asserts the launch's whole verdict, so a failure prints its
+// reason: toMatchObject's failure message shows only the keys it was given.
 describe("launch input a child does not read", () => {
   const unread = "x".repeat(10 * 1024 * 1024);
+  const ended = { stdout: "", stderr: "" };
+  const timedOut = { ok: false, reason: "timeout", ...ended, exitCode: null, signal: "SIGTERM" };
 
   it("leaves a child's success standing", async () => {
     const r = await launch({
@@ -1063,9 +1067,7 @@ describe("launch input a child does not read", () => {
       args: ["-c", "exit 0"],
       stdinInput: unread,
     });
-    // The whole verdict, so a failure prints its reason: toMatchObject's
-    // failure message shows only the keys it was given.
-    expect(r).toStrictEqual({ ok: true, stdout: "", stderr: "", exitCode: 0 });
+    expect(r).toStrictEqual({ ok: true, ...ended, exitCode: 0 });
   });
 
   it("leaves a child's failure its own explanation", async () => {
@@ -1094,30 +1096,28 @@ describe("launch input a child does not read", () => {
       timeoutMs: 100,
     });
     // The error names the bound, not the unread input.
-    expect(r).toMatchObject({ ok: false, reason: "timeout", error: "timed out after 0.1 s" });
+    expect(r).toStrictEqual({ ...timedOut, error: "timed out after 0.1 s" });
   });
 
   it("names the bound when the blocking launch times out", () => {
-    const r = launchSync({ category: "user-shell", bin: "sleep", args: ["5"], timeoutMs: 100 });
-    expect(r).toMatchObject({ ok: false, reason: "timeout", error: "timed out after 0.1 s" });
+    const r = launchSync({
+      category: "user-shell",
+      bin: "sleep",
+      args: ["5"],
+      stdinInput: unread,
+      timeoutMs: 100,
+    });
+    expect(r).toStrictEqual({ ...timedOut, error: "timed out after 0.1 s" });
   });
 
   it("gives the blocking launch the same verdicts", () => {
     const run = (script: string) =>
       launchSync({ category: "user-shell", bin: "sh", args: ["-c", script], stdinInput: unread });
-    const ended = { stdout: "", stderr: "" };
+    const killed = { ok: false, reason: "signal", ...ended, exitCode: null };
     expect(run("exit 0")).toStrictEqual({ ok: true, ...ended, exitCode: 0 });
     expect(run("exit 1")).toStrictEqual({ ok: false, reason: "non-zero", ...ended, exitCode: 1, signal: null });
     expect(run("head -c 1 >/dev/null")).toStrictEqual({ ok: true, ...ended, exitCode: 0 });
-    expect(
-      launchSync({ category: "user-shell", bin: "sh", args: ["-c", "kill -TERM $$"], timeoutMs: 5000 }),
-    ).toStrictEqual({ ok: false, reason: "signal", ...ended, exitCode: null, signal: "SIGTERM" });
-    expect(run("kill -KILL $$")).toStrictEqual({
-      ok: false,
-      reason: "signal",
-      ...ended,
-      exitCode: null,
-      signal: "SIGKILL",
-    });
+    expect(run("kill -TERM $$")).toStrictEqual({ ...killed, signal: "SIGTERM" });
+    expect(run("kill -KILL $$")).toStrictEqual({ ...killed, signal: "SIGKILL" });
   });
 });
