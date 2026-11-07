@@ -31,6 +31,7 @@ test('the band draws the session’s pushed frame, its links as Links', async ($
   // The engine beneath the mod: the session it names, and a band it draws empty.
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 'sid-1' }))
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
   on('ui.log', (_$, e) => (logged.push(e.text), { value: undefined }))
   on('ui.render', ($, e) => {
     const { Box } = $.ui.resolve(e)
@@ -68,30 +69,48 @@ test('the band draws the session’s pushed frame, its links as Links', async ($
     'candybar-band: frames started for sid-1',
     'candybar-band: frames for sid-1 ended (exit 1)',
   ])
+
+  // A child that ended holds no slot: the next prompt follows again.
+  await $.prompt.submit({ text: 'go on', asUser: true })
+  await clock.advance(1)
+  expect(spawned).toHaveLength(2)
   await ui.unmount()
 })
 
 // The band's lane switched off in candybar's settings is the daemon's
 // SWITCHED_OFF refusal on the child's stdout, relayed as it was sent: the band
 // hands the prompt area back to what is beneath it, the debug log says why,
-// and the child goes on, so switching it back on brings the bar back.
-test('the lane switched off hands the band back, and the next bar draws again', { timeoutMs: 15_000 }, async ($, on) => {
+// and the child is killed, so a session with the lane off holds no process.
+// The person's next prompt asks again, so a lane switched back on by any
+// route brings the bar back.
+test('the lane switched off hands the band back and kills the child, and the next prompt follows again', { timeoutMs: 15_000 }, async ($, on) => {
   const logged: string[] = []
+  const spawned: (readonly string[])[] = []
   const clock = mock.clock(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 'sid-1' }))
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
   on('ui.log', (_$, e) => (logged.push(e.text), { value: undefined }))
   // What is beneath the band: drawn only when the band hands it on.
   on('ui.render', ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     return <Box><Text>beneath</Text></Box>
   })
-  on('process.spawn', async function* () {
-    yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
-    await clock.sleep(250)
-    yield { stream: 'stdout' as const, text: `${JSON.stringify({ ok: false, code: 'SWITCHED_OFF', error: '🧪 band (A) is off', daemonV: 3 })}\n` }
-    await clock.sleep(250)
-    yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
+  // A refused child is killed wherever it is: here, still holding the refusal
+  // it wrote. The first draws a bar before the lane goes off; the next asks
+  // while it is still off; the last finds it on again.
+  const OFF = { ok: false, code: 'SWITCHED_OFF', error: '🧪 band (A) is off', daemonV: 3 }
+  let laneOn = true
+  const killed: number[] = []
+  on('process.spawn', async function* (_$, e, next) {
+    spawned.push(e.argv)
+    const nth = spawned.length
+    next.signal.addEventListener('abort', () => killed.push(nth), { once: true })
+    if (laneOn) {
+      yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
+      await clock.sleep(250)
+    }
+    if (nth < 3) yield { stream: 'stdout' as const, text: `${JSON.stringify(OFF)}\n` }
     await clock.sleep(60_000)
     return { value: { code: 0, signal: null } }
   })
@@ -102,12 +121,31 @@ test('the lane switched off hands the band back, and the next bar draws again', 
   expect(await ui.find({ type: 'Link' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /beneath/ })).toBeUndefined()
 
+  laneOn = false
   await clock.advance(250)
+  expect(killed).toEqual([1])
   expect(await ui.find({ type: 'Link' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /beneath/ })).toBeDefined()
-  expect(logged).toContain('candybar-band: lane A is off for sid-1: 🧪 band (A) is off')
+  // A lane switched off is no failure to draw above the prompt.
+  expect(await ui.find({ type: 'Text', text: /candybar: frames/ })).toBeUndefined()
+  expect(logged.filter(line => line.startsWith('candybar-band:'))).toEqual([
+    'candybar-band: frames started for sid-1',
+    'candybar-band: frames for sid-1 not following: lane A is off (🧪 band (A) is off)',
+  ])
 
-  await clock.advance(250)
+  // Still off: refused and killed again, and the band still asks after.
+  await $.prompt.submit({ text: 'go on', asUser: true })
+  await clock.advance(1)
+  expect(killed).toEqual([1, 2])
+  expect(await ui.find({ type: 'Text', text: /beneath/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /candybar: frames/ })).toBeUndefined()
+  expect(logged.filter(line => line.includes('not following'))).toHaveLength(2)
+
+  laneOn = true
+  await $.prompt.submit({ text: 'and on', asUser: true })
+  await clock.advance(1)
+  expect(spawned).toHaveLength(3)
+  expect(killed).toEqual([1, 2])
   expect(await ui.find({ type: 'Link' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /beneath/ })).toBeUndefined()
   await ui.unmount()
@@ -131,6 +169,7 @@ for (const reason of ['clear', 'resume'] as const) {
       spawned.push(e.argv)
       // The old session's child draws a frame; the new one's has drawn none yet.
       if (spawned.length === 1) yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
+      await clock.sleep(60_000)
       return { value: { code: 0, signal: null } }
     })
 
@@ -211,6 +250,7 @@ test('an end that keeps the session id keeps its child', async ($, on) => {
   })
   on('process.spawn', async function* (_$, e) {
     spawned.push(e.argv)
+    await clock.sleep(60_000)
     return { value: { code: 0, signal: null } }
   })
 
