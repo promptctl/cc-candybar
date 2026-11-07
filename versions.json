@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-687",
+      "ref": "refs/pull/687/merge",
+      "sha": "d16920b00ec2151770514d640de0aab8b59f276d",
+      "timestamp": "2026-11-07T10:44:58.988Z",
+      "commits": [
+        {
+          "sha": "d16920b00ec2151770514d640de0aab8b59f276d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:44:00-07:00",
+          "message": "Merge 326e671aa0e8912975de2d96edc6a8c2cef70d17 into 2a63ae55593d80d6590080431d83cf19e539622e\n"
+        },
+        {
+          "sha": "326e671aa0e8912975de2d96edc6a8c2cef70d17",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:43:20-07:00",
+          "message": "refactor(cache): the render cache takes a render origin, not three positional strings (brandon-unfiled-3248.9cru)\n\nThe cache's entry points (getOrCreate, hold, holdSession, reload, the\nprivate load, and loadFromDisk) take one LoadOrigin, picked from\nRenderOrigin, so every caller passes the origin it already holds and a\nswapped or missing field is a type error. loadFromDisk is the one place\nthe origin is spelled out into the resolver's arguments. An entry holds\na copy of what resolution reads, never the caller's target source, so\norigins that name one file by different sources share one entry.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-686",
       "ref": "refs/pull/686/merge",
       "sha": "1d67aebaa7c871ad8223db0a724d4aba63cab16e",
