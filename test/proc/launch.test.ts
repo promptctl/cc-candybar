@@ -616,6 +616,19 @@ describe("launchSync", () => {
     expect(ends).toHaveLength(1);
     expect(ends[0]?.category).toBe("user-shell");
   });
+
+  it("names the bound when it times out", () => {
+    const r = launchSync({ category: "user-shell", bin: "sleep", args: ["5"], timeoutMs: 100 });
+    expect(r).toStrictEqual({
+      ok: false,
+      reason: "timeout",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: "SIGTERM",
+      error: "timed out after 0.1 s",
+    });
+  });
 });
 
 describe("launchDetachedSync", () => {
@@ -1055,18 +1068,10 @@ describe("a launcher's scope", () => {
 
 // Every case asserts the launch's whole verdict, so a failure prints its
 // reason: toMatchObject's failure message shows only the keys it was given.
-// The blocking timeout feeds no input: it is the one blocking timeout case, so
-// it covers the launch with no input pipe.
 describe("launch input a child does not read", () => {
   const unread = "x".repeat(10 * 1024 * 1024);
   const noOutput = { stdout: "", stderr: "" };
-  const timedOut = {
-    ok: false,
-    reason: "timeout",
-    ...noOutput,
-    exitCode: null,
-    error: "timed out after 0.1 s",
-  };
+  const timedOut = { ok: false, reason: "timeout", ...noOutput, exitCode: null };
 
   it("leaves a child's success standing", async () => {
     const r = await launch({
@@ -1104,13 +1109,24 @@ describe("launch input a child does not read", () => {
       timeoutMs: 100,
     });
     // The error names the bound, not the unread input. The signal is whichever
-    // ended the child: SIGTERM, or SIGKILL once the grace runs out.
-    expect(r).toStrictEqual({ ...timedOut, signal: expect.stringMatching(/^SIG(TERM|KILL)$/) });
+    // ended the child, SIGTERM or the escalated SIGKILL: the order it is sent
+    // in is the timeout case's to pin, with the signal spy.
+    expect(r).toStrictEqual({
+      ...timedOut,
+      signal: expect.stringMatching(/^SIG(TERM|KILL)$/),
+      error: "timed out after 0.1 s",
+    });
   });
 
   it("names the bound when the blocking launch times out", () => {
-    const r = launchSync({ category: "user-shell", bin: "sleep", args: ["5"], timeoutMs: 100 });
-    expect(r).toStrictEqual({ ...timedOut, signal: "SIGTERM" });
+    const r = launchSync({
+      category: "user-shell",
+      bin: "sleep",
+      args: ["5"],
+      stdinInput: unread,
+      timeoutMs: 100,
+    });
+    expect(r).toStrictEqual({ ...timedOut, signal: "SIGTERM", error: "timed out after 0.1 s" });
   });
 
   it("gives the blocking launch the same verdicts", () => {
