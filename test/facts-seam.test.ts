@@ -491,6 +491,7 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     menuIdle: live.menuIdle,
     links: TEST_LINKS,
     fileEvents: NO_FILE_EVENTS,
+    gitEnv: { kind: "asked", names: [] },
     renderWarnings: new RenderWarningRecords(),
     effectSessions: new EffectSessions<RenderedLine>(),
     updateWatch: { notice: () => [], error: () => null },

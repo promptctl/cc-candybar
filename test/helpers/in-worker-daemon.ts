@@ -113,6 +113,9 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       clock: systemTimekeeper,
       // A daemon's gates are its own: none is shared with another built here.
       gates: daemonGates(),
+      // The worker's environment as the daemon is handed it, with nothing
+      // dropped: a case about the ask's failure passes its own.
+      gitEnv: { kind: "asked", names: [] },
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
       // carries an exit is loud. A case about the exit passes its own.
       exit: (code) => {
