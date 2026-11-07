@@ -495,10 +495,10 @@ export class TmuxStatusLines {
   // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
   // arrival, a click's commit — never at a draw: a session whose switch is on
   // is held in the pane its Claude Code's record confirms it runs in (`pane`),
-  // and one switched off, or confirmed outside tmux, is not. An unconfirmed
-  // request says nothing of where its session runs, so a session held already
-  // stays where it is. A daemon restart picks each session up at its next
-  // request.
+  // and one switched off, or confirmed outside tmux, is not. A request not
+  // confirmed places its session nowhere, so a session held already stays
+  // where it is until the session its pane confirms takes the pane. A daemon
+  // restart picks each session up at its next request.
   observe(sessionId: string, pane: SessionPane, on: boolean): void {
     if (this.closed) return;
     const held = this.held.get(sessionId);

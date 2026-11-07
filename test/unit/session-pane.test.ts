@@ -61,11 +61,11 @@ describe("sessionPaneOf", () => {
     expect(asked).toEqual([[CLAUDE, "/home/u/.claude.zai"]]);
   });
 
-  test("a client run in the pane under another session is not the pane's", () => {
+  test("a request whose Claude Code holds another session is mismatched", () => {
     const { of } = records({ [`${CLAUDE}@default`]: holds("real") });
     const pane = sessionPaneOf(hints({}), "test-1", of);
     expect(pane).toEqual({
-      kind: "unconfirmed",
+      kind: "mismatched",
       tmux: TMUX,
       why: `the Claude Code that ran its statusline (pid ${CLAUDE}) holds session real`,
     });
@@ -105,7 +105,7 @@ describe("runsNowIn", () => {
     const held: Record<string, HeldSession> = { [`${CLAUDE}@default`]: holds("before") };
     const { of } = records(held);
     const req = { hints: hints({}), sessionId: "after" };
-    expect(sessionPaneOf(req.hints, req.sessionId, of).kind).toBe("unconfirmed");
+    expect(sessionPaneOf(req.hints, req.sessionId, of).kind).toBe("mismatched");
     held[`${CLAUDE}@default`] = holds("after");
     expect(runsNowIn(TMUX, of)(req)).toBe(true);
     expect(runsNowIn(TMUX, of)({ ...req, sessionId: "before" })).toBe(false);
@@ -137,6 +137,13 @@ describe("sessionPaneError", () => {
     expect(sessionPaneError(unconfirmed, lanes("pane", "tmuxStatus"))).toMatch(
       /^The 🧪 tmux pane \(C\) and tmux status line of pane %7 /,
     );
+  });
+
+  test("says nothing of a cleared session's straggling tick, whose render line still says why", () => {
+    const { of } = records({ [`${CLAUDE}@default`]: holds("after") });
+    const mismatched = sessionPaneOf(hints({}), "before", of);
+    expect(sessionPaneError(mismatched, lanes("pane", "tmuxStatus"))).toBeNull();
+    expect(paneFact(mismatched)).toBe(`mismatched: the Claude Code that ran its statusline (pid ${CLAUDE}) holds session after`);
   });
 
   test("says nothing while no such lane is on, or of a session that runs in its pane", () => {

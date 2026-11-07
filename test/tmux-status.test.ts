@@ -412,14 +412,19 @@ describe("TmuxStatusLines", () => {
   });
 
   // A client in the pane under the session's own id, run from its shell, is
-  // not known to run there: it says nothing of where the session runs.
-  test("an unconfirmed request leaves its session's hold where it is, and a switch off still releases it", async () => {
+  // not known to run there, and a `/clear`'s straggling tick of it is
+  // mismatched: neither says where the session runs.
+  test("a request not confirmed leaves its session's hold where it is, and a switch off still releases it", async () => {
     const h = harness();
     h.hold("s1", "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     const tmux = { socket: SOCKET, pane: "%1", truecolor: null };
-    for (const where of [tmux, null])
-      h.owner.observe("s1", { kind: "unconfirmed", tmux: where, why: "its parent keeps no record" }, true);
+    const notConfirmed = [
+      { kind: "unconfirmed", why: "its parent keeps no record" },
+      { kind: "mismatched", why: "its Claude Code holds session s2" },
+    ] as const;
+    for (const stamp of notConfirmed)
+      for (const where of [tmux, null]) h.owner.observe("s1", { ...stamp, tmux: where }, true);
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     expect(h.unsubscribed).toEqual([]);
     h.owner.observe("s1", { kind: "unconfirmed", tmux, why: "its parent keeps no record" }, false);
