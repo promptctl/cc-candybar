@@ -86,8 +86,9 @@ const sameKey = (a: StorageKey, b: StorageKey): boolean =>
 // What the owner knows of one folder path across its generations.
 interface Folder {
   generation: number;
-  // Recorded when the current generation's watch opened (or when a key
-  // request moved the generation); null while nothing is recorded.
+  // The current generation's folder, recorded by every stat of it that
+  // answers, a key request's or its watch's opening; null while nothing is
+  // recorded.
   identity: FolderIdentity | null;
   // Gone, replaced, or could not be made: the next key request moves the
   // generation.
@@ -269,10 +270,13 @@ export class ManagedStorage {
       (known.identity !== null &&
         now !== null &&
         (now === "gone" || !sameIdentity(now, known.identity)));
+    // A stat that failed keeps what was recorded, unless the generation moved
+    // past it.
+    const kept = moved ? null : known.identity;
+    known.identity = now === null ? kept : now === "gone" ? null : now;
     if (moved) {
       known.generation++;
       known.lost = false;
-      known.identity = now === "gone" ? null : now;
       this.logger(
         "info",
         `plugin storage generation folder=${valueOf(folder)} generation=${known.generation}`,
@@ -348,11 +352,14 @@ export class ManagedStorage {
     const unusable =
       key.generation === folder.generation ? folder.unusable : null;
     // [LAW:no-silent-failure] A stat that fails here is the generation's stat
-    // failure, as a judgment's is, never a throw out of the build, and the
-    // folder the watch opened on is unnamed until a judgment's stat answers.
+    // failure, as a judgment's is, never a throw out of the build. The folder
+    // the watch opened on is then the one the key request's stat recorded, or
+    // unnamed until a judgment's stat answers.
     const stat: Stat =
       unusable === null ? this.statOf(key.folder) : { now: "gone" };
-    const identity = "now" in stat ? stat.now : "unnamed";
+    const recorded =
+      key.generation === folder.generation ? folder.identity : null;
+    const identity = "now" in stat ? stat.now : (recorded ?? "unnamed");
     if (key.generation === folder.generation) {
       folder.identity = typeof identity === "string" ? null : identity;
     }

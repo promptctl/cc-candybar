@@ -940,6 +940,23 @@ describe("ManagedStorage when its folder's watch or stat recovers", () => {
     expect(r.storage.keyFor(r.folder)).toEqual(key);
   });
 
+  // The key request's stat named the folder the generation is for, so a
+  // folder put at the path while no stat answered is another folder.
+  test("a folder replaced while the watch's opening stat failed is lost when a period's stat answers", async () => {
+    const { stat, filesystem: stand } = failingStat("EIO", "i/o error");
+    fakeWatches();
+    const r = rig({ filesystem: stand });
+    const key = r.storage.keyFor(r.folder);
+    stat.failing = true;
+    r.storage.watch(key);
+    fs.rmSync(r.folder, { recursive: true });
+    fs.mkdirSync(r.folder);
+    stat.failing = false;
+    period(r);
+    await until(() => r.storage.stats().lost === 1, "the loss");
+    expect(r.storage.keyFor(r.folder).generation).toBe(1);
+  });
+
   // The key request's mkdir is the only retry for a folder that cannot be
   // made; a stat is asked again on every period.
   test("a stat that fails on the key request is no unusable folder: it clears when a period's stat succeeds, with no reload", async () => {

@@ -206,8 +206,9 @@ export interface Deafness {
   readonly reason: string;
 }
 
-// [LAW:single-enforcer] The one phrasing of a deaf directory, for every
-// consumer that shows a watch's fault.
+// [LAW:single-enforcer] The one phrasing of a deaf directory as a standing
+// fault, for every consumer that shows one; a failed window's reason is the
+// cause a consumer embeds in a phrase of its own.
 export const deafnessReason = (d: Deafness): string =>
   d.kind === "refused"
     ? `cannot watch ${d.path} — ${d.reason}`
