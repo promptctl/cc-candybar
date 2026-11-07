@@ -22965,6 +22965,16 @@ var startTimeLaunch = (pid2, budgetMs = START_TIME_READ_BUDGET_MS) => ({
   // can't make one live process render two different start-time strings.
   envOverlay: { LC_ALL: "C", TZ: "UTC" }
 });
+function processIdentityOf(pid2, read2) {
+  if (read2.kind === "unavailable")
+    return { pid: pid2, startTime: null, why: read2.detail };
+  const startTime = parseStartToken(read2.token);
+  return startTime === void 0 ? {
+    pid: pid2,
+    startTime: null,
+    why: `ps printed ${JSON.stringify(read2.token)}, not a start in the form \`ps -o lstart=\` prints`
+  } : { pid: pid2, startTime };
+}
 function startTimeOf(res) {
   if (res.ok) {
     const token = res.stdout.trim();
@@ -24084,17 +24094,14 @@ function processWorld() {
     // [LAW:no-silent-failure] Bounded like a connect, so a slow `ps` costs
     // a tick no more than a slow daemon would: one that runs out reads as a
     // start not known, which the daemon says (src/daemon/session-pane.ts).
-    parent: () => {
-      const read2 = startTimeOf(
+    parent: () => processIdentityOf(
+      process_default.ppid,
+      startTimeOf(
         launcher.launchSync(
           startTimeLaunch(process_default.ppid, PARENT_START_READ_BUDGET_MS)
         )
-      );
-      return {
-        pid: process_default.ppid,
-        startTime: read2.kind === "start" ? parseStartToken(read2.token) ?? null : null
-      };
-    }
+      )
+    )
   };
 }
 function processHome(host) {
@@ -66456,9 +66463,12 @@ function sanitizeSsh(v) {
 }
 function sanitizeParent(v) {
   if (typeof v !== "object" || v === null) return void 0;
-  const { pid: pid2, startTime } = v;
-  const token = startTime === null ? null : parseStartToken(startTime);
-  return Number.isSafeInteger(pid2) && pid2 > 0 && token !== void 0 ? { pid: pid2, startTime: token } : void 0;
+  const { pid: pid2, startTime, why: why2 } = v;
+  if (!Number.isSafeInteger(pid2) || pid2 <= 0) return void 0;
+  if (startTime === null)
+    return typeof why2 === "string" && why2 !== "" ? { pid: pid2, startTime: null, why: why2 } : void 0;
+  const token = parseStartToken(startTime);
+  return token === void 0 ? void 0 : { pid: pid2, startTime: token };
 }
 var URL_FRAME_VERSION = 1;
 var EARLIER_URL_FRAME_VERSIONS = [];
@@ -72366,24 +72376,30 @@ function sessionPaneOf(hints, sessionId2, heldSession) {
       tmux: tmux3,
       why: "its client is too old to say which process ran it (reinstall it with `cc-candybar install`)"
     };
-  const { pid: parentPid, startTime } = parent;
-  if (startTime === null)
+  const parentPid = parent.pid;
+  if (parent.startTime === null)
     return {
       kind: "unconfirmed",
       tmux: tmux3,
-      why: `its client could not read when the process that ran it (pid ${parentPid}) started`
+      why: `its client could not read when the process that ran it (pid ${parentPid}) started: ${parent.why}`
     };
   const claude = {
     pid: parentPid,
-    startTime,
+    startTime: parent.startTime,
     configDir: hints.claudeConfigDir
   };
   const held = heldSession(claude);
-  if (held.kind === "unread")
+  if (held.kind === "none")
     return {
       kind: "unconfirmed",
       tmux: tmux3,
       why: `the process that ran its statusline (pid ${parentPid}) is no Claude Code whose session can be read: ${held.why}. A statusline command that runs the client through a shell or a wrapper (a script, \`pnpm dlx\`) hands it that process instead: \`cc-candybar install\` writes one that runs it directly`
+    };
+  if (held.kind === "unread")
+    return {
+      kind: "unconfirmed",
+      tmux: tmux3,
+      why: `the session of the process that ran its statusline (pid ${parentPid}) cannot be read: ${held.why}`
     };
   return held.sessionId === sessionId2 ? { kind: "runs", tmux: tmux3, claude } : {
     kind: "mismatched",
@@ -86119,7 +86135,7 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
     );
   }
   const now2 = await edge.paneClaude(tmux3);
-  if (now2.pid !== claude.pid) {
+  if (now2.pid !== claude.pid || now2.startTime !== claude.startTime) {
     throw new Error(
       `Claude Code in ${tmux3.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`
     );
@@ -86164,7 +86180,7 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
     startTime: claude.startTime,
     configDir: detectClaudeConfigDir(Object.fromEntries(started2), claude.cwd)
   });
-  if (held.kind === "unread") {
+  if (held.kind !== "holds") {
     throw new Error(
       `Claude Code in ${tmux3.pane} was left running: ${held.why}, so which session it runs is unknown`
     );
@@ -87827,16 +87843,18 @@ async function paneClaude(launcher, hint) {
   if (parent === void 0) {
     throw new Error(`pane ${hint.pane}'s foreground job ${pid2} is gone`);
   }
-  const start = await readStartTime(pid2, (opts) => launcher.launch(opts));
-  const startTime = start.kind === "start" ? parseStartToken(start.token) : void 0;
-  if (startTime === void 0) {
+  const job = processIdentityOf(
+    pid2,
+    await readStartTime(pid2, (opts) => launcher.launch(opts))
+  );
+  if (job.startTime === null) {
     throw new Error(
-      `the start of pane ${hint.pane}'s foreground job ${pid2} could not be read (${start.kind === "start" ? `ps printed ${JSON.stringify(start.token)}` : start.detail})`
+      `the start of pane ${hint.pane}'s foreground job ${pid2} could not be read (${job.why})`
     );
   }
   return {
     pid: pid2,
-    startTime,
+    startTime: job.startTime,
     // The installed binary itself, as cc-extra's own `bin/cc-attach` hands it
     // to the launcher (`readlink -f`): `~/.local/bin/claude` is a link to the
     // release it runs.
@@ -87861,7 +87879,7 @@ function recordIn(file, claude) {
     return {
       torn: false,
       held: e.code === "ENOENT" ? {
-        kind: "unread",
+        kind: "none",
         why: `it keeps no session record at ${file} (update Claude Code with \`claude update\`: recent releases keep one)`
       } : { kind: "unread", why: e.message }
     };
@@ -87892,7 +87910,7 @@ function recordIn(file, claude) {
       kind: "unread",
       why: `its session record ${file} names its process start as ${JSON.stringify(procStart)}, not in the form \`ps -o lstart=\` prints it`
     } : start !== claude.startTime ? {
-      kind: "unread",
+      kind: "none",
       why: `its session record ${file} was left by a Claude Code that has exited: the record names a process started ${start}, and pid ${claude.pid} is a process started ${claude.startTime}`
     } : { kind: "holds", sessionId: sessionId2 }
   };

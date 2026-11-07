@@ -4,15 +4,22 @@
     {
       "version": "pr-673",
       "ref": "refs/pull/673/merge",
-      "sha": "2cf7790afa2901dafe973fcfd658303f2a028113",
-      "timestamp": "2026-11-07T07:39:56.951Z",
+      "sha": "259d4a7b29cae001f0b3ccd724cf6a6ef5110a3a",
+      "timestamp": "2026-11-07T07:55:37.075Z",
       "commits": [
         {
-          "sha": "2cf7790afa2901dafe973fcfd658303f2a028113",
+          "sha": "259d4a7b29cae001f0b3ccd724cf6a6ef5110a3a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T00:38:25-07:00",
-          "message": "Merge dc331e0cf27fe60ab01b75b8d7b97000120a813b into 1bd51ef3f44ff8c49821b7b309e85764c97b024e\n"
+          "timestamp": "2026-11-07T07:54:41Z",
+          "message": "Merge 3079149fd31c1401ed7d216e97ad9a4dbd04839a into 1bd51ef3f44ff8c49821b7b309e85764c97b024e\n"
+        },
+        {
+          "sha": "3079149fd31c1401ed7d216e97ad9a4dbd04839a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T00:54:29-07:00",
+          "message": "fix(lanes): a record that cannot be judged is not said as a wrapper's, and a start not read says why (candybar-gather-renderer-76bb.1dh.ycm)\n\nReview fixes, step 10 (/code-review high):\n- A held-session read says `none` when no record is the process's (none\n  kept, or an exited Claude Code's under a reused pid) and `unread` when the\n  record under the pid cannot be judged; only `none` gets the\n  shell-or-wrapper fix.\n- The parent hint carries `why` beside a null start, from both clients,\n  through one fold of a start read into an identity.\n- The restart's check before the kill compares the process's start, not\n  its pid alone.\n- `frames` reads its parent once, not per forwarded hook.\n"
         },
         {
           "sha": "dc331e0cf27fe60ab01b75b8d7b97000120a813b",
