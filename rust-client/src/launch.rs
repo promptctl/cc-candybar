@@ -147,6 +147,20 @@ pub fn spawn_node_detached_daemon(node_script: &Path) -> bool {
     cmd.spawn().is_ok()
 }
 
+// What `ps -o lstart=` prints for `pid` under the pinning the daemon's start
+// reads use (src/daemon/process-fingerprint.ts): the token the kernel read in
+// process_start.rs must render. Test-only, and here because every spawn is.
+#[cfg(test)]
+pub fn ps_lstart(pid: u32) -> String {
+    let out = Command::new("ps")
+        .args(["-o", "lstart=", "-p", &pid.to_string()])
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .output()
+        .expect("ps runs");
+    String::from_utf8(out.stdout).expect("utf8").trim().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{heap_cap_mb, DEFAULT_RSS_LIMIT_MB};

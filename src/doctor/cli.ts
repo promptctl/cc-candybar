@@ -227,7 +227,7 @@ export async function doctorPlan(
   edge: DoctorEdge,
   handler: HandlerProbeEdge,
   daemon: () => Promise<DaemonAnswer>,
-  host: Pick<Host, "env" | "parentPid">,
+  host: Pick<Host, "env"> & Pick<World, "parent">,
   cwd: string,
   // Measures the terminal the command runs in (`commandTerminal`), inside
   // the one try below, so a measurement that throws is a `doctor:` line and
@@ -244,7 +244,8 @@ export async function doctorPlan(
     // command runs in, standing in for the stream Claude Code would hand
     // that client (which the command's own redirects say nothing about).
     const hints = detectClientHints(
-      { ...host, home: edge.home },
+      { env, home: edge.home },
+      host.parent(),
       cwd,
       measureTerminal(),
     );
@@ -374,7 +375,7 @@ export async function doctorCommandPlan(
         ),
         productionHandlerProbeEdge(world.launcher, world),
         () => askDaemon(world),
-        world.host,
+        { env: world.host.env, parent: world.parent },
         process.cwd(),
         commandTerminal,
         parsed.configFile,

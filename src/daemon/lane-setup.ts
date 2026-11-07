@@ -42,6 +42,7 @@ import { failed, type EffectOutcome } from "./effect-outcome.js";
 import type { SessionFacts } from "./session-env.js";
 import type { ClientHints } from "./protocol.js";
 import type { HeldSessionOf } from "./session-pane.js";
+import type { StartToken } from "./process-fingerprint.js";
 import type { RenderOrigin } from "../config-hint.js";
 import { samePane, type TmuxHint } from "../tmux-hint.js";
 import {
@@ -95,9 +96,10 @@ const RELOAD_PLUGINS = slashLine("/reload-plugins");
 // whether the pane's own first process is a shell it was started from (so a
 // restart has somewhere to run), whether it already runs under the attach
 // launcher, the environment it was started with, and the directory it runs
-// in.
+// in. Its start, with its pid, is which process its record must name.
 export interface PaneClaude {
   readonly pid: number;
+  readonly startTime: StartToken;
   readonly executable: string;
   readonly argv: readonly string[];
   // The environment it was started with, `NAME=value` each.
@@ -604,10 +606,11 @@ async function restartUnderAttach(
   // names it too.
   // The directory is resolved from the process's own environment, as the
   // relaunch line carries it, by the client's rule over the process's cwd.
-  const held = edge.heldSession(
-    claude.pid,
-    detectClaudeConfigDir(Object.fromEntries(started), claude.cwd),
-  );
+  const held = edge.heldSession({
+    pid: claude.pid,
+    startTime: claude.startTime,
+    configDir: detectClaudeConfigDir(Object.fromEntries(started), claude.cwd),
+  });
   if (held.kind === "unread") {
     throw new Error(
       `Claude Code in ${tmux.pane} was left running: ${held.why}, so which session it runs is unknown`,

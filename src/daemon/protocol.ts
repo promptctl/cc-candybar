@@ -7,6 +7,10 @@ import type { TmuxHint } from "../tmux-hint";
 import { TERMINAL_ENV_VARS, type TerminalEnvHint } from "../terminal-hint";
 import { CLIENT_KINDS, type ClientHint, type ClientKind } from "../client-hint";
 import type { Lane } from "../config/lanes";
+import {
+  parseStartToken,
+  type ParsedProcessIdentity,
+} from "./process-fingerprint";
 import type { BandBar } from "../../mod/types";
 import type { WireFrame } from "../render/frame";
 import type { TmuxStatusBar } from "../tmux-status/frames";
@@ -88,7 +92,7 @@ export interface RenderRequest {
   configEnv?: string;
   claudeConfigDir?: string;
   terminalEnv?: TerminalEnvHint;
-  parentPid?: number;
+  parent?: { pid: number; startTime: string | null };
   client?: ClientHint;
 }
 
@@ -157,11 +161,15 @@ export interface ReaderRenderRequest extends RenderRequest {
 //     Present, it is the absolute directory the client resolved from it
 //     (detectClaudeConfigDir, src/claude-settings.ts) — the one whose
 //     settings.json that session's Claude Code reads.
-//   • `parentPid` absent — the client did not REPORT (too old, as `ssh`).
-//     Present, it is the pid of the process that ran the client: Claude Code,
-//     for a statusline, whose record of the session it holds is what makes
-//     the session its pane's (src/daemon/session-pane.ts). Any other process
-//     in the pane has a parent that keeps no such record.
+//   • `parent` absent — the client did not REPORT (too old, as `ssh`).
+//     Present, it is the identity of the process that ran the client: Claude
+//     Code, for a statusline, whose record of the session it holds is what
+//     makes the session its pane's (src/daemon/session-pane.ts). Any other
+//     process in the pane has a parent that keeps no such record. Its pid
+//     names it only with its start, since the kernel reuses pids: the start
+//     token Claude Code writes as its record's `procStart`
+//     (src/daemon/process-fingerprint.ts), or `null` when the client could not
+//     read it.
 //   • `client` absent — the client did not REPORT what it is: a client too
 //     old to carry the field, which is itself the doctor's finding (an
 //     install whose client predates its daemon). Present, it is total: the
@@ -174,7 +182,7 @@ export interface ClientHints {
   readonly configEnv?: string;
   readonly claudeConfigDir?: string;
   readonly terminalEnv?: TerminalEnvHint;
-  readonly parentPid?: number;
+  readonly parent?: ParsedProcessIdentity;
   readonly client?: ClientHint;
 }
 
@@ -188,7 +196,7 @@ const CLIENT_HINT_FIELDS = Object.keys({
   configEnv: true,
   claudeConfigDir: true,
   terminalEnv: true,
-  parentPid: true,
+  parent: true,
   client: true,
 } satisfies Record<keyof ClientHints, true>) as ReadonlyArray<
   keyof ClientHints
@@ -211,7 +219,7 @@ export function parseClientHints(
   const configEnv = sanitizeAbsolutePath(req.configEnv);
   const claudeConfigDir = sanitizeAbsolutePath(req.claudeConfigDir);
   const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
-  const parentPid = sanitizePid(req.parentPid);
+  const parent = sanitizeParent(req.parent);
   const client = sanitizeClient(req.client);
   return {
     ...(termCols !== undefined && { termCols }),
@@ -221,7 +229,7 @@ export function parseClientHints(
     ...(configEnv !== undefined && { configEnv }),
     ...(claudeConfigDir !== undefined && { claudeConfigDir }),
     ...(terminalEnv !== undefined && { terminalEnv }),
-    ...(parentPid !== undefined && { parentPid }),
+    ...(parent !== undefined && { parent }),
     ...(client !== undefined && { client }),
   };
 }
@@ -363,10 +371,14 @@ export function sanitizeSsh(v: unknown): boolean | undefined {
   return typeof v === "boolean" ? v : undefined;
 }
 
-// A process id: a positive integer, or the hint is unreported.
-function sanitizePid(v: unknown): number | undefined {
-  return Number.isSafeInteger(v) && (v as number) > 0
-    ? (v as number)
+// The process that ran the client: a positive pid with its start, as a token
+// or `null` for one the client could not read; anything else is unreported.
+function sanitizeParent(v: unknown): ClientHints["parent"] {
+  if (typeof v !== "object" || v === null) return undefined;
+  const { pid, startTime } = v as { pid?: unknown; startTime?: unknown };
+  const token = startTime === null ? null : parseStartToken(startTime);
+  return Number.isSafeInteger(pid) && (pid as number) > 0 && token !== undefined
+    ? { pid: pid as number, startTime: token }
     : undefined;
 }
 

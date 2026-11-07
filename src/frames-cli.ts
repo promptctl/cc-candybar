@@ -120,7 +120,7 @@ export async function runFrames(
     // The terminal as it is now: a resize between two statusline ticks is in
     // the next one.
     const hints = {
-      ...detectClientHints(world.host, cwd, process.stderr),
+      ...detectClientHints(world.host, world.parent(), cwd, process.stderr),
       client: nodeClientHint("frames", bundle),
     };
     const outcome = await tryRenderViaDaemon(

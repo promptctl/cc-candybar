@@ -137,7 +137,7 @@ function liveArm(): Arm {
   };
   // The demo's frames go to stdout, so stdout is the stream on the terminal.
   const hints = parseClientHints(
-    detectClientHints(machine.host, cwd, process.stdout),
+    detectClientHints(machine.host, machine.parent(), cwd, process.stdout),
   );
   const watchers = new WatcherRegistry({
     filesystem: systemFilesystem,

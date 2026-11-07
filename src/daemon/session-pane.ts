@@ -3,6 +3,7 @@
 
 import { LANES, LANE_NAMES, type LaneSwitches } from "../config/lanes.js";
 import { inTmux, samePane, type TmuxHint } from "../tmux-hint.js";
+import type { ProcessIdentity, StartToken } from "./process-fingerprint.js";
 import type { ClientHints } from "./protocol.js";
 
 // [LAW:no-silent-failure] A process's session as its own record says it, or
@@ -11,26 +12,27 @@ export type HeldSession =
   | { readonly kind: "holds"; readonly sessionId: string }
   | { readonly kind: "unread"; readonly why: string };
 
-// The session Claude Code's process `pid` holds now, by the record it keeps
-// of itself under its configuration directory (`configDir`, as the process's
-// environment names it; the default when it names none): a `/clear` or
-// `/resume` rewrites it, though the process stays one.
-export type HeldSessionOf = (
-  pid: number,
-  configDir: string | undefined,
-) => HeldSession;
+// The Claude Code whose record is read: a process by its identity, its start
+// known (a pid alone names whichever process holds it now, since the kernel
+// reuses pids), in the configuration directory its environment names (the
+// default when it names none).
+export type ClaudeProcess = Readonly<
+  ProcessIdentity & {
+    readonly startTime: StartToken;
+    readonly configDir: string | undefined;
+  }
+>;
 
-// The Claude Code whose record was read: the process that ran the client, in
-// the configuration directory its environment names.
-export interface ClaudeProcess {
-  readonly pid: number;
-  readonly configDir: string | undefined;
-}
+// The session the Claude Code `claude` holds now, by the record it keeps of
+// its process under its configuration directory: a `/clear` or `/resume`
+// rewrites it, though the process stays one.
+export type HeldSessionOf = (claude: ClaudeProcess) => HeldSession;
 
 // [LAW:one-source-of-truth] A Claude Code as a map key: what tells one
-// process's record from another's.
+// process's record from another's, so a process that reuses an exited one's
+// pid is never taken for it.
 export const claudeKey = (claude: ClaudeProcess): string =>
-  `${claude.pid}\0${claude.configDir ?? ""}`;
+  `${claude.pid}\0${claude.startTime}\0${claude.configDir ?? ""}`;
 
 // [LAW:types-are-the-program] Where a request's session runs, as the render
 // checkpoint stamps it: confirmed by the record of the Claude Code that ran its
@@ -72,15 +74,26 @@ export function sessionPaneOf(
   heldSession: HeldSessionOf,
 ): SessionPane {
   const tmux = inTmux(hints.tmux) ? hints.tmux : null;
-  const { parentPid } = hints;
-  if (parentPid === undefined)
+  const { parent } = hints;
+  if (parent === undefined)
     return {
       kind: "unconfirmed",
       tmux,
       why: "its client is too old to say which process ran it (reinstall it with `cc-candybar install`)",
     };
-  const claude = { pid: parentPid, configDir: hints.claudeConfigDir };
-  const held = heldSession(parentPid, hints.claudeConfigDir);
+  const { pid: parentPid, startTime } = parent;
+  if (startTime === null)
+    return {
+      kind: "unconfirmed",
+      tmux,
+      why: `its client could not read when the process that ran it (pid ${parentPid}) started`,
+    };
+  const claude = {
+    pid: parentPid,
+    startTime,
+    configDir: hints.claudeConfigDir,
+  };
+  const held = heldSession(claude);
   if (held.kind === "unread")
     return {
       kind: "unconfirmed",
@@ -113,9 +126,9 @@ export function runsNowIn(
   readonly sessionId: string;
 }) => boolean {
   const reads = new Map<string, HeldSession>();
-  const once: HeldSessionOf = (pid, configDir) => {
-    const key = claudeKey({ pid, configDir });
-    const read = reads.get(key) ?? heldSession(pid, configDir);
+  const once: HeldSessionOf = (claude) => {
+    const key = claudeKey(claude);
+    const read = reads.get(key) ?? heldSession(claude);
     reads.set(key, read);
     return read;
   };

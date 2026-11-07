@@ -61,6 +61,7 @@ import type { LaneSetupEffect } from "../src/daemon/lane-setup";
 import { failed, type EffectOutcome } from "../src/daemon/effect-outcome";
 import { LANES, type Lane, type LaneSwitches } from "../src/config/lanes";
 import type { TmuxHint } from "../src/tmux-hint";
+import { CLAUDE_START } from "./helpers/claude-record";
 
 const SID = "1f6e0c2a-0d0e-4a52-9d1b-2b0b0f0e0a11";
 // The bundled bar, whose settings menu declares every lane's switch.
@@ -110,6 +111,7 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
   const did: string[] = [];
   const claude: PaneClaude = {
     pid: 4242,
+    startTime: CLAUDE_START,
     executable: "/u/.local/share/claude/versions/2.1.299",
     argv: ["claude", "--dangerously-skip-permissions", "--worktree"],
     env: ["PATH=/usr/bin", "PWD=/work", "EDITOR=vi"],
@@ -153,8 +155,8 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     // Claude Code's record of its process, under the default configuration
     // directory its environment leaves it, holds the session under test; a
     // record asked of anything else is not there.
-    heldSession: (pid, configDir) =>
-      pid === claude.pid && configDir === undefined
+    heldSession: ({ pid, startTime, configDir }) =>
+      pid === claude.pid && startTime === claude.startTime && configDir === undefined
         ? { kind: "holds", sessionId: SID }
         : { kind: "unread", why: `no record of ${pid} under ${configDir ?? "the default"}` },
     terminate: (pid) => void did.push(`terminate ${pid}`),
@@ -378,7 +380,7 @@ describe("lane B, statusline", () => {
         ],
       }),
       // Its record is under the directory it was started with.
-      heldSession: (pid, configDir) =>
+      heldSession: ({ pid, configDir }) =>
         pid === claude.pid && configDir === "/u/.claude zai"
           ? { kind: "holds", sessionId: SID }
           : { kind: "unread", why: `no record of ${pid} under ${configDir ?? "the default"}` },
@@ -629,7 +631,7 @@ describe("lane B, statusline", () => {
         },
         type: async () => ({ kind: "typed" }),
       },
-      heldSession: (pid, configDir) => {
+      heldSession: ({ pid, configDir }) => {
         read.push([pid, configDir]);
         return { kind: "holds", sessionId: holds };
       },
@@ -661,6 +663,7 @@ describe("lane B, statusline", () => {
     const { edge, did } = fakeEdge({
       paneClaude: async () => ({
         pid: 1,
+        startTime: CLAUDE_START,
         executable: "/bin/claude",
         argv: ["cc-attach"],
         env: [],
@@ -680,6 +683,7 @@ describe("lane B, statusline", () => {
     const { edge, did } = fakeEdge({
       paneClaude: async () => ({
         pid: 1,
+        startTime: CLAUDE_START,
         executable: "/bin/claude",
         argv: ["claude"],
         env: [],
@@ -726,6 +730,7 @@ describe("lane B, statusline", () => {
     const { edge, did } = fakeEdge({
       paneClaude: async () => ({
         pid: 1,
+        startTime: CLAUDE_START,
         executable: "/bin/claude",
         argv: ["claude", "--brand-new-flag", "x"],
         env: [],

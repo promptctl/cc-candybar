@@ -30,7 +30,7 @@ import { linkKeyFile, linkSignerFromKeyFile } from "../../../src/daemon/link-key
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import { PROTOCOL_VERSION, type ClientHints } from "../../../src/daemon/protocol";
-import { claudeHolds } from "../../helpers/claude-record";
+import { CLAUDE_START, claudeHolds } from "../../helpers/claude-record";
 import { click, render, sendClick } from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
@@ -95,7 +95,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     claudeHolds(claudeConfigDir, parentPid, sid);
     return {
       tmux: { socket: `/tmp/lane-e2e-${sid}`, pane: "%7", truecolor: null },
-      parentPid,
+      parent: { pid: parentPid, startTime: CLAUDE_START },
       claudeConfigDir,
     };
   };
@@ -289,7 +289,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     // Run from the shell Claude Code's Bash tool opens, whose parent keeps
     // no record, and by Claude Code itself under a session it does not hold.
     const shell = 3999;
-    await render(daemon, "lane-shell", projectDir, { ...pane, parentPid: shell }, args());
+    await render(daemon, "lane-shell", projectDir, { ...pane, parent: { pid: shell, startTime: CLAUDE_START } }, args());
     await render(daemon, "lane-stranger", projectDir, pane, args());
     expect(await paneSession()).toEqual({ ok: true, paneSession: sid });
     expect(await paneFactOf("lane-shell")).toBe(
@@ -299,20 +299,20 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     );
     expect(await paneFactOf("lane-stranger")).toBe(
       valueOf(
-        `mismatched: the Claude Code that ran its statusline (pid ${pane.parentPid}) holds session ${sid}`,
+        `mismatched: the Claude Code that ran its statusline (pid ${pane.parent!.pid}) holds session ${sid}`,
       ),
     );
     // Run from that shell under the pane's own session, a client says
     // nothing of where the session runs: its hold stays, as the one release
     // below says.
-    await render(daemon, sid, projectDir, { ...pane, parentPid: shell }, args());
+    await render(daemon, sid, projectDir, { ...pane, parent: { pid: shell, startTime: CLAUDE_START } }, args());
     await render(daemon, sid, projectDir, pane, args());
     // The next session's first request can arrive before its Claude Code
     // rewrites the record (a `/clear`): the pane follows it once the record
     // names it, with no request since.
     await render(daemon, "lane-taker", projectDir, pane, args());
     expect(await paneSession()).toEqual({ ok: true, paneSession: sid });
-    claudeHolds(pane.claudeConfigDir!, pane.parentPid!, "lane-taker");
+    claudeHolds(pane.claudeConfigDir!, pane.parent!.pid, "lane-taker");
     expect(await paneSession()).toEqual({ ok: true, paneSession: "lane-taker" });
     await until(
       () => statusLines(sid, "released").length > 0,

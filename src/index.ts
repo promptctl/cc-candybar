@@ -224,7 +224,12 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       process.argv.slice(1),
       process.cwd(),
       {
-        ...detectClientHints(host, process.cwd(), process.stderr),
+        ...detectClientHints(
+          host,
+          world.parent(),
+          process.cwd(),
+          process.stderr,
+        ),
         client: nodeClientHint("node", RUNNING_BUNDLE),
       },
     );

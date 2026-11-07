@@ -31,10 +31,11 @@ import type { TmuxRun } from "../src/proc/tmux";
 import { barOf } from "./helpers/drawn-frame";
 import { countedIds } from "./helpers/link-ids";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { CLAUDE_START } from "./helpers/claude-record";
 
 const SOCKET = "/tmp/tmux-test/default";
 // The Claude Code whose record a confirmed or mismatched stamp read.
-const CLAUDE = { pid: 4242, configDir: undefined };
+const CLAUDE = { pid: 4242, startTime: CLAUDE_START, configDir: undefined };
 // What the binding's URL carries for a click on `range` of pane `%<pane>`.
 const clickOn = (
   pane: string,

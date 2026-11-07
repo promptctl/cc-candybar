@@ -26,6 +26,7 @@
 mod error_glyph;
 mod follow;
 mod launch;
+mod process_start;
 
 use std::env;
 use std::ffi::OsString;
@@ -328,10 +329,16 @@ fn client_hints(request: &mut serde_json::Value, cwd: &std::path::Path) {
     // environment does not set left out of it — absence stays "client too old
     // to report".
     request["terminalEnv"] = detect_terminal_env();
-    // parentPid is UNCONDITIONAL like ssh: the process that ran us, which for
-    // a statusline is Claude Code itself, whose record of the session it holds
-    // the daemon reads by this pid.
-    request["parentPid"] = serde_json::Value::from(std::os::unix::process::parent_id());
+    // parent is UNCONDITIONAL like ssh: the identity of the process that ran
+    // us, which for a statusline is Claude Code itself, whose record of the
+    // session it holds the daemon reads by this pid and checks against this
+    // start, since the kernel reuses pids. A start that could not be read is
+    // the affirmative `null`.
+    let parent = std::os::unix::process::parent_id();
+    request["parent"] = serde_json::json!({
+        "pid": parent,
+        "startTime": process_start::start_secs(parent).ok().map(process_start::lstart_token),
+    });
     // client is CONDITIONAL only on the binary naming its own path: one that
     // cannot (current_exe failed) can spawn no daemon either, and its absence
     // reads as the doctor's "unreported" — never a guessed bundle.

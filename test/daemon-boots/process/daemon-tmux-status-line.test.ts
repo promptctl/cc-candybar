@@ -19,7 +19,7 @@ import {
   NO_RENDERER,
   RENDERER_OPTION,
 } from "../../../src/tmux-status/click-binding";
-import { claudeHolds } from "../../helpers/claude-record";
+import { CLAUDE_START, claudeHolds } from "../../helpers/claude-record";
 import { configFlag, killAndWait, render } from "../../helpers/daemon-e2e";
 import { logLines } from "../../helpers/daemon-log";
 import {
@@ -194,7 +194,7 @@ const USER_BINDING = "switch-client -t = \\; set-option -g @ccb-pressed yes";
               termCols: COLS,
               termRows: ROWS,
               tmux: { socket: inner, pane, truecolor: null },
-              parentPid,
+              parent: { pid: parentPid, startTime: CLAUDE_START },
               claudeConfigDir,
             },
             configFlag(config),
