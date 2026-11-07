@@ -1,3 +1,4 @@
+import { originAt } from "./helpers/render-origin";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING } from "./helpers/facts";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.6 —
@@ -531,11 +532,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     durable.write(TWO_SEGMENTS);
     const { cache, cleanups, reloads } = makeCache();
     try {
-      const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
-      );
+      const entry = cache.getOrCreate(originAt(durable.projectDir));
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.segments.sidebar!.palette).toBeUndefined();
 
@@ -592,11 +589,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
 
     const { cache, cleanups } = makeCache();
     try {
-      const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
-      );
+      const entry = cache.getOrCreate(originAt(durable.projectDir));
       expect(entry.state.config.segments.sidebar!.palette).toBe("gruvbox");
     } finally {
       for (const fn of cleanups) fn();
@@ -606,11 +599,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     // disk — no in-memory state carries over.
     const { cache: restarted, cleanups: restartedCleanups } = makeCache();
     try {
-      const entry = restarted.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
-      );
+      const entry = restarted.getOrCreate(originAt(durable.projectDir));
       expect(entry.state.config.segments.sidebar!.palette).toBe("gruvbox");
     } finally {
       for (const fn of restartedCleanups) fn();
@@ -637,11 +626,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
 
     const { cache, cleanups } = makeCache();
     try {
-      const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
-      );
+      const entry = cache.getOrCreate(originAt(durable.projectDir));
       expect(entry.lastError).toBeNull();
       const directory = entry.state.config.segments.directory!;
       expect(directory.palette).toBe("nord");

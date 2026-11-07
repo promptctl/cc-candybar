@@ -4,6 +4,7 @@
 // durable writer) answers the same way. The answer is per repository, holds
 // across edits (nothing here hashes a file) and covers every linked worktree.
 
+import { originAt } from "./helpers/render-origin";
 import { MAIN_NAME, homeOf } from "../src/daemon/home";
 import { bareGates } from "./helpers/gates";
 import { HOST, hostOf, worldOf, mainEnv } from "./helpers/host";
@@ -159,13 +160,13 @@ describe("the gate over a project's plugins", () => {
       gates: bareGates(),
       stateDir: stateDir(homeOf(host)), locations: locations(host, homeOf(host)),
     };
-    const waiting = loadFromDisk(project, project, undefined, deps);
+    const waiting = loadFromDisk(originAt(project), deps);
     expect(waiting.repos.awaiting).toEqual([project]);
     expect(waiting.state!.plugins.loaded).toEqual([]);
     waiting.state!.registry.dispose();
 
     answerRepo(project, "approved", host.env);
-    const approved = loadFromDisk(project, project, undefined, deps);
+    const approved = loadFromDisk(originAt(project), deps);
     expect(approved.repos.awaiting).toEqual([]);
     expect(approved.repos.plugins).toBe(project);
     expect(approved.state!.plugins.loaded).toEqual([
@@ -242,9 +243,7 @@ describe("check", () => {
 });
 
 const loadedEntry: ReloadedEntry = {
-  projectDir: "/p",
-  cwd: "/p",
-  configFile: undefined,
+  origin: { projectDir: "/p", cwd: "/p", target: { path: undefined } },
   configLayers: [],
   repos: {
     plugins: null,
@@ -296,9 +295,7 @@ test.each<[LoadCause, string]>([
 
 test("the config loaded event names the repositories left waiting and declined, and the unproven worktrees", () => {
   const entry: ReloadedEntry = {
-    projectDir: project,
-    cwd: project,
-    configFile: undefined,
+    origin: { projectDir: project, cwd: project, target: { path: undefined } },
     configLayers: [],
     repos: {
       plugins: null,

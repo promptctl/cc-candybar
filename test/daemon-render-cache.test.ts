@@ -1,3 +1,4 @@
+import { originAt } from "./helpers/render-origin";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING, factsRunning } from "./helpers/facts";
 // [LAW:single-enforcer] Tests for the RenderCache invariants that bzh.2
@@ -63,6 +64,7 @@ import { rootNode, rootOf } from "../src/config/root";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
+import type { RenderOrigin } from "../src/config-hint";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
 import { repoConfigsDir, repoConfigsPath } from "../src/daemon/repo-configs";
@@ -197,7 +199,7 @@ describe("RenderCache", () => {
       );
       chmodSync(locked, 0o000);
       try {
-        const entry = cache.getOrCreate(dir, dir, cfg);
+        const entry = cache.getOrCreate(originAt(dir, cfg));
         expect(entry.lastError).toBeNull();
         expect(entry.configLayers).toEqual([]);
         expect(entry.lastWarning).toContain(
@@ -223,13 +225,13 @@ describe("RenderCache", () => {
     const { dir, cleanup } = mkConfigDir();
     try {
       const cfg = join(dir, "named.json5");
-      const entry = cache.getOrCreate(dir, dir, cfg);
+      const entry = cache.getOrCreate(originAt(dir, cfg));
       expect(entry.lastError).toBeNull();
       expect(entry.configLayers).toEqual([]);
       expect(entry.lastWarning).toContain(`Config file not found: ${cfg}`);
       // The state beneath the warning is the bundled default's.
       expect(entry.state.config.root).toEqual(
-        cache.getOrCreate(dir, dir, undefined).state.config.root,
+        cache.getOrCreate(originAt(dir)).state.config.root,
       );
 
       await reloads.after(entry, () =>
@@ -272,8 +274,8 @@ describe("RenderCache", () => {
       cleanups.push(() => rmSync(b, { recursive: true, force: true }));
       // A source is a session view's: each entry's view runs it in the
       // entry's directory.
-      const inA = cache.holdSession(a, a, cfg, viewFacts(a, "s-a"));
-      const inB = cache.holdSession(b, b, cfg, viewFacts(b, "s-b"));
+      const inA = cache.holdSession(originAt(a, cfg), viewFacts(a, "s-a"));
+      const inB = cache.holdSession(originAt(b, cfg), viewFacts(b, "s-b"));
       cleanups.unshift(() => inA[Symbol.dispose]());
       cleanups.unshift(() => inB[Symbol.dispose]());
       expect(await inA.view.registry.settled(5000)).toEqual([]);
@@ -290,16 +292,16 @@ describe("RenderCache", () => {
     const { cache, cleanups } = makeCache();
     try {
       // Same (projectDir, cwd, configFile=undefined) → same entry.
-      const a = cache.getOrCreate("/x", "/x", undefined);
-      const b = cache.getOrCreate("/x", "/x", undefined);
+      const a = cache.getOrCreate(originAt("/x"));
+      const b = cache.getOrCreate(originAt("/x"));
       expect(a).toBe(b);
       expect(cache.size).toBe(1);
 
       // Distinct configFile values produce distinct entries — the CLI
       // override is a real input to config resolution and must be part
       // of the cache key.
-      const c = cache.getOrCreate("/x", "/x", "/tmp/alt.json5");
-      const d = cache.getOrCreate("/x", "/x", "/tmp/other.json5");
+      const c = cache.getOrCreate(originAt("/x", "/tmp/alt.json5"));
+      const d = cache.getOrCreate(originAt("/x", "/tmp/other.json5"));
       expect(c).not.toBe(a);
       expect(d).not.toBe(c);
       expect(cache.size).toBe(3);
@@ -308,11 +310,38 @@ describe("RenderCache", () => {
     }
   });
 
+  // A click's recorded origin can name its file with a source this build
+  // cannot read; the config it lands in is still the one the render drew with.
+  test("origins that name one file by different sources share the entry that loaded it", () => {
+    const { cache, cleanups } = makeCache();
+    const { dir, cleanup } = mkConfigDir();
+    try {
+      const cfg = join(dir, "named.json5");
+      writeFileSync(
+        cfg,
+        JSON.stringify({ segments: { t: { template: "named" } }, root: { h: ["t"] } }),
+      );
+      const drawn = cache.getOrCreate(originAt(dir, cfg));
+      const recorded: RenderOrigin = {
+        projectDir: dir,
+        cwd: dir,
+        target: { source: "unknown", path: cfg },
+      };
+      expect(cache.getOrCreate(recorded)).toBe(drawn);
+      expect(drawn.configLayers).toEqual([cfg]);
+      // The source is no part of identity; whether a file is named still is.
+      expect(cache.getOrCreate(originAt(dir)).configLayers).toEqual([]);
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
   test("falls back to DEFAULT_DSL_CONFIG when no config file exists", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups } = makeCache();
     try {
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.lastError).toBeNull();
       // No file means state was built from the bundled default — every
       // built-in segment is declared.
@@ -350,14 +379,14 @@ describe("RenderCache", () => {
           root: { h: ["t"] },
         }),
       );
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       // The error is loud AND names the file...
       expect(entry.lastError).toMatch(/trigger needs a display/);
       expect(entry.configLayers).toEqual([cfg]);
       // ...while the state is the bundled default's: the same tree a
       // no-file entry builds, settings menu included — one synthesis, not a
       // second "safe mode" config.
-      const fallback = cache.getOrCreate(bare, bare, undefined);
+      const fallback = cache.getOrCreate(originAt(bare));
       const menuOf = (root: LayoutNode): string[] =>
         layoutSegments(root).filter((n) => n.startsWith(SETTINGS_NS));
       const floor = presetRoot(entry.state.config, PRESET_FLOOR).node;
@@ -404,7 +433,7 @@ describe("RenderCache", () => {
           root: { h: ["s"] },
         }),
       );
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.lastError).toBeNull();
       const goodState = entry.state;
       // Pin the specific state's identity — build-then-swap means a
@@ -432,7 +461,7 @@ describe("RenderCache", () => {
     const { cache, cleanups, reloads } = makeCache();
     try {
       // First call: no file exists, falls back to default.
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.configLayers).toEqual([]);
       // The bundled default's layout is non-empty. Use the flat segment
       // count (across all rows) because the user fixture below uses one
@@ -517,7 +546,7 @@ describe("RenderCache", () => {
         writeFileSync(target, configWith("first"));
         const link = join(dir, ".cc-candybar.json5");
         symlinkSync(target, link);
-        const entry = cache.getOrCreate(dir, dir, undefined);
+        const entry = cache.getOrCreate(originAt(dir));
         expect(entry.configLayers).toEqual([link]);
         expect(literalX(entry)).toBe("first");
         // Bound once, hearing the target's directory as well as the link's.
@@ -558,7 +587,7 @@ describe("RenderCache", () => {
         writeFileSync(second, configWith("second"));
         const link = join(dir, ".cc-candybar.json5");
         symlinkSync(first, link);
-        const entry = cache.getOrCreate(dir, dir, undefined);
+        const entry = cache.getOrCreate(originAt(dir));
         expect(literalX(entry)).toBe("first");
 
         // `ln -sfn`: a new link renamed over the old entry.
@@ -601,7 +630,7 @@ describe("RenderCache", () => {
         symlinkSync(work, current);
         const link = join(dir, ".cc-candybar.json5");
         symlinkSync(current, link);
-        const entry = cache.getOrCreate(dir, dir, undefined);
+        const entry = cache.getOrCreate(originAt(dir));
         expect(literalX(entry)).toBe("work");
         // Every hop's directory is heard.
         expect(hears(bound(lines, dir)[0]!, dir)).toBe(true);
@@ -636,7 +665,7 @@ describe("RenderCache", () => {
         const link = join(dir, ".cc-candybar.json5");
         symlinkSync(`${link}.other`, link);
         symlinkSync(link, `${link}.other`);
-        cache.getOrCreate(dir, dir, undefined);
+        cache.getOrCreate(originAt(dir));
         expect(
           lines.filter((l) =>
             l.startsWith(
@@ -669,12 +698,12 @@ describe("RenderCache", () => {
     }) as typeof fs.watch);
     const { cache, cleanups, watchers } = makeCache();
     try {
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
       watchers.judge();
       expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
       refuse = false;
-      cache.reload(dir, dir, undefined, { kind: "doctor" });
+      cache.reload(originAt(dir), { kind: "doctor" });
       expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
       watchers.judge();
       expect(entry.watch!.held.handle.deaf).toEqual([]);
@@ -710,7 +739,7 @@ describe("RenderCache", () => {
           root: { h: ["only"] },
         });
       writeFileSync(cfg, config("old"));
-      const entry = cache.getOrCreate(proj, proj, undefined);
+      const entry = cache.getOrCreate(originAt(proj));
       const x = (): unknown => {
         const decl = entry.state.config.variables.x;
         if (decl === undefined) return "absent";
@@ -749,7 +778,7 @@ describe("RenderCache", () => {
       // The home (here the explicit file) is what authors a root: a reset
       // writes nowhere else.
       const cfg = join(dir, ".cc-candybar.json5");
-      const entry = cache.getOrCreate(dir, dir, cfg);
+      const entry = cache.getOrCreate(originAt(dir, cfg));
       const bundledRows = Object.keys(entry.state.config.root.rows);
       expect(entry.state.authoredRoots.has(PRESET_FLOOR)).toBe(false);
 
@@ -805,7 +834,7 @@ describe("RenderCache", () => {
           root: { h: ["only"] },
         }),
       );
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.lastError).toBeNull();
       expect(entry.configLayers).toEqual([cfg]);
       expect(entry.state.config.root).toEqual(rootOf(oneRow("only")));
@@ -834,7 +863,7 @@ describe("RenderCache", () => {
       writeFileSync(cfgJson5, validCfg);
       writeFileSync(cfgJson, validCfg);
 
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       // Load succeeded — .json5 won; warning is the advisory.
       expect(entry.lastError).toBeNull();
       expect(entry.configLayers).toEqual([cfgJson5]);
@@ -881,7 +910,7 @@ describe("RenderCache", () => {
       const cfg = join(dir, ".cc-candybar.json5");
       writeFileSync(cfg, DUPLICATE_KEY_CONFIG);
 
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.globals.padding).toBe(2);
       expect(entry.lastWarning).toBe(
@@ -909,7 +938,7 @@ describe("RenderCache", () => {
         cfg,
         `{ segments: { s: { template: "mine" } }, root: { h: ["s", "nope"] } }`,
       );
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.lastError).toBeNull();
       expect(entry.state.dropped[0]?.message).toMatch(
         /root entry "nope" does not match any declared segment/,
@@ -934,7 +963,7 @@ describe("RenderCache", () => {
         cfg,
         DUPLICATE_KEY_CONFIG.replace("{{ .x }}", "{{ .nope }}"),
       );
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.lastError).toContain("nope");
       expect(entry.lastWarning).toContain(`${cfg}:8: duplicate key "padding"`);
     } finally {
@@ -954,7 +983,7 @@ describe("RenderCache", () => {
         cfg,
         DUPLICATE_KEY_CONFIG.replace(`root: { h: ["s"] },`, `bogus: true,`),
       );
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.lastError).toContain('Unknown top-level key "bogus"');
       expect(entry.lastWarning).toContain(`${cfg}:8: duplicate key "padding"`);
     } finally {
@@ -993,7 +1022,7 @@ describe("RenderCache", () => {
           root: { h: ["s"] },
         }),
       );
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.lastError).toContain('key "k" is an integer spec');
       expect(entry.lastWarning).toContain('Variable "s.v"');
     } finally {
@@ -1012,7 +1041,7 @@ describe("RenderCache", () => {
     // The cache's own watch, on the answers for repositories.
     const own = watchers.size();
     try {
-      expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
+      expect(() => cache.getOrCreate(originAt(dir))).toThrow(
         "observer boom",
       );
       // The entry — and the live registry + watcher it owns — is in the
@@ -1022,7 +1051,7 @@ describe("RenderCache", () => {
       // A second lookup finds it rather than building a duplicate: the
       // observer (which would throw again) does not run, and no second
       // watcher opens.
-      cache.getOrCreate(dir, dir, undefined);
+      cache.getOrCreate(originAt(dir));
       expect(cache.size).toBe(1);
       expect(watchers.size()).toBe(own + 1);
     } finally {
@@ -1057,7 +1086,7 @@ describe("RenderCache", () => {
     const own = watchers.size();
     try {
       for (let i = 0; i < 5; i++) {
-        expect(() => cache.getOrCreate(`/p${i}`, `/p${i}`, undefined)).toThrow(
+        expect(() => cache.getOrCreate(originAt(`/p${i}`))).toThrow(
           "observer boom",
         );
       }
@@ -1073,12 +1102,12 @@ describe("RenderCache", () => {
     let inner: CacheEntry | undefined;
     const { cache, cleanups, watchers } = makeCache({
       onReload: () => {
-        inner = cache.getOrCreate(dir, dir, undefined);
+        inner = cache.getOrCreate(originAt(dir));
       },
     });
     const own = watchers.size();
     try {
-      const outer = cache.getOrCreate(dir, dir, undefined);
+      const outer = cache.getOrCreate(originAt(dir));
       expect(inner).toBe(outer);
       expect(cache.size).toBe(1);
       expect(watchers.size()).toBe(own + 1);
@@ -1103,7 +1132,7 @@ describe("RenderCache", () => {
       const own = watchers.size();
       const file = join(dir, ".cc-candybar.json5");
       writeFileSync(file, `{ segments: { t: { template: "x" } } }`);
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.configLayers).toEqual([file]);
       expect(watchers.size()).toBe(own + 1);
       // A rewrite of the book, so every retry the signal makes is an event.
@@ -1128,7 +1157,7 @@ describe("RenderCache", () => {
       // maxEntries=4. Insert 5 entries; the oldest gets evicted.
       const entries = [];
       for (let i = 0; i < 5; i++) {
-        const e = cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
+        const e = cache.getOrCreate(originAt(`/p${i}`));
         entries.push(e);
       }
       expect(cache.size).toBe(4);
@@ -1138,7 +1167,7 @@ describe("RenderCache", () => {
       // again on an already-disposed registry would throw or no-op
       // depending on internals. We don't probe that here — just that the
       // entry's state is no longer reachable from the cache.
-      const survivor = cache.getOrCreate("/p0", "/p0", undefined);
+      const survivor = cache.getOrCreate(originAt("/p0"));
       expect(survivor).not.toBe(evicted);
     } finally {
       for (const fn of cleanups) fn();
@@ -1161,10 +1190,10 @@ describe("RenderCache", () => {
     const fileOf = (i: number) => (i === 4 ? cfg.file : undefined);
     try {
       cache
-        .holdSession("/p0", "/p0", undefined, viewFacts("/p0", "s0"))
+        .holdSession(originAt("/p0"), viewFacts("/p0", "s0"))
         [Symbol.dispose]();
       for (let i = 0; i < 5; i++)
-        cache.getOrCreate(`/p${i}`, `/p${i}`, fileOf(i));
+        cache.getOrCreate(originAt(`/p${i}`, fileOf(i)));
       const evict = lines.filter((l) => l.startsWith("config disposed "));
       expect(evict).toHaveLength(1);
       expect(evict[0]).toMatch(
@@ -1179,7 +1208,7 @@ describe("RenderCache", () => {
       );
 
       cfg.edit();
-      cache.reload("/p4", "/p4", cfg.file, { kind: "write" });
+      cache.reload(originAt("/p4", cfg.file), { kind: "write" });
       const reload = lines.filter((l) =>
         l.startsWith("config disposed reason=reload"),
       );
@@ -1190,7 +1219,7 @@ describe("RenderCache", () => {
 
       // A close tears every entry down at once, but a state a render still
       // holds waits for it, as an eviction's does.
-      const hold = cache.hold("/p4", "/p4", cfg.file);
+      const hold = cache.hold(originAt("/p4", cfg.file));
       const closes = () =>
         lines.filter((l) => l.startsWith("config disposed reason=close"));
       cache.close();
@@ -1230,10 +1259,10 @@ describe("RenderCache", () => {
       lines.filter((l) => l.startsWith("config disposed reason=evict"));
     try {
       // maxEntries=4. /p0 is the oldest, and held.
-      const hold = cache.hold("/p0", "/p0", undefined);
+      const hold = cache.hold(originAt("/p0"));
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
       for (let i = 1; i < 5; i++)
-        cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
+        cache.getOrCreate(originAt(`/p${i}`));
       // The cap held: /p0 left the map. Its state is retired, not disposed —
       // the render still draws with it, and its store still answers.
       expect(cache.stats).toMatchObject({ size: 4, held: 1, retired: 1 });
@@ -1241,7 +1270,7 @@ describe("RenderCache", () => {
       expect(hold.state.store.names().length).toBeGreaterThan(0);
       // Asking for /p0 again is a new entry with a state of its own — and a
       // fifth insertion, so unheld /p1 goes at once.
-      const again = cache.getOrCreate("/p0", "/p0", undefined);
+      const again = cache.getOrCreate(originAt("/p0"));
       expect(again).not.toBe(hold.entry);
       expect(again.state).not.toBe(hold.state);
       expect(disposals()).toEqual([expect.stringMatching(/ held=0$/)]);
@@ -1269,13 +1298,13 @@ describe("RenderCache", () => {
     const cfg = editedConfig();
     cleanups.push(cfg.cleanup);
     try {
-      const hold = cache.hold("/p0", "/p0", cfg.file);
+      const hold = cache.hold(originAt("/p0", cfg.file));
       cfg.edit();
-      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
+      cache.reload(originAt("/p0", cfg.file), { kind: "write" });
       // The entry serves the fresh state; the render keeps the one it
       // started on, undisposed, until it returns.
       expect(hold.entry.state).not.toBe(hold.state);
-      expect(cache.getOrCreate("/p0", "/p0", cfg.file)).toBe(hold.entry);
+      expect(cache.getOrCreate(originAt("/p0", cfg.file))).toBe(hold.entry);
       expect(disposals()).toEqual([]);
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 1 });
       hold[Symbol.dispose]();
@@ -1287,7 +1316,7 @@ describe("RenderCache", () => {
       expect(cache.stats).toMatchObject({ size: 1, held: 0, retired: 0 });
       // The fresh state is served and torn down like any other.
       cfg.edit();
-      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
+      cache.reload(originAt("/p0", cfg.file), { kind: "write" });
       expect(disposals()).toHaveLength(2);
       expect(disposals()[1]).toMatch(/ held=0$/);
     } finally {
@@ -1304,13 +1333,13 @@ describe("RenderCache", () => {
     cleanups.push(cfg.cleanup);
     try {
       const holds: Hold[] = [
-        cache.hold("/p0", "/p0", cfg.file),
-        cache.hold("/p0", "/p0", cfg.file),
+        cache.hold(originAt("/p0", cfg.file)),
+        cache.hold(originAt("/p0", cfg.file)),
       ];
       expect(holds[1]!.state).toBe(holds[0]!.state);
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
       cfg.edit();
-      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
+      cache.reload(originAt("/p0", cfg.file), { kind: "write" });
       holds[0]![Symbol.dispose]();
       expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([]);
       holds[1]![Symbol.dispose]();
@@ -1356,7 +1385,7 @@ describe("RenderCache", () => {
       const range = project({ step: { set: "k", min: 1, max: 9, by: 1 } });
       const narrower = project({ step: { set: "k", min: 1, max: 3, by: 1 } });
       const entries = [words, range, narrower].map((dir) =>
-        cache.getOrCreate(dir, dir, undefined),
+        cache.getOrCreate(originAt(dir)),
       );
       expect(entries.map((e) => e.lastError)).toEqual([null, null, null]);
       const [w, r, n] = entries.map((e) => stateGate(e.state.config));
@@ -1378,7 +1407,7 @@ describe("RenderCache", () => {
     try {
       const root = join(dir, ".cc-candybar", "plugins");
       mkdirSync(root, { recursive: true });
-      const entry = cache.getOrCreate(dir, dir, undefined);
+      const entry = cache.getOrCreate(originAt(dir));
       expect(entry.state.config.segments["repo.deploy.status"]).toBeUndefined();
       // Staged then renamed in, so every repetition is an event in the root.
       const staging = join(dir, "staging");
@@ -1442,7 +1471,7 @@ describe("RenderCache idle sweep", () => {
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
-      cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"))[
+      cache.holdSession(originAt(dir), viewFacts(dir, "s1"))[
         Symbol.dispose
       ]();
       // The sweep is armed, beside whatever the entry's sources arm.
@@ -1452,11 +1481,11 @@ describe("RenderCache idle sweep", () => {
       expect(cache.size).toBe(0);
       expect(jest.getTimerCount()).toBe(0);
       // Every way a state is built refuses: an entry, or a reload of one.
-      expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
+      expect(() => cache.getOrCreate(originAt(dir))).toThrow(
         "render cache used after close",
       );
       expect(() =>
-        cache.reload(dir, dir, undefined, { kind: "write" }),
+        cache.reload(originAt(dir), { kind: "write" }),
       ).toThrow("render cache used after close");
     } finally {
       cache.close();
@@ -1491,7 +1520,7 @@ describe("RenderCache idle sweep", () => {
     try {
       let released = 0;
       const view = openView(
-        cache.getOrCreate(dir, dir, undefined).state,
+        cache.getOrCreate(originAt(dir)).state,
         dir,
         viewFacts(dir, "s1"),
         {
@@ -1575,7 +1604,7 @@ describe("RenderCache idle sweep", () => {
     try {
       const a = request("/a");
       const view = (() => {
-        using hold = cache.holdSession(dir, dir, undefined, a);
+        using hold = cache.holdSession(originAt(dir), a);
         return hold.view;
       })();
       // A view opens followed, at the request it opens with.
@@ -1641,12 +1670,7 @@ describe("RenderCache frames and pins", () => {
       for (const d of dirs) d.cleanup();
     };
     const request = (sessionId: string, dir: string): SessionView => {
-      using hold = cache.holdSession(
-        dir,
-        dir,
-        undefined,
-        viewFacts(dir, sessionId),
-      );
+      using hold = cache.holdSession(originAt(dir), viewFacts(dir, sessionId));
       return hold.view;
     };
     const opened = (): string[] =>
@@ -1672,7 +1696,7 @@ describe("RenderCache frames and pins", () => {
       for (let i = 0; i < 5; i++) {
         using hold = cache.holdView("s1");
         expect(hold?.view).toBe(view);
-        expect(hold?.entry.cwd).toBe(dirs[0]);
+        expect(hold?.entry.origin.cwd).toBe(dirs[0]);
       }
       // A frame wrote no line: it opened no view, built no entry, declared
       // nothing.
@@ -1692,12 +1716,12 @@ describe("RenderCache frames and pins", () => {
       expect(cache.stats.pinned).toBe(1);
       // Other directories push the cache over its budget: the least recently
       // used entry is the pinned session's, and it is passed over.
-      for (const dir of dirs.slice(1)) cache.getOrCreate(dir, dir, undefined);
+      for (const dir of dirs.slice(1)) cache.getOrCreate(originAt(dir));
       expect(cache.size).toBeLessThan(dirs.length);
       {
         using hold = cache.holdView("s1");
         expect(hold?.view).toBe(view);
-        expect(hold?.entry.cwd).toBe(dirs[0]);
+        expect(hold?.entry.origin.cwd).toBe(dirs[0]);
       }
       // No request across three sweeps: the pin keeps the view.
       cache.releaseIdle();
@@ -1724,7 +1748,7 @@ describe("RenderCache frames and pins", () => {
     const { cache, dirs, close, request } = pinCache();
     try {
       request("s1", dirs[0]!);
-      for (const dir of dirs.slice(1)) cache.getOrCreate(dir, dir, undefined);
+      for (const dir of dirs.slice(1)) cache.getOrCreate(originAt(dir));
       expect(cache.holdView("s1")).toBeNull();
     } finally {
       close();
@@ -1760,16 +1784,11 @@ describe("RenderCache frames and pins", () => {
     );
     try {
       {
-        using _request = cache.holdSession(
-          dir,
-          dir,
-          undefined,
-          viewFacts(dir, "s1"),
-        );
+        using _request = cache.holdSession(originAt(dir), viewFacts(dir, "s1"));
       }
       const unpin = cache.pin("s1");
       editProjectConfig(dir);
-      cache.reload(dir, dir, undefined, { kind: "write" });
+      cache.reload(originAt(dir), { kind: "write" });
       expect(logs).toContainEqual(
         expect.stringMatching(
           /^session view reopen failed sid="s1": Error: the successor broke/,
@@ -1786,12 +1805,7 @@ describe("RenderCache frames and pins", () => {
       );
       // The session's next request opens its view, and the error goes.
       {
-        using _request = cache.holdSession(
-          dir,
-          dir,
-          undefined,
-          viewFacts(dir, "s1"),
-        );
+        using _request = cache.holdSession(originAt(dir), viewFacts(dir, "s1"));
       }
       expect(cache.holdView("s1")).not.toBeNull();
       expect(cache.openFailure("s1")).toBeNull();
@@ -1830,7 +1844,7 @@ describe("RenderCache frames and pins", () => {
     );
     try {
       expect(() =>
-        cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1")),
+        cache.holdSession(originAt(dir), viewFacts(dir, "s1")),
       ).toThrow("the view broke");
       expect(cache.openFailure("s1")).not.toBeNull();
       cache.releaseIdle();
@@ -1847,7 +1861,7 @@ describe("RenderCache frames and pins", () => {
     try {
       request("s1", dirs[0]!);
       editProjectConfig(dirs[0]!);
-      cache.reload(dirs[0]!, dirs[0]!, undefined, { kind: "write" });
+      cache.reload(originAt(dirs[0]!), { kind: "write" });
       expect(opened().map((l) => l.match(/ by=(\w+) /)?.[1])).toEqual([
         "request",
         "reload",

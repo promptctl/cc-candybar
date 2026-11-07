@@ -118,12 +118,7 @@ export function loadConfigOnce(
     gates: daemonGates(),
     stateDir: stateDir(home),
   };
-  const loaded = loadFromDisk(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-    deps,
-  );
+  const loaded = loadFromDisk(origin, deps);
   const state =
     loaded.state ?? fallbackState(origin.cwd, loaded.repos.plugins, deps);
   state.registry.dispose();

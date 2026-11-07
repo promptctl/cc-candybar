@@ -1,7 +1,11 @@
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import type { Filesystem } from "../../disk/filesystem.js";
-import { chainName } from "../../config-hint.js";
+import {
+  chainName,
+  type ConfigTarget,
+  type RenderOrigin,
+} from "../../config-hint.js";
 import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
 import {
@@ -285,13 +289,7 @@ export interface RenderCacheObservers {
 export type ReloadedEntry = Readonly<
   Pick<
     CacheEntry,
-    | "projectDir"
-    | "cwd"
-    | "configFile"
-    | "configLayers"
-    | "repos"
-    | "lastError"
-    | "lastWarning"
+    "origin" | "configLayers" | "repos" | "lastError" | "lastWarning"
   >
 > & { readonly state: Readonly<Pick<DslRenderState, "config">> };
 
@@ -491,7 +489,7 @@ export function configLoadedLine(
   settled: Settled,
 ): string {
   const dirs = (ds: readonly string[]): string => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.origin.projectDir)} cwd=${valueOf(entry.origin.cwd)} cause=${valueOf(causeField(cause))} state=${settled} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 
 export function configDisposeLine(
@@ -513,17 +511,16 @@ export function configDisposeLine(
 // parse / validate); `lastWarning` is advisory (e.g., extension collision —
 // load succeeded but something the user should know about). The render path
 // surfaces both through one diagnostics composer in src/daemon/draw-bar.ts.
-// [LAW:types-are-the-program] `projectDir` and `cwd` are required inputs to
-// every render request. The wire boundary in render-checkpoint.ts validates the
-// underlying hookData and returns BAD_REQUEST when either is absent, so by
-// the time a cache entry is built they are real non-empty paths. `configFile`
-// is the explicit path a session's render origin names (`--config` or the
-// `configEnv` hint; absolute) — present when
-// overriding the standard precedence chain, undefined otherwise.
+// [LAW:types-are-the-program] `origin` is what the entry's config resolves
+// from, and the entry's identity. Its `projectDir` and `cwd` are required
+// inputs to every render request. The wire boundary in render-checkpoint.ts
+// validates the underlying hookData and returns BAD_REQUEST when either is
+// absent, so by the time a cache entry is built they are real non-empty paths.
+// Its target's `path` is the explicit path a session's render origin names
+// (`--config` or the `configEnv` hint; absolute) — present when overriding the
+// standard precedence chain, undefined otherwise.
 export interface CacheEntry {
-  projectDir: string;
-  cwd: string;
-  configFile: string | undefined;
+  readonly origin: LoadOrigin;
   // The files the state was merged from, lowest first, as the last load
   // resolved them (empty: the bundled default), and the one whose load
   // failed when the last load did.
@@ -619,16 +616,24 @@ export interface RenderCacheStats {
   readonly budgetBytes: number;
 }
 
+// [LAW:types-are-the-program] What config resolution reads of a render origin:
+// where the session runs and the file its target names, never what named it.
+// Every `RenderOrigin` is one, so a caller passes its origin as it holds it,
+// and a swapped or missing field is a type error rather than another path.
+// [LAW:one-source-of-truth] Picked from `RenderOrigin`, so a resolution input
+// added there is one field here.
+export type LoadOrigin = Pick<RenderOrigin, "projectDir" | "cwd"> & {
+  readonly target: Pick<ConfigTarget, "path">;
+};
+
 // [LAW:one-source-of-truth] Cache key includes every input that affects DSL
 // resolution: projectDir, cwd, and the session's explicit config path (if any).
 // `projectDir`/`cwd` are real strings by construction (validated upstream);
-// `configFile` collapses absent → empty in the key, distinct from any real path.
-function cacheKey(
-  projectDir: string,
-  cwd: string,
-  configFile: string | undefined,
-): string {
-  return projectDir + "\0" + cwd + "\0" + (configFile ?? "");
+// an absent path collapses → empty in the key, distinct from any real path.
+// The target's source is no part of it: an origin recorded by a build that
+// spelled the source differently still lands on the entry the render drew from.
+function cacheKey({ projectDir, cwd, target }: LoadOrigin): string {
+  return projectDir + "\0" + cwd + "\0" + (target.path ?? "");
 }
 
 // [LAW:one-source-of-truth] The preset names whose layout the raw file
@@ -655,8 +660,8 @@ function authoredRoots(
 }
 
 // [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
-// covers the exact set of paths the next reload would consult — an explicit
-// `configFile` collapses to one candidate; absent, the precedence chain unfolds
+// covers the exact set of paths the next reload would consult — a path the
+// origin's target names collapses to one candidate; absent, the chain unfolds
 // in full. Where each of those paths can change is the watch rule every file
 // watcher shares (`watchTargetsOf`): a dotfiles-managed config is heard
 // wherever a link in its chain is re-pointed.
@@ -678,16 +683,16 @@ function watchTargetsFor(
   const roots = [
     ...new Set([
       ...entry.state.plugins.roots,
-      path.join(entry.projectDir, REPO_PLUGIN_DIR),
+      path.join(entry.origin.projectDir, REPO_PLUGIN_DIR),
     ]),
   ];
   return watchTargetsOf(filesystem, {
     named: [
       ...dslConfigCandidatePaths(
         locs,
-        entry.projectDir,
-        entry.cwd,
-        entry.configFile,
+        entry.origin.projectDir,
+        entry.origin.cwd,
+        entry.origin.target.path,
       ),
       ...roots,
       ...loaded.map((d) => d.path),
@@ -1123,10 +1128,10 @@ export function loadChain(
 // the state it built is never constructed-then-discarded and the no-file
 // default is built once, not twice; `cc-candybar doctor`, which has no cache,
 // reads the outcome and disposes the state it was handed.
+// [LAW:single-enforcer] The one place an origin is spelled out into the
+// resolver's arguments.
 export function loadFromDisk(
-  projectDir: string,
-  cwd: string,
-  configFile: string | undefined,
+  { projectDir, cwd, target }: LoadOrigin,
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
@@ -1136,7 +1141,7 @@ export function loadFromDisk(
     repoConfigs(deps.stateDir).read(),
     projectDir,
     cwd,
-    configFile,
+    target.path,
   );
   const { repos } = resolution;
   // `chain` loads its layers; `missing`/`unreadable` build the bundled
@@ -1570,12 +1575,8 @@ export class RenderCache<
   // same fields and a renderable state. The renderer reads the data; no
   // special-case branches between "first load", "reload",
   // "reload-after-error".
-  getOrCreate(
-    projectDir: string,
-    cwd: string,
-    configFile: string | undefined,
-  ): CacheEntry {
-    const key = cacheKey(projectDir, cwd, configFile);
+  getOrCreate(origin: LoadOrigin): CacheEntry {
+    const key = cacheKey(origin);
     const existing = this.entries.get(key);
     if (existing) {
       // Move to end (most recently used) for LRU eviction.
@@ -1584,7 +1585,7 @@ export class RenderCache<
       return existing;
     }
 
-    const loaded = this.load(projectDir, cwd, configFile, null);
+    const loaded = this.load(origin, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
@@ -1594,16 +1595,21 @@ export class RenderCache<
     // (test/default-dsl-config.test.ts); a throw is a daemon bug and surfaces
     // as the request's failure, never a half-built entry.
     const entry: CacheEntry = {
-      projectDir,
-      cwd,
-      configFile,
+      // [LAW:one-source-of-truth] A copy of what resolution reads, never the
+      // caller's value: the first caller's source is no fact about the entry.
+      origin: {
+        projectDir: origin.projectDir,
+        cwd: origin.cwd,
+        target: { path: origin.target.path },
+      },
       configLayers: [],
       configHome: "",
       repos: loaded.repos,
       lastError: loaded.error,
       lastWarning: loaded.warning,
       state:
-        loaded.state ?? fallbackState(cwd, loaded.repos.plugins, this.deps),
+        loaded.state ??
+        fallbackState(origin.cwd, loaded.repos.plugins, this.deps),
       watch: null,
     };
     this.serve(entry.state);
@@ -1618,7 +1624,7 @@ export class RenderCache<
     this.fit(entry);
     this.log(
       "info",
-      `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
+      `render-cache entry projectDir=${origin.projectDir} cwd=${origin.cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
     this.refreshWatcher(entry, loaded);
     // An entry just created was drawn by no session.
@@ -1634,8 +1640,8 @@ export class RenderCache<
   // released, so the render finishes on the state it resolved its payload
   // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
   // every exit, a throw included.
-  hold(projectDir: string, cwd: string, configFile: string | undefined): Hold {
-    const entry = this.getOrCreate(projectDir, cwd, configFile);
+  hold(origin: LoadOrigin): Hold {
+    const entry = this.getOrCreate(origin);
     return this.holdState(entry, entry.state);
   }
 
@@ -1667,13 +1673,8 @@ export class RenderCache<
   // [LAW:single-enforcer] `facts` is the request the render is drawn for: the
   // view is declared with it here, opened (openView) or kept (`requested`),
   // so no view is drawn declared for another request.
-  holdSession(
-    projectDir: string,
-    cwd: string,
-    configFile: string | undefined,
-    facts: F,
-  ): SessionHold<S, F> {
-    const held = this.hold(projectDir, cwd, configFile);
+  holdSession(origin: LoadOrigin, facts: F): SessionHold<S, F> {
+    const held = this.hold(origin);
     let view: SessionView<S, F>;
     let lease: ViewHold;
     try {
@@ -1805,7 +1806,7 @@ export class RenderCache<
     const { sessionId } = facts;
     let view: SessionView<S, F>;
     try {
-      view = openView(state, entry.cwd, facts, {
+      view = openView(state, entry.origin.cwd, facts, {
         facts: this.deps.facts,
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),
@@ -1821,7 +1822,7 @@ export class RenderCache<
     this.placeView(sessionId, view);
     this.log(
       "info",
-      `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.cwd} views=${this.views.size}`,
+      `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.origin.cwd} views=${this.views.size}`,
     );
     return view;
   }
@@ -1932,14 +1933,9 @@ export class RenderCache<
   // config watch firing after the close.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  private load(
-    projectDir: string,
-    cwd: string,
-    configFile: string | undefined,
-    served: DslRenderState | null,
-  ): LoadOutcome {
+  private load(origin: LoadOrigin, served: DslRenderState | null): LoadOutcome {
     if (this.closed) throw new Error("render cache used after close");
-    return loadFromDisk(projectDir, cwd, configFile, this.deps, served);
+    return loadFromDisk(origin, this.deps, served);
   }
 
   // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
@@ -2111,13 +2107,8 @@ export class RenderCache<
   // config until the reload has landed (a save releasing the picks the file
   // now holds, a doctor verdict on the files as they are). The watcher still
   // fires after a write, and its reload of the same bytes keeps the state.
-  reload(
-    projectDir: string,
-    cwd: string,
-    configFile: string | undefined,
-    cause: ExplicitLoad,
-  ): void {
-    this.reloadInto(this.getOrCreate(projectDir, cwd, configFile), cause);
+  reload(origin: LoadOrigin, cause: ExplicitLoad): void {
+    this.reloadInto(this.getOrCreate(origin), cause);
   }
 
   // Re-populate `entry` from the current state of disk, for `cause`.
@@ -2142,12 +2133,7 @@ export class RenderCache<
     // A save's watch reload of the bytes the save just loaded keeps the
     // state the entry serves, so it reopens no view and restarts no source.
     const served = entry.state;
-    const loaded = this.load(
-      entry.projectDir,
-      entry.cwd,
-      entry.configFile,
-      served,
-    );
+    const loaded = this.load(entry.origin, served);
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null)
@@ -2199,7 +2185,8 @@ export class RenderCache<
     const { targets, unresolved } = paths;
     // [LAW:one-source-of-truth] The key names the target set and the folders
     // it binds, so the registry's `follow` rebinds exactly when either moved.
-    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${paths.key}`;
+    const { projectDir, cwd, target } = entry.origin;
+    const key = `config:${projectDir}:${cwd}:${target.path ?? ""}:${paths.key}`;
     // [LAW:single-enforcer] One reload dispatcher per cache entry: any
     // change the entry's watch hears re-resolves its whole chain (so a
     // higher-precedence file appearing supersedes a lower one) and reloads.
@@ -2220,12 +2207,12 @@ export class RenderCache<
     // entry now hears: a change that fires nothing is read against this line.
     this.log(
       "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch.handle.deaf.length}`,
+      `config watch bound projectDir=${projectDir} cwd=${cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch.handle.deaf.length}`,
     );
     for (const { path: at, reason } of unresolved)
       this.log(
         "warn",
-        `config watch unresolved projectDir=${entry.projectDir} path=${at} reason=${reason}`,
+        `config watch unresolved projectDir=${projectDir} path=${at} reason=${reason}`,
       );
   }
 

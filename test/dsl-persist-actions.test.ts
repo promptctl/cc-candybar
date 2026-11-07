@@ -1,3 +1,4 @@
+import { originAt } from "./helpers/render-origin";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import { FACTS_NOTHING } from "./helpers/facts";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.2 —
@@ -980,11 +981,7 @@ describe("RenderCache: the config file is the durable store", () => {
 `);
     const { cache, sessionState, cleanups, reloads } = makeCache();
     try {
-      const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
-      );
+      const entry = cache.getOrCreate(originAt(durable.projectDir));
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.globals.palette).toBe("textual-dark");
 
@@ -1020,11 +1017,7 @@ describe("RenderCache: the config file is the durable store", () => {
 
     const { cache: restarted, cleanups: restartedCleanups } = makeCache();
     try {
-      const entry = restarted.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
-      );
+      const entry = restarted.getOrCreate(originAt(durable.projectDir));
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.globals.palette).toBe("nord");
     } finally {
@@ -1052,11 +1045,7 @@ describe("RenderCache: the config file is the durable store", () => {
     );
     const { cache, cleanups } = makeCache();
     try {
-      const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
-      );
+      const entry = cache.getOrCreate(originAt(durable.projectDir));
       expect(entry.lastError).toBeNull();
 
       // No active preset (the floor): the file's globals apply as-is.
@@ -1085,11 +1074,7 @@ describe("RenderCache: the config file is the durable store", () => {
     );
     const { cache, cleanups } = makeCache();
     try {
-      const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
-      );
+      const entry = cache.getOrCreate(originAt(durable.projectDir));
       // The file's default is every session's starting point.
       expect(entry.state.config.globals.palette).toBe("nord");
 

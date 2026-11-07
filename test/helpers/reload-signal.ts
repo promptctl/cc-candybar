@@ -53,7 +53,7 @@ export class ReloadSignal {
   // on the event, not on a poll tick.
   async after(entry: ReloadedEntry, mutate: () => void | Promise<void>): Promise<void> {
     const reloaded = this.next(entry).then(() => true);
-    await untilHeard(mutate, () => reloaded, `a reload of ${entry.projectDir}`);
+    await untilHeard(mutate, () => reloaded, `a reload of ${entry.origin.projectDir}`);
   }
 
   // [LAW:no-ambient-temporal-coupling] `after`, for removing `target`, a file

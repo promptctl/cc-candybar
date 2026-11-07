@@ -1,3 +1,4 @@
+import { originAt } from "./helpers/render-origin";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import { factsRunning } from "./helpers/facts";
 // brandon-unfiled-3248.8ro6 §4e: a session's view says when what it draws
@@ -109,9 +110,9 @@ function setUp() {
   );
   cleanups.push(() => cache.close());
   const open = (sid: string) =>
-    cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
+    cache.holdSession(originAt(dir, configFile), viewFacts(dir, sid));
   const reload = (): void =>
-    cache.reload(dir, dir, configFile, { kind: "write" });
+    cache.reload(originAt(dir, configFile), { kind: "write" });
   return { status, changed, reloads, writeConfig, reload, open };
 }
 

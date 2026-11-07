@@ -16,6 +16,7 @@
 // that instant drew from. Every frame, live and replayed, is drawn by the
 // demo's one draw.
 
+import { originAt } from "./helpers/render-origin";
 import { dialerFake } from "../src/dial/dialer-fake";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import fs from "node:fs";
@@ -515,7 +516,7 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
       refusedArgs: [],
       pane: { kind: "runs", tmux: null, claude: { pid: 4242, configDir: claudeConfigDir } },
     } as unknown as CheckedRenderRequest;
-    const held = live.cache.holdSession(cwd, cwd, configFile, req);
+    const held = live.cache.holdSession(originAt(cwd, configFile), req);
     const settling = settleRequest(live.recorder, held.view, at);
     return {
       view: held.view,
@@ -1422,7 +1423,7 @@ test("a recording of a session's facts replays through a second cache into the b
     arm,
   );
   // The load: the config and the plugin are read here, before the instruments.
-  replay.cache.getOrCreate(s.cwd, s.cwd, s.configFile);
+  replay.cache.getOrCreate(originAt(s.cwd, s.configFile));
   const reads = spyReads();
   const effects = new SessionEffects<RenderedLine>(SID);
   const drawn = warnings();
@@ -1430,9 +1431,7 @@ test("a recording of a session's facts replays through a second cache into the b
   // The lines in the file's order, each request's view held until the next.
   restoreDraw(replay.sessionState, replay.depths, SID, recording.opening.state);
   let held = replay.cache.holdSession(
-    s.cwd,
-    s.cwd,
-    s.configFile,
+    originAt(s.cwd, s.configFile),
     recording.opening.request,
   );
   let elapsed = 0;
@@ -1449,7 +1448,7 @@ test("a recording of a session's facts replays through a second cache into the b
       replayClock.advance(offset - elapsed);
       elapsed = offset;
       held[Symbol.dispose]();
-      held = replay.cache.holdSession(s.cwd, s.cwd, s.configFile, line.request);
+      held = replay.cache.holdSession(originAt(s.cwd, s.configFile), line.request);
       await settleRequest(replay.recorder, held.view, line.at).landed;
     } else if (line.kind === "declared") {
       held.view.requested(line.request);

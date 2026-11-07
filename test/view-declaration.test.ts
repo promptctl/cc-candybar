@@ -5,6 +5,7 @@
 // that read it, and released only by a sweep 2.5 to 5 minutes after the last
 // draw that did.
 
+import { originAt } from "./helpers/render-origin";
 import { systemFilesystem } from "../src/disk/system-filesystem";
 import { TEST_LINKS } from "./helpers/link-signer";
 import { HOST, locs, WORLD } from "./helpers/host";
@@ -167,7 +168,7 @@ test("a view reads the PR from its declaration whatever its preset places, and a
   // The view opens declared at the session's request: its repo is held in
   // the opening turn (brandon-unfiled-3248.8ro6, 4a/4b).
   const view = (() => {
-    using hold = cache.holdSession(dir, dir, undefined, facts);
+    using hold = cache.holdSession(originAt(dir), facts);
     return hold.view;
   })();
   expect(git.getStats().held).toBe(1);
@@ -306,7 +307,7 @@ function gitCache() {
   );
   cleanups.push(() => cache.close());
   const view = (() => {
-    using hold = cache.holdSession(dir, dir, undefined, viewFacts(dir));
+    using hold = cache.holdSession(originAt(dir), viewFacts(dir));
     return hold.view;
   })();
   return { inner, git, cache, view };
@@ -326,7 +327,7 @@ test("a reload under a view no request reaches opens its successor declared: git
       root: { h: ["gitaculous"] },
     }),
   );
-  cache.reload(dir, dir, undefined, { kind: "write" });
+  cache.reload(originAt(dir), { kind: "write" });
   const successor = cache.latestView()!;
   expect(successor).not.toBe(view);
   expect(successor.source.facts().builtins.git).toMatchObject({

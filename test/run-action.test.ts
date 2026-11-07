@@ -1,3 +1,4 @@
+import { originAt } from "./helpers/render-origin";
 import { MAIN_NAME } from "../src/daemon/home";
 // [LAW:behavior-not-structure] The `run` action through what a user and an
 // operator see: the load errors a declaration earns, the link a draw makes,
@@ -302,7 +303,7 @@ function viewOf(
   configFile: string,
   sid = SID,
 ): SessionView<SessionSource> {
-  const held = r.cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
+  const held = r.cache.holdSession(originAt(dir, configFile), viewFacts(dir, sid));
   cleanups.push(() => held[Symbol.dispose]());
   return held.view;
 }
@@ -421,7 +422,7 @@ describe("a run's declaration", () => {
 
   test("a plugin's run loads: its refreshes under its namespace, its folder the directory it runs in", () => {
     const r = rig();
-    const loaded = loadFromDisk(dir, dir, config(["mine"]), {
+    const loaded = loadFromDisk(originAt(dir, config(["mine"])), {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
       locations: locs(),
@@ -450,7 +451,7 @@ describe("a run's declaration", () => {
       "conf/config.json5",
       `{ plugins: ["../p/plugin.json5"], actions: { mine: { run: ["true"], refreshes: ["${STATUS}"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, file, {
+    const loaded = loadFromDisk(originAt(dir, file), {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
       locations: locs(),
