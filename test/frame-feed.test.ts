@@ -801,10 +801,10 @@ describe("a feed's draws and its summary", () => {
     );
   });
 
-  // A frame is drawn in one synchronous turn, so a wake while it draws is the
-  // draw's own (a view it reopened), and the frame reads what that moved: it
+  // A frame renders in one synchronous turn, so a wake while it renders is the
+  // render's own (a view it reopened), and the frame reads what that moved: it
   // is coalesced into that frame, and the next falls due as the frame set it.
-  test("a wake while a frame is drawn is coalesced into it", () => {
+  test("a wake while a frame renders is coalesced into it", () => {
     const { feeds, note, state, log, clock } = harness({ motion: "still" });
     note("s", "bar");
     state.duringRender = () => feeds.wake("s", "data");
@@ -820,6 +820,56 @@ describe("a feed's draws and its summary", () => {
     expect(log.at(-1)).toContain(
       " woke=data:1,state:0,reload:0,visibility:0 wakeToFrame=- coalesced=1 ",
     );
+  });
+
+  // The render has read the bar's values by the time its frame goes out, so a
+  // wake from a subscriber's sink is the next frame's: it is drawn a spacing
+  // on, not when the still bar would next have been drawn, and it is timed.
+  test("a wake from a subscriber's sink brings the next frame forward", () => {
+    const { feeds, note, state, log, clock } = harness({ motion: "still" });
+    note("s", "bar");
+    let woken = false;
+    const close = feeds.subscribe(
+      "s",
+      sub(() => {
+        if (woken) return;
+        woken = true;
+        feeds.wake("s", "state");
+      }),
+    );
+    clock.advance(PERIODS.moving - 1);
+    expect(state.renders).toBe(1);
+    clock.advance(1);
+    expect(state.renders).toBe(2);
+    close();
+    expect(log.at(-1)).toMatch(
+      / woke=data:0,state:1,reload:0,visibility:0 wakeToFrame=last:[\d.]+ms,max:[\d.]+ms coalesced=0 /,
+    );
+  });
+
+  // A lane refused as its frame goes out leaves, and who follows the session
+  // is drawn into the frame: the next is drawn a spacing on, not when the
+  // still bar would next have been.
+  test("a lane switched off as its frame goes out brings the next frame forward", () => {
+    const { feeds, note, state, clock } = harness({ motion: "still" });
+    note("s", "bar");
+    feeds.subscribe("s", sub(() => {}, "band"));
+    const close = feeds.subscribe("s", sub(() => {}, "pane"));
+    clock.advance(1);
+    const before = state.renders;
+    state.lanes = {
+      band: false,
+      statusline: true,
+      pane: true,
+      tmuxStatus: false,
+    };
+    feeds.wake("s", "state");
+    clock.advance(PERIODS.moving);
+    expect(state.renders).toBe(before + 1);
+    expect(feeds.getStats()).toMatchObject({ refused: 1 });
+    clock.advance(PERIODS.moving);
+    expect(state.renders).toBe(before + 2);
+    close();
   });
 
   // A feed whose session has no view has no timer: a frame opens no view,

@@ -177,7 +177,8 @@ export type WakeCause = (typeof WAKE_CAUSES)[number];
 
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
 // state: no view to draw yet; the next frame due `at` a timer, on the
-// monotonic clock; or a frame being drawn.
+// monotonic clock; a frame's render, which reads the bar's values; or that
+// frame going out after the render read them.
 type Phase =
   | { readonly kind: "waiting" }
   | {
@@ -185,7 +186,8 @@ type Phase =
       readonly at: number;
       readonly clear: () => void;
     }
-  | { readonly kind: "drawing" };
+  | { readonly kind: "rendering" }
+  | { readonly kind: "pushing" };
 
 // A lane some subscriber of the session follows: kept from the lane's first
 // subscriber joining to its last leaving, which is how long the renderer holds
@@ -444,8 +446,8 @@ export class FrameFeeds<Req> {
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
     feed.woke[cause]++;
-    // A wake while a frame draws is that frame's, read by it: nothing waits.
-    if (feed.phase.kind !== "drawing")
+    // A wake while a frame renders is that frame's, read by it: nothing waits.
+    if (feed.phase.kind !== "rendering")
       feed.wokeSince ??= this.deps.clock.monotonic();
     if (!this.hasten(feed)) feed.coalesced++;
   }
@@ -599,7 +601,7 @@ export class FrameFeeds<Req> {
   // ever drawn further ahead of the wall than that, so nothing carries from
   // one frame to the next. Its moment on the monotonic clock is that instant's.
   private draw(feed: Feed, due: Instant): void {
-    feed.phase = { kind: "drawing" };
+    feed.phase = { kind: "rendering" };
     const woke = feed.wokeSince;
     feed.wokeSince = null;
     const started = this.deps.clock.monotonic();
@@ -647,6 +649,10 @@ export class FrameFeeds<Req> {
       feed.phase = { kind: "waiting" };
       return;
     }
+    // [LAW:no-ambient-temporal-coupling] The render has read the bar's
+    // values: a wake from here on, a sink's or a refused lane's, is the next
+    // frame's.
+    feed.phase = { kind: "pushing" };
     feed.lastStart = moment;
     const finished = this.deps.clock.monotonic();
     if (woke !== null) {
@@ -678,6 +684,7 @@ export class FrameFeeds<Req> {
   // costs. A frame step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's
   // next change is Infinity, and an unseen bar's spacing is the still period.
+  // A wake while the frame went out may already have set the timer sooner.
   private schedule(feed: Feed, frame: FeedFrame | null, at: Instant): void {
     const { moving, still } = this.deps.periods;
     const until = ((frame?.bar.nextChange ?? Infinity) - at) * 1000;
@@ -704,28 +711,32 @@ export class FrameFeeds<Req> {
   // never later than it already falls due. Answers whether it moved anything:
   // a wake that did not was coalesced into a frame already due. Spaced on the
   // monotonic clock, so a wall clock stepped back cannot stall a wake.
-  // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
-  // turn and opens nothing, so a wake while it draws is the draw's own, and
-  // the frame reads what that moved: it is coalesced into that frame.
+  // [LAW:no-ambient-temporal-coupling] A frame renders in one synchronous
+  // turn and opens nothing, so a wake while it renders is the render's own,
+  // and the frame reads what that moved: it is coalesced into that frame. A
+  // wake after the render read its values is the next frame's.
   private hasten(feed: Feed): boolean {
     const { phase } = feed;
-    if (phase.kind === "drawing") return false;
+    if (phase.kind === "rendering") return false;
     const now = this.deps.clock.monotonic();
     const at = Math.max(now, feed.lastStart + this.spacingOf(feed));
-    if (phase.kind === "due" && phase.at <= at) return false;
     const wall = this.deps.instant();
-    this.arm(feed, (wall + (at - now) / 1000) as Instant, wall);
-    return true;
+    return this.arm(feed, (wall + (at - now) / 1000) as Instant, wall);
   }
 
   // [LAW:single-enforcer] The feed's one timer, set to draw its next frame for
   // the wall instant `due`, in a later turn than the caller's however soon
   // that is. Its wait is measured from `wall`, the caller's own reading, so
   // the instant a caller set is never rebuilt from a second, truncated one;
-  // its monotonic due time is what a wake compares against.
-  private arm(feed: Feed, due: Instant, wall: Instant): void {
+  // its monotonic due time is what a later caller compares against.
+  // [LAW:single-enforcer] The one rule that a timer is never set later than
+  // it already falls due. Answers whether it moved the timer.
+  private arm(feed: Feed, due: Instant, wall: Instant): boolean {
     const delay = Math.max(0, (due - wall) * 1000);
-    this.setTimer(feed, due, this.deps.clock.monotonic() + delay, delay);
+    const dueMoment = this.deps.clock.monotonic() + delay;
+    if (feed.phase.kind === "due" && feed.phase.at <= dueMoment) return false;
+    this.setTimer(feed, due, dueMoment, delay);
+    return true;
   }
 
   private setTimer(
