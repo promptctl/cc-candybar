@@ -55,7 +55,9 @@ import {
   judgeAct,
   makeActReader,
   spendLook,
+  type ActAwake,
   type ActFacts,
+  type ActJob,
   type ActState,
 } from "./update-act";
 import type { ProcessProbe } from "./process-fingerprint";
@@ -322,8 +324,8 @@ export interface UpdateWatch {
   // it. False while its files can't be read: the error says so, and holding
   // every restart on a file nothing repairs would hold them for good.
   running(): Promise<boolean>;
-  // Why this bundle's act files can't be read, as of the last look; null when
-  // they can.
+  // Why this bundle's act files can't be read or take a look, else why
+  // the act last read was ended with no verdict to say so; null when neither.
   error(): string | null;
 }
 
@@ -503,6 +505,9 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     | { readonly ok: false; readonly error: string };
   let unreadable: string | null = null;
   const logUnreadable = changeLogger(log);
+  // The one spelling of the ⚠ text an act-file fault shows.
+  const actsFault = (why: string): string =>
+    `update act files (${actsDir}): ${why}`;
   async function touchActs<T>(touch: () => Promise<T>): Promise<ActsTouch<T>> {
     try {
       const value = await touch();
@@ -512,24 +517,77 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       if (err instanceof DaemonClosing) {
         return { ok: false, error: err.message };
       }
-      unreadable = `update act files (${actsDir}): ${(err as Error).message}`;
+      unreadable = actsFault((err as Error).message);
       logUnreadable(["error", unreadable]);
       return { ok: false, error: unreadable };
     }
   }
 
+  // This daemon's last look at the act, of the job its reader said it was of.
+  // While the act's files can't take a look, this copy is what carries the
+  // spend, so the bound is ten minutes of one daemon's watching: the spend
+  // crosses no daemon, and one started mid-act (only a crash or a kill starts
+  // one, since a restart for a changed bundle waits on the act) counts from the
+  // last spend the files hold, and shows the same fault.
+  let lastLook: { readonly job: ActJob; readonly awake: ActAwake } | null =
+    null;
+  // [LAW:no-silent-failure] Why the watch ended an act whose verdict it could
+  // not write. Readers judge that act lost, and the touch that next succeeds
+  // clears the fault that said why, so the reason is kept while the act last
+  // read is that job. Keyed by job, not act number: a number is taken again
+  // once the acts directory is emptied.
+  let unrecorded: { readonly job: ActJob; readonly reason: string } | null =
+    null;
+  // [LAW:one-source-of-truth] Why the act's files could not take the watch's
+  // last look at the spend. Its own, not `unreadable`: only a look can say
+  // whether the spend file took one, and a read that succeeds says nothing of
+  // it, so a read between ticks must not clear it.
+  let spendFault: string | null = null;
+  const logSpendFault = changeLogger(log);
+
   // Spends a look on the act if its group is alive, and ends it once that has
   // spent its budget, with a timeout verdict unless the job's own landed first.
   // [LAW:one-source-of-truth] The one budget is observed time, shared through
   // the act's files by every daemon that looks.
-  function endIfOverdue(facts: ActFacts | null): void {
-    if (!facts?.alive) return;
-    const spent = spendLook(actsDir, facts, clock.now(), LONGEST_LOOK_MS);
-    if (spent === null || spent.spentMs <= ACT_TIMEOUT_MS) return;
-    const { stands, signalled } = endOverdue(actsDir, facts, launcher);
-    const why = stands ? "timed out" : "outlived its verdict";
-    const ending = signalled ? "ending it" : "its group took no signal";
-    log("error", `apply-update: act ${facts.act} ${why}; ${ending}`);
+  // Returns why the act's files could not take the look, null when they did
+  // or no look was spent; the spend is judged first, so a write that fails
+  // ends nothing early.
+  function endIfOverdue(facts: ActFacts | null): string | null {
+    if (!facts?.alive) return null;
+    const own = lastLook?.job === facts.job ? lastLook.awake : null;
+    const look = spendLook(actsDir, facts, own, clock.now(), LONGEST_LOOK_MS);
+    if (look === null) return null;
+    lastLook = { job: facts.job, awake: look.awake };
+    if (look.awake.spentMs > ACT_TIMEOUT_MS) endAct(facts);
+    return look.fault === null ? null : actsFault(look.fault);
+  }
+
+  function endAct(facts: ActFacts): void {
+    const ending = endOverdue(actsDir, facts, launcher);
+    // [LAW:no-silent-failure] The act's files went between the look and its
+    // end: a newer claim pruned it, or the state directory was removed. Either
+    // way a group this look proved alive is left unsignalled, so it is said.
+    if (ending.verdict === "gone") {
+      log(
+        "error",
+        `apply-update: act ${facts.act} timed out, but its files were removed before it could be ended; its group (pid ${facts.record.pid}) was not signalled`,
+      );
+      return;
+    }
+    // [LAW:one-source-of-truth] The one spelling of what the end did to the
+    // group, for the log and the ⚠ alike.
+    const signal = ending.signalled ? "ending it" : "its group took no signal";
+    if (ending.verdict !== "unrecorded") {
+      const why =
+        ending.verdict === "stands" ? "timed out" : "outlived its verdict";
+      log("error", `apply-update: act ${facts.act} ${why}; ${signal}`);
+      return;
+    }
+    const reason = actsFault(
+      `act ${facts.act} timed out; its verdict could not be written: ${ending.error}; ${signal}`,
+    );
+    log("error", `apply-update: ${reason}`);
+    unrecorded = { job: facts.job, reason };
   }
 
   // Notices an act ending, whichever daemon started it: a success means the
@@ -538,10 +596,14 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   async function watchAct(): Promise<void> {
     const read = await touchActs(async () => {
       const facts = await acts.read();
-      if (!closed) endIfOverdue(facts);
+      if (!closed) spendFault = endIfOverdue(facts);
       return facts;
     });
     if (closed || !read.ok) return;
+    if (spendFault !== null) logSpendFault(["error", spendFault]);
+    if (unrecorded !== null && read.value?.job !== unrecorded.job) {
+      unrecorded = null;
+    }
     const next = judgeAct(read.value);
     if (seen === null && next.kind === "running") {
       log("info", `apply-update: act ${next.act} is running; watching it`);
@@ -592,7 +654,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         const read = await touchActs(() => acts.read());
         return read.ok && judgeAct(read.value).kind === "running";
       }),
-    error: () => unreadable,
+    error: () => unreadable ?? spendFault ?? unrecorded?.reason ?? null,
     act: () =>
       actTurn(async () => {
         if (closed) throw new DaemonClosing("apply-update");
@@ -632,6 +694,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
           `apply-update: act ${claim.act}: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
         );
         seen = { kind: "running", act: claim.act };
+        unrecorded = null;
       }),
   };
 }
