@@ -81906,7 +81906,6 @@ var SessionUsageStore = class {
   // keeps for the draws until the next one.
   refreshed(sessionId2, transcriptPath, stamp2) {
     return this.requestFlight.run(`${sessionId2}:${stamp2}`, async () => {
-      this.pricing.ask();
       const tally = { hits: 0, misses: 0 };
       const startedAt = this.clock.monotonic();
       const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
@@ -81924,8 +81923,16 @@ var SessionUsageStore = class {
         this.hold(sessionId2).failure,
         record2.kind === "failed" ? record2.reason : null
       );
+      if (this.holdsUnpriced()) this.pricing.ask();
       return record2;
     });
+  }
+  // Whether any record held keeps tokens only a table prices.
+  holdsUnpriced() {
+    for (const { record: record2 } of this.sessions.values()) {
+      if (record2 !== void 0 && record2.usage.unpriced.size > 0) return true;
+    }
+    return false;
   }
   // The `today` projection: cross-session sum of every record's today bucket.
   // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
