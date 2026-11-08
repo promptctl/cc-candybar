@@ -1,3 +1,9 @@
+## [1.212.1](https://github.com/promptctl/cc-candybar/compare/v1.212.0...v1.212.1) (2026-11-08)
+
+### Bug Fixes
+
+* **watchers:** on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens ([#699](https://github.com/promptctl/cc-candybar/issues/699)) ([3b7ffb1](https://github.com/promptctl/cc-candybar/commit/3b7ffb140e9cd7ddb57c056cd4b741f9d4f8f695))
+
 ## [1.212.0](https://github.com/promptctl/cc-candybar/compare/v1.211.3...v1.212.0) (2026-11-08)
 
 ### ⚠ BREAKING CHANGES
