@@ -81301,6 +81301,10 @@ function livePricing(owner) {
   const landed = computed(() => lastLanded(held.get()), {
     equals: (a, b) => a?.at === b?.at
   });
+  const settle3 = (load) => load.then((settled4) => runInAction(() => held.set(settled4))).catch((e) => {
+    owner.log("error", `pricing load rejected: ${String(e)}`);
+  });
+  const primed = settle3(readDisk(owner));
   let loading = null;
   const sayNotLoaded = changeLogger(owner.log);
   return {
@@ -81310,7 +81314,7 @@ function livePricing(owner) {
       const prev = held.get();
       const owed = prev === null || due(prev, owner.clock.now());
       if (!owed || owner.closing.aborted) return;
-      loading ??= loadHeld(owner, prev, sayNotLoaded).then((settled4) => runInAction(() => held.set(settled4))).finally(() => {
+      loading ??= primed.then(() => settle3(loadHeld(owner, held.get(), sayNotLoaded))).finally(() => {
         loading = null;
       });
     }
