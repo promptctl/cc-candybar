@@ -69959,7 +69959,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.4";
+var PACKAGE_VERSION = "1.210.5";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
