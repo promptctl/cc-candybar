@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-699",
+      "ref": "refs/pull/699/merge",
+      "sha": "04badd888673359fb6d78266f75e038ccdf98b87",
+      "timestamp": "2026-11-08T14:56:27.085Z",
+      "commits": [
+        {
+          "sha": "04badd888673359fb6d78266f75e038ccdf98b87",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:54:50Z",
+          "message": "Merge 0d3d856851b86e7d4c724cd6697c4b1e1ea6880d into ada85603434124de78d6e549106c59efccbe463b\n"
+        },
+        {
+          "sha": "0d3d856851b86e7d4c724cd6697c4b1e1ea6880d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:54:46-07:00",
+          "message": "Merge branch 'main' into fix/stall-polled-watches"
+        },
+        {
+          "sha": "8e2881bac313ce673e933a6cf74ad55aa02b4797",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:38:13-07:00",
+          "message": "Merge branch 'main' into fix/stall-polled-watches"
+        },
+        {
+          "sha": "3a06cbead73b50b93d8d0fb280529bb50d3ae9e3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:36:43-07:00",
+          "message": "fix(watchers): the stall row names no consumer, and the probe's dead stream check goes back to the law on its target (brandon-unfiled-3248.slsx)\n\nThe row's consumer examples copied watch shapes each consumer owns, so a\nchanged shape would leave the row saying a deaf watch still refreshes. The\nprobe's target has no filenames, so its watch always rides the stream; the\nridesStream check after the refusal could not fire, and the\none-source-of-truth marker returns to the target it depends on.\n"
+        },
+        {
+          "sha": "24c3c1933540c332951d5f1b2f8d7b28e82949fe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:31:46-07:00",
+          "message": "fix(watchers): the stall row reads the registry's polling rule, and names branch refs, not branches, as deafened (brandon-unfiled-3248.slsx)\n\nThe row keyed its text on the disk's watch reach, a second copy of the\nregistry's rule for which watches are polled. The registry now owns that\nrule as one answer, opens every directory by it, and the row reads it.\nOn macOS a repo's HEAD is polled and heard through a stall; only the\nbranch refs tree rides the stream, so the row says branch refs.\n"
+        },
+        {
+          "sha": "b4291bbdeece7951e5278f5f202fe6f0b96cd2b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:26:41-07:00",
+          "message": "fix(watchers): on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens (brandon-unfiled-3248.slsx)\n\nA watch handle now says whether it rides the OS's one event stream, from the\nregistry's own choice of what is polled. A stall is the fault only of a watch\nthat rides it, so a polled `watch_file` name carries no stall fault and keeps\nrefreshing; the file-event probe asks the same question of its own watch. The\nstall row reads the disk's watch reach: on macOS it names a folder or tree\nwatched whole as what a stall deafens and says a file watched by name still\nrefreshes; on Linux, where every watch rides inotify, it reads as before.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-698",
       "ref": "refs/pull/698/merge",
       "sha": "d8645b236d49e4ea78ccd40d51641c796a390dee",
@@ -99,49 +149,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-08T14:27:30Z",
           "message": "chore(release): set `package.json` to 1.211.2 [skip ci]\n\n## [1.211.2](https://github.com/promptctl/cc-candybar/compare/v1.211.1...v1.211.2) (2026-11-08)\n\n### Bug Fixes\n\n* **daemon:** the doctor stores, doctor edge and lane edge take the daemon's disk, so one daemon answers from one disk ([#697](https://github.com/promptctl/cc-candybar/issues/697)) ([eaa59b6](https://github.com/promptctl/cc-candybar/commit/eaa59b6d87c32073b040a97072a0fee0a6e048fc))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-699",
-      "ref": "refs/pull/699/merge",
-      "sha": "1ffe33763cfb9608690750ea9434627821002c57",
-      "timestamp": "2026-11-08T14:39:04.495Z",
-      "commits": [
-        {
-          "sha": "1ffe33763cfb9608690750ea9434627821002c57",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:38:16-07:00",
-          "message": "Merge 8e2881bac313ce673e933a6cf74ad55aa02b4797 into 56a5c61981df900d1c9d0cee98199d3a1f52182f\n"
-        },
-        {
-          "sha": "8e2881bac313ce673e933a6cf74ad55aa02b4797",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:38:13-07:00",
-          "message": "Merge branch 'main' into fix/stall-polled-watches"
-        },
-        {
-          "sha": "3a06cbead73b50b93d8d0fb280529bb50d3ae9e3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:36:43-07:00",
-          "message": "fix(watchers): the stall row names no consumer, and the probe's dead stream check goes back to the law on its target (brandon-unfiled-3248.slsx)\n\nThe row's consumer examples copied watch shapes each consumer owns, so a\nchanged shape would leave the row saying a deaf watch still refreshes. The\nprobe's target has no filenames, so its watch always rides the stream; the\nridesStream check after the refusal could not fire, and the\none-source-of-truth marker returns to the target it depends on.\n"
-        },
-        {
-          "sha": "24c3c1933540c332951d5f1b2f8d7b28e82949fe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:31:46-07:00",
-          "message": "fix(watchers): the stall row reads the registry's polling rule, and names branch refs, not branches, as deafened (brandon-unfiled-3248.slsx)\n\nThe row keyed its text on the disk's watch reach, a second copy of the\nregistry's rule for which watches are polled. The registry now owns that\nrule as one answer, opens every directory by it, and the row reads it.\nOn macOS a repo's HEAD is polled and heard through a stall; only the\nbranch refs tree rides the stream, so the row says branch refs.\n"
-        },
-        {
-          "sha": "b4291bbdeece7951e5278f5f202fe6f0b96cd2b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:26:41-07:00",
-          "message": "fix(watchers): on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens (brandon-unfiled-3248.slsx)\n\nA watch handle now says whether it rides the OS's one event stream, from the\nregistry's own choice of what is polled. A stall is the fault only of a watch\nthat rides it, so a polled `watch_file` name carries no stall fault and keeps\nrefreshing; the file-event probe asks the same question of its own watch. The\nstall row reads the disk's watch reach: on macOS it names a folder or tree\nwatched whole as what a stall deafens and says a file watched by name still\nrefreshes; on Linux, where every watch rides inotify, it reads as before.\n"
         }
       ]
     },
