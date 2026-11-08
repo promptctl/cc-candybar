@@ -8,7 +8,8 @@ import { stagedPath } from "./staged-path.js";
 // reading while we write it — the config file, the settings history, and Claude
 // Code's settings.json (the doctor fix and `install`), and the home's link-id
 // counter: a reader never sees a
-// torn file, and a rename that fails leaves no orphaned tmp behind. Without a
+// torn file, and a rename that fails removes its tmp; when that removal fails
+// too, the write's error names the tmp left behind in its message. Without a
 // `mode` the existing file's mode survives (a hand-authored file keeps
 // whatever the user gave it) and a first-ever file takes the process umask.
 // A symlinked file is written where it points — a dotfiles-managed
@@ -38,11 +39,15 @@ export function writeAtomicOn(
     try {
       disk.rmSync(tmp);
     } catch (cleanup) {
-      // [LAW:no-silent-failure] The write's own failure is what the caller
-      // hears; a cleanup that fails too (a directory no longer searchable)
-      // rides on it as its `cause`, never in its place. A disk error carries
-      // no cause of its own, so the slot is free; one that did keeps it.
-      if (e instanceof Error && e.cause === undefined) e.cause = cleanup;
+      // [LAW:no-silent-failure] the leftover travels in the message every caller renders
+      // The write's own failure stays the error, its `code` intact, since
+      // callers branch on it; a cleanup that fails too (a directory no longer
+      // searchable) is named beside it, never in its place.
+      // [LAW:types-are-the-program] The port fails only with a FilesystemError,
+      // so `instanceof Error` narrows the caught `unknown` and skips nothing.
+      if (e instanceof Error) {
+        e.message += `; staged file ${tmp} was left behind: ${cleanup instanceof Error ? cleanup.message : String(cleanup)}`;
+      }
     }
     throw e;
   }

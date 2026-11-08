@@ -5,9 +5,9 @@ import { heldClock } from "../helpers/held-clock";
 
 // A write that fails, and whose cleanup of the staged file fails too (the
 // directory stopped being searchable mid-write): the caller hears why the
-// write failed, and the cleanup's failure rides along on it rather than
-// replacing it.
-test("a failed write whose cleanup also fails throws the write's error, the cleanup's as its cause", () => {
+// write failed, with its errno intact, and the message it logs and shows
+// names the staged file left behind and why it could not be removed.
+test("a failed write whose cleanup also fails throws the write's error, naming the leftover tmp in its message", () => {
   const disk = filesystemFake({ clock: heldClock(new Date(0)), platform: "darwin" });
   disk.mkdir("/home");
   // The staged file lands, then every later call naming it is refused: the
@@ -29,10 +29,8 @@ test("a failed write whose cleanup also fails throws the write's error, the clea
 
   expect(thrown).toMatchObject({
     code: "EACCES",
-    message: expect.stringMatching(/, rename '\/home\/config\.json5\..*\.tmp'$/),
-    cause: expect.objectContaining({
-      code: "EACCES",
-      message: expect.stringMatching(/, rm '\/home\/config\.json5\..*\.tmp'$/),
-    }),
+    message: expect.stringMatching(
+      /^EACCES: .*, rename '(\/home\/config\.json5\..*\.tmp)'; staged file \1 was left behind: EACCES: .*, rm '\1'$/,
+    ),
   });
 });
