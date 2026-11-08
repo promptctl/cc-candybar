@@ -305,7 +305,11 @@ async function loadHeld(
   sayNotLoaded: ReturnType<typeof changeLogger>,
 ): Promise<Held | null> {
   const copy = await readDisk(owner);
-  if (copy !== null && !due(copy, owner.clock.now())) return copy;
+  // The copy stands for the day, but a table this owner holds may be the newer
+  // landing: its own disk write can have failed while a copy another daemon
+  // wrote is older than what it fetched.
+  if (copy !== null && !due(copy, owner.clock.now()))
+    return later(copy, lastLanded(prev));
   const landed = await fetchLanded(owner).catch((e: unknown) => {
     owner.log("error", `pricing load threw: ${String(e)}`);
     return null;
