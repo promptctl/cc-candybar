@@ -12,7 +12,12 @@ import { buildRig } from "./helpers/rig";
 import { type VerbContext } from "../src/daemon/verbs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
-import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
+import {
+  EDIT_CONFIGURE_KEY,
+  EDIT_MODE_KEY,
+  EDIT_MODE_ARRANGE,
+  configureMember,
+} from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
 import { closingView } from "../src/daemon/closing-view";
 import { chromeIdent } from "../src/config/edit-chrome";
@@ -254,6 +259,25 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
       await rt.clickDoing((v) => v === "insert:directory:anchor:after");
       expect(rt.logged.join("\n")).toContain('placed={"seg":"directory"}');
       expect(rt.held(AFTER)).toBe(DISCLOSURE_CLOSED);
+    });
+
+    // The configure key is declared by every config, so only its value's
+    // admission tells the edits apart: the hand edit leaves the member it
+    // stopped admitting, and the re-add admits it again.
+    test("a placement configured, removed by hand and re-added under its id is not configuring", async () => {
+      const configuring = configureMember("default", "directory");
+      durable.write(ANCHORED);
+      const rt = nestBar(ANCHORED, durable);
+      await arrange(rt);
+      await rt.clickWriting(EDIT_CONFIGURE_KEY, configuring);
+      expect(rt.held(EDIT_CONFIGURE_KEY)).toBe(configuring);
+      durable.write(`{ root: { h: [{ seg: 'model', id: 'anchor' }] } }`);
+      rt.reload(durable);
+      await rt.clickWriting(ANCHOR_LIBRARY, ANCHOR_APPLY);
+      expect(rt.held(EDIT_CONFIGURE_KEY)).toBe(configuring);
+      await rt.clickDoing((v) => v === "insert:directory:anchor:after");
+      expect(rt.logged.join("\n")).toContain('placed={"seg":"directory"}');
+      expect(rt.held(EDIT_CONFIGURE_KEY)).toBe(DISCLOSURE_CLOSED);
     });
   });
 

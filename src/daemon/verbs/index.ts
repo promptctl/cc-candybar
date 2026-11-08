@@ -45,7 +45,11 @@ import type { CheckedRenderRequest } from "../render-checkpoint";
 import { closingView } from "../closing-view";
 import { configKeySeed } from "./key-seeds";
 import type { Gates } from "../foundations/gates";
-import type { Gate, RangeParams } from "../foundations/validator-registry";
+import type {
+  Gate,
+  RangeParams,
+  Verdict,
+} from "../foundations/validator-registry";
 import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
@@ -70,20 +74,12 @@ import {
 import type { NavigationHistory } from "../navigation-history";
 import { durableConfig, type ConfigHome } from "../../config/loader/discovery";
 import {
-  placementId,
   settingSpelling,
-  walkNodes,
   type DslConfig,
   type Globals,
-  type SegmentNode,
 } from "../../config/dsl-types";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
-import {
-  configureMember,
-  EDIT_CONFIGURE_KEY,
-  PLACEMENT_DRAFT_NS,
-} from "../../config/loader/edit-mode";
-import { ident } from "../../config/ident";
+import { PLACEMENT_DRAFT_NS } from "../../config/loader/edit-mode";
 import {
   durableLanding,
   placementDrafts,
@@ -99,7 +95,6 @@ import {
   SETTINGS,
 } from "../../config/setting-projections";
 import { decodeLayoutOp } from "../../config/layout-ops";
-import { presetNames, presetRoot } from "../../config/presets";
 import {
   batchAdjacentWrites,
   parseEffects,
@@ -1268,47 +1263,15 @@ const resetConfig: VerbHandler = (sid, args, ctx) => {
   );
 };
 
-// Every placement an edit ended: a (preset, id) the config held before the
-// edit and no longer holds after it. Measured over every preset, since a row
-// can be shared — an edit made in one preset's layout can end a placement
-// another renders. [LAW:dataflow-not-control-flow] No branch on the op: an
-// insertion ends nothing, and the comparison says so.
-function endedPlacements(
-  before: DslConfig,
-  after: DslConfig,
-): ReadonlyArray<{ readonly member: string; readonly node: SegmentNode }> {
-  const placed = (config: DslConfig, preset: string) =>
-    [...walkNodes(presetRoot(config, preset).node)].filter(
-      (n): n is SegmentNode => n.kind === "segment",
-    );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap((preset) =>
-      placed(after, preset).map((n) =>
-        configureMember(ident(preset), placementId(n)),
-      ),
-    ),
-  );
-  return presetNames(before.presets).flatMap((preset) =>
-    placed(before, preset)
-      .map((node) => ({
-        member: configureMember(ident(preset), placementId(node)),
-        node,
-      }))
-      .filter(({ member }) => !survivors.has(member)),
-  );
-}
-
-// What an ended placement leaves in the session: its unsaved values, and the
-// configure key while it names that placement — a later placement that takes
-// its id is a new instance, and must inherit neither.
-function endedSessionKeys(
-  ended: ReturnType<typeof endedPlacements>,
-  configuring: string | null,
-): readonly string[] {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...(member === configuring ? [EDIT_CONFIGURE_KEY] : []),
-  ]);
+// How one config reads a session's stored value: a key its state gate does not
+// list is undeclared, and a listed key's value is the gate's verdict on it.
+// [LAW:single-enforcer] The verdict is the gate's own, the one every judged
+// read asks, so what a layout edit releases cannot drift from what a render reads.
+type Reading = "undeclared" | Verdict["kind"];
+function readingUnder(gate: Gate): (key: string, stored: string) => Reading {
+  const listed = new Set(gate.listKeys());
+  return (key, stored) =>
+    listed.has(key) ? gate.verdict(key, stored).kind : "undeclared";
 }
 
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
@@ -1341,36 +1304,37 @@ const applyLayoutOp: VerbHandler = (sid, args, ctx) => {
   }
   const home = originHome(ctx, origin);
   const placed = applyLayoutOpToFile(editStore(ctx, sid), home, key, op);
-  // A removed placement's session state ends with it (endedSessionKeys).
   // Measured on the file as it now reads, and released in the same click, so
-  // its undo brings the placement and its drafts back.
+  // its undo brings the placement and its session state back.
   ctx.reloadConfig(origin);
   const after = ctx.configFor(origin);
-  // [LAW:single-enforcer] Every state key the edit ends or begins is released
-  // here, in its click. A key the edit ends (the chrome named by a removed
-  // placement, the ✚ whose gap a pick renamed) is otherwise held forever:
-  // nothing closes an undeclared key. A key the edit begins holds nothing the
-  // current config wrote, so whatever it holds is left by an earlier placement
-  // under the same id — however that placement was removed, a hand edit
-  // included — and the new one inherits nothing.
-  const declaredBefore = new Set(ctx.gates.state.gateFor(before).listKeys());
-  const declaredAfter = new Set(ctx.gates.state.gateFor(after).listKeys());
-  const changed = [
-    ...[...declaredBefore].filter((key) => !declaredAfter.has(key)),
-    ...[...declaredAfter].filter((key) => !declaredBefore.has(key)),
-  ];
+  // [LAW:single-enforcer] Every held value whose admission the edit changes
+  // is released here, in its click: a value the configs before and after the
+  // edit read differently. That covers a key the edit ends (a removed
+  // placement's chrome and drafts, the ✚ whose gap a pick renamed), which
+  // nothing else closes once no config declares it; a key it begins, which
+  // holds nothing the current config wrote, so its value is left by an
+  // earlier placement under the same id, however that one was removed; and a
+  // key every config declares whose value the edit admits or refuses anew
+  // (configuring a placement that is removed or re-added). A value both
+  // configs read alike stays as it was.
+  // [LAW:dataflow-not-control-flow] No branch on the op: the comparison is
+  // the same for an insertion and a removal.
+  const gateBefore = ctx.gates.state.gateFor(before);
+  const gateAfter = ctx.gates.state.gateFor(after);
+  const readBefore = readingUnder(gateBefore);
+  const readAfter = readingUnder(gateAfter);
   // The session state the edit discards — the fact its log line carries.
-  // Raw: under the reloaded config a removed placement's member is foreign,
-  // so a judged read would keep exactly what this click releases.
+  // Raw: the read that chooses what to release compares both configs'
+  // readings itself, so a judged read would hide the very values it compares.
   const released = [
-    ...new Set([
-      ...endedSessionKeys(
-        endedPlacements(before, after),
-        ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
-      ),
-      ...changed,
-    ]),
-  ].filter((key) => ctx.sessionState.get(sid, key) !== null);
+    ...new Set([...gateBefore.listKeys(), ...gateAfter.listKeys()]),
+  ].filter((key) => {
+    const stored = ctx.sessionState.get(sid, key);
+    return (
+      stored !== null && readBefore(key, stored) !== readAfter(key, stored)
+    );
+  });
   for (const key of released) ctx.sessionState.clear(sid, key);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
