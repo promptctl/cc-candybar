@@ -4,6 +4,7 @@
 // asleep mid-act spends none of it, and a wall clock set back spends nothing.
 
 import {
+  latestLook,
   observe,
   unwatched,
   type ActRecord,
@@ -61,5 +62,42 @@ describe("observe: one look at an act alive", () => {
     for (const landed of [a, b]) {
       expect(observe(landed, next, LONGEST).spentMs).toBe(33_000);
     }
+  });
+});
+
+describe("latestLook: the look a daemon counts on from", () => {
+  const shared = { spentMs: 30_000, lastSeen: STARTED + 30_000 };
+
+  test("this daemon's own look wins when it has spent more than the act's files hold: a write that failed loses no spend", () => {
+    const own = { spentMs: 34_000, lastSeen: STARTED + 34_000 };
+    expect(latestLook(RECORD, shared, own)).toEqual(own);
+  });
+
+  test("the act's files win when they hold more: another daemon looked after this one", () => {
+    const own = { spentMs: 28_000, lastSeen: STARTED + 28_000 };
+    expect(latestLook(RECORD, shared, own)).toEqual(shared);
+  });
+
+  test("a wall clock set back hands a stale copy nothing: the larger spend wins whatever its last look says", () => {
+    const own = { spentMs: 300_000, lastSeen: STARTED - HOUR };
+    const stale = { spentMs: 200_000, lastSeen: STARTED };
+    expect(latestLook(RECORD, stale, own)).toEqual(own);
+    expect(latestLook(RECORD, own, stale)).toEqual(own);
+  });
+
+  test("of two equal spends, the later look wins, so no span is counted twice", () => {
+    const own = { spentMs: 30_000, lastSeen: STARTED + 31_000 };
+    expect(latestLook(RECORD, shared, own)).toEqual(own);
+    expect(latestLook(RECORD, own, shared)).toEqual(own);
+  });
+
+  test("with no look of its own, a daemon counts on from the act's files, or from the act's start when they hold none", () => {
+    expect(latestLook(RECORD, shared, null)).toEqual(shared);
+    expect(latestLook(RECORD, null, null)).toEqual(unwatched(RECORD));
+  });
+
+  test("with nothing in the act's files, a daemon counts on from its own look", () => {
+    const own = { spentMs: 4_000, lastSeen: STARTED + 4_000 };
+    expect(latestLook(RECORD, null, own)).toEqual(own);
   });
 });
