@@ -69953,7 +69953,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.4";
+var PACKAGE_VERSION = "1.210.5";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -80094,11 +80094,7 @@ function spendLook(dir, facts, own2, now2, longestMs) {
     longestMs
   );
   if (read2.kind === "unread") {
-    const base = own2 === null ? "the act's start" : "this daemon's last look";
-    return {
-      awake,
-      fault: `${file}: ${read2.reason}; left in place, this look counts on from ${base}`
-    };
+    return { awake, fault: `${file}: ${read2.reason}; left in place` };
   }
   const faults = [];
   if (read2.kind === "unparsed") {
@@ -80403,14 +80399,16 @@ function makeUpdateWatch(opts) {
   }
   let lastLook = null;
   let unrecorded = null;
+  let spendFault = null;
+  const logSpendFault = changeLogger(log);
   function endIfOverdue(facts) {
-    if (!facts?.alive) return;
+    if (!facts?.alive) return null;
     const own2 = lastLook?.job === facts.job ? lastLook.awake : null;
     const look = spendLook(actsDir2, facts, own2, clock.now(), LONGEST_LOOK_MS);
-    if (look === null) return;
+    if (look === null) return null;
     lastLook = { job: facts.job, awake: look.awake };
     if (look.awake.spentMs > ACT_TIMEOUT_MS) endAct(facts);
-    if (look.fault !== null) throw new Error(look.fault);
+    return look.fault === null ? null : actsFault(look.fault);
   }
   function endAct(facts) {
     const ending = endOverdue(actsDir2, facts, launcher);
@@ -80427,25 +80425,20 @@ function makeUpdateWatch(opts) {
       log("error", `apply-update: act ${facts.act} ${why2}; ${signal}`);
       return;
     }
-    log(
-      "error",
-      `apply-update: act ${facts.act} timed out; its verdict could not be written: ${ending.error}; ${signal}`
+    const reason = actsFault(
+      `act ${facts.act} timed out; its verdict could not be written: ${ending.error}; ${signal}`
     );
-    const end = ending.signalled ? "was ended" : "its group took no signal";
-    unrecorded = {
-      job: facts.job,
-      reason: actsFault(
-        `act ${facts.act} spent its budget and ${end}; its timeout verdict could not be written: ${ending.error}`
-      )
-    };
+    log("error", `apply-update: ${reason}`);
+    unrecorded = { job: facts.job, reason };
   }
   async function watchAct() {
     const read2 = await touchActs(async () => {
       const facts = await acts.read();
-      if (!closed) endIfOverdue(facts);
+      if (!closed) spendFault = endIfOverdue(facts);
       return facts;
     });
     if (closed || !read2.ok) return;
+    if (spendFault !== null) logSpendFault(["error", spendFault]);
     if (unrecorded !== null && read2.value?.job !== unrecorded.job) {
       unrecorded = null;
     }
@@ -80492,7 +80485,7 @@ function makeUpdateWatch(opts) {
       const read2 = await touchActs(() => acts.read());
       return read2.ok && judgeAct(read2.value).kind === "running";
     }),
-    error: () => unreadable ?? unrecorded?.reason ?? null,
+    error: () => unreadable ?? spendFault ?? unrecorded?.reason ?? null,
     act: () => actTurn(async () => {
       if (closed) throw new DaemonClosing("apply-update");
       const read2 = await touchActs(() => acts.read());

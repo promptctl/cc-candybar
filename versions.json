@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-694",
+      "ref": "refs/pull/694/merge",
+      "sha": "2b411de559445d3af830fd16a13d22c61ccfbe04",
+      "timestamp": "2026-11-08T11:44:53.304Z",
+      "commits": [
+        {
+          "sha": "2b411de559445d3af830fd16a13d22c61ccfbe04",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T11:43:59Z",
+          "message": "Merge c1e8f8aad4e5f338f77c9660eb2cabc3498a51c8 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
+        },
+        {
+          "sha": "c1e8f8aad4e5f338f77c9660eb2cabc3498a51c8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T04:43:48-07:00",
+          "message": "fix(update-act): a spend fault holds between looks, and the end's wording is spelled once\n\nMedium review of PR #694:\n- The spend look's fault is the watch's own value, set at each look, not\n  touchActs' read fault: a successful read between ticks (the restart hold's\n  running(), or act()) cleared it and the ⚠ blinked off.\n- An unreadable spend's fault no longer names where the look counted from,\n  which moved after the first look and made one fault read as two.\n- What the end did to the group is spelled once; the unrecorded reason is\n  the logged line.\n- The header says the act's files outrank the daemon's copy once they hold\n  a larger spend, as latestLook ranks.\n\nbrandon-unfiled-3248.7cay\n"
+        },
+        {
+          "sha": "d1b1340ee39e094d69f9f3e8f39f6587efe67f34",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:33:16-07:00",
+          "message": "fix(update-act): a fault reads the same at every look, a failed read keeps the shared spend, and cleanup never blocks an end (brandon-unfiled-3248.7cay)\n\nHigh review of PR #694:\n- A write fault names the published file and the errno code, not the\n  message that names a fresh staged path each look, so the change logger\n  dedupes it and the warning text holds still.\n- A spend file that can't be read is left in place and the look counts on\n  from this daemon's own; only bytes that can't be parsed are replaced, so a\n  transient read error no longer hands the act a fresh budget.\n- The latest look is the larger spend, ties going to the later look: a wall\n  clock set back no longer lets a stale copy win.\n- A staging is removed only when it is there: in a directory that can't be\n  searched the removal's EACCES replaced the verdict and nothing was ended.\n- An act whose files vanish before its end is logged, with its pid.\n- The unrecorded-end reason is keyed by job, not act number, and\n  error() reads it directly.\n- The verdict write's type is the one JobEnding derives from; the warning\n  prefix is spelled once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "be7b7b9a247b32d0a850198204517e488a7b800d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:19:15-07:00",
+          "message": "fix(update-act): an act whose files can't be written is still ended after its budget (brandon-unfiled-3248.7cay)\n\nA look now judges its spend before it reports a write it could not make:\nspendLook returns the spend and its fault instead of throwing, and counts\non from the later of the act's files and this daemon's own last look of\nthe same job (the reader's job identity decides \"same job\"). endJob\nsignals the group even when its timeout verdict can't be written, as a\nnew `unrecorded` arm of JobEnding, and the watch keeps why it ended that\nact so the warning still says so once the group is gone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-691",
       "ref": "refs/pull/691/merge",
       "sha": "85c09786d3b15428b7111fd8a55e6bf72c183f6d",
@@ -121,35 +157,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:17:14-07:00",
           "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-694",
-      "ref": "refs/pull/694/merge",
-      "sha": "b339f085c6a633c95014e79f98ce023142583e6a",
-      "timestamp": "2026-11-07T12:34:37.259Z",
-      "commits": [
-        {
-          "sha": "b339f085c6a633c95014e79f98ce023142583e6a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:33:44Z",
-          "message": "Merge d1b1340ee39e094d69f9f3e8f39f6587efe67f34 into b21e989ab734befd8acc182d17139d743372d040\n"
-        },
-        {
-          "sha": "d1b1340ee39e094d69f9f3e8f39f6587efe67f34",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:33:16-07:00",
-          "message": "fix(update-act): a fault reads the same at every look, a failed read keeps the shared spend, and cleanup never blocks an end (brandon-unfiled-3248.7cay)\n\nHigh review of PR #694:\n- A write fault names the published file and the errno code, not the\n  message that names a fresh staged path each look, so the change logger\n  dedupes it and the warning text holds still.\n- A spend file that can't be read is left in place and the look counts on\n  from this daemon's own; only bytes that can't be parsed are replaced, so a\n  transient read error no longer hands the act a fresh budget.\n- The latest look is the larger spend, ties going to the later look: a wall\n  clock set back no longer lets a stale copy win.\n- A staging is removed only when it is there: in a directory that can't be\n  searched the removal's EACCES replaced the verdict and nothing was ended.\n- An act whose files vanish before its end is logged, with its pid.\n- The unrecorded-end reason is keyed by job, not act number, and\n  error() reads it directly.\n- The verdict write's type is the one JobEnding derives from; the warning\n  prefix is spelled once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "be7b7b9a247b32d0a850198204517e488a7b800d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:19:15-07:00",
-          "message": "fix(update-act): an act whose files can't be written is still ended after its budget (brandon-unfiled-3248.7cay)\n\nA look now judges its spend before it reports a write it could not make:\nspendLook returns the spend and its fault instead of throwing, and counts\non from the later of the act's files and this daemon's own last look of\nthe same job (the reader's job identity decides \"same job\"). endJob\nsignals the group even when its timeout verdict can't be written, as a\nnew `unrecorded` arm of JobEnding, and the watch keeps why it ended that\nact so the warning still says so once the group is gone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
