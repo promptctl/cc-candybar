@@ -24191,10 +24191,13 @@ var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock
 
 // src/host.ts
 function processWorld() {
+  return worldOver(process_default.env);
+}
+function worldOver(env2) {
   const clock = systemTimekeeper;
-  const launcher = systemOneShotLauncher({ inherited: process_default.env }, clock);
+  const launcher = systemOneShotLauncher({ inherited: env2 }, clock);
   const host = {
-    env: process_default.env,
+    env: env2,
     home: os_default.homedir(),
     tmp: os_default.tmpdir()
   };
@@ -67350,9 +67353,15 @@ var GitService = class {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
+  // [LAW:single-enforcer] In the daemon, a session's repository comes from its
+  // directory alone. git honours `GIT_DIR`, `GIT_WORK_TREE` and the rest of
+  // `git rev-parse --local-env-vars` over its cwd, and `execGitAsync` passes
+  // the launcher's environment, which in the daemon is whichever shell spawned
+  // it; so the daemon drops those variables from its environment once, at its
+  // boot (src/host.ts daemonWorld), and every read it makes here inherits
+  // that. The demo draws the directory it was run in, under the shell that ran
+  // it, so that shell's environment is its own to honour; `check` reads no git
+  // (its session's git facts are a fixture).
   //
   // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
@@ -70167,7 +70176,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.212.2";
+var PACKAGE_VERSION = "1.212.3";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -77786,6 +77795,10 @@ function requestEvent(kind, facts, outcome, tookMs) {
 }
 var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 
+// src/git-env.ts
+init_globals();
+var gitEnvFault = (reason) => `git could not say which variables locate a repository (${reason}), so git reads use the environment of the shell that started this daemon, and may show another repository's branch; the daemon asks again when it next starts`;
+
 // src/daemon/session-recorder.ts
 init_globals();
 
@@ -78435,7 +78448,8 @@ function drawRender(parts, setup, drawing2) {
     effectSessions,
     menuIdle,
     launcher,
-    mismatchRuns
+    mismatchRuns,
+    gitEnv
   } = parts;
   const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const payload = view.source.payload();
@@ -78500,6 +78514,10 @@ function drawRender(parts, setup, drawing2) {
     ),
     ...launched,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
+    // [LAW:no-silent-failure] An ask that failed left the daemon's environment
+    // as the spawning shell's, so any session's git reads may answer for that
+    // shell's repository: every bar says so while the daemon lives.
+    ...gitEnv.kind === "asked" ? [] : [{ kind: "git-env", message: gitEnvFault(gitEnv.reason) }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }],
     // [LAW:no-silent-failure] A turn that could not be taken, or taken over a
     // document that could not be stamped, leaves the bar drawn from older
@@ -78597,6 +78615,7 @@ function drawRender(parts, setup, drawing2) {
       case "load":
       case "facts":
       case "config-watch":
+      case "git-env":
       case "lifeline":
       case "launch-pipes":
       case "when":
@@ -87630,7 +87649,8 @@ function createDaemon(inputs) {
     exit: exit2,
     home,
     gates,
-    host
+    host,
+    gitEnv
   } = inputs;
   const paths2 = daemonPaths(home);
   const locs = locations(host, home);
@@ -87863,6 +87883,7 @@ function createDaemon(inputs) {
     watcherRegistry,
     refreshLedger,
     fileEvents,
+    gitEnv,
     payloadProviders,
     sessionState,
     rendererName: home.name,
@@ -89637,6 +89658,9 @@ var pageDaemon = createDaemon({
   memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
   clock: WORLD.clock,
+  // The page's simulated machine sets none of git's repository variables, so
+  // its daemon has none to drop.
+  gitEnv: { kind: "asked", names: [] },
   exit: (code) => {
     throw new Error(`the page's daemon asked to exit ${code}`);
   }

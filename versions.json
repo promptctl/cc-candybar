@@ -2,81 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-690",
-      "ref": "refs/pull/690/merge",
-      "sha": "efc84c5381284d7c40294690ef30cda2ba943a1f",
-      "timestamp": "2026-11-08T21:27:31.174Z",
-      "commits": [
-        {
-          "sha": "efc84c5381284d7c40294690ef30cda2ba943a1f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:26:34-07:00",
-          "message": "Merge 0e5b6f41e4cddb57c8a6f2441d7277355509bcc1 into db0b16eb6e3fcf6352d98a6009faa5e544dc9473\n"
-        },
-        {
-          "sha": "0e5b6f41e4cddb57c8a6f2441d7277355509bcc1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:26:32-07:00",
-          "message": "Merge branch 'main' into brandon-unfiled-3248.i3ek"
-        },
-        {
-          "sha": "3055ebe5bead70e67dd1f32d930d19b2bb473e39",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:24:36-07:00",
-          "message": "docs(git): the git read's comment says check reads no git, and only the demo honours its invoking shell (brandon-unfiled-3248.i3ek)\n"
-        },
-        {
-          "sha": "1ade44ca4db05c9c5c4d0730a59d5e2aff79cff9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:18:33-07:00",
-          "message": "test(git): the real-git case reads through a GitService over the world's disk, as main's GitService now takes one (brandon-unfiled-3248.i3ek)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "9e1302d6b71428a4de49d2f6b214a08fb2c908d0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:07:52-07:00",
-          "message": "fix(git): the daemon's world and its git ask are one value; comments name git's list as repository-local (brandon-unfiled-3248.i3ek)\n\n- daemonWorld returns the world with the ask it was cleaned by, and\n  runDaemon takes that value, so a daemon cannot be handed an env its\n  warning does not describe. [LAW:types-are-the-program]\n- The git-env log line is written once the breaker has admitted the\n  daemon, so a refused candidate adds none.\n- Comments call git's list what git calls it: variables local to one\n  repository, config and object settings included; the git.ts rule is\n  narrowed to the daemon.\n- The integration case builds its fixtures and base env without git's\n  repository variables, so a run from a hook leaves the hook's repo alone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "f327c7096d440cc6d6e6f6302918a0fffa955ab8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:37:36-07:00",
-          "message": "test(git): the real-git case for the daemon's environment is an adapter case, under test/integration (brandon-unfiled-3248.i3ek)\n\nIt drives real git through the system launcher, which the test lint\nadmits only in the adapter tiers; it reached it through worldOf, past the\nrule. What it proves is git's own behaviour, so it belongs with the\nadapters. [LAW:effects-at-boundaries]\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "09bd78bc2e0825bfab692c3aa63eefe41889311b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T04:34:34-07:00",
-          "message": "fix(git): each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek)\n\nA daemon spawned from an environment carrying GIT_DIR or another of git's\nrepository variables (a hook, vcsh, yadm) passed it to every git read, so\nevery bar showed the spawning shell's repository. The daemon now asks git\nfor those names once at its process edge, before its lease, bounded at 2 s,\nand runs in a world whose environment is the process's without them. An ask\nthat fails keeps the inherited environment and draws a git-env warning on\nevery bar; a git that is not installed names none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "9059da1b93913b94233ed0518558525dfaa91eff",
-      "timestamp": "2026-11-08T21:09:33.561Z",
+      "sha": "cc1efbe069bd704ecda3aa4731f6c19e89cd8de0",
+      "timestamp": "2026-11-08T21:36:37.588Z",
       "commits": [
         {
-          "sha": "9059da1b93913b94233ed0518558525dfaa91eff",
+          "sha": "cc1efbe069bd704ecda3aa4731f6c19e89cd8de0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:08:32-07:00",
-          "message": "fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (#695)\n\n* fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (brandon-unfiled-3248.5bfl)\n\nEdit chrome spelled every insert slot, removal, configure entry, draft\nvariable and setting control from one walk counter shared over the preset\ntree, so adding, removing or moving a placement shifted the name of every\ncontrol after it, and an open + library, its page cursor or an open\nconfigure list landed on a neighbour after the reload. Every name is now\nspelled from the placement it serves through chromeIdent, an injective\nbase-36 spelling of the id that is a fixed point of ident, and the counter\nis gone.\n\nThe default-menu bytes snapshot regenerates for the new link names; its\nplain text is unchanged.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(edit-chrome): a pick at the row's leading ✚ closes its library, whose gap the pick renames (brandon-unfiled-3248.5bfl)\n\nA pick at a before gap makes the new placement the row's first content, so the\nreload names the leading gap after it and the library's state key is declared\nno more. Nothing closes an undeclared key, so it stayed open and reopened on\nits own when the anchor led its row again. The leading library now closes on\npick, while its key is still declared; an after gap keeps its name across its\nown pick and stays open.\n\nThe default-menu-bytes 'one + opened' entry moves: each leading-library option\nlink now carries the close write after its layout op.\n\n* fix(edit-chrome): a layout edit releases every state key it ends, so a leading-✚ pick lands without a click error (brandon-unfiled-3248.5bfl)\n\nThe leading ✚'s close-on-pick ran after the layout op had reloaded the config,\nwhen its key was no longer declared, so the state gate refused it and every\npick there showed a click error. The layout-op verb now releases, in the same\nclick, every session key the config declared before the edit and no longer\ndeclares: the leading library's key after a pick renames its gap, and every\nkey a removed placement's chrome held, which a later placement minted with the\nfreed id would otherwise inherit open. The per-gap close-on-pick is gone; the\ndefault-menu-bytes 'one + opened' entry returns to its links without it.\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+          "timestamp": "2026-11-08T14:35:38-07:00",
+          "message": "fix(git): each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek) (#690)\n\n* fix(git): each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek)\n\nA daemon spawned from an environment carrying GIT_DIR or another of git's\nrepository variables (a hook, vcsh, yadm) passed it to every git read, so\nevery bar showed the spawning shell's repository. The daemon now asks git\nfor those names once at its process edge, before its lease, bounded at 2 s,\nand runs in a world whose environment is the process's without them. An ask\nthat fails keeps the inherited environment and draws a git-env warning on\nevery bar; a git that is not installed names none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* test(git): the real-git case for the daemon's environment is an adapter case, under test/integration (brandon-unfiled-3248.i3ek)\n\nIt drives real git through the system launcher, which the test lint\nadmits only in the adapter tiers; it reached it through worldOf, past the\nrule. What it proves is git's own behaviour, so it belongs with the\nadapters. [LAW:effects-at-boundaries]\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(git): the daemon's world and its git ask are one value; comments name git's list as repository-local (brandon-unfiled-3248.i3ek)\n\n- daemonWorld returns the world with the ask it was cleaned by, and\n  runDaemon takes that value, so a daemon cannot be handed an env its\n  warning does not describe. [LAW:types-are-the-program]\n- The git-env log line is written once the breaker has admitted the\n  daemon, so a refused candidate adds none.\n- Comments call git's list what git calls it: variables local to one\n  repository, config and object settings included; the git.ts rule is\n  narrowed to the daemon.\n- The integration case builds its fixtures and base env without git's\n  repository variables, so a run from a hook leaves the hook's repo alone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* test(git): the real-git case reads through a GitService over the world's disk, as main's GitService now takes one (brandon-unfiled-3248.i3ek)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* docs(git): the git read's comment says check reads no git, and only the demo honours its invoking shell (brandon-unfiled-3248.i3ek)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         },
         {
-          "sha": "ea9f892021ce76328d938eacb9b73d3d35311e9d",
+          "sha": "db0b16eb6e3fcf6352d98a6009faa5e544dc9473",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-08T20:29:43Z",
-          "message": "chore(release): set `package.json` to 1.212.2 [skip ci]\n\n## [1.212.2](https://github.com/promptctl/cc-candybar/compare/v1.212.1...v1.212.2) (2026-11-08)\n\n### Bug Fixes\n\n* **daemon:** the lane edge takes the daemon's claude-input edge (candybar-testing-ihvy.izc.ubq) ([#698](https://github.com/promptctl/cc-candybar/issues/698)) ([3f5670d](https://github.com/promptctl/cc-candybar/commit/3f5670db72be5ec2abd20fa416f132125685c675))\n"
+          "timestamp": "2026-11-08T21:18:06Z",
+          "message": "chore(release): set `package.json` to 1.212.3 [skip ci]\n\n## [1.212.3](https://github.com/promptctl/cc-candybar/compare/v1.212.2...v1.212.3) (2026-11-08)\n\n### Bug Fixes\n\n* **edit-chrome:** a placement's chrome names are its own, so an edit beside it renames nothing ([#695](https://github.com/promptctl/cc-candybar/issues/695)) ([9059da1](https://github.com/promptctl/cc-candybar/commit/9059da1b93913b94233ed0518558525dfaa91eff))\n"
         }
       ]
     },
