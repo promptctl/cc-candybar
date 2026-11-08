@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-692",
+      "ref": "refs/pull/692/merge",
+      "sha": "0f4b87b7fc745d819016803e49abe9f542d5d80d",
+      "timestamp": "2026-11-08T11:48:57.619Z",
+      "commits": [
+        {
+          "sha": "0f4b87b7fc745d819016803e49abe9f542d5d80d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T11:48:07Z",
+          "message": "Merge 1189f2010876191e95b15f15d5898f943259ccb8 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
+        },
+        {
+          "sha": "1189f2010876191e95b15f15d5898f943259ccb8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T04:47:56-07:00",
+          "message": "test(facts): the live request states its deadline from the instant it arrives, crosses the checkpoint before the setup's burn, and the header names the whole request path (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "b3349f126c430a5f5df24850e18abc58bf790ad9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:36:51-07:00",
+          "message": "test(facts): the live session states a client's deadline, spells its argv once, and checks the pane its checkpoint stamped (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "b72b705f710b16fab4ba22a42c743a393f4044bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:14:46-07:00",
+          "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-694",
       "ref": "refs/pull/694/merge",
       "sha": "2b411de559445d3af830fd16a13d22c61ccfbe04",
@@ -99,35 +135,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:35:05-07:00",
           "message": "fix(colour)!: the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g)\n\nAt ansi the open settings door's ✖ was drawn silver, yellow, purple or\nblack: the red was chosen as truecolor measures it, and keptOn's repair\nsearched the depth's table by contrast alone. The choice now measures\nevery candidate and the ground as the render's depth draws them, and\nthe candidates are per depth: the theme's named reds in truecolor and\nat 256 colours, the terminal's red and bright red (SGR 31/91) at ansi.\nkeptOn has no job left and is deleted.\n\nBREAKING CHANGE: the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-692",
-      "ref": "refs/pull/692/merge",
-      "sha": "94481901787c8e59e57ee6863d3807d843fe22b9",
-      "timestamp": "2026-11-07T12:37:54.141Z",
-      "commits": [
-        {
-          "sha": "94481901787c8e59e57ee6863d3807d843fe22b9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:37:02Z",
-          "message": "Merge b3349f126c430a5f5df24850e18abc58bf790ad9 into b21e989ab734befd8acc182d17139d743372d040\n"
-        },
-        {
-          "sha": "b3349f126c430a5f5df24850e18abc58bf790ad9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:36:51-07:00",
-          "message": "test(facts): the live session states a client's deadline, spells its argv once, and checks the pane its checkpoint stamped (candybar-gather-renderer-76bb.1dh.izh)\n"
-        },
-        {
-          "sha": "b72b705f710b16fab4ba22a42c743a393f4044bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:14:46-07:00",
-          "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
