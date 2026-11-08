@@ -419,12 +419,14 @@ export interface FileEventsWarning {
 export function fileEventsWarnings(d: Delivery): FileEventsWarning[] {
   if (d.missedSince === null) return [];
   const since = iso(d.missedSince);
+  // [LAW:one-source-of-truth] The row names no consumer: which watches ride
+  // file events is the disk's (a polled name rides none), not this row's.
   const message = (): string => {
     switch (d.kind) {
       case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so what refreshes on file events may have missed a change made since`;
       case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
+        return `${stopped(d.missedSince)}, so nothing that refreshes on file events will refresh until they resume`;
       case "unmeasured":
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
