@@ -4,15 +4,22 @@
     {
       "version": "pr-701",
       "ref": "refs/pull/701/merge",
-      "sha": "c6d09252e12c791a0a078b58255d50d20668073d",
-      "timestamp": "2026-11-08T22:07:15.590Z",
+      "sha": "85d12966521659b64b83fa9db0c6ae67a1e20df6",
+      "timestamp": "2026-11-08T22:18:29.822Z",
       "commits": [
         {
-          "sha": "c6d09252e12c791a0a078b58255d50d20668073d",
+          "sha": "85d12966521659b64b83fa9db0c6ae67a1e20df6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T15:05:30-07:00",
-          "message": "Merge 45178075aeba315b1b889b0f186e453e133a5e68 into 9305fac751a09046e5f10a15bc206da0a3312754\n"
+          "timestamp": "2026-11-08T22:17:39Z",
+          "message": "Merge f4528e5124ef4c723c08bfe759836e21a4ef61fc into dcc0d9858406c27a4f4728c234ebd7ef48445799\n"
+        },
+        {
+          "sha": "f4528e5124ef4c723c08bfe759836e21a4ef61fc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:17:24-07:00",
+          "message": "fix(edit-chrome): a layout edit releases every held value whose admission it changes, so a re-added placement's configure state is closed (brandon-unfiled-3248.t2yz)\n\nThe release compared declarations, and the configure key is declared by\nevery config, so a configure value naming a placement removed by hand\nsurvived the click that re-added the same id. The layout-op verb now\nreads each stored value under the configs before and after the edit, as\nthe state gate reads it (undeclared, held, or foreign), and releases\nevery value the two read differently. That one comparison covers keys\nthe edit ends, keys it begins, and the configure member, so the ended-\nplacement walk and its configure clause are gone. Drafts are state-gate\nkeys (every setting control writes its key through a `set` action), so\nthe walk's drafts part goes too; the two-preset drafts test still pins\nthe exact released list.\n\n\"Undeclared\" is its own reading rather than folded into \"not admitted\",\nso a foreign value in a key the edit ends or begins is still released,\nas the declaration rule released it before.\n\nOut of scope: other sessions on the same origin keep their values; that\nis brandon-unfiled-3248.ce4m.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
           "sha": "45178075aeba315b1b889b0f186e453e133a5e68",

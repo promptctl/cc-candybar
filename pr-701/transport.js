@@ -64910,7 +64910,13 @@ function writeAtomicOn(disk, at, text4, mode) {
     disk.writeFileSync(tmp, text4, { mode: fileMode, flush: true });
     disk.renameSync(tmp, file);
   } catch (e) {
-    disk.rmSync(tmp);
+    try {
+      disk.rmSync(tmp);
+    } catch (cleanup) {
+      if (e instanceof Error) {
+        e.message += `; staged file ${tmp} was left behind: ${cleanup instanceof Error ? cleanup.message : String(cleanup)}`;
+      }
+    }
     throw e;
   }
 }
@@ -70176,7 +70182,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.212.4";
+var PACKAGE_VERSION = "1.212.5";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -72017,29 +72023,9 @@ var resetConfig = (sid, args, ctx) => {
     `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${home.path} (session=${sid})`
   );
 };
-function endedPlacements(before, after) {
-  const placed2 = (config2, preset) => [...walkNodes(presetRoot(config2, preset).node)].filter(
-    (n) => n.kind === "segment"
-  );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap(
-      (preset) => placed2(after, preset).map(
-        (n) => configureMember(ident(preset), placementId(n))
-      )
-    )
-  );
-  return presetNames(before.presets).flatMap(
-    (preset) => placed2(before, preset).map((node) => ({
-      member: configureMember(ident(preset), placementId(node)),
-      node
-    })).filter(({ member }) => !survivors.has(member))
-  );
-}
-function endedSessionKeys(ended, configuring) {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
-  ]);
+function readingUnder(gate2) {
+  const listed = new Set(gate2.listKeys());
+  return (key, stored) => listed.has(key) ? gate2.verdict(key, stored).kind : "undeclared";
 }
 var applyLayoutOp2 = (sid, args, ctx) => {
   const [key = "", opToken = ""] = args;
@@ -72063,21 +72049,16 @@ var applyLayoutOp2 = (sid, args, ctx) => {
   const placed2 = applyLayoutOp(editStore(ctx, sid), home, key, op);
   ctx.reloadConfig(origin);
   const after = ctx.configFor(origin);
-  const declaredBefore = new Set(ctx.gates.state.gateFor(before).listKeys());
-  const declaredAfter = new Set(ctx.gates.state.gateFor(after).listKeys());
-  const changed = [
-    ...[...declaredBefore].filter((key2) => !declaredAfter.has(key2)),
-    ...[...declaredAfter].filter((key2) => !declaredBefore.has(key2))
-  ];
+  const gateBefore = ctx.gates.state.gateFor(before);
+  const gateAfter = ctx.gates.state.gateFor(after);
+  const readBefore = readingUnder(gateBefore);
+  const readAfter = readingUnder(gateAfter);
   const released = [
-    .../* @__PURE__ */ new Set([
-      ...endedSessionKeys(
-        endedPlacements(before, after),
-        ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
-      ),
-      ...changed
-    ])
-  ].filter((key2) => ctx.sessionState.get(sid, key2) !== null);
+    .../* @__PURE__ */ new Set([...gateBefore.listKeys(), ...gateAfter.listKeys()])
+  ].filter((key2) => {
+    const stored = ctx.sessionState.get(sid, key2);
+    return stored !== null && readBefore(key2, stored) !== readAfter(key2, stored);
+  });
   for (const key2 of released) ctx.sessionState.clear(sid, key2);
   ctx.log(
     "info",
