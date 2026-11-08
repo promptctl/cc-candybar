@@ -1,3 +1,9 @@
+## [1.211.2](https://github.com/promptctl/cc-candybar/compare/v1.211.1...v1.211.2) (2026-11-08)
+
+### Bug Fixes
+
+* **daemon:** the doctor stores, doctor edge and lane edge take the daemon's disk, so one daemon answers from one disk ([#697](https://github.com/promptctl/cc-candybar/issues/697)) ([eaa59b6](https://github.com/promptctl/cc-candybar/commit/eaa59b6d87c32073b040a97072a0fee0a6e048fc))
+
 ## [1.211.1](https://github.com/promptctl/cc-candybar/compare/v1.211.0...v1.211.1) (2026-11-08)
 
 ### Bug Fixes
