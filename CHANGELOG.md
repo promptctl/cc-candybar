@@ -1,3 +1,9 @@
+## [1.212.2](https://github.com/promptctl/cc-candybar/compare/v1.212.1...v1.212.2) (2026-11-08)
+
+### Bug Fixes
+
+* **daemon:** the lane edge takes the daemon's claude-input edge (candybar-testing-ihvy.izc.ubq) ([#698](https://github.com/promptctl/cc-candybar/issues/698)) ([3f5670d](https://github.com/promptctl/cc-candybar/commit/3f5670db72be5ec2abd20fa416f132125685c675))
+
 ## [1.212.1](https://github.com/promptctl/cc-candybar/compare/v1.212.0...v1.212.1) (2026-11-08)
 
 ### Bug Fixes
