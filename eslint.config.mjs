@@ -132,7 +132,6 @@ const FS_READERS = [
   "src/daemon/server.ts",
   "src/daemon/session-recorder.ts",
   "src/daemon/session-state-file.ts",
-  "src/daemon/settings-history.ts",
   "src/daemon/socket-lease.ts",
   "src/daemon/socket-ownership.ts",
   "src/daemon/update-act.ts",

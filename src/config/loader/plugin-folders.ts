@@ -13,7 +13,7 @@ import {
 } from "./plugins.js";
 import type { PluginScope } from "./plugin-scope.js";
 import type { Locations } from "../../daemon/paths.js";
-import type { Unchecked } from "../../utils/presence.js";
+import { presence, type Unchecked } from "../../utils/presence.js";
 import type { ApprovedRepo } from "./repo-gate.js";
 
 /**
@@ -145,7 +145,12 @@ export function listFolders(
       files: entries.filter((e) => !isFolder(e)).map((e) => e.name),
     };
   } catch (e) {
-    return (e as { code?: string }).code === "ENOENT"
+    // [LAW:single-enforcer] Absent as presence says it: a root behind a
+    // regular file holds no plugins, as it holds no config. A listing's
+    // ENOTDIR cannot tell that from a root that is itself a file, which is
+    // there and cannot be listed, so the stat that classifies every path
+    // decides.
+    return presence(reads, root) === "absent"
       ? { folders: [], files: [] }
       : { path: root, error: (e as Error).message };
   }

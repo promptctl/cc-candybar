@@ -37,7 +37,7 @@ export function repoConfigsPath(stateDir: string): string {
 // stat that cannot see it reads it, and the read names what stopped it.
 // [LAW:single-enforcer] Absent as presence says it, so a folder that is a
 // regular file holds no book, as it holds no config.
-export function bookIsFiled(reads: FilesystemReads, stateDir: string): boolean {
+function bookIsFiled(reads: FilesystemReads, stateDir: string): boolean {
   return presence(reads, repoConfigsPath(stateDir)) !== "absent";
 }
 

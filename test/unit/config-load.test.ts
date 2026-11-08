@@ -123,6 +123,20 @@ test("a config folder that is a regular file holds no config: the bundled defaul
   expect(l.parsed.kind).toBe("parsed");
 });
 
+test("a data folder that is a regular file holds no plugins, and nothing is unlistable", () => {
+  file(path.join(locs.dataHome, "cc-candybar"), "not a folder");
+  const l = load();
+  expect(l.parsed.kind).toBe("parsed");
+  expect(l.parsed.warnings).toEqual([]);
+});
+
+test("a plugin root that is itself a regular file is named unlistable", () => {
+  file(path.join(locs.dataHome, "cc-candybar", "plugins"), "not a folder");
+  expect(load().parsed.warnings).toEqual([
+    expect.stringContaining("Plugin folder could not be listed"),
+  ]);
+});
+
 test("a .json beside a .json5 is the collision advisory", () => {
   file(userFile, "{}");
   file(userFile.replace(/\.json5$/, ".json"), "{}");

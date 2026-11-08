@@ -149,7 +149,7 @@ export function filesystemContract(name: string, make: () => Subject): void {
       s.filesystem.rmSync(at("f"));
       s.filesystem.rmSync(at("f"));
       expect(codeOf(() => s.filesystem.statSync(at("f")))).toBe("ENOENT");
-      expect(codeOf(() => s.filesystem.rmSync(at("sub")))).toBeDefined();
+      expect(codeOf(() => s.filesystem.rmSync(at("sub")))).toBe("EISDIR");
       expect(codeOf(() => s.filesystem.readdirSync(at("nope")))).toBe("ENOENT");
     });
 

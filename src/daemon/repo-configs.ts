@@ -5,21 +5,18 @@
 // (src/config/loader/repo-gate.ts).
 
 import type { Filesystem, FilesystemReads } from "../disk/filesystem.js";
-import { stateFile, type StateFile } from "../disk/state-file.js";
+import { filedAt, type StateFile } from "../disk/state-file.js";
 import type { SignedFields } from "../click/link-signer.js";
 import type { RendererLinks } from "../click/renderer-links.js";
 import { effectsUrl, VERB_REPO_CONFIG } from "../click/wire.js";
 import { repoProject } from "../config/loader/discovery.js";
 import {
-  bookIsFiled,
   readRepoAnswers,
-  repoConfigsDir,
-  REPO_CONFIGS_FILE,
+  repoConfigsPath,
 } from "../config/loader/repo-book.js";
 import {
   answerDir,
   gateRepos,
-  parseRepoConfigBook,
   REPO_ANSWERS,
   withAnswer,
   type RepoAnswer,
@@ -38,36 +35,13 @@ import {
 } from "../render/diagnostics.js";
 
 // [LAW:one-source-of-truth] The answers as a store: read as every load reads
-// them, and the first answer recorded while the folder holds no book writes
-// the loose one's answers into the folder with it.
+// them, and filed in the folder, so the first answer recorded while the folder
+// holds no book writes the loose one's answers into the folder with it.
 export const repoConfigs = (
   disk: Filesystem,
   dir: string,
-): StateFile<RepoConfigBook> => {
-  const book = stateFile(
-    disk,
-    repoConfigsDir(dir),
-    REPO_CONFIGS_FILE,
-    {},
-    parseRepoConfigBook,
-  );
-  const loose = stateFile(
-    disk,
-    dir,
-    REPO_CONFIGS_FILE,
-    {},
-    parseRepoConfigBook,
-  );
-  return {
-    read: () => readRepoAnswers(disk, dir),
-    update: (next) => {
-      if (bookIsFiled(disk, dir)) return book.update(next);
-      const kept = loose.read();
-      if (kept.kind === "failed") return kept;
-      return book.update(() => next(kept.value));
-    },
-  };
-};
+): StateFile<RepoConfigBook> =>
+  filedAt(disk, repoConfigsPath(dir), () => readRepoAnswers(disk, dir));
 
 // What recording an answer did to the book's other entries: the worktrees'
 // own answers it superseded, and the entries no key can be proven for, which

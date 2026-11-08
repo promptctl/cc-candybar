@@ -75,7 +75,16 @@ export function stateFile<T>(
   parse: (doc: unknown) => Asked<T>,
 ): StateFile<T> {
   const file = path.join(dir, name);
-  const read = (): Asked<T> => readStateFile(disk, file, empty, parse);
+  return filedAt(disk, file, () => readStateFile(disk, file, empty, parse));
+}
+
+// The store that holds what `read` says and files each change at `file`: a
+// document read from more places than the one it is written to.
+export function filedAt<T>(
+  disk: Filesystem,
+  file: string,
+  read: () => Asked<T>,
+): StateFile<T> {
   return {
     read,
     update: (next) => {

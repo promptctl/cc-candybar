@@ -96,6 +96,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   // keep, so it fails the test rather than reading as empty stacks.
   const historyStorage = (): HistoryStorage =>
     fileHistoryStorage(
+      systemFilesystem,
       settingsHistoryPath(home),
       storedRoot(home),
       (level, message) => {
