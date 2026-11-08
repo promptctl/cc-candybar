@@ -165,8 +165,8 @@ export interface Pricing {
   // table lands.
   table(): PriceTable;
   // [LAW:effects-at-boundaries] The one effect, apart from the read: a load
-  // starts when what is held is due. A request's refresh asks once; a read
-  // never does, so a derivation starts nothing.
+  // starts when what is held is due. A request's refresh asks once a price
+  // is owed; a read never does, so a derivation starts nothing.
   ask(): void;
 }
 

@@ -733,12 +733,6 @@ export class SessionUsageStore {
     stamp: string,
   ): Promise<Outcome<SessionRecord>> {
     return this.requestFlight.run(`${sessionId}:${stamp}`, async () => {
-      // [LAW:effects-at-boundaries] The request's refresh is where the table
-      // is asked for: it runs on every statusline tick of every session
-      // whose config reads session, today or speed, so the pricing's loads
-      // are driven by the one effect that already runs then, and never by a
-      // read, which a derivation makes.
-      this.pricing.ask();
       // [LAW:no-ambient-temporal-coupling] This refresh's own tally, so
       // whether IT read is its own fact, never another session's refresh
       // landing in the same await.
@@ -761,8 +755,25 @@ export class SessionUsageStore {
         this.hold(sessionId).failure,
         record.kind === "failed" ? record.reason : null,
       );
+      // [LAW:effects-at-boundaries] The request's refresh is where the table
+      // is asked for: it runs on every statusline tick of every session
+      // whose config reads session, today or speed, so the pricing's loads
+      // are driven by the one effect that already runs then, and never by a
+      // read, which a derivation makes. It asks once a price is owed: when a
+      // record the store holds, this one or a scan's, keeps tokens no entry
+      // priced. Records that all carried a cost read no table, so a machine
+      // whose transcripts price themselves fetches nothing and warns of nothing.
+      if (this.holdsUnpriced()) this.pricing.ask();
       return record;
     });
+  }
+
+  // Whether any record held keeps tokens only a table prices.
+  private holdsUnpriced(): boolean {
+    for (const { record } of this.sessions.values()) {
+      if (record !== undefined && record.usage.unpriced.size > 0) return true;
+    }
+    return false;
   }
 
   // The `today` projection: cross-session sum of every record's today bucket.

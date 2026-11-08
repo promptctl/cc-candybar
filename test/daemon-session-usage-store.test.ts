@@ -1261,6 +1261,41 @@ describe("SessionUsageStore — pricing", () => {
     }
   });
 
+  test("a table is asked for only once a held record has an entry no cost priced", async () => {
+    const pdir = join(dir, "projects", "p");
+    mkdirSync(pdir, { recursive: true });
+    const t = join(pdir, "A.jsonl");
+    const at = new Date();
+    writeFileSync(t, usageLine("a", at, 0.25));
+    let asks = 0;
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      pricing: { table: () => rates(1), ask: () => void asks++ },
+      sweepIntervalMs: 0,
+    });
+    try {
+      const hd = hook("A", t);
+      // Every entry carried its cost: no request asks, however many run.
+      await store.getUsageInfo("A", hd);
+      await todayInfo(store, holds, hd, dir, instantOf(at));
+      expect(asks).toBe(0);
+
+      // A session in another directory has an entry with no cost. Once that
+      // directory's scan holds it, the request asks, though the requesting
+      // session priced itself, since `today` there prices it by the table.
+      const other = join(dir, "other");
+      const odir = join(other, "projects", "p");
+      mkdirSync(odir, { recursive: true });
+      writeFileSync(join(odir, "B.jsonl"), unpricedLine("b", at));
+      await todayInfo(store, holds, hd, other, instantOf(at));
+      await store.getUsageInfo("A", hd);
+      expect(asks).toBeGreaterThan(0);
+    } finally {
+      store.close();
+    }
+  });
+
   test("an entry that carries its own cost keeps it under any table", async () => {
     const t = join(dir, "A.jsonl");
     const at = new Date();
