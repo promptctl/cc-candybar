@@ -72,12 +72,13 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 const WORLD = processWorld();
 const HOST = WORLD.host;
 const paths = daemonPaths(WORLD.home);
+const pageLog = new DaemonLog(paths.log, WORLD.clock);
 const pageDaemon = createDaemon({
   ...productionAdapters(
     paths,
-    new DaemonLog(paths.log, WORLD.clock),
+    pageLog,
     WORLD.clock,
-    probeBirthtimeIn(paths.state, WORLD.clock),
+    probeBirthtimeIn(paths.state, WORLD.clock, pageLog.log),
   ),
   gates: daemonGates(),
   home: WORLD.home,

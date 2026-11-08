@@ -55,6 +55,12 @@ import type { World } from "./host";
 import { timeoutSignal } from "./time";
 import { SourceRegistry } from "./var-system/sources.js";
 import { SourceRuns } from "./var-system/source-runs.js";
+import { WatcherRegistry } from "./daemon/cache/watchers.js";
+import {
+  probeBirthtimeIn,
+  systemFilesystemFor,
+} from "./disk/system-filesystem.js";
+import { quietLogger } from "./utils/logger.js";
 import { SessionState, SINGLE_RUN } from "./daemon/session-state.js";
 import {
   bindPayload,
@@ -635,7 +641,22 @@ export async function prepareConfig(
   // [LAW:single-enforcer] A one-shot's own owner of its sources' runs: no
   // daemon shares them, and the check closes them with the registry that
   // holds them.
-  const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
+  // [LAW:one-source-of-truth] A one-shot is a process main too, so its watches
+  // judge a folder by its own probe of the disk, as the daemon's do; a verdict
+  // that leaves birth time unjudged is one of its warnings.
+  const watchers = new WatcherRegistry({
+    filesystem: systemFilesystemFor(
+      probeBirthtimeIn(world.host.tmp, world.clock, (level, msg) =>
+        level === "info" ? quietLogger(level, msg) : void warnings.push(msg),
+      ),
+    ),
+    clock: world.clock,
+  });
+  const runs = new SourceRuns({
+    launcher: world.launcher,
+    clock: world.clock,
+    watchers,
+  });
   // A fresh session that has never clicked, judged as the daemon judges its
   // sessions: by this config's gate over the keys the daemon holds.
   const registry = new SourceRegistry(

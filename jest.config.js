@@ -41,6 +41,9 @@ export function reportersFor(run) {
 // spelling the same way, when no file has the name: whatever src the global
 // hooks import resolves as it does in a test.
 // [LAW:one-source-of-truth] One pattern for both resolvers.
+// `module.registerHooks` arrived in Node 22.15 and 23.5, later than the floor
+// the package runs on (`engines`), so the repository's own floor is
+// package.json's `devEngines`, which pnpm refuses an older Node by.
 const SOURCE_SPECIFIER = /^(\.{1,2}\/.*)\.js$/;
 const NOT_FOUND = new Set(["MODULE_NOT_FOUND", "ERR_MODULE_NOT_FOUND"]);
 module.registerHooks({

@@ -7,6 +7,7 @@ import {
 } from "../src/disk/system-filesystem";
 import { systemTimekeeper } from "../src/time";
 import { identityKey, statIdentity } from "../src/utils/folder-identity";
+import { quietLogger } from "../src/utils/logger";
 
 // A host without statx, staged on the real disk: libuv's fallback copies
 // ctime into birth time for every stat the process makes, the probe's own
@@ -33,13 +34,17 @@ describe("a folder's identity where the host copies ctime into birth time", () =
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test("is probed as a ctime copy, and the probe leaves no folder behind", () => {
-    expect(probeBirthtimeIn(dir, systemTimekeeper)).toEqual({ kind: "ctime" });
+  test("is probed as a ctime copy, logs it, and the probe leaves no folder behind", () => {
+    const logged: [string, string][] = [];
+    expect(probeBirthtimeIn(dir, systemTimekeeper, (level, msg) => void logged.push([level, msg]))).toEqual({
+      kind: "ctime",
+    });
+    expect(logged).toEqual([["info", expect.stringContaining("a copy of ctime on this host")]]);
     expect(fs.readdirSync(dir)).toEqual([]);
   });
 
   test("stays put across a child write, on the disk built over the probe", () => {
-    const disk = systemFilesystemFor(probeBirthtimeIn(dir, systemTimekeeper));
+    const disk = systemFilesystemFor(probeBirthtimeIn(dir, systemTimekeeper, quietLogger));
     const before = identityKey(statIdentity(disk, dir));
     fs.writeFileSync(path.join(dir, "child"), "x");
     fs.rmSync(path.join(dir, "child"));

@@ -1,4 +1,5 @@
 import { plusMs, type Timekeeper } from "../time";
+import type { LogLevel } from "../utils/logger";
 
 // Whether the disk's stat supplies a folder's birth time. libuv reads it with
 // statx; where statx fails (an old kernel, a seccomp filter) libuv stops
@@ -8,10 +9,10 @@ import { plusMs, type Timekeeper } from "../time";
 // write in a folder read as another folder, so a process main asks once which
 // host it is on, and builds its daemon's disk over the answer.
 //
-// `supplied`: birth time stayed put while ctime moved, or ctime never moved
-// within the bound, which is no evidence against it. `ctime`: birth time moved
-// with ctime. `unprobed`: the probe could not run, and birth time is read as
-// the disk gives it.
+// `supplied`: birth time stayed put while ctime moved. `ctime`: birth time
+// moved with ctime. `unprobed`: the probe could not run, or ctime never moved
+// within the bound (a filesystem stamping ctime by the second), where a copy
+// and a real birth time read alike; birth time is read as the disk gives it.
 //
 // Known gap: libuv also gives up on statx at its first EOPNOTSUPP, which
 // depends on the path (a DVS mount), so a process that probed `supplied` can
@@ -53,10 +54,16 @@ const verdictIn = (
     steps.touch(folder);
     after = steps.stat(folder);
   }
-  return after.ctimeNs !== before.ctimeNs &&
-    after.birthtimeNs !== before.birthtimeNs
-    ? { kind: "ctime" }
-    : { kind: "supplied" };
+  // [LAW:no-silent-failure] No movement is no evidence either way, so it is
+  // no verdict, and its process logs it as a warning.
+  return after.ctimeNs === before.ctimeNs
+    ? {
+        kind: "unprobed",
+        reason: `ctime did not move within ${CTIME_WAIT_MS} ms`,
+      }
+    : after.birthtimeNs !== before.birthtimeNs
+      ? { kind: "ctime" }
+      : { kind: "supplied" };
 };
 
 export const probeBirthtime = (
@@ -89,10 +96,19 @@ export const birthtimeOf = (
 ): bigint | null =>
   verdict.kind === "ctime" || birthtimeNs === 0n ? null : birthtimeNs;
 
-// The verdict as the daemon's startup line says it.
-export const describeBirthtime = (verdict: BirthtimeVerdict): string =>
+// The verdict as the line its process logs: one that leaves birth time
+// unjudged is a warning.
+export const birthtimeLine = (
+  verdict: BirthtimeVerdict,
+): readonly [LogLevel, string] =>
   verdict.kind === "supplied"
-    ? "birth time: supplied by the disk"
+    ? ["info", "birth time: supplied by the disk"]
     : verdict.kind === "ctime"
-      ? "birth time: a copy of ctime on this host (no statx), so folder identity is device and inode"
-      : `birth time: unprobed (${verdict.reason}), read as the disk gives it`;
+      ? [
+          "info",
+          "birth time: a copy of ctime on this host (no statx), so folder identity is device and inode, and a folder made again on a reused inode reads as the same folder",
+        ]
+      : [
+          "warn",
+          `birth time: unprobed (${verdict.reason}), read as the disk gives it`,
+        ];

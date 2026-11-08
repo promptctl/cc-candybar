@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Timekeeper } from "../time.js";
+import type { DaemonLogger } from "../utils/logger.js";
 import {
+  birthtimeLine,
   birthtimeOf,
   probeBirthtime,
   type BirthtimeVerdict,
@@ -29,11 +31,14 @@ const kindOf = (st: Kinded): Stat["kind"] =>
 // a scratch folder under `parent`. libuv's fallback is process-wide, so a
 // process main probes once, in a folder it owns and on its own clock, and
 // builds its disk over the verdict (src/daemon/server.ts).
+// [LAW:single-enforcer] [LAW:nothing-unseen] Every probe logs its verdict where
+// it is made, so no process main builds a disk over one unreported.
 export const probeBirthtimeIn = (
   parent: string,
   clock: Pick<Timekeeper, "monotonic">,
-): BirthtimeVerdict =>
-  probeBirthtime(
+  log: DaemonLogger,
+): BirthtimeVerdict => {
+  const verdict = probeBirthtime(
     {
       makeFolder: () => fs.mkdtempSync(path.join(parent, "birthtime-")),
       stat: (at) => fs.statSync(at, { bigint: true }),
@@ -44,6 +49,9 @@ export const probeBirthtimeIn = (
     },
     clock,
   );
+  log(...birthtimeLine(verdict));
+  return verdict;
+};
 
 const statOf = (birthtime: BirthtimeVerdict, st: fs.BigIntStats): Stat => ({
   kind: kindOf(st),

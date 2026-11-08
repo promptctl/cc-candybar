@@ -1,4 +1,5 @@
 import {
+  birthtimeLine,
   birthtimeOf,
   CTIME_WAIT_MS,
   probeBirthtime,
@@ -56,11 +57,18 @@ describe("the birth-time probe", () => {
     expect(probeBirthtime(statx.steps, ticking())).toEqual(supplied);
   });
 
-  test("answers supplied when ctime never moves within the bound", () => {
-    const h = host({ copiesCtime: true, tickEvery: Infinity });
-    expect(probeBirthtime(h.steps, ticking())).toEqual(supplied);
-    expect(h.writes()).toBeLessThanOrEqual(CTIME_WAIT_MS);
-    expect(h.removed).toEqual(["/tmp/probe"]);
+  test("gives no verdict when ctime never moves within the bound, copy or not, and says so as a warning", () => {
+    const unmoved: BirthtimeVerdict = {
+      kind: "unprobed",
+      reason: `ctime did not move within ${CTIME_WAIT_MS} ms`,
+    };
+    for (const copiesCtime of [true, false]) {
+      const h = host({ copiesCtime, tickEvery: Infinity });
+      expect(probeBirthtime(h.steps, ticking())).toEqual(unmoved);
+      expect(h.writes()).toBeLessThanOrEqual(CTIME_WAIT_MS);
+      expect(h.removed).toEqual(["/tmp/probe"]);
+    }
+    expect(birthtimeLine(unmoved)[0]).toBe("warn");
   });
 
   test("a probe that cannot run says why, and still removes its folder", () => {

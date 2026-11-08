@@ -150,7 +150,7 @@ function liveArm(): Arm {
   );
   const watchers = new WatcherRegistry({
     filesystem: systemFilesystemFor(
-      probeBirthtimeIn(machine.host.tmp, machine.clock),
+      probeBirthtimeIn(machine.host.tmp, machine.clock, log),
     ),
     clock: machine.clock,
     logger: log,

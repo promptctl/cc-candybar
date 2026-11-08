@@ -89,7 +89,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
         paths,
         daemonLog,
         systemTimekeeper,
-        probeBirthtimeIn(paths.state, systemTimekeeper),
+        probeBirthtimeIn(paths.state, systemTimekeeper, daemonLog.log),
       ),
       // [LAW:effects-at-boundaries] A daemon under test prices by the bundled
       // rates: it reaches no network, and leaves no load out at its close.
