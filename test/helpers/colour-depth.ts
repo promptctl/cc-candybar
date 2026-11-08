@@ -10,6 +10,7 @@ import { type ColorCompatibility } from "../../src/themes/policy";
 import { TEXT_MIN_CONTRAST } from "../../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../../src/config/quiet-text";
 import { SWATCH_GLYPH } from "../../src/render/swatch";
+import { DOOR_CLOSE_GLYPH } from "../../src/config/disclosure";
 
 const luminance = ([r, g, b]: Rgb): number => {
   const ch = (v: number) => {
@@ -164,8 +165,11 @@ export function compare(label: string, truecolor: Chars, quantized: Chars, failu
     const q = quantized[i]!;
     // A seam that is an arrow at either depth is a shape, held above. A
     // swatch is no text either: it is a theme's colours side by side, and at
-    // 256 it shows that theme's colours as the terminal draws them.
-    if (joiner || q.joiner || ch === SWATCH_GLYPH || !isRgb(fg) || !isRgb(bg)) return;
+    // 256 it shows that theme's colours as the terminal draws them. The
+    // door's ✖ keeps its hue over its floor: it is chosen among the named
+    // reds as each depth draws them, which can all stand nearer its ground
+    // once rounded (held in test/unit/segment-colors.test.ts).
+    if (joiner || q.joiner || ch === SWATCH_GLYPH || ch === DOOR_CLOSE_GLYPH || !isRgb(fg) || !isRgb(bg)) return;
     measured++;
     if (!isRgb(q.fg) || !isRgb(q.bg)) {
       failures.push(`${label} ${ch}: drawn in terminal-defined ANSI colours`);
