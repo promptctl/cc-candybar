@@ -570,7 +570,7 @@ export function drawRender(
   const standing: readonly StandingWarning[] = [
     ...fileEventsWarnings(
       fileEvents.delivery(),
-      parts.watcherRegistry.filesystem.watchReach,
+      parts.watcherRegistry.namesPolled,
     ),
     ...launched,
     ...(configWatch === null

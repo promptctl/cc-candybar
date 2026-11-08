@@ -9,7 +9,6 @@ import type { Release } from "../../utils/holds";
 import type { DaemonLogger } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
 import type { Timekeeper } from "../../time";
-import type { Filesystem } from "../../disk/filesystem";
 
 // [LAW:no-ambient-temporal-coupling] How often the owner writes a probe: a
 // probe's event gets one full period, far above the watch's debounce.
@@ -427,20 +426,19 @@ export interface FileEventsWarning {
   readonly message: string;
 }
 
-// [LAW:one-source-of-truth] What a stall deafens follows from how far the
-// disk's directory watch reaches, the fact the registry polls by: where it
-// reaches the tree (macOS) a file watched by name is polled and still heard,
-// and only a folder or tree watched whole rides the stream; where it reaches
-// one directory (Linux) every watch rides it.
-const deafened: Record<Filesystem["watchReach"], string> = {
-  tree: "so what watches a whole folder or tree (plugin folders, plugin storage, branches) will not refresh until they resume; a file watched by name, such as the config, is checked on a timer and still refreshes",
-  directory:
-    "so nothing that refreshes on file events will refresh until they resume",
-};
+// [LAW:one-source-of-truth] What a stall deafens follows from whether the
+// registry polls a watch for named entries, which the registry alone decides:
+// where it does (macOS) a file watched by name is still heard, and only a
+// folder or tree watched whole rides the stream; where it does not (Linux)
+// every watch rides it. The consumers named are examples, not a list.
+const deafened = (namesPolled: boolean): string =>
+  namesPolled
+    ? "so what watches a whole folder or tree, such as plugin folders, plugin storage and branch refs, will not refresh until they resume; a file watched by name, such as the config or a repo's HEAD, is checked on a timer and still refreshes"
+    : "so nothing that refreshes on file events will refresh until they resume";
 
 export function fileEventsWarnings(
   d: Delivery,
-  reach: Filesystem["watchReach"],
+  namesPolled: WatcherRegistry["namesPolled"],
 ): FileEventsWarning[] {
   if (d.missedSince === null) return [];
   const since = iso(d.missedSince);
@@ -449,7 +447,7 @@ export function fileEventsWarnings(
       case "delivering":
         return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so what refreshes on file events may have missed a change made since`;
       case "stalled":
-        return `${stopped(d.missedSince)}, ${deafened[reach]}`;
+        return `${stopped(d.missedSince)}, ${deafened(namesPolled)}`;
       case "unmeasured":
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }

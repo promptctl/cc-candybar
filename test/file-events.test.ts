@@ -294,7 +294,7 @@ describe("FileEventDelivery", () => {
     });
     // A probe that landed is not one heard: the stall's span stays open.
     expect(
-      fileEventsWarnings(r.events.delivery(), systemFilesystem.watchReach),
+      fileEventsWarnings(r.events.delivery(), false),
     ).toEqual([
       expect.objectContaining({
         state: "delivering",
@@ -311,7 +311,7 @@ describe("FileEventDelivery", () => {
       missedSince: null,
     });
     expect(
-      fileEventsWarnings(r.events.delivery(), systemFilesystem.watchReach),
+      fileEventsWarnings(r.events.delivery(), false),
     ).toEqual([]);
   });
 
@@ -519,8 +519,8 @@ describe("FileEventDelivery", () => {
 describe("the bar's row and daemon-stats' line", () => {
   const AT = Date.parse("2026-10-27T04:00:00.000Z");
   const LATER = AT + 90_000;
-  // Only a stall's row reads the disk's watch reach.
-  const warnings = (d: Delivery) => fileEventsWarnings(d, "directory");
+  // Only a stall's row reads whether the registry polls a named entry.
+  const warnings = (d: Delivery) => fileEventsWarnings(d, false);
 
   test("nothing while delivering", () => {
     expect(
@@ -561,13 +561,19 @@ describe("the bar's row and daemon-stats' line", () => {
     ],
     [
       "tree",
-      `${STOPPED}, so what watches a whole folder or tree (plugin folders, plugin storage, branches) will not refresh until they resume; a file watched by name, such as the config, is checked on a timer and still refreshes`,
+      `${STOPPED}, so what watches a whole folder or tree, such as plugin folders, plugin storage and branch refs, will not refresh until they resume; a file watched by name, such as the config or a repo's HEAD, is checked on a timer and still refreshes`,
     ],
   ] as const)(
     "a stall where the watch reaches the %s names what it deafens and the span's start, and composes into one warning",
     (reach, message) => {
       const delivery: Delivery = { kind: "stalled", missedSince: AT };
-      const warned = fileEventsWarnings(delivery, reach);
+      // [LAW:one-source-of-truth] The row reads the registry's polling rule
+      // for this disk, not one of its own.
+      const { namesPolled } = new WatcherRegistry({
+        filesystem: { ...systemFilesystem, watchReach: reach },
+        clock: systemTimekeeper,
+      });
+      const warned = fileEventsWarnings(delivery, namesPolled);
       expect(warned).toEqual([
         { kind: "file-events", state: "stalled", message },
       ]);
