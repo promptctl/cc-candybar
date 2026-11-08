@@ -212,14 +212,66 @@ describe("a daemon's pricing", () => {
     }
   });
 
-  test("the day's copy on disk is read by the next daemon, which fetches nothing", async () => {
+  test("the day's copy on disk prices the next daemon from its start, before anything asks, and an ask fetches nothing", async () => {
     await loaded();
 
     const next = live();
-    next.ask();
     await holding(next, "model-x");
     expect(next.table()).toEqual(RATES);
-    expect(asked).toHaveLength(1);
+    next.ask();
+    await noFetchPast(1);
+  });
+
+  test("a copy past its day prices a daemon from its start, and nothing is fetched until it asks", async () => {
+    fs.mkdirSync(path.join(cacheRoot, "usage"), { recursive: true });
+    fs.writeFileSync(
+      path.join(cacheRoot, "usage", "pricing.json"),
+      JSON.stringify({
+        data: RATES,
+        timestamp: clock.now() - PRICING_PERIOD.okMs,
+      }),
+    );
+
+    const pricing = live();
+    await holding(pricing, "model-x");
+    await noFetchPast(0);
+    pricing.ask();
+    await asking(1);
+    asked[0]!.answer(NEXT_RATES);
+    await holding(pricing, "model-y");
+  });
+
+  test("a load that rejects is said in the owner's log, and the next ask starts another", async () => {
+    let clockThrows = false;
+    const pricing = livePricing({
+      cacheRoot,
+      clock: {
+        now: () => {
+          if (clockThrows) throw new Error("clock gone");
+          return clock.now();
+        },
+      },
+      closing: closing.signal,
+      log,
+    });
+    pricing.ask();
+    await asking(1);
+    // The failed load reads the clock to stamp its failure, outside the
+    // load's own catches.
+    clockThrows = true;
+    asked[0]!.fail();
+    await until(() => warnings.length === 1, "the rejection said");
+    expect(warnings).toEqual(["pricing load rejected: Error: clock gone"]);
+    expect(pricing.table()).toBe(BUNDLED);
+
+    clockThrows = false;
+    await until(
+      () => {
+        pricing.ask();
+        return asked.length === 2;
+      },
+      "the next load started",
+    );
   });
 
   test("a copy on disk missing a rate the cost reads is a miss, and the table is fetched", async () => {
@@ -435,7 +487,7 @@ describe("a daemon's pricing", () => {
     pricing.ask();
     await asking(1);
     asked[0]!.fail();
-    await holding(pricing, "model-x");
+    await until(() => warnings.length === 1, "the failed load said");
     expect(pricing.table()).toEqual(RATES);
     expect(warnings).toEqual([
       `pricing table not loaded: priced by the last table; the next ask after ${PRICING_PERIOD.failedMs}ms tries again`,

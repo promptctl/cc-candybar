@@ -248,9 +248,10 @@ const due = (held: Held, now: number): boolean =>
 // so a cold cache costs one fetch and one disk write.
 // [LAW:dataflow-not-control-flow] Every ask takes the same step: the one load
 // starts when what is held is due, and lands behind the reads, which answer
-// what is held: the bundled rates until a table lands, and after a load that
-// lands nothing, the last table standing. Nothing waits for a load, since
-// what a landing changes is re-read where it is priced.
+// what is held: the copy on disk from the owner's start, the bundled rates
+// while there is none, and after a load that lands nothing, the last table
+// standing. Nothing waits for a load, since what a landing changes is re-read
+// where it is priced.
 // [LAW:no-ambient-temporal-coupling] No timer is armed: the retry is the next
 // ask after the due moment, so the close has nothing to cancel.
 // [LAW:one-source-of-truth] What is held is the one observable; the table is
@@ -266,6 +267,22 @@ export function livePricing(owner: LiveOwner): Pricing {
   const landed = computed(() => lastLanded(held.get()), {
     equals: (a, b) => a?.at === b?.at,
   });
+  // [LAW:no-silent-failure] What a load settled is held. A load that rejects,
+  // against its contract, holds nothing new and is said in the owner's own
+  // log, so it never depends on the hosting process handling a rejection: the
+  // demo installs no handler, and an unhandled one would end it.
+  const settle = (load: Promise<Held | null>): Promise<void> =>
+    load
+      .then((settled) => runInAction(() => held.set(settled)))
+      .catch((e: unknown) => {
+        owner.log("error", `pricing load rejected: ${String(e)}`);
+      });
+  // [LAW:effects-at-boundaries] The copy on disk is read as the owner starts,
+  // so a daemon's first frames are priced by it, not by the bundled rates,
+  // however long its first fold runs. Reading it fetches nothing: whether a
+  // fetch is owed stays the asker's. Every load follows it, so it never
+  // replaces what a load settled.
+  const primed = settle(readDisk(owner));
   let loading: Promise<void> | null = null;
   // [LAW:one-type-per-behavior] A load that lands nothing is said once per
   // backoff: the line names the backoff, so it changes while the backoff grows
@@ -280,11 +297,12 @@ export function livePricing(owner: LiveOwner): Pricing {
       const owed = prev === null || due(prev, owner.clock.now());
       if (!owed || owner.closing.aborted) return;
       // [LAW:dataflow-not-control-flow] The one load out is let go however it
-      // ends, so a load that rejects, against loadHeld's contract, is said by
-      // the daemon's unhandled-rejection line and the next ask starts another,
-      // never a daemon priced by the bundled rates for its whole life.
-      loading ??= loadHeld(owner, prev, sayNotLoaded)
-        .then((settled) => runInAction(() => held.set(settled)))
+      // ends, so after a load that rejects the next ask starts another, never
+      // a daemon priced by the bundled rates for its whole life. It loads from
+      // what the disk copy left held, so an ask before the copy is read finds
+      // the day's copy and fetches nothing.
+      loading ??= primed
+        .then(() => settle(loadHeld(owner, held.get(), sayNotLoaded)))
         .finally(() => {
           loading = null;
         });
