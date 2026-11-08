@@ -604,6 +604,8 @@ export function priceOf(
 export function modelIdOf(entry: PrunedRaw): string {
   // [LAW:parse-dont-validate] The parse keeps a model only as a string, at
   // the entry or on its message (src/utils/claude.ts), so there is nothing
-  // else to read; an entry naming none is priced as the default model.
-  return entry.model ?? entry.message?.model ?? DEFAULT_MODEL_ID;
+  // else to read. An empty string names no model, so it falls through to the
+  // message's, as a missing one does; an entry naming none is priced as the
+  // default model.
+  return entry.model || entry.message?.model || DEFAULT_MODEL_ID;
 }
