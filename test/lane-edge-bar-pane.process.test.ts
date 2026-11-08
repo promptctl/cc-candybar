@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { heldSessionUnder, productionLaneEdge } from "../src/daemon/lane-edge";
+import { productionClaudeInputEdge } from "../src/claude-input/edge";
 import { type Launcher } from "../src/proc/launch";
 import type { TmuxHint } from "../src/tmux-hint";
 import { systemTimekeeper } from "../src/time";
@@ -80,7 +81,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
         return result;
       },
     };
-    const edge = productionLaneEdge(launcher, () => new Set(), closing.signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"), systemFilesystem);
+    const edge = productionLaneEdge(launcher, () => new Set(), closing.signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"), systemFilesystem, productionClaudeInputEdge(launcher));
 
     const opened = await edge.openBarPane(hint, barPane(), {});
 
@@ -88,7 +89,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     const tagged = productionLaneEdge(
       processLauncher,
       () => new Set(),
-      new AbortController().signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"), systemFilesystem
+      new AbortController().signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"), systemFilesystem, productionClaudeInputEdge(processLauncher)
     );
     expect(await tagged.barPanes(hint)).toEqual([opened]);
     expect(active()).toBe(hint.pane);
@@ -109,7 +110,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     const edge = productionLaneEdge(
       processLauncher,
       () => new Set(),
-      new AbortController().signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"), systemFilesystem
+      new AbortController().signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"), systemFilesystem, productionClaudeInputEdge(processLauncher)
     );
 
     await edge.openBarPane(hint, barPane(), {});
@@ -123,7 +124,7 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     const edge = productionLaneEdge(
       processLauncher,
       () => new Set(),
-      new AbortController().signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"), systemFilesystem
+      new AbortController().signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"), systemFilesystem, productionClaudeInputEdge(processLauncher)
     );
 
     await expect(edge.openBarPane(hint, barPane(), {})).rejects.toThrow(
