@@ -1345,13 +1345,29 @@ const applyLayoutOp: VerbHandler = (sid, args, ctx) => {
   // Measured on the file as it now reads, and released in the same click, so
   // its undo brings the placement and its drafts back.
   ctx.reloadConfig(origin);
+  const after = ctx.configFor(origin);
+  // [LAW:single-enforcer] Every state key the edit ends is released here, in
+  // the click that ends it: a key the config declared before the edit and no
+  // longer declares (the chrome named by a removed placement, the ✚ whose gap
+  // a pick renamed) is otherwise held forever — nothing closes an undeclared
+  // key — and a later placement minted with the same id inherits it.
+  const declared = new Set(ctx.gates.state.gateFor(after).listKeys());
+  const undeclared = ctx.gates.state
+    .gateFor(before)
+    .listKeys()
+    .filter((key) => !declared.has(key));
   // The session state the edit discards — the fact its log line carries.
   // Raw: under the reloaded config a removed placement's member is foreign,
   // so a judged read would keep exactly what this click releases.
-  const released = endedSessionKeys(
-    endedPlacements(before, ctx.configFor(origin)),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
-  ).filter((key) => ctx.sessionState.get(sid, key) !== null);
+  const released = [
+    ...new Set([
+      ...endedSessionKeys(
+        endedPlacements(before, after),
+        ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
+      ),
+      ...undeclared,
+    ]),
+  ].filter((key) => ctx.sessionState.get(sid, key) !== null);
   for (const key of released) ctx.sessionState.clear(sid, key);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.

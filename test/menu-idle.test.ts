@@ -25,7 +25,8 @@ import {
 } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
 import type { DslConfig } from "../src/config/dsl-types";
-import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
+import { chromeIdent, EDIT_LIVE_KEY } from "../src/config/edit-chrome";
+import { menuStateKey } from "../src/config/menu-keys";
 import {
   CLOSING_FLASH_SECONDS,
   MENU_TIMEOUT_RANGE,
@@ -355,6 +356,14 @@ const menuRows = (frame: Frame): number =>
   frame.rows.filter((row) => row.kind === "menu").length;
 
 const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
+// The `+` before the row's first content, `directory`: its menu's apply action
+// and the state key that holds the library open.
+const LIBRARY_APPLY = `edit.default.insert.before.${chromeIdent("directory")}`;
+const LIBRARY = menuStateKey(
+  `edit.default.insertSeg.before.${chromeIdent("directory")}`,
+  LIBRARY_APPLY,
+  undefined,
+);
 const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true, closed: () => {} };
 
 describe("the close is the write the door's ✕ makes, on a click's own path", () => {
@@ -374,17 +383,16 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
       segments: { arrange: { template: '{{ action "edit.toggle" "✎" }}' } },
       root: { h: ['directory', 'arrange'] },
     }`);
-    const library = "menus.edit_default_insertSeg_0.edit_default_insert_0";
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    await rt.clickWriting(library, "edit.default.insert.0");
+    await rt.clickWriting(LIBRARY, LIBRARY_APPLY);
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     expect(menuRows(rt.draw(instantOf(new Date())))).toBeGreaterThan(0);
     await closeIdleMenus(SID, IDLE, rt.ctx);
-    expect(rt.held(library)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.held(LIBRARY)).toBe(DISCLOSURE_CLOSED);
     expect(rt.held(EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
     expect(menuRows(rt.draw(instantOf(new Date())))).toBe(0);
     expect(rt.logged).toContain(
-      `menu-idle: closed=${library} idle=30.0s timeout=30s (session=${SID})`,
+      `menu-idle: closed=${LIBRARY} idle=30.0s timeout=30s (session=${SID})`,
     );
   });
 

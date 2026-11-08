@@ -15,8 +15,16 @@ import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
 import { closingView } from "../src/daemon/closing-view";
+import { chromeIdent } from "../src/config/edit-chrome";
+import { menuStateKey } from "../src/config/menu-keys";
+import { SessionState, SINGLE_RUN } from "../src/daemon/session-state";
+import type { DslConfig } from "../src/config/dsl-types";
+import { listResolvablePaletteNames } from "../src/themes/policy";
+import { parseAndValidate } from "./helpers/parse-and-validate";
+import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 
 const SID = "s1";
+const PALETTES = new Set(listResolvablePaletteNames());
 const TAB = "candybar.tab";
 const PICKERS = "menus.candybar_pickers";
 const GEAR_PICKERS = "menus.candybar_gearPickers";
@@ -28,12 +36,32 @@ const PAYLOAD = {
   model: { display_name: "Opus" },
 };
 
-function nestBar(src: string) {
-  const rig = buildRig({ source: src, label: "<user>", base: DEFAULT_DSL_CONFIG });
-  const { config, sessionState } = rig;
+// With `durable`, the bar's config is that file's: a click that edits the
+// layout writes it and reloads from it, as the daemon's render cache does.
+function nestBar(src: string, durable?: DurableConfig) {
+  const sessionState = new SessionState(SINGLE_RUN);
+  durable?.seedOrigin(sessionState, SID);
+  const rig = buildRig({
+    source: src,
+    label: "<user>",
+    base: DEFAULT_DSL_CONFIG,
+    sessionState,
+    ...(durable && { history: durable.historyFor(sessionState), host: durable.host }),
+  });
+  const { config } = rig;
   const render = (): Frame => rig.draw({ payload: PAYLOAD }).frame;
   const logged: string[] = [];
-  const ctx: VerbContext = { ...rig.ctx, log: (_level, line) => logged.push(line) };
+  let current: DslConfig = config;
+  const ctx: VerbContext = {
+    ...rig.ctx,
+    log: (_level, line) => logged.push(line),
+    ...(durable && {
+      configFor: () => current,
+      reloadConfig: () => {
+        current = parseAndValidate("<reloaded>", durable.text()!, PALETTES, DEFAULT_DSL_CONFIG);
+      },
+    }),
+  };
   // One click is one verb call, as the daemon runs it.
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
   // Click the affordance whose URL writes `value` to a key `key` names
@@ -50,10 +78,24 @@ function nestBar(src: string) {
   // What the session reads: a cleared key holds its state variable's default.
   const held = (key: string): string =>
     sessionState.get(SID, key) ?? disclosureNest(config).defaultOf(key);
-  return { config, sessionState, render, clickWriting, held, logged, ctx };
+  // Click the first affordance one of whose effects carries a value `value` accepts.
+  const clickDoing = async (value: (v: string) => boolean): Promise<void> => {
+    const url = linkUrls(render()).find((u) => effectsOf(u).some((e) => value(e.args[2] ?? "")));
+    if (!url) throw new Error("no such affordance rendered");
+    await click(url);
+  };
+  return { config, sessionState, render, clickWriting, clickDoing, held, logged, ctx };
 }
 
 const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
+// The `+` before the row's first content, `directory`: its menu's apply action
+// and the state key that holds the library open.
+const LIBRARY_APPLY = `edit.default.insert.before.${chromeIdent("directory")}`;
+const LIBRARY = menuStateKey(
+  `edit.default.insertSeg.before.${chromeIdent("directory")}`,
+  LIBRARY_APPLY,
+  undefined,
+);
 const openDoor = async (rt: ReturnType<typeof nestBar>): Promise<void> =>
   await rt.clickWriting(SETTINGS_ANCHOR, "open");
 
@@ -124,12 +166,54 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
   test("case 4: a ✚'s segment library", async () => {
     const rt = nestBar(BUNDLED);
     await arrange(rt);
-    await rt.clickWriting("menus.edit_default_insertSeg_0.*", "edit.default.insert.0");
-    const key = "menus.edit_default_insertSeg_0.edit_default_insert_0";
-    expect(rt.held(key)).toBe("edit.default.insert.0");
+    await rt.clickWriting(LIBRARY, LIBRARY_APPLY);
+    expect(rt.held(LIBRARY)).toBe(LIBRARY_APPLY);
     await rt.clickWriting(EDIT_MODE_KEY, DISCLOSURE_CLOSED);
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    expect(rt.held(key)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.held(LIBRARY)).toBe(DISCLOSURE_CLOSED);
+  });
+
+  // A layout edit that ends a ✚'s gap (a pick at the row's leading ✚ renames
+  // it after the new first content; removing its anchor ends it) releases the
+  // library's key in the same click: nothing closes a key no config declares.
+  // A gap the edit keeps keeps its library open for the next pick.
+  describe("a layout edit and the libraries beside it", () => {
+    let durable: DurableConfig;
+    beforeEach(() => {
+      durable = durableConfig("cc-candybar-nest-");
+      durable.write(BUNDLED);
+    });
+    afterEach(() => durable.dispose());
+    const AFTER_APPLY = `edit.default.insert.after.${chromeIdent("directory")}`;
+    const AFTER = menuStateKey(
+      `edit.default.insertSeg.after.${chromeIdent("directory")}`,
+      AFTER_APPLY,
+      undefined,
+    );
+
+    test("a pick at the row's leading ✚ lands and closes its library", async () => {
+      const rt = nestBar(BUNDLED, durable);
+      await arrange(rt);
+      await rt.clickWriting(LIBRARY, LIBRARY_APPLY);
+      await rt.clickDoing((v) => v.endsWith(":directory:before"));
+      expect(rt.sessionState.get(SID, LIBRARY)).toBeNull();
+    });
+
+    test("a pick after a placement keeps its library open", async () => {
+      const rt = nestBar(BUNDLED, durable);
+      await arrange(rt);
+      await rt.clickWriting(AFTER, AFTER_APPLY);
+      await rt.clickDoing((v) => v.endsWith(":directory:after"));
+      expect(rt.sessionState.get(SID, AFTER)).toBe(AFTER_APPLY);
+    });
+
+    test("removing a placement closes the library its gap opened", async () => {
+      const rt = nestBar(BUNDLED, durable);
+      await arrange(rt);
+      await rt.clickWriting(AFTER, AFTER_APPLY);
+      await rt.clickDoing((v) => v === "remove:directory");
+      expect(rt.sessionState.get(SID, AFTER)).toBeNull();
+    });
   });
 
   test("case 5: edit mode's (?)", async () => {
