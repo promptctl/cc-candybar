@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-694",
+      "ref": "refs/pull/694/merge",
+      "sha": "10228845fbe69d834a4d95a41542d9a027656b13",
+      "timestamp": "2026-11-08T14:36:44.395Z",
+      "commits": [
+        {
+          "sha": "10228845fbe69d834a4d95a41542d9a027656b13",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:35:43Z",
+          "message": "Merge f05b96fdb552580199d8ad9d3332d1f886511aa3 into 56a5c61981df900d1c9d0cee98199d3a1f52182f\n"
+        },
+        {
+          "sha": "f05b96fdb552580199d8ad9d3332d1f886511aa3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:35:39-07:00",
+          "message": "Merge branch 'main' into brandon-unfiled-3248.7cay"
+        },
+        {
+          "sha": "334a96ec3e9d604e33a1f68456a265429678e560",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:22:30-07:00",
+          "message": "Merge branch 'main' into brandon-unfiled-3248.7cay"
+        },
+        {
+          "sha": "c1e8f8aad4e5f338f77c9660eb2cabc3498a51c8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T04:43:48-07:00",
+          "message": "fix(update-act): a spend fault holds between looks, and the end's wording is spelled once\n\nMedium review of PR #694:\n- The spend look's fault is the watch's own value, set at each look, not\n  touchActs' read fault: a successful read between ticks (the restart hold's\n  running(), or act()) cleared it and the ⚠ blinked off.\n- An unreadable spend's fault no longer names where the look counted from,\n  which moved after the first look and made one fault read as two.\n- What the end did to the group is spelled once; the unrecorded reason is\n  the logged line.\n- The header says the act's files outrank the daemon's copy once they hold\n  a larger spend, as latestLook ranks.\n\nbrandon-unfiled-3248.7cay\n"
+        },
+        {
+          "sha": "d1b1340ee39e094d69f9f3e8f39f6587efe67f34",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:33:16-07:00",
+          "message": "fix(update-act): a fault reads the same at every look, a failed read keeps the shared spend, and cleanup never blocks an end (brandon-unfiled-3248.7cay)\n\nHigh review of PR #694:\n- A write fault names the published file and the errno code, not the\n  message that names a fresh staged path each look, so the change logger\n  dedupes it and the warning text holds still.\n- A spend file that can't be read is left in place and the look counts on\n  from this daemon's own; only bytes that can't be parsed are replaced, so a\n  transient read error no longer hands the act a fresh budget.\n- The latest look is the larger spend, ties going to the later look: a wall\n  clock set back no longer lets a stale copy win.\n- A staging is removed only when it is there: in a directory that can't be\n  searched the removal's EACCES replaced the verdict and nothing was ended.\n- An act whose files vanish before its end is logged, with its pid.\n- The unrecorded-end reason is keyed by job, not act number, and\n  error() reads it directly.\n- The verdict write's type is the one JobEnding derives from; the warning\n  prefix is spelled once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "be7b7b9a247b32d0a850198204517e488a7b800d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:19:15-07:00",
+          "message": "fix(update-act): an act whose files can't be written is still ended after its budget (brandon-unfiled-3248.7cay)\n\nA look now judges its spend before it reports a write it could not make:\nspendLook returns the spend and its fault instead of throwing, and counts\non from the later of the act's files and this daemon's own last look of\nthe same job (the reader's job identity decides \"same job\"). endJob\nsignals the group even when its timeout verdict can't be written, as a\nnew `unrecorded` arm of JobEnding, and the watch keeps why it ended that\nact so the warning still says so once the group is gone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-698",
       "ref": "refs/pull/698/merge",
       "sha": "a504a230511e84269ebe6638aec8a20896fe826e",
@@ -56,49 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-08T07:26:41-07:00",
           "message": "fix(watchers): on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens (brandon-unfiled-3248.slsx)\n\nA watch handle now says whether it rides the OS's one event stream, from the\nregistry's own choice of what is polled. A stall is the fault only of a watch\nthat rides it, so a polled `watch_file` name carries no stall fault and keeps\nrefreshing; the file-event probe asks the same question of its own watch. The\nstall row reads the disk's watch reach: on macOS it names a folder or tree\nwatched whole as what a stall deafens and says a file watched by name still\nrefreshes; on Linux, where every watch rides inotify, it reads as before.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-694",
-      "ref": "refs/pull/694/merge",
-      "sha": "f9b2ca70f9d8c87801a9a8ff19fff6b5b16000c1",
-      "timestamp": "2026-11-08T14:23:31.689Z",
-      "commits": [
-        {
-          "sha": "f9b2ca70f9d8c87801a9a8ff19fff6b5b16000c1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:22:32-07:00",
-          "message": "Merge 334a96ec3e9d604e33a1f68456a265429678e560 into eaa59b6d87c32073b040a97072a0fee0a6e048fc\n"
-        },
-        {
-          "sha": "334a96ec3e9d604e33a1f68456a265429678e560",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:22:30-07:00",
-          "message": "Merge branch 'main' into brandon-unfiled-3248.7cay"
-        },
-        {
-          "sha": "c1e8f8aad4e5f338f77c9660eb2cabc3498a51c8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T04:43:48-07:00",
-          "message": "fix(update-act): a spend fault holds between looks, and the end's wording is spelled once\n\nMedium review of PR #694:\n- The spend look's fault is the watch's own value, set at each look, not\n  touchActs' read fault: a successful read between ticks (the restart hold's\n  running(), or act()) cleared it and the ⚠ blinked off.\n- An unreadable spend's fault no longer names where the look counted from,\n  which moved after the first look and made one fault read as two.\n- What the end did to the group is spelled once; the unrecorded reason is\n  the logged line.\n- The header says the act's files outrank the daemon's copy once they hold\n  a larger spend, as latestLook ranks.\n\nbrandon-unfiled-3248.7cay\n"
-        },
-        {
-          "sha": "d1b1340ee39e094d69f9f3e8f39f6587efe67f34",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:33:16-07:00",
-          "message": "fix(update-act): a fault reads the same at every look, a failed read keeps the shared spend, and cleanup never blocks an end (brandon-unfiled-3248.7cay)\n\nHigh review of PR #694:\n- A write fault names the published file and the errno code, not the\n  message that names a fresh staged path each look, so the change logger\n  dedupes it and the warning text holds still.\n- A spend file that can't be read is left in place and the look counts on\n  from this daemon's own; only bytes that can't be parsed are replaced, so a\n  transient read error no longer hands the act a fresh budget.\n- The latest look is the larger spend, ties going to the later look: a wall\n  clock set back no longer lets a stale copy win.\n- A staging is removed only when it is there: in a directory that can't be\n  searched the removal's EACCES replaced the verdict and nothing was ended.\n- An act whose files vanish before its end is logged, with its pid.\n- The unrecorded-end reason is keyed by job, not act number, and\n  error() reads it directly.\n- The verdict write's type is the one JobEnding derives from; the warning\n  prefix is spelled once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "be7b7b9a247b32d0a850198204517e488a7b800d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:19:15-07:00",
-          "message": "fix(update-act): an act whose files can't be written is still ended after its budget (brandon-unfiled-3248.7cay)\n\nA look now judges its spend before it reports a write it could not make:\nspendLook returns the spend and its fault instead of throwing, and counts\non from the later of the act's files and this daemon's own last look of\nthe same job (the reader's job identity decides \"same job\"). endJob\nsignals the group even when its timeout verdict can't be written, as a\nnew `unrecorded` arm of JobEnding, and the watch keeps why it ended that\nact so the warning still says so once the group is gone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
