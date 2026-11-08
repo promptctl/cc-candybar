@@ -41,6 +41,7 @@ import { FEED_PERIODS, type FeedFrame } from "../../src/daemon/frame-feed";
 import { homeOf } from "../../src/daemon/home";
 import { JournalTurns } from "../../src/daemon/journal-turns";
 import { heldSessionUnder, productionLaneEdge } from "../../src/daemon/lane-edge";
+import { productionClaudeInputEdge } from "../../src/claude-input/edge";
 import { linkIdAllocator } from "../../src/daemon/link-id-allocator";
 import { makeLimits, memoryLimitBytes, realLimitsDeps } from "../../src/daemon/limits";
 import { MismatchRuns } from "../../src/daemon/mismatch-runs";
@@ -192,6 +193,7 @@ export function daemonParts({ host, clock, log, source, drew }: DaemonPartsOptio
       NO_PROCESSES,
       heldSession,
       systemFilesystem,
+      productionClaudeInputEdge(launcher),
     ),
     host: { bundle, node: running.node, home, preload: stableAttachPreload(bundle, host) },
     log,

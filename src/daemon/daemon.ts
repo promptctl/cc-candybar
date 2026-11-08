@@ -172,6 +172,9 @@ export interface DaemonAdapters {
     // [LAW:types-are-the-program] Reads only: the lane edge never writes to
     // the disk; its effects go to tmux panes and Claude Code.
     disk: FilesystemReads,
+    // [LAW:one-source-of-truth] The daemon's one claude-input edge, so a lane
+    // types into Claude Code through the edge a click does.
+    claudeInput: ClaudeInputEdge,
   ) => LaneEdge;
   // The session a Claude Code process holds, by the records Claude Code keeps
   // under the user's home (`home`) or the directory a session names.
@@ -421,6 +424,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // process holds: the render checkpoint's stamp, a pane's lookup and a
   // restart's check before its kill all ask it.
   const heldSession = inputs.heldSession(host.home);
+  // [LAW:one-source-of-truth] The one edge every typing into Claude Code goes
+  // through: a click's slash command and a lane's setup alike.
+  const claudeInput = inputs.claudeInput(launcher);
   // [LAW:single-enforcer] The one owner of what turning an animation lane on or
   // off takes (src/daemon/lane-setup.ts), told the switches each of a session's
   // clicks moved, and each request's arrival for the setups owed to it.
@@ -432,6 +438,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       probe,
       heldSession,
       inputs.filesystem,
+      claudeInput,
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -566,7 +573,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clients: renderSightings,
     mismatchRuns,
     bundle: bundle.path,
-    claudeInput: inputs.claudeInput(launcher),
+    claudeInput,
     history: settingsHistory,
     navigation: navigationHistory,
     links,

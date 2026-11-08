@@ -36,7 +36,15 @@ export function productionAdapters(
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe, heldSession, disk) =>
+    laneEdge: (
+      launcher,
+      following,
+      closing,
+      probe,
+      heldSession,
+      disk,
+      claudeInput,
+    ) =>
       productionLaneEdge(
         launcher,
         following,
@@ -45,6 +53,7 @@ export function productionAdapters(
         probe,
         heldSession,
         disk,
+        claudeInput,
       ),
     heldSession: heldSessionUnder,
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
