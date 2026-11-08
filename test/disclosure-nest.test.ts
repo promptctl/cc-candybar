@@ -141,6 +141,40 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
     expect(rt.held(LIBRARY)).toBe(DISCLOSURE_CLOSED);
   });
 
+  // A pick at the leading ✚ renames its gap after the placement it adds, so the
+  // library's key is declared no more after the reload and nothing would ever
+  // close it. Every option the leading library offers closes it in the same
+  // click; the library after `directory` keeps its name and stays open.
+  test("a pick at the row's leading ✚ closes its library; a pick after a placement does not", async () => {
+    const rt = nestBar(BUNDLED);
+    await arrange(rt);
+    const AFTER_APPLY = `edit.default.insert.after.${chromeIdent("directory")}`;
+    const AFTER = menuStateKey(
+      `edit.default.insertSeg.after.${chromeIdent("directory")}`,
+      AFTER_APPLY,
+      undefined,
+    );
+    // Whether each option the library at `key` offers closes it, deduplicated.
+    const picksClosing = async (
+      key: string,
+      apply: string,
+      relation: "before" | "after",
+    ): Promise<boolean[]> => {
+      await rt.clickWriting(key, apply);
+      const picks = linkUrls(rt.render()).filter((u) =>
+        effectsOf(u).some((e) => e.args[2]?.endsWith(`:directory:${relation}`)),
+      );
+      expect(picks.length).toBeGreaterThan(1);
+      const closes = picks.map((u) =>
+        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === DISCLOSURE_CLOSED),
+      );
+      await rt.clickWriting(key, DISCLOSURE_CLOSED);
+      return [...new Set(closes)];
+    };
+    expect(await picksClosing(LIBRARY, LIBRARY_APPLY, "before")).toEqual([true]);
+    expect(await picksClosing(AFTER, AFTER_APPLY, "after")).toEqual([false]);
+  });
+
   test("case 5: edit mode's (?)", async () => {
     const rt = nestBar(BUNDLED);
     await arrange(rt);

@@ -668,10 +668,18 @@ function insertTerm(
   // it and a floor measured against it would measure the wrong colour.
   const open = disclosureTerm({ variable: stateKey, key: stateKey, member });
   const add = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
+  // [LAW:no-ambient-temporal-coupling] A pick at a `before` gap places the
+  // row's new first content, so the reload names the gap after the new
+  // placement and this state key is declared no more. Nothing closes an
+  // undeclared key (leaving edit mode closes only declared ones), so it would
+  // stay open and reopen on its own when the anchor leads its row again. The
+  // pick closes it while it is still declared. An `after` gap keeps its name
+  // across its own pick, so its library stays open for the next pick.
+  const closeOnPick = relation === "before";
   return {
     host: chromeSegName,
     template:
-      `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}` +
+      `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" (dict "closeOnPick" ${closeOnPick}) }}` +
       `{{ if ${open} }}{{ $m }}{{ else }}{{ fg (${add}) $m }}{{ end }}`,
   };
 }
