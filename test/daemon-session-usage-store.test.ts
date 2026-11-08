@@ -1266,7 +1266,19 @@ describe("SessionUsageStore — pricing", () => {
     mkdirSync(pdir, { recursive: true });
     const t = join(pdir, "A.jsonl");
     const at = new Date();
-    writeFileSync(t, usageLine("a", at, 0.25));
+    // Claude Code's entry for an API error or an interrupt: an all-zero
+    // usage and no cost. It holds no token to price.
+    const synthetic =
+      JSON.stringify({
+        timestamp: at.toISOString(),
+        requestId: "req-synthetic",
+        message: {
+          id: "msg-synthetic",
+          model: "<synthetic>",
+          usage: { input_tokens: 0, output_tokens: 0 },
+        },
+      }) + "\n";
+    writeFileSync(t, usageLine("a", at, 0.25) + synthetic);
     let asks = 0;
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
@@ -1276,8 +1288,11 @@ describe("SessionUsageStore — pricing", () => {
     });
     try {
       const hd = hook("A", t);
-      // Every entry carried its cost: no request asks, however many run.
-      await store.getUsageInfo("A", hd);
+      // Every entry carried its cost or had none to carry: no request asks,
+      // however many run, and the session's totals are its priced entry's.
+      expect(await store.getUsageInfo("A", hd)).toMatchObject({
+        value: { session: { cost: 0.25, tokens: 15 } },
+      });
       await todayInfo(store, holds, hd, dir, instantOf(at));
       expect(asks).toBe(0);
 

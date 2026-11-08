@@ -7,9 +7,9 @@ import { dateOf, type Instant } from "../../utils/instant";
 // fact and the draw's instant, so what reads it (the draw, `check`, the demo)
 // does not load the store's pricing, transcript reads or observables.
 
-// Per-(session, day) scalar contribution — the only granularity the today fold
-// needs. Raw entries are discarded after bucketing, so per-session retained
-// memory is O(retained-days), not O(entries).
+// One day's usage, priced: the cost and the token breakdown the today fold
+// sums. It is read off the usage the store holds, at the table held at the
+// read, and is never what the store retains.
 export interface DayUsage {
   cost: number;
   input: number;

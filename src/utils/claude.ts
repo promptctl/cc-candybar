@@ -473,7 +473,7 @@ export async function foldAppended<S>(
   filePath: string,
   prior: Folded<S> | undefined,
   empty: S,
-  step: (state: S, entries: readonly ParsedEntry[]) => S | Promise<S>,
+  step: (state: S, entries: readonly ParsedEntry[]) => S,
 ): Promise<Outcome<{ folded: Folded<S>; longLines: readonly LongLine[] }>> {
   let longLines: readonly LongLine[] = [];
   let cursor = prior?.cursor;
@@ -496,12 +496,12 @@ export async function foldAppended<S>(
       end = { size: window.size, stamp: window.stamp };
     }
     const next = window.start + window.lines.length;
-    // Decoded, and the window given back, before `step` can await — and
-    // passed straight in, never named: a name holds this window's entries in
-    // the fold's frame across the next read's I/O wait, where they are
-    // promoted to the old generation (eight concurrent cold folds of a 29 MB
+    // Decoded, and the window given back, before the next read — and passed
+    // straight in, never named: a name holds this window's entries in the
+    // fold's frame across the next read's I/O wait, where they are promoted
+    // to the old generation (eight concurrent cold folds of a 29 MB
     // transcript: +120 MB RSS against +30 MB).
-    value = await step(
+    value = step(
       value,
       decodeLines(window, (b) => parseJsonlLines(b.toString("utf-8"))),
     );

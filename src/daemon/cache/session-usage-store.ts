@@ -301,17 +301,22 @@ function addUsage(into: Summing, u: Usage): void {
   }
 }
 
-// One entry's usage: carried when the entry priced itself, else its tokens
-// under the model they are priced as.
+// One entry's usage: carried when its cost is known with no table, else its
+// tokens under the model they are priced as. A cost is known when the entry
+// priced itself, or when it holds no token to price: Claude Code writes an
+// API error or an interrupt as an entry with an all-zero usage and no cost,
+// and such an entry, held as unpriced, would have a machine whose entries all
+// price themselves fetch a table to price nothing.
 function usageOfEntry(entry: ParsedEntry, counts: UsageCounts): Usage {
   const tokens = breakdownOf(counts);
-  return entry.costUSD === undefined
+  const cost = entry.costUSD ?? (totalTokens(tokens) === 0 ? 0 : undefined);
+  return cost === undefined
     ? {
         carried: EMPTY_USAGE.carried,
         unpriced: new Map([[modelIdOf(entry.raw), tokens]]),
       }
     : {
-        carried: { cost: entry.costUSD, tokens },
+        carried: { cost, tokens },
         unpriced: EMPTY_USAGE.unpriced,
       };
 }
@@ -535,9 +540,12 @@ function answer<T>(box: IObservableValue<T>, value: T): void {
 
 export class SessionUsageStore {
   // No count cap: `today` is a fold over every record, so a cap smaller than
-  // the day's sessions would drop work from it unseen. A record is a few
-  // scalars per file and retained day, and `sweepStale` bounds the map to the
-  // sessions seen within `staleAgeMs` plus those holding work done today.
+  // the day's sessions would drop work from it unseen. A record holds, per
+  // file and per retained day, a usage: a carried cost and token breakdown,
+  // plus one token breakdown per model priced by no entry, so it grows with
+  // files × retained days × unpriced models and never with entries.
+  // `sweepStale` bounds the map to the sessions seen within `staleAgeMs` plus
+  // those holding work done today.
   // Observable, shallowly: a slot replaced is the change the day sums read.
   private readonly sessions = observable.map<string, SessionSlot>(undefined, {
     deep: false,
