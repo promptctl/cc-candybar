@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-702",
+      "ref": "refs/pull/702/merge",
+      "sha": "921b02027fda25e7c9ac8e909948a7cf826b89b6",
+      "timestamp": "2026-11-08T22:19:20.556Z",
+      "commits": [
+        {
+          "sha": "921b02027fda25e7c9ac8e909948a7cf826b89b6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:18:21-07:00",
+          "message": "Merge e4e6ec7335bc365d5ef42d797b41ff2d55466c83 into dcc0d9858406c27a4f4728c234ebd7ef48445799\n"
+        },
+        {
+          "sha": "e4e6ec7335bc365d5ef42d797b41ff2d55466c83",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:17:42-07:00",
+          "message": "fix(update-act): an overdue act pruned before its end still has its group ended when its leader proves it, and otherwise shown in the ⚠ until it is gone (brandon-unfiled-3248.pj1z)\n\nWhen a newer claim removes a timed-out act between the look and the end,\nthe end now proves the group by its leader's fingerprint and signals it\nonly on that proof. A group nothing proves is written beside the acts, so\nevery daemon's ⚠ names it with the command that ends it until it is no\nlonger the job's. The watch's ⚠ messages are now each their own entry.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-701",
       "ref": "refs/pull/701/merge",
       "sha": "85d12966521659b64b83fa9db0c6ae67a1e20df6",
