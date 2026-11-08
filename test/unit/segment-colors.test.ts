@@ -12,19 +12,17 @@ import { TEST_ENGINE } from "../helpers/test-engine";
 import {
   Palette,
   getThemePalette,
+  listThemePalettes,
   parseRgbHex,
   ColorRgba,
   Oklch,
   darken,
   blendRgb,
   contrastFor,
-  contrastRatio,
-  drawnColour,
   ColorDepth,
   transposePalette,
 } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../../src/template-engine/engine";
-import { QUIET_MIN_CONTRAST } from "../../src/config/quiet-text";
 import {
   resolveSegmentColors,
   ColorSpecError,
@@ -34,7 +32,8 @@ import {
   openSegment,
 } from "../../src/render/active-segment";
 import type { ActiveSegmentRef } from "../../src/render/active-segment";
-import { segmentColorFuncs } from "../../src/render/segment-color";
+import { roleText, segmentColorFuncs } from "../../src/render/segment-color";
+import { ERROR_REDS } from "../helpers/door-close";
 import type { Disclosure } from "../../src/themes/decor";
 import { DEFAULT_DECOR } from "../helpers/decor";
 import {
@@ -183,68 +182,7 @@ describe("no bg/fg templates → the tint, and the text paired with it", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 1b. keptOn: a colour shown as given, which rounding never makes less legible
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("keptOn: a colour shown exactly as given, which the terminal's rounding never makes less legible", () => {
-  const at = (drawnAt: ColorDepth) => {
-    const ref = createActiveSegmentRef(() => drawnAt);
-    const engine = createCcCandybarEngine({
-      ...TEST_ENGINE,
-      extraFuncs: segmentColorFuncs(ref),
-    });
-    openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT, PAIRED_TEXT);
-    return (fg: string, bg: string): string =>
-      engine
-        .parse(`{{ keptOn "${fg}" "${bg}" }}`)
-        .evaluate({})
-        .map((f) => f.plain)
-        .join("");
-  };
-  // rose-pine-moon's door ✖ red on its open state: 3.90:1 in truecolor, and
-  // 2.73:1 once the terminal rounds both to 256 colours.
-  const RED = "#ea6f92";
-  const STATE = "#443546";
-  const drawn = (hex: string) => drawnColour(parseRgbHex(hex.slice(1)), ColorDepth.EIGHT_BIT);
-
-  test("in truecolor it is the colour itself, however faint — a theme that gives it faintly keeps it so", () => {
-    const keptOn = at(ColorDepth.TRUECOLOR);
-    expect(keptOn(RED, STATE)).toBe(RED);
-    expect(keptOn("#ff4444", "#ee5555")).toBe("#ff4444");
-  });
-
-  test("at 256 colours it stands as far off its ground as the truecolor pair does, where rounding alone would cost it", () => {
-    const held = contrastRatio(parseRgbHex(RED.slice(1)), parseRgbHex(STATE.slice(1)));
-    expect(contrastRatio(drawn(RED), drawn(STATE))).toBeLessThan(held);
-    const kept = at(ColorDepth.EIGHT_BIT)(RED, STATE);
-    expect(contrastRatio(drawn(kept), drawn(STATE))).toBeGreaterThanOrEqual(held);
-  });
-
-  test("at 256 colours a red that reads under the quiet floor on its ground before rounding keeps that contrast, and is never lifted toward the floor", () => {
-    // atom-one-dark's error-lighten-3 on primary-darken-2: the farthest named
-    // red, accepted at 2.00:1. Lifted to the quiet floor it rounds to a yellow
-    // (#ffff87, 3.65:1). Its own rounding (#ffaf87, 2.15:1) already keeps
-    // what it had, so it is the red itself.
-    const FAINT_RED = "#ffa09b";
-    const GROUND = "#2c87c4";
-    const held = contrastRatio(parseRgbHex(FAINT_RED.slice(1)), parseRgbHex(GROUND.slice(1)));
-    expect(held).toBeLessThan(QUIET_MIN_CONTRAST);
-    const kept = at(ColorDepth.EIGHT_BIT)(FAINT_RED, GROUND);
-    expect(kept).toBe(FAINT_RED);
-    expect(contrastRatio(drawn(kept), drawn(GROUND))).toBeGreaterThanOrEqual(held);
-  });
-
-  test("a translucent colour is measured as the terminal draws it, over black — never laid over its ground", () => {
-    // White at half alpha on #202020 is drawn #808080: 4.13:1 off the ground
-    // as drawn, 4.32:1 once 256 colours round the pair, so it keeps its
-    // contrast as it is. Laid over the ground it would claim 5.10:1, and a
-    // floor taken from that refused the grey the terminal draws.
-    expect(at(ColorDepth.EIGHT_BIT)("#ffffff80", "#202020")).toBe("#808080");
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// 1c. roleTextOn: a role's text on a ground, selected among the colours the
+// 1b. roleTextOn: a role's text on a ground, selected among the colours the
 //     theme names for the role
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -261,8 +199,8 @@ describe("roleTextOn: a role's text on a ground is a colour the theme names for 
     ["error-darken-2", parseRgbHex("641414")],
     ["error-darken-3", parseRgbHex("460000")],
   ]);
-  const on = (ground: string, palette = withRoles("reds", RED), role = "error"): string => {
-    const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
+  const on = (ground: string, palette = withRoles("reds", RED), role = "error", depth = ColorDepth.TRUECOLOR): string => {
+    const ref = createActiveSegmentRef(() => depth);
     const engine = createCcCandybarEngine({ ...TEST_ENGINE, extraFuncs: segmentColorFuncs(ref) });
     openSegment(ref, SEG, SEG, palette, DISCLOSURE, TINT, PAIRED_TEXT);
     return engine
@@ -295,9 +233,56 @@ describe("roleTextOn: a role's text on a ground is a colour the theme names for 
     expect(on("#707070")).toBe("#460000");
   });
 
-  test("a role the palette names no full ladder for fails loudly, naming the missing entry, even where the text colour reads", () => {
+  test("a role that is not a semantic one fails loudly, naming the three it may be", () => {
     // nord's text-muted reads on black, and no theme has a muted ladder.
-    expect(() => on("#000000", getThemePalette("nord"), "muted")).toThrow(/"muted" did not resolve/);
+    expect(() => on("#000000", getThemePalette("nord"), "muted")).toThrow(/"muted".*"error", "warning", "success"/);
+  });
+
+  const ROSE_PINE_MOON = getThemePalette("rose-pine-moon");
+
+  test("at ansi it is the terminal's red or bright red, whichever stands farther off the ground as drawn", () => {
+    // rose-pine-moon's pressed state #443546 is drawn #800080: bright red
+    // #ff0000 stands 2.36:1 off it, red #800000 1.16:1. The theme's reds round
+    // to #c0c0c0, #808080 and #800080 there.
+    expect(on("#443546", ROSE_PINE_MOON, "error", ColorDepth.STANDARD)).toBe("#ff0000");
+    // #886666 is drawn #808080: red 2.77:1, bright red 1.01:1.
+    expect(on("#886666", ROSE_PINE_MOON, "error", ColorDepth.STANDARD)).toBe("#800000");
+  });
+
+  test("at 256 colours it is the named red the order prefers among those that clear as drawn, not as truecolor measures them", () => {
+    // rose-pine-moon's accent-muted #5e4553, drawn #4e4e4e: text-error
+    // #f19fb7 (drawn #ffafaf) stands 4.76:1 off it and comes first. In
+    // truecolor it stands 4.23:1, so truecolor takes error-lighten-3 (4.94:1).
+    expect(on("#5e4553", ROSE_PINE_MOON, "error", ColorDepth.EIGHT_BIT)).toBe("#f19fb7");
+  });
+
+  test("at 256 colours, where no named red clears as drawn, the one standing farthest off as drawn", () => {
+    // On rose-pine-moon's own error #ea6f92: in truecolor error-darken-3
+    // #a83159 stands farthest (2.21:1), but the two are drawn only 1.27:1
+    // apart; as drawn error-lighten-3 #ffadce stands farthest, at 2.10:1.
+    expect(on("#ea6f92", ROSE_PINE_MOON, "error", ColorDepth.EIGHT_BIT)).toBe("#ffadce");
+  });
+
+  // Every ground the bar draws is a colour its palette names (held by
+  // test/palette-identity.test.ts), so every palette colour as a ground
+  // stands for every door the ✖ can be drawn on.
+  test("on every colour of every bundled theme, it is a named red at 256 colours and the terminal's red or bright red at ansi", () => {
+    const TERMINAL_REDS = new Set(["#ff0000", "#800000"]);
+    const wrong: string[] = [];
+    let measured = 0;
+    for (const theme of listThemePalettes()) {
+      const palette = getThemePalette(theme);
+      const named = new Set(ERROR_REDS.map((name) => palette.get(name).hex));
+      for (const [name, ground] of palette.vars) {
+        measured++;
+        const ansi = roleText(palette, "error", ground, ColorDepth.STANDARD).hex;
+        if (!TERMINAL_REDS.has(ansi)) wrong.push(`${theme} on ${name}: ansi ${ansi}`);
+        const eightBit = roleText(palette, "error", ground, ColorDepth.EIGHT_BIT).hex;
+        if (!named.has(eightBit)) wrong.push(`${theme} on ${name}: 256 ${eightBit}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+    expect(measured).toBeGreaterThan(listThemePalettes().length * 100);
   });
 });
 

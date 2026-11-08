@@ -389,6 +389,23 @@ export interface Decor {
 /** The roles whose meaning decoration must never borrow. */
 export type SemanticRole = "error" | "success" | "warning";
 
+/**
+ * Each semantic role's two colours among the terminal's sixteen, by their
+ * ANSI names: what a role's text wears where the terminal draws only those
+ * sixteen. A theme's own shades of the role round there to whichever entry is
+ * nearest, often a grey or a purple, and the detached daemon cannot see the
+ * terminal's own colours, so the terminal's red is the only red it can name.
+ * [LAW:types-are-the-program] Total over the roles, so a new role cannot be
+ * drawn at sixteen colours until it is given its two.
+ */
+export const ANSI_ROLE_COLOURS: Readonly<
+  Record<SemanticRole, readonly [string, string]>
+> = {
+  error: ["bright_red", "red"],
+  warning: ["bright_yellow", "yellow"],
+  success: ["bright_green", "green"],
+};
+
 // [LAW:types-are-the-program] Checked by the compiler rather than a review: no
 // semantic role is a decorative hue. (test/decor.test.ts asserts it at runtime
 // too.)

@@ -909,20 +909,20 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
-      // gives it (`roleTextOn`): the theme's text-red where that reads on the
-      // pressed state, otherwise the role's own red or the nearest rung of its
-      // ladder out toward the pole the pressed state stands farther from that
-      // does, and where none does, the named red standing farthest off. It
-      // never slides lightness: a slid red stops reading as red, and the ✖
-      // must be red on every theme. `keptOn` only stops the terminal's
-      // rounding from costing it the contrast it has. Closed, the author's
-      // glyph keeps the cell's own text.
+      // the ✖ wears a red the render's depth draws as `DOOR_CLOSE_ROLE`'s
+      // (`roleTextOn`), measured on the pressed state as that depth draws
+      // both: in truecolor and at 256 colours the theme's text-red where that
+      // reads, otherwise the role's own red or the nearest rung of its ladder
+      // out toward the pole the pressed state stands farther from that does;
+      // at ansi the terminal's red or bright red; and where none reads, the
+      // one standing farthest off. It never slides lightness: a slid red
+      // stops reading as red, and the ✖ must be red on every theme and at
+      // every depth. Closed, the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
         template:
           `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}` +
           `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
-          `{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}` +
+          `{{ fg (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) $door }}` +
           `{{ else }}{{ $door }}{{ end }}` +
           DIAGNOSTICS_INDICATOR,
       },
