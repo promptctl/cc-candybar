@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-692",
+      "ref": "refs/pull/692/merge",
+      "sha": "1d214fe01d9e87757364617c9b931ee8cc6d43bd",
+      "timestamp": "2026-11-08T12:01:46.374Z",
+      "commits": [
+        {
+          "sha": "1d214fe01d9e87757364617c9b931ee8cc6d43bd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T12:00:57Z",
+          "message": "Merge a5338da065a15b2b9a435d49d3b3b5d47b44ac55 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
+        },
+        {
+          "sha": "a5338da065a15b2b9a435d49d3b3b5d47b44ac55",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T05:00:46-07:00",
+          "message": "test(facts): the live request is a statusline client's (no encoding, the shared Status hook data), owns its setup's hold from the setup on, and its comments claim only the steps it takes (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "1189f2010876191e95b15f15d5898f943259ccb8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T04:47:56-07:00",
+          "message": "test(facts): the live request states its deadline from the instant it arrives, crosses the checkpoint before the setup's burn, and the header names the whole request path (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "b3349f126c430a5f5df24850e18abc58bf790ad9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:36:51-07:00",
+          "message": "test(facts): the live session states a client's deadline, spells its argv once, and checks the pane its checkpoint stamped (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "b72b705f710b16fab4ba22a42c743a393f4044bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:14:46-07:00",
+          "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-693",
       "ref": "refs/pull/693/merge",
       "sha": "08ad4336c52ac715c55c200249927c406ae463bd",
@@ -84,42 +127,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:13:44-07:00",
           "message": "fix(pricing): entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fold priced each un-costed entry with the table held when it ran and\nstored the sum, so a daemon that started offline kept the bundled rates\nfor every entry folded before the live table landed, in the session total\nand in today, until a rewrite re-folded the file from zero.\n\nA record now holds the price's inputs and no price: the cost its entries\ncarried themselves, and the tokens of the entries that carried none by\nthe model they are priced as. Every reader prices the record with the\ntable held at the read. The pricing adapter's table is an observable\nread, and the ask that starts a due load is a separate effect the\nrequest's refresh makes, so the day sums and the session draw recompute\nin the turn a table lands and no read inside a derivation starts a load.\nNothing waits for the first load any more: a cold daemon's first frame\ndraws at the bundled rates and is re-priced when the table lands.\n\nTests: a store over the live adapter and the mocked network folds entries\nbefore the fetch answers and reads the landed table's price for them\nafter it, with no transcript read and no refresh, and again when the\nday's table lands; a carried cost stands under any table; the adapter's\ncases are restated over the read and the ask, with a reaction observing\nthe landing.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-692",
-      "ref": "refs/pull/692/merge",
-      "sha": "0f4b87b7fc745d819016803e49abe9f542d5d80d",
-      "timestamp": "2026-11-08T11:48:57.619Z",
-      "commits": [
-        {
-          "sha": "0f4b87b7fc745d819016803e49abe9f542d5d80d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T11:48:07Z",
-          "message": "Merge 1189f2010876191e95b15f15d5898f943259ccb8 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
-        },
-        {
-          "sha": "1189f2010876191e95b15f15d5898f943259ccb8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T04:47:56-07:00",
-          "message": "test(facts): the live request states its deadline from the instant it arrives, crosses the checkpoint before the setup's burn, and the header names the whole request path (candybar-gather-renderer-76bb.1dh.izh)\n"
-        },
-        {
-          "sha": "b3349f126c430a5f5df24850e18abc58bf790ad9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:36:51-07:00",
-          "message": "test(facts): the live session states a client's deadline, spells its argv once, and checks the pane its checkpoint stamped (candybar-gather-renderer-76bb.1dh.izh)\n"
-        },
-        {
-          "sha": "b72b705f710b16fab4ba22a42c743a393f4044bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:14:46-07:00",
-          "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
