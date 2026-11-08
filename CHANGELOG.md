@@ -1,3 +1,9 @@
+## [1.211.1](https://github.com/promptctl/cc-candybar/compare/v1.211.0...v1.211.1) (2026-11-08)
+
+### Bug Fixes
+
+* **watchers:** on macOS, named-entry watches are polled instead of subscribing fseventsd to whole trees ([#688](https://github.com/promptctl/cc-candybar/issues/688)) ([691cd17](https://github.com/promptctl/cc-candybar/commit/691cd171bcee77b6d424fd6a730ab3be4bd8d503))
+
 ## [1.211.0](https://github.com/promptctl/cc-candybar/compare/v1.210.6...v1.211.0) (2026-11-08)
 
 ### Features
