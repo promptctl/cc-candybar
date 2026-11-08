@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-698",
+      "ref": "refs/pull/698/merge",
+      "sha": "3439a396295102bd4df6b670a605cc29b5d7b5d9",
+      "timestamp": "2026-11-08T14:27:25.725Z",
+      "commits": [
+        {
+          "sha": "3439a396295102bd4df6b670a605cc29b5d7b5d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:26:30-07:00",
+          "message": "Merge 8c3b2fa483b6448de8b6247dc9d251b17cfc3fab into eaa59b6d87c32073b040a97072a0fee0a6e048fc\n"
+        },
+        {
+          "sha": "8c3b2fa483b6448de8b6247dc9d251b17cfc3fab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:26:13-07:00",
+          "message": "fix(daemon): the lane edge takes the daemon's claude-input edge, so a daemon's claudeInput adapter reaches a lane's typing (candybar-testing-ihvy.izc.ubq)\n\nproductionLaneEdge built its own claude-input edge from the launcher, so a\ndaemon built over another claudeInput adapter still typed real input when a\nlane turned on. createDaemon now builds the claude-input edge once and hands\nthe same edge to the lane edge and to the click context, as it hands both\nedges its disk. With the production adapters the lane types through the same\nproductionClaudeInputEdge over the daemon's launcher as before.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-694",
       "ref": "refs/pull/694/merge",
       "sha": "f9b2ca70f9d8c87801a9a8ff19fff6b5b16000c1",
