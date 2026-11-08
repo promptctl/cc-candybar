@@ -543,16 +543,21 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     // declaring its view: what that declaration stamps is later than `at`.
     clock.burn(burnMs);
     // [LAW:no-ambient-temporal-coupling] The setup's hold is owned from the
-    // moment it is set up, as the daemon's draw binds it: a throw before the
-    // answer releases it, and the answer releases it on every exit.
-    using owned = new DisposableStack();
-    const setup = owned.use(setUpRender(parts, checked.req, at, []));
-    const settling = settleRequest(live.recorder, setup.view, at);
-    const held = owned.move();
+    // moment it is set up, as the daemon's render setup owns its hold: a throw
+    // before the answer is handed out releases it, and the answer releases it
+    // on every exit.
+    const setup = setUpRender(parts, checked.req, at, []);
+    let settling: ReturnType<typeof settleRequest>;
+    try {
+      settling = settleRequest(live.recorder, setup.view, at);
+    } catch (e) {
+      setup[Symbol.dispose]();
+      throw e;
+    }
     return {
       view: setup.view,
       answer: async (): Promise<Frame> => {
-        using _held = held;
+        using _held = setup;
         await landed(clock, setup.view, stepMs);
         await settling.landed;
         const frame = drawForAnswer(parts, setup, settling.arrival).drawn.body;
