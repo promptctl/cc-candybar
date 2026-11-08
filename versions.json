@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-688",
+      "ref": "refs/pull/688/merge",
+      "sha": "455b614daf39d69fc3109f412292b2db1aeadbee",
+      "timestamp": "2026-11-08T13:15:18.698Z",
+      "commits": [
+        {
+          "sha": "455b614daf39d69fc3109f412292b2db1aeadbee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T13:14:17Z",
+          "message": "Merge 051ff3dad1e77204adaa60e01b1f759ca0142f42 into 10f03f8b92a7ea6f004ace540fcfaeb89e89cbac\n"
+        },
+        {
+          "sha": "051ff3dad1e77204adaa60e01b1f759ca0142f42",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:03:46-07:00",
+          "message": "fix(file-events): the stall row names no consumer, since a polled config name rides no file event (brandon-unfiled-3248.iywk)\n"
+        },
+        {
+          "sha": "0c851cdc4e4262844b48feed48a6536d1aeabfa0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:15:32-07:00",
+          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-692",
       "ref": "refs/pull/692/merge",
       "sha": "5cbfc8a273dfc728297261c09922c7ce44bac86a",
@@ -84,35 +113,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-08T12:38:31Z",
           "message": "chore(release): set `package.json` to 1.210.6 [skip ci]\n\n## [1.210.6](https://github.com/promptctl/cc-candybar/compare/v1.210.5...v1.210.6) (2026-11-08)\n\n### Bug Fixes\n\n* **pricing:** entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3) ([#691](https://github.com/promptctl/cc-candybar/issues/691)) ([0a394d3](https://github.com/promptctl/cc-candybar/commit/0a394d3d93cccb884c28bb7b74e365fa6bef1695))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-688",
-      "ref": "refs/pull/688/merge",
-      "sha": "eaa196291c259f49b8117a501b593e79669ae074",
-      "timestamp": "2026-11-08T13:08:00.760Z",
-      "commits": [
-        {
-          "sha": "eaa196291c259f49b8117a501b593e79669ae074",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:07:02-07:00",
-          "message": "Merge be711f146cee175977a52621d0ab893e83610966 into 600ecfad0d88530c307e642fa2c302f67f99d326\n"
-        },
-        {
-          "sha": "be711f146cee175977a52621d0ab893e83610966",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:03:46-07:00",
-          "message": "fix(file-events): the stall row names no consumer, since a polled config name rides no file event (brandon-unfiled-3248.iywk)\n"
-        },
-        {
-          "sha": "155272d6ffa0f874c8be36065c3e6fd77f9c5dbc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:15:32-07:00",
-          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
         }
       ]
     },
