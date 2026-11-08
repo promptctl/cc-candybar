@@ -2,59 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-699",
-      "ref": "refs/pull/699/merge",
-      "sha": "df0744174d3eb8eb7c6a354d8655d9ea54ed8368",
-      "timestamp": "2026-11-08T17:53:26.133Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "3b7ffb140e9cd7ddb57c056cd4b741f9d4f8f695",
+      "timestamp": "2026-11-08T17:59:48.032Z",
       "commits": [
         {
-          "sha": "df0744174d3eb8eb7c6a354d8655d9ea54ed8368",
+          "sha": "3b7ffb140e9cd7ddb57c056cd4b741f9d4f8f695",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T17:52:28Z",
-          "message": "Merge 563763ea9283ffd45d9db0cb3baf89e7af5bdb3d into bd12db81817a904ee592c29a78c54f8aa6722033\n"
+          "timestamp": "2026-11-08T10:58:46-07:00",
+          "message": "fix(watchers): on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens (#699)\n\n* fix(watchers): on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens (brandon-unfiled-3248.slsx)\n\nA watch handle now says whether it rides the OS's one event stream, from the\nregistry's own choice of what is polled. A stall is the fault only of a watch\nthat rides it, so a polled `watch_file` name carries no stall fault and keeps\nrefreshing; the file-event probe asks the same question of its own watch. The\nstall row reads the disk's watch reach: on macOS it names a folder or tree\nwatched whole as what a stall deafens and says a file watched by name still\nrefreshes; on Linux, where every watch rides inotify, it reads as before.\n\n* fix(watchers): the stall row reads the registry's polling rule, and names branch refs, not branches, as deafened (brandon-unfiled-3248.slsx)\n\nThe row keyed its text on the disk's watch reach, a second copy of the\nregistry's rule for which watches are polled. The registry now owns that\nrule as one answer, opens every directory by it, and the row reads it.\nOn macOS a repo's HEAD is polled and heard through a stall; only the\nbranch refs tree rides the stream, so the row says branch refs.\n\n* fix(watchers): the stall row names no consumer, and the probe's dead stream check goes back to the law on its target (brandon-unfiled-3248.slsx)\n\nThe row's consumer examples copied watch shapes each consumer owns, so a\nchanged shape would leave the row saying a deaf watch still refreshes. The\nprobe's target has no filenames, so its watch always rides the stream; the\nridesStream check after the refusal could not fire, and the\none-source-of-truth marker returns to the target it depends on."
         },
         {
-          "sha": "563763ea9283ffd45d9db0cb3baf89e7af5bdb3d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T10:52:24-07:00",
-          "message": "Merge branch 'main' into fix/stall-polled-watches"
-        },
-        {
-          "sha": "0d3d856851b86e7d4c724cd6697c4b1e1ea6880d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:54:46-07:00",
-          "message": "Merge branch 'main' into fix/stall-polled-watches"
-        },
-        {
-          "sha": "8e2881bac313ce673e933a6cf74ad55aa02b4797",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:38:13-07:00",
-          "message": "Merge branch 'main' into fix/stall-polled-watches"
-        },
-        {
-          "sha": "3a06cbead73b50b93d8d0fb280529bb50d3ae9e3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:36:43-07:00",
-          "message": "fix(watchers): the stall row names no consumer, and the probe's dead stream check goes back to the law on its target (brandon-unfiled-3248.slsx)\n\nThe row's consumer examples copied watch shapes each consumer owns, so a\nchanged shape would leave the row saying a deaf watch still refreshes. The\nprobe's target has no filenames, so its watch always rides the stream; the\nridesStream check after the refusal could not fire, and the\none-source-of-truth marker returns to the target it depends on.\n"
-        },
-        {
-          "sha": "24c3c1933540c332951d5f1b2f8d7b28e82949fe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:31:46-07:00",
-          "message": "fix(watchers): the stall row reads the registry's polling rule, and names branch refs, not branches, as deafened (brandon-unfiled-3248.slsx)\n\nThe row keyed its text on the disk's watch reach, a second copy of the\nregistry's rule for which watches are polled. The registry now owns that\nrule as one answer, opens every directory by it, and the row reads it.\nOn macOS a repo's HEAD is polled and heard through a stall; only the\nbranch refs tree rides the stream, so the row says branch refs.\n"
-        },
-        {
-          "sha": "b4291bbdeece7951e5278f5f202fe6f0b96cd2b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:26:41-07:00",
-          "message": "fix(watchers): on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens (brandon-unfiled-3248.slsx)\n\nA watch handle now says whether it rides the OS's one event stream, from the\nregistry's own choice of what is polled. A stall is the fault only of a watch\nthat rides it, so a polled `watch_file` name carries no stall fault and keeps\nrefreshing; the file-event probe asks the same question of its own watch. The\nstall row reads the disk's watch reach: on macOS it names a folder or tree\nwatched whole as what a stall deafens and says a file watched by name still\nrefreshes; on Linux, where every watch rides inotify, it reads as before.\n"
+          "sha": "bd12db81817a904ee592c29a78c54f8aa6722033",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-08T15:58:21Z",
+          "message": "chore(release): set `package.json` to 1.212.0 [skip ci]\n\n## [1.212.0](https://github.com/promptctl/cc-candybar/compare/v1.211.3...v1.212.0) (2026-11-08)\n\n### ⚠ BREAKING CHANGES\n\n* **colour:** the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-authored-by: Claude <noreply@anthropic.com>\n\n### Bug Fixes\n\n* **colour:** the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g) ([#696](https://github.com/promptctl/cc-candybar/issues/696)) ([8dad5f4](https://github.com/promptctl/cc-candybar/commit/8dad5f4a185cb522babdc3e982a38cf82eeb3290))\n"
         }
       ]
     },
@@ -112,28 +77,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-08T07:26:13-07:00",
           "message": "fix(daemon): the lane edge takes the daemon's claude-input edge, so a daemon's claudeInput adapter reaches a lane's typing (candybar-testing-ihvy.izc.ubq)\n\nproductionLaneEdge built its own claude-input edge from the launcher, so a\ndaemon built over another claudeInput adapter still typed real input when a\nlane turned on. createDaemon now builds the claude-input edge once and hands\nthe same edge to the lane edge and to the click context, as it hands both\nedges its disk. With the production adapters the lane types through the same\nproductionClaudeInputEdge over the daemon's launcher as before.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "8dad5f4a185cb522babdc3e982a38cf82eeb3290",
-      "timestamp": "2026-11-08T15:51:25.707Z",
-      "commits": [
-        {
-          "sha": "8dad5f4a185cb522babdc3e982a38cf82eeb3290",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T08:50:24-07:00",
-          "message": "fix(colour)!: the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g) (#696)\n\nAt ansi the open settings door's ✖ was drawn silver, yellow, purple or\nblack: the red was chosen as truecolor measures it, and keptOn's repair\nsearched the depth's table by contrast alone. The choice now measures\nevery candidate and the ground as the render's depth draws them, and\nthe candidates are per depth: the theme's named reds in truecolor and\nat 256 colours, the terminal's red and bright red (SGR 31/91) at ansi.\nkeptOn has no job left and is deleted.\n\nBREAKING CHANGE: the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        },
-        {
-          "sha": "def0cff0eec757d875b325aba53190574e418e29",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-08T14:56:21Z",
-          "message": "chore(release): set `package.json` to 1.211.3 [skip ci]\n\n## [1.211.3](https://github.com/promptctl/cc-candybar/compare/v1.211.2...v1.211.3) (2026-11-08)\n\n### Bug Fixes\n\n* **update-act:** an act whose files can't be written is still ended after its budget ([#694](https://github.com/promptctl/cc-candybar/issues/694)) ([ada8560](https://github.com/promptctl/cc-candybar/commit/ada85603434124de78d6e549106c59efccbe463b))\n"
         }
       ]
     },
