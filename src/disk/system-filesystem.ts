@@ -30,6 +30,7 @@ const statOf = (st: fs.BigIntStats): Stat => ({
 });
 
 export const systemFilesystem: Filesystem = {
+  watchReach: process.platform === "darwin" ? "tree" : "directory",
   statSync: (p) => statOf(fs.statSync(p, { bigint: true })),
   lstatSync: (p) => statOf(fs.lstatSync(p, { bigint: true })),
   readlinkSync: (p) => fs.readlinkSync(p),
