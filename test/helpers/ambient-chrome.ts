@@ -168,7 +168,7 @@ export function ownLinks(urls: readonly string[]): string[] {
   // [LAW:one-source-of-truth] Reads the same reserved-key predicate the
   // validator filter does, rather than restating a prefix list that drifted
   // once already: matching `edit.` alone missed edit chrome's own insert-menu
-  // disclosure, whose key is `menus.edit_<preset>_insertSeg_<n>.…`.
+  // disclosure, whose key starts `menus.edit_<preset>_insertSeg_`.
   //
   // Safe for a layout-edit test's own subject because `apply-layout-op` is not
   // a key-writing verb — `keysWrittenBy` reports nothing for it, so a `+`/`-`
