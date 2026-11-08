@@ -26741,15 +26741,6 @@ function ensureContrast(fg, bg, minRatio = 4.5, drawnAt = ColorDepth.TRUECOLOR, 
     return chosen;
   return table.written.get(table.shown.matchReadable(fg.compositeOver(ground), shownBg, minRatio));
 }
-function ensureDrawn(chosen, drawnAt, accept, substrate = SURFACE_BLACK, terminal) {
-  const opaque = drawnBackground(chosen, substrate);
-  const table = drawnTable(drawnAt, terminal);
-  const drawn = (c) => shownAs(table, drawnBackground(c, substrate));
-  if (accept(drawn(opaque), drawn))
-    return opaque;
-  const index = table?.shown.matchWhere(opaque, (entry) => accept(entry, drawn));
-  return index === void 0 ? void 0 : table.written.get(index);
-}
 function drawnColour(colour, drawnAt, substrate = SURFACE_BLACK, terminal) {
   return shownAs(drawnTable(drawnAt, terminal), drawnBackground(colour, substrate));
 }
@@ -36622,6 +36613,11 @@ var VARIATIONS = {
 var TRIAL_VARIATION_NAMES = Object.keys(
   TUNINGS
 );
+var ANSI_ROLE_COLOURS = {
+  error: ["bright_red", "red"],
+  warning: ["bright_yellow", "yellow"],
+  success: ["bright_green", "green"]
+};
 var vocabularyOf = (palette, decor, drawnAt) => turnsHeld(
   palette,
   decor,
@@ -58558,17 +58554,17 @@ function settingsArtifacts(doorGlyph) {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
-      // gives it (`roleTextOn`): the theme's text-red where that reads on the
-      // pressed state, otherwise the role's own red or the nearest rung of its
-      // ladder out toward the pole the pressed state stands farther from that
-      // does, and where none does, the named red standing farthest off. It
-      // never slides lightness: a slid red stops reading as red, and the ✖
-      // must be red on every theme. `keptOn` only stops the terminal's
-      // rounding from costing it the contrast it has. Closed, the author's
-      // glyph keeps the cell's own text.
+      // the ✖ wears a red the render's depth draws as `DOOR_CLOSE_ROLE`'s
+      // (`roleTextOn`), measured on the pressed state as that depth draws
+      // both: in truecolor and at 256 colours the theme's text-red where that
+      // reads, otherwise the role's own red or the nearest rung of its ladder
+      // out toward the pole the pressed state stands farther from that does;
+      // at ansi the terminal's red or bright red; and where none reads, the
+      // one standing farthest off. It never slides lightness: a slid red
+      // stops reading as red, and the ✖ must be red on every theme and at
+      // every depth. Closed, the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
-        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
+        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
       },
       [FPS_SEG]: { template: FRAME_RATE },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
@@ -70158,7 +70154,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.211.2";
+var PACKAGE_VERSION = "1.211.3";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -75314,34 +75310,12 @@ function segmentColorFuncs(ref) {
   const roleTextOn = {
     fn: ((role, bgRef) => {
       const { palette: palette2 } = requireActiveSegment(ref, "{{ roleTextOn }}");
-      return namedRoleText(palette2, role, resolveColorRef(palette2, bgRef)).hex;
-    }),
-    argTypes: ["string", "string"],
-    arity: { kind: "exact" },
-    returnType: "string"
-  };
-  const keptOn = {
-    fn: ((fgRef, bgRef) => {
-      const { palette: palette2 } = requireActiveSegment(ref, "{{ keptOn }}");
-      const fg = resolveColorRef(palette2, fgRef);
-      const bg = resolveColorRef(palette2, bgRef);
-      const held = contrastRatio(
-        drawnColour(fg, ColorDepth.TRUECOLOR),
-        drawnColour(bg, ColorDepth.TRUECOLOR)
-      );
-      const floor2 = Math.min(TEXT_MIN_CONTRAST, held);
-      const depth = ref.drawnAt();
-      const kept = ensureDrawn(
-        fg,
-        depth,
-        (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor2
-      );
-      if (kept === void 0) {
-        throw new Error(
-          `keptOn: nothing drawn at ${ColorDepth[depth]} stands ${floor2.toFixed(2)}:1 off ${bg.hex} (drawn ${drawnColour(bg, depth).hex})`
-        );
-      }
-      return kept.hex;
+      return roleText2(
+        palette2,
+        semanticRole(role),
+        resolveColorRef(palette2, bgRef),
+        ref.drawnAt()
+      ).hex;
     }),
     argTypes: ["string", "string"],
     arity: { kind: "exact" },
@@ -75373,40 +75347,63 @@ function segmentColorFuncs(ref) {
     arity: { kind: "variadic" },
     returnType: "T"
   };
-  return { ...palette, bgOf, tint, roleTextOn, keptOn, gauge };
+  return { ...palette, bgOf, tint, roleTextOn, gauge };
 }
 var RUNGS_OUT = {
   "#000000": ["darken-1", "darken-2", "darken-3"],
   "#ffffff": ["lighten-1", "lighten-2", "lighten-3"]
 };
 var RUNGS = Object.values(RUNGS_OUT).flat();
-function namedRoleText(palette, role, ground) {
-  const shown = drawnColour(ground, ColorDepth.TRUECOLOR);
-  const named3 = (name) => {
-    const colour = resolveColorRef(palette, name);
-    return {
-      colour,
-      ratio: contrastRatio(drawnColour(colour, ColorDepth.TRUECOLOR), shown)
-    };
-  };
-  const pole = contrastFor(shown).hex;
-  const out = RUNGS_OUT[pole];
-  if (out === void 0) {
+function semanticRole(role) {
+  if (!Object.hasOwn(ANSI_ROLE_COLOURS, role)) {
+    const roles = Object.keys(ANSI_ROLE_COLOURS).map((known) => `"${known}"`).join(", ");
     throw new Error(
-      `contrastFor named ${pole} for ${ground.hex}, which is neither pole`
+      `{{ roleTextOn }}: "${role}" is not a semantic role; it takes one of ${roles}`
     );
   }
-  const text4 = `text-${role}`;
-  const rung = (step4) => `${role}-${step4}`;
-  const colours = new Map(
-    [text4, role, ...RUNGS.map(rung)].map((name) => [name, named3(name)])
+  return role;
+}
+function ansiColour(name) {
+  const index = ANSI_COLOR_NAMES[name];
+  if (index === void 0) {
+    throw new Error(`"${name}" is not an ANSI colour name rich-js knows`);
+  }
+  return STANDARD_TABLE.get(index);
+}
+var namedCandidates = (palette, role, pole) => {
+  const out = RUNGS_OUT[pole];
+  if (out === void 0) {
+    throw new Error(`contrastFor named ${pole}, which is neither pole`);
+  }
+  const named3 = (rungs) => [`text-${role}`, role, ...rungs.map((step4) => `${role}-${step4}`)].map(
+    (name) => resolveColorRef(palette, name)
   );
-  const preferred = [text4, role, ...out.map(rung)].map(
-    (name) => colours.get(name)
+  return { preferred: named3(out), all: named3(RUNGS) };
+};
+var terminalCandidates = (_palette, role) => {
+  const both2 = ANSI_ROLE_COLOURS[role].map(ansiColour);
+  return { preferred: both2, all: both2 };
+};
+var CANDIDATES_AT = {
+  [ColorDepth.DEFAULT]: namedCandidates,
+  [ColorDepth.STANDARD]: terminalCandidates,
+  [ColorDepth.EIGHT_BIT]: namedCandidates,
+  [ColorDepth.TRUECOLOR]: namedCandidates,
+  [ColorDepth.WINDOWS]: terminalCandidates
+};
+function roleText2(palette, role, ground, depth) {
+  const shown = drawnColour(ground, depth);
+  const measured3 = (colour) => ({
+    colour,
+    ratio: contrastRatio(drawnColour(colour, depth), shown)
+  });
+  const { preferred, all: all2 } = CANDIDATES_AT[depth](
+    palette,
+    role,
+    contrastFor(shown).hex
   );
-  return (preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? [...colours.values()].reduce(
-    (farthest, colour) => colour.ratio > farthest.ratio ? colour : farthest
-  )).colour;
+  const farthest = all2.map(measured3).reduce((best, colour) => colour.ratio > best.ratio ? colour : best);
+  return (preferred.map(measured3).find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? farthest).colour;
 }
 function flattenStops(stops) {
   return stops.flatMap((stop2) => {
