@@ -52811,8 +52811,9 @@ var FileEventDelivery = class {
       // [LAW:single-enforcer] The only acquirer of this registry key.
       handle: this.watchers.acquire(
         `file-events:${folder}`,
-        // Every child of a folder of its own: a watch for a named entry may
-        // be polled, and the probe measures the OS's delivery.
+        // [LAW:one-source-of-truth] Every child of a folder of its own: a
+        // watch for a named entry may be polled, and the probe measures the
+        // OS's delivery, which only an OS watch rides.
         { dirs: [{ path: folder }] },
         (heard) => this.heard(probing, heard)
       )
@@ -52825,10 +52826,6 @@ var FileEventDelivery = class {
         stopPeriod,
         `the OS refused the probe folder's watch: ${refusal.reason}`
       );
-      return;
-    }
-    if (!probing.handle.ridesStream) {
-      this.end(stopPeriod, "the probe folder's watch rides no OS stream");
       return;
     }
     this.move({ kind: "delivering", unreported: [], missedSince: null });
@@ -53008,7 +53005,7 @@ var FileEventDelivery = class {
 };
 var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
 var stallReason = (d, watch2) => d.kind === "stalled" && watch2.ridesStream ? stopped(d.missedSince) : null;
-var deafened = (namesPolled) => namesPolled ? "so what watches a whole folder or tree, such as plugin folders, plugin storage and branch refs, will not refresh until they resume; a file watched by name, such as the config or a repo's HEAD, is checked on a timer and still refreshes" : "so nothing that refreshes on file events will refresh until they resume";
+var deafened = (namesPolled) => namesPolled ? "so a folder or tree watched whole will not refresh until they resume; a file watched by name is checked on a timer and still refreshes" : "so nothing that refreshes on file events will refresh until they resume";
 function fileEventsWarnings(d, namesPolled) {
   if (d.missedSince === null) return [];
   const since = iso(d.missedSince);
