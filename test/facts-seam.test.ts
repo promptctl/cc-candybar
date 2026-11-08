@@ -8,10 +8,9 @@
 // the demo (src/demo/play.ts).
 //
 // The live half is the daemon's parts in this worker (test/helpers/
-// daemon-parts.ts), taking each request as the daemon's request path does:
-// its wire form crosses the render checkpoint, the daemon's render setup
-// declares its view, and the request is settled and its answer drawn there,
-// because the boot ratchet admits no new booting case
+// daemon-parts.ts): each request's wire form crosses the daemon's render
+// checkpoint and render setup, and is settled and its answer drawn by the
+// daemon's own draw, because the boot ratchet admits no new booting case
 // (.claude/memory/testing.md). Each
 // live frame is drawn only once every fact has landed, so a line stamped
 // after a draw never exists: the recording at an instant is what the frame at
@@ -121,7 +120,7 @@ import { TEST_LINKS } from "./helpers/link-signer";
 import { until } from "./helpers/until";
 import { daemonParts } from "./helpers/daemon-parts";
 import { CLAUDE_START, claudeHolds } from "./helpers/claude-record";
-import { configFlag } from "./helpers/daemon-e2e";
+import { configFlag, hookData } from "./helpers/daemon-e2e";
 
 jest.setTimeout(30_000);
 
@@ -277,15 +276,11 @@ function wireRequest(
   return {
     v: PROTOCOL_VERSION,
     kind: "render",
-    encoding: "frame",
     deadline: now + TOTAL_BUDGET_MS,
     hookData: {
-      hook_event_name: "Status",
-      session_id: SID,
+      ...hookData(SID, cwd),
       transcript_path: path.join(home, "transcript.jsonl"),
-      cwd,
       model: { id: "claude-opus-4-7", display_name: model },
-      workspace: { current_dir: cwd, project_dir: cwd },
     },
     args: configFlag(configFile),
     cwd,
@@ -512,9 +507,11 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
       },
       drawing: () => true,
     });
-  // One request of the session's from `cwd`, at the clock's instant, as the
-  // daemon's request path takes one: the view declared with it, the request
-  // noted and its view settled. Its answer, once every fact landed, is the
+  // One request of the session's from `cwd`, at the clock's instant, through
+  // the daemon's checkpoint and render setup: the view declared with it, the
+  // request noted for its recordings and its view settled. The frame feeds are
+  // never told of it, so a lane or a click finds the session with no request
+  // on record. Its answer, once every fact landed, is the
   // daemon's draw of the view it holds, noted for its recordings, and the
   // hold released.
   const arrive = (
@@ -545,12 +542,17 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     // What the request path spends between reading the request's instant and
     // declaring its view: what that declaration stamps is later than `at`.
     clock.burn(burnMs);
-    const setup = setUpRender(parts, checked.req, at, []);
+    // [LAW:no-ambient-temporal-coupling] The setup's hold is owned from the
+    // moment it is set up, as the daemon's draw binds it: a throw before the
+    // answer releases it, and the answer releases it on every exit.
+    using owned = new DisposableStack();
+    const setup = owned.use(setUpRender(parts, checked.req, at, []));
     const settling = settleRequest(live.recorder, setup.view, at);
+    const held = owned.move();
     return {
       view: setup.view,
       answer: async (): Promise<Frame> => {
-        using _setup = setup;
+        using _held = held;
         await landed(clock, setup.view, stepMs);
         await settling.landed;
         const frame = drawForAnswer(parts, setup, settling.arrival).drawn.body;
