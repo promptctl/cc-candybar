@@ -264,7 +264,8 @@ const CLAUDE_PID = 4242;
 // The request a statusline client that Claude Code's process CLAUDE_PID ran
 // sends from `cwd` with `--config <configFile>` at the epoch instant `now`, in
 // its wire form, raw hints and all: what the daemon's checkpoint takes. Its
-// deadline is the one a client states, its budget past the instant it sends.
+// deadline is the one the Node client states, its budget past the instant it
+// sends over a connection already made.
 function wireRequest(
   cwd: string,
   home: string,
@@ -542,22 +543,20 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     // What the request path spends between reading the request's instant and
     // declaring its view: what that declaration stamps is later than `at`.
     clock.burn(burnMs);
-    // [LAW:no-ambient-temporal-coupling] The setup's hold is owned from the
-    // moment it is set up, as the daemon's render setup owns its hold: a throw
-    // before the answer is handed out releases it, and the answer releases it
-    // on every exit.
+    // [LAW:no-ambient-temporal-coupling] The setup's hold has one owner at a
+    // time: the case's teardown from the moment it is set up, until the answer
+    // takes it and releases it on every exit of its draw. A request never
+    // answered, because settling it or a later step of the case threw, is
+    // released ahead of the parts' close.
     const setup = setUpRender(parts, checked.req, at, []);
-    let settling: ReturnType<typeof settleRequest>;
-    try {
-      settling = settleRequest(live.recorder, setup.view, at);
-    } catch (e) {
-      setup[Symbol.dispose]();
-      throw e;
-    }
+    let unanswered: typeof setup | null = setup;
+    cleanups.push(() => unanswered?.[Symbol.dispose]());
+    const settling = settleRequest(live.recorder, setup.view, at);
     return {
       view: setup.view,
       answer: async (): Promise<Frame> => {
         using _held = setup;
+        unanswered = null;
         await landed(clock, setup.view, stepMs);
         await settling.landed;
         const frame = drawForAnswer(parts, setup, settling.arrival).drawn.body;
