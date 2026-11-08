@@ -52983,9 +52983,9 @@ function fileEventsWarnings(d) {
   const message = () => {
     switch (d.kind) {
       case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so what refreshes on file events may have missed a change made since`;
       case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
+        return `${stopped(d.missedSince)}, so nothing that refreshes on file events will refresh until they resume`;
       case "unmeasured":
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
@@ -67730,6 +67730,14 @@ function applyClaudeCodeReserve(rawCols) {
 
 // src/daemon/cache/today-facts.ts
 init_globals();
+
+// src/segments/session.ts
+init_globals();
+function totalTokens(breakdown) {
+  return breakdown.input + breakdown.output + breakdown.cacheCreation + breakdown.cacheRead;
+}
+
+// src/daemon/cache/today-facts.ts
 var EMPTY_DAY = {
   cost: 0,
   input: 0,
@@ -67760,7 +67768,7 @@ function projectToday(facts, at) {
   if (own2 !== void 0) addDay(total, own2);
   return ok({
     cost: total.cost,
-    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
+    tokens: totalTokens(total),
     tokenBreakdown: {
       input: total.input,
       output: total.output,
@@ -68974,7 +68982,7 @@ async function foldAppended(filePath2, prior, empty2, step4) {
       end = { size: window2.size, stamp: window2.stamp };
     }
     const next = window2.start + window2.lines.length;
-    value = await step4(
+    value = step4(
       value,
       decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
     );
@@ -70061,7 +70069,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.4";
+var PACKAGE_VERSION = "1.210.6";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -79374,7 +79382,10 @@ var stay = (resp) => ({
   exitAfterFlush: null,
   delivered: NOTHING_DELIVERED
 });
-var replied = (reply) => ({ kind: "reply", ...reply });
+var replied = (reply) => ({
+  kind: "reply",
+  ...reply
+});
 var REPLY_KINDS = {
   render: true,
   "pane-session": true,
@@ -81262,6 +81273,7 @@ var import_node_path43 = __toESM(require_path_browserify(), 1);
 init_globals();
 init_url();
 var import_node_path42 = __toESM(require_path_browserify(), 1);
+var DEFAULT_MODEL_ID = "claude-sonnet-4-5-20250929";
 var OFFLINE_PRICING_DATA = {
   "claude-haiku-4-5-20251001": {
     name: "Claude Haiku 4.5",
@@ -81393,33 +81405,38 @@ var PRICING_PERIOD = {
 };
 var PRICING_RETRY_CEILING_MS = 60 * 60 * 1e3;
 var lastLanded = (held) => held === null ? null : held.kind === "landed" ? held : held.last;
-var tableOf = (held) => lastLanded(held)?.table ?? OFFLINE_PRICING_DATA;
 var later = (a, b) => a === null ? b : b === null ? a : a.at >= b.at ? a : b;
 var failuresOf = (held) => held.kind === "landed" ? 0 : held.failures;
 var standsMs = (failures) => backedOffMs(PRICING_PERIOD, failures, PRICING_RETRY_CEILING_MS);
 var due = (held, now2) => held.at + standsMs(failuresOf(held)) <= now2;
 function livePricing(owner) {
-  let held = null;
+  const held = observable.box(null, { deep: false });
+  const landed = computed(() => lastLanded(held.get()), {
+    equals: (a, b) => a?.at === b?.at
+  });
+  const settle3 = (load) => load.then((settled4) => runInAction(() => held.set(settled4))).catch((e) => {
+    owner.log("error", `pricing load rejected: ${String(e)}`);
+  });
+  const primed = settle3(readDisk(owner));
   let loading = null;
   const sayNotLoaded = changeLogger(owner.log);
   return {
-    table: () => {
-      const owed = held === null || due(held, owner.clock.now());
-      if (owed && !owner.closing.aborted) {
-        loading ??= loadHeld(owner, held, sayNotLoaded).then((settled4) => {
-          held = settled4;
-          loading = null;
-          return settled4;
-        });
-      }
-      if (held !== null) return Promise.resolve(tableOf(held));
-      return loading === null ? Promise.resolve(OFFLINE_PRICING_DATA) : loading.then(tableOf);
+    // The bundled rates price until a table lands.
+    table: () => landed.get()?.table ?? OFFLINE_PRICING_DATA,
+    ask: () => {
+      const prev = held.get();
+      const owed = prev === null || due(prev, owner.clock.now());
+      if (!owed || owner.closing.aborted) return;
+      loading ??= primed.then(() => settle3(loadHeld(owner, held.get(), sayNotLoaded))).finally(() => {
+        loading = null;
+      });
     }
   };
 }
 async function loadHeld(owner, prev, sayNotLoaded) {
   const copy3 = await readDisk(owner);
-  if (copy3 !== null && !due(copy3, owner.clock.now())) return copy3;
+  if (copy3 !== null && !due(copy3, owner.clock.now()))
+    return later(copy3, lastLanded(prev));
   const landed = await fetchLanded(owner).catch((e) => {
     owner.log("error", `pricing load threw: ${String(e)}`);
     return null;
@@ -81625,7 +81642,7 @@ function modelPricingOf(modelId, allPricing) {
       }
     }
   }
-  return allPricing["claude-sonnet-4-5-20250929"] || {
+  return allPricing[DEFAULT_MODEL_ID] || {
     name: `${modelId} (Unknown Model)`,
     input: 3,
     cache_write_5m: 3.75,
@@ -81634,39 +81651,12 @@ function modelPricingOf(modelId, allPricing) {
     output: 15
   };
 }
-function costOf(table, entry) {
-  const usage = entry.message?.usage;
-  if (!usage) {
-    return 0;
-  }
-  const pricing = modelPricingOf(modelIdOf(entry), table);
-  const inputTokens = usage.input_tokens || 0;
-  const outputTokens = usage.output_tokens || 0;
-  const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-  const cacheReadTokens = usage.cache_read_input_tokens || 0;
-  const inputCost = inputTokens / 1e6 * pricing.input;
-  const outputCost = outputTokens / 1e6 * pricing.output;
-  const cacheReadCost = cacheReadTokens / 1e6 * pricing.cache_read;
-  const cacheCreationCost = cacheCreationTokens / 1e6 * pricing.cache_write_5m;
-  return inputCost + outputCost + cacheCreationCost + cacheReadCost;
+function priceOf(table, modelId, tokens) {
+  const rates = modelPricingOf(modelId, table);
+  return tokens.input / 1e6 * rates.input + tokens.output / 1e6 * rates.output + tokens.cacheCreation / 1e6 * rates.cache_write_5m + tokens.cacheRead / 1e6 * rates.cache_read;
 }
 function modelIdOf(entry) {
-  if (entry.model && typeof entry.model === "string") {
-    return entry.model;
-  }
-  const message = entry.message;
-  if (message?.model) {
-    const model = message.model;
-    if (typeof model === "string") {
-      return model;
-    }
-    const modelObj = model;
-    return (typeof modelObj?.id === "string" ? modelObj.id : null) || "claude-sonnet-4-5-20250929";
-  }
-  if (entry.model_id && typeof entry.model_id === "string") {
-    return entry.model_id;
-  }
-  return "claude-sonnet-4-5-20250929";
+  return entry.model || entry.message?.model || DEFAULT_MODEL_ID;
 }
 
 // src/utils/single-flight.ts
@@ -81696,9 +81686,13 @@ var SingleFlight = class {
 // src/daemon/cache/session-usage-store.ts
 var SPEED_RING_CAPACITY = 64;
 function speedSampleOf(breakdown, atMs) {
-  const input = breakdown ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead : 0;
-  const output = breakdown ? breakdown.output : 0;
-  return { input, output, total: input + output, atMs };
+  const input = breakdown.input + breakdown.cacheCreation + breakdown.cacheRead;
+  return {
+    input,
+    output: breakdown.output,
+    total: totalTokens(breakdown),
+    atMs
+  };
 }
 var DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1e3;
 var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
@@ -81721,87 +81715,134 @@ function seedCutoffMs(now2) {
 function emptyBreakdown() {
   return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
 }
+function addTokens(into, t2) {
+  into.input += t2.input;
+  into.output += t2.output;
+  into.cacheCreation += t2.cacheCreation;
+  into.cacheRead += t2.cacheRead;
+}
+function breakdownOf(counts) {
+  return {
+    input: counts.input_tokens || 0,
+    output: counts.output_tokens || 0,
+    cacheCreation: counts.cache_creation_input_tokens || 0,
+    cacheRead: counts.cache_read_input_tokens || 0
+  };
+}
+var EMPTY_USAGE = {
+  carried: { cost: 0, tokens: emptyBreakdown() },
+  unpriced: /* @__PURE__ */ new Map()
+};
+function summing() {
+  return {
+    carried: { cost: 0, tokens: emptyBreakdown() },
+    unpriced: /* @__PURE__ */ new Map()
+  };
+}
+function addUsage(into, u) {
+  into.carried.cost += u.carried.cost;
+  addTokens(into.carried.tokens, u.carried.tokens);
+  for (const [model, tokens] of u.unpriced) {
+    const held = into.unpriced.get(model);
+    if (held === void 0) into.unpriced.set(model, { ...tokens });
+    else addTokens(held, tokens);
+  }
+}
+function usageOfEntry(entry, counts) {
+  const tokens = breakdownOf(counts);
+  const cost = entry.costUSD ?? (totalTokens(tokens) === 0 ? 0 : void 0);
+  return cost === void 0 ? {
+    carried: EMPTY_USAGE.carried,
+    unpriced: /* @__PURE__ */ new Map([[modelIdOf(entry.raw), tokens]])
+  } : {
+    carried: { cost, tokens },
+    unpriced: EMPTY_USAGE.unpriced
+  };
+}
+function tokensOf(usage) {
+  const total = { ...usage.carried.tokens };
+  for (const tokens of usage.unpriced.values()) addTokens(total, tokens);
+  return total;
+}
+function costOf(usage, table) {
+  let cost = usage.carried.cost;
+  for (const [model, tokens] of usage.unpriced) {
+    cost += priceOf(table, model, tokens);
+  }
+  return cost;
+}
+function dayUsageOf(usage, table) {
+  return { cost: costOf(usage, table), ...tokensOf(usage) };
+}
+function sessionInfoOf(record2, table) {
+  if (record2 === void 0 || record2.entries === 0) return EMPTY_SESSION_INFO;
+  const tokenBreakdown = tokensOf(record2.usage);
+  const cost = costOf(record2.usage, table);
+  return {
+    cost,
+    calculatedCost: cost,
+    officialCost: null,
+    tokens: totalTokens(tokenBreakdown),
+    tokenBreakdown
+  };
+}
 var EMPTY_FILE_FOLD = {
   entries: 0,
-  cost: 0,
-  breakdown: emptyBreakdown(),
+  usage: EMPTY_USAGE,
   days: /* @__PURE__ */ new Map()
 };
-async function foldFile(state, entries, pricing, clock) {
-  const keep2 = dayKey(new Date(seedCutoffMs(clock.now())));
+function sumInto(sums, key, u) {
+  let sum = sums.get(key);
+  if (sum === void 0) {
+    sum = summing();
+    sums.set(key, sum);
+  }
+  addUsage(sum, u);
+}
+function foldFile(state, entries, keep2) {
   let count = state.entries;
-  let cost = state.cost;
-  const breakdown = { ...state.breakdown };
-  let table = null;
+  const usage = summing();
+  addUsage(usage, state.usage);
   const days = /* @__PURE__ */ new Map();
-  for (const [k, v] of state.days) if (k >= keep2) days.set(k, { ...v });
+  for (const [k, v] of state.days) if (k >= keep2) sumInto(days, k, v);
   for (const entry of entries) {
-    const u = entry.message?.usage;
-    if (!u) continue;
+    const counts = entry.message?.usage;
+    if (!counts) continue;
     count++;
-    const priced = entry.costUSD ?? costOf(table ??= await pricing.table(), entry.raw);
-    cost += priced;
-    breakdown.input += u.input_tokens || 0;
-    breakdown.output += u.output_tokens || 0;
-    breakdown.cacheCreation += u.cache_creation_input_tokens || 0;
-    breakdown.cacheRead += u.cache_read_input_tokens || 0;
+    const u = usageOfEntry(entry, counts);
+    addUsage(usage, u);
     const key = dayKey(new Date(entry.timestamp));
     if (key < keep2) continue;
-    const d = days.get(key) ?? { ...EMPTY_DAY };
-    d.cost += priced;
-    d.input += u.input_tokens || 0;
-    d.output += u.output_tokens || 0;
-    d.cacheCreation += u.cache_creation_input_tokens || 0;
-    d.cacheRead += u.cache_read_input_tokens || 0;
-    days.set(key, d);
+    sumInto(days, key, u);
   }
-  return { entries: count, cost, breakdown, days };
+  return { entries: count, usage, days };
 }
 function mergeFolds(files) {
-  let count = 0;
-  let cost = 0;
-  const bd = emptyBreakdown();
+  let entries = 0;
+  const usage = summing();
   const days = /* @__PURE__ */ new Map();
   for (const { value: f } of files.values()) {
-    count += f.entries;
-    cost += f.cost;
-    bd.input += f.breakdown.input;
-    bd.output += f.breakdown.output;
-    bd.cacheCreation += f.breakdown.cacheCreation;
-    bd.cacheRead += f.breakdown.cacheRead;
-    for (const [k, v] of f.days) {
-      const d = days.get(k) ?? { ...EMPTY_DAY };
-      addDay(d, v);
-      days.set(k, d);
-    }
+    entries += f.entries;
+    addUsage(usage, f.usage);
+    for (const [k, v] of f.days) sumInto(days, k, v);
   }
-  if (count === 0) return { sessionInfo: EMPTY_SESSION_INFO, days };
-  const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
-  return {
-    sessionInfo: {
-      cost,
-      calculatedCost: cost,
-      officialCost: null,
-      tokens,
-      tokenBreakdown: bd
-    },
-    days
-  };
+  return { entries, usage, days };
 }
 function under(path47, roots) {
   return path47 !== void 0 && roots.some((root) => path47.startsWith(root));
 }
-function daySumsOver(slots, roots) {
+function daySumsOver(slots, roots, table) {
   const sums = /* @__PURE__ */ new Map();
   for (const { record: record2 } of slots) {
     if (record2 === void 0 || !under(record2.transcriptPath, roots)) continue;
-    for (const [day, d] of record2.days) {
-      const sum = sums.get(day) ?? { ...EMPTY_DAY };
-      addDay(sum, d);
-      sums.set(day, sum);
-    }
+    for (const [day, usage] of record2.days) sumInto(sums, day, usage);
   }
-  return Object.fromEntries(sums);
+  return priced(sums, table);
+}
+function priced(days, table) {
+  const out = {};
+  for (const [day, usage] of days) out[day] = dayUsageOf(usage, table);
+  return out;
 }
 async function mapPool(items, limit, fn) {
   let cursor = 0;
@@ -81825,9 +81866,12 @@ function answer(box, value) {
 }
 var SessionUsageStore = class {
   // No count cap: `today` is a fold over every record, so a cap smaller than
-  // the day's sessions would drop work from it unseen. A record is a few
-  // scalars per file and retained day, and `sweepStale` bounds the map to the
-  // sessions seen within `staleAgeMs` plus those holding work done today.
+  // the day's sessions would drop work from it unseen. A record holds, per
+  // file and per retained day, a usage: a carried cost and token breakdown,
+  // plus one token breakdown per model priced by no entry, so it grows with
+  // files × retained days × unpriced models and never with entries.
+  // `sweepStale` bounds the map to the sessions seen within `staleAgeMs` plus
+  // those holding work done today.
   // Observable, shallowly: a slot replaced is the change the day sums read.
   sessions = observable.map(void 0, {
     deep: false
@@ -81946,7 +81990,10 @@ var SessionUsageStore = class {
         if (record2.kind === "failed") return record2;
         return ok(
           usageOver(
-            record2.kind === "ok" ? record2.value.sessionInfo : EMPTY_SESSION_INFO,
+            sessionInfoOf(
+              record2.kind === "ok" ? record2.value : void 0,
+              this.pricing.table()
+            ),
             hookData2
           )
         );
@@ -81963,16 +82010,17 @@ var SessionUsageStore = class {
     };
   }
   // The `session` projection as the session's last refresh left it, for a
-  // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
-  // dropped) is not answered yet; one whose refresh found no transcript is the
-  // empty record its refresh answers for it.
+  // draw: no I/O, no fold, priced at the table held now. A session no refresh
+  // has answered (or one the sweep dropped) is not answered yet; one whose
+  // refresh found no transcript is the empty record its refresh answers for
+  // it.
   usageOf(sessionId2, hookData2) {
     const slot = this.sessions.get(sessionId2);
     if (slot === void 0) return pendingOf("unread");
     const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
     return ok(
-      usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData2)
+      usageOver(sessionInfoOf(slot.record, this.pricing.table()), hookData2)
     );
   }
   // A request's ingest of its own session, whose outcome the session's slot
@@ -81996,8 +82044,16 @@ var SessionUsageStore = class {
         this.hold(sessionId2).failure,
         record2.kind === "failed" ? record2.reason : null
       );
+      if (this.holdsUnpriced()) this.pricing.ask();
       return record2;
     });
+  }
+  // Whether any record held keeps tokens only a table prices.
+  holdsUnpriced() {
+    for (const { record: record2 } of this.sessions.values()) {
+      if (record2 !== void 0 && record2.usage.unpriced.size > 0) return true;
+    }
+    return false;
   }
   // The `today` projection: cross-session sum of every record's today bucket.
   // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
@@ -82053,7 +82109,7 @@ var SessionUsageStore = class {
     if (record2 === void 0 || under(record2.transcriptPath, roots)) {
       return ABSENT2;
     }
-    return ok(Object.fromEntries(record2.days));
+    return ok(priced(record2.days, this.pricing.table()));
   }
   // Take one tok/s observation of the active session: ingest its current
   // cumulative counts, return the prior sample alongside, and record this one as
@@ -82075,7 +82131,7 @@ var SessionUsageStore = class {
         answer(this.hold(sessionId2).speed, record2);
         return record2;
       }
-      const breakdown = record2.kind === "ok" ? record2.value.sessionInfo.tokenBreakdown : null;
+      const breakdown = record2.kind === "ok" ? tokensOf(record2.value.usage) : emptyBreakdown();
       const cur = speedSampleOf(breakdown, nowMs);
       const { ring } = this.hold(sessionId2);
       let prev;
@@ -82133,11 +82189,10 @@ var SessionUsageStore = class {
     }
     const { prior, outcome } = refolded;
     if (outcome.kind !== "ok") return outcome;
+    const { mainStamp, ...folded2 } = outcome.value;
     const record2 = {
-      files: outcome.value.files,
-      sessionInfo: outcome.value.sessionInfo,
-      days: outcome.value.days,
-      transcriptStamp: outcome.value.mainStamp,
+      ...folded2,
+      transcriptStamp: mainStamp,
       transcriptPath
     };
     const landed = this.sessions.get(sessionId2)?.record;
@@ -82188,7 +82243,7 @@ var SessionUsageStore = class {
       roots,
       sums: new Kept(
         `today over ${claudePaths.join(",")}`,
-        () => daySumsOver(this.sessions.values(), roots)
+        () => daySumsOver(this.sessions.values(), roots, this.pricing.table())
       )
     };
     this.daySets.set(key, set2);
@@ -82208,6 +82263,7 @@ var SessionUsageStore = class {
       prior === void 0 ? void 0 : new Set(prior.files.keys())
     );
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
+    const keep2 = dayKey(new Date(seedCutoffMs(this.clock.now())));
     const newFiles = /* @__PURE__ */ new Map();
     let mainStamp = "";
     for (const filePath2 of [transcriptPath, ...agents.paths]) {
@@ -82216,7 +82272,7 @@ var SessionUsageStore = class {
         filePath2,
         priorFold,
         EMPTY_FILE_FOLD,
-        (state, entries) => foldFile(state, entries, this.pricing, this.clock)
+        (state, entries) => foldFile(state, entries, keep2)
       );
       if (read2.kind === "failed") return read2;
       if (read2.kind === "absent") {
@@ -82503,10 +82559,10 @@ var ContextProvider = class {
   // or a native window whose percentages are still null pre-first-call). No
   // auto-compact buffer: that was a hardcoded guess at Claude's threshold and
   // a soft second source; the native remaining_percentage is authoritative.
-  ratioPercentages(totalTokens, contextLimit) {
+  ratioPercentages(totalTokens2, contextLimit) {
     const percentage = Math.min(
       100,
-      Math.max(0, Math.round(totalTokens / contextLimit * 100))
+      Math.max(0, Math.round(totalTokens2 / contextLimit * 100))
     );
     return { percentage, contextLeftPercentage: Math.max(0, 100 - percentage) };
   }
@@ -82524,13 +82580,13 @@ var ContextProvider = class {
     }
     const currentUsage = cw.current_usage;
     const contextLimit = cw.context_window_size;
-    const totalTokens = (currentUsage.input_tokens || 0) + (currentUsage.cache_creation_input_tokens || 0) + (currentUsage.cache_read_input_tokens || 0);
+    const totalTokens2 = (currentUsage.input_tokens || 0) + (currentUsage.cache_creation_input_tokens || 0) + (currentUsage.cache_read_input_tokens || 0);
     debug(
-      `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens} (limit: ${contextLimit})`
+      `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens2} (limit: ${contextLimit})`
     );
-    const ratio = this.ratioPercentages(totalTokens, contextLimit);
+    const ratio = this.ratioPercentages(totalTokens2, contextLimit);
     return {
-      totalTokens,
+      totalTokens: totalTokens2,
       maxTokens: contextLimit,
       percentage: cw.used_percentage != null ? Math.round(cw.used_percentage) : ratio.percentage,
       contextLeftPercentage: cw.remaining_percentage != null ? Math.round(cw.remaining_percentage) : ratio.contextLeftPercentage
@@ -82576,18 +82632,18 @@ var ContextProvider = class {
     if (read2.kind === "failed") {
       return failed(`context transcript: ${read2.reason}`, read2.failedAt);
     }
-    const totalTokens = read2.value;
-    if (totalTokens === void 0) {
+    const totalTokens2 = read2.value;
+    if (totalTokens2 === void 0) {
       debug("No main chain entries with usage data found");
       return ABSENT2;
     }
     debug(
-      `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`
+      `Most recent main chain context: ${totalTokens2} tokens (limit: ${contextLimit})`
     );
     return ok({
-      totalTokens,
+      totalTokens: totalTokens2,
       maxTokens: contextLimit,
-      ...this.ratioPercentages(totalTokens, contextLimit)
+      ...this.ratioPercentages(totalTokens2, contextLimit)
     });
   }
 };

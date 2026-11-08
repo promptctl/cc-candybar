@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-688",
+      "ref": "refs/pull/688/merge",
+      "sha": "7d547c2a369daf7ae108d687d16455bdaefba274",
+      "timestamp": "2026-11-08T13:04:52.809Z",
+      "commits": [
+        {
+          "sha": "7d547c2a369daf7ae108d687d16455bdaefba274",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T13:03:58Z",
+          "message": "Merge ab34af0f9eb8af4b47760b78f38f73d36f7498b7 into 600ecfad0d88530c307e642fa2c302f67f99d326\n"
+        },
+        {
+          "sha": "ab34af0f9eb8af4b47760b78f38f73d36f7498b7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:03:46-07:00",
+          "message": "fix(file-events): the stall row names no consumer, since a polled config name rides no file event (brandon-unfiled-3248.iywk)\n"
+        },
+        {
+          "sha": "bbb3f7b4dc0ecb51eb4812f9ae3f4bbaefb7d299",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:15:32-07:00",
+          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-667",
       "ref": "refs/pull/667/merge",
       "sha": "49603a02406c314ab8df1e9a5d9a0211a28e35d5",
@@ -235,28 +264,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:35:05-07:00",
           "message": "fix(colour)!: the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g)\n\nAt ansi the open settings door's ✖ was drawn silver, yellow, purple or\nblack: the red was chosen as truecolor measures it, and keptOn's repair\nsearched the depth's table by contrast alone. The choice now measures\nevery candidate and the ground as the render's depth draws them, and\nthe candidates are per depth: the theme's named reds in truecolor and\nat 256 colours, the terminal's red and bright red (SGR 31/91) at ansi.\nkeptOn has no job left and is deleted.\n\nBREAKING CHANGE: the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-688",
-      "ref": "refs/pull/688/merge",
-      "sha": "4559aa23c7126737d4cf9d9ee1f7ad084fcf5a5a",
-      "timestamp": "2026-11-07T12:29:02.221Z",
-      "commits": [
-        {
-          "sha": "4559aa23c7126737d4cf9d9ee1f7ad084fcf5a5a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:28:06Z",
-          "message": "Merge bbb3f7b4dc0ecb51eb4812f9ae3f4bbaefb7d299 into e5b0fe5cb0e0b514bcdc61157f7356ddfffc2b6b\n"
-        },
-        {
-          "sha": "bbb3f7b4dc0ecb51eb4812f9ae3f4bbaefb7d299",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:15:32-07:00",
-          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
         }
       ]
     },
