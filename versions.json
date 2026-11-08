@@ -4,15 +4,22 @@
     {
       "version": "pr-698",
       "ref": "refs/pull/698/merge",
-      "sha": "54bef906f78e8e526a11ffccd2be7ac703ca7354",
-      "timestamp": "2026-11-08T18:11:47.575Z",
+      "sha": "fe34a488e01e47d6595a6933cc3e13ae133de2b2",
+      "timestamp": "2026-11-08T20:08:03.608Z",
       "commits": [
         {
-          "sha": "54bef906f78e8e526a11ffccd2be7ac703ca7354",
+          "sha": "fe34a488e01e47d6595a6933cc3e13ae133de2b2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T18:10:58Z",
-          "message": "Merge 6ba798da06a349c62cce45cc9f0a82bc297f88dd into 2c49054392b6ed6498c546ab75bd3ffae25e2629\n"
+          "timestamp": "2026-11-08T20:07:13Z",
+          "message": "Merge d07eda9caae6803483a2ffd7dc71515a7a3aa5b8 into 2c49054392b6ed6498c546ab75bd3ffae25e2629\n"
+        },
+        {
+          "sha": "d07eda9caae6803483a2ffd7dc71515a7a3aa5b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T13:07:01-07:00",
+          "message": "test(daemon): the lane setup e2e case carries the claude-input assertion, so no case joins test/daemon-boots/ (candybar-testing-ihvy.izc.ubq)\n\nThe band's setup in the lane e2e daemon types through a stand-in claude-input\nedge: the stand-in receives exactly %7 /reload-plugins and the lane log says\nit typed into the pane. The separate file's one case is gone, so the boot\nratchet holds at 201.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
           "sha": "6ba798da06a349c62cce45cc9f0a82bc297f88dd",
