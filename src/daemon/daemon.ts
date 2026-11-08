@@ -40,7 +40,7 @@ import { makeUpdateWatch, type UpdateWatch } from "./update-notice";
 import { newUpdateFact, type UpdateFact } from "./update-fact";
 import type { ProcessProbe } from "./process-fingerprint";
 import { makeBinaryWatch, type BinaryWatch } from "./binary-watch";
-import type { Filesystem } from "../disk/filesystem";
+import type { Filesystem, FilesystemReads } from "../disk/filesystem";
 import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
 import {
@@ -146,15 +146,16 @@ export interface DaemonAdapters {
   // is kept on the disk whose config files it puts back.
   readonly storage: (log: DaemonLogger, disk: Filesystem) => DaemonStorage;
   // The doctor's stores, which this daemon files.
-  // [LAW:one-source-of-truth] Every adapter that touches a disk is handed the
-  // daemon's own (`filesystem`), so a daemon cannot be built over two disks.
+  // [LAW:one-source-of-truth] Over the daemon's own disk (`filesystem`), the
+  // one its storage writes, so the doctor's files land beside the daemon's.
   readonly doctorStores: (disk: Filesystem) => DoctorStores;
   // The doctor's reads of the machine, over the config load it is handed.
   readonly doctorEdge: (
     launcher: Launcher,
     loadConfig: DoctorEdge["loadConfig"],
     host: Host,
-    disk: Filesystem,
+    // [LAW:types-are-the-program] Reads only: the doctor's edge never writes.
+    disk: FilesystemReads,
   ) => DoctorEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
   // What the daemon asks the machine about a pid: whether a process is there, and
@@ -168,7 +169,8 @@ export interface DaemonAdapters {
     closing: AbortSignal,
     probe: ProcessProbe,
     heldSession: HeldSessionOf,
-    disk: Filesystem,
+    // [LAW:types-are-the-program] Reads only: the lane edge never writes.
+    disk: FilesystemReads,
   ) => LaneEdge;
   // The session a Claude Code process holds, by the records Claude Code keeps
   // under the user's home (`home`) or the directory a session names.
