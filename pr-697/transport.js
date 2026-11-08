@@ -24013,6 +24013,7 @@ var statOf = (st) => ({
   birthtimeNs: st.birthtimeNs
 });
 var systemFilesystem = {
+  watchReach: process_default.platform === "darwin" ? "tree" : "directory",
   statSync: (p2) => statOf(fs_default.statSync(p2, { bigint: true })),
   lstatSync: (p2) => statOf(fs_default.lstatSync(p2, { bigint: true })),
   readlinkSync: (p2) => fs_default.readlinkSync(p2),
@@ -52233,6 +52234,7 @@ function nearestWatchTarget(filesystem, candidate) {
 // src/daemon/cache/watchers.ts
 var defaultLogger = (_level, message) => debug(message);
 var DEBOUNCE_MS = 50;
+var NAMES_POLL_MS = 1e3;
 function watchTargetsOf(filesystem, paths2) {
   const unresolved = [];
   let reached = true;
@@ -52297,7 +52299,17 @@ var failedOf = (d) => ({
 });
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
 var sameDeafness = (was, now2) => was?.kind === "deaf" && was.deafness.kind === now2.kind && was.deafness.reason === now2.reason;
-var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+var dirId = (target, polled) => `${polled ? "names" : target.recursive === true ? "tree" : "dir"}:${target.path}`;
+function entryAt(filesystem, dir, name) {
+  try {
+    const s = filesystem.lstatSync(import_node_path6.default.join(dir, name));
+    const contents = s.kind === "directory" ? "" : `${s.size}:${s.mtimeMs}`;
+    return `${s.kind}:${s.dev}:${s.ino}:${s.mode}:${contents}`;
+  } catch (e) {
+    return `error:${e.code}`;
+  }
+}
+var heardNames = (dir) => new Set([...dir.listeners].flatMap(({ filter }) => [...filter ?? []]));
 var WatcherRegistry = class {
   slots = /* @__PURE__ */ new Map();
   dirs = /* @__PURE__ */ new Map();
@@ -52308,6 +52320,8 @@ var WatcherRegistry = class {
   // owner sharing this registry reads the folders and links it judges from,
   // so a watch and the identity it is judged by read one tree.
   filesystem;
+  // The sweep armed while any directory is polled.
+  sweep = null;
   closed = false;
   constructor(opts) {
     this.clock = opts.clock;
@@ -52384,10 +52398,11 @@ var WatcherRegistry = class {
       };
       dir.listeners.add(listener);
       slot.listeners.push(listener);
+      this.baseline(dir);
     }
     this.slots.set(key, slot);
     if (this.counters) {
-      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
+      if (slot.listeners.every((l) => l.dir.state.kind !== "deaf"))
         this.counters.watchersOpened++;
       else this.counters.watchRefusals++;
     }
@@ -52396,13 +52411,18 @@ var WatcherRegistry = class {
   // The directory watch a new slot's target joins: the one already open
   // there, judged, or a new one.
   dirFor(target) {
-    const id2 = dirId(target);
+    const polled = this.filesystem.watchReach === "tree" && target.filenames !== void 0;
+    const id2 = dirId(target, polled);
     const existing = this.dirs.get(id2);
     if (existing !== void 0) {
       this.judged(existing, "acquire");
       return existing;
     }
-    const where = { path: target.path, recursive: target.recursive === true };
+    const where = {
+      path: target.path,
+      recursive: target.recursive === true,
+      polled
+    };
     const dir = {
       id: id2,
       ...where,
@@ -52427,6 +52447,7 @@ var WatcherRegistry = class {
       this.reopen(dir, cause);
       return;
     }
+    if (dir.state.kind === "polling") return;
     const now2 = boundOf(this.filesystem, dir.path);
     if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
       this.reopen(dir, "another folder is at its path");
@@ -52454,7 +52475,8 @@ var WatcherRegistry = class {
     const was = dir.state;
     if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
     dir.state = this.open(dir, () => dir, cause, was);
-    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
+    this.baseline(dir);
+    if (dir.state.kind !== "deaf") this.tell(dir, { kind: "unknown" });
     else if (!sameDeafness(was, dir.state.deafness))
       this.tell(dir, failedOf(dir.state.deafness));
   }
@@ -52465,6 +52487,14 @@ var WatcherRegistry = class {
     const bound = boundKey(boundOf(this.filesystem, at));
     try {
       this.filesystem.opendirSync(at);
+      if (where.polled) {
+        this.logger(
+          "info",
+          `dir names polled path=${valueOf(at)} cause=${valueOf(cause)}`
+        );
+        this.armSweep();
+        return { kind: "polling", bound, seen: /* @__PURE__ */ new Map() };
+      }
       const handle = this.filesystem.watch(
         at,
         { recursive: where.recursive },
@@ -52586,12 +52616,83 @@ var WatcherRegistry = class {
     for (const listener of slot.listeners) {
       const { dir } = listener;
       dir.listeners.delete(listener);
+      if (dir.state.kind === "polling") {
+        const names = heardNames(dir);
+        for (const name of dir.state.seen.keys())
+          if (!names.has(name)) dir.state.seen.delete(name);
+      }
       if (dir.listeners.size > 0) continue;
       if (dir.state.kind === "listening")
         this.closeHandle(dir.path, dir.state.handle, cause);
+      if (dir.state.kind === "polling")
+        this.logger(
+          "info",
+          `dir names unpolled path=${valueOf(dir.path)} cause=${valueOf(cause)}`
+        );
       this.dirs.delete(dir.id);
     }
+    if (this.sweep !== null && !this.polling()) {
+      this.sweep();
+      this.sweep = null;
+    }
     if (this.counters) this.counters.watchersClosed++;
+  }
+  polling() {
+    return [...this.dirs.values()].some((d) => d.state.kind === "polling");
+  }
+  // Every name a polled directory's listeners hear is read now, unless the
+  // last sweep already read it: a name newly asked for starts from what is
+  // there, so only a change after the acquire is an event.
+  baseline(dir) {
+    const { state } = dir;
+    if (state.kind !== "polling") return;
+    for (const name of heardNames(dir))
+      if (!state.seen.has(name))
+        state.seen.set(name, entryAt(this.filesystem, dir.path, name));
+  }
+  // [LAW:no-ambient-temporal-coupling] Armed by the first polled open and
+  // cancelled by the last release, so a sweep runs only while a directory is
+  // polled; the next is armed before this one reads, so nothing a sweep meets
+  // can leave the polled names unheard.
+  armSweep() {
+    if (this.sweep !== null || this.closed) return;
+    this.sweep = this.clock.after(
+      NAMES_POLL_MS,
+      () => {
+        this.sweep = null;
+        this.armSweep();
+        this.pollNames();
+      },
+      { unref: true }
+    );
+  }
+  // [LAW:dataflow-not-control-flow] The same steps for every polled directory
+  // each sweep: a folder other than the one last read at its path (removed,
+  // made again, renamed away) tells every slot on it an `unknown` window, as a
+  // directory watch reopened does, and every name is read again from there;
+  // otherwise each name whose entry differs fires the slots that hear it, by
+  // its path.
+  pollNames() {
+    for (const dir of this.dirs.values()) {
+      const { state } = dir;
+      if (state.kind !== "polling") continue;
+      const bound = boundKey(boundOf(this.filesystem, dir.path));
+      const names = heardNames(dir);
+      if (bound !== state.bound) {
+        state.bound = bound;
+        for (const name of names)
+          state.seen.set(name, entryAt(this.filesystem, dir.path, name));
+        this.tell(dir, { kind: "unknown" });
+        continue;
+      }
+      for (const name of names) {
+        const now2 = entryAt(this.filesystem, dir.path, name);
+        if (state.seen.get(name) === now2) continue;
+        state.seen.set(name, now2);
+        for (const { slot, filter } of dir.listeners)
+          if (filter?.has(name)) this.fire(slot, namedOf(dir.path, name));
+      }
+    }
   }
   // The slots held now.
   size() {
@@ -52601,12 +52702,18 @@ var WatcherRegistry = class {
   dirWatches() {
     return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
   }
+  // The directories whose named entries are polled now: no OS watch each.
+  polledDirs() {
+    return [...this.dirs.values()].filter((d) => d.state.kind === "polling").length;
+  }
   // Every directory a held watch targets.
   watchedDirs() {
     return [...this.dirs.values()].map((d) => d.path);
   }
   closeAll() {
     this.closed = true;
+    this.sweep?.();
+    this.sweep = null;
     for (const slot of this.slots.values()) this.closeSlot(slot, "close");
     this.slots.clear();
   }
@@ -52695,7 +52802,10 @@ var FileEventDelivery = class {
       // [LAW:single-enforcer] The only acquirer of this registry key.
       handle: this.watchers.acquire(
         `file-events:${folder}`,
-        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
+        // [LAW:one-source-of-truth] Every child of a folder of its own: a
+        // watch for a named entry may be polled, and the probe measures the
+        // OS's delivery, which only an OS watch rides.
+        { dirs: [{ path: folder }] },
         (heard) => this.heard(probing, heard)
       )
     };
@@ -52892,9 +53002,9 @@ function fileEventsWarnings(d) {
   const message = () => {
     switch (d.kind) {
       case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so what refreshes on file events may have missed a change made since`;
       case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
+        return `${stopped(d.missedSince)}, so nothing that refreshes on file events will refresh until they resume`;
       case "unmeasured":
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
@@ -70996,6 +71106,7 @@ var RuntimeStats = class _RuntimeStats {
       linkIds: { minted: 0, reused: 0, evicted: 0, reservations: 0, faults: 0 },
       watchersActive: 0,
       dirWatchesActive: 0,
+      dirsPolled: 0,
       handlerProbes: [],
       clients: [],
       bundle: "/",
@@ -71061,7 +71172,8 @@ var RuntimeStats = class _RuntimeStats {
           active: extras.dirWatchesActive,
           opened: this.dirWatchesOpened,
           closed: this.dirWatchesClosed
-        }
+        },
+        polled: extras.dirsPolled
       },
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,
@@ -79555,6 +79667,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         linkIds: parts.linkIds.stats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
+        dirsPolled: watcherRegistry.polledDirs(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
         clients: renderSightings.list(instantOf(new Date(clock.now()))),
