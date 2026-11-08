@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-688",
+      "ref": "refs/pull/688/merge",
+      "sha": "30f2695944dce5f1dc378da4039b3cf3abdaeb86",
+      "timestamp": "2026-11-08T13:38:55.059Z",
+      "commits": [
+        {
+          "sha": "30f2695944dce5f1dc378da4039b3cf3abdaeb86",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T13:37:52Z",
+          "message": "Merge 97d9d076cd167fc14f19af1551ecbe7c7edcd95d into 3b21a55b949237b11e1b184774041ed3e7b34600\n"
+        },
+        {
+          "sha": "97d9d076cd167fc14f19af1551ecbe7c7edcd95d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:37:48-07:00",
+          "message": "Merge branch 'main' into fix/fsevents-named-poll"
+        },
+        {
+          "sha": "051ff3dad1e77204adaa60e01b1f759ca0142f42",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:03:46-07:00",
+          "message": "fix(file-events): the stall row names no consumer, since a polled config name rides no file event (brandon-unfiled-3248.iywk)\n"
+        },
+        {
+          "sha": "0c851cdc4e4262844b48feed48a6536d1aeabfa0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:15:32-07:00",
+          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-692",
       "ref": "refs/pull/692/merge",
       "sha": "0b45faa8be1e7c2babdf5a696546de336c1b59a6",
@@ -84,35 +120,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-08T06:15:38-07:00",
           "message": "fix(daemon): the doctor's stores, the doctor's edge and the lane edge take the daemon's disk (candybar-testing-ihvy.5zt)\n\nReview follow-up to #667. productionAdapters bound these three to the\nsystem disk while the daemon's inputs name its disk separately as\n`filesystem`, so an inputs bundle could describe a daemon over two disks.\nEach now takes the disk as a parameter, as storage already does, and the\ndaemon hands each one inputs.filesystem.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-688",
-      "ref": "refs/pull/688/merge",
-      "sha": "455b614daf39d69fc3109f412292b2db1aeadbee",
-      "timestamp": "2026-11-08T13:15:18.698Z",
-      "commits": [
-        {
-          "sha": "455b614daf39d69fc3109f412292b2db1aeadbee",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T13:14:17Z",
-          "message": "Merge 051ff3dad1e77204adaa60e01b1f759ca0142f42 into 10f03f8b92a7ea6f004ace540fcfaeb89e89cbac\n"
-        },
-        {
-          "sha": "051ff3dad1e77204adaa60e01b1f759ca0142f42",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:03:46-07:00",
-          "message": "fix(file-events): the stall row names no consumer, since a polled config name rides no file event (brandon-unfiled-3248.iywk)\n"
-        },
-        {
-          "sha": "0c851cdc4e4262844b48feed48a6536d1aeabfa0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:15:32-07:00",
-          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
         }
       ]
     },
