@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-700",
+      "ref": "refs/pull/700/merge",
+      "sha": "b8c4c6e17c175aa742f2ee35a39ab410c1d81976",
+      "timestamp": "2026-11-08T21:43:41.078Z",
+      "commits": [
+        {
+          "sha": "b8c4c6e17c175aa742f2ee35a39ab410c1d81976",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:42:47-07:00",
+          "message": "Merge e95503077b871556002584180cee2996a3577365 into cc1efbe069bd704ecda3aa4731f6c19e89cd8de0\n"
+        },
+        {
+          "sha": "e95503077b871556002584180cee2996a3577365",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:42:13-07:00",
+          "message": "fix(atomic-write): a failed staging cleanup rides on the write's error as its cause instead of replacing it (brandon-unfiled-3248.8a7z)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "cc1efbe069bd704ecda3aa4731f6c19e89cd8de0",
