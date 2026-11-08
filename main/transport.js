@@ -70164,7 +70164,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.212.0";
+var PACKAGE_VERSION = "1.212.1";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -87701,6 +87701,7 @@ function createDaemon(inputs) {
   const links2 = { to: home.name, signer: inputs.linkSigner };
   const runs = sessionRuns({ managedStorage, launcher, log, clock });
   const heldSession = inputs.heldSession(host.home);
+  const claudeInput = inputs.claudeInput(launcher);
   const laneSetups = sessionLaneSetups(() => parts, journalTurns, {
     edge: inputs.laneEdge(
       launcher,
@@ -87708,7 +87709,8 @@ function createDaemon(inputs) {
       closing.signal,
       probe3,
       heldSession,
-      inputs.filesystem
+      inputs.filesystem,
+      claudeInput
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -87825,7 +87827,7 @@ function createDaemon(inputs) {
     clients: renderSightings,
     mismatchRuns,
     bundle: bundle.path,
-    claudeInput: inputs.claudeInput(launcher),
+    claudeInput,
     history: settingsHistory,
     navigation: navigationHistory,
     links: links2,
@@ -89027,10 +89029,10 @@ var heldSessionUnder = (home) => (claude) => heldSessionIn(
   claude
 );
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing, clock, probe3, heldSession, filesystem) {
+function productionLaneEdge(launcher, following, closing, clock, probe3, heldSession, filesystem, claudeInput) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
-    claudeInput: productionClaudeInputEdge(launcher),
+    claudeInput,
     barPanes: async (hint) => barPanesOf(
       await tmux2(launcher, hint, [
         "list-panes",
@@ -89259,14 +89261,15 @@ function productionAdapters(paths2, daemonLog, machine) {
     doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe3, heldSession, disk) => productionLaneEdge(
+    laneEdge: (launcher, following, closing, probe3, heldSession, disk, claudeInput) => productionLaneEdge(
       launcher,
       following,
       closing,
       machine,
       probe3,
       heldSession,
-      disk
+      disk,
+      claudeInput
     ),
     heldSession: heldSessionUnder,
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),

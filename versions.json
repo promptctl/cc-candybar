@@ -2,102 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-698",
-      "ref": "refs/pull/698/merge",
-      "sha": "fe34a488e01e47d6595a6933cc3e13ae133de2b2",
-      "timestamp": "2026-11-08T20:08:03.608Z",
-      "commits": [
-        {
-          "sha": "fe34a488e01e47d6595a6933cc3e13ae133de2b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T20:07:13Z",
-          "message": "Merge d07eda9caae6803483a2ffd7dc71515a7a3aa5b8 into 2c49054392b6ed6498c546ab75bd3ffae25e2629\n"
-        },
-        {
-          "sha": "d07eda9caae6803483a2ffd7dc71515a7a3aa5b8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T13:07:01-07:00",
-          "message": "test(daemon): the lane setup e2e case carries the claude-input assertion, so no case joins test/daemon-boots/ (candybar-testing-ihvy.izc.ubq)\n\nThe band's setup in the lane e2e daemon types through a stand-in claude-input\nedge: the stand-in receives exactly %7 /reload-plugins and the lane log says\nit typed into the pane. The separate file's one case is gone, so the boot\nratchet holds at 201.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "6ba798da06a349c62cce45cc9f0a82bc297f88dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T11:10:54-07:00",
-          "message": "Merge branch 'main' into fix/lane-edge-claude-input"
-        },
-        {
-          "sha": "58ab2f54519c4aca7061b793575c1885b5a011d3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T11:00:42-07:00",
-          "message": "Merge branch 'main' into fix/lane-edge-claude-input"
-        },
-        {
-          "sha": "d6deaf413dff122d7e9c5c0e3514bc1cc0cf2576",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T09:01:09-07:00",
-          "message": "Merge branch 'main' into fix/lane-edge-claude-input"
-        },
-        {
-          "sha": "27629873d4631f48a79a9eb303187123d51237ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T08:53:02-07:00",
-          "message": "Merge branch 'main' into fix/lane-edge-claude-input"
-        },
-        {
-          "sha": "8d2ca9628131c312dad2a23b9af76a75cd240ef1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:54:44-07:00",
-          "message": "Merge branch 'main' into fix/lane-edge-claude-input"
-        },
-        {
-          "sha": "9ef2202d1c93cd60a5a4d37c032267c9079372f7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:35:28-07:00",
-          "message": "Merge branch 'main' into fix/lane-edge-claude-input"
-        },
-        {
-          "sha": "ff2d971bbc5cc769a9b35046b0db5cd0751db50c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:32:45-07:00",
-          "message": "test(daemon): the test parts hand one claude-input edge to verbs and lane edge, and the lane test's header claims only typing into Claude Code (candybar-testing-ihvy.izc.ubq)\n"
-        },
-        {
-          "sha": "8c3b2fa483b6448de8b6247dc9d251b17cfc3fab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:26:13-07:00",
-          "message": "fix(daemon): the lane edge takes the daemon's claude-input edge, so a daemon's claudeInput adapter reaches a lane's typing (candybar-testing-ihvy.izc.ubq)\n\nproductionLaneEdge built its own claude-input edge from the launcher, so a\ndaemon built over another claudeInput adapter still typed real input when a\nlane turned on. createDaemon now builds the claude-input edge once and hands\nthe same edge to the lane edge and to the click context, as it hands both\nedges its disk. With the production adapters the lane types through the same\nproductionClaudeInputEdge over the daemon's launcher as before.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "3b7ffb140e9cd7ddb57c056cd4b741f9d4f8f695",
-      "timestamp": "2026-11-08T17:59:48.032Z",
+      "sha": "3f5670db72be5ec2abd20fa416f132125685c675",
+      "timestamp": "2026-11-08T20:17:57.876Z",
       "commits": [
         {
-          "sha": "3b7ffb140e9cd7ddb57c056cd4b741f9d4f8f695",
+          "sha": "3f5670db72be5ec2abd20fa416f132125685c675",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T10:58:46-07:00",
-          "message": "fix(watchers): on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens (#699)\n\n* fix(watchers): on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens (brandon-unfiled-3248.slsx)\n\nA watch handle now says whether it rides the OS's one event stream, from the\nregistry's own choice of what is polled. A stall is the fault only of a watch\nthat rides it, so a polled `watch_file` name carries no stall fault and keeps\nrefreshing; the file-event probe asks the same question of its own watch. The\nstall row reads the disk's watch reach: on macOS it names a folder or tree\nwatched whole as what a stall deafens and says a file watched by name still\nrefreshes; on Linux, where every watch rides inotify, it reads as before.\n\n* fix(watchers): the stall row reads the registry's polling rule, and names branch refs, not branches, as deafened (brandon-unfiled-3248.slsx)\n\nThe row keyed its text on the disk's watch reach, a second copy of the\nregistry's rule for which watches are polled. The registry now owns that\nrule as one answer, opens every directory by it, and the row reads it.\nOn macOS a repo's HEAD is polled and heard through a stall; only the\nbranch refs tree rides the stream, so the row says branch refs.\n\n* fix(watchers): the stall row names no consumer, and the probe's dead stream check goes back to the law on its target (brandon-unfiled-3248.slsx)\n\nThe row's consumer examples copied watch shapes each consumer owns, so a\nchanged shape would leave the row saying a deaf watch still refreshes. The\nprobe's target has no filenames, so its watch always rides the stream; the\nridesStream check after the refusal could not fire, and the\none-source-of-truth marker returns to the target it depends on."
+          "timestamp": "2026-11-08T13:16:47-07:00",
+          "message": "fix(daemon): the lane edge takes the daemon's claude-input edge (candybar-testing-ihvy.izc.ubq) (#698)\n\n* fix(daemon): the lane edge takes the daemon's claude-input edge, so a daemon's claudeInput adapter reaches a lane's typing (candybar-testing-ihvy.izc.ubq)\n\nproductionLaneEdge built its own claude-input edge from the launcher, so a\ndaemon built over another claudeInput adapter still typed real input when a\nlane turned on. createDaemon now builds the claude-input edge once and hands\nthe same edge to the lane edge and to the click context, as it hands both\nedges its disk. With the production adapters the lane types through the same\nproductionClaudeInputEdge over the daemon's launcher as before.\n\n* test(daemon): the test parts hand one claude-input edge to verbs and lane edge, and the lane test's header claims only typing into Claude Code (candybar-testing-ihvy.izc.ubq)\n\n* test(daemon): the lane setup e2e case carries the claude-input assertion, so no case joins test/daemon-boots/ (candybar-testing-ihvy.izc.ubq)\n\nThe band's setup in the lane e2e daemon types through a stand-in claude-input\nedge: the stand-in receives exactly %7 /reload-plugins and the lane log says\nit typed into the pane. The separate file's one case is gone, so the boot\nratchet holds at 201.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         },
         {
-          "sha": "bd12db81817a904ee592c29a78c54f8aa6722033",
+          "sha": "2c49054392b6ed6498c546ab75bd3ffae25e2629",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-08T15:58:21Z",
-          "message": "chore(release): set `package.json` to 1.212.0 [skip ci]\n\n## [1.212.0](https://github.com/promptctl/cc-candybar/compare/v1.211.3...v1.212.0) (2026-11-08)\n\n### ⚠ BREAKING CHANGES\n\n* **colour:** the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-authored-by: Claude <noreply@anthropic.com>\n\n### Bug Fixes\n\n* **colour:** the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g) ([#696](https://github.com/promptctl/cc-candybar/issues/696)) ([8dad5f4](https://github.com/promptctl/cc-candybar/commit/8dad5f4a185cb522babdc3e982a38cf82eeb3290))\n"
+          "timestamp": "2026-11-08T18:07:15Z",
+          "message": "chore(release): set `package.json` to 1.212.1 [skip ci]\n\n## [1.212.1](https://github.com/promptctl/cc-candybar/compare/v1.212.0...v1.212.1) (2026-11-08)\n\n### Bug Fixes\n\n* **watchers:** on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens ([#699](https://github.com/promptctl/cc-candybar/issues/699)) ([3b7ffb1](https://github.com/promptctl/cc-candybar/commit/3b7ffb140e9cd7ddb57c056cd4b741f9d4f8f695))\n"
         }
       ]
     },
