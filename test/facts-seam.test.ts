@@ -545,9 +545,9 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     clock.burn(burnMs);
     // [LAW:no-ambient-temporal-coupling] The setup's hold has one owner at a
     // time: the case's teardown from the moment it is set up, until the answer
-    // takes it and releases it on every exit of its draw. A request never
-    // answered, because settling it or a later step of the case threw, is
-    // released ahead of the parts' close.
+    // takes it once every fact has landed and releases it on every exit of its
+    // draw. A request never answered, or whose wait threw or never ended, is
+    // released by the teardown ahead of the parts' close.
     const setup = setUpRender(parts, checked.req, at, []);
     let unanswered: typeof setup | null = setup;
     cleanups.push(() => unanswered?.[Symbol.dispose]());
@@ -555,10 +555,10 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     return {
       view: setup.view,
       answer: async (): Promise<Frame> => {
-        using _held = setup;
-        unanswered = null;
         await landed(clock, setup.view, stepMs);
         await settling.landed;
+        using _held = setup;
+        unanswered = null;
         const frame = drawForAnswer(parts, setup, settling.arrival).drawn.body;
         drawn.push(frame);
         return frame;
