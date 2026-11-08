@@ -52329,6 +52329,13 @@ var WatcherRegistry = class {
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
   }
+  // [LAW:one-source-of-truth] Whether a watch for named entries is polled
+  // here, and so heard through a stall of the OS's stream: the one rule every
+  // directory opens by, and the one the bar's stall row reads. The disk says
+  // what a directory watch costs: where it reaches the tree, a name is polled.
+  get namesPolled() {
+    return this.filesystem.watchReach === "tree";
+  }
   // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
   // holder of one slot, and each holder's callback hears every window.
   // `targets` from the first acquire wins; subsequent acquires keep the
@@ -52412,7 +52419,7 @@ var WatcherRegistry = class {
   // The directory watch a new slot's target joins: the one already open
   // there, judged, or a new one.
   dirFor(target) {
-    const polled = this.filesystem.watchReach === "tree" && target.filenames !== void 0;
+    const polled = this.namesPolled && target.filenames !== void 0;
     const id2 = dirId(target, polled);
     const existing = this.dirs.get(id2);
     if (existing !== void 0) {
@@ -53001,11 +53008,8 @@ var FileEventDelivery = class {
 };
 var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
 var stallReason = (d, watch2) => d.kind === "stalled" && watch2.ridesStream ? stopped(d.missedSince) : null;
-var deafened = {
-  tree: "so what watches a whole folder or tree (plugin folders, plugin storage, branches) will not refresh until they resume; a file watched by name, such as the config, is checked on a timer and still refreshes",
-  directory: "so nothing that refreshes on file events will refresh until they resume"
-};
-function fileEventsWarnings(d, reach) {
+var deafened = (namesPolled) => namesPolled ? "so what watches a whole folder or tree, such as plugin folders, plugin storage and branch refs, will not refresh until they resume; a file watched by name, such as the config or a repo's HEAD, is checked on a timer and still refreshes" : "so nothing that refreshes on file events will refresh until they resume";
+function fileEventsWarnings(d, namesPolled) {
   if (d.missedSince === null) return [];
   const since = iso(d.missedSince);
   const message = () => {
@@ -53013,7 +53017,7 @@ function fileEventsWarnings(d, reach) {
       case "delivering":
         return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so what refreshes on file events may have missed a change made since`;
       case "stalled":
-        return `${stopped(d.missedSince)}, ${deafened[reach]}`;
+        return `${stopped(d.missedSince)}, ${deafened(namesPolled)}`;
       case "unmeasured":
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
@@ -70165,7 +70169,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.211.1";
+var PACKAGE_VERSION = "1.211.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -78485,7 +78489,7 @@ function drawRender(parts, setup, drawing2) {
   const standing = [
     ...fileEventsWarnings(
       fileEvents.delivery(),
-      parts.watcherRegistry.filesystem.watchReach
+      parts.watcherRegistry.namesPolled
     ),
     ...launched,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],

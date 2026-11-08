@@ -4,15 +4,22 @@
     {
       "version": "pr-699",
       "ref": "refs/pull/699/merge",
-      "sha": "c3ccd99782eced6572e8de5fe0101322fbab4bb1",
-      "timestamp": "2026-11-08T14:28:00.709Z",
+      "sha": "736ba052cda39ee596ecb9ab455959c5d8e32680",
+      "timestamp": "2026-11-08T14:32:49.133Z",
       "commits": [
         {
-          "sha": "c3ccd99782eced6572e8de5fe0101322fbab4bb1",
+          "sha": "736ba052cda39ee596ecb9ab455959c5d8e32680",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:26:59-07:00",
-          "message": "Merge b4291bbdeece7951e5278f5f202fe6f0b96cd2b2 into eaa59b6d87c32073b040a97072a0fee0a6e048fc\n"
+          "timestamp": "2026-11-08T14:31:57Z",
+          "message": "Merge 24c3c1933540c332951d5f1b2f8d7b28e82949fe into 56a5c61981df900d1c9d0cee98199d3a1f52182f\n"
+        },
+        {
+          "sha": "24c3c1933540c332951d5f1b2f8d7b28e82949fe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:31:46-07:00",
+          "message": "fix(watchers): the stall row reads the registry's polling rule, and names branch refs, not branches, as deafened (brandon-unfiled-3248.slsx)\n\nThe row keyed its text on the disk's watch reach, a second copy of the\nregistry's rule for which watches are polled. The registry now owns that\nrule as one answer, opens every directory by it, and the row reads it.\nOn macOS a repo's HEAD is polled and heard through a stall; only the\nbranch refs tree rides the stream, so the row says branch refs.\n"
         },
         {
           "sha": "b4291bbdeece7951e5278f5f202fe6f0b96cd2b2",
