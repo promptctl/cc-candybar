@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-695",
+      "ref": "refs/pull/695/merge",
+      "sha": "05f6d4190e75d8d74b16bc9f83dcd78df03c9d5e",
+      "timestamp": "2026-11-08T20:29:21.168Z",
+      "commits": [
+        {
+          "sha": "05f6d4190e75d8d74b16bc9f83dcd78df03c9d5e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T20:28:26Z",
+          "message": "Merge 042a517ebf8249b4a8260719d24824d63d336600 into 3f5670db72be5ec2abd20fa416f132125685c675\n"
+        },
+        {
+          "sha": "042a517ebf8249b4a8260719d24824d63d336600",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T13:28:15-07:00",
+          "message": "fix(edit-chrome): a pick at the row's leading ✚ closes its library, whose gap the pick renames (brandon-unfiled-3248.5bfl)\n\nA pick at a before gap makes the new placement the row's first content, so the\nreload names the leading gap after it and the library's state key is declared\nno more. Nothing closes an undeclared key, so it stayed open and reopened on\nits own when the anchor led its row again. The leading library now closes on\npick, while its key is still declared; an after gap keeps its name across its\nown pick and stays open.\n\nThe default-menu-bytes 'one + opened' entry moves: each leading-library option\nlink now carries the close write after its layout op.\n"
+        },
+        {
+          "sha": "335ba3e4ee9428a94719297ee0a208870a1ab88d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:24:50-07:00",
+          "message": "fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (brandon-unfiled-3248.5bfl)\n\nEdit chrome spelled every insert slot, removal, configure entry, draft\nvariable and setting control from one walk counter shared over the preset\ntree, so adding, removing or moving a placement shifted the name of every\ncontrol after it, and an open + library, its page cursor or an open\nconfigure list landed on a neighbour after the reload. Every name is now\nspelled from the placement it serves through chromeIdent, an injective\nbase-36 spelling of the id that is a fixed point of ident, and the counter\nis gone.\n\nThe default-menu bytes snapshot regenerates for the new link names; its\nplain text is unchanged.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3f5670db72be5ec2abd20fa416f132125685c675",
@@ -56,28 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:17:14-07:00",
           "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-695",
-      "ref": "refs/pull/695/merge",
-      "sha": "1f4e639890462d51ccccc347c3779722de6442f4",
-      "timestamp": "2026-11-07T12:27:27.198Z",
-      "commits": [
-        {
-          "sha": "1f4e639890462d51ccccc347c3779722de6442f4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:26:08Z",
-          "message": "Merge 335ba3e4ee9428a94719297ee0a208870a1ab88d into e5b0fe5cb0e0b514bcdc61157f7356ddfffc2b6b\n"
-        },
-        {
-          "sha": "335ba3e4ee9428a94719297ee0a208870a1ab88d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:24:50-07:00",
-          "message": "fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (brandon-unfiled-3248.5bfl)\n\nEdit chrome spelled every insert slot, removal, configure entry, draft\nvariable and setting control from one walk counter shared over the preset\ntree, so adding, removing or moving a placement shifted the name of every\ncontrol after it, and an open + library, its page cursor or an open\nconfigure list landed on a neighbour after the reload. Every name is now\nspelled from the placement it serves through chromeIdent, an injective\nbase-36 spelling of the id that is a fixed point of ident, and the counter\nis gone.\n\nThe default-menu bytes snapshot regenerates for the new link names; its\nplain text is unchanged.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
