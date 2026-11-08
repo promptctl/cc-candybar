@@ -1,3 +1,9 @@
+## [1.212.3](https://github.com/promptctl/cc-candybar/compare/v1.212.2...v1.212.3) (2026-11-08)
+
+### Bug Fixes
+
+* **edit-chrome:** a placement's chrome names are its own, so an edit beside it renames nothing ([#695](https://github.com/promptctl/cc-candybar/issues/695)) ([9059da1](https://github.com/promptctl/cc-candybar/commit/9059da1b93913b94233ed0518558525dfaa91eff))
+
 ## [1.212.2](https://github.com/promptctl/cc-candybar/compare/v1.212.1...v1.212.2) (2026-11-08)
 
 ### Bug Fixes
