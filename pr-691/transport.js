@@ -81318,7 +81318,8 @@ function livePricing(owner) {
 }
 async function loadHeld(owner, prev, sayNotLoaded) {
   const copy3 = await readDisk(owner);
-  if (copy3 !== null && !due(copy3, owner.clock.now())) return copy3;
+  if (copy3 !== null && !due(copy3, owner.clock.now()))
+    return later(copy3, lastLanded(prev));
   const landed = await fetchLanded(owner).catch((e) => {
     owner.log("error", `pricing load threw: ${String(e)}`);
     return null;
