@@ -958,9 +958,15 @@ export class GitService {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
+  // [LAW:single-enforcer] In the daemon, a session's repository comes from its
+  // directory alone. git honours `GIT_DIR`, `GIT_WORK_TREE` and the rest of
+  // `git rev-parse --local-env-vars` over its cwd, and `execGitAsync` passes
+  // the launcher's environment, which in the daemon is whichever shell spawned
+  // it; so the daemon drops those variables from its environment once, at its
+  // boot (src/host.ts daemonWorld), and every read it makes here inherits
+  // that. The demo draws the directory it was run in, under the shell that ran
+  // it, so that shell's environment is its own to honour; `check` reads no git
+  // (its session's git facts are a fixture).
   //
   // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed

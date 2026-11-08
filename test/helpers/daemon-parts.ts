@@ -66,6 +66,7 @@ import { ProbeArrivals } from "../../src/doctor/handler-probe";
 import { stableAttachPreload } from "../../src/install/index";
 import { EffectSessions } from "../../src/render/effect";
 import type { RenderedLine } from "../../src/dsl/node-registry";
+import type { GitEnvAsk } from "../../src/git-env";
 import type { Host } from "../../src/host";
 import { offlinePricing } from "../../src/segments/pricing";
 import { instantAt } from "../../src/utils/instant";
@@ -93,6 +94,9 @@ export interface DaemonPartsOptions {
   ) => SourceOf<SessionSource, CheckedRenderRequest>;
   // Each frame a feed drew, as it drew it.
   readonly drew?: (frame: FeedFrame | null) => void;
+  // What git named at the daemon's start: an ask that answered with nothing
+  // to drop unless the case is about the ask.
+  readonly gitEnv?: GitEnvAsk;
 }
 
 export interface BuiltParts {
@@ -110,7 +114,14 @@ const NO_PROCESSES: ProcessProbe = {
   startTime: async () => ({ kind: "unavailable", detail: "no process table in this test" }),
 };
 
-export function daemonParts({ host, clock, log, source, drew }: DaemonPartsOptions): BuiltParts {
+export function daemonParts({
+  host,
+  clock,
+  log,
+  source,
+  drew,
+  gitEnv = { kind: "asked", names: [] },
+}: DaemonPartsOptions): BuiltParts {
   const home = homeOf(host);
   const paths = daemonPaths(home);
   const locs = locations(host, home);
@@ -321,6 +332,7 @@ export function daemonParts({ host, clock, log, source, drew }: DaemonPartsOptio
     watcherRegistry,
     refreshLedger,
     fileEvents,
+    gitEnv,
     payloadProviders,
     sessionState,
     rendererName: home.name,
