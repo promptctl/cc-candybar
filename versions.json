@@ -2,53 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-700",
-      "ref": "refs/pull/700/merge",
-      "sha": "814f8011432018df9a20ba62caf81c2f86b05ddb",
-      "timestamp": "2026-11-08T21:56:54.827Z",
-      "commits": [
-        {
-          "sha": "814f8011432018df9a20ba62caf81c2f86b05ddb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:55:53-07:00",
-          "message": "Merge f547cadf6c793ef6dd44dc958f8f526d79fd7486 into 9305fac751a09046e5f10a15bc206da0a3312754\n"
-        },
-        {
-          "sha": "f547cadf6c793ef6dd44dc958f8f526d79fd7486",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:55:50-07:00",
-          "message": "Merge branch 'main' into brandon-unfiled-3248.8a7z"
-        },
-        {
-          "sha": "d5ff590591ab2baef43b98d4e985d568aa5a897d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:49:27-07:00",
-          "message": "fix(atomic-write): a failed staging cleanup is named in the write's error message, so the leftover tmp is shown (brandon-unfiled-3248.8a7z)\n"
-        },
-        {
-          "sha": "e95503077b871556002584180cee2996a3577365",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:42:13-07:00",
-          "message": "fix(atomic-write): a failed staging cleanup rides on the write's error as its cause instead of replacing it (brandon-unfiled-3248.8a7z)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-701",
       "ref": "refs/pull/701/merge",
-      "sha": "7652961c18ae831695d901848e31aa46a5615112",
-      "timestamp": "2026-11-08T21:45:07.337Z",
+      "sha": "d5a2cfb9b6feeee63ddb652448bba460c32c87a3",
+      "timestamp": "2026-11-08T22:06:18.029Z",
       "commits": [
         {
-          "sha": "7652961c18ae831695d901848e31aa46a5615112",
+          "sha": "d5a2cfb9b6feeee63ddb652448bba460c32c87a3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:44:02-07:00",
-          "message": "Merge 8c98e178f55e915c7bdabfd93243a8009a288ce0 into cc1efbe069bd704ecda3aa4731f6c19e89cd8de0\n"
+          "timestamp": "2026-11-08T22:05:20Z",
+          "message": "Merge bbc83798c92863811f1aead7de28c488829032bf into 9305fac751a09046e5f10a15bc206da0a3312754\n"
+        },
+        {
+          "sha": "bbc83798c92863811f1aead7de28c488829032bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:05:06-07:00",
+          "message": "fix(edit-chrome): a placement's removed library state is released by any edit that begins or ends its key, so a re-added placement inherits nothing (brandon-unfiled-3248.t2yz)\n\nThe layout-op verb released only the keys an edit ends, so a placement\nremoved by a hand edit left its after-gap library key open, and the click\nthat re-added the same id did not release it (the key was not declared\nbefore that click). The release now covers the symmetric difference: a\nkey the edit begins holds nothing the current config wrote, so whatever\nit holds is left over from an earlier placement. Still one enforcer, and\nstill nothing released on reload, so session values outlive a transient\nhand edit.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         },
         {
           "sha": "8c98e178f55e915c7bdabfd93243a8009a288ce0",

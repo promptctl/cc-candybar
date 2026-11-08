@@ -70176,7 +70176,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.212.3";
+var PACKAGE_VERSION = "1.212.4";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -72063,15 +72063,19 @@ var applyLayoutOp2 = (sid, args, ctx) => {
   const placed2 = applyLayoutOp(editStore(ctx, sid), home, key, op);
   ctx.reloadConfig(origin);
   const after = ctx.configFor(origin);
-  const declared = new Set(ctx.gates.state.gateFor(after).listKeys());
-  const undeclared = ctx.gates.state.gateFor(before).listKeys().filter((key2) => !declared.has(key2));
+  const declaredBefore = new Set(ctx.gates.state.gateFor(before).listKeys());
+  const declaredAfter = new Set(ctx.gates.state.gateFor(after).listKeys());
+  const changed = [
+    ...[...declaredBefore].filter((key2) => !declaredAfter.has(key2)),
+    ...[...declaredAfter].filter((key2) => !declaredBefore.has(key2))
+  ];
   const released = [
     .../* @__PURE__ */ new Set([
       ...endedSessionKeys(
         endedPlacements(before, after),
         ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
       ),
-      ...undeclared
+      ...changed
     ])
   ].filter((key2) => ctx.sessionState.get(sid, key2) !== null);
   for (const key2 of released) ctx.sessionState.clear(sid, key2);
