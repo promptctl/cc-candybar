@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-697",
+      "ref": "refs/pull/697/merge",
+      "sha": "f4dd61d56e64a82793defb3807376ed5de8bd413",
+      "timestamp": "2026-11-08T13:42:32.157Z",
+      "commits": [
+        {
+          "sha": "f4dd61d56e64a82793defb3807376ed5de8bd413",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T13:41:31Z",
+          "message": "Merge 8de199c824018aa8abd4d6517724b1307e1a4ab1 into 3b21a55b949237b11e1b184774041ed3e7b34600\n"
+        },
+        {
+          "sha": "8de199c824018aa8abd4d6517724b1307e1a4ab1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:41:19-07:00",
+          "message": "fix(daemon): the doctor-store comment claims only what the code does, and the two edges' disk is reads-only (candybar-testing-ihvy.5zt)\n"
+        },
+        {
+          "sha": "f9a5f3f236e9e5f3e8344e9edd2841b41e312ba4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:15:38-07:00",
+          "message": "fix(daemon): the doctor's stores, the doctor's edge and the lane edge take the daemon's disk (candybar-testing-ihvy.5zt)\n\nReview follow-up to #667. productionAdapters bound these three to the\nsystem disk while the daemon's inputs name its disk separately as\n`filesystem`, so an inputs bundle could describe a daemon over two disks.\nEach now takes the disk as a parameter, as storage already does, and the\ndaemon hands each one inputs.filesystem.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-688",
       "ref": "refs/pull/688/merge",
       "sha": "30f2695944dce5f1dc378da4039b3cf3abdaeb86",
@@ -98,28 +127,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:14:46-07:00",
           "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-697",
-      "ref": "refs/pull/697/merge",
-      "sha": "593599157775478801833e83b31eabe53dc34726",
-      "timestamp": "2026-11-08T13:17:11.794Z",
-      "commits": [
-        {
-          "sha": "593599157775478801833e83b31eabe53dc34726",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:16:14-07:00",
-          "message": "Merge f9a5f3f236e9e5f3e8344e9edd2841b41e312ba4 into 10f03f8b92a7ea6f004ace540fcfaeb89e89cbac\n"
-        },
-        {
-          "sha": "f9a5f3f236e9e5f3e8344e9edd2841b41e312ba4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:15:38-07:00",
-          "message": "fix(daemon): the doctor's stores, the doctor's edge and the lane edge take the daemon's disk (candybar-testing-ihvy.5zt)\n\nReview follow-up to #667. productionAdapters bound these three to the\nsystem disk while the daemon's inputs name its disk separately as\n`filesystem`, so an inputs bundle could describe a daemon over two disks.\nEach now takes the disk as a parameter, as storage already does, and the\ndaemon hands each one inputs.filesystem.\n"
         }
       ]
     },
