@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "10f03f8b92a7ea6f004ace540fcfaeb89e89cbac",
+      "timestamp": "2026-11-08T13:09:03.862Z",
+      "commits": [
+        {
+          "sha": "10f03f8b92a7ea6f004ace540fcfaeb89e89cbac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:08:04-07:00",
+          "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt) (#667)\n\n* feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(config): a click's proof shares the render cache's installed layers and reads its home's disk (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the installed-layer memo its loads share; the render\n  cache lends its own through the verb context, so a click's proof checks no\n  plugin the bar's last load already checked. The memo keys on definition\n  text, so a lent memo serves no layer the borrower's disk does not hold.\n- presence() reads ENOTDIR as absent, as the stat it replaced did: a path\n  through a regular file holds nothing. The filesystem contract pins ENOTDIR.\n- A click reads its home's text and the layers above on the disk its proof\n  loads; config-file-store leaves FS_READERS.\n- The lane edge's fileExists asks the same disk as its presence.\n- stateFromLoad folds into loadFromDisk; keyLoad is module-private.\n\n* fix(config): a click writes its home on the disk it read and proved; the book's folder is absent as presence says (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the click's writable disk; the commit writes through it\n  (writeAtomicOn), so a click's read, proof and write are one disk's. Undo\n  keeps its own system-disk pair until the settings history takes a disk.\n- bookIsFiled asks presence(): a book folder that is a regular file holds no\n  book, and the loose book is read.\n- holdsGit asks presence() and marks its no-silent-failure exception; the\n  ascent carrying the failure is candybar-testing-ihvy.izc.sv9.\n\n* fix(config): undo puts a click's text back on the disk the click wrote; a write's stat error is never a cleanup's (candybar-testing-ihvy.5zt)\n\n- The settings history takes the daemon's disk, and the config text read and\n  write take a disk: a click, its proof, its write and its undo are one\n  disk's. config-file-store leaves the systemFilesystem owners.\n- writeAtomicOn takes the replaced file's mode before the tmp exists, so a\n  stat that fails is the error the caller sees.\n- config.md: ENOTDIR counts as absent beside ENOENT.\n\n* fix(config): absent is presence's answer for plugin roots, the port's rm speaks errno, and a daemon's journal and answers keep to one disk and one read (candybar-testing-ihvy.5zt)\n\n- A plugin root behind a regular file lists as empty, as presence calls it\n  absent; a root that is itself a file is still named unlistable.\n- The system disk's rmSync of a directory throws EISDIR, as the fake does,\n  and the contract asserts the code.\n- The undo journal is kept on the daemon's own disk: storage is built over\n  the daemon's Filesystem, and settings-history leaves FS_READERS.\n- The answers store reads as every load reads them and files into the\n  folder, one read path instead of a second loose-book branch.\n- The sources bench takes its disk from the process world.\n\ncandybar-testing-ihvy.5zt\n\n* fix(config): the rebased parts and tests carry the port onto main's render origin; an answer the loose book holds writes nothing (candybar-testing-ihvy.5zt)\n\n- The daemon parts the worker tests build (from main) take the disk: the\n  settings history, the lane edge and the click context's filesystem and\n  installed layers, as the daemon wires them.\n- The moved unit cases build a ReloadedEntry by its origin.\n- The answers book's comments say what filing does: the first answer that\n  changes the book writes it into the folder; one already held writes\n  nothing, as with every state file.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\ncandybar-testing-ihvy.5zt\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+        },
+        {
+          "sha": "600ecfad0d88530c307e642fa2c302f67f99d326",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-08T12:38:31Z",
+          "message": "chore(release): set `package.json` to 1.210.6 [skip ci]\n\n## [1.210.6](https://github.com/promptctl/cc-candybar/compare/v1.210.5...v1.210.6) (2026-11-08)\n\n### Bug Fixes\n\n* **pricing:** entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3) ([#691](https://github.com/promptctl/cc-candybar/issues/691)) ([0a394d3](https://github.com/promptctl/cc-candybar/commit/0a394d3d93cccb884c28bb7b74e365fa6bef1695))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-688",
       "ref": "refs/pull/688/merge",
       "sha": "eaa196291c259f49b8117a501b593e79669ae074",
@@ -27,63 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:15:32-07:00",
           "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-667",
-      "ref": "refs/pull/667/merge",
-      "sha": "49603a02406c314ab8df1e9a5d9a0211a28e35d5",
-      "timestamp": "2026-11-08T13:02:32.129Z",
-      "commits": [
-        {
-          "sha": "49603a02406c314ab8df1e9a5d9a0211a28e35d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:01:38-07:00",
-          "message": "Merge afaddd6921b63d0acf38f62203f71415f9082237 into 600ecfad0d88530c307e642fa2c302f67f99d326\n"
-        },
-        {
-          "sha": "afaddd6921b63d0acf38f62203f71415f9082237",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:01:23-07:00",
-          "message": "fix(config): the rebased parts and tests carry the port onto main's render origin; an answer the loose book holds writes nothing (candybar-testing-ihvy.5zt)\n\n- The daemon parts the worker tests build (from main) take the disk: the\n  settings history, the lane edge and the click context's filesystem and\n  installed layers, as the daemon wires them.\n- The moved unit cases build a ReloadedEntry by its origin.\n- The answers book's comments say what filing does: the first answer that\n  changes the book writes it into the folder; one already held writes\n  nothing, as with every state file.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\ncandybar-testing-ihvy.5zt\n"
-        },
-        {
-          "sha": "0f954d13bc012b1df31956420d383dc622d4f3ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T05:32:01-07:00",
-          "message": "fix(config): absent is presence's answer for plugin roots, the port's rm speaks errno, and a daemon's journal and answers keep to one disk and one read (candybar-testing-ihvy.5zt)\n\n- A plugin root behind a regular file lists as empty, as presence calls it\n  absent; a root that is itself a file is still named unlistable.\n- The system disk's rmSync of a directory throws EISDIR, as the fake does,\n  and the contract asserts the code.\n- The undo journal is kept on the daemon's own disk: storage is built over\n  the daemon's Filesystem, and settings-history leaves FS_READERS.\n- The answers store reads as every load reads them and files into the\n  folder, one read path instead of a second loose-book branch.\n- The sources bench takes its disk from the process world.\n\ncandybar-testing-ihvy.5zt\n"
-        },
-        {
-          "sha": "08e33958bd5b64d8df96117135887f106d732c9e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:12:23-07:00",
-          "message": "fix(config): undo puts a click's text back on the disk the click wrote; a write's stat error is never a cleanup's (candybar-testing-ihvy.5zt)\n\n- The settings history takes the daemon's disk, and the config text read and\n  write take a disk: a click, its proof, its write and its undo are one\n  disk's. config-file-store leaves the systemFilesystem owners.\n- writeAtomicOn takes the replaced file's mode before the tmp exists, so a\n  stat that fails is the error the caller sees.\n- config.md: ENOTDIR counts as absent beside ENOENT.\n"
-        },
-        {
-          "sha": "ad4d495c39dd99e70d8ddd88db3b2dca28353e89",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:41:39-07:00",
-          "message": "fix(config): a click writes its home on the disk it read and proved; the book's folder is absent as presence says (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the click's writable disk; the commit writes through it\n  (writeAtomicOn), so a click's read, proof and write are one disk's. Undo\n  keeps its own system-disk pair until the settings history takes a disk.\n- bookIsFiled asks presence(): a book folder that is a regular file holds no\n  book, and the loose book is read.\n- holdsGit asks presence() and marks its no-silent-failure exception; the\n  ascent carrying the failure is candybar-testing-ihvy.izc.sv9.\n"
-        },
-        {
-          "sha": "2682a74195b318afed21bd74de3d5bf0731f595d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:27:28-07:00",
-          "message": "fix(config): a click's proof shares the render cache's installed layers and reads its home's disk (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the installed-layer memo its loads share; the render\n  cache lends its own through the verb context, so a click's proof checks no\n  plugin the bar's last load already checked. The memo keys on definition\n  text, so a lent memo serves no layer the borrower's disk does not hold.\n- presence() reads ENOTDIR as absent, as the stat it replaced did: a path\n  through a regular file holds nothing. The filesystem contract pins ENOTDIR.\n- A click reads its home's text and the layers above on the disk its proof\n  loads; config-file-store leaves FS_READERS.\n- The lane edge's fileExists asks the same disk as its presence.\n- stateFromLoad folds into loadFromDisk; keyLoad is module-private.\n"
-        },
-        {
-          "sha": "e0a5532af1875ec67ab67275d27f993db132c576",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:33:52-07:00",
-          "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
@@ -141,35 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:14:46-07:00",
           "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "0a394d3d93cccb884c28bb7b74e365fa6bef1695",
-      "timestamp": "2026-11-08T12:26:42.487Z",
-      "commits": [
-        {
-          "sha": "0a394d3d93cccb884c28bb7b74e365fa6bef1695",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T05:25:40-07:00",
-          "message": "fix(pricing): entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3) (#691)\n\n* fix(pricing): entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fold priced each un-costed entry with the table held when it ran and\nstored the sum, so a daemon that started offline kept the bundled rates\nfor every entry folded before the live table landed, in the session total\nand in today, until a rewrite re-folded the file from zero.\n\nA record now holds the price's inputs and no price: the cost its entries\ncarried themselves, and the tokens of the entries that carried none by\nthe model they are priced as. Every reader prices the record with the\ntable held at the read. The pricing adapter's table is an observable\nread, and the ask that starts a due load is a separate effect the\nrequest's refresh makes, so the day sums and the session draw recompute\nin the turn a table lands and no read inside a derivation starts a load.\nNothing waits for the first load any more: a cold daemon's first frame\ndraws at the bundled rates and is re-priced when the table lands.\n\nTests: a store over the live adapter and the mocked network folds entries\nbefore the fetch answers and reads the landed table's price for them\nafter it, with no transcript read and no refresh, and again when the\nday's table lands; a carried cost stands under any table; the adapter's\ncases are restated over the read and the ask, with a reaction observing\nthe landing.\n\n* fix(pricing): the table is derived by landing, the load latch opens however the load ends (candybar-gather-renderer-76bb.6pj.wi3)\n\nFrom the high review of PR #691:\n\n- A derivation over the table moves only when a table does: the landing is\n  a computed told apart by its moment, so a retry that lands nothing, or a\n  refresh that finds the day's copy on disk, recomputes nothing downstream.\n  Pinned by a test that fails under reference equality.\n- The one-load latch is released in a finally, so a load that rejects\n  cannot leave the daemon on the bundled rates for its whole life.\n- The parse's token and raw shapes are interfaces: the exception that kept\n  them aliases named a boundary this PR tightened away.\n- The merge of a session's file folds is a FileFold, not a second type of\n  the same shape.\n- The token total is one function on the breakdown's module, in place of\n  three hand sums.\n\n* fix(pricing): an empty entry model names no model, so the message's model prices the entry (candybar-gather-renderer-76bb.6pj.wi3)\n\n* fix(pricing): a day's disk copy does not replace a newer table this owner holds (candybar-gather-renderer-76bb.6pj.wi3)\n\n* fix(pricing): the table is asked for once a held record has an entry no cost priced (candybar-gather-renderer-76bb.6pj.wi3)\n\nA machine whose transcripts all carry costUSD reads no table, so its\nstatusline tick starts no fetch of pricing.json and, offline, warns of no\ntable it never priced by. The ask stays in the request's refresh, the one\neffect per tick; a record a scan holds with unpriced tokens makes the next\nrequest ask, since today prices it by the table.\n\n* fix(pricing): the day's disk copy prices from the owner's start, and a rejected load is said in the owner's log (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fresh daemon asked for its table only after its first fold, so a cold\nfold of a large transcript drew its first frames at the bundled rates even\nwith the day's copy on disk. The copy is now read as the pricing is built,\nwhich fetches nothing; a fetch still starts only from a refresh that owes a\nprice, and every load follows the read. A load that rejects is said through\nthe owner's log instead of the host process's unhandled-rejection handling,\nwhich the demo does not install. Memory lines on pricing now state this.\n\ncandybar-gather-renderer-76bb.6pj.wi3\n\n* fix(pricing): an entry with no tokens owes no price, so it never asks for the table (candybar-gather-renderer-76bb.6pj.wi3)\n\nA synthetic entry (an API error or an interrupt) carries an all-zero usage\nand no cost; held as unpriced it had a machine whose entries all price\nthemselves fetch the table. The usage comments say what a record holds now,\nand the transcript fold's step is synchronous, as every caller passes.\n\ncandybar-gather-renderer-76bb.6pj.wi3"
-        },
-        {
-          "sha": "b73c3b4c722203fa627fdf1bedaca72a2428f675",
-          "author_name": "GitHub Action",
-          "author_email": "action@github.com",
-          "timestamp": "2026-11-08T08:39:09Z",
-          "message": "chore: update pricing data 2026-11-08 [skip ci]\n"
-        },
-        {
-          "sha": "d05412c9391a086110457900c0ee687556f7f7ad",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T12:40:29Z",
-          "message": "chore(release): set `package.json` to 1.210.5 [skip ci]\n\n## [1.210.5](https://github.com/promptctl/cc-candybar/compare/v1.210.4...v1.210.5) (2026-11-07)\n\n### Bug Fixes\n\n* **daemon:** a connection's state is one value, and past waiting it reads no more frames ([#689](https://github.com/promptctl/cc-candybar/issues/689)) ([b21e989](https://github.com/promptctl/cc-candybar/commit/b21e989ab734befd8acc182d17139d743372d040))\n"
         }
       ]
     },
