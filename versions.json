@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-701",
+      "ref": "refs/pull/701/merge",
+      "sha": "c6d09252e12c791a0a078b58255d50d20668073d",
+      "timestamp": "2026-11-08T22:07:15.590Z",
+      "commits": [
+        {
+          "sha": "c6d09252e12c791a0a078b58255d50d20668073d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:05:30-07:00",
+          "message": "Merge 45178075aeba315b1b889b0f186e453e133a5e68 into 9305fac751a09046e5f10a15bc206da0a3312754\n"
+        },
+        {
+          "sha": "45178075aeba315b1b889b0f186e453e133a5e68",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:05:27-07:00",
+          "message": "Merge branch 'main' into brandon-unfiled-3248.t2yz"
+        },
+        {
+          "sha": "bbc83798c92863811f1aead7de28c488829032bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:05:06-07:00",
+          "message": "fix(edit-chrome): a placement's removed library state is released by any edit that begins or ends its key, so a re-added placement inherits nothing (brandon-unfiled-3248.t2yz)\n\nThe layout-op verb released only the keys an edit ends, so a placement\nremoved by a hand edit left its after-gap library key open, and the click\nthat re-added the same id did not release it (the key was not declared\nbefore that click). The release now covers the symmetric difference: a\nkey the edit begins holds nothing the current config wrote, so whatever\nit holds is left over from an earlier placement. Still one enforcer, and\nstill nothing released on reload, so session values outlive a transient\nhand edit.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "8c98e178f55e915c7bdabfd93243a8009a288ce0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:43:34-07:00",
+          "message": "test(edit-chrome): a placement re-added under a removed one's freed id finds its after-gap library closed (brandon-unfiled-3248.t2yz)\n\nThe layout-op verb already releases, in the removal's own click, every\nstate key the config declared before the edit and no longer declares, so\nthe removed placement's after-gap library key is cleared and a placement\nminted later under the freed id inherits nothing. This pins the ticket's\ndone-when end to end: open the library, remove, re-add under the bare id,\nand the library reads closed. It fails with that release disabled.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ca24cbf5adbedbbea71a01319f2da901dfd775bd",
@@ -20,35 +56,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-08T21:47:37Z",
           "message": "chore(release): set `package.json` to 1.212.4 [skip ci]\n\n## [1.212.4](https://github.com/promptctl/cc-candybar/compare/v1.212.3...v1.212.4) (2026-11-08)\n\n### Bug Fixes\n\n* **git:** each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek) ([#690](https://github.com/promptctl/cc-candybar/issues/690)) ([cc1efbe](https://github.com/promptctl/cc-candybar/commit/cc1efbe069bd704ecda3aa4731f6c19e89cd8de0))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-701",
-      "ref": "refs/pull/701/merge",
-      "sha": "d5a2cfb9b6feeee63ddb652448bba460c32c87a3",
-      "timestamp": "2026-11-08T22:06:18.029Z",
-      "commits": [
-        {
-          "sha": "d5a2cfb9b6feeee63ddb652448bba460c32c87a3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T22:05:20Z",
-          "message": "Merge bbc83798c92863811f1aead7de28c488829032bf into 9305fac751a09046e5f10a15bc206da0a3312754\n"
-        },
-        {
-          "sha": "bbc83798c92863811f1aead7de28c488829032bf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T15:05:06-07:00",
-          "message": "fix(edit-chrome): a placement's removed library state is released by any edit that begins or ends its key, so a re-added placement inherits nothing (brandon-unfiled-3248.t2yz)\n\nThe layout-op verb released only the keys an edit ends, so a placement\nremoved by a hand edit left its after-gap library key open, and the click\nthat re-added the same id did not release it (the key was not declared\nbefore that click). The release now covers the symmetric difference: a\nkey the edit begins holds nothing the current config wrote, so whatever\nit holds is left over from an earlier placement. Still one enforcer, and\nstill nothing released on reload, so session values outlive a transient\nhand edit.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "8c98e178f55e915c7bdabfd93243a8009a288ce0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:43:34-07:00",
-          "message": "test(edit-chrome): a placement re-added under a removed one's freed id finds its after-gap library closed (brandon-unfiled-3248.t2yz)\n\nThe layout-op verb already releases, in the removal's own click, every\nstate key the config declared before the edit and no longer declares, so\nthe removed placement's after-gap library key is cleared and a placement\nminted later under the freed id inherits nothing. This pins the ticket's\ndone-when end to end: open the library, remove, re-add under the bare id,\nand the library reads closed. It fails with that release disabled.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
