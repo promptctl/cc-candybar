@@ -169,7 +169,8 @@ export interface DaemonAdapters {
     closing: AbortSignal,
     probe: ProcessProbe,
     heldSession: HeldSessionOf,
-    // [LAW:types-are-the-program] Reads only: the lane edge never writes.
+    // [LAW:types-are-the-program] Reads only: the lane edge never writes to
+    // the disk; its effects go to tmux panes and Claude Code.
     disk: FilesystemReads,
   ) => LaneEdge;
   // The session a Claude Code process holds, by the records Claude Code keeps
