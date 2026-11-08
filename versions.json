@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-700",
+      "ref": "refs/pull/700/merge",
+      "sha": "3eab8077c72fec2689cd9cc936e63ae64dd7b0b3",
+      "timestamp": "2026-11-08T21:50:41.943Z",
+      "commits": [
+        {
+          "sha": "3eab8077c72fec2689cd9cc936e63ae64dd7b0b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T21:49:39Z",
+          "message": "Merge d5ff590591ab2baef43b98d4e985d568aa5a897d into 9305fac751a09046e5f10a15bc206da0a3312754\n"
+        },
+        {
+          "sha": "d5ff590591ab2baef43b98d4e985d568aa5a897d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:49:27-07:00",
+          "message": "fix(atomic-write): a failed staging cleanup is named in the write's error message, so the leftover tmp is shown (brandon-unfiled-3248.8a7z)\n"
+        },
+        {
+          "sha": "e95503077b871556002584180cee2996a3577365",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:42:13-07:00",
+          "message": "fix(atomic-write): a failed staging cleanup rides on the write's error as its cause instead of replacing it (brandon-unfiled-3248.8a7z)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-701",
       "ref": "refs/pull/701/merge",
       "sha": "7652961c18ae831695d901848e31aa46a5615112",
@@ -20,28 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-08T14:43:34-07:00",
           "message": "test(edit-chrome): a placement re-added under a removed one's freed id finds its after-gap library closed (brandon-unfiled-3248.t2yz)\n\nThe layout-op verb already releases, in the removal's own click, every\nstate key the config declared before the edit and no longer declares, so\nthe removed placement's after-gap library key is cleared and a placement\nminted later under the freed id inherits nothing. This pins the ticket's\ndone-when end to end: open the library, remove, re-add under the bare id,\nand the library reads closed. It fails with that release disabled.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-700",
-      "ref": "refs/pull/700/merge",
-      "sha": "b8c4c6e17c175aa742f2ee35a39ab410c1d81976",
-      "timestamp": "2026-11-08T21:43:41.078Z",
-      "commits": [
-        {
-          "sha": "b8c4c6e17c175aa742f2ee35a39ab410c1d81976",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:42:47-07:00",
-          "message": "Merge e95503077b871556002584180cee2996a3577365 into cc1efbe069bd704ecda3aa4731f6c19e89cd8de0\n"
-        },
-        {
-          "sha": "e95503077b871556002584180cee2996a3577365",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:42:13-07:00",
-          "message": "fix(atomic-write): a failed staging cleanup rides on the write's error as its cause instead of replacing it (brandon-unfiled-3248.8a7z)\n"
         }
       ]
     },
