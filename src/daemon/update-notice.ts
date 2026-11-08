@@ -51,6 +51,7 @@ import {
 import {
   claimAct,
   endOverdue,
+  groupStands,
   IDLE,
   judgeAct,
   leaveGroup,
@@ -654,7 +655,12 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // `left/` holds.
   async function watchLeft(): Promise<void> {
     const faults: string[] = [];
+    // [LAW:single-enforcer][LAW:one-source-of-truth] A held group is judged by
+    // the rule the reader judges an entry by, so one that has exited leaves
+    // the ⚠ rather than naming a pid that may be someone else's.
+    // [LAW:no-silent-failure] One that still stands keeps its write's fault.
     unwritten = unwritten.filter((group) => {
+      if (!groupStands(group, launcher, clock.bootTime())) return false;
       const fault = leaveGroup(actsDir, group);
       if (fault !== null) faults.push(fault);
       return fault !== null;

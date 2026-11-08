@@ -257,7 +257,7 @@ type JobIdentity = Pick<ActRecord, "pid" | "startTime" | "started">;
 
 // A group of this boot that is still alive: the part of the proof that needs
 // no `ps`.
-const groupStands = (
+export const groupStands = (
   record: JobIdentity,
   jobs: Pick<Launcher, "jobGroupAlive">,
   boot: number,

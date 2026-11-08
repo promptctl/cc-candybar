@@ -1265,6 +1265,29 @@ describe("the update watch: an act's budget is the time it was watched running",
     return { b, signal, next };
   }
 
+  unlessRoot("a left group the directory won't take, whose group has since exited, leaves the ⚠ at the next tick", async () => {
+    const b = bench({
+      leader: async () => ({ kind: "unavailable", detail: "no row" }),
+      pruned: true,
+    });
+    const leftDir = path.join(b.dir, "left");
+    fs.mkdirSync(leftDir);
+    fs.chmodSync(leftDir, 0o555);
+    try {
+      const watch = b.daemon();
+      await b.settled();
+      await b.awake(10 * MINUTE + 2 * POLL);
+      expect(shown(watch)).toMatch(/kill -TERM -41000/);
+
+      b.group.end();
+      await b.awake(POLL);
+      expect(shown(watch) ?? "").not.toMatch(/kill -TERM -41000/);
+      expect(watch.errors().map((e) => e.about)).not.toContain("left\u000041000");
+    } finally {
+      fs.chmodSync(leftDir, 0o755);
+    }
+  });
+
   test("an overdue act pruned as the daemon closes mid-proof is ended by the next daemon when its leader proves the group the job's", async () => {
     const { b, signal, next } = await closedMidProof({ kind: "start", token: "t" });
 
