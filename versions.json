@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-696",
+      "ref": "refs/pull/696/merge",
+      "sha": "19bb9ba0dc2d53f0524e7f0ed854c83c1ffebc0b",
+      "timestamp": "2026-11-08T14:37:02.992Z",
+      "commits": [
+        {
+          "sha": "19bb9ba0dc2d53f0524e7f0ed854c83c1ffebc0b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:35:52-07:00",
+          "message": "Merge de4bcedd9083aebbc146f72c1778ef93fc13ff3d into 56a5c61981df900d1c9d0cee98199d3a1f52182f\n"
+        },
+        {
+          "sha": "de4bcedd9083aebbc146f72c1778ef93fc13ff3d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:35:49-07:00",
+          "message": "Merge branch 'main' into brandon-unfiled-3248.7u1g"
+        },
+        {
+          "sha": "b919e0c6b9e0c08fee741b7553571020f3c4deda",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:35:05-07:00",
+          "message": "fix(colour)!: the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g)\n\nAt ansi the open settings door's ✖ was drawn silver, yellow, purple or\nblack: the red was chosen as truecolor measures it, and keptOn's repair\nsearched the depth's table by contrast alone. The choice now measures\nevery candidate and the ground as the render's depth draws them, and\nthe candidates are per depth: the theme's named reds in truecolor and\nat 256 colours, the terminal's red and bright red (SGR 31/91) at ansi.\nkeptOn has no job left and is deleted.\n\nBREAKING CHANGE: the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-698",
       "ref": "refs/pull/698/merge",
       "sha": "1c991b452f880257604da8402c4189b3fe36c9d7",
@@ -164,28 +193,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:17:14-07:00",
           "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-696",
-      "ref": "refs/pull/696/merge",
-      "sha": "dddd1f681fba3498ce9fa4f8d037bcc9ea6a72ca",
-      "timestamp": "2026-11-07T12:41:47.902Z",
-      "commits": [
-        {
-          "sha": "dddd1f681fba3498ce9fa4f8d037bcc9ea6a72ca",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:37:49Z",
-          "message": "Merge b919e0c6b9e0c08fee741b7553571020f3c4deda into b21e989ab734befd8acc182d17139d743372d040\n"
-        },
-        {
-          "sha": "b919e0c6b9e0c08fee741b7553571020f3c4deda",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:35:05-07:00",
-          "message": "fix(colour)!: the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g)\n\nAt ansi the open settings door's ✖ was drawn silver, yellow, purple or\nblack: the red was chosen as truecolor measures it, and keptOn's repair\nsearched the depth's table by contrast alone. The choice now measures\nevery candidate and the ground as the render's depth draws them, and\nthe candidates are per depth: the theme's named reds in truecolor and\nat 256 colours, the terminal's red and bright red (SGR 31/91) at ansi.\nkeptOn has no job left and is deleted.\n\nBREAKING CHANGE: the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
