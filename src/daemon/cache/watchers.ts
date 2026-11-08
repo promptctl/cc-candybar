@@ -294,6 +294,11 @@ interface WatcherSlot {
 export interface WatcherHandle {
   release(): void;
   readonly deaf: readonly Deafness[];
+  // [LAW:one-source-of-truth] Whether any directory this watch hears rides
+  // the OS's one event stream, so a stall of that stream deafens it. A
+  // polled directory rides none, and the registry alone decides which are
+  // polled.
+  readonly ridesStream: boolean;
 }
 
 // What a consumer asks to watch, under the key naming it. [LAW:one-source-of-truth]
@@ -435,6 +440,14 @@ export class WatcherRegistry {
     this.logger = opts.logger ?? defaultLogger;
   }
 
+  // [LAW:one-source-of-truth] Whether a watch for named entries is polled
+  // here, and so heard through a stall of the OS's stream: the one rule every
+  // directory opens by, and the one the bar's stall row reads. The disk says
+  // what a directory watch costs: where it reaches the tree, a name is polled.
+  get namesPolled(): boolean {
+    return this.filesystem.watchReach === "tree";
+  }
+
   // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
   // holder of one slot, and each holder's callback hears every window.
   // `targets` from the first acquire wins; subsequent acquires keep the
@@ -451,6 +464,7 @@ export class WatcherRegistry {
       // so; releasing it is a no-op, so callers don't crash mid-shutdown.
       return {
         release: () => {},
+        ridesStream: false,
         deaf: targets.dirs.map((d) => ({
           kind: "refused",
           path: d.path,
@@ -531,9 +545,8 @@ export class WatcherRegistry {
   // The directory watch a new slot's target joins: the one already open
   // there, judged, or a new one.
   private dirFor(target: DirTarget): DirWatch {
-    // [LAW:one-source-of-truth] The disk says what a directory watch costs.
-    const polled =
-      this.filesystem.watchReach === "tree" && target.filenames !== undefined;
+    // [LAW:one-source-of-truth] The registry's one polling rule.
+    const polled = this.namesPolled && target.filenames !== undefined;
     const id = dirId(target, polled);
     const existing = this.dirs.get(id);
     if (existing !== undefined) {
@@ -738,6 +751,7 @@ export class WatcherRegistry {
 
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
     return {
+      ridesStream: slot.listeners.some(({ dir }) => !dir.polled),
       get deaf() {
         return slot.listeners.flatMap(({ dir }) =>
           dir.state.kind === "deaf" ? [dir.state.deafness] : [],

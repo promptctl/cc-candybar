@@ -117,6 +117,46 @@ for (const platform of ["darwin", "linux"] as const) {
         },
       ]);
     });
+
+    // What a stall of the OS's event stream deafens: every child and a tree
+    // ride it on both platforms; a name rides it only where the directory
+    // watch reaches one directory (Linux), since elsewhere it is polled.
+    it("says which watches ride the OS's event stream", () => {
+      disk.mkdir("/cfg/sub");
+      const named = registry.acquire(
+        "named",
+        { dirs: [{ path: "/cfg", filenames: ["a.json"] }] },
+        hear,
+      );
+      const everyChild = registry.acquire(
+        "every",
+        { dirs: [{ path: "/cfg/sub" }] },
+        hear,
+      );
+      const tree = registry.acquire(
+        "tree",
+        { dirs: [{ path: "/cfg", recursive: true }] },
+        hear,
+      );
+      const mixed = registry.acquire(
+        "mixed",
+        {
+          dirs: [{ path: "/cfg", filenames: ["a.json"] }, { path: "/cfg/sub" }],
+        },
+        hear,
+      );
+      expect({
+        named: named.ridesStream,
+        everyChild: everyChild.ridesStream,
+        tree: tree.ridesStream,
+        mixed: mixed.ridesStream,
+      }).toEqual({
+        named: platform === "linux",
+        everyChild: true,
+        tree: true,
+        mixed: true,
+      });
+    });
   });
 }
 
