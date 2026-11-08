@@ -2,74 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-697",
-      "ref": "refs/pull/697/merge",
-      "sha": "fb672d525b32ab10f76bf4dc82d3c43d625b5dc6",
-      "timestamp": "2026-11-08T14:15:35.350Z",
-      "commits": [
-        {
-          "sha": "fb672d525b32ab10f76bf4dc82d3c43d625b5dc6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:14:42-07:00",
-          "message": "Merge fa8777d071de563905a32778c826110abdc5b52b into 6ad002020ced84236a4235120e245cc02ab701cf\n"
-        },
-        {
-          "sha": "fa8777d071de563905a32778c826110abdc5b52b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:14:38-07:00",
-          "message": "Merge branch 'main' into candybar-testing-ihvy.5zt-followup"
-        },
-        {
-          "sha": "8f406be588c295e225425a38cb220fd36f53d0c8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:49:50-07:00",
-          "message": "Merge branch 'main' into candybar-testing-ihvy.5zt-followup"
-        },
-        {
-          "sha": "000715406c5cf86091d85f44a66ca33ecbe96f20",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:46:53-07:00",
-          "message": "fix(daemon): the lane edge's disk comment says it never writes to the disk, not that it never writes (candybar-testing-ihvy.5zt)\n"
-        },
-        {
-          "sha": "8de199c824018aa8abd4d6517724b1307e1a4ab1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:41:19-07:00",
-          "message": "fix(daemon): the doctor-store comment claims only what the code does, and the two edges' disk is reads-only (candybar-testing-ihvy.5zt)\n"
-        },
-        {
-          "sha": "f9a5f3f236e9e5f3e8344e9edd2841b41e312ba4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:15:38-07:00",
-          "message": "fix(daemon): the doctor's stores, the doctor's edge and the lane edge take the daemon's disk (candybar-testing-ihvy.5zt)\n\nReview follow-up to #667. productionAdapters bound these three to the\nsystem disk while the daemon's inputs name its disk separately as\n`filesystem`, so an inputs bundle could describe a daemon over two disks.\nEach now takes the disk as a parameter, as storage already does, and the\ndaemon hands each one inputs.filesystem.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "6ad002020ced84236a4235120e245cc02ab701cf",
-      "timestamp": "2026-11-08T14:15:13.874Z",
+      "sha": "eaa59b6d87c32073b040a97072a0fee0a6e048fc",
+      "timestamp": "2026-11-08T14:17:00.308Z",
       "commits": [
         {
-          "sha": "6ad002020ced84236a4235120e245cc02ab701cf",
+          "sha": "eaa59b6d87c32073b040a97072a0fee0a6e048fc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:14:15-07:00",
-          "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh) (#692)\n\n* test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* test(facts): the live session states a client's deadline, spells its argv once, and checks the pane its checkpoint stamped (candybar-gather-renderer-76bb.1dh.izh)\n\n* test(facts): the live request states its deadline from the instant it arrives, crosses the checkpoint before the setup's burn, and the header names the whole request path (candybar-gather-renderer-76bb.1dh.izh)\n\n* test(facts): the live request is a statusline client's (no encoding, the shared Status hook data), owns its setup's hold from the setup on, and its comments claim only the steps it takes (candybar-gather-renderer-76bb.1dh.izh)\n\n* test(facts): the live request's setup hold is released by an explicit try/catch, not DisposableStack, which Node 22 lacks (candybar-gather-renderer-76bb.1dh.izh)\n\n* test(facts): a live request's setup hold is the case teardown's until its answer takes it, so an unanswered overlap is released before the parts close; the wire deadline is named as the Node client's (candybar-gather-renderer-76bb.1dh.izh)\n\n* test(facts): the live answer takes its setup's reference only once its waits end, so a wait that throws or never settles leaves the release to the case teardown ahead of the parts' close (candybar-gather-renderer-76bb.1dh.izh)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        },
-        {
-          "sha": "4bfb7a074dcca9490925b9eb06692b43956d8765",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-08T13:55:14Z",
-          "message": "chore(release): set `package.json` to 1.211.1 [skip ci]\n\n## [1.211.1](https://github.com/promptctl/cc-candybar/compare/v1.211.0...v1.211.1) (2026-11-08)\n\n### Bug Fixes\n\n* **watchers:** on macOS, named-entry watches are polled instead of subscribing fseventsd to whole trees ([#688](https://github.com/promptctl/cc-candybar/issues/688)) ([691cd17](https://github.com/promptctl/cc-candybar/commit/691cd171bcee77b6d424fd6a730ab3be4bd8d503))\n"
+          "timestamp": "2026-11-08T07:15:55-07:00",
+          "message": "fix(daemon): the doctor stores, doctor edge and lane edge take the daemon's disk, so one daemon answers from one disk (#697)\n\n* fix(daemon): the doctor's stores, the doctor's edge and the lane edge take the daemon's disk (candybar-testing-ihvy.5zt)\n\nReview follow-up to #667. productionAdapters bound these three to the\nsystem disk while the daemon's inputs name its disk separately as\n`filesystem`, so an inputs bundle could describe a daemon over two disks.\nEach now takes the disk as a parameter, as storage already does, and the\ndaemon hands each one inputs.filesystem.\n\n* fix(daemon): the doctor-store comment claims only what the code does, and the two edges' disk is reads-only (candybar-testing-ihvy.5zt)\n\n* fix(daemon): the lane edge's disk comment says it never writes to the disk, not that it never writes (candybar-testing-ihvy.5zt)"
         }
       ]
     },

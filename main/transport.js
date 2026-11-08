@@ -87588,7 +87588,7 @@ function createDaemon(inputs) {
   });
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
-  const doctorStores = inputs.doctorStores;
+  const doctorStores = inputs.doctorStores(inputs.filesystem);
   const watcherRegistry = new WatcherRegistry({
     filesystem: inputs.filesystem,
     clock,
@@ -87637,7 +87637,8 @@ function createDaemon(inputs) {
       (sessionId2) => frameFeeds.following(sessionId2),
       closing.signal,
       probe3,
-      heldSession
+      heldSession,
+      inputs.filesystem
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -87746,7 +87747,8 @@ function createDaemon(inputs) {
           repos: entry.repos
         };
       },
-      host
+      host,
+      inputs.filesystem
     ),
     doctorStores,
     probes: handlerProbes,
@@ -89183,18 +89185,18 @@ function productionAdapters(paths2, daemonLog, machine) {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     storage: (log, disk) => fileStorage(paths2, log, machine, disk),
-    doctorStores: fileStores(systemFilesystem, paths2.state),
-    doctorEdge: (launcher, loadConfig, host) => productionEdge(launcher, loadConfig, host, systemFilesystem),
+    doctorStores: (disk) => fileStores(disk, paths2.state),
+    doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe3, heldSession) => productionLaneEdge(
+    laneEdge: (launcher, following, closing, probe3, heldSession, disk) => productionLaneEdge(
       launcher,
       following,
       closing,
       machine,
       probe3,
       heldSession,
-      systemFilesystem
+      disk
     ),
     heldSession: heldSessionUnder,
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
