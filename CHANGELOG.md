@@ -1,3 +1,9 @@
+## [1.210.6](https://github.com/promptctl/cc-candybar/compare/v1.210.5...v1.210.6) (2026-11-08)
+
+### Bug Fixes
+
+* **pricing:** entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3) ([#691](https://github.com/promptctl/cc-candybar/issues/691)) ([0a394d3](https://github.com/promptctl/cc-candybar/commit/0a394d3d93cccb884c28bb7b74e365fa6bef1695))
+
 ## [1.210.5](https://github.com/promptctl/cc-candybar/compare/v1.210.4...v1.210.5) (2026-11-07)
 
 ### Bug Fixes
