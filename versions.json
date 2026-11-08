@@ -2,6 +2,70 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-691",
+      "ref": "refs/pull/691/merge",
+      "sha": "8a6ed793657e5df07da970a7a1c36815f56f3959",
+      "timestamp": "2026-11-08T12:21:29.877Z",
+      "commits": [
+        {
+          "sha": "8a6ed793657e5df07da970a7a1c36815f56f3959",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T12:20:32Z",
+          "message": "Merge 9fcc59a9e4165194d37cae578fbd42089b555753 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
+        },
+        {
+          "sha": "9fcc59a9e4165194d37cae578fbd42089b555753",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T05:08:49-07:00",
+          "message": "fix(pricing): an entry with no tokens owes no price, so it never asks for the table (candybar-gather-renderer-76bb.6pj.wi3)\n\nA synthetic entry (an API error or an interrupt) carries an all-zero usage\nand no cost; held as unpriced it had a machine whose entries all price\nthemselves fetch the table. The usage comments say what a record holds now,\nand the transcript fold's step is synchronous, as every caller passes.\n\ncandybar-gather-renderer-76bb.6pj.wi3\n"
+        },
+        {
+          "sha": "0278c644e3521987175c7220c4d57503d24e364a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T05:00:54-07:00",
+          "message": "fix(pricing): the day's disk copy prices from the owner's start, and a rejected load is said in the owner's log (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fresh daemon asked for its table only after its first fold, so a cold\nfold of a large transcript drew its first frames at the bundled rates even\nwith the day's copy on disk. The copy is now read as the pricing is built,\nwhich fetches nothing; a fetch still starts only from a refresh that owes a\nprice, and every load follows the read. A load that rejects is said through\nthe owner's log instead of the host process's unhandled-rejection handling,\nwhich the demo does not install. Memory lines on pricing now state this.\n\ncandybar-gather-renderer-76bb.6pj.wi3\n"
+        },
+        {
+          "sha": "c9e8a8d17827c9cf1000269ca0c0eb2a1fb02f21",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T04:50:39-07:00",
+          "message": "fix(pricing): the table is asked for once a held record has an entry no cost priced (candybar-gather-renderer-76bb.6pj.wi3)\n\nA machine whose transcripts all carry costUSD reads no table, so its\nstatusline tick starts no fetch of pricing.json and, offline, warns of no\ntable it never priced by. The ask stays in the request's refresh, the one\neffect per tick; a record a scan holds with unpriced tokens makes the next\nrequest ask, since today prices it by the table.\n"
+        },
+        {
+          "sha": "79d95caf48e3df7be3f38065bbdb68ed5d14af10",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T01:59:16-07:00",
+          "message": "fix(pricing): a day's disk copy does not replace a newer table this owner holds (candybar-gather-renderer-76bb.6pj.wi3)\n"
+        },
+        {
+          "sha": "95b07f82e599d2d2500b191c994805c80d800f98",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T01:54:02-07:00",
+          "message": "fix(pricing): an empty entry model names no model, so the message's model prices the entry (candybar-gather-renderer-76bb.6pj.wi3)\n"
+        },
+        {
+          "sha": "e046772550cc45bd8d35696cf735a5316b8161f3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:35:44-07:00",
+          "message": "fix(pricing): the table is derived by landing, the load latch opens however the load ends (candybar-gather-renderer-76bb.6pj.wi3)\n\nFrom the high review of PR #691:\n\n- A derivation over the table moves only when a table does: the landing is\n  a computed told apart by its moment, so a retry that lands nothing, or a\n  refresh that finds the day's copy on disk, recomputes nothing downstream.\n  Pinned by a test that fails under reference equality.\n- The one-load latch is released in a finally, so a load that rejects\n  cannot leave the daemon on the bundled rates for its whole life.\n- The parse's token and raw shapes are interfaces: the exception that kept\n  them aliases named a boundary this PR tightened away.\n- The merge of a session's file folds is a FileFold, not a second type of\n  the same shape.\n- The token total is one function on the breakdown's module, in place of\n  three hand sums.\n"
+        },
+        {
+          "sha": "d86cc665bedf4151e9565ed92c80a9a61061adb1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:13:44-07:00",
+          "message": "fix(pricing): entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fold priced each un-costed entry with the table held when it ran and\nstored the sum, so a daemon that started offline kept the bundled rates\nfor every entry folded before the live table landed, in the session total\nand in today, until a rewrite re-folded the file from zero.\n\nA record now holds the price's inputs and no price: the cost its entries\ncarried themselves, and the tokens of the entries that carried none by\nthe model they are priced as. Every reader prices the record with the\ntable held at the read. The pricing adapter's table is an observable\nread, and the ask that starts a due load is a separate effect the\nrequest's refresh makes, so the day sums and the session draw recompute\nin the turn a table lands and no read inside a derivation starts a load.\nNothing waits for the first load any more: a cold daemon's first frame\ndraws at the bundled rates and is re-priced when the table lands.\n\nTests: a store over the live adapter and the mocked network folds entries\nbefore the fetch answers and reads the landed table's price for them\nafter it, with no transcript read and no refresh, and again when the\nday's table lands; a carried cost stands under any table; the adapter's\ncases are restated over the read and the ask, with a reaction observing\nthe landing.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-692",
       "ref": "refs/pull/692/merge",
       "sha": "94b90bd8a45e5a0f3be02811eaf31e88c446651d",
@@ -48,70 +112,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:14:46-07:00",
           "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-691",
-      "ref": "refs/pull/691/merge",
-      "sha": "a241f761d14c903b439b26381cbfaf1613f3102d",
-      "timestamp": "2026-11-08T12:09:53.035Z",
-      "commits": [
-        {
-          "sha": "a241f761d14c903b439b26381cbfaf1613f3102d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T12:09:00Z",
-          "message": "Merge 66719a02b9ab8cd6011bf2636f276124cd146ef3 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
-        },
-        {
-          "sha": "66719a02b9ab8cd6011bf2636f276124cd146ef3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T05:08:49-07:00",
-          "message": "fix(pricing): an entry with no tokens owes no price, so it never asks for the table (candybar-gather-renderer-76bb.6pj.wi3)\n\nA synthetic entry (an API error or an interrupt) carries an all-zero usage\nand no cost; held as unpriced it had a machine whose entries all price\nthemselves fetch the table. The usage comments say what a record holds now,\nand the transcript fold's step is synchronous, as every caller passes.\n\ncandybar-gather-renderer-76bb.6pj.wi3\n"
-        },
-        {
-          "sha": "472dc2dbef57a1dd7b204e42f0454dd2104139fb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T05:00:54-07:00",
-          "message": "fix(pricing): the day's disk copy prices from the owner's start, and a rejected load is said in the owner's log (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fresh daemon asked for its table only after its first fold, so a cold\nfold of a large transcript drew its first frames at the bundled rates even\nwith the day's copy on disk. The copy is now read as the pricing is built,\nwhich fetches nothing; a fetch still starts only from a refresh that owes a\nprice, and every load follows the read. A load that rejects is said through\nthe owner's log instead of the host process's unhandled-rejection handling,\nwhich the demo does not install. Memory lines on pricing now state this.\n\ncandybar-gather-renderer-76bb.6pj.wi3\n"
-        },
-        {
-          "sha": "07e82c8e4559a83ccb41287a965031affaed9b24",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T04:50:39-07:00",
-          "message": "fix(pricing): the table is asked for once a held record has an entry no cost priced (candybar-gather-renderer-76bb.6pj.wi3)\n\nA machine whose transcripts all carry costUSD reads no table, so its\nstatusline tick starts no fetch of pricing.json and, offline, warns of no\ntable it never priced by. The ask stays in the request's refresh, the one\neffect per tick; a record a scan holds with unpriced tokens makes the next\nrequest ask, since today prices it by the table.\n"
-        },
-        {
-          "sha": "fd16568f00cc8222c458f116c42c480eb234b2df",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T01:59:16-07:00",
-          "message": "fix(pricing): a day's disk copy does not replace a newer table this owner holds (candybar-gather-renderer-76bb.6pj.wi3)\n"
-        },
-        {
-          "sha": "3457ce914c37acfa2988b9e60debeb3bd3f62d6e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T01:54:02-07:00",
-          "message": "fix(pricing): an empty entry model names no model, so the message's model prices the entry (candybar-gather-renderer-76bb.6pj.wi3)\n"
-        },
-        {
-          "sha": "41cae9402e09704ea18fde54f03f97ca9b492e89",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:35:44-07:00",
-          "message": "fix(pricing): the table is derived by landing, the load latch opens however the load ends (candybar-gather-renderer-76bb.6pj.wi3)\n\nFrom the high review of PR #691:\n\n- A derivation over the table moves only when a table does: the landing is\n  a computed told apart by its moment, so a retry that lands nothing, or a\n  refresh that finds the day's copy on disk, recomputes nothing downstream.\n  Pinned by a test that fails under reference equality.\n- The one-load latch is released in a finally, so a load that rejects\n  cannot leave the daemon on the bundled rates for its whole life.\n- The parse's token and raw shapes are interfaces: the exception that kept\n  them aliases named a boundary this PR tightened away.\n- The merge of a session's file folds is a FileFold, not a second type of\n  the same shape.\n- The token total is one function on the breakdown's module, in place of\n  three hand sums.\n"
-        },
-        {
-          "sha": "9eb0f402b986cf36b6850bac932165f3173745ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:13:44-07:00",
-          "message": "fix(pricing): entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fold priced each un-costed entry with the table held when it ran and\nstored the sum, so a daemon that started offline kept the bundled rates\nfor every entry folded before the live table landed, in the session total\nand in today, until a rewrite re-folded the file from zero.\n\nA record now holds the price's inputs and no price: the cost its entries\ncarried themselves, and the tokens of the entries that carried none by\nthe model they are priced as. Every reader prices the record with the\ntable held at the read. The pricing adapter's table is an observable\nread, and the ask that starts a due load is a separate effect the\nrequest's refresh makes, so the day sums and the session draw recompute\nin the turn a table lands and no read inside a derivation starts a load.\nNothing waits for the first load any more: a cold daemon's first frame\ndraws at the bundled rates and is re-priced when the table lands.\n\nTests: a store over the live adapter and the mocked network folds entries\nbefore the fetch answers and reads the landed table's price for them\nafter it, with no transcript read and no refresh, and again when the\nday's table lands; a carried cost stands under any table; the adapter's\ncases are restated over the read and the ask, with a reaction observing\nthe landing.\n"
         }
       ]
     },
