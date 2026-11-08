@@ -214,6 +214,25 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
       await rt.clickDoing((v) => v === "remove:directory");
       expect(rt.sessionState.get(SID, AFTER)).toBeNull();
     });
+
+    test("a placement re-added under a removed one's id finds its library closed", async () => {
+      // The anchor's id is placed in no other preset's tree, so the re-add
+      // takes the freed id `directory` rather than `directory-2`.
+      const src = `{ root: { h: ['directory', { seg: 'model', id: 'anchor' }] } }`;
+      durable.write(src);
+      const rt = nestBar(src, durable);
+      await arrange(rt);
+      await rt.clickWriting(AFTER, AFTER_APPLY);
+      await rt.clickDoing((v) => v === "remove:directory");
+      const anchorApply = `edit.default.insert.after.${chromeIdent("anchor")}`;
+      await rt.clickWriting(
+        menuStateKey(`edit.default.insertSeg.after.${chromeIdent("anchor")}`, anchorApply, undefined),
+        anchorApply,
+      );
+      await rt.clickDoing((v) => v === "insert:directory:anchor:after");
+      expect(rt.logged.join("\n")).toContain('placed={"seg":"directory"}');
+      expect(rt.held(AFTER)).toBe(DISCLOSURE_CLOSED);
+    });
   });
 
   test("case 5: edit mode's (?)", async () => {
