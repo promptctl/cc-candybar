@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-667",
+      "ref": "refs/pull/667/merge",
+      "sha": "49603a02406c314ab8df1e9a5d9a0211a28e35d5",
+      "timestamp": "2026-11-08T13:02:32.129Z",
+      "commits": [
+        {
+          "sha": "49603a02406c314ab8df1e9a5d9a0211a28e35d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:01:38-07:00",
+          "message": "Merge afaddd6921b63d0acf38f62203f71415f9082237 into 600ecfad0d88530c307e642fa2c302f67f99d326\n"
+        },
+        {
+          "sha": "afaddd6921b63d0acf38f62203f71415f9082237",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:01:23-07:00",
+          "message": "fix(config): the rebased parts and tests carry the port onto main's render origin; an answer the loose book holds writes nothing (candybar-testing-ihvy.5zt)\n\n- The daemon parts the worker tests build (from main) take the disk: the\n  settings history, the lane edge and the click context's filesystem and\n  installed layers, as the daemon wires them.\n- The moved unit cases build a ReloadedEntry by its origin.\n- The answers book's comments say what filing does: the first answer that\n  changes the book writes it into the folder; one already held writes\n  nothing, as with every state file.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\ncandybar-testing-ihvy.5zt\n"
+        },
+        {
+          "sha": "0f954d13bc012b1df31956420d383dc622d4f3ad",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T05:32:01-07:00",
+          "message": "fix(config): absent is presence's answer for plugin roots, the port's rm speaks errno, and a daemon's journal and answers keep to one disk and one read (candybar-testing-ihvy.5zt)\n\n- A plugin root behind a regular file lists as empty, as presence calls it\n  absent; a root that is itself a file is still named unlistable.\n- The system disk's rmSync of a directory throws EISDIR, as the fake does,\n  and the contract asserts the code.\n- The undo journal is kept on the daemon's own disk: storage is built over\n  the daemon's Filesystem, and settings-history leaves FS_READERS.\n- The answers store reads as every load reads them and files into the\n  folder, one read path instead of a second loose-book branch.\n- The sources bench takes its disk from the process world.\n\ncandybar-testing-ihvy.5zt\n"
+        },
+        {
+          "sha": "08e33958bd5b64d8df96117135887f106d732c9e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T19:12:23-07:00",
+          "message": "fix(config): undo puts a click's text back on the disk the click wrote; a write's stat error is never a cleanup's (candybar-testing-ihvy.5zt)\n\n- The settings history takes the daemon's disk, and the config text read and\n  write take a disk: a click, its proof, its write and its undo are one\n  disk's. config-file-store leaves the systemFilesystem owners.\n- writeAtomicOn takes the replaced file's mode before the tmp exists, so a\n  stat that fails is the error the caller sees.\n- config.md: ENOTDIR counts as absent beside ENOENT.\n"
+        },
+        {
+          "sha": "ad4d495c39dd99e70d8ddd88db3b2dca28353e89",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:41:39-07:00",
+          "message": "fix(config): a click writes its home on the disk it read and proved; the book's folder is absent as presence says (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the click's writable disk; the commit writes through it\n  (writeAtomicOn), so a click's read, proof and write are one disk's. Undo\n  keeps its own system-disk pair until the settings history takes a disk.\n- bookIsFiled asks presence(): a book folder that is a regular file holds no\n  book, and the loose book is read.\n- holdsGit asks presence() and marks its no-silent-failure exception; the\n  ascent carrying the failure is candybar-testing-ihvy.izc.sv9.\n"
+        },
+        {
+          "sha": "2682a74195b318afed21bd74de3d5bf0731f595d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T18:27:28-07:00",
+          "message": "fix(config): a click's proof shares the render cache's installed layers and reads its home's disk (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the installed-layer memo its loads share; the render\n  cache lends its own through the verb context, so a click's proof checks no\n  plugin the bar's last load already checked. The memo keys on definition\n  text, so a lent memo serves no layer the borrower's disk does not hold.\n- presence() reads ENOTDIR as absent, as the stat it replaced did: a path\n  through a regular file holds nothing. The filesystem contract pins ENOTDIR.\n- A click reads its home's text and the layers above on the disk its proof\n  loads; config-file-store leaves FS_READERS.\n- The lane edge's fileExists asks the same disk as its presence.\n- stateFromLoad folds into loadFromDisk; keyLoad is module-private.\n"
+        },
+        {
+          "sha": "e0a5532af1875ec67ab67275d27f993db132c576",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-06T17:33:52-07:00",
+          "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-692",
       "ref": "refs/pull/692/merge",
       "sha": "7105edc722c7a1ff397e71dcec103042dff6b7a2",
@@ -309,49 +366,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T02:37:49-07:00",
           "message": "fix(cache): a catch-up reloads one entry per turn, so requests are answered between entries (candybar-animation-wbxz.v24)\n\nWhen file events resumed after a stall, or the repo answers moved, the\nrender cache reloaded every entry in one synchronous turn. A reload that\nkeeps its state still resolves, validates and keys the whole chain, so\n105 entries held the live daemon's loop for 1.7s on a calm machine and\n11s on a loaded one, and every client waiting behind it hung up (the\nEPIPE bursts in daemon.log).\n\nThe walk now takes one due entry per turn of the loop. Any reload clears\nits entry's due mark, a drop clears a dropped entry's, a reload that\nthrows ends only its own turn, and close cancels the armed turn. The\nrender cache's stats count the entries still due.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-667",
-      "ref": "refs/pull/667/merge",
-      "sha": "4df55460ab0696bffd23d1baf78c8f3aa769bf03",
-      "timestamp": "2026-11-07T06:26:55.808Z",
-      "commits": [
-        {
-          "sha": "4df55460ab0696bffd23d1baf78c8f3aa769bf03",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T23:26:01-07:00",
-          "message": "Merge 9cfce78aed5fb0edc8a096e2bb32236ce4bc81e0 into d8be82f47dab2890d335b8563bbfdc937aedba77\n"
-        },
-        {
-          "sha": "9cfce78aed5fb0edc8a096e2bb32236ce4bc81e0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T19:12:23-07:00",
-          "message": "fix(config): undo puts a click's text back on the disk the click wrote; a write's stat error is never a cleanup's (candybar-testing-ihvy.5zt)\n\n- The settings history takes the daemon's disk, and the config text read and\n  write take a disk: a click, its proof, its write and its undo are one\n  disk's. config-file-store leaves the systemFilesystem owners.\n- writeAtomicOn takes the replaced file's mode before the tmp exists, so a\n  stat that fails is the error the caller sees.\n- config.md: ENOTDIR counts as absent beside ENOENT.\n"
-        },
-        {
-          "sha": "50f0f3ff593080ddf6455a9684391f76fcd87a76",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:41:39-07:00",
-          "message": "fix(config): a click writes its home on the disk it read and proved; the book's folder is absent as presence says (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the click's writable disk; the commit writes through it\n  (writeAtomicOn), so a click's read, proof and write are one disk's. Undo\n  keeps its own system-disk pair until the settings history takes a disk.\n- bookIsFiled asks presence(): a book folder that is a regular file holds no\n  book, and the loose book is read.\n- holdsGit asks presence() and marks its no-silent-failure exception; the\n  ascent carrying the failure is candybar-testing-ihvy.izc.sv9.\n"
-        },
-        {
-          "sha": "622dd5ab1ef12dbe929e59e139bd39e62e4f8584",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T18:27:28-07:00",
-          "message": "fix(config): a click's proof shares the render cache's installed layers and reads its home's disk (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the installed-layer memo its loads share; the render\n  cache lends its own through the verb context, so a click's proof checks no\n  plugin the bar's last load already checked. The memo keys on definition\n  text, so a lent memo serves no layer the borrower's disk does not hold.\n- presence() reads ENOTDIR as absent, as the stat it replaced did: a path\n  through a regular file holds nothing. The filesystem contract pins ENOTDIR.\n- A click reads its home's text and the layers above on the disk its proof\n  loads; config-file-store leaves FS_READERS.\n- The lane edge's fileExists asks the same disk as its presence.\n- stateFromLoad folds into loadFromDisk; keyLoad is module-private.\n"
-        },
-        {
-          "sha": "894bbab966a4e4aebfe5e55478b39a08e7abab84",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-06T17:33:52-07:00",
-          "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     }
