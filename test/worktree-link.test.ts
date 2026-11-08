@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { worktreeLink } from "../src/utils/git-root";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 let root: string;
 let main: string;
@@ -49,17 +50,19 @@ afterEach(() => {
 const linked = (to: string) => ({ kind: "linked", main: to });
 
 test("a linked worktree, and a directory in it, are their main worktree's counterparts", () => {
-  expect(worktreeLink(wt)).toEqual(linked(main));
+  expect(worktreeLink(systemFilesystem, wt)).toEqual(linked(main));
   const sub = path.join(wt, "pkg", "a");
   fs.mkdirSync(sub, { recursive: true });
-  expect(worktreeLink(sub)).toEqual(linked(path.join(main, "pkg", "a")));
+  expect(worktreeLink(systemFilesystem, sub)).toEqual(
+    linked(path.join(main, "pkg", "a")),
+  );
 });
 
 test("a main worktree and a directory in no checkout are not linked", () => {
-  expect(worktreeLink(main)).toEqual({ kind: "unlinked" });
+  expect(worktreeLink(systemFilesystem, main)).toEqual({ kind: "unlinked" });
   const loose = path.join(root, "loose");
   fs.mkdirSync(loose);
-  expect(worktreeLink(loose)).toEqual({ kind: "unlinked" });
+  expect(worktreeLink(systemFilesystem, loose)).toEqual({ kind: "unlinked" });
 });
 
 test("a bare repository's worktrees share the bare repository's spelling", () => {
@@ -67,20 +70,22 @@ test("a bare repository's worktrees share the bare repository's spelling", () =>
   git("clone", "-q", "--bare", main, bare);
   const bwt = path.join(root, "bwt");
   git("-C", bare, "worktree", "add", "-q", "--detach", bwt);
-  expect(worktreeLink(bwt)).toEqual(linked(bare));
+  expect(worktreeLink(systemFilesystem, bwt)).toEqual(linked(bare));
 });
 
 test("a --separate-git-dir checkout, whose git dir has no commondir, is not linked", () => {
   const sep = path.join(root, "sep");
   git("init", "-q", "--separate-git-dir", path.join(root, "sep.git"), sep);
-  expect(worktreeLink(sep)).toEqual({ kind: "unlinked" });
+  expect(worktreeLink(systemFilesystem, sep)).toEqual({ kind: "unlinked" });
 });
 
 test("a .git symlinked to a git directory claims no worktree", () => {
   const linkedDir = path.join(root, "linked-git");
   fs.mkdirSync(linkedDir);
   fs.symlinkSync(path.join(main, ".git"), path.join(linkedDir, ".git"));
-  expect(worktreeLink(linkedDir)).toEqual({ kind: "unlinked" });
+  expect(worktreeLink(systemFilesystem, linkedDir)).toEqual({
+    kind: "unlinked",
+  });
 });
 
 describe("what a directory writes about itself proves nothing", () => {
@@ -91,7 +96,7 @@ describe("what a directory writes about itself proves nothing", () => {
       path.join(evil, ".git"),
       `gitdir: ${path.join(main, ".git", "worktrees", "wt")}\n`,
     );
-    expect(worktreeLink(evil).kind).toBe("unproven");
+    expect(worktreeLink(systemFilesystem, evil).kind).toBe("unproven");
   });
 
   test("a .git naming metadata of its own, pointing at the repository, is not registered there", () => {
@@ -101,14 +106,14 @@ describe("what a directory writes about itself proves nothing", () => {
     fs.writeFileSync(path.join(evil, ".git"), "gitdir: meta\n");
     fs.writeFileSync(path.join(meta, "commondir"), path.join(main, ".git"));
     fs.writeFileSync(path.join(meta, "gitdir"), path.join(evil, ".git"));
-    expect(worktreeLink(evil).kind).toBe("unproven");
+    expect(worktreeLink(systemFilesystem, evil).kind).toBe("unproven");
   });
 
   test("a .git that is a symlink to a real worktree's .git is not that worktree", () => {
     const evil = path.join(root, "evil");
     fs.mkdirSync(evil);
     fs.symlinkSync(path.join(wt, ".git"), path.join(evil, ".git"));
-    expect(worktreeLink(evil).kind).toBe("unproven");
+    expect(worktreeLink(systemFilesystem, evil).kind).toBe("unproven");
   });
 });
 
@@ -116,19 +121,23 @@ describe("a link that cannot be proven is said, never thrown", () => {
   test("a worktree moved by hand", () => {
     const moved = path.join(root, "moved");
     fs.renameSync(wt, moved);
-    expect(worktreeLink(moved)).toMatchObject({ kind: "unproven" });
+    expect(worktreeLink(systemFilesystem, moved)).toMatchObject({
+      kind: "unproven",
+    });
   });
 
   test("a worktree whose metadata was pruned", () => {
     fs.rmSync(path.join(main, ".git", "worktrees", "wt"), { recursive: true });
-    expect(worktreeLink(wt)).toMatchObject({ kind: "unproven" });
+    expect(worktreeLink(systemFilesystem, wt)).toMatchObject({
+      kind: "unproven",
+    });
   });
 
   test("a .git that cannot be read says why", () => {
     const dotGit = path.join(wt, ".git");
     fs.chmodSync(dotGit, 0o000);
     try {
-      expect(worktreeLink(wt)).toEqual({
+      expect(worktreeLink(systemFilesystem, wt)).toEqual({
         kind: "unproven",
         reason: expect.stringContaining("EACCES"),
       });
@@ -141,7 +150,7 @@ describe("a link that cannot be proven is said, never thrown", () => {
     const dangling = path.join(root, "dangling");
     fs.mkdirSync(dangling);
     fs.writeFileSync(path.join(dangling, ".git"), "gitdir: /nonexistent/x\n");
-    expect(worktreeLink(dangling)).toEqual({
+    expect(worktreeLink(systemFilesystem, dangling)).toEqual({
       kind: "unproven",
       reason: "/nonexistent/x is not there",
     });

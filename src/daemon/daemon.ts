@@ -142,7 +142,9 @@ export interface DaemonAdapters {
   // Their files, for a daemon that won the socket, which makes it their sole
   // writer. Built over the daemon's log: a write in flight at the close finishes
   // after it, and what it logs says so like any other line of the daemon's work.
-  readonly storage: (log: DaemonLogger) => DaemonStorage;
+  // [LAW:one-source-of-truth] Over the daemon's own disk, so the undo journal
+  // is kept on the disk whose config files it puts back.
+  readonly storage: (log: DaemonLogger, disk: Filesystem) => DaemonStorage;
   // The doctor's stores, which this daemon files.
   readonly doctorStores: DoctorStores;
   // The doctor's reads of the machine, over the config load it is handed.
@@ -317,13 +319,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const probe = inputs.probe(launcher);
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
-  const storage = inputs.storage(log);
+  const storage = inputs.storage(log, inputs.filesystem);
   // [LAW:single-enforcer] The one owner of every journal's turn, and so of
   // when session state may be written: the store refuses a write while no
   // turn is held.
   const journalTurns = new JournalTurns();
   const sessionState = new SessionState(journalTurns, storage.session);
   const settingsHistory = new SettingsHistory(
+    inputs.filesystem,
     sessionState,
     log,
     storage.history,
@@ -520,6 +523,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     gates,
     sessionState,
     stateDir: paths.state,
+    filesystem: inputs.filesystem,
+    installedLayers: renderCache.installedLayers,
     storedRoot: paths.storedRoot,
     locations: locs,
     journalTurns,

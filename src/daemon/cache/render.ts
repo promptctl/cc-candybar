@@ -1,6 +1,6 @@
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
-import type { Filesystem } from "../../disk/filesystem.js";
+import type { Filesystem, FilesystemReads } from "../../disk/filesystem.js";
 import {
   chainName,
   type ConfigTarget,
@@ -21,28 +21,25 @@ import type { RendererLinks } from "../../click/renderer-links.js";
 import type { SessionId } from "../session-id.js";
 import { fileHeldSettings } from "../setting-drafts.js";
 import {
-  repoConfigs,
   repoConfigsDir,
   repoConfigsPath,
-} from "../repo-configs.js";
+} from "../../config/loader/repo-book.js";
+import {
+  parseChain,
+  readConfigLoad,
+  type ConfigChain,
+  type ParsedChain,
+} from "../../config/load.js";
 import { REPO_PLUGIN_DIR } from "../../config/loader/plugin-folders.js";
 import type { Drawing } from "../../config/lanes.js";
+import type { ApprovedRepo, RepoGate } from "../../config/loader/repo-gate.js";
 import {
-  repoUnreadNotice,
-  type ApprovedRepo,
-  type RepoGate,
-} from "../../config/loader/repo-gate.js";
-import {
-  loadConfigChain,
+  InstalledLayerMemo,
   type LoadedChain,
   type LoadedFile,
-  resolveDslConfig,
-  configResolutionNotice,
   dslConfigCandidatePaths,
-  detectConfigCollisions,
   ConfigError,
   type DroppedFileError,
-  type ConfigLayer,
 } from "../../config/dsl-loader.js";
 import type {
   DslConfig,
@@ -218,6 +215,10 @@ export const UNOWNED_STORAGE: PluginStorage = {
 
 // What building one config's state needs.
 export interface StateDeps {
+  // The disk every load reads, and the installed-plugin memo its loads share:
+  // the render cache's own, or a one-shot load's fresh one.
+  readonly filesystem: FilesystemReads;
+  readonly memo: InstalledLayerMemo;
   // The clock its variables' ages and the load's own duration run on: the
   // daemon's.
   readonly clock: Timekeeper;
@@ -357,18 +358,6 @@ export interface DslRenderState {
 // The installed roots searched (every one watched), and the definitions —
 // installed and listed — merged and dropped.
 type LoadedPlugins = LoadedChain["installed"];
-
-// The files a config is merged from, lowest first, and the one durable
-// clicks write — `resolveDslConfig`'s chain, or the bundled default's empty
-// one.
-export interface ConfigChain {
-  readonly layers: readonly ConfigLayer[];
-  readonly home: string;
-  // The session's project, once approved: where the plugins it ships live.
-  readonly repo: ApprovedRepo | null;
-  // Where the installed plugins the chain loads over live.
-  readonly locs: Locations;
-}
 
 // [LAW:nothing-unseen] Which plugins a daemon load merged, how many variables
 // they declare between them, the data file each merged one reads, the checkout a `{ checkout }` path resolved against —
@@ -879,36 +868,26 @@ function declaredSources(
   return sources;
 }
 
-// [LAW:single-enforcer] Read a chain from disk: each layer validated over the
-// layers it joins, so cross-ref diagnostics name the failing file's own paths
-// and lines, and every advisory a layer earns appended before its validation,
-// so a cross-ref failure still carries them (a duplicate key names its line
-// beside the error).
-export function resolveLoad(
+// A parsed chain keyed: the storage key of every source its config declares,
+// and the identity of everything a build derives a state from.
+function keyLoad(
   cwd: string,
   chain: ConfigChain,
+  parsed: Extract<ParsedChain, { kind: "parsed" }>,
   storage: PluginStorage,
-): ResolvedLoad | Failed {
-  const warnings: string[] = [];
-  try {
-    const loaded = loadConfigChain(
-      chain.locs,
-      chain.layers,
-      DEFAULT_DSL_CONFIG,
-      { warned: (w) => warnings.push(...w) },
-      { repo: chain.repo, cwd },
-    );
-    const inputs = {
-      cwd,
-      chain,
-      loaded,
-      sources: declaredSources(loaded.config, storage),
-    };
-    return { kind: "resolved", ...inputs, key: loadKey(inputs), warnings };
-  } catch (err) {
-    if (err instanceof ConfigError) warnings.push(...err.warnings);
-    return { kind: "failed", cause: err, warnings };
-  }
+): ResolvedLoad {
+  const inputs = {
+    cwd,
+    chain,
+    loaded: parsed.loaded,
+    sources: declaredSources(parsed.loaded.config, storage),
+  };
+  return {
+    kind: "resolved",
+    ...inputs,
+    key: loadKey(inputs),
+    warnings: parsed.warnings,
+  };
 }
 
 // [LAW:single-enforcer] Construct the full new state — store, registry,
@@ -1116,10 +1095,30 @@ export function loadChain(
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
-  const resolved = resolveLoad(cwd, chain, deps.storage);
-  if (resolved.kind === "failed") {
-    return settle(frame, chain, [], resolved, deps.clock);
+  return settleParsed(
+    frame,
+    cwd,
+    chain,
+    parseChain(deps.filesystem, deps.memo, cwd, chain),
+    deps,
+    served,
+  );
+}
+
+// A parsed chain's state, settled: `served` kept when the parse keys to the
+// inputs it was built from.
+function settleParsed(
+  frame: LoadFrame,
+  cwd: string,
+  chain: ConfigChain,
+  parsed: ParsedChain,
+  deps: StateDeps,
+  served: DslRenderState | null,
+): LoadOutcome {
+  if (parsed.kind === "failed") {
+    return settle(frame, chain, [], parsed, deps.clock);
   }
+  const resolved = keyLoad(cwd, chain, parsed, deps.storage);
   // [LAW:one-source-of-truth] A memo on load identity, as the compile table
   // is on compile identity.
   const attempt: Attempt =
@@ -1129,54 +1128,39 @@ export function loadChain(
   return settle(frame, chain, resolved.warnings, attempt, deps.clock);
 }
 
-// [LAW:effects-at-boundaries] One attempt at the disk: read the user's
-// answers for repositories, resolve the path, detect collisions, resolve the
-// chain and attempt a state. It touches no entry — the cache folds the
-// outcome onto a new entry (getOrCreate) or an existing one (reloadInto), so
-// the state it built is never constructed-then-discarded and the no-file
+// [LAW:effects-at-boundaries] One attempt at the disk: the session's load
+// (readConfigLoad) and a state from it. It touches no entry — the cache folds
+// the outcome onto a new entry (getOrCreate) or an existing one (reloadInto),
+// so the state it built is never constructed-then-discarded and the no-file
 // default is built once, not twice; `cc-candybar doctor`, which has no cache,
 // reads the outcome and disposes the state it was handed.
+// [LAW:dataflow-not-control-flow] A failure at any step — parse,
+// registration, palette resolution — is the `failed` arm; the caller's prior
+// state stays untouched, so the daemon keeps rendering the last-known-good
+// config — the bundled default until one has loaded — and its diagnostics
+// count `lastError` and `lastWarning`.
 export function loadFromDisk(
   { projectDir, cwd, target }: LoadOrigin,
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
   const started = deps.clock.monotonic();
-  const resolution = resolveDslConfig(
-    deps.locations,
-    repoConfigs(deps.stateDir).read(),
+  const load = readConfigLoad(deps.filesystem, {
+    locations: deps.locations,
+    stateDir: deps.stateDir,
     projectDir,
     cwd,
-    target.path,
+    configFile: target.path,
+    memo: deps.memo,
+  });
+  return settleParsed(
+    { repos: load.repos, advisories: load.advisories, started },
+    load.cwd,
+    load.chain,
+    load.parsed,
+    deps,
+    served,
   );
-  const { repos } = resolution;
-  // `chain` loads its layers; `missing`/`unreadable` build the bundled
-  // default — what distinguishes them is a notice, below, not a load path.
-  const chain: ConfigChain = {
-    layers: resolution.kind === "chain" ? resolution.layers : [],
-    home: resolution.home,
-    repo: repos.plugins,
-    locs: deps.locations,
-  };
-  // [LAW:dataflow-not-control-flow] Advisories run every load, independent
-  // of load success — even if the .json5 fails to parse, the user still
-  // wants to know they have a shadowed .json sibling; an explicit path to
-  // an absent file is named whatever the default then does. Pure
-  // file-existence checks, so cheap. The watcher already monitors every
-  // candidate path, so creating/removing a duplicate — or the named file
-  // appearing — triggers reload and re-detection automatically; nothing
-  // else needs to invalidate this.
-  const advisories = [
-    detectConfigCollisions(deps.locations, projectDir, cwd),
-    configResolutionNotice(resolution),
-    repoUnreadNotice(repos),
-  ];
-  // [LAW:dataflow-not-control-flow] A failure at any step — parse,
-  // registration, palette resolution — is the `failed` arm; the caller's
-  // prior state stays untouched, so the daemon keeps rendering the
-  // last-known-good config — the bundled default until one has loaded —
-  // and its diagnostics count `lastError` and `lastWarning`.
-  return loadChain({ repos, advisories, started }, cwd, chain, deps, served);
 }
 
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the
@@ -1191,13 +1175,12 @@ export function fallbackState(
 ): DslRenderState {
   // The failed load's approved project: the seed draws the plugins it ships,
   // as the load would have.
-  const resolved = resolveLoad(
-    cwd,
-    { layers: [], home: "", repo, locs: deps.locations },
-    deps.storage,
-  );
+  const chain = { layers: [], home: "", repo, locs: deps.locations };
+  const parsed = parseChain(deps.filesystem, deps.memo, cwd, chain);
   const built =
-    resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
+    parsed.kind === "failed"
+      ? parsed
+      : buildRenderState(keyLoad(cwd, chain, parsed, deps.storage), deps);
   // [LAW:no-silent-failure] The default validates by program invariant
   // (test/default-dsl-config.test.ts); a throw is a daemon bug.
   if (built.kind === "failed")
@@ -1538,6 +1521,10 @@ export class RenderCache<
   ) {
     this.deps = {
       ...deps,
+      // [LAW:one-source-of-truth] The disk the cache watches is the disk its
+      // loads read, and the cache owns the memo every one of them shares.
+      filesystem: deps.watchers.filesystem,
+      memo: new InstalledLayerMemo(),
       compile: (key, input) => this.compileOf(key, input),
     };
     this.log = deps.log ?? quietLogger;
@@ -2252,6 +2239,14 @@ export class RenderCache<
     key: string,
   ): string | undefined {
     return this.copies.get(sessionId)?.get(by)?.get(key);
+  }
+
+  // The installed layers every load of this cache shares, lent to a load
+  // outside it over the same disk (a click's proof), so that load checks no
+  // plugin this cache's loads already checked: the key is the definitions'
+  // text, so a lent memo serves no layer the borrower's disk does not hold.
+  get installedLayers(): InstalledLayerMemo {
+    return this.deps.memo;
   }
 
   // The renderer no longer draws the session's bar (its feed closed): what

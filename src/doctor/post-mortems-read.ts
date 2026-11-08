@@ -7,7 +7,8 @@
 // identity filed here answers for every breach up to it.
 
 import type { Asked, PostMortemsRead } from "./checks.js";
-import { stateFile, type StateFile } from "./state-file.js";
+import { stateFile, type StateFile } from "../disk/state-file.js";
+import type { Filesystem } from "../disk/filesystem.js";
 
 // [LAW:parse-dont-validate] The document as the identity filed read: every
 // value the store can file reads back, `null` included.
@@ -18,8 +19,12 @@ export function parsePostMortemsRead(doc: unknown): Asked<PostMortemsRead> {
     : { kind: "failed", reason: "names no post-mortem read" };
 }
 
-export const filePostMortemsRead = (dir: string): StateFile<PostMortemsRead> =>
+export const filePostMortemsRead = (
+  disk: Filesystem,
+  dir: string,
+): StateFile<PostMortemsRead> =>
   stateFile(
+    disk,
     dir,
     "doctor-post-mortems-read.json",
     { through: null },

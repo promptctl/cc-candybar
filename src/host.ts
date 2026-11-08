@@ -8,6 +8,8 @@ import {
 } from "./daemon/process-fingerprint.js";
 import type { Dialer } from "./dial/dialer.js";
 import { systemDialer } from "./dial/system-dialer.js";
+import type { Filesystem } from "./disk/filesystem.js";
+import { systemFilesystem } from "./disk/system-filesystem.js";
 import type { OneShotLauncher } from "./proc/launch.js";
 import { systemOneShotLauncher } from "./proc/system-launcher.js";
 import { systemTimekeeper, type Timekeeper } from "./time.js";
@@ -29,8 +31,9 @@ export interface Host {
 // once, src/daemon/home.ts), the launcher over them (so a child inherits the
 // same environment the process itself reads), the machine's clock, which
 // real children and real files run on, the dialer a client reaches its
-// daemon through, and a read of the process that ran this one (Claude Code,
-// for a statusline), which only a client reporting its hints asks for.
+// daemon through, a read of the process that ran this one (Claude Code,
+// for a statusline), which only a client reporting its hints asks for, and
+// the disk it reads and writes.
 export interface World {
   readonly host: Host;
   readonly home: RendererHome;
@@ -40,6 +43,7 @@ export interface World {
   // `budgetMs` is the caller's: a statusline tick has a connect's worth, a
   // process that reads once for its whole life has a daemon read's.
   readonly parent: (budgetMs: number) => ParsedProcessIdentity;
+  readonly filesystem: Filesystem;
 }
 
 // The longest a statusline tick waits to learn when the process that ran it
@@ -79,6 +83,7 @@ export function processWorld(): World {
           launcher.launchSync(startTimeLaunch(process.ppid, budgetMs)),
         ),
       ),
+    filesystem: systemFilesystem,
   };
 }
 

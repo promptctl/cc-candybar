@@ -12,7 +12,14 @@ import { daemonFields } from "../src/doctor/report";
 import { filePostMortemsRead, parsePostMortemsRead } from "../src/doctor/post-mortems-read";
 import { RuntimeStats } from "../src/daemon/stats";
 import { postMortemsOf, type ServingDaemon } from "../src/daemon/limits";
-import { EMPTY_STORES, HEALTHY_FACTS, HEALTHY_PROCESS, HEALTHY_SERVING, emptyStores } from "./helpers/doctor-facts";
+import {
+  EMPTY_STORES,
+  HEALTHY_FACTS,
+  HEALTHY_PROCESS,
+  HEALTHY_SERVING,
+  emptyStores,
+} from "./helpers/doctor-facts";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 const MB = 1024 * 1024;
 const NEWER = "2026-10-19T18-01-12-345Z-77";
@@ -462,7 +469,7 @@ describe("the post-mortems-read record", () => {
   test("every value the store can file reads back, none filed included", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pm-read-"));
     try {
-      const store = filePostMortemsRead(dir);
+      const store = filePostMortemsRead(systemFilesystem, dir);
       store.update(() => ({ through: null }));
       expect(store.read()).toEqual({ kind: "ok", value: { through: null } });
     } finally {
@@ -484,7 +491,10 @@ describe("the post-mortems-read record", () => {
     try {
       const file = path.join(dir, "doctor-post-mortems-read.json");
       fs.writeFileSync(file, "junk");
-      const stores = { ...emptyStores(), postMortemsRead: filePostMortemsRead(dir) };
+      const stores = {
+        ...emptyStores(),
+        postMortemsRead: filePostMortemsRead(systemFilesystem, dir),
+      };
       const fix = { kind: "post-mortems-read", through: NEWER } as const;
       expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({
         kind: "failed",

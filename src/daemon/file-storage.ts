@@ -1,4 +1,5 @@
 import type { DaemonStorage } from "./daemon";
+import type { Filesystem } from "../disk/filesystem";
 import type { DaemonPaths } from "./paths";
 import { FileSessionStorage } from "./session-state-file";
 import { fileHistoryStorage } from "./settings-history";
@@ -13,9 +14,15 @@ export function fileStorage(
   paths: Pick<DaemonPaths, "sessionState" | "settingsHistory" | "storedRoot">,
   log: DaemonLogger,
   clock: Pick<Timekeeper, "after" | "monotonic">,
+  disk: Filesystem,
 ): DaemonStorage {
   return {
     session: new FileSessionStorage(paths.sessionState, clock, 500, log),
-    history: fileHistoryStorage(paths.settingsHistory, paths.storedRoot, log),
+    history: fileHistoryStorage(
+      disk,
+      paths.settingsHistory,
+      paths.storedRoot,
+      log,
+    ),
   };
 }

@@ -59,7 +59,7 @@ describe("a daemon aimed by its home", () => {
       daemonLog.log("info", "a line");
       await daemonLog.drained();
 
-      const storage = adapters.storage(() => {});
+      const storage = adapters.storage(() => {}, adapters.filesystem);
       storage.session.save({ s1: { theme: "x" } });
       storage.session.flush();
       storage.history.save({});

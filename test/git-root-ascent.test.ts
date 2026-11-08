@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { GitService } from "../src/segments/git";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 function run(cmd: string, cwd: string): void {
   execSync(cmd, { cwd, stdio: "pipe" });
@@ -31,7 +32,7 @@ function initRepo(dir: string): void {
 }
 
 describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
-  const git = new GitService(processLauncher);
+  const git = new GitService(processLauncher, systemFilesystem);
   let root: string;
 
   beforeAll(() => {

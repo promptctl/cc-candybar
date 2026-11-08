@@ -3,9 +3,10 @@ import type { DirectoryEntry, Filesystem, Stat } from "./filesystem.js";
 
 // [LAW:effects-at-boundaries] The disk, through Node's `fs`. Errors pass
 // through as Node raises them: they already carry the code, path and message
-// the port promises. `fs.watch` is reached through the module object, so a
-// test that still replaces it there (test/helpers/fake-watches.ts) reaches
-// this adapter's watches too.
+// the port promises, save rm's, whose code is translated to the errno.
+// `fs.watch` is reached through the module object, so a test that still
+// replaces it there (test/helpers/fake-watches.ts) reaches this adapter's
+// watches too.
 
 type Kinded = Pick<fs.BigIntStats, "isFile" | "isDirectory" | "isSymbolicLink">;
 
@@ -36,6 +37,28 @@ export const systemFilesystem: Filesystem = {
   realpathSync: (p) => fs.realpathSync.native(p),
   mkdirSync: (p) => void fs.mkdirSync(p, { recursive: true }),
   opendirSync: (p) => fs.opendirSync(p).closeSync(),
+  readFileSync: (p) => fs.readFileSync(p, "utf8"),
+  readdirSync: (p) =>
+    fs
+      .readdirSync(p, { withFileTypes: true })
+      .map(
+        (entry): DirectoryEntry => ({ name: entry.name, kind: kindOf(entry) }),
+      ),
+  writeFileSync: (p, text, { mode, flush }) =>
+    fs.writeFileSync(p, text, { mode, flush }),
+  renameSync: (from, to) => fs.renameSync(from, to),
+  // [LAW:one-source-of-truth] The port speaks errno: Node's rm names a
+  // directory with its own ERR_FS_EISDIR, which is the errno EISDIR that
+  // unlink raises for the same refusal.
+  rmSync: (p) => {
+    try {
+      fs.rmSync(p, { force: true });
+    } catch (e) {
+      const err = e as { code?: string };
+      if (err.code === "ERR_FS_EISDIR") err.code = "EISDIR";
+      throw e;
+    }
+  },
   stat: async (p) => statOf(await fs.promises.stat(p, { bigint: true })),
   readFile: (p) => fs.promises.readFile(p, "utf8"),
   writeFile: (p, text) => fs.promises.writeFile(p, text),

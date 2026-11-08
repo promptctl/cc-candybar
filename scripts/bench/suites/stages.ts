@@ -19,7 +19,11 @@ import {
   type PreparedConfig,
 } from "../../../src/check.js";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config.js";
-import { homeLayer, loadConfigChain } from "../../../src/config/dsl-loader.js";
+import {
+  homeLayer,
+  InstalledLayerMemo,
+  loadConfigChain,
+} from "../../../src/config/dsl-loader.js";
 import { resolveEffectiveGlobals } from "../../../src/config/effective-globals.js";
 import { presetNames } from "../../../src/config/presets.js";
 import { ansiOf } from "../../../src/render/frame.js";
@@ -153,10 +157,14 @@ export const STAGES: readonly Benchmark[] = [
     samples: 30,
     async run(plan) {
       const cwd = scratchDir("ccbn-stage");
+      const world = processWorld();
+      const memo = new InstalledLayerMemo();
       try {
         const ms = await repeat(plan.samples, () => {
           loadConfigChain(
-            locations(processWorld().host, processWorld().home),
+            world.filesystem,
+            memo,
+            locations(world.host, world.home),
             [],
             DEFAULT_DSL_CONFIG,
             { warned: () => {} },

@@ -38,6 +38,7 @@ import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 import { readAsWritten } from "./helpers/judged";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
@@ -315,7 +316,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
   test("an undo is a write like a click's: the frame after it compares against nothing", () => {
     const on = renderer(ROW);
     try {
-      const history = new SettingsHistory(on.session, () => {});
+      const history = new SettingsHistory(systemFilesystem, on.session, () => {});
       const journal = history.begin();
       journal.sessionState.set("s", "theme", "nord");
       journal.commit();
@@ -496,7 +497,7 @@ describe("a session's state revision moves with every change to it, whoever writ
 
   test("the settings history's undo moves it, though it writes past the click's journal", () => {
     const state = new SessionState(SINGLE_RUN);
-    const history = new SettingsHistory(state, () => {});
+    const history = new SettingsHistory(systemFilesystem, state, () => {});
     const journal = history.begin();
     journal.sessionState.set("s", "theme", "nord");
     journal.commit();
