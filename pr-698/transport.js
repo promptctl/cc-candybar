@@ -52327,6 +52327,13 @@ var WatcherRegistry = class {
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
   }
+  // [LAW:one-source-of-truth] Whether a watch for named entries is polled
+  // here, and so heard through a stall of the OS's stream: the one rule every
+  // directory opens by, and the one the bar's stall row reads. The disk says
+  // what a directory watch costs: where it reaches the tree, a name is polled.
+  get namesPolled() {
+    return this.filesystem.watchReach === "tree";
+  }
   // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
   // holder of one slot, and each holder's callback hears every window.
   // `targets` from the first acquire wins; subsequent acquires keep the
@@ -52338,6 +52345,7 @@ var WatcherRegistry = class {
       return {
         release: () => {
         },
+        ridesStream: false,
         deaf: targets.dirs.map((d) => ({
           kind: "refused",
           path: d.path,
@@ -52409,7 +52417,7 @@ var WatcherRegistry = class {
   // The directory watch a new slot's target joins: the one already open
   // there, judged, or a new one.
   dirFor(target) {
-    const polled = this.filesystem.watchReach === "tree" && target.filenames !== void 0;
+    const polled = this.namesPolled && target.filenames !== void 0;
     const id2 = dirId(target, polled);
     const existing = this.dirs.get(id2);
     if (existing !== void 0) {
@@ -52581,6 +52589,7 @@ var WatcherRegistry = class {
   }
   makeHandle(slot, holder) {
     return {
+      ridesStream: slot.listeners.some(({ dir }) => !dir.polled),
       get deaf() {
         return slot.listeners.flatMap(
           ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
@@ -52993,8 +53002,9 @@ var FileEventDelivery = class {
   }
 };
 var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
-var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
-function fileEventsWarnings(d) {
+var stallReason = (d, watch2) => d.kind === "stalled" && watch2.ridesStream ? stopped(d.missedSince) : null;
+var deafened = (namesPolled) => namesPolled ? "so a folder or tree watched whole will not refresh until they resume; a file watched by name is checked on a timer and still refreshes" : "so nothing that refreshes on file events will refresh until they resume";
+function fileEventsWarnings(d, namesPolled) {
   if (d.missedSince === null) return [];
   const since = iso(d.missedSince);
   const message = () => {
@@ -53002,7 +53012,7 @@ function fileEventsWarnings(d) {
       case "delivering":
         return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so what refreshes on file events may have missed a change made since`;
       case "stalled":
-        return `${stopped(d.missedSince)}, so nothing that refreshes on file events will refresh until they resume`;
+        return `${stopped(d.missedSince)}, ${deafened(namesPolled)}`;
       case "unmeasured":
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
@@ -53666,13 +53676,13 @@ var PathWatches = class {
     for (const onFault of entry.subscribers.values()) onFault(fault);
   }
   // The watch's fault, derived from what it holds now and whether the OS is
-  // delivering what it would hear. A stall is every watch's: it rides the
-  // delivery owner's one stream.
+  // delivering what it would hear. A stall is the fault of a watch that rides
+  // the delivery owner's one stream; a polled watch hears through it.
   faultOf(filePath2, entry) {
     return watchFault(
       `watch_file ${filePath2}`,
       entry.bound,
-      stallReason(this.fileEvents.delivery())
+      stallReason(this.fileEvents.delivery(), entry.bound.held.handle)
     );
   }
   // [LAW:no-silent-failure] Delivery moved or a span closed, so the watches
@@ -78473,7 +78483,10 @@ function drawRender(parts, setup, drawing2) {
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
   const pipeShown = pipeWarning?.event ?? null;
   const standing = [
-    ...fileEventsWarnings(fileEvents.delivery()),
+    ...fileEventsWarnings(
+      fileEvents.delivery(),
+      parts.watcherRegistry.namesPolled
+    ),
     ...launched,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }],
@@ -83600,7 +83613,7 @@ var ManagedStorage = class {
     const fault = watched.reported;
     if (fault?.cause === "unusable")
       return `cannot refresh: ${storage.folder} ${fault.reason}; reload the config or restart the daemon`;
-    const reason = fault?.reason ?? stallReason(this.fileEvents.delivery());
+    const reason = fault?.reason ?? stallReason(this.fileEvents.delivery(), watched.handle);
     return reason === null ? null : `cannot refresh: ${storage.folder}: ${reason}`;
   }
   async read(f) {
