@@ -1,3 +1,9 @@
+## [1.211.3](https://github.com/promptctl/cc-candybar/compare/v1.211.2...v1.211.3) (2026-11-08)
+
+### Bug Fixes
+
+* **update-act:** an act whose files can't be written is still ended after its budget ([#694](https://github.com/promptctl/cc-candybar/issues/694)) ([ada8560](https://github.com/promptctl/cc-candybar/commit/ada85603434124de78d6e549106c59efccbe463b))
+
 ## [1.211.2](https://github.com/promptctl/cc-candybar/compare/v1.211.1...v1.211.2) (2026-11-08)
 
 ### Bug Fixes
