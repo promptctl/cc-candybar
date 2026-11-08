@@ -55,8 +55,10 @@ describe("a daemon spawned with GIT_DIR set", () => {
 
   // The spawning shell's environment: the worker's, inside a hook of repo a.
   const shellEnv = (): NodeJS.ProcessEnv => ({ ...worker, GIT_DIR: join(a, ".git") });
-  const branchIn = async (env: NodeJS.ProcessEnv, dir: string) =>
-    new GitService(worldOf(hostOf(env)).launcher).getGitInfo(dir);
+  const branchIn = async (env: NodeJS.ProcessEnv, dir: string) => {
+    const world = worldOf(hostOf(env));
+    return new GitService(world.launcher, world.filesystem).getGitInfo(dir);
+  };
 
   test("its git reads answer for the session's directory", async () => {
     // Asked as the daemon's main asks: through the spawning shell's launcher.
