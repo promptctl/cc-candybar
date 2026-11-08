@@ -12,7 +12,12 @@ import { buildRig } from "./helpers/rig";
 import { type VerbContext } from "../src/daemon/verbs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
-import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
+import {
+  EDIT_CONFIGURE_KEY,
+  EDIT_MODE_KEY,
+  EDIT_MODE_ARRANGE,
+  configureMember,
+} from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
 import { closingView } from "../src/daemon/closing-view";
 import { chromeIdent } from "../src/config/edit-chrome";
@@ -52,14 +57,17 @@ function nestBar(src: string, durable?: DurableConfig) {
   const render = (): Frame => rig.draw({ payload: PAYLOAD }).frame;
   const logged: string[] = [];
   let current: DslConfig = config;
+  // The daemon's reload: the session's config becomes the file's text, after
+  // a click's write and after a hand edit alike.
+  const reload = (file: DurableConfig): void => {
+    current = parseAndValidate("<reloaded>", file.text()!, PALETTES, DEFAULT_DSL_CONFIG);
+  };
   const ctx: VerbContext = {
     ...rig.ctx,
     log: (_level, line) => logged.push(line),
     ...(durable && {
       configFor: () => current,
-      reloadConfig: () => {
-        current = parseAndValidate("<reloaded>", durable.text()!, PALETTES, DEFAULT_DSL_CONFIG);
-      },
+      reloadConfig: () => reload(durable),
     }),
   };
   // One click is one verb call, as the daemon runs it.
@@ -84,7 +92,7 @@ function nestBar(src: string, durable?: DurableConfig) {
     if (!url) throw new Error("no such affordance rendered");
     await click(url);
   };
-  return { config, sessionState, render, clickWriting, clickDoing, held, logged, ctx };
+  return { config, sessionState, render, clickWriting, clickDoing, held, logged, ctx, reload };
 }
 
 const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
@@ -190,6 +198,15 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
       AFTER_APPLY,
       undefined,
     );
+    // The anchor's id is placed in no other preset's tree, so a re-add of
+    // `directory` beside it takes the freed id rather than `directory-2`.
+    const ANCHORED = `{ root: { h: ['directory', { seg: 'model', id: 'anchor' }] } }`;
+    const ANCHOR_APPLY = `edit.default.insert.after.${chromeIdent("anchor")}`;
+    const ANCHOR_LIBRARY = menuStateKey(
+      `edit.default.insertSeg.after.${chromeIdent("anchor")}`,
+      ANCHOR_APPLY,
+      undefined,
+    );
 
     test("a pick at the row's leading ✚ lands and closes its library", async () => {
       const rt = nestBar(BUNDLED, durable);
@@ -213,6 +230,54 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
       await rt.clickWriting(AFTER, AFTER_APPLY);
       await rt.clickDoing((v) => v === "remove:directory");
       expect(rt.sessionState.get(SID, AFTER)).toBeNull();
+    });
+
+    test("a placement re-added under a removed one's id finds its library closed", async () => {
+      durable.write(ANCHORED);
+      const rt = nestBar(ANCHORED, durable);
+      await arrange(rt);
+      await rt.clickWriting(AFTER, AFTER_APPLY);
+      await rt.clickDoing((v) => v === "remove:directory");
+      await rt.clickWriting(ANCHOR_LIBRARY, ANCHOR_APPLY);
+      await rt.clickDoing((v) => v === "insert:directory:anchor:after");
+      expect(rt.logged.join("\n")).toContain('placed={"seg":"directory"}');
+      expect(rt.held(AFTER)).toBe(DISCLOSURE_CLOSED);
+    });
+
+    // A hand edit ends the placement outside any click, so its library's key
+    // outlives it; the click that re-adds the id begins that key again.
+    test("a placement removed by hand and re-added under its id finds its library closed", async () => {
+      durable.write(ANCHORED);
+      const rt = nestBar(ANCHORED, durable);
+      await arrange(rt);
+      await rt.clickWriting(AFTER, AFTER_APPLY);
+      expect(rt.held(AFTER)).toBe(AFTER_APPLY);
+      durable.write(`{ root: { h: [{ seg: 'model', id: 'anchor' }] } }`);
+      rt.reload(durable);
+      await rt.clickWriting(ANCHOR_LIBRARY, ANCHOR_APPLY);
+      expect(rt.held(AFTER)).toBe(AFTER_APPLY);
+      await rt.clickDoing((v) => v === "insert:directory:anchor:after");
+      expect(rt.logged.join("\n")).toContain('placed={"seg":"directory"}');
+      expect(rt.held(AFTER)).toBe(DISCLOSURE_CLOSED);
+    });
+
+    // The configure key is declared by every config, so only its value's
+    // admission tells the edits apart: the hand edit leaves the member it
+    // stopped admitting, and the re-add admits it again.
+    test("a placement configured, removed by hand and re-added under its id is not configuring", async () => {
+      const configuring = configureMember("default", "directory");
+      durable.write(ANCHORED);
+      const rt = nestBar(ANCHORED, durable);
+      await arrange(rt);
+      await rt.clickWriting(EDIT_CONFIGURE_KEY, configuring);
+      expect(rt.held(EDIT_CONFIGURE_KEY)).toBe(configuring);
+      durable.write(`{ root: { h: [{ seg: 'model', id: 'anchor' }] } }`);
+      rt.reload(durable);
+      await rt.clickWriting(ANCHOR_LIBRARY, ANCHOR_APPLY);
+      expect(rt.held(EDIT_CONFIGURE_KEY)).toBe(configuring);
+      await rt.clickDoing((v) => v === "insert:directory:anchor:after");
+      expect(rt.logged.join("\n")).toContain('placed={"seg":"directory"}');
+      expect(rt.held(EDIT_CONFIGURE_KEY)).toBe(DISCLOSURE_CLOSED);
     });
   });
 

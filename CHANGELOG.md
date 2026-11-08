@@ -1,3 +1,15 @@
+## [1.212.5](https://github.com/promptctl/cc-candybar/compare/v1.212.4...v1.212.5) (2026-11-08)
+
+### Bug Fixes
+
+* **atomic-write:** a failed staging cleanup rides on the write's error as its cause instead of replacing it (brandon-unfiled-3248.8a7z) ([#700](https://github.com/promptctl/cc-candybar/issues/700)) ([ca24cbf](https://github.com/promptctl/cc-candybar/commit/ca24cbf5adbedbbea71a01319f2da901dfd775bd))
+
+## [1.212.4](https://github.com/promptctl/cc-candybar/compare/v1.212.3...v1.212.4) (2026-11-08)
+
+### Bug Fixes
+
+* **git:** each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek) ([#690](https://github.com/promptctl/cc-candybar/issues/690)) ([cc1efbe](https://github.com/promptctl/cc-candybar/commit/cc1efbe069bd704ecda3aa4731f6c19e89cd8de0))
+
 ## [1.212.3](https://github.com/promptctl/cc-candybar/compare/v1.212.2...v1.212.3) (2026-11-08)
 
 ### Bug Fixes
