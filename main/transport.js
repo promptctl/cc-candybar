@@ -64910,7 +64910,13 @@ function writeAtomicOn(disk, at, text4, mode) {
     disk.writeFileSync(tmp, text4, { mode: fileMode, flush: true });
     disk.renameSync(tmp, file);
   } catch (e) {
-    disk.rmSync(tmp);
+    try {
+      disk.rmSync(tmp);
+    } catch (cleanup) {
+      if (e instanceof Error) {
+        e.message += `; staged file ${tmp} was left behind: ${cleanup instanceof Error ? cleanup.message : String(cleanup)}`;
+      }
+    }
     throw e;
   }
 }
@@ -70176,7 +70182,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.212.3";
+var PACKAGE_VERSION = "1.212.4";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {

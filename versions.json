@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "ca24cbf5adbedbbea71a01319f2da901dfd775bd",
+      "timestamp": "2026-11-08T22:06:54.798Z",
+      "commits": [
+        {
+          "sha": "ca24cbf5adbedbbea71a01319f2da901dfd775bd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:05:33-07:00",
+          "message": "fix(atomic-write): a failed staging cleanup rides on the write's error as its cause instead of replacing it (brandon-unfiled-3248.8a7z) (#700)\n\n* fix(atomic-write): a failed staging cleanup rides on the write's error as its cause instead of replacing it (brandon-unfiled-3248.8a7z)\n\n* fix(atomic-write): a failed staging cleanup is named in the write's error message, so the leftover tmp is shown (brandon-unfiled-3248.8a7z)"
+        },
+        {
+          "sha": "9305fac751a09046e5f10a15bc206da0a3312754",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-08T21:47:37Z",
+          "message": "chore(release): set `package.json` to 1.212.4 [skip ci]\n\n## [1.212.4](https://github.com/promptctl/cc-candybar/compare/v1.212.3...v1.212.4) (2026-11-08)\n\n### Bug Fixes\n\n* **git:** each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek) ([#690](https://github.com/promptctl/cc-candybar/issues/690)) ([cc1efbe](https://github.com/promptctl/cc-candybar/commit/cc1efbe069bd704ecda3aa4731f6c19e89cd8de0))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-701",
       "ref": "refs/pull/701/merge",
       "sha": "d5a2cfb9b6feeee63ddb652448bba460c32c87a3",
@@ -27,28 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-08T14:43:34-07:00",
           "message": "test(edit-chrome): a placement re-added under a removed one's freed id finds its after-gap library closed (brandon-unfiled-3248.t2yz)\n\nThe layout-op verb already releases, in the removal's own click, every\nstate key the config declared before the edit and no longer declares, so\nthe removed placement's after-gap library key is cleared and a placement\nminted later under the freed id inherits nothing. This pins the ticket's\ndone-when end to end: open the library, remove, re-add under the bare id,\nand the library reads closed. It fails with that release disabled.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "cc1efbe069bd704ecda3aa4731f6c19e89cd8de0",
-      "timestamp": "2026-11-08T21:36:37.588Z",
-      "commits": [
-        {
-          "sha": "cc1efbe069bd704ecda3aa4731f6c19e89cd8de0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:35:38-07:00",
-          "message": "fix(git): each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek) (#690)\n\n* fix(git): each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek)\n\nA daemon spawned from an environment carrying GIT_DIR or another of git's\nrepository variables (a hook, vcsh, yadm) passed it to every git read, so\nevery bar showed the spawning shell's repository. The daemon now asks git\nfor those names once at its process edge, before its lease, bounded at 2 s,\nand runs in a world whose environment is the process's without them. An ask\nthat fails keeps the inherited environment and draws a git-env warning on\nevery bar; a git that is not installed names none.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* test(git): the real-git case for the daemon's environment is an adapter case, under test/integration (brandon-unfiled-3248.i3ek)\n\nIt drives real git through the system launcher, which the test lint\nadmits only in the adapter tiers; it reached it through worldOf, past the\nrule. What it proves is git's own behaviour, so it belongs with the\nadapters. [LAW:effects-at-boundaries]\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(git): the daemon's world and its git ask are one value; comments name git's list as repository-local (brandon-unfiled-3248.i3ek)\n\n- daemonWorld returns the world with the ask it was cleaned by, and\n  runDaemon takes that value, so a daemon cannot be handed an env its\n  warning does not describe. [LAW:types-are-the-program]\n- The git-env log line is written once the breaker has admitted the\n  daemon, so a refused candidate adds none.\n- Comments call git's list what git calls it: variables local to one\n  repository, config and object settings included; the git.ts rule is\n  narrowed to the daemon.\n- The integration case builds its fixtures and base env without git's\n  repository variables, so a run from a hook leaves the hook's repo alone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* test(git): the real-git case reads through a GitService over the world's disk, as main's GitService now takes one (brandon-unfiled-3248.i3ek)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* docs(git): the git read's comment says check reads no git, and only the demo honours its invoking shell (brandon-unfiled-3248.i3ek)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        },
-        {
-          "sha": "db0b16eb6e3fcf6352d98a6009faa5e544dc9473",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-08T21:18:06Z",
-          "message": "chore(release): set `package.json` to 1.212.3 [skip ci]\n\n## [1.212.3](https://github.com/promptctl/cc-candybar/compare/v1.212.2...v1.212.3) (2026-11-08)\n\n### Bug Fixes\n\n* **edit-chrome:** a placement's chrome names are its own, so an edit beside it renames nothing ([#695](https://github.com/promptctl/cc-candybar/issues/695)) ([9059da1](https://github.com/promptctl/cc-candybar/commit/9059da1b93913b94233ed0518558525dfaa91eff))\n"
         }
       ]
     },
