@@ -7,9 +7,9 @@
 // [LAW:one-source-of-truth] The acts directory is the one answer to "is an
 // act running on this bundle, and how did the last one end"; each daemon
 // judges the directory when it asks. What a daemon holds beside it is its own
-// last look at an act's spend, a copy the act's files outrank once they name a
-// later look (`spendLook`), and why it ended an act whose verdict it could not
-// write, which the directory cannot say.
+// last look at an act's spend, a copy the act's files outrank once they hold a
+// larger spend (`latestLook`), and why it ended an act whose verdict it could
+// not write, which the directory cannot say.
 //
 // Layout: `<state>/update-act/<bundle key>/<n>/` per act, `n` counting up.
 // Each act directory holds `record.json` (what was started, by whom it is
@@ -517,13 +517,11 @@ export function spendLook(
   );
   // [LAW:no-silent-failure] A spend that can't be read is left as it is, and
   // this look counts on from the latest look this daemon knows of, then says
-  // so.
+  // so. The fault names the file and why, not where the look counted from:
+  // that moves from the act's start to this daemon's own after one look, and
+  // one fault would read as two.
   if (read.kind === "unread") {
-    const base = own === null ? "the act's start" : "this daemon's last look";
-    return {
-      awake,
-      fault: `${file}: ${read.reason}; left in place, this look counts on from ${base}`,
-    };
+    return { awake, fault: `${file}: ${read.reason}; left in place` };
   }
   const faults: string[] = [];
   // [LAW:no-silent-failure] A spend this version can't parse is replaced by

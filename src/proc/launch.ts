@@ -1383,9 +1383,10 @@ export function readJobEnd(status: string): JobEnd | null {
 // verdict written; `preceded`, the job's own landed first; `unrecorded`, the
 // verdict could not be written, and the group is ended all the same, since a
 // verdict's write is no condition of a job's end; `gone`, the job's files were
-// removed, so nothing was signalled and the caller says so. `signalled` says whether
-// the group took the SIGTERM. Only a group that took it gets the SIGKILL, since
-// an id that answered nothing may no longer be the job's by the grace's end.
+// removed, so nothing was signalled and the caller says so. `signalled` says
+// whether the group took the SIGTERM. Only a group that took it gets the
+// SIGKILL, since an id that answered nothing may no longer be the job's by the
+// grace's end.
 type VerdictWrite =
   | { readonly verdict: "gone" }
   | { readonly verdict: "stands" | "preceded" }

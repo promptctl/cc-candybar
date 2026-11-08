@@ -1133,6 +1133,9 @@ describe("the update watch: an act's budget is the time it was watched running",
       await b.awake(POLL);
       expect(watch.error()).toMatch(/awake\.json/);
       expect(watch.error()).toMatch(/EACCES/);
+      // A read between looks says nothing of the spend file: the ⚠ holds.
+      await expect(watch.running()).resolves.toBe(true);
+      expect(watch.error()).toMatch(/awake\.json: not written: EACCES/);
 
       await b.awake(10 * MINUTE - 5 * POLL);
       expect(signal).not.toHaveBeenCalledWith(b.pid, "SIGTERM");
@@ -1141,14 +1144,14 @@ describe("the update watch: an act's budget is the time it was watched running",
       expect(signal).toHaveBeenCalledWith(b.pid, "SIGTERM");
       expect(b.logged).toContainEqual(
         expect.stringMatching(
-          /^apply-update: act 1 timed out; its verdict could not be written: .*EACCES.*; ending it$/,
+          /^apply-update: update act files .*: act 1 timed out; its verdict could not be written: .*EACCES.*; ending it$/,
         ),
       );
 
       b.group.end();
       await b.awake(POLL);
       expect(watch.error()).toMatch(
-        /act 1 spent its budget and was ended; its timeout verdict could not be written: .*EACCES/,
+        /act 1 timed out; its verdict could not be written: .*EACCES.*; ending it$/,
       );
       expect(b.verdict()).toBeNull();
     } finally {
@@ -1243,7 +1246,7 @@ describe("spendLook: one look written for the daemons after it", () => {
       expect(spendLook(dir, facts({ act: 3, alive: true }), own, 32_000, 10_000)).toEqual({
         awake: { spentMs: 32_000, lastSeen: 32_000 },
         fault: expect.stringMatching(
-          /awake\.json: .*EACCES.*; left in place, this look counts on from this daemon's last look$/,
+          /awake\.json: .*EACCES.*; left in place$/,
         ),
       });
     } finally {

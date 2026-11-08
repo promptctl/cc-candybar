@@ -324,7 +324,7 @@ export interface UpdateWatch {
   // it. False while its files can't be read: the error says so, and holding
   // every restart on a file nothing repairs would hold them for good.
   running(): Promise<boolean>;
-  // Why this bundle's act files can't be read, as of the last look, else why
+  // Why this bundle's act files can't be read or take a look, else why
   // the act last read was ended with no verdict to say so; null when neither.
   error(): string | null;
 }
@@ -538,21 +538,28 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // once the acts directory is emptied.
   let unrecorded: { readonly job: ActJob; readonly reason: string } | null =
     null;
+  // [LAW:one-source-of-truth] Why the act's files could not take the watch's
+  // last look at the spend. Its own, not `unreadable`: only a look can say
+  // whether the spend file took one, and a read that succeeds says nothing of
+  // it, so a read between ticks must not clear it.
+  let spendFault: string | null = null;
+  const logSpendFault = changeLogger(log);
 
   // Spends a look on the act if its group is alive, and ends it once that has
   // spent its budget, with a timeout verdict unless the job's own landed first.
   // [LAW:one-source-of-truth] The one budget is observed time, shared through
   // the act's files by every daemon that looks.
-  // [LAW:single-enforcer] The look's fault is thrown only once the spend is
-  // judged, so `touchActs` shows it and a write that fails ends nothing early.
-  function endIfOverdue(facts: ActFacts | null): void {
-    if (!facts?.alive) return;
+  // Returns why the act's files could not take the look, null when they did
+  // or no look was spent; the spend is judged first, so a write that fails
+  // ends nothing early.
+  function endIfOverdue(facts: ActFacts | null): string | null {
+    if (!facts?.alive) return null;
     const own = lastLook?.job === facts.job ? lastLook.awake : null;
     const look = spendLook(actsDir, facts, own, clock.now(), LONGEST_LOOK_MS);
-    if (look === null) return;
+    if (look === null) return null;
     lastLook = { job: facts.job, awake: look.awake };
     if (look.awake.spentMs > ACT_TIMEOUT_MS) endAct(facts);
-    if (look.fault !== null) throw new Error(look.fault);
+    return look.fault === null ? null : actsFault(look.fault);
   }
 
   function endAct(facts: ActFacts): void {
@@ -567,6 +574,8 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       );
       return;
     }
+    // [LAW:one-source-of-truth] The one spelling of what the end did to the
+    // group, for the log and the ⚠ alike.
     const signal = ending.signalled ? "ending it" : "its group took no signal";
     if (ending.verdict !== "unrecorded") {
       const why =
@@ -574,17 +583,11 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       log("error", `apply-update: act ${facts.act} ${why}; ${signal}`);
       return;
     }
-    log(
-      "error",
-      `apply-update: act ${facts.act} timed out; its verdict could not be written: ${ending.error}; ${signal}`,
+    const reason = actsFault(
+      `act ${facts.act} timed out; its verdict could not be written: ${ending.error}; ${signal}`,
     );
-    const end = ending.signalled ? "was ended" : "its group took no signal";
-    unrecorded = {
-      job: facts.job,
-      reason: actsFault(
-        `act ${facts.act} spent its budget and ${end}; its timeout verdict could not be written: ${ending.error}`,
-      ),
-    };
+    log("error", `apply-update: ${reason}`);
+    unrecorded = { job: facts.job, reason };
   }
 
   // Notices an act ending, whichever daemon started it: a success means the
@@ -593,10 +596,11 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   async function watchAct(): Promise<void> {
     const read = await touchActs(async () => {
       const facts = await acts.read();
-      if (!closed) endIfOverdue(facts);
+      if (!closed) spendFault = endIfOverdue(facts);
       return facts;
     });
     if (closed || !read.ok) return;
+    if (spendFault !== null) logSpendFault(["error", spendFault]);
     if (unrecorded !== null && read.value?.job !== unrecorded.job) {
       unrecorded = null;
     }
@@ -650,7 +654,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         const read = await touchActs(() => acts.read());
         return read.ok && judgeAct(read.value).kind === "running";
       }),
-    error: () => unreadable ?? unrecorded?.reason ?? null,
+    error: () => unreadable ?? spendFault ?? unrecorded?.reason ?? null,
     act: () =>
       actTurn(async () => {
         if (closed) throw new DaemonClosing("apply-update");
