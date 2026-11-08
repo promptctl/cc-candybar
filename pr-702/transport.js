@@ -72027,29 +72027,9 @@ var resetConfig = (sid, args, ctx) => {
     `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${home.path} (session=${sid})`
   );
 };
-function endedPlacements(before, after) {
-  const placed2 = (config2, preset) => [...walkNodes(presetRoot(config2, preset).node)].filter(
-    (n) => n.kind === "segment"
-  );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap(
-      (preset) => placed2(after, preset).map(
-        (n) => configureMember(ident(preset), placementId(n))
-      )
-    )
-  );
-  return presetNames(before.presets).flatMap(
-    (preset) => placed2(before, preset).map((node) => ({
-      member: configureMember(ident(preset), placementId(node)),
-      node
-    })).filter(({ member }) => !survivors.has(member))
-  );
-}
-function endedSessionKeys(ended, configuring) {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
-  ]);
+function readingUnder(gate2) {
+  const listed = new Set(gate2.listKeys());
+  return (key, stored) => listed.has(key) ? gate2.verdict(key, stored).kind : "undeclared";
 }
 var applyLayoutOp2 = (sid, args, ctx) => {
   const [key = "", opToken = ""] = args;
@@ -72073,17 +72053,16 @@ var applyLayoutOp2 = (sid, args, ctx) => {
   const placed2 = applyLayoutOp(editStore(ctx, sid), home, key, op);
   ctx.reloadConfig(origin);
   const after = ctx.configFor(origin);
-  const declared = new Set(ctx.gates.state.gateFor(after).listKeys());
-  const undeclared = ctx.gates.state.gateFor(before).listKeys().filter((key2) => !declared.has(key2));
+  const gateBefore = ctx.gates.state.gateFor(before);
+  const gateAfter = ctx.gates.state.gateFor(after);
+  const readBefore = readingUnder(gateBefore);
+  const readAfter = readingUnder(gateAfter);
   const released = [
-    .../* @__PURE__ */ new Set([
-      ...endedSessionKeys(
-        endedPlacements(before, after),
-        ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
-      ),
-      ...undeclared
-    ])
-  ].filter((key2) => ctx.sessionState.get(sid, key2) !== null);
+    .../* @__PURE__ */ new Set([...gateBefore.listKeys(), ...gateAfter.listKeys()])
+  ].filter((key2) => {
+    const stored = ctx.sessionState.get(sid, key2);
+    return stored !== null && readBefore(key2, stored) !== readAfter(key2, stored);
+  });
   for (const key2 of released) ctx.sessionState.clear(sid, key2);
   ctx.log(
     "info",
@@ -80825,6 +80804,7 @@ function makeUpdateWatch(opts) {
   async function watchLeft() {
     const faults = [];
     unwritten2 = unwritten2.filter((group) => {
+      if (!groupStands(group, launcher, clock.bootTime())) return false;
       const fault = leaveGroup(actsDir2, group);
       if (fault !== null) faults.push(fault);
       return fault !== null;

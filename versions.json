@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-702",
+      "ref": "refs/pull/702/merge",
+      "sha": "166fc2077ecd92866374747faf74c4b8ba4ce4c7",
+      "timestamp": "2026-11-08T22:29:17.657Z",
+      "commits": [
+        {
+          "sha": "166fc2077ecd92866374747faf74c4b8ba4ce4c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T22:28:18Z",
+          "message": "Merge 9813dfb5ee4ea6675bc670133e33c3868c092cd4 into 832a6f68075b46a5748841520726edb6914fefcb\n"
+        },
+        {
+          "sha": "9813dfb5ee4ea6675bc670133e33c3868c092cd4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:27:58-07:00",
+          "message": "fix(update-act): a held group whose process has exited is dropped from the ⚠ before its write is retried (brandon-unfiled-3248.pj1z)\n"
+        },
+        {
+          "sha": "e4e6ec7335bc365d5ef42d797b41ff2d55466c83",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:17:42-07:00",
+          "message": "fix(update-act): an overdue act pruned before its end still has its group ended when its leader proves it, and otherwise shown in the ⚠ until it is gone (brandon-unfiled-3248.pj1z)\n\nWhen a newer claim removes a timed-out act between the look and the end,\nthe end now proves the group by its leader's fingerprint and signals it\nonly on that proof. A group nothing proves is written beside the acts, so\nevery daemon's ⚠ names it with the command that ends it until it is no\nlonger the job's. The watch's ⚠ messages are now each their own entry.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "832a6f68075b46a5748841520726edb6914fefcb",
@@ -20,28 +49,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-08T22:16:46Z",
           "message": "chore(release): set `package.json` to 1.212.5 [skip ci]\n\n## [1.212.5](https://github.com/promptctl/cc-candybar/compare/v1.212.4...v1.212.5) (2026-11-08)\n\n### Bug Fixes\n\n* **atomic-write:** a failed staging cleanup rides on the write's error as its cause instead of replacing it (brandon-unfiled-3248.8a7z) ([#700](https://github.com/promptctl/cc-candybar/issues/700)) ([ca24cbf](https://github.com/promptctl/cc-candybar/commit/ca24cbf5adbedbbea71a01319f2da901dfd775bd))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-702",
-      "ref": "refs/pull/702/merge",
-      "sha": "921b02027fda25e7c9ac8e909948a7cf826b89b6",
-      "timestamp": "2026-11-08T22:19:20.556Z",
-      "commits": [
-        {
-          "sha": "921b02027fda25e7c9ac8e909948a7cf826b89b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T15:18:21-07:00",
-          "message": "Merge e4e6ec7335bc365d5ef42d797b41ff2d55466c83 into dcc0d9858406c27a4f4728c234ebd7ef48445799\n"
-        },
-        {
-          "sha": "e4e6ec7335bc365d5ef42d797b41ff2d55466c83",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T15:17:42-07:00",
-          "message": "fix(update-act): an overdue act pruned before its end still has its group ended when its leader proves it, and otherwise shown in the ⚠ until it is gone (brandon-unfiled-3248.pj1z)\n\nWhen a newer claim removes a timed-out act between the look and the end,\nthe end now proves the group by its leader's fingerprint and signals it\nonly on that proof. A group nothing proves is written beside the acts, so\nevery daemon's ⚠ names it with the command that ends it until it is no\nlonger the job's. The watch's ⚠ messages are now each their own entry.\n"
         }
       ]
     },
