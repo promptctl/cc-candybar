@@ -12,7 +12,12 @@ import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
 import { EventEmitter } from "events";
-import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import {
+  DEBOUNCE_MS,
+  NAMES_POLL_MS,
+  WatcherRegistry,
+} from "../src/daemon/cache/watchers";
+import { filesystemFake } from "../src/disk/filesystem-fake";
 import type { Delivery } from "../src/daemon/cache/file-events";
 import {
   VariableStore,
@@ -1849,8 +1854,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
   });
 
   // A stall is the delivery owner's one fact, so every watch_file variable
-  // reads it there. The watched file is never written in these: only the
-  // owner's word can move them, and no OS watcher has to break.
+  // whose watch rides the OS's stream reads it there. The watched path is
+  // never written in these: only the owner's word can move them, and no OS
+  // watcher has to break. It is a directory, watched for every child, so it
+  // rides the stream on every platform.
   describe("while file events are stalled", () => {
     const STALL = "file events stopped at 2026-10-27T04:00:00.000Z";
     const stalled: Delivery = { kind: "stalled", missedSince: STALLED_AT };
@@ -1863,7 +1870,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     function rig(dir: string) {
       const watched = path.join(dir, "watched");
       const data = path.join(dir, "data");
-      fs.writeFileSync(watched, "w");
+      fs.mkdirSync(watched);
       fs.writeFileSync(data, "before");
       const events = handDelivery();
       const store = new VariableStore(systemTimekeeper);
@@ -2011,6 +2018,81 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       }
     });
   });
+
+  // A file watched by name is polled where the directory watch reaches the
+  // tree (macOS), so a stall of the OS's stream leaves it heard; where the
+  // watch reaches one directory (Linux), the name rides the stream and the
+  // stall is its fault. The watch is the fake's; the value read is the disk's.
+  describe.each(["darwin", "linux"] as const)(
+    "a named file's watch over the %s fake while file events are stalled",
+    (platform) => {
+      const stalled: Delivery = { kind: "stalled", missedSince: STALLED_AT };
+
+      function rig(dir: string) {
+        const clock = heldClock(new Date(STALLED_AT));
+        const disk = filesystemFake({ clock, platform });
+        const watchers = new WatcherRegistry({ filesystem: disk, clock });
+        disk.mkdir("/w");
+        disk.write("/w/watched", "w");
+        const data = path.join(dir, "data");
+        fs.writeFileSync(data, "before");
+        const events = handDelivery();
+        const store = new VariableStore(systemTimekeeper);
+        const runs = runsOver({ fileEvents: events, watchers });
+        const registry = registryOver(store, "", undefined, null, runs);
+        registry.declareFile("val", data, {
+          parse: TEXT,
+          cache: { kind: "watch_file", path: "/w/watched" },
+        });
+        // One sweep of polled names, then the debounce window, closed.
+        const settle = () => {
+          clock.advance(0);
+          clock.advance(NAMES_POLL_MS);
+          clock.advance(DEBOUNCE_MS);
+        };
+        return { disk, watchers, data, events, store, registry, settle };
+      }
+
+      it(
+        platform === "darwin"
+          ? "carries no stall fault, and its watch keeps refreshing it"
+          : "carries the stall as its fault",
+        async () => {
+          const { dir, cleanup } = makeTmpDir();
+          const { disk, watchers, data, events, store, registry, settle } =
+            rig(dir);
+          try {
+            await ran(registry);
+            events.set(stalled, { kind: "moved" });
+            await ran(registry);
+            expect(
+              registry
+                .getLastError("val")
+                ?.message.includes(
+                  "file events stopped at 2026-10-27T04:00:00.000Z",
+                ) ?? false,
+            ).toBe(platform === "linux");
+
+            fs.writeFileSync(data, "edited");
+            disk.write("/w/watched", "w2");
+            settle();
+            // The fake delivers on both platforms: the owner's word is the
+            // stall here, so only the fault differs.
+            await until(
+              () => store.read("val") === "edited",
+              "the watch's re-read",
+            );
+            expect(registry.cachePolicyFaults().size).toBe(
+              platform === "linux" ? 1 : 0,
+            );
+          } finally {
+            watchers.closeAll();
+            cleanup();
+          }
+        },
+      );
+    },
+  );
 
   // A linked path changes wherever any link in its chain is re-pointed, and
   // where the file at its end is replaced or first appears; each lives in a

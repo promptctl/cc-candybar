@@ -1021,7 +1021,7 @@ describe("watchFault", () => {
 
   const held = (deaf: readonly Deafness[]) => ({
     key: "k",
-    handle: { release: () => {}, deaf },
+    handle: { release: () => {}, deaf, ridesStream: true },
   });
 
   test("a watch that hears every place its paths can change has no fault", () => {

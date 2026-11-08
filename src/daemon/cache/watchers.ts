@@ -294,6 +294,11 @@ interface WatcherSlot {
 export interface WatcherHandle {
   release(): void;
   readonly deaf: readonly Deafness[];
+  // [LAW:one-source-of-truth] Whether any directory this watch hears rides
+  // the OS's one event stream, so a stall of that stream deafens it. A
+  // polled directory rides none, and the registry alone decides which are
+  // polled.
+  readonly ridesStream: boolean;
 }
 
 // What a consumer asks to watch, under the key naming it. [LAW:one-source-of-truth]
@@ -451,6 +456,7 @@ export class WatcherRegistry {
       // so; releasing it is a no-op, so callers don't crash mid-shutdown.
       return {
         release: () => {},
+        ridesStream: false,
         deaf: targets.dirs.map((d) => ({
           kind: "refused",
           path: d.path,
@@ -738,6 +744,7 @@ export class WatcherRegistry {
 
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
     return {
+      ridesStream: slot.listeners.some(({ dir }) => !dir.polled),
       get deaf() {
         return slot.listeners.flatMap(({ dir }) =>
           dir.state.kind === "deaf" ? [dir.state.deafness] : [],
