@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-696",
+      "ref": "refs/pull/696/merge",
+      "sha": "99704e6c53d3d9d9185f2b285f4b02b9309e23dd",
+      "timestamp": "2026-11-08T14:55:59.361Z",
+      "commits": [
+        {
+          "sha": "99704e6c53d3d9d9185f2b285f4b02b9309e23dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:54:44Z",
+          "message": "Merge f47c141ecdca2386b00d6c97f11642326c818735 into ada85603434124de78d6e549106c59efccbe463b\n"
+        },
+        {
+          "sha": "f47c141ecdca2386b00d6c97f11642326c818735",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:54:40-07:00",
+          "message": "Merge branch 'main' into brandon-unfiled-3248.7u1g"
+        },
+        {
+          "sha": "de4bcedd9083aebbc146f72c1778ef93fc13ff3d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:35:49-07:00",
+          "message": "Merge branch 'main' into brandon-unfiled-3248.7u1g"
+        },
+        {
+          "sha": "b919e0c6b9e0c08fee741b7553571020f3c4deda",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:35:05-07:00",
+          "message": "fix(colour)!: the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g)\n\nAt ansi the open settings door's ✖ was drawn silver, yellow, purple or\nblack: the red was chosen as truecolor measures it, and keptOn's repair\nsearched the depth's table by contrast alone. The choice now measures\nevery candidate and the ground as the render's depth draws them, and\nthe candidates are per depth: the theme's named reds in truecolor and\nat 256 colours, the terminal's red and bright red (SGR 31/91) at ansi.\nkeptOn has no job left and is deleted.\n\nBREAKING CHANGE: the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ada85603434124de78d6e549106c59efccbe463b",
@@ -63,35 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-08T07:26:41-07:00",
           "message": "fix(watchers): on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens (brandon-unfiled-3248.slsx)\n\nA watch handle now says whether it rides the OS's one event stream, from the\nregistry's own choice of what is polled. A stall is the fault only of a watch\nthat rides it, so a polled `watch_file` name carries no stall fault and keeps\nrefreshing; the file-event probe asks the same question of its own watch. The\nstall row reads the disk's watch reach: on macOS it names a folder or tree\nwatched whole as what a stall deafens and says a file watched by name still\nrefreshes; on Linux, where every watch rides inotify, it reads as before.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-696",
-      "ref": "refs/pull/696/merge",
-      "sha": "19bb9ba0dc2d53f0524e7f0ed854c83c1ffebc0b",
-      "timestamp": "2026-11-08T14:37:02.992Z",
-      "commits": [
-        {
-          "sha": "19bb9ba0dc2d53f0524e7f0ed854c83c1ffebc0b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:35:52-07:00",
-          "message": "Merge de4bcedd9083aebbc146f72c1778ef93fc13ff3d into 56a5c61981df900d1c9d0cee98199d3a1f52182f\n"
-        },
-        {
-          "sha": "de4bcedd9083aebbc146f72c1778ef93fc13ff3d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:35:49-07:00",
-          "message": "Merge branch 'main' into brandon-unfiled-3248.7u1g"
-        },
-        {
-          "sha": "b919e0c6b9e0c08fee741b7553571020f3c4deda",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:35:05-07:00",
-          "message": "fix(colour)!: the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g)\n\nAt ansi the open settings door's ✖ was drawn silver, yellow, purple or\nblack: the red was chosen as truecolor measures it, and keptOn's repair\nsearched the depth's table by contrast alone. The choice now measures\nevery candidate and the ground as the render's depth draws them, and\nthe candidates are per depth: the theme's named reds in truecolor and\nat 256 colours, the terminal's red and bright red (SGR 31/91) at ansi.\nkeptOn has no job left and is deleted.\n\nBREAKING CHANGE: the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
