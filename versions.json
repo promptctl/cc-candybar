@@ -4,15 +4,22 @@
     {
       "version": "pr-698",
       "ref": "refs/pull/698/merge",
-      "sha": "735cf1d85621cd7d975a445c9e9f72115a8acecf",
-      "timestamp": "2026-11-08T18:01:33.689Z",
+      "sha": "54bef906f78e8e526a11ffccd2be7ac703ca7354",
+      "timestamp": "2026-11-08T18:11:47.575Z",
       "commits": [
         {
-          "sha": "735cf1d85621cd7d975a445c9e9f72115a8acecf",
+          "sha": "54bef906f78e8e526a11ffccd2be7ac703ca7354",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T11:00:46-07:00",
-          "message": "Merge 58ab2f54519c4aca7061b793575c1885b5a011d3 into 3b7ffb140e9cd7ddb57c056cd4b741f9d4f8f695\n"
+          "timestamp": "2026-11-08T18:10:58Z",
+          "message": "Merge 6ba798da06a349c62cce45cc9f0a82bc297f88dd into 2c49054392b6ed6498c546ab75bd3ffae25e2629\n"
+        },
+        {
+          "sha": "6ba798da06a349c62cce45cc9f0a82bc297f88dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T11:10:54-07:00",
+          "message": "Merge branch 'main' into fix/lane-edge-claude-input"
         },
         {
           "sha": "58ab2f54519c4aca7061b793575c1885b5a011d3",
