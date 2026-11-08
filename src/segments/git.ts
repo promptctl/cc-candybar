@@ -964,8 +964,9 @@ export class GitService {
   // the launcher's environment, which in the daemon is whichever shell spawned
   // it; so the daemon drops those variables from its environment once, at its
   // boot (src/host.ts daemonWorld), and every read it makes here inherits
-  // that. A one-shot command (check, the demo) runs in the shell that invoked
-  // it, whose environment is its own to honour.
+  // that. The demo draws the directory it was run in, under the shell that ran
+  // it, so that shell's environment is its own to honour; `check` reads no git
+  // (its session's git facts are a fixture).
   //
   // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
