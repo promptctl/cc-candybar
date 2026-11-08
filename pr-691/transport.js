@@ -81538,7 +81538,7 @@ function priceOf(table, modelId, tokens) {
   return tokens.input / 1e6 * rates.input + tokens.output / 1e6 * rates.output + tokens.cacheCreation / 1e6 * rates.cache_write_5m + tokens.cacheRead / 1e6 * rates.cache_read;
 }
 function modelIdOf(entry) {
-  return entry.model ?? entry.message?.model ?? DEFAULT_MODEL_ID;
+  return entry.model || entry.message?.model || DEFAULT_MODEL_ID;
 }
 
 // src/utils/single-flight.ts

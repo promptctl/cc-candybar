@@ -4,15 +4,22 @@
     {
       "version": "pr-691",
       "ref": "refs/pull/691/merge",
-      "sha": "b69df87072ab43dcf2ae8fd4a392c8c5ce88d404",
-      "timestamp": "2026-11-08T08:50:26.697Z",
+      "sha": "6d3ccddde097909eb98ec797b9128a84d88894dc",
+      "timestamp": "2026-11-08T08:55:06.907Z",
       "commits": [
         {
-          "sha": "b69df87072ab43dcf2ae8fd4a392c8c5ce88d404",
+          "sha": "6d3ccddde097909eb98ec797b9128a84d88894dc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T08:49:32Z",
-          "message": "Merge 41cae9402e09704ea18fde54f03f97ca9b492e89 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
+          "timestamp": "2026-11-08T08:54:14Z",
+          "message": "Merge 3457ce914c37acfa2988b9e60debeb3bd3f62d6e into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
+        },
+        {
+          "sha": "3457ce914c37acfa2988b9e60debeb3bd3f62d6e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T01:54:02-07:00",
+          "message": "fix(pricing): an empty entry model names no model, so the message's model prices the entry (candybar-gather-renderer-76bb.6pj.wi3)\n"
         },
         {
           "sha": "41cae9402e09704ea18fde54f03f97ca9b492e89",
