@@ -8,8 +8,9 @@
 // the demo (src/demo/play.ts).
 //
 // The live half is the daemon's parts in this worker (test/helpers/
-// daemon-parts.ts), settling each request as the daemon's request path does
-// (`settleRequest`), because the boot ratchet admits no new booting case
+// daemon-parts.ts): each request's wire form crosses the daemon's render
+// checkpoint and render setup, and is settled and its answer drawn by the
+// daemon's own draw, because the boot ratchet admits no new booting case
 // (.claude/memory/testing.md). Each
 // live frame is drawn only once every fact has landed, so a line stamped
 // after a draw never exists: the recording at an instant is what the frame at
@@ -33,11 +34,13 @@ import {
 import { homeOf } from "../src/daemon/home";
 import { locations, stateDir } from "../src/daemon/paths";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
-import { parseClientHints } from "../src/daemon/protocol";
-import type { ViewFacts } from "../src/daemon/render-payload";
+import {
+  PROTOCOL_VERSION,
+  TOTAL_BUDGET_MS,
+  type ReaderRenderRequest,
+} from "../src/daemon/protocol";
 import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import {
-  drawRequest,
   recordedCache,
   RecordingFailed,
   recordToFile,
@@ -100,8 +103,8 @@ import {
 } from "../src/proc/spawner-fake";
 import { SessionEffects } from "../src/render/effect";
 import { type Lane } from "../src/config/lanes";
-import { drawForAnswer, type RenderSetup } from "../src/daemon/draw-bar";
-import type { CheckedRenderRequest } from "../src/daemon/render-checkpoint";
+import { drawForAnswer, setUpRender } from "../src/daemon/draw-bar";
+import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type { Frame } from "../src/render/frame";
 import { textOf } from "../src/render/frame";
 import type { Timekeeper } from "../src/time";
@@ -116,6 +119,8 @@ import { WORLD, hostOf } from "./helpers/host";
 import { TEST_LINKS } from "./helpers/link-signer";
 import { until } from "./helpers/until";
 import { daemonParts } from "./helpers/daemon-parts";
+import { CLAUDE_START, claudeHolds } from "./helpers/claude-record";
+import { configFlag, hookData } from "./helpers/daemon-e2e";
 
 jest.setTimeout(30_000);
 
@@ -253,34 +258,43 @@ function scriptPrograms(
   spawner.program((bin) => bin === "tmux", answers(exits(0, "work\n")));
 }
 
-function request(
+// The pid of the stand-in Claude Code that runs the live session's client.
+const CLAUDE_PID = 4242;
+
+// The request a statusline client that Claude Code's process CLAUDE_PID ran
+// sends from `cwd` with `--config <configFile>` at the epoch instant `now`, in
+// its wire form, raw hints and all: what the daemon's checkpoint takes. Its
+// deadline is the one the Node client states, its budget past the instant it
+// sends over a connection already made.
+function wireRequest(
   cwd: string,
   home: string,
   claudeConfigDir: string,
+  configFile: string,
+  now: number,
   model = "Opus 4.7",
-): SessionRequest {
+): ReaderRenderRequest {
   return {
-    sessionId: sessionIdOf(SID),
+    v: PROTOCOL_VERSION,
+    kind: "render",
+    deadline: now + TOTAL_BUDGET_MS,
     hookData: {
-      hook_event_name: "Status",
-      session_id: SID,
+      ...hookData(SID, cwd),
       transcript_path: path.join(home, "transcript.jsonl"),
-      cwd,
       model: { id: "claude-opus-4-7", display_name: model },
-      workspace: { current_dir: cwd, project_dir: cwd },
     },
+    args: configFlag(configFile),
     cwd,
-    hints: parseClientHints({
-      termCols: WIDTH,
-      termRows: 40,
-      ssh: true,
-      tmux: {
-        socket: path.join(home, "tmux.sock"),
-        pane: "%0",
-        truecolor: null,
-      },
-      claudeConfigDir,
-    }),
+    termCols: WIDTH,
+    termRows: 40,
+    ssh: true,
+    tmux: {
+      socket: path.join(home, "tmux.sock"),
+      pane: "%0",
+      truecolor: null,
+    },
+    claudeConfigDir,
+    parent: { pid: CLAUDE_PID, startTime: CLAUDE_START },
   };
 }
 
@@ -417,6 +431,7 @@ const HELD: Pace = { runsMs: 0, stepMs: 0 };
 function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
   const dir = sessionDir(config);
   const { home, claudeConfigDir } = homeDir();
+  claudeHolds(claudeConfigDir, CLAUDE_PID, SID);
   const clock = heldClock(AT);
   const failsFor = path.join(home, "fails");
   const lines: string[] = [];
@@ -493,9 +508,11 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
       },
       drawing: () => true,
     });
-  // One request of the session's from `cwd`, at the clock's instant, as the
-  // daemon's request path takes one: the view declared with it, the request
-  // noted and its view settled. Its answer, once every fact landed, is the
+  // One request of the session's from `cwd`, at the clock's instant, through
+  // the daemon's checkpoint and render setup: the view declared with it, the
+  // request noted for its recordings and its view settled. The frame feeds are
+  // never told of it, so a lane or a click finds the session with no request
+  // on record. Its answer, once every fact landed, is the
   // daemon's draw of the view it holds, noted for its recordings, and the
   // hold released.
   const arrive = (
@@ -505,37 +522,43 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     model?: string,
   ) => {
     const at = instantAt(clock);
+    // The request crosses the daemon's checkpoint, which stamps its pane from
+    // the record that says Claude Code's process runs the session, and its view
+    // is declared by the daemon's own render setup over what that passes on.
+    // Its deadline is stated from `at`, the instant it arrives, as a client
+    // sending then states it. Nothing here waits on that deadline: the
+    // answer waits until every fact has landed, so it never ends a wait.
+    const checked = checkRenderRequest(
+      wireRequest(cwd, home, claudeConfigDir, configFile, msOf(at), model),
+      parts.stats,
+      parts.log,
+      parts.home,
+      parts.storedRoot,
+      parts.heldSession,
+    );
+    if (!checked.ok) {
+      throw new Error(`the checkpoint refused the request: ${checked.problems.join("; ")}`);
+    }
+    expect(checked.req.pane).toMatchObject({ kind: "runs", claude: { pid: CLAUDE_PID } });
     // What the request path spends between reading the request's instant and
     // declaring its view: what that declaration stamps is later than `at`.
     clock.burn(burnMs);
-    // The view is declared with the request as the daemon's checkpoint
-    // passes it on, which a lane's frame draws by: no argument refused, and
-    // run in no tmux pane.
-    const req = {
-      ...request(cwd, home, claudeConfigDir, model),
-      refusedArgs: [],
-      pane: { kind: "runs", tmux: null, claude: { pid: 4242, configDir: claudeConfigDir } },
-    } as unknown as CheckedRenderRequest;
-    const held = live.cache.holdSession(originAt(cwd, configFile), req);
-    const settling = settleRequest(live.recorder, held.view, at);
+    // [LAW:no-ambient-temporal-coupling] The setup's hold has one owner at a
+    // time: the case's teardown from the moment it is set up, until the answer
+    // takes it once every fact has landed and releases it on every exit of its
+    // draw. A request never answered, or whose wait threw or never ended, is
+    // released by the teardown ahead of the parts' close.
+    const setup = setUpRender(parts, checked.req, at, []);
+    let unanswered: typeof setup | null = setup;
+    cleanups.push(() => unanswered?.[Symbol.dispose]());
+    const settling = settleRequest(live.recorder, setup.view, at);
     return {
-      view: held.view,
+      view: setup.view,
       answer: async (): Promise<Frame> => {
-        using _held = held;
-        await landed(clock, held.view, stepMs);
+        await landed(clock, setup.view, stepMs);
         await settling.landed;
-        // The setup the daemon's request path makes, over this request.
-        const setup: RenderSetup = {
-          req,
-          at,
-          facts: [],
-          sessionId: req.sessionId,
-          entry: held.entry,
-          state: held.state,
-          view: held.view,
-          hintsError: null,
-          [Symbol.dispose]: () => {},
-        };
+        using _held = setup;
+        unanswered = null;
         const frame = drawForAnswer(parts, setup, settling.arrival).drawn.body;
         drawn.push(frame);
         return frame;
@@ -815,7 +838,7 @@ async function recordedRuns(): Promise<{
 }
 
 test("a session's shell and file sources, recorded live, replay with what each run read, with nothing read and nothing spawned", async () => {
-  const { s, configFile, file, liveFrames } = await recordedRuns();
+  const { configFile, file, liveFrames } = await recordedRuns();
   const liveText = liveFrames.map(textOf);
   expect(liveText).toEqual([
     expect.stringContaining(
