@@ -59019,10 +59019,9 @@ function insertTerm(ctx, anchor, relation) {
   artifacts.actions[pageKey] = { set: pageKey, int: true };
   const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
   const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
-  const closeOnPick = relation === "before";
   return {
     host: chromeSegName,
-    template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" (dict "closeOnPick" ${closeOnPick}) }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
+    template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
   };
 }
 function spliceContainer(node, ctx) {
@@ -70168,7 +70167,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.212.1";
+var PACKAGE_VERSION = "1.212.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -72054,10 +72053,18 @@ var applyLayoutOp2 = (sid, args, ctx) => {
   const home = originHome(ctx, origin);
   const placed2 = applyLayoutOp(editStore(ctx, sid), home, key, op);
   ctx.reloadConfig(origin);
-  const released = endedSessionKeys(
-    endedPlacements(before, ctx.configFor(origin)),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
-  ).filter((key2) => ctx.sessionState.get(sid, key2) !== null);
+  const after = ctx.configFor(origin);
+  const declared = new Set(ctx.gates.state.gateFor(after).listKeys());
+  const undeclared = ctx.gates.state.gateFor(before).listKeys().filter((key2) => !declared.has(key2));
+  const released = [
+    .../* @__PURE__ */ new Set([
+      ...endedSessionKeys(
+        endedPlacements(before, after),
+        ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
+      ),
+      ...undeclared
+    ])
+  ].filter((key2) => ctx.sessionState.get(sid, key2) !== null);
   for (const key2 of released) ctx.sessionState.clear(sid, key2);
   ctx.log(
     "info",

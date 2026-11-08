@@ -4,15 +4,22 @@
     {
       "version": "pr-695",
       "ref": "refs/pull/695/merge",
-      "sha": "05f6d4190e75d8d74b16bc9f83dcd78df03c9d5e",
-      "timestamp": "2026-11-08T20:29:21.168Z",
+      "sha": "1b30e85054b3a1f90e70c64a8ad90e93c70de2bd",
+      "timestamp": "2026-11-08T20:57:15.845Z",
       "commits": [
         {
-          "sha": "05f6d4190e75d8d74b16bc9f83dcd78df03c9d5e",
+          "sha": "1b30e85054b3a1f90e70c64a8ad90e93c70de2bd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T20:28:26Z",
-          "message": "Merge 042a517ebf8249b4a8260719d24824d63d336600 into 3f5670db72be5ec2abd20fa416f132125685c675\n"
+          "timestamp": "2026-11-08T20:56:16Z",
+          "message": "Merge 71c7debd7436698fc22a7e1a136ef6828f7a3066 into ea9f892021ce76328d938eacb9b73d3d35311e9d\n"
+        },
+        {
+          "sha": "71c7debd7436698fc22a7e1a136ef6828f7a3066",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T13:56:04-07:00",
+          "message": "fix(edit-chrome): a layout edit releases every state key it ends, so a leading-✚ pick lands without a click error (brandon-unfiled-3248.5bfl)\n\nThe leading ✚'s close-on-pick ran after the layout op had reloaded the config,\nwhen its key was no longer declared, so the state gate refused it and every\npick there showed a click error. The layout-op verb now releases, in the same\nclick, every session key the config declared before the edit and no longer\ndeclares: the leading library's key after a pick renames its gap, and every\nkey a removed placement's chrome held, which a later placement minted with the\nfreed id would otherwise inherit open. The per-gap close-on-pick is gone; the\ndefault-menu-bytes 'one + opened' entry returns to its links without it.\n"
         },
         {
           "sha": "042a517ebf8249b4a8260719d24824d63d336600",
