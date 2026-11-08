@@ -35,7 +35,15 @@ export function writeAtomicOn(
     disk.writeFileSync(tmp, text, { mode: fileMode, flush: true });
     disk.renameSync(tmp, file);
   } catch (e) {
-    disk.rmSync(tmp);
+    try {
+      disk.rmSync(tmp);
+    } catch (cleanup) {
+      // [LAW:no-silent-failure] The write's own failure is what the caller
+      // hears; a cleanup that fails too (a directory no longer searchable)
+      // rides on it as its `cause`, never in its place. A disk error carries
+      // no cause of its own, so the slot is free; one that did keeps it.
+      if (e instanceof Error && e.cause === undefined) e.cause = cleanup;
+    }
     throw e;
   }
 }
