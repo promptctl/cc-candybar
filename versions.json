@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "ada85603434124de78d6e549106c59efccbe463b",
+      "timestamp": "2026-11-08T14:46:03.651Z",
+      "commits": [
+        {
+          "sha": "ada85603434124de78d6e549106c59efccbe463b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:45:00-07:00",
+          "message": "fix(update-act): an act whose files can't be written is still ended after its budget (#694)\n\n* fix(update-act): an act whose files can't be written is still ended after its budget (brandon-unfiled-3248.7cay)\n\nA look now judges its spend before it reports a write it could not make:\nspendLook returns the spend and its fault instead of throwing, and counts\non from the later of the act's files and this daemon's own last look of\nthe same job (the reader's job identity decides \"same job\"). endJob\nsignals the group even when its timeout verdict can't be written, as a\nnew `unrecorded` arm of JobEnding, and the watch keeps why it ended that\nact so the warning still says so once the group is gone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(update-act): a fault reads the same at every look, a failed read keeps the shared spend, and cleanup never blocks an end (brandon-unfiled-3248.7cay)\n\nHigh review of PR #694:\n- A write fault names the published file and the errno code, not the\n  message that names a fresh staged path each look, so the change logger\n  dedupes it and the warning text holds still.\n- A spend file that can't be read is left in place and the look counts on\n  from this daemon's own; only bytes that can't be parsed are replaced, so a\n  transient read error no longer hands the act a fresh budget.\n- The latest look is the larger spend, ties going to the later look: a wall\n  clock set back no longer lets a stale copy win.\n- A staging is removed only when it is there: in a directory that can't be\n  searched the removal's EACCES replaced the verdict and nothing was ended.\n- An act whose files vanish before its end is logged, with its pid.\n- The unrecorded-end reason is keyed by job, not act number, and\n  error() reads it directly.\n- The verdict write's type is the one JobEnding derives from; the warning\n  prefix is spelled once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(update-act): a spend fault holds between looks, and the end's wording is spelled once\n\nMedium review of PR #694:\n- The spend look's fault is the watch's own value, set at each look, not\n  touchActs' read fault: a successful read between ticks (the restart hold's\n  running(), or act()) cleared it and the ⚠ blinked off.\n- An unreadable spend's fault no longer names where the look counted from,\n  which moved after the first look and made one fault read as two.\n- What the end did to the group is spelled once; the unrecorded reason is\n  the logged line.\n- The header says the act's files outrank the daemon's copy once they hold\n  a larger spend, as latestLook ranks.\n\nbrandon-unfiled-3248.7cay\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+        },
+        {
+          "sha": "56a5c61981df900d1c9d0cee98199d3a1f52182f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-08T14:27:30Z",
+          "message": "chore(release): set `package.json` to 1.211.2 [skip ci]\n\n## [1.211.2](https://github.com/promptctl/cc-candybar/compare/v1.211.1...v1.211.2) (2026-11-08)\n\n### Bug Fixes\n\n* **daemon:** the doctor stores, doctor edge and lane edge take the daemon's disk, so one daemon answers from one disk ([#697](https://github.com/promptctl/cc-candybar/issues/697)) ([eaa59b6](https://github.com/promptctl/cc-candybar/commit/eaa59b6d87c32073b040a97072a0fee0a6e048fc))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-699",
       "ref": "refs/pull/699/merge",
       "sha": "1ffe33763cfb9608690750ea9434627821002c57",
@@ -106,71 +128,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-08T07:26:13-07:00",
           "message": "fix(daemon): the lane edge takes the daemon's claude-input edge, so a daemon's claudeInput adapter reaches a lane's typing (candybar-testing-ihvy.izc.ubq)\n\nproductionLaneEdge built its own claude-input edge from the launcher, so a\ndaemon built over another claudeInput adapter still typed real input when a\nlane turned on. createDaemon now builds the claude-input edge once and hands\nthe same edge to the lane edge and to the click context, as it hands both\nedges its disk. With the production adapters the lane types through the same\nproductionClaudeInputEdge over the daemon's launcher as before.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-694",
-      "ref": "refs/pull/694/merge",
-      "sha": "10228845fbe69d834a4d95a41542d9a027656b13",
-      "timestamp": "2026-11-08T14:36:44.395Z",
-      "commits": [
-        {
-          "sha": "10228845fbe69d834a4d95a41542d9a027656b13",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T14:35:43Z",
-          "message": "Merge f05b96fdb552580199d8ad9d3332d1f886511aa3 into 56a5c61981df900d1c9d0cee98199d3a1f52182f\n"
-        },
-        {
-          "sha": "f05b96fdb552580199d8ad9d3332d1f886511aa3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:35:39-07:00",
-          "message": "Merge branch 'main' into brandon-unfiled-3248.7cay"
-        },
-        {
-          "sha": "334a96ec3e9d604e33a1f68456a265429678e560",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:22:30-07:00",
-          "message": "Merge branch 'main' into brandon-unfiled-3248.7cay"
-        },
-        {
-          "sha": "c1e8f8aad4e5f338f77c9660eb2cabc3498a51c8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T04:43:48-07:00",
-          "message": "fix(update-act): a spend fault holds between looks, and the end's wording is spelled once\n\nMedium review of PR #694:\n- The spend look's fault is the watch's own value, set at each look, not\n  touchActs' read fault: a successful read between ticks (the restart hold's\n  running(), or act()) cleared it and the ⚠ blinked off.\n- An unreadable spend's fault no longer names where the look counted from,\n  which moved after the first look and made one fault read as two.\n- What the end did to the group is spelled once; the unrecorded reason is\n  the logged line.\n- The header says the act's files outrank the daemon's copy once they hold\n  a larger spend, as latestLook ranks.\n\nbrandon-unfiled-3248.7cay\n"
-        },
-        {
-          "sha": "d1b1340ee39e094d69f9f3e8f39f6587efe67f34",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:33:16-07:00",
-          "message": "fix(update-act): a fault reads the same at every look, a failed read keeps the shared spend, and cleanup never blocks an end (brandon-unfiled-3248.7cay)\n\nHigh review of PR #694:\n- A write fault names the published file and the errno code, not the\n  message that names a fresh staged path each look, so the change logger\n  dedupes it and the warning text holds still.\n- A spend file that can't be read is left in place and the look counts on\n  from this daemon's own; only bytes that can't be parsed are replaced, so a\n  transient read error no longer hands the act a fresh budget.\n- The latest look is the larger spend, ties going to the later look: a wall\n  clock set back no longer lets a stale copy win.\n- A staging is removed only when it is there: in a directory that can't be\n  searched the removal's EACCES replaced the verdict and nothing was ended.\n- An act whose files vanish before its end is logged, with its pid.\n- The unrecorded-end reason is keyed by job, not act number, and\n  error() reads it directly.\n- The verdict write's type is the one JobEnding derives from; the warning\n  prefix is spelled once.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "be7b7b9a247b32d0a850198204517e488a7b800d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:19:15-07:00",
-          "message": "fix(update-act): an act whose files can't be written is still ended after its budget (brandon-unfiled-3248.7cay)\n\nA look now judges its spend before it reports a write it could not make:\nspendLook returns the spend and its fault instead of throwing, and counts\non from the later of the act's files and this daemon's own last look of\nthe same job (the reader's job identity decides \"same job\"). endJob\nsignals the group even when its timeout verdict can't be written, as a\nnew `unrecorded` arm of JobEnding, and the watch keeps why it ended that\nact so the warning still says so once the group is gone.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "eaa59b6d87c32073b040a97072a0fee0a6e048fc",
-      "timestamp": "2026-11-08T14:17:00.308Z",
-      "commits": [
-        {
-          "sha": "eaa59b6d87c32073b040a97072a0fee0a6e048fc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T07:15:55-07:00",
-          "message": "fix(daemon): the doctor stores, doctor edge and lane edge take the daemon's disk, so one daemon answers from one disk (#697)\n\n* fix(daemon): the doctor's stores, the doctor's edge and the lane edge take the daemon's disk (candybar-testing-ihvy.5zt)\n\nReview follow-up to #667. productionAdapters bound these three to the\nsystem disk while the daemon's inputs name its disk separately as\n`filesystem`, so an inputs bundle could describe a daemon over two disks.\nEach now takes the disk as a parameter, as storage already does, and the\ndaemon hands each one inputs.filesystem.\n\n* fix(daemon): the doctor-store comment claims only what the code does, and the two edges' disk is reads-only (candybar-testing-ihvy.5zt)\n\n* fix(daemon): the lane edge's disk comment says it never writes to the disk, not that it never writes (candybar-testing-ihvy.5zt)"
         }
       ]
     },
