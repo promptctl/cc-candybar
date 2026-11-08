@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-697",
+      "ref": "refs/pull/697/merge",
+      "sha": "593599157775478801833e83b31eabe53dc34726",
+      "timestamp": "2026-11-08T13:17:11.794Z",
+      "commits": [
+        {
+          "sha": "593599157775478801833e83b31eabe53dc34726",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:16:14-07:00",
+          "message": "Merge f9a5f3f236e9e5f3e8344e9edd2841b41e312ba4 into 10f03f8b92a7ea6f004ace540fcfaeb89e89cbac\n"
+        },
+        {
+          "sha": "f9a5f3f236e9e5f3e8344e9edd2841b41e312ba4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:15:38-07:00",
+          "message": "fix(daemon): the doctor's stores, the doctor's edge and the lane edge take the daemon's disk (candybar-testing-ihvy.5zt)\n\nReview follow-up to #667. productionAdapters bound these three to the\nsystem disk while the daemon's inputs name its disk separately as\n`filesystem`, so an inputs bundle could describe a daemon over two disks.\nEach now takes the disk as a parameter, as storage already does, and the\ndaemon hands each one inputs.filesystem.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-688",
       "ref": "refs/pull/688/merge",
       "sha": "455b614daf39d69fc3109f412292b2db1aeadbee",
