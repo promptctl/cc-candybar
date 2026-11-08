@@ -21,6 +21,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import JSON5 from "json5";
+import { systemFilesystem } from "../src/disk/system-filesystem";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const config = (source: string) =>
@@ -167,7 +169,15 @@ describe("a save under a preset that pins the field lands where it renders", () 
     const before = drafts(source, p);
     writeValues(
       { record: () => {}, logger: () => {} },
-      { path: file, above: [], repo: null, cwd: null, locs: locs() },
+      {
+        path: file,
+        above: [],
+        repo: null,
+        cwd: null,
+        locs: locs(),
+        disk: systemFilesystem,
+        memo: new InstalledLayerMemo(),
+      },
       before.map(({ target, value }) => [target, value] as const),
     );
     const after = readFileSync(file, "utf8");

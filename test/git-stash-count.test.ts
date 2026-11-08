@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { GitService } from "../src/segments/git";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 function run(cmd: string, cwd: string): string {
   return execSync(cmd, { cwd, stdio: "pipe", encoding: "utf8" });
@@ -34,7 +35,7 @@ function stashOnce(cwd: string, marker: string): void {
 }
 
 describe("stash count reads the refs/stash reflog", () => {
-  const git = new GitService(processLauncher);
+  const git = new GitService(processLauncher, systemFilesystem);
   let root: string;
   let repo: string;
   let worktree: string;

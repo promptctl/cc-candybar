@@ -15,6 +15,7 @@ import { GitService } from "../src/segments/git";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { systemTimekeeper } from "../src/time";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 function run(cmd: string, cwd: string): void {
   execSync(cmd, { cwd, stdio: "pipe" });
@@ -23,7 +24,7 @@ function run(cmd: string, cwd: string): void {
 describe("GitService outcome classification", () => {
   let root: string;
   let repo: string;
-  const svc = new GitService(processLauncher);
+  const svc = new GitService(processLauncher, systemFilesystem);
 
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), "candybar-git-outcome-"));
@@ -183,9 +184,13 @@ describe("GitService outcome classification", () => {
     );
     // The git the service launches inherits a global config of its own.
     const shadowed = new GitService(
-      systemLauncher({
-        inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
-      }, systemTimekeeper),
+      systemLauncher(
+        {
+          inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
+        },
+        systemTimekeeper,
+      ),
+      systemFilesystem,
     );
     try {
       const remotes = await shadowed.getRemotesAsync(repo);

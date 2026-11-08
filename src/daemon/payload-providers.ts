@@ -61,7 +61,7 @@ export function createPayloadProviders(opts: {
     home: opts.host.home,
     hostService: new HostService({ clock, logger, ledger }),
     gitProvider: new GitDataProvider({
-      inner: new GitService(launcher),
+      inner: new GitService(launcher, opts.watchers.filesystem),
       watchers: opts.watchers,
       clock,
       logger,

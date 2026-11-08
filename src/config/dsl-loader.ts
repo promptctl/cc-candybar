@@ -25,9 +25,10 @@
 // concern lives in its own `loader/` module (split by change-reason); the
 // re-exports below keep the import surface stable for every consumer.
 
-import fs from "node:fs";
 import JSON5 from "json5";
 import type { Locations } from "../daemon/paths.js";
+import type { FilesystemReads } from "../disk/filesystem.js";
+import { digestOf } from "../utils/plain.js";
 import {
   type DslConfig,
   type InsertCell,
@@ -99,6 +100,8 @@ import { validateNoNesting } from "./loader/nesting.js";
 import {
   applyPlugins,
   listedPlugins,
+  readDefinitions,
+  type ReadDefinition,
   droppedPluginNotice,
   type PluginContext,
   withDroppedPlacements,
@@ -209,7 +212,7 @@ export function loadConfig(
     ? noFile(dflt)
     : loadConfigSource(
         path,
-        fs.readFileSync(path, "utf-8"),
+        ctx.reads.readFileSync(path),
         dflt,
         ctx,
         allowedPalettes,
@@ -221,6 +224,8 @@ export function loadConfig(
 // that no plugin owns stands in naming the unnamed ones), and which definition
 // renders each plugin name.
 export interface LoadContext extends PluginContext {
+  // The disk the file's listed plugins are read from.
+  readonly reads: FilesystemReads;
   // [LAW:one-source-of-truth] The scope of the plugins the file lists, as
   // discovery found the file: `repo` for a repository's own config, `plugins`
   // for every other.
@@ -233,8 +238,9 @@ export interface LoadContext extends PluginContext {
 
 // A load with no session and nothing beneath the bundled default: a
 // `data: { checkout }` plugin drops, naming why.
-export function noProject(home: string): LoadContext {
+export function noProject(reads: FilesystemReads, home: string): LoadContext {
   return {
+    reads,
     scope: "plugins",
     repo: null,
     checkout: null,
@@ -265,7 +271,10 @@ export function loadConfigSource(
     const layer = applyPlugins(
       // [LAW:one-source-of-truth] The layer's scope, decided where the
       // layer was discovered, rides on every definition it lists.
-      listedPlugins(refs, path, ctx.scope, ctx.home),
+      readDefinitions(
+        ctx.reads,
+        listedPlugins(refs, path, ctx.scope, ctx.home),
+      ),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
       (c, plugin, replaces) =>
@@ -300,44 +309,60 @@ export function loadConfigSource(
   };
 }
 
-// [LAW:one-source-of-truth] The installed layer is a function of the
-// definitions' bytes, the project, the checkout, the base and the palettes,
-// so it is memoised on exactly those: a load with nothing installed changed
-// pays one stat per definition, not one reference check per plugin.
+// [LAW:no-shared-mutable-globals] The installed layer each checkout last
+// merged, held by one owner and handed to every load it runs: the render
+// cache's loads share one, and a one-shot load holds a fresh one. The layer is
+// a function of the definitions' texts, the project, the checkout, the base and
+// the palettes, so it is keyed on exactly those, and a load with nothing
+// installed changed reads each definition and checks no plugin again.
 // Per-plugin validation stays — it is what lets one plugin drop alone.
-const installedMemo = new WeakMap<
-  DslConfig,
-  Map<string, { readonly key: string; readonly layer: PluginLayer }>
->();
+export class InstalledLayerMemo {
+  readonly #byBase = new WeakMap<
+    DslConfig,
+    Map<string, { readonly key: string; readonly layer: PluginLayer }>
+  >();
 
-function installedLayer(
-  definitions: readonly PluginDefinition[],
-  ctx: PluginContext,
-  dflt: DslConfig,
-  allowedPalettes: ReadonlySet<string> | undefined,
-): PluginLayer {
-  const key = JSON.stringify([
-    [...(allowedPalettes ?? [])].sort(),
-    definitions.map((d) => [d.path, d.scope, statKey(d.path)]),
-  ]);
-  const byProject = installedMemo.get(dflt) ?? new Map();
-  installedMemo.set(dflt, byProject);
-  // Keyed on the checkout, not the working directory: every directory of one
-  // checkout reads the same data, and the next load after a `.git` appears
-  // above a directory reads the new checkout's. Nothing watches for that
-  // `.git`: an ancestor watch per session is the cost, a reload the remedy.
-  const slot = JSON.stringify([ctx.repo, ctx.checkout?.root ?? null]);
-  const hit = byProject.get(slot);
-  if (hit?.key === key) return hit.layer;
-  const layer = applyPlugins(
-    definitions,
-    ctx,
-    { config: dflt, rendering: new Map() },
-    (c, plugin, replaces) =>
-      checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes),
-  );
-  byProject.set(slot, { key, layer });
-  return layer;
+  layer(
+    definitions: readonly ReadDefinition[],
+    ctx: PluginContext,
+    dflt: DslConfig,
+    allowedPalettes: ReadonlySet<string> | undefined,
+  ): PluginLayer {
+    // [LAW:one-source-of-truth] The key is the text the merge takes, so a
+    // rewrite is a new key whatever its stat says.
+    const key = digestOf({
+      palettes: [...(allowedPalettes ?? [])].sort(),
+      definitions: definitions.map((d) => ({
+        path: d.path,
+        scope: d.scope,
+        read: d.read,
+      })),
+    });
+    const byProject = this.#byBase.get(dflt) ?? new Map();
+    this.#byBase.set(dflt, byProject);
+    // Keyed on the checkout, not the working directory: every directory of one
+    // checkout reads the same data, and the next load after a `.git` appears
+    // above a directory reads the new checkout's. Nothing watches for that
+    // `.git`: an ancestor watch per session is the cost, a reload the remedy.
+    const slot = JSON.stringify([ctx.repo, ctx.checkout?.root ?? null]);
+    const hit = byProject.get(slot);
+    if (hit?.key === key) return hit.layer;
+    const layer = applyPlugins(
+      definitions,
+      ctx,
+      { config: dflt, rendering: new Map() },
+      (c, plugin, replaces) =>
+        checkPlugin(
+          c,
+          plugin,
+          replaces,
+          "<installed plugins>",
+          allowedPalettes,
+        ),
+    );
+    byProject.set(slot, { key, layer });
+    return layer;
+  }
 }
 
 /**
@@ -349,29 +374,19 @@ function installedLayer(
 // [LAW:single-enforcer] The install's verdict is the loader's own, so a
 // definition the bar would drop is never installed.
 export function definitionProblems(
+  reads: FilesystemReads,
   definitions: readonly PluginDefinition[],
   dflt: DslConfig,
   checkout: Checkout,
   home: string,
 ): readonly DroppedPlugin[] {
   return applyPlugins(
-    definitions,
+    readDefinitions(reads, definitions),
     { repo: null, checkout, home },
     { config: dflt, rendering: new Map() },
     (c, plugin, replaces) =>
       checkPlugin(c, plugin, replaces, "<plugin install>", undefined),
   ).dropped;
-}
-
-// What a definition's bytes are, as cheaply as a stat says: a rewrite moves
-// its mtime, size or inode; one that cannot be seen is its own state.
-function statKey(file: string): string {
-  try {
-    const st = fs.statSync(file);
-    return `${st.ino}:${st.size}:${st.mtimeMs}`;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code ?? "unreadable";
-  }
 }
 
 /**
@@ -385,8 +400,10 @@ function statKey(file: string): string {
  * the first that fails is the error — so a broken file fails naming ITS path
  * and line, never the file above it.
  *
- * `read` is the one content read of each file — a writer proving the text it
- * is about to write passes that text for its own layer. `trace` hears each
+ * `reads` answers every question the load asks the disk: each layer's text,
+ * the checkout, the installed plugin roots and every definition — a writer
+ * proving the text it is about to write passes a disk that answers its own
+ * layer with that text. `memo` is its caller's (InstalledLayerMemo). `trace` hears each
  * layer's advisories before its validation runs, so a caller still holds them
  * when a layer throws; the throw itself names the file it is blamed on.
  *
@@ -395,27 +412,33 @@ function statKey(file: string): string {
  * takes.
  */
 export function loadConfigChain(
+  reads: FilesystemReads,
+  memo: InstalledLayerMemo,
   locs: Locations,
   chain: readonly ConfigLayer[],
   dflt: DslConfig,
   trace: ChainTrace,
   session: SessionDirs,
-  read: (path: string) => string = (p) => fs.readFileSync(p, "utf-8"),
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
   // [LAW:single-enforcer] The one place a session's working directory
   // becomes the checkout its plugins' data paths resolve against.
   const ctx: PluginContext = {
     repo: session.repo,
-    checkout: session.cwd === null ? null : checkoutOf(session.cwd),
+    checkout: session.cwd === null ? null : checkoutOf(reads, session.cwd),
     home: locs.homeDir,
   };
   // [LAW:one-source-of-truth] Installed plugins are the layer every file
   // merges over: bundled < installed < the chain's files (and what each
   // lists). A file names an installed plugin's segment exactly as it names a
   // bundled one.
-  const found = installedPlugins(locs, ctx.repo);
-  const merged = installedLayer(found.definitions, ctx, dflt, allowedPalettes);
+  const found = installedPlugins(reads, locs, ctx.repo);
+  const merged = memo.layer(
+    readDefinitions(reads, found.definitions),
+    ctx,
+    dflt,
+    allowedPalettes,
+  );
   const plugins = {
     ...merged,
     dropped: [...merged.dropped, ...found.strays],
@@ -431,10 +454,11 @@ export function loadConfigChain(
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path,
-      read(path),
+      reads.readFileSync(path),
       layers.at(-1)?.config ?? base,
       {
         ...ctx,
+        reads,
         // [LAW:one-source-of-truth] A layer's scope is where discovery found
         // it, carried here as data — never read off the file's name.
         scope,

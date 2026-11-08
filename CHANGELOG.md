@@ -1,3 +1,33 @@
+## [1.211.2](https://github.com/promptctl/cc-candybar/compare/v1.211.1...v1.211.2) (2026-11-08)
+
+### Bug Fixes
+
+* **daemon:** the doctor stores, doctor edge and lane edge take the daemon's disk, so one daemon answers from one disk ([#697](https://github.com/promptctl/cc-candybar/issues/697)) ([eaa59b6](https://github.com/promptctl/cc-candybar/commit/eaa59b6d87c32073b040a97072a0fee0a6e048fc))
+
+## [1.211.1](https://github.com/promptctl/cc-candybar/compare/v1.211.0...v1.211.1) (2026-11-08)
+
+### Bug Fixes
+
+* **watchers:** on macOS, named-entry watches are polled instead of subscribing fseventsd to whole trees ([#688](https://github.com/promptctl/cc-candybar/issues/688)) ([691cd17](https://github.com/promptctl/cc-candybar/commit/691cd171bcee77b6d424fd6a730ab3be4bd8d503))
+
+## [1.211.0](https://github.com/promptctl/cc-candybar/compare/v1.210.6...v1.211.0) (2026-11-08)
+
+### Features
+
+* **config:** a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt) ([#667](https://github.com/promptctl/cc-candybar/issues/667)) ([10f03f8](https://github.com/promptctl/cc-candybar/commit/10f03f8b92a7ea6f004ace540fcfaeb89e89cbac))
+
+## [1.210.6](https://github.com/promptctl/cc-candybar/compare/v1.210.5...v1.210.6) (2026-11-08)
+
+### Bug Fixes
+
+* **pricing:** entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3) ([#691](https://github.com/promptctl/cc-candybar/issues/691)) ([0a394d3](https://github.com/promptctl/cc-candybar/commit/0a394d3d93cccb884c28bb7b74e365fa6bef1695))
+
+## [1.210.5](https://github.com/promptctl/cc-candybar/compare/v1.210.4...v1.210.5) (2026-11-07)
+
+### Bug Fixes
+
+* **daemon:** a connection's state is one value, and past waiting it reads no more frames ([#689](https://github.com/promptctl/cc-candybar/issues/689)) ([b21e989](https://github.com/promptctl/cc-candybar/commit/b21e989ab734befd8acc182d17139d743372d040))
+
 ## [1.210.4](https://github.com/promptctl/cc-candybar/compare/v1.210.3...v1.210.4) (2026-11-07)
 
 ### Bug Fixes

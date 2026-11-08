@@ -51,6 +51,12 @@ export interface Watch {
 }
 
 export interface Filesystem {
+  // [LAW:types-are-the-program] What one directory watch subscribes to,
+  // however shallow it asks to be: the directory alone (Linux's inotify), or
+  // every file event in the tree beneath it (macOS's FSEvents, which has no
+  // depth; libuv drops the deeper events only after fseventsd has routed each
+  // one to the process).
+  readonly watchReach: "directory" | "tree";
   statSync(path: string): Stat;
   lstatSync(path: string): Stat;
   readlinkSync(path: string): string;
@@ -60,6 +66,19 @@ export interface Filesystem {
   // Opens the directory and closes it: the check that it can be listed,
   // without reading its entries.
   opendirSync(path: string): void;
+  readFileSync(path: string): string;
+  readdirSync(path: string): readonly DirectoryEntry[];
+  // `mode` is a new file's; `flush` syncs the bytes to the disk before the
+  // file is closed, so a rename after it never publishes a file still in the
+  // page cache.
+  writeFileSync(
+    path: string,
+    text: string,
+    options: { readonly mode?: number; readonly flush: boolean },
+  ): void;
+  renameSync(from: string, to: string): void;
+  // Removes a file; a path with nothing at it is no error.
+  rmSync(path: string): void;
   stat(path: string): Promise<Stat>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, text: string): Promise<void>;
@@ -72,3 +91,10 @@ export interface Filesystem {
     listener: WatchListener,
   ): Watch;
 }
+
+// [LAW:types-are-the-program] What a config load asks of the disk: reads, and
+// nothing that writes, so a load cannot change what it is reading.
+export type FilesystemReads = Pick<
+  Filesystem,
+  "readFileSync" | "readdirSync" | "statSync" | "lstatSync" | "realpathSync"
+>;

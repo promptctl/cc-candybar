@@ -39,6 +39,7 @@ import { NO_REPOS } from "./helpers/repo-gate";
 import { applyClick, clickUrl, recordRender, testVerbContext, clicking, effectLink } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 const SID = "s1";
 const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true, closed: () => {} };
@@ -75,7 +76,7 @@ function setup({ rawHistory = false } = {}) {
   const ctx: VerbContext = {
     ...testVerbContext(
       sessionState,
-      rawHistory ? new SettingsHistory(sessionState, () => {}) : undefined,
+      rawHistory ? new SettingsHistory(systemFilesystem, sessionState, () => {}) : undefined,
       EMPTY_DEFAULT,
       undefined,
       turns,

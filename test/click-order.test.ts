@@ -42,6 +42,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
 import { systemTimekeeper } from "../src/time";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const RULE = "─".repeat(60);
@@ -392,7 +393,7 @@ describe("a gather is a snapshot of what it read", () => {
   test("the re-gather asks the real rate limiter nothing twice", async () => {
     const launcher = systemLauncher({ inherited: process.env }, systemTimekeeper);
     let load = LOAD;
-    const real = productionEdge(launcher, () => load, HOST);
+    const real = productionEdge(launcher, () => load, HOST, systemFilesystem);
     const parked = gate();
     let daemons = 0;
     const { ctx, reports, sessionState } = setup();

@@ -42,7 +42,11 @@ import type { Gates } from "../daemon/foundations/gates.js";
 import { locations } from "../daemon/paths.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
-import { homeLayer, refuseDrops } from "../config/dsl-loader.js";
+import {
+  homeLayer,
+  InstalledLayerMemo,
+  refuseDrops,
+} from "../config/dsl-loader.js";
 import {
   loadChain,
   openView,
@@ -101,7 +105,7 @@ export function loadDemo({
   const sessionState = new SessionState(SINGLE_RUN);
   const gates = daemonGates();
   const locs = locations(world.host, world.home);
-  const repos = repoGateAt(stateDir, cwd);
+  const repos = repoGateAt(world.filesystem, stateDir, cwd);
   // [LAW:single-enforcer] The daemon's own load and settle: the advisories
   // come out of the one place every load composes them.
   const loaded = loadChain(
@@ -126,6 +130,8 @@ export function loadDemo({
       links,
       gates,
       stateDir,
+      filesystem: world.filesystem,
+      memo: new InstalledLayerMemo(),
     },
   );
   if (loaded.warning !== null) warn(loaded.warning);

@@ -538,7 +538,7 @@ describe("the bar's row and daemon-stats' line", () => {
         kind: "file-events",
         state: "delivering",
         message:
-          "file events unconfirmed since 2026-10-27T04:00:00.000Z: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded",
+          "file events unconfirmed since 2026-10-27T04:00:00.000Z: the probe written to test them has not been heard yet, so what refreshes on file events may have missed a change made since",
       },
     ]);
   });
@@ -551,7 +551,7 @@ describe("the bar's row and daemon-stats' line", () => {
         kind: "file-events",
         state: "stalled",
         message:
-          "file events stopped at 2026-10-27T04:00:00.000Z; the OS has delivered none since, not even for a file the daemon wrote to test it, so an edit to the config will not reload until they resume",
+          "file events stopped at 2026-10-27T04:00:00.000Z; the OS has delivered none since, not even for a file the daemon wrote to test it, so nothing that refreshes on file events will refresh until they resume",
       },
     ]);
     const diagnostics = collectDiagnostics(

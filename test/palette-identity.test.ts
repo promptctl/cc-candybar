@@ -68,7 +68,11 @@ const VIEWS: readonly View[] = [
  * every one the bundled bar draws is a palette role (`warning`, `error`), and
  * an authored colour that is not belongs on this list.
  */
-function grounds({ rows }: Frame): { readonly ch: string; readonly at: string; readonly bg: ColorSpec }[] {
+function grounds({ rows }: Frame): {
+  readonly ch: string;
+  readonly at: string;
+  readonly bg: ColorSpec;
+}[] {
   return rows.flatMap(({ runs }, row) => {
     // Columns counted along the row, so two depths that split one row into
     // different runs place it alike.

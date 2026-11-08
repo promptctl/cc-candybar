@@ -342,7 +342,9 @@ export function setUpRender(
     hookData: {
       ...arrived.hookData,
       ...(dir !== undefined &&
-        path.isAbsolute(dir) && { location: checkoutLocation(dir) }),
+        path.isAbsolute(dir) && {
+          location: checkoutLocation(parts.watcherRegistry.filesystem, dir),
+        }),
     },
   };
   const hintsError = requestFacts(req, at, facts, parts.rendererName);

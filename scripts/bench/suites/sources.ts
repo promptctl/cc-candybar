@@ -59,7 +59,8 @@ const gitBenchmark = ([
     try {
       const repo = path.join(root, "repo");
       makeRepo(repo, shape);
-      const service = new GitService(processWorld().launcher);
+      const world = processWorld();
+      const service = new GitService(world.launcher, world.filesystem);
       const ms = await repeat(plan.samples, async () => {
         const info = await service.getGitInfo(repo, EVERYTHING);
         // [LAW:no-silent-failure] A read that failed, or saw a tree other

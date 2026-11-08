@@ -9,7 +9,8 @@
 // reads it in the daemon's answer.
 
 import type { Asked } from "./checks.js";
-import { stateFile, type StateFile } from "./state-file.js";
+import { stateFile, type StateFile } from "../disk/state-file.js";
+import type { Filesystem } from "../disk/filesystem.js";
 
 // [LAW:parse-dont-validate] The document as the terminals clicked from — each
 // its sighting (`sightingOf`, src/doctor/terminal.ts).
@@ -29,6 +30,13 @@ export const withClicked = (
   clicked.includes(sighting) ? clicked : [...clicked, sighting];
 
 export const fileClickedTerminals = (
+  disk: Filesystem,
   dir: string,
 ): StateFile<readonly string[]> =>
-  stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
+  stateFile(
+    disk,
+    dir,
+    "doctor-clicked-terminals.json",
+    [],
+    parseClickedTerminals,
+  );
