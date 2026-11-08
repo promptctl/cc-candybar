@@ -1379,19 +1379,30 @@ export function readJobEnd(status: string): JobEnd | null {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text)}`);
 }
 
-// What `endJob` did: whether the launcher's verdict is the one that stands, and
-// whether the group took the SIGTERM. Only a group that took it gets the SIGKILL,
-// since an id that answered nothing may no longer be the job's by the grace's end.
-export interface JobEnding {
-  readonly stands: boolean;
-  readonly signalled: boolean;
-}
+// [LAW:types-are-the-program] What `endJob` did. `stands` is the launcher's
+// verdict written; `preceded`, the job's own landed first; `unrecorded`, the
+// verdict could not be written, and the group is ended all the same, since a
+// verdict's write is no condition of a job's end; `gone`, the job's files were
+// removed, so nothing was signalled and the caller says so. `signalled` says
+// whether the group took the SIGTERM. Only a group that took it gets the
+// SIGKILL, since an id that answered nothing may no longer be the job's by the
+// grace's end.
+type VerdictWrite =
+  | { readonly verdict: "gone" }
+  | { readonly verdict: "stands" | "preceded" }
+  | { readonly verdict: "unrecorded"; readonly error: string };
+
+export type JobEnding =
+  | Extract<VerdictWrite, { verdict: "gone" }>
+  | (Exclude<VerdictWrite, { verdict: "gone" }> & {
+      readonly signalled: boolean;
+    });
 
 // Ends a job's group with the timeout's own escalation, and gives it a verdict
 // of the launcher's unless its own landed first: the first verdict stands, and
 // a group that outlives its verdict (a child the program left) is ended all the
-// same. A status whose directory is gone belongs to a job whose files were
-// removed once it had ended, so there is nothing left to end.
+// same. A status whose directory is gone names no job left to prove the group
+// by, so the group is not signalled.
 function endJob(
   spawner: Spawner,
   clock: Pick<Timekeeper, "after">,
@@ -1399,24 +1410,8 @@ function endJob(
   status: string,
   end: JobEnd,
 ): JobEnding {
-  const staged = stagedPath(status);
-  try {
-    writeFileSync(staged, `${formatJobEnd(end)}\n`);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return { stands: false, signalled: false };
-    }
-    throw err;
-  }
-  let stands = true;
-  try {
-    linkSync(staged, status);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-    stands = false;
-  } finally {
-    rmSync(staged, { force: true });
-  }
+  const verdict = writeVerdict(status, end);
+  if (verdict.verdict === "gone") return verdict;
   const signalled = spawner.signalJob(pid, "SIGTERM");
   if (signalled) {
     clock.after(
@@ -1427,7 +1422,32 @@ function endJob(
       },
     );
   }
-  return { stands, signalled };
+  return { ...verdict, signalled };
+}
+
+// The verdict's write: staged, then linked, so the first verdict stands. The
+// error names the status and the code, not the message: that names the
+// staging, a new path each try.
+function writeVerdict(status: string, end: JobEnd): VerdictWrite {
+  const staged = stagedPath(status);
+  try {
+    writeFileSync(staged, `${formatJobEnd(end)}\n`);
+    linkSync(staged, status);
+    return { verdict: "stands" };
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return { verdict: "gone" };
+    if (code === "EEXIST") return { verdict: "preceded" };
+    return {
+      verdict: "unrecorded",
+      error: `${status}: ${code ?? (err as Error).message}`,
+    };
+  } finally {
+    // Only a staging that is there is removed: a directory that can't be
+    // searched, where none could be staged, answers a removal with EACCES, a
+    // throw that would stand in for the verdict and end nothing.
+    if (existsSync(staged)) rmSync(staged, { force: true });
+  }
 }
 
 // [LAW:one-type-per-behavior] One owner's launches. Each form is one lifetime
