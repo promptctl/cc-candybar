@@ -4,15 +4,22 @@
     {
       "version": "pr-690",
       "ref": "refs/pull/690/merge",
-      "sha": "3f42fbb28c0425fc66cd1d0cf31fbfc57ce94e58",
-      "timestamp": "2026-11-08T21:19:45.653Z",
+      "sha": "d028237252c7ad8f1a7171bcd16837c8c180e531",
+      "timestamp": "2026-11-08T21:25:46.983Z",
       "commits": [
         {
-          "sha": "3f42fbb28c0425fc66cd1d0cf31fbfc57ce94e58",
+          "sha": "d028237252c7ad8f1a7171bcd16837c8c180e531",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T21:18:46Z",
-          "message": "Merge 1ade44ca4db05c9c5c4d0730a59d5e2aff79cff9 into db0b16eb6e3fcf6352d98a6009faa5e544dc9473\n"
+          "timestamp": "2026-11-08T21:24:49Z",
+          "message": "Merge 3055ebe5bead70e67dd1f32d930d19b2bb473e39 into db0b16eb6e3fcf6352d98a6009faa5e544dc9473\n"
+        },
+        {
+          "sha": "3055ebe5bead70e67dd1f32d930d19b2bb473e39",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:24:36-07:00",
+          "message": "docs(git): the git read's comment says check reads no git, and only the demo honours its invoking shell (brandon-unfiled-3248.i3ek)\n"
         },
         {
           "sha": "1ade44ca4db05c9c5c4d0730a59d5e2aff79cff9",
@@ -63,42 +70,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-08T20:29:43Z",
           "message": "chore(release): set `package.json` to 1.212.2 [skip ci]\n\n## [1.212.2](https://github.com/promptctl/cc-candybar/compare/v1.212.1...v1.212.2) (2026-11-08)\n\n### Bug Fixes\n\n* **daemon:** the lane edge takes the daemon's claude-input edge (candybar-testing-ihvy.izc.ubq) ([#698](https://github.com/promptctl/cc-candybar/issues/698)) ([3f5670d](https://github.com/promptctl/cc-candybar/commit/3f5670db72be5ec2abd20fa416f132125685c675))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-693",
-      "ref": "refs/pull/693/merge",
-      "sha": "08ad4336c52ac715c55c200249927c406ae463bd",
-      "timestamp": "2026-11-08T11:52:15.228Z",
-      "commits": [
-        {
-          "sha": "08ad4336c52ac715c55c200249927c406ae463bd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T11:51:11Z",
-          "message": "Merge f60293291818464257a2743cd77c7ed62cb4b7a4 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
-        },
-        {
-          "sha": "f60293291818464257a2743cd77c7ed62cb4b7a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T04:50:11-07:00",
-          "message": "fix(watchers): a probe that sees no ctime move gives no verdict, every probe logs where it is made, and check judges folders by its own probe (brandon-unfiled-3248.0463)\n\n- No ctime movement inside the bound is no evidence either way, so the\n  probe answers unprobed with the reason, logged as a warning, instead\n  of supplied.\n- probeBirthtimeIn takes the process's logger and logs the verdict\n  itself, so the daemon, the page, the demo and the test daemon all\n  report it from one place; the server's own line is gone.\n- prepareConfig (check, gallery) builds its watch registry over its own\n  probed disk, the one production watch owner left on the unprobed one.\n- package.json devEngines states the repository's Node floor, which\n  jest's module.registerHooks needs (22.15 / 23.5), apart from the\n  package's runtime engines.\n\nbrandon-unfiled-3248.0463\n"
-        },
-        {
-          "sha": "d58dd3af1b13c8f923f6c452b6fba1720c81cc00",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:34:00-07:00",
-          "message": "fix(watchers): the daemon probes birth time at boot, in its state directory, and builds its disk over the verdict (brandon-unfiled-3248.0463)\n\nThe probe ran ambiently on any process's first stat, on the real clock and\nin the spawning shell's TMPDIR, behind two disabled lint rules. A process\nmain now probes once with its own clock in a folder it owns, logs the\nverdict (warn when unprobed), and hands the daemon a disk built over it; no\nCLI process or client tick pays for a probe. Jest's global hooks resolve a\n`.js` specifier to its TypeScript source as a test's registry does, so src\nkeeps one import spelling.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "36848c09d445bf8d7a1ce702698f8c157d6233c0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:17:14-07:00",
-          "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
