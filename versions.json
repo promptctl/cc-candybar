@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "691cd171bcee77b6d424fd6a730ab3be4bd8d503",
+      "timestamp": "2026-11-08T13:45:48.444Z",
+      "commits": [
+        {
+          "sha": "691cd171bcee77b6d424fd6a730ab3be4bd8d503",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:44:49-07:00",
+          "message": "fix(watchers): on macOS, named-entry watches are polled instead of subscribing fseventsd to whole trees (#688)\n\n* fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n\n* fix(file-events): the stall row names no consumer, since a polled config name rides no file event (brandon-unfiled-3248.iywk)"
+        },
+        {
+          "sha": "3b21a55b949237b11e1b184774041ed3e7b34600",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-08T13:20:03Z",
+          "message": "chore(release): set `package.json` to 1.211.0 [skip ci]\n\n## [1.211.0](https://github.com/promptctl/cc-candybar/compare/v1.210.6...v1.211.0) (2026-11-08)\n\n### Features\n\n* **config:** a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt) ([#667](https://github.com/promptctl/cc-candybar/issues/667)) ([10f03f8](https://github.com/promptctl/cc-candybar/commit/10f03f8b92a7ea6f004ace540fcfaeb89e89cbac))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-697",
       "ref": "refs/pull/697/merge",
       "sha": "f4dd61d56e64a82793defb3807376ed5de8bd413",
@@ -27,42 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-08T06:15:38-07:00",
           "message": "fix(daemon): the doctor's stores, the doctor's edge and the lane edge take the daemon's disk (candybar-testing-ihvy.5zt)\n\nReview follow-up to #667. productionAdapters bound these three to the\nsystem disk while the daemon's inputs name its disk separately as\n`filesystem`, so an inputs bundle could describe a daemon over two disks.\nEach now takes the disk as a parameter, as storage already does, and the\ndaemon hands each one inputs.filesystem.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-688",
-      "ref": "refs/pull/688/merge",
-      "sha": "30f2695944dce5f1dc378da4039b3cf3abdaeb86",
-      "timestamp": "2026-11-08T13:38:55.059Z",
-      "commits": [
-        {
-          "sha": "30f2695944dce5f1dc378da4039b3cf3abdaeb86",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T13:37:52Z",
-          "message": "Merge 97d9d076cd167fc14f19af1551ecbe7c7edcd95d into 3b21a55b949237b11e1b184774041ed3e7b34600\n"
-        },
-        {
-          "sha": "97d9d076cd167fc14f19af1551ecbe7c7edcd95d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:37:48-07:00",
-          "message": "Merge branch 'main' into fix/fsevents-named-poll"
-        },
-        {
-          "sha": "051ff3dad1e77204adaa60e01b1f759ca0142f42",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:03:46-07:00",
-          "message": "fix(file-events): the stall row names no consumer, since a polled config name rides no file event (brandon-unfiled-3248.iywk)\n"
-        },
-        {
-          "sha": "0c851cdc4e4262844b48feed48a6536d1aeabfa0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:15:32-07:00",
-          "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
         }
       ]
     },
@@ -127,28 +113,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:14:46-07:00",
           "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "10f03f8b92a7ea6f004ace540fcfaeb89e89cbac",
-      "timestamp": "2026-11-08T13:09:03.862Z",
-      "commits": [
-        {
-          "sha": "10f03f8b92a7ea6f004ace540fcfaeb89e89cbac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:08:04-07:00",
-          "message": "feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt) (#667)\n\n* feat(config): a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt)\n\nEvery read a config load makes goes through the FilesystemReads it is\nhanded: the answers book, discovery, worktree links, plugin folders, each\nlayer and each definition. readConfigLoad (src/config/load.ts) is the load\nas a value; the render cache builds state from it. Each definition is read\nonce per load, and the installed-plugin memo is an owned value keyed on\nthe texts, not module state keyed on a stat. The answers book's read moves\ninto Config, the state-file store into src/disk. Repo-approval cases move\nto test/unit over the fake. Ten files leave FS_READERS; Config gets an\nimport rule.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(config): a click's proof shares the render cache's installed layers and reads its home's disk (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the installed-layer memo its loads share; the render\n  cache lends its own through the verb context, so a click's proof checks no\n  plugin the bar's last load already checked. The memo keys on definition\n  text, so a lent memo serves no layer the borrower's disk does not hold.\n- presence() reads ENOTDIR as absent, as the stat it replaced did: a path\n  through a regular file holds nothing. The filesystem contract pins ENOTDIR.\n- A click reads its home's text and the layers above on the disk its proof\n  loads; config-file-store leaves FS_READERS.\n- The lane edge's fileExists asks the same disk as its presence.\n- stateFromLoad folds into loadFromDisk; keyLoad is module-private.\n\n* fix(config): a click writes its home on the disk it read and proved; the book's folder is absent as presence says (candybar-testing-ihvy.5zt)\n\n- ConfigHome carries the click's writable disk; the commit writes through it\n  (writeAtomicOn), so a click's read, proof and write are one disk's. Undo\n  keeps its own system-disk pair until the settings history takes a disk.\n- bookIsFiled asks presence(): a book folder that is a regular file holds no\n  book, and the loose book is read.\n- holdsGit asks presence() and marks its no-silent-failure exception; the\n  ascent carrying the failure is candybar-testing-ihvy.izc.sv9.\n\n* fix(config): undo puts a click's text back on the disk the click wrote; a write's stat error is never a cleanup's (candybar-testing-ihvy.5zt)\n\n- The settings history takes the daemon's disk, and the config text read and\n  write take a disk: a click, its proof, its write and its undo are one\n  disk's. config-file-store leaves the systemFilesystem owners.\n- writeAtomicOn takes the replaced file's mode before the tmp exists, so a\n  stat that fails is the error the caller sees.\n- config.md: ENOTDIR counts as absent beside ENOENT.\n\n* fix(config): absent is presence's answer for plugin roots, the port's rm speaks errno, and a daemon's journal and answers keep to one disk and one read (candybar-testing-ihvy.5zt)\n\n- A plugin root behind a regular file lists as empty, as presence calls it\n  absent; a root that is itself a file is still named unlistable.\n- The system disk's rmSync of a directory throws EISDIR, as the fake does,\n  and the contract asserts the code.\n- The undo journal is kept on the daemon's own disk: storage is built over\n  the daemon's Filesystem, and settings-history leaves FS_READERS.\n- The answers store reads as every load reads them and files into the\n  folder, one read path instead of a second loose-book branch.\n- The sources bench takes its disk from the process world.\n\ncandybar-testing-ihvy.5zt\n\n* fix(config): the rebased parts and tests carry the port onto main's render origin; an answer the loose book holds writes nothing (candybar-testing-ihvy.5zt)\n\n- The daemon parts the worker tests build (from main) take the disk: the\n  settings history, the lane edge and the click context's filesystem and\n  installed layers, as the daemon wires them.\n- The moved unit cases build a ReloadedEntry by its origin.\n- The answers book's comments say what filing does: the first answer that\n  changes the book writes it into the folder; one already held writes\n  nothing, as with every state file.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\ncandybar-testing-ihvy.5zt\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        },
-        {
-          "sha": "600ecfad0d88530c307e642fa2c302f67f99d326",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-08T12:38:31Z",
-          "message": "chore(release): set `package.json` to 1.210.6 [skip ci]\n\n## [1.210.6](https://github.com/promptctl/cc-candybar/compare/v1.210.5...v1.210.6) (2026-11-08)\n\n### Bug Fixes\n\n* **pricing:** entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3) ([#691](https://github.com/promptctl/cc-candybar/issues/691)) ([0a394d3](https://github.com/promptctl/cc-candybar/commit/0a394d3d93cccb884c28bb7b74e365fa6bef1695))\n"
         }
       ]
     },
