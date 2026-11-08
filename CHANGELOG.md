@@ -1,3 +1,17 @@
+## [1.212.0](https://github.com/promptctl/cc-candybar/compare/v1.211.3...v1.212.0) (2026-11-08)
+
+### ⚠ BREAKING CHANGES
+
+* **colour:** the keptOn template function is removed (use
+readableOn fg bg ratio instead), and roleTextOn accepts only the
+semantic roles error, warning and success.
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+### Bug Fixes
+
+* **colour:** the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g) ([#696](https://github.com/promptctl/cc-candybar/issues/696)) ([8dad5f4](https://github.com/promptctl/cc-candybar/commit/8dad5f4a185cb522babdc3e982a38cf82eeb3290))
+
 ## [1.211.3](https://github.com/promptctl/cc-candybar/compare/v1.211.2...v1.211.3) (2026-11-08)
 
 ### Bug Fixes
