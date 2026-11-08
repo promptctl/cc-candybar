@@ -3,11 +3,13 @@ import { get } from "node:https";
 import { URL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
+import { computed, observable, runInAction } from "mobx";
 import type { Timekeeper } from "../time";
 import { changeLogger, type DaemonLogger } from "../utils/logger";
 import type { PrunedRaw } from "../utils/claude.js";
 import { stagedPath } from "../utils/staged-path.js";
 import { backedOffMs, type Every } from "../utils/period";
+import type { TokenBreakdown } from "./session";
 
 // Every model's rates, by model id.
 export type PriceTable = Readonly<Record<string, ModelPricing>>;
@@ -20,6 +22,9 @@ export interface ModelPricing {
   cache_read: number;
   output: number;
 }
+// [LAW:one-source-of-truth] The model an entry naming none is priced as, and
+// the rates a model the table does not know falls back on.
+const DEFAULT_MODEL_ID = "claude-sonnet-4-5-20250929";
 const OFFLINE_PRICING_DATA: PriceTable = {
   "claude-haiku-4-5-20251001": {
     name: "Claude Haiku 4.5",
@@ -148,16 +153,26 @@ const OFFLINE_PRICING_DATA: PriceTable = {
 // an adapter over its own closing signal, so a load in flight at the close
 // ends with the close, and a daemon under test is handed the bundled table and
 // reaches no network.
+//
+// [LAW:one-source-of-truth] A price is read, never stored: the usage store
+// keeps each entry's tokens by model and prices them with `table()` at the
+// moment of the read, so a table that lands after entries were folded (a
+// daemon that started offline) prices those entries too, in the turn it lands
+// and with no transcript read again.
 export interface Pricing {
-  // [LAW:no-silent-failure] Never rejects: a load that cannot reach a table
-  // prices by the table held, or by the bundled rates before any landed, and
-  // says why on the owner's log.
-  table(): Promise<PriceTable>;
+  // What prices now: the last table that landed, or the bundled rates before
+  // any has. Observable, so a derivation over it is recomputed in the turn a
+  // table lands.
+  table(): PriceTable;
+  // [LAW:effects-at-boundaries] The one effect, apart from the read: a load
+  // starts when what is held is due. A request's refresh asks once a price
+  // is owed; a read never does, so a derivation starts nothing.
+  ask(): void;
 }
 
 // The bundled rates, with no I/O.
 export function offlinePricing(): Pricing {
-  return { table: async () => OFFLINE_PRICING_DATA };
+  return { table: () => OFFLINE_PRICING_DATA, ask: () => {} };
 }
 
 const PRICING_URL = new URL(
@@ -210,10 +225,6 @@ type Held = Landed | Failed;
 const lastLanded = (held: Held | null): Landed | null =>
   held === null ? null : held.kind === "landed" ? held : held.last;
 
-// The bundled rates price until a table lands.
-const tableOf = (held: Held | null): PriceTable =>
-  lastLanded(held)?.table ?? OFFLINE_PRICING_DATA;
-
 // [LAW:one-source-of-truth] Of two tables that landed, the one read later: the
 // disk copy and what the owner holds are both landings, and a copy another
 // daemon wrote may be the newer, or the older when this owner's write failed.
@@ -233,39 +244,68 @@ const standsMs = (failures: number): number =>
 const due = (held: Held, now: number): boolean =>
   held.at + standsMs(failuresOf(held)) <= now;
 
-// [LAW:single-enforcer] One load per owner, however many entries ask while it
-// is out: every un-costed entry of every fold awaits the same table, so a cold
-// cache costs one fetch and one disk write, not one per entry.
+// [LAW:single-enforcer] One load per owner, however many ask while it is out,
+// so a cold cache costs one fetch and one disk write.
 // [LAW:dataflow-not-control-flow] Every ask takes the same step: the one load
-// starts when what is held is due, and the ask is answered with what is held.
-// Before anything settled the ask awaits that load; afterwards it answers at
-// once and the load lands behind it, so neither a day's end nor a retry stalls
-// a fold, and a load that lands nothing leaves the last table standing.
+// starts when what is held is due, and lands behind the reads, which answer
+// what is held: the copy on disk from the owner's start, the bundled rates
+// while there is none, and after a load that lands nothing, the last table
+// standing. Nothing waits for a load, since what a landing changes is re-read
+// where it is priced.
 // [LAW:no-ambient-temporal-coupling] No timer is armed: the retry is the next
 // ask after the due moment, so the close has nothing to cancel.
+// [LAW:one-source-of-truth] What is held is the one observable; the table is
+// derived from it on each read.
 export function livePricing(owner: LiveOwner): Pricing {
-  let held: Held | null = null;
-  let loading: Promise<Held | null> | null = null;
+  const held = observable.box<Held | null>(null, { deep: false });
+  // [LAW:one-source-of-truth] The landing the table is read off, told apart by
+  // its moment and not its object, so a derivation over the table moves only
+  // when a table does: a load that lands nothing, and a refresh that finds the
+  // day's copy already on disk, each settle a holding whose last landing is
+  // the one already priced by, read from disk again as a new object. A machine
+  // with no network retries once per backoff, and a retry prices nothing again.
+  const landed = computed(() => lastLanded(held.get()), {
+    equals: (a, b) => a?.at === b?.at,
+  });
+  // [LAW:no-silent-failure] What a load settled is held. A load that rejects,
+  // against its contract, holds nothing new and is said in the owner's own
+  // log, so it never depends on the hosting process handling a rejection: the
+  // demo installs no handler, and an unhandled one would end it.
+  const settle = (load: Promise<Held | null>): Promise<void> =>
+    load
+      .then((settled) => runInAction(() => held.set(settled)))
+      .catch((e: unknown) => {
+        owner.log("error", `pricing load rejected: ${String(e)}`);
+      });
+  // [LAW:effects-at-boundaries] The copy on disk is read as the owner starts,
+  // so a daemon's first frames are priced by it, not by the bundled rates,
+  // however long its first fold runs. Reading it fetches nothing: whether a
+  // fetch is owed stays the asker's. Every load follows it, so it never
+  // replaces what a load settled.
+  const primed = settle(readDisk(owner));
+  let loading: Promise<void> | null = null;
   // [LAW:one-type-per-behavior] A load that lands nothing is said once per
   // backoff: the line names the backoff, so it changes while the backoff grows
   // and falls silent at the ceiling, where a machine with no network would
   // otherwise say the same thing every hour for as long as it stays offline.
   const sayNotLoaded = changeLogger(owner.log);
   return {
-    table: () => {
-      const owed = held === null || due(held, owner.clock.now());
-      if (owed && !owner.closing.aborted) {
-        loading ??= loadHeld(owner, held, sayNotLoaded).then((settled) => {
-          held = settled;
+    // The bundled rates price until a table lands.
+    table: () => landed.get()?.table ?? OFFLINE_PRICING_DATA,
+    ask: () => {
+      const prev = held.get();
+      const owed = prev === null || due(prev, owner.clock.now());
+      if (!owed || owner.closing.aborted) return;
+      // [LAW:dataflow-not-control-flow] The one load out is let go however it
+      // ends, so after a load that rejects the next ask starts another, never
+      // a daemon priced by the bundled rates for its whole life. It loads from
+      // what the disk copy left held, so an ask before the copy is read finds
+      // the day's copy and fetches nothing.
+      loading ??= primed
+        .then(() => settle(loadHeld(owner, held.get(), sayNotLoaded)))
+        .finally(() => {
           loading = null;
-          return settled;
         });
-      }
-      if (held !== null) return Promise.resolve(tableOf(held));
-      // Nothing settled and no load out: the owner closed before any did.
-      return loading === null
-        ? Promise.resolve(OFFLINE_PRICING_DATA)
-        : loading.then(tableOf);
     },
   };
 }
@@ -283,7 +323,11 @@ async function loadHeld(
   sayNotLoaded: ReturnType<typeof changeLogger>,
 ): Promise<Held | null> {
   const copy = await readDisk(owner);
-  if (copy !== null && !due(copy, owner.clock.now())) return copy;
+  // The copy stands for the day, but a table this owner holds may be the newer
+  // landing: its own disk write can have failed while a copy another daemon
+  // wrote is older than what it fetched.
+  if (copy !== null && !due(copy, owner.clock.now()))
+    return later(copy, lastLanded(prev));
   const landed = await fetchLanded(owner).catch((e: unknown) => {
     owner.log("error", `pricing load threw: ${String(e)}`);
     return null;
@@ -548,7 +592,7 @@ function modelPricingOf(modelId: string, allPricing: PriceTable): ModelPricing {
   }
 
   return (
-    allPricing["claude-sonnet-4-5-20250929"] || {
+    allPricing[DEFAULT_MODEL_ID] || {
       name: `${modelId} (Unknown Model)`,
       input: 3.0,
       cache_write_5m: 3.75,
@@ -559,51 +603,31 @@ function modelPricingOf(modelId: string, allPricing: PriceTable): ModelPricing {
   );
 }
 
-// [LAW:dataflow-not-control-flow] An entry's cost is its usage at its model's
-// rates in the table: a pure function of the two.
-export function costOf(table: PriceTable, entry: PrunedRaw): number {
-  const usage = entry.message?.usage;
-  if (!usage) {
-    return 0;
-  }
-
-  const pricing = modelPricingOf(modelIdOf(entry), table);
-
-  const inputTokens = usage.input_tokens || 0;
-  const outputTokens = usage.output_tokens || 0;
-  const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-  const cacheReadTokens = usage.cache_read_input_tokens || 0;
-
-  const inputCost = (inputTokens / 1_000_000) * pricing.input;
-  const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  const cacheReadCost = (cacheReadTokens / 1_000_000) * pricing.cache_read;
-  const cacheCreationCost =
-    (cacheCreationTokens / 1_000_000) * pricing.cache_write_5m;
-
-  return inputCost + outputCost + cacheCreationCost + cacheReadCost;
+// [LAW:dataflow-not-control-flow] A model's tokens at its rates in the table:
+// a pure function of the three. The model is resolved against the table here,
+// at the price, so a table that lands with the model under another key, or
+// with the model at all, prices tokens folded before it landed.
+export function priceOf(
+  table: PriceTable,
+  modelId: string,
+  tokens: TokenBreakdown,
+): number {
+  const rates = modelPricingOf(modelId, table);
+  return (
+    (tokens.input / 1_000_000) * rates.input +
+    (tokens.output / 1_000_000) * rates.output +
+    (tokens.cacheCreation / 1_000_000) * rates.cache_write_5m +
+    (tokens.cacheRead / 1_000_000) * rates.cache_read
+  );
 }
 
-function modelIdOf(entry: Record<string, unknown>): string {
-  if (entry.model && typeof entry.model === "string") {
-    return entry.model;
-  }
-
-  const message = entry.message as Record<string, unknown> | undefined;
-  if (message?.model) {
-    const model = message.model;
-    if (typeof model === "string") {
-      return model;
-    }
-    const modelObj = model as Record<string, unknown> | undefined;
-    return (
-      (typeof modelObj?.id === "string" ? modelObj.id : null) ||
-      "claude-sonnet-4-5-20250929"
-    );
-  }
-
-  if (entry.model_id && typeof entry.model_id === "string") {
-    return entry.model_id;
-  }
-
-  return "claude-sonnet-4-5-20250929";
+// The model an entry's tokens are priced as, by the key the fold stores them
+// under, so the table's lookup above sees the same id for every entry.
+export function modelIdOf(entry: PrunedRaw): string {
+  // [LAW:parse-dont-validate] The parse keeps a model only as a string, at
+  // the entry or on its message (src/utils/claude.ts), so there is nothing
+  // else to read. An empty string names no model, so it falls through to the
+  // message's, as a missing one does; an entry naming none is priced as the
+  // default model.
+  return entry.model || entry.message?.model || DEFAULT_MODEL_ID;
 }
