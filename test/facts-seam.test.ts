@@ -8,8 +8,10 @@
 // the demo (src/demo/play.ts).
 //
 // The live half is the daemon's parts in this worker (test/helpers/
-// daemon-parts.ts), settling each request as the daemon's request path does
-// (`settleRequest`), because the boot ratchet admits no new booting case
+// daemon-parts.ts), taking each request as the daemon's request path does:
+// its wire form crosses the render checkpoint, the daemon's render setup
+// declares its view, and the request is settled and its answer drawn there,
+// because the boot ratchet admits no new booting case
 // (.claude/memory/testing.md). Each
 // live frame is drawn only once every fact has landed, so a line stamped
 // after a draw never exists: the recording at an instant is what the frame at
@@ -522,16 +524,14 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
     model?: string,
   ) => {
     const at = instantAt(clock);
-    // What the request path spends between reading the request's instant and
-    // declaring its view: what that declaration stamps is later than `at`.
-    clock.burn(burnMs);
     // The request crosses the daemon's checkpoint, which stamps its pane from
     // the record that says Claude Code's process runs the session, and its view
     // is declared by the daemon's own render setup over what that passes on.
-    // Its deadline bounds only the request path's wait, which this case makes
-    // its own.
+    // Its deadline is stated from `at`, the instant it arrives, as a client
+    // sending then states it. Nothing here waits on that deadline: the
+    // answer waits until every fact has landed, so it never ends a wait.
     const checked = checkRenderRequest(
-      wireRequest(cwd, home, claudeConfigDir, configFile, clock.now(), model),
+      wireRequest(cwd, home, claudeConfigDir, configFile, msOf(at), model),
       parts.stats,
       parts.log,
       parts.home,
@@ -542,6 +542,9 @@ function liveSession({ runsMs, stepMs }: Pace = HELD, config = CONFIG) {
       throw new Error(`the checkpoint refused the request: ${checked.problems.join("; ")}`);
     }
     expect(checked.req.pane).toMatchObject({ kind: "runs", claude: { pid: CLAUDE_PID } });
+    // What the request path spends between reading the request's instant and
+    // declaring its view: what that declaration stamps is later than `at`.
+    clock.burn(burnMs);
     const setup = setUpRender(parts, checked.req, at, []);
     const settling = settleRequest(live.recorder, setup.view, at);
     return {
