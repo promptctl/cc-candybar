@@ -35,8 +35,10 @@ import {
 } from "../render/diagnostics.js";
 
 // [LAW:one-source-of-truth] The answers as a store: read as every load reads
-// them, and filed in the folder, so the first answer recorded while the folder
-// holds no book writes the loose one's answers into the folder with it.
+// them, and filed in the folder, so the first answer that changes the book
+// while the folder holds none writes the loose one's answers into the folder
+// with it. An answer the loose book already holds changes nothing, so it
+// writes nothing, as with every state file.
 export const repoConfigs = (
   disk: Filesystem,
   dir: string,

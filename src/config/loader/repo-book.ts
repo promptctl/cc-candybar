@@ -29,8 +29,8 @@ export function repoConfigsPath(stateDir: string): string {
 
 // [LAW:one-source-of-truth] The book in its folder is the answers. One kept
 // directly in the state directory, where the book used to live, is read only
-// while the folder holds none, and the first answer recorded writes it into
-// the folder with that answer: nothing is moved, so no answer is lost to a
+// while the folder holds none, and the first answer that changes it writes it
+// into the folder with that answer: nothing is moved, so no answer is lost to a
 // move, and every reader — the daemon, `check`, the demo — reads the same
 // answers. `true` when the folder's book is the one.
 // [LAW:no-silent-failure] Only an absent book is no book in the folder: a

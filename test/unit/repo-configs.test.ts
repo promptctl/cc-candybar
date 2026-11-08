@@ -184,9 +184,7 @@ describe("the gate over a project's plugins", () => {
 });
 
 const loadedEntry: ReloadedEntry = {
-  projectDir: "/p",
-  cwd: "/p",
-  configFile: undefined,
+  origin: { projectDir: "/p", cwd: "/p", target: { path: undefined } },
   configLayers: [],
   repos: {
     plugins: null,
@@ -239,8 +237,7 @@ test.each<[LoadCause, string]>([
 test("the config loaded event names the repositories left waiting and declined, and the unproven worktrees", () => {
   const entry: ReloadedEntry = {
     ...loadedEntry,
-    projectDir: project,
-    cwd: project,
+    origin: { projectDir: project, cwd: project, target: { path: undefined } },
     repos: {
       plugins: null,
       approved: [],
