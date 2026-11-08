@@ -1,3 +1,9 @@
+## [1.212.4](https://github.com/promptctl/cc-candybar/compare/v1.212.3...v1.212.4) (2026-11-08)
+
+### Bug Fixes
+
+* **git:** each session's git reads answer for its own directory (brandon-unfiled-3248.i3ek) ([#690](https://github.com/promptctl/cc-candybar/issues/690)) ([cc1efbe](https://github.com/promptctl/cc-candybar/commit/cc1efbe069bd704ecda3aa4731f6c19e89cd8de0))
+
 ## [1.212.3](https://github.com/promptctl/cc-candybar/compare/v1.212.2...v1.212.3) (2026-11-08)
 
 ### Bug Fixes
