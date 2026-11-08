@@ -414,6 +414,7 @@ export function filesystemFake(opts: {
     );
 
   return {
+    watchReach: platform === "darwin" ? "tree" : "directory",
     statSync: (at) => statOf(walk(at, true, "stat")),
     lstatSync: (at) => statOf(walk(at, false, "lstat")),
     readlinkSync: (at) => {

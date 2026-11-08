@@ -1,3 +1,9 @@
+## [1.211.0](https://github.com/promptctl/cc-candybar/compare/v1.210.6...v1.211.0) (2026-11-08)
+
+### Features
+
+* **config:** a renderer loads config as a value over the filesystem port (candybar-testing-ihvy.5zt) ([#667](https://github.com/promptctl/cc-candybar/issues/667)) ([10f03f8](https://github.com/promptctl/cc-candybar/commit/10f03f8b92a7ea6f004ace540fcfaeb89e89cbac))
+
 ## [1.210.6](https://github.com/promptctl/cc-candybar/compare/v1.210.5...v1.210.6) (2026-11-08)
 
 ### Bug Fixes

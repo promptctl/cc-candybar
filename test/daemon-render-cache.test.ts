@@ -707,15 +707,17 @@ describe("RenderCache", () => {
   test("a refused config directory stays deaf through a refused retry, is heard again on the period's judgment, and a reload leaves it as it is", () => {
     const { dir, cleanup } = mkConfigDir();
     const at = realpathSync(dir);
-    const watch = fs.watch.bind(fs);
+    // Every open opens the directory first, an OS watch or a polled one, so
+    // the refusal is the opendir's.
+    const opendir = fs.opendirSync.bind(fs);
     let refuse = true;
-    const spy = jest.spyOn(fs, "watch").mockImplementation(((
-      ...args: Parameters<typeof fs.watch>
+    const spy = jest.spyOn(fs, "opendirSync").mockImplementation(((
+      ...args: Parameters<typeof fs.opendirSync>
     ) => {
       if (refuse && args[0] === at)
         throw new Error("EMFILE: too many open files");
-      return watch(...args);
-    }) as typeof fs.watch);
+      return opendir(...args);
+    }) as typeof fs.opendirSync);
     const { cache, cleanups, watchers } = makeCache();
     try {
       const entry = cache.getOrCreate(originAt(dir));
@@ -771,12 +773,14 @@ describe("RenderCache", () => {
       renameSync(join(root, "proj"), join(root, "old"));
       mkdirSync(proj, { recursive: true });
       writeFileSync(cfg, config("new"));
-      // On macOS the watch follows the path and would hear the write on its
-      // own, so what proves the judgment on both platforms is the handle it
-      // closes, before any window can land.
+      // What proves the judgment is the handle it closes, before any window
+      // can land. On macOS the config's folder is polled, holds no handle,
+      // and its sweep follows the path on its own.
       const closed = counters.dirWatchesClosed;
       watchers.judge();
-      expect(counters.dirWatchesClosed).toBe(closed + 1);
+      expect(counters.dirWatchesClosed).toBe(
+        closed + (systemFilesystem.watchReach === "directory" ? 1 : 0),
+      );
       await until(
         () => x() === "new",
         "the entry read the tree now at its path",
