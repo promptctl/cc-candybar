@@ -40,7 +40,7 @@ import { makeUpdateWatch, type UpdateWatch } from "./update-notice";
 import { newUpdateFact, type UpdateFact } from "./update-fact";
 import type { ProcessProbe } from "./process-fingerprint";
 import { makeBinaryWatch, type BinaryWatch } from "./binary-watch";
-import type { Filesystem } from "../disk/filesystem";
+import type { Filesystem, FilesystemReads } from "../disk/filesystem";
 import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
 import {
@@ -146,12 +146,16 @@ export interface DaemonAdapters {
   // is kept on the disk whose config files it puts back.
   readonly storage: (log: DaemonLogger, disk: Filesystem) => DaemonStorage;
   // The doctor's stores, which this daemon files.
-  readonly doctorStores: DoctorStores;
+  // [LAW:one-source-of-truth] Over the daemon's own disk (`filesystem`), the
+  // one its storage writes, so the doctor's files land beside the daemon's.
+  readonly doctorStores: (disk: Filesystem) => DoctorStores;
   // The doctor's reads of the machine, over the config load it is handed.
   readonly doctorEdge: (
     launcher: Launcher,
     loadConfig: DoctorEdge["loadConfig"],
     host: Host,
+    // [LAW:types-are-the-program] Reads only: the doctor's edge never writes.
+    disk: FilesystemReads,
   ) => DoctorEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
   // What the daemon asks the machine about a pid: whether a process is there, and
@@ -165,6 +169,9 @@ export interface DaemonAdapters {
     closing: AbortSignal,
     probe: ProcessProbe,
     heldSession: HeldSessionOf,
+    // [LAW:types-are-the-program] Reads only: the lane edge never writes to
+    // the disk; its effects go to tmux panes and Claude Code.
+    disk: FilesystemReads,
   ) => LaneEdge;
   // The session a Claude Code process holds, by the records Claude Code keeps
   // under the user's home (`home`) or the directory a session names.
@@ -347,7 +354,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:one-source-of-truth] The doctor's stores, under this daemon's state
   // directory: its click files them, and daemon-stats answers what they hold
   // to `cc-candybar doctor`.
-  const doctorStores = inputs.doctorStores;
+  const doctorStores = inputs.doctorStores(inputs.filesystem);
   // [LAW:single-enforcer] The daemon injects its log into both registries so
   // cache + watcher lifecycle events land in daemon.log at the right level.
   // Non-daemon consumers (var-system tests, future library use) take the
@@ -424,6 +431,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       closing.signal,
       probe,
       heldSession,
+      inputs.filesystem,
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -551,6 +559,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         };
       },
       host,
+      inputs.filesystem,
     ),
     doctorStores,
     probes: handlerProbes,

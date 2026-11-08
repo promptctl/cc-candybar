@@ -32,12 +32,11 @@ export function productionAdapters(
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),
     storage: (log, disk) => fileStorage(paths, log, machine, disk),
-    doctorStores: fileStores(systemFilesystem, paths.state),
-    doctorEdge: (launcher, loadConfig, host) =>
-      productionEdge(launcher, loadConfig, host, systemFilesystem),
+    doctorStores: (disk) => fileStores(disk, paths.state),
+    doctorEdge: productionEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe, heldSession) =>
+    laneEdge: (launcher, following, closing, probe, heldSession, disk) =>
       productionLaneEdge(
         launcher,
         following,
@@ -45,7 +44,7 @@ export function productionAdapters(
         machine,
         probe,
         heldSession,
-        systemFilesystem,
+        disk,
       ),
     heldSession: heldSessionUnder,
     linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),

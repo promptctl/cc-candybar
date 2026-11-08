@@ -63,7 +63,8 @@ describe("a daemon aimed by its home", () => {
       storage.session.save({ s1: { theme: "x" } });
       storage.session.flush();
       storage.history.save({});
-      adapters.doctorStores.clicked.update((seen) => [...seen, "kitty"]);
+      const stores = adapters.doctorStores(adapters.filesystem);
+      stores.clicked.update((seen) => [...seen, "kitty"]);
       adapters.linkSigner.sign({
         sessionId: "s1",
         action: "a",
