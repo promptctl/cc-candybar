@@ -52,14 +52,17 @@ function nestBar(src: string, durable?: DurableConfig) {
   const render = (): Frame => rig.draw({ payload: PAYLOAD }).frame;
   const logged: string[] = [];
   let current: DslConfig = config;
+  // The daemon's reload: the session's config becomes the file's text, after
+  // a click's write and after a hand edit alike.
+  const reload = (file: DurableConfig): void => {
+    current = parseAndValidate("<reloaded>", file.text()!, PALETTES, DEFAULT_DSL_CONFIG);
+  };
   const ctx: VerbContext = {
     ...rig.ctx,
     log: (_level, line) => logged.push(line),
     ...(durable && {
       configFor: () => current,
-      reloadConfig: () => {
-        current = parseAndValidate("<reloaded>", durable.text()!, PALETTES, DEFAULT_DSL_CONFIG);
-      },
+      reloadConfig: () => reload(durable),
     }),
   };
   // One click is one verb call, as the daemon runs it.
@@ -84,7 +87,7 @@ function nestBar(src: string, durable?: DurableConfig) {
     if (!url) throw new Error("no such affordance rendered");
     await click(url);
   };
-  return { config, sessionState, render, clickWriting, clickDoing, held, logged, ctx };
+  return { config, sessionState, render, clickWriting, clickDoing, held, logged, ctx, reload };
 }
 
 const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
@@ -190,6 +193,15 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
       AFTER_APPLY,
       undefined,
     );
+    // The anchor's id is placed in no other preset's tree, so a re-add of
+    // `directory` beside it takes the freed id rather than `directory-2`.
+    const ANCHORED = `{ root: { h: ['directory', { seg: 'model', id: 'anchor' }] } }`;
+    const ANCHOR_APPLY = `edit.default.insert.after.${chromeIdent("anchor")}`;
+    const ANCHOR_LIBRARY = menuStateKey(
+      `edit.default.insertSeg.after.${chromeIdent("anchor")}`,
+      ANCHOR_APPLY,
+      undefined,
+    );
 
     test("a pick at the row's leading ✚ lands and closes its library", async () => {
       const rt = nestBar(BUNDLED, durable);
@@ -216,19 +228,29 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
     });
 
     test("a placement re-added under a removed one's id finds its library closed", async () => {
-      // The anchor's id is placed in no other preset's tree, so the re-add
-      // takes the freed id `directory` rather than `directory-2`.
-      const src = `{ root: { h: ['directory', { seg: 'model', id: 'anchor' }] } }`;
-      durable.write(src);
-      const rt = nestBar(src, durable);
+      durable.write(ANCHORED);
+      const rt = nestBar(ANCHORED, durable);
       await arrange(rt);
       await rt.clickWriting(AFTER, AFTER_APPLY);
       await rt.clickDoing((v) => v === "remove:directory");
-      const anchorApply = `edit.default.insert.after.${chromeIdent("anchor")}`;
-      await rt.clickWriting(
-        menuStateKey(`edit.default.insertSeg.after.${chromeIdent("anchor")}`, anchorApply, undefined),
-        anchorApply,
-      );
+      await rt.clickWriting(ANCHOR_LIBRARY, ANCHOR_APPLY);
+      await rt.clickDoing((v) => v === "insert:directory:anchor:after");
+      expect(rt.logged.join("\n")).toContain('placed={"seg":"directory"}');
+      expect(rt.held(AFTER)).toBe(DISCLOSURE_CLOSED);
+    });
+
+    // A hand edit ends the placement outside any click, so its library's key
+    // outlives it; the click that re-adds the id begins that key again.
+    test("a placement removed by hand and re-added under its id finds its library closed", async () => {
+      durable.write(ANCHORED);
+      const rt = nestBar(ANCHORED, durable);
+      await arrange(rt);
+      await rt.clickWriting(AFTER, AFTER_APPLY);
+      expect(rt.held(AFTER)).toBe(AFTER_APPLY);
+      durable.write(`{ root: { h: [{ seg: 'model', id: 'anchor' }] } }`);
+      rt.reload(durable);
+      await rt.clickWriting(ANCHOR_LIBRARY, ANCHOR_APPLY);
+      expect(rt.held(AFTER)).toBe(AFTER_APPLY);
       await rt.clickDoing((v) => v === "insert:directory:anchor:after");
       expect(rt.logged.join("\n")).toContain('placed={"seg":"directory"}');
       expect(rt.held(AFTER)).toBe(DISCLOSURE_CLOSED);

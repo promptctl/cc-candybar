@@ -1346,16 +1346,19 @@ const applyLayoutOp: VerbHandler = (sid, args, ctx) => {
   // its undo brings the placement and its drafts back.
   ctx.reloadConfig(origin);
   const after = ctx.configFor(origin);
-  // [LAW:single-enforcer] Every state key the edit ends is released here, in
-  // the click that ends it: a key the config declared before the edit and no
-  // longer declares (the chrome named by a removed placement, the ✚ whose gap
-  // a pick renamed) is otherwise held forever — nothing closes an undeclared
-  // key — and a later placement minted with the same id inherits it.
-  const declared = new Set(ctx.gates.state.gateFor(after).listKeys());
-  const undeclared = ctx.gates.state
-    .gateFor(before)
-    .listKeys()
-    .filter((key) => !declared.has(key));
+  // [LAW:single-enforcer] Every state key the edit ends or begins is released
+  // here, in its click. A key the edit ends (the chrome named by a removed
+  // placement, the ✚ whose gap a pick renamed) is otherwise held forever:
+  // nothing closes an undeclared key. A key the edit begins holds nothing the
+  // current config wrote, so whatever it holds is left by an earlier placement
+  // under the same id — however that placement was removed, a hand edit
+  // included — and the new one inherits nothing.
+  const declaredBefore = new Set(ctx.gates.state.gateFor(before).listKeys());
+  const declaredAfter = new Set(ctx.gates.state.gateFor(after).listKeys());
+  const changed = [
+    ...[...declaredBefore].filter((key) => !declaredAfter.has(key)),
+    ...[...declaredAfter].filter((key) => !declaredBefore.has(key)),
+  ];
   // The session state the edit discards — the fact its log line carries.
   // Raw: under the reloaded config a removed placement's member is foreign,
   // so a judged read would keep exactly what this click releases.
@@ -1365,7 +1368,7 @@ const applyLayoutOp: VerbHandler = (sid, args, ctx) => {
         endedPlacements(before, after),
         ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
       ),
-      ...undeclared,
+      ...changed,
     ]),
   ].filter((key) => ctx.sessionState.get(sid, key) !== null);
   for (const key of released) ctx.sessionState.clear(sid, key);
