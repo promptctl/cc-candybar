@@ -568,7 +568,10 @@ export function drawRender(
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
   const pipeShown = pipeWarning?.event ?? null;
   const standing: readonly StandingWarning[] = [
-    ...fileEventsWarnings(fileEvents.delivery()),
+    ...fileEventsWarnings(
+      fileEvents.delivery(),
+      parts.watcherRegistry.namesPolled,
+    ),
     ...launched,
     ...(configWatch === null
       ? []

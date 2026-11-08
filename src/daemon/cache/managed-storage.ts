@@ -572,7 +572,8 @@ export class ManagedStorage {
     // when the OS or the disk answers otherwise.
     if (fault?.cause === "unusable")
       return `cannot refresh: ${storage.folder} ${fault.reason}; reload the config or restart the daemon`;
-    const reason = fault?.reason ?? stallReason(this.fileEvents.delivery());
+    const reason =
+      fault?.reason ?? stallReason(this.fileEvents.delivery(), watched.handle);
     return reason === null
       ? null
       : `cannot refresh: ${storage.folder}: ${reason}`;

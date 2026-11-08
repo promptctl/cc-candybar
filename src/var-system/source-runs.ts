@@ -342,13 +342,13 @@ class PathWatches {
   }
 
   // The watch's fault, derived from what it holds now and whether the OS is
-  // delivering what it would hear. A stall is every watch's: it rides the
-  // delivery owner's one stream.
+  // delivering what it would hear. A stall is the fault of a watch that rides
+  // the delivery owner's one stream; a polled watch hears through it.
   private faultOf(filePath: string, entry: WatchEntry): string | null {
     return watchFault(
       `watch_file ${filePath}`,
       entry.bound,
-      stallReason(this.fileEvents.delivery()),
+      stallReason(this.fileEvents.delivery(), entry.bound.held.handle),
     );
   }
 
