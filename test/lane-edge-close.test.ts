@@ -6,10 +6,11 @@ import { heldSessionUnder, productionLaneEdge } from "../src/daemon/lane-edge";
 import { processProbe } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 describe("the lane edge after its daemon closes", () => {
   const edgeOver = (closing: AbortController) =>
-    productionLaneEdge(unscriptedLauncher, () => new Set(), closing.signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"));
+    productionLaneEdge(unscriptedLauncher, () => new Set(), closing.signal, systemTimekeeper, processProbe, heldSessionUnder("/nonexistent-home"), systemFilesystem);
 
   test("a wait for a subscriber ends at once, before its deadline", async () => {
     const closing = new AbortController();

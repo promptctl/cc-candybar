@@ -27,6 +27,8 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { systemFilesystem } from "../src/disk/system-filesystem";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
 
 const config = (variables: string, helpers = "{}") =>
   parseAndValidate(
@@ -200,8 +202,19 @@ test("the config load line names the load's projections", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-projections-"));
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
-    fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
-    const loaded = loadFromDisk(originAt(dir, file), { clock: systemTimekeeper, stateDir: stateDir(WORLD.home), locations: locs(), storage: NO_PLUGIN_STORAGE, links: TEST_LINKS, gates: bareGates(),
+    fs.writeFileSync(
+      file,
+      `{ variables: ${variables}, segments: ${segments} }`,
+    );
+    const loaded = loadFromDisk(originAt(dir, file), {
+      clock: systemTimekeeper,
+      stateDir: stateDir(WORLD.home),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
+      locations: locs(),
+      storage: NO_PLUGIN_STORAGE,
+      links: TEST_LINKS,
+      gates: bareGates(),
       sessionState: new SessionState(SINGLE_RUN),
     });
     expect(loaded.error).toBeNull();

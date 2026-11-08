@@ -25,6 +25,7 @@ import { rateLimitsSeen } from "../src/daemon/render-sightings";
 import { RuntimeStats } from "../src/daemon/stats";
 import type { StatsSnapshot } from "../src/daemon/stats";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
+import { systemFilesystem } from "../src/disk/system-filesystem";
 
 const segmentData = checkByName("segmentData")!;
 
@@ -374,48 +375,64 @@ describe("the forge probe over a real checkout", () => {
   };
 
   test("a directory in no checkout names no forge", async () => {
-    expect(await forgeLogin(processLauncher, bin)).toEqual({ kind: "ok", value: null });
+    expect(await forgeLogin(processLauncher, systemFilesystem, bin)).toEqual({
+      kind: "ok",
+      value: null,
+    });
   });
 
   test("a checkout with no forge remote names none", async () => {
     remote("/srv/git/mirror.git");
-    expect(await forgeLogin(processLauncher, repo())).toEqual({ kind: "ok", value: null });
+    expect(await forgeLogin(processLauncher, systemFilesystem, repo())).toEqual(
+      {
+        kind: "ok",
+        value: null,
+      },
+    );
   });
 
   test("gh asked for the remote's own host, and logged in", async () => {
     remote("git@github.com:o/r.git");
     gh('[ "$*" = "auth token --hostname github.com" ] && echo tok || exit 3');
-    expect(await forgeLogin(processLauncher, repo())).toEqual({
-      kind: "ok",
-      value: { cli: "gh", host: "github.com", status: "ready" },
-    });
+    expect(await forgeLogin(processLauncher, systemFilesystem, repo())).toEqual(
+      {
+        kind: "ok",
+        value: { cli: "gh", host: "github.com", status: "ready" },
+      },
+    );
   });
 
   test("gh asked for github.com under an ssh-over-443 remote, as gh keys its login", async () => {
     remote("ssh://git@ssh.github.com:443/o/r.git");
     gh('[ "$*" = "auth token --hostname github.com" ] && echo tok || exit 3');
-    expect(await forgeLogin(processLauncher, repo())).toEqual({
-      kind: "ok",
-      value: { cli: "gh", host: "github.com", status: "ready" },
-    });
+    expect(await forgeLogin(processLauncher, systemFilesystem, repo())).toEqual(
+      {
+        kind: "ok",
+        value: { cli: "gh", host: "github.com", status: "ready" },
+      },
+    );
   });
 
   test("gh with no token for the host is logged out, with its line", async () => {
     remote("https://github.com/o/r.git");
     gh('echo "no oauth token found for github.com" >&2; exit 1');
-    expect(await forgeLogin(processLauncher, repo())).toEqual({
-      kind: "ok",
-      value: {
-        cli: "gh",
-        host: "github.com",
-        status: { loggedOut: "no oauth token found for github.com" },
+    expect(await forgeLogin(processLauncher, systemFilesystem, repo())).toEqual(
+      {
+        kind: "ok",
+        value: {
+          cli: "gh",
+          host: "github.com",
+          status: { loggedOut: "no oauth token found for github.com" },
+        },
       },
-    });
+    );
   });
 
   test("no gh on PATH is missing", async () => {
     remote("https://github.com/o/r.git");
-    expect(await forgeLogin(processLauncher, repo())).toMatchObject({
+    expect(
+      await forgeLogin(processLauncher, systemFilesystem, repo()),
+    ).toMatchObject({
       kind: "ok",
       value: { status: "missing" },
     });

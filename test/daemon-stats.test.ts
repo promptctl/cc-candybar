@@ -134,7 +134,14 @@ describe("RuntimeStats.snapshot", () => {
       effectCache: { sessions: 2, effects: 5 },
       menuIdle: { sessions: 2, armed: 1 },
       journalTurns: { gathers: 0 },
-      runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0, queued: 0 },
+      runs: {
+        started: 3,
+        failed: 1,
+        timedOut: 1,
+        refused: 2,
+        running: 0,
+        queued: 0,
+      },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: {
         feeds: 0,
@@ -149,6 +156,7 @@ describe("RuntimeStats.snapshot", () => {
       linkIds: { minted: 0, reused: 0, evicted: 0, reservations: 0, faults: 0 },
       watchersActive: 2,
       dirWatchesActive: 5,
+      dirsPolled: 3,
       handlerProbes: [{ nonce: "n", delivery: { kind: "forwarder", urlV: 1 } }],
       clients: [
         {
@@ -225,6 +233,7 @@ describe("RuntimeStats.snapshot", () => {
       refused: 1,
       errors: 2,
       dirs: { active: 5, opened: 9, closed: 4 },
+      polled: 3,
     });
     expect(snap.uptimeSec).toBeGreaterThanOrEqual(0);
     expect(snap.pid).toBe(process.pid);
@@ -363,7 +372,14 @@ describe("formatStats", () => {
       effectCache: { sessions: 2, effects: 3 },
       menuIdle: { sessions: 2, armed: 1 },
       journalTurns: { gathers: 0 },
-      runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0, queued: 0 },
+      runs: {
+        started: 3,
+        failed: 1,
+        timedOut: 1,
+        refused: 2,
+        running: 0,
+        queued: 0,
+      },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: {
         feeds: 0,
@@ -383,6 +399,7 @@ describe("formatStats", () => {
         refused: 1,
         errors: 3,
         dirs: { active: 4, opened: 6, closed: 2 },
+        polled: 3,
       },
       subprocesses: {
         total: 0,
@@ -417,6 +434,7 @@ describe("formatStats", () => {
     expect(out).toContain("rss           50.0MB");
     expect(out).toContain("held          2");
     expect(out).toContain("hit rate      80.0%");
+    expect(out).toContain("polled        3 dirs");
     expect(out).toContain(
       "pane/tmux                 failures=1 last=3ms refreshes first:2 period:7 change:0 supersede:0",
     );
@@ -513,7 +531,14 @@ describe("formatStats", () => {
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
       journalTurns: { gathers: 0 },
-      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0, queued: 0 },
+      runs: {
+        started: 0,
+        failed: 0,
+        timedOut: 0,
+        refused: 0,
+        running: 0,
+        queued: 0,
+      },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
@@ -533,6 +558,7 @@ describe("formatStats", () => {
         refused: 0,
         errors: 0,
         dirs: { active: 0, opened: 0, closed: 0 },
+        polled: 0,
       },
       subprocesses: {
         total: 0,

@@ -1,4 +1,4 @@
-import type { TokenBreakdown } from "../../segments/session";
+import { totalTokens, type TokenBreakdown } from "../../segments/session";
 import { ABSENT, ok, type Outcome } from "../../utils/outcome";
 import { dateOf, type Instant } from "../../utils/instant";
 
@@ -7,9 +7,9 @@ import { dateOf, type Instant } from "../../utils/instant";
 // fact and the draw's instant, so what reads it (the draw, `check`, the demo)
 // does not load the store's pricing, transcript reads or observables.
 
-// Per-(session, day) scalar contribution — the only granularity the today fold
-// needs. Raw entries are discarded after bucketing, so per-session retained
-// memory is O(retained-days), not O(entries).
+// One day's usage, priced: the cost and the token breakdown the today fold
+// sums. It is read off the usage the store holds, at the table held at the
+// read, and is never what the store retains.
 export interface DayUsage {
   cost: number;
   input: number;
@@ -89,7 +89,7 @@ export function projectToday(
   if (own !== undefined) addDay(total, own);
   return ok({
     cost: total.cost,
-    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
+    tokens: totalTokens(total),
     tokenBreakdown: {
       input: total.input,
       output: total.output,

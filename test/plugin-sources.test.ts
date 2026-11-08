@@ -65,6 +65,7 @@ import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -313,6 +314,8 @@ describe("a source's declaration", () => {
     const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -407,6 +410,8 @@ describe("a source's declaration", () => {
     const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -441,6 +446,8 @@ describe("a source's declaration", () => {
     const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -567,6 +574,8 @@ describe("a source's declaration", () => {
     const loaded = loadFromDisk(originAt(dir, p), {
       clock: systemTimekeeper,
       stateDir: stateDir(homeOf(host)),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locations(host, homeOf(host)),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,

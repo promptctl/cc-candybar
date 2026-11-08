@@ -74,6 +74,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -449,6 +450,8 @@ describe("config-file-store: segment-palette placement", () => {
           repo: null,
           cwd: null,
           locs: locations(durable.host, durable.home),
+          disk: systemFilesystem,
+          memo: new InstalledLayerMemo(),
         },
         [["segments.ghost.palette", "nord"]],
       ),
@@ -545,6 +548,8 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
             repo: null,
             cwd: null,
             locs: locations(durable.host, durable.home),
+            disk: systemFilesystem,
+            memo: new InstalledLayerMemo(),
           },
           [["segments.sidebar.palette", "nord"]],
         ),
@@ -583,6 +588,8 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
         repo: null,
         cwd: null,
         locs: locations(durable.host, durable.home),
+        disk: systemFilesystem,
+        memo: new InstalledLayerMemo(),
       },
       [["segments.sidebar.palette", "gruvbox"]],
     );
@@ -620,6 +627,8 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
         repo: null,
         cwd: null,
         locs: locations(durable.host, durable.home),
+        disk: systemFilesystem,
+        memo: new InstalledLayerMemo(),
       },
       [["segments.directory.palette", "nord"]],
     );

@@ -20,8 +20,6 @@
 // stacks. The session's other changes stay steppable.
 
 import { observable, runInAction } from "mobx";
-import fs from "node:fs";
-import path from "node:path";
 import { SETTING_PROJECTIONS } from "../config/setting-projections";
 import {
   EDIT_MODE_KEY,
@@ -29,10 +27,11 @@ import {
   PLACEMENT_DRAFT_NS,
 } from "../config/loader/edit-mode";
 import { readConfigText, writeConfigText } from "./config-file-store";
+import type { Filesystem } from "../disk/filesystem";
 import type { DaemonLogger } from "../utils/logger";
 import { recordingView, type SessionStateRW } from "./session-state";
 import { BadVerbArgs } from "./verb-error";
-import { writeAtomic } from "../utils/atomic-write.js";
+import { writeAtomicOn } from "../utils/atomic-write.js";
 import {
   StoredPathRefused,
   oneReading,
@@ -187,6 +186,9 @@ export class SettingsHistory {
   }
 
   constructor(
+    // The disk a file change is read back and put back on: the one the click
+    // that recorded it wrote.
+    private readonly disk: Filesystem,
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
     private readonly storage: HistoryStorage = EPHEMERAL_HISTORY_STORAGE,
@@ -413,12 +415,12 @@ export class SettingsHistory {
   private read(sessionId: string, change: Change): string | null {
     return change.kind === "session"
       ? this.sessionState.get(sessionId, change.key)
-      : readConfigText(change.file);
+      : readConfigText(this.disk, change.file);
   }
 
   private write(sessionId: string, change: Change, value: string | null): void {
     if (change.kind === "file") {
-      writeConfigText(change.file, value, this.logger);
+      writeConfigText(this.disk, change.file, value, this.logger);
     } else if (value === null) {
       this.sessionState.clear(sessionId, change.key);
     } else {
@@ -741,6 +743,7 @@ function mapFiles<A, B>(
 // so a home's history names its config relative to the home, and a copy of
 // the home's tree undoes into the copy's config.
 export function fileHistoryStorage(
+  disk: Filesystem,
   file: string,
   root: StoredRoot,
   logger: DaemonLogger,
@@ -749,9 +752,9 @@ export function fileHistoryStorage(
     load: () => {
       let raw: string;
       try {
-        raw = fs.readFileSync(file, "utf8");
+        raw = disk.readFileSync(file);
       } catch (e) {
-        const code = (e as NodeJS.ErrnoException).code;
+        const code = (e as { code?: string }).code;
         if (code !== "ENOENT") {
           logger(
             "warn",
@@ -825,8 +828,7 @@ export function fileHistoryStorage(
         ]),
       );
       try {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        writeAtomic(file, JSON.stringify(stored), 0o600);
+        writeAtomicOn(disk, file, JSON.stringify(stored), 0o600);
       } catch (e) {
         const message = `settings-history write failed — the change landed but is not undoable: ${(e as Error).message}`;
         logger("error", message);

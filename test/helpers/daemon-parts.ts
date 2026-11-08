@@ -136,7 +136,7 @@ export function daemonParts({ host, clock, log, source, drew }: DaemonPartsOptio
   // daemon's is, so a write outside a turn throws here too.
   const journalTurns = new JournalTurns();
   const sessionState = new SessionState(journalTurns);
-  const settingsHistory = new SettingsHistory(sessionState, log);
+  const settingsHistory = new SettingsHistory(systemFilesystem, sessionState, log);
   const gates = bareGates();
   const limits = makeLimits({
     ...realLimitsDeps(stats.startedAt.getTime(), exit, {
@@ -191,6 +191,7 @@ export function daemonParts({ host, clock, log, source, drew }: DaemonPartsOptio
       clock,
       NO_PROCESSES,
       heldSession,
+      systemFilesystem,
     ),
     host: { bundle, node: running.node, home, preload: stableAttachPreload(bundle, host) },
     log,
@@ -281,6 +282,8 @@ export function daemonParts({ host, clock, log, source, drew }: DaemonPartsOptio
     gates,
     sessionState,
     stateDir: paths.state,
+    filesystem: systemFilesystem,
+    installedLayers: renderCache.installedLayers,
     storedRoot: paths.storedRoot,
     locations: locs,
     journalTurns,

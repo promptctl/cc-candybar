@@ -206,31 +206,23 @@ export async function findAgentTranscripts(
   return { paths, longLines };
 }
 
-// [LAW:types-are-the-program] exception: kept as type-aliases (not
-// interfaces) so they're structurally assignable to `Record<string,
-// unknown>` at the `extractModelId` boundary in segments/pricing.ts.
-// Switching to `interface` removes the implicit index signature and
-// breaks typecheck. A proper fix tightens that boundary to take
-// `PrunedRaw` directly and is out of scope for the CI-fix branch.
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
-type UsageCounts = {
+export interface UsageCounts {
   input_tokens?: number;
   output_tokens?: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
-};
+}
 
 // [LAW:one-source-of-truth] The only fields ever read from raw are
 // model, message.{id,model,usage}, and requestId. Storing the full
 // parsed JSON (including content arrays with full message text) causes
 // hundreds of MB of V8 heap churn per transcript re-parse. raw is
 // pruned to this shape at parse time so the GC pressure is bounded.
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
-export type PrunedRaw = {
+export interface PrunedRaw {
   model?: string;
   message?: { id?: string; model?: string; usage?: UsageCounts };
   requestId?: string;
-};
+}
 
 export interface ParsedEntry {
   timestamp: Date;
@@ -481,7 +473,7 @@ export async function foldAppended<S>(
   filePath: string,
   prior: Folded<S> | undefined,
   empty: S,
-  step: (state: S, entries: readonly ParsedEntry[]) => S | Promise<S>,
+  step: (state: S, entries: readonly ParsedEntry[]) => S,
 ): Promise<Outcome<{ folded: Folded<S>; longLines: readonly LongLine[] }>> {
   let longLines: readonly LongLine[] = [];
   let cursor = prior?.cursor;
@@ -504,12 +496,12 @@ export async function foldAppended<S>(
       end = { size: window.size, stamp: window.stamp };
     }
     const next = window.start + window.lines.length;
-    // Decoded, and the window given back, before `step` can await — and
-    // passed straight in, never named: a name holds this window's entries in
-    // the fold's frame across the next read's I/O wait, where they are
-    // promoted to the old generation (eight concurrent cold folds of a 29 MB
+    // Decoded, and the window given back, before the next read — and passed
+    // straight in, never named: a name holds this window's entries in the
+    // fold's frame across the next read's I/O wait, where they are promoted
+    // to the old generation (eight concurrent cold folds of a 29 MB
     // transcript: +120 MB RSS against +30 MB).
-    value = await step(
+    value = step(
       value,
       decodeLines(window, (b) => parseJsonlLines(b.toString("utf-8"))),
     );

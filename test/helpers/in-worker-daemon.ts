@@ -104,8 +104,8 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       ...overrides,
       home,
       daemonLog,
-      storage: (log) => ({
-        ...fileStorage(paths, log, systemTimekeeper),
+      storage: (log, disk) => ({
+        ...fileStorage(paths, log, systemTimekeeper, disk),
         ...overrides.storage?.(log),
       }),
     });

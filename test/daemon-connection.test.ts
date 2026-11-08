@@ -4,6 +4,7 @@
 // one would answer inside the backstop. A connection to a daemon built in the
 // worker is the other half (test/daemon-boots/worker/daemon-built-connection.test.ts).
 
+import { PassThrough } from "node:stream";
 import { setImmediate } from "node:timers";
 
 import {
@@ -15,8 +16,10 @@ import { NOTHING_DELIVERED } from "../src/daemon/draw-bar";
 import type { Subscriber } from "../src/daemon/frame-feed";
 import {
   FRAME_HEADER_BYTES,
+  MAX_FRAME_BYTES,
   PROTOCOL_VERSION,
   encodeFrame,
+  readOneFrame,
   sendOne,
   type Request,
   type Response,
@@ -204,7 +207,7 @@ describe("a connection over a stream", () => {
   test("a url frame whose writer hung up stays in flight, under the deadline, with no client gone", async () => {
     const request = held();
     const daemon = standIn({ handle: request.handle });
-    const { client } = open(daemon);
+    const { client, received } = open(daemon);
     client.end(encodeFrame({ kind: "url", urlV: 1, url: "cc-candybar://x" }));
     await settled();
     expect(daemon.stats.inFlight).toBe(1);
@@ -221,6 +224,45 @@ describe("a connection over a stream", () => {
     request.answer(replyWith());
     await settled();
     expect(daemon.stats.inFlight).toBe(0);
+    expect(received).toEqual([]);
+  });
+
+  test("a url frame read after the backstop fired stays in flight until handled, with no client gone", async () => {
+    const request = held();
+    const daemon = standIn({ handle: request.handle });
+    const { client, received } = open(daemon);
+    // The forwarder's frame sat unread while the daemon was busy: it is sent
+    // after the TIMEOUT only because a memory stream cannot hold it unread.
+    client.allowHalfOpen = true;
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    await settled();
+    expect(daemon.stats.requestsTimedOut).toBe(1);
+
+    client.end(encodeFrame({ kind: "url", urlV: 1, url: "cc-candybar://x" }));
+    await settled();
+    expect(request.timedOut()).toBe(true);
+    expect(request.clientLeft()).toBe(false);
+    expect(daemon.stats.inFlight).toBe(1);
+
+    request.answer(replyWith());
+    await settled();
+    expect(daemon.stats.inFlight).toBe(0);
+    expect(received).toMatchObject([{ code: "TIMEOUT" }]);
+  });
+
+  // A socket error destroys it at once, and its 'close' comes later: a click
+  // whose turn falls between sees its client gone.
+  test("a socket error is its client leaving, before the close", async () => {
+    const request = held();
+    const { daemonEnd, client } = memoryConnection();
+    handleConnection(standIn({ handle: request.handle }), daemonEnd);
+    client.write(encodeFrame(STATS));
+    await settled();
+    expect(request.clientLeft()).toBe(false);
+
+    daemonEnd.emit("error", new Error("read ECONNRESET"));
+    expect(request.clientLeft()).toBe(true);
+    client.destroy();
   });
 
   test("a client that half-closes before its answer is answered to no one", async () => {
@@ -317,28 +359,111 @@ describe("a connection over a stream", () => {
     expect(received).toEqual([expect.objectContaining({ code: "TIMEOUT" })]);
   });
 
-  test("a late reply and its exit leave a subscription streaming", async () => {
-    const request = held();
-    const { client, send, received, ended } = open(
-      standIn({
-        handle: async (inbound, timedOut, accepted) =>
-          inbound.kind === "request" && inbound.req.kind === "subscribe"
-            ? SUBSCRIBED
-            : request.handle(inbound, timedOut, accepted, () => false),
-      }),
+  // A connection reads one frame: whatever its client sends after it is never
+  // handled, so no click runs and no render opens views for an answer that
+  // goes nowhere.
+  describe("one frame per connection", () => {
+    const counted = () => {
+      const handle = jest.fn(async () => replyWith());
+      return { handle, daemon: standIn({ handle }) };
+    };
+
+    test("two frames in one chunk: the first is handled and answered, the second is not read", async () => {
+      const { handle, daemon } = counted();
+      const { client, received } = open(daemon);
+      client.write(Buffer.concat([encodeFrame(STATS), encodeFrame(STATS)]));
+      await settled();
+      expect(handle).toHaveBeenCalledTimes(1);
+      expect(received).toEqual([ANSWER]);
+    });
+
+    test("a frame written after the answer is not handled", async () => {
+      const { handle, daemon } = counted();
+      const { client, send, received } = open(daemon);
+      client.allowHalfOpen = true;
+      send(STATS);
+      await settled();
+      expect(received).toEqual([ANSWER]);
+
+      send(STATS);
+      await settled();
+      expect(handle).toHaveBeenCalledTimes(1);
+      client.destroy();
+    });
+
+    test("a frame that is not JSON is answered BAD_REQUEST, and the valid one after it is not handled", async () => {
+      const { handle, daemon } = counted();
+      const { client, send, received } = open(daemon);
+      client.allowHalfOpen = true;
+      const header = Buffer.alloc(FRAME_HEADER_BYTES);
+      header.writeUInt32BE(3);
+      client.write(Buffer.concat([header, Buffer.from("not")]));
+      await settled();
+      send(STATS);
+      await settled();
+      expect(received).toMatchObject([{ ok: false, code: "BAD_REQUEST" }]);
+      expect(handle).not.toHaveBeenCalled();
+      client.destroy();
+    });
+
+    // A sender stating a length past the cap and writing on: its bytes are
+    // read once, refused once, and never buffered, so they cannot grow the
+    // daemon toward its memory limit.
+    test("a header past the frame cap is refused once, whatever follows it", async () => {
+      const log = jest.fn();
+      const { client, received } = open(standIn({ log }));
+      client.allowHalfOpen = true;
+      const header = Buffer.alloc(FRAME_HEADER_BYTES);
+      header.writeUInt32BE(MAX_FRAME_BYTES + 1);
+      client.write(header);
+      for (let i = 0; i < 10; i++) client.write(Buffer.alloc(1024, i));
+      await settled();
+      expect(
+        log.mock.calls.filter(([, line]) =>
+          String(line).startsWith("frame parse failed"),
+        ),
+      ).toHaveLength(1);
+      expect(received).toMatchObject([{ ok: false, code: "BAD_REQUEST" }]);
+      client.destroy();
+    });
+  });
+
+  // [LAW:no-silent-failure] A throw from what handles the frame is that throw,
+  // raised where the stream delivered the bytes, never a parse failure dropped
+  // because a frame was already read.
+  test("a throw from the frame's handler reaches the stream as itself", () => {
+    const stream = new PassThrough();
+    const onError = jest.fn();
+    readOneFrame(
+      stream,
+      () => {
+        throw new Error("the handler broke");
+      },
+      onError,
     );
+    expect(() => stream.emit("data", encodeFrame(STATS))).toThrow(
+      "the handler broke",
+    );
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  // [LAW:no-silent-failure] An answer that cannot be encoded is still an
+  // answer: the client is told what failed, and the stream ends.
+  test("a reply that cannot be encoded is answered RENDER_FAILED, ends the stream, and keeps its exit", async () => {
+    const daemon = standIn({
+      handle: async () =>
+        replyWith({
+          resp: { ok: true, output: 1n } as unknown as Response,
+          exitAfterFlush: 2,
+        }),
+    });
+    const { send, received, ended } = open(daemon);
     send(STATS);
-    send(SUBSCRIBE);
     await settled();
-    expect(subscriptions).toHaveLength(1);
-
-    request.answer(replyWith({ exitAfterFlush: 0 }));
-    await settled();
-
-    expect(exit).not.toHaveBeenCalled();
-    expect(received).toEqual([]);
-    expect(ended()).toBe(false);
-    client.destroy();
+    expect(received).toMatchObject([{ ok: false, code: "RENDER_FAILED" }]);
+    expect(ended()).toBe(true);
+    expect(exit).toHaveBeenCalledWith(2);
+    expect(daemon.stats.inFlight).toBe(0);
   });
 
   test("a frame that does not parse is answered BAD_REQUEST", async () => {
@@ -349,6 +474,31 @@ describe("a connection over a stream", () => {
     await settled();
     expect(received).toMatchObject([{ ok: false, code: "BAD_REQUEST" }]);
     expect(ended()).toBe(true);
+  });
+
+  // A throw before the handler's first await is the same failure as one after
+  // it: answered and logged, never an exception out of the socket's read.
+  test("a handler that throws before it returns a promise is answered RENDER_FAILED", async () => {
+    const log = jest.fn();
+    const daemon = standIn({
+      log,
+      handle: () => {
+        throw new Error("the handler broke at once");
+      },
+    });
+    const { send, received, ended } = open(daemon);
+    send(STATS);
+    await settled();
+    expect(received).toMatchObject([
+      { ok: false, code: "RENDER_FAILED", error: "the handler broke at once" },
+    ]);
+    expect(ended()).toBe(true);
+    expect(daemon.stats.inFlight).toBe(0);
+    expect(
+      log.mock.calls.some(([, line]) =>
+        String(line).startsWith("handler threw"),
+      ),
+    ).toBe(true);
   });
 
   test("a handler that throws is answered RENDER_FAILED", async () => {
@@ -455,19 +605,19 @@ describe("a connection over a stream", () => {
     });
 
     test("one that throws is answered RENDER_FAILED, never an open stream nothing feeds", async () => {
-      const { send, received, ended } = open(
-        subscribing({
-          subscribe: () => {
-            throw new Error("the feed refused");
-          },
-        }),
-      );
+      const daemon = subscribing({
+        subscribe: () => {
+          throw new Error("the feed refused");
+        },
+      });
+      const { send, received, ended } = open(daemon);
       send(SUBSCRIBE);
       await settled();
       expect(received).toMatchObject([
         { code: "RENDER_FAILED", error: "the feed refused" },
       ]);
       expect(ended()).toBe(true);
+      expect(daemon.stats.inFlight).toBe(0);
     });
 
     test("a subscriber slower than the frames gets the newest, never a backlog", async () => {

@@ -13,7 +13,8 @@ import {
   type GlyphMark,
   type MarkBook,
 } from "./checks.js";
-import { stateFile, type StateFile } from "./state-file.js";
+import { stateFile, type StateFile } from "../disk/state-file.js";
+import type { Filesystem } from "../disk/filesystem.js";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -54,5 +55,8 @@ export function withMark(
   return { ...book, [check]: { ...book[check], [sighting]: mark } };
 }
 
-export const fileMarkBook = (dir: string): StateFile<MarkBook> =>
-  stateFile(dir, "doctor-marks.json", {}, parseMarkBook);
+export const fileMarkBook = (
+  disk: Filesystem,
+  dir: string,
+): StateFile<MarkBook> =>
+  stateFile(disk, dir, "doctor-marks.json", {}, parseMarkBook);

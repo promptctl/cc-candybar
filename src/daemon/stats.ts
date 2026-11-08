@@ -167,7 +167,8 @@ export interface StatsSnapshot {
   // with a target the OS refused, and errors watches reported after opening.
   // `dirs`: the OS directory watches the slots share, open now, opened and
   // closed, a reopen counting one of each; on macOS each open or close
-  // rebuilds the one FSEvents stream, so this is the churn that costs.
+  // rebuilds the one FSEvents stream, so this is the churn that costs, and
+  // each one held routes its directory's whole tree through fseventsd.
   watchers: {
     active: number;
     opened: number;
@@ -175,6 +176,8 @@ export interface StatsSnapshot {
     refused: number;
     errors: number;
     dirs: { active: number; opened: number; closed: number };
+    // Directories heard by polling their named entries: no OS watch each.
+    polled: number;
   };
   subprocesses: {
     total: number;
@@ -466,6 +469,7 @@ export class RuntimeStats {
       linkIds: { minted: 0, reused: 0, evicted: 0, reservations: 0, faults: 0 },
       watchersActive: 0,
       dirWatchesActive: 0,
+      dirsPolled: 0,
       handlerProbes: [],
       clients: [],
       bundle: "/",
@@ -502,6 +506,7 @@ export class RuntimeStats {
     linkIds: LinkIdStats;
     watchersActive: number;
     dirWatchesActive: number;
+    dirsPolled: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
     clients: readonly RenderSighting[];
@@ -558,6 +563,7 @@ export class RuntimeStats {
           opened: this.dirWatchesOpened,
           closed: this.dirWatchesClosed,
         },
+        polled: extras.dirsPolled,
       },
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,
