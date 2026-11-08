@@ -259,7 +259,7 @@ Depth is also read during the draw, so colour values are chosen for it:
 - rich-js `core/protocol.js`: `groundedStyle`.
 - `src/dsl/parts.ts`: `drawnAt: () => drawnDepth(this.colorCompatibility())`.
 - `src/themes/decor.ts`: `textOn` and `legibleOn` floor via `ensureContrast(..., drawnAt)`. Shade windows use `drawnColour(..., drawnAt)`.
-- `src/render/segment-color.ts`: `keptOn`.
+- `src/render/segment-color.ts`: `roleTextOn`.
 - `src/render/band-style.ts`, `src/template-engine/colors.ts`, `menu.ts`, `picker.ts`, `carousel.ts`, `swatches.ts`, `theme-preview.ts`, `layout-preview.ts`, and the flash text in `src/dsl/render.ts`.
 
 **Conclusion: a Frame is not depth-independent.** It is drawn for one depth and cannot be re-encoded at another with the floors intact.
