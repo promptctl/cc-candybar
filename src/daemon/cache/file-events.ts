@@ -192,8 +192,9 @@ export class FileEventDelivery {
       // [LAW:single-enforcer] The only acquirer of this registry key.
       handle: this.watchers.acquire(
         `file-events:${folder}`,
-        // Every child of a folder of its own: a watch for a named entry may
-        // be polled, and the probe measures the OS's delivery.
+        // [LAW:one-source-of-truth] Every child of a folder of its own: a
+        // watch for a named entry may be polled, and the probe measures the
+        // OS's delivery, which only an OS watch rides.
         { dirs: [{ path: folder }] },
         (heard) => this.heard(probing, heard),
       ),
@@ -206,13 +207,6 @@ export class FileEventDelivery {
         stopPeriod,
         `the OS refused the probe folder's watch: ${refusal.reason}`,
       );
-      return;
-    }
-    // [LAW:one-source-of-truth] The registry says whether a watch rides the
-    // OS's stream; a probe heard by polling would vouch for a stream it never
-    // rode.
-    if (!probing.handle.ridesStream) {
-      this.end(stopPeriod, "the probe folder's watch rides no OS stream");
       return;
     }
     this.move({ kind: "delivering", unreported: [], missedSince: null });
@@ -430,10 +424,11 @@ export interface FileEventsWarning {
 // registry polls a watch for named entries, which the registry alone decides:
 // where it does (macOS) a file watched by name is still heard, and only a
 // folder or tree watched whole rides the stream; where it does not (Linux)
-// every watch rides it. The consumers named are examples, not a list.
+// every watch rides it. The row names no consumer: which shape each consumer
+// watches is that consumer's own.
 const deafened = (namesPolled: boolean): string =>
   namesPolled
-    ? "so what watches a whole folder or tree, such as plugin folders, plugin storage and branch refs, will not refresh until they resume; a file watched by name, such as the config or a repo's HEAD, is checked on a timer and still refreshes"
+    ? "so a folder or tree watched whole will not refresh until they resume; a file watched by name is checked on a timer and still refreshes"
     : "so nothing that refreshes on file events will refresh until they resume";
 
 export function fileEventsWarnings(

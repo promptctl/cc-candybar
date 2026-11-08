@@ -561,7 +561,7 @@ describe("the bar's row and daemon-stats' line", () => {
     ],
     [
       "tree",
-      `${STOPPED}, so what watches a whole folder or tree, such as plugin folders, plugin storage and branch refs, will not refresh until they resume; a file watched by name, such as the config or a repo's HEAD, is checked on a timer and still refreshes`,
+      `${STOPPED}, so a folder or tree watched whole will not refresh until they resume; a file watched by name is checked on a timer and still refreshes`,
     ],
   ] as const)(
     "a stall where the watch reaches the %s names what it deafens and the span's start, and composes into one warning",
