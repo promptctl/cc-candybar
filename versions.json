@@ -2,66 +2,31 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-691",
-      "ref": "refs/pull/691/merge",
-      "sha": "8a6ed793657e5df07da970a7a1c36815f56f3959",
-      "timestamp": "2026-11-08T12:21:29.877Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "0a394d3d93cccb884c28bb7b74e365fa6bef1695",
+      "timestamp": "2026-11-08T12:26:42.487Z",
       "commits": [
         {
-          "sha": "8a6ed793657e5df07da970a7a1c36815f56f3959",
+          "sha": "0a394d3d93cccb884c28bb7b74e365fa6bef1695",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T12:20:32Z",
-          "message": "Merge 9fcc59a9e4165194d37cae578fbd42089b555753 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
+          "timestamp": "2026-11-08T05:25:40-07:00",
+          "message": "fix(pricing): entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3) (#691)\n\n* fix(pricing): entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fold priced each un-costed entry with the table held when it ran and\nstored the sum, so a daemon that started offline kept the bundled rates\nfor every entry folded before the live table landed, in the session total\nand in today, until a rewrite re-folded the file from zero.\n\nA record now holds the price's inputs and no price: the cost its entries\ncarried themselves, and the tokens of the entries that carried none by\nthe model they are priced as. Every reader prices the record with the\ntable held at the read. The pricing adapter's table is an observable\nread, and the ask that starts a due load is a separate effect the\nrequest's refresh makes, so the day sums and the session draw recompute\nin the turn a table lands and no read inside a derivation starts a load.\nNothing waits for the first load any more: a cold daemon's first frame\ndraws at the bundled rates and is re-priced when the table lands.\n\nTests: a store over the live adapter and the mocked network folds entries\nbefore the fetch answers and reads the landed table's price for them\nafter it, with no transcript read and no refresh, and again when the\nday's table lands; a carried cost stands under any table; the adapter's\ncases are restated over the read and the ask, with a reaction observing\nthe landing.\n\n* fix(pricing): the table is derived by landing, the load latch opens however the load ends (candybar-gather-renderer-76bb.6pj.wi3)\n\nFrom the high review of PR #691:\n\n- A derivation over the table moves only when a table does: the landing is\n  a computed told apart by its moment, so a retry that lands nothing, or a\n  refresh that finds the day's copy on disk, recomputes nothing downstream.\n  Pinned by a test that fails under reference equality.\n- The one-load latch is released in a finally, so a load that rejects\n  cannot leave the daemon on the bundled rates for its whole life.\n- The parse's token and raw shapes are interfaces: the exception that kept\n  them aliases named a boundary this PR tightened away.\n- The merge of a session's file folds is a FileFold, not a second type of\n  the same shape.\n- The token total is one function on the breakdown's module, in place of\n  three hand sums.\n\n* fix(pricing): an empty entry model names no model, so the message's model prices the entry (candybar-gather-renderer-76bb.6pj.wi3)\n\n* fix(pricing): a day's disk copy does not replace a newer table this owner holds (candybar-gather-renderer-76bb.6pj.wi3)\n\n* fix(pricing): the table is asked for once a held record has an entry no cost priced (candybar-gather-renderer-76bb.6pj.wi3)\n\nA machine whose transcripts all carry costUSD reads no table, so its\nstatusline tick starts no fetch of pricing.json and, offline, warns of no\ntable it never priced by. The ask stays in the request's refresh, the one\neffect per tick; a record a scan holds with unpriced tokens makes the next\nrequest ask, since today prices it by the table.\n\n* fix(pricing): the day's disk copy prices from the owner's start, and a rejected load is said in the owner's log (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fresh daemon asked for its table only after its first fold, so a cold\nfold of a large transcript drew its first frames at the bundled rates even\nwith the day's copy on disk. The copy is now read as the pricing is built,\nwhich fetches nothing; a fetch still starts only from a refresh that owes a\nprice, and every load follows the read. A load that rejects is said through\nthe owner's log instead of the host process's unhandled-rejection handling,\nwhich the demo does not install. Memory lines on pricing now state this.\n\ncandybar-gather-renderer-76bb.6pj.wi3\n\n* fix(pricing): an entry with no tokens owes no price, so it never asks for the table (candybar-gather-renderer-76bb.6pj.wi3)\n\nA synthetic entry (an API error or an interrupt) carries an all-zero usage\nand no cost; held as unpriced it had a machine whose entries all price\nthemselves fetch the table. The usage comments say what a record holds now,\nand the transcript fold's step is synchronous, as every caller passes.\n\ncandybar-gather-renderer-76bb.6pj.wi3"
         },
         {
-          "sha": "9fcc59a9e4165194d37cae578fbd42089b555753",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T05:08:49-07:00",
-          "message": "fix(pricing): an entry with no tokens owes no price, so it never asks for the table (candybar-gather-renderer-76bb.6pj.wi3)\n\nA synthetic entry (an API error or an interrupt) carries an all-zero usage\nand no cost; held as unpriced it had a machine whose entries all price\nthemselves fetch the table. The usage comments say what a record holds now,\nand the transcript fold's step is synchronous, as every caller passes.\n\ncandybar-gather-renderer-76bb.6pj.wi3\n"
+          "sha": "b73c3b4c722203fa627fdf1bedaca72a2428f675",
+          "author_name": "GitHub Action",
+          "author_email": "action@github.com",
+          "timestamp": "2026-11-08T08:39:09Z",
+          "message": "chore: update pricing data 2026-11-08 [skip ci]\n"
         },
         {
-          "sha": "0278c644e3521987175c7220c4d57503d24e364a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T05:00:54-07:00",
-          "message": "fix(pricing): the day's disk copy prices from the owner's start, and a rejected load is said in the owner's log (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fresh daemon asked for its table only after its first fold, so a cold\nfold of a large transcript drew its first frames at the bundled rates even\nwith the day's copy on disk. The copy is now read as the pricing is built,\nwhich fetches nothing; a fetch still starts only from a refresh that owes a\nprice, and every load follows the read. A load that rejects is said through\nthe owner's log instead of the host process's unhandled-rejection handling,\nwhich the demo does not install. Memory lines on pricing now state this.\n\ncandybar-gather-renderer-76bb.6pj.wi3\n"
-        },
-        {
-          "sha": "c9e8a8d17827c9cf1000269ca0c0eb2a1fb02f21",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T04:50:39-07:00",
-          "message": "fix(pricing): the table is asked for once a held record has an entry no cost priced (candybar-gather-renderer-76bb.6pj.wi3)\n\nA machine whose transcripts all carry costUSD reads no table, so its\nstatusline tick starts no fetch of pricing.json and, offline, warns of no\ntable it never priced by. The ask stays in the request's refresh, the one\neffect per tick; a record a scan holds with unpriced tokens makes the next\nrequest ask, since today prices it by the table.\n"
-        },
-        {
-          "sha": "79d95caf48e3df7be3f38065bbdb68ed5d14af10",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T01:59:16-07:00",
-          "message": "fix(pricing): a day's disk copy does not replace a newer table this owner holds (candybar-gather-renderer-76bb.6pj.wi3)\n"
-        },
-        {
-          "sha": "95b07f82e599d2d2500b191c994805c80d800f98",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T01:54:02-07:00",
-          "message": "fix(pricing): an empty entry model names no model, so the message's model prices the entry (candybar-gather-renderer-76bb.6pj.wi3)\n"
-        },
-        {
-          "sha": "e046772550cc45bd8d35696cf735a5316b8161f3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:35:44-07:00",
-          "message": "fix(pricing): the table is derived by landing, the load latch opens however the load ends (candybar-gather-renderer-76bb.6pj.wi3)\n\nFrom the high review of PR #691:\n\n- A derivation over the table moves only when a table does: the landing is\n  a computed told apart by its moment, so a retry that lands nothing, or a\n  refresh that finds the day's copy on disk, recomputes nothing downstream.\n  Pinned by a test that fails under reference equality.\n- The one-load latch is released in a finally, so a load that rejects\n  cannot leave the daemon on the bundled rates for its whole life.\n- The parse's token and raw shapes are interfaces: the exception that kept\n  them aliases named a boundary this PR tightened away.\n- The merge of a session's file folds is a FileFold, not a second type of\n  the same shape.\n- The token total is one function on the breakdown's module, in place of\n  three hand sums.\n"
-        },
-        {
-          "sha": "d86cc665bedf4151e9565ed92c80a9a61061adb1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:13:44-07:00",
-          "message": "fix(pricing): entries folded before the table landed are priced by it when it lands (candybar-gather-renderer-76bb.6pj.wi3)\n\nA fold priced each un-costed entry with the table held when it ran and\nstored the sum, so a daemon that started offline kept the bundled rates\nfor every entry folded before the live table landed, in the session total\nand in today, until a rewrite re-folded the file from zero.\n\nA record now holds the price's inputs and no price: the cost its entries\ncarried themselves, and the tokens of the entries that carried none by\nthe model they are priced as. Every reader prices the record with the\ntable held at the read. The pricing adapter's table is an observable\nread, and the ask that starts a due load is a separate effect the\nrequest's refresh makes, so the day sums and the session draw recompute\nin the turn a table lands and no read inside a derivation starts a load.\nNothing waits for the first load any more: a cold daemon's first frame\ndraws at the bundled rates and is re-priced when the table lands.\n\nTests: a store over the live adapter and the mocked network folds entries\nbefore the fetch answers and reads the landed table's price for them\nafter it, with no transcript read and no refresh, and again when the\nday's table lands; a carried cost stands under any table; the adapter's\ncases are restated over the read and the ask, with a reaction observing\nthe landing.\n"
+          "sha": "d05412c9391a086110457900c0ee687556f7f7ad",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-07T12:40:29Z",
+          "message": "chore(release): set `package.json` to 1.210.5 [skip ci]\n\n## [1.210.5](https://github.com/promptctl/cc-candybar/compare/v1.210.4...v1.210.5) (2026-11-07)\n\n### Bug Fixes\n\n* **daemon:** a connection's state is one value, and past waiting it reads no more frames ([#689](https://github.com/promptctl/cc-candybar/issues/689)) ([b21e989](https://github.com/promptctl/cc-candybar/commit/b21e989ab734befd8acc182d17139d743372d040))\n"
         }
       ]
     },
@@ -206,28 +171,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:35:05-07:00",
           "message": "fix(colour)!: the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g)\n\nAt ansi the open settings door's ✖ was drawn silver, yellow, purple or\nblack: the red was chosen as truecolor measures it, and keptOn's repair\nsearched the depth's table by contrast alone. The choice now measures\nevery candidate and the ground as the render's depth draws them, and\nthe candidates are per depth: the theme's named reds in truecolor and\nat 256 colours, the terminal's red and bright red (SGR 31/91) at ansi.\nkeptOn has no job left and is deleted.\n\nBREAKING CHANGE: the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "b21e989ab734befd8acc182d17139d743372d040",
-      "timestamp": "2026-11-07T12:30:11.167Z",
-      "commits": [
-        {
-          "sha": "b21e989ab734befd8acc182d17139d743372d040",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:29:10-07:00",
-          "message": "fix(daemon): a connection's state is one value, and past waiting it reads no more frames (#689)\n\n* fix(daemon): a connection's state is one value, and past waiting it reads no more frames (brandon-unfiled-3248.df7i)\n\nA connection's lifecycle is one state (awaiting, answering, unattended,\nanswered, held, streaming, closed) moved by one pure transition table; the\nconnection only performs the effects a step names. In-flight and the\nbackstop are columns of the table, so each moves once, on crossing its line.\n\nA connection reads exactly one frame: a second frame, a frame after the\nanswer, and the bytes behind an over-cap header or unparseable frame are\nnever handled or buffered. A reply that cannot be encoded is answered\nRENDER_FAILED and ends the stream, its exit still sequenced on that flush.\nA dropped exit's warning names its one cause: the client was told TIMEOUT.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(daemon): a url frame read past the deadline stays unattended, a socket error is the peer leaving, and a frame handler's throw is heard (brandon-unfiled-3248.df7i)\n\n- The read carries who waits in every state: a url frame read after the\n  backstop answered is unattended and lapsed, so its forwarder's hang-up\n  no longer leaves in-flight or reads as a client gone mid-click.\n- A socket error moves the state to closed, so a click whose turn falls\n  between the destroy and the 'close' sees its client gone.\n- readOneFrame delivers its first outcome outside the reader's parse, so a\n  throw from onFrame reaches the stream instead of being dropped as a\n  second parse failure.\n- The connection uses reply.ts's stay-up reply instead of a copy.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(daemon): a frame handler's synchronous throw is answered RENDER_FAILED, never an exception out of the socket's read (brandon-unfiled-3248.df7i)\n\nThe connection's frame handling runs inside one promise started in the\nread's turn, so a throw before its first await takes the handler-threw\npath. readOneFrame raising onFrame's throw would otherwise end the shared\ndaemon through uncaughtException.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(daemon): a subscription the feed took after the connection moved on is ended, not dropped (brandon-unfiled-3248.df7i)\n\nThe subscribed cell unsubscribes from every state but answering, so the\ntable no longer depends on nothing interleaving with the feed's\nsubscribe. The connection builds a reply event through reply.ts's\nreplied, and the clientLeft comment says when a url frame's writer\ncounts as present.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        },
-        {
-          "sha": "e5b0fe5cb0e0b514bcdc61157f7356ddfffc2b6b",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-07T12:21:53Z",
-          "message": "chore(release): set `package.json` to 1.210.4 [skip ci]\n\n## [1.210.4](https://github.com/promptctl/cc-candybar/compare/v1.210.3...v1.210.4) (2026-11-07)\n\n### Bug Fixes\n\n* **update-act:** an act's budget is the time it was watched running, so a sleep does not end it (brandon-unfiled-3248.9eu3) ([#680](https://github.com/promptctl/cc-candybar/issues/680)) ([fa8e87c](https://github.com/promptctl/cc-candybar/commit/fa8e87c85367b73007971b034e493d8b29912a51))\n* **watchers:** a storage folder's fault clears when its watch or stat recovers (brandon-unfiled-3248.tvhj) ([#685](https://github.com/promptctl/cc-candybar/issues/685)) ([7b4203a](https://github.com/promptctl/cc-candybar/commit/7b4203a84d6fa6c8c96ff5a612bc0d128bb97b40))\n"
         }
       ]
     },
