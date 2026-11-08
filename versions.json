@@ -2,60 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-697",
-      "ref": "refs/pull/697/merge",
-      "sha": "6388ba248b05675a0489221ee5f8d27d81229aba",
-      "timestamp": "2026-11-08T13:50:56.376Z",
-      "commits": [
-        {
-          "sha": "6388ba248b05675a0489221ee5f8d27d81229aba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:49:53-07:00",
-          "message": "Merge 8f406be588c295e225425a38cb220fd36f53d0c8 into 691cd171bcee77b6d424fd6a730ab3be4bd8d503\n"
-        },
-        {
-          "sha": "8f406be588c295e225425a38cb220fd36f53d0c8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:49:50-07:00",
-          "message": "Merge branch 'main' into candybar-testing-ihvy.5zt-followup"
-        },
-        {
-          "sha": "000715406c5cf86091d85f44a66ca33ecbe96f20",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:46:53-07:00",
-          "message": "fix(daemon): the lane edge's disk comment says it never writes to the disk, not that it never writes (candybar-testing-ihvy.5zt)\n"
-        },
-        {
-          "sha": "8de199c824018aa8abd4d6517724b1307e1a4ab1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:41:19-07:00",
-          "message": "fix(daemon): the doctor-store comment claims only what the code does, and the two edges' disk is reads-only (candybar-testing-ihvy.5zt)\n"
-        },
-        {
-          "sha": "f9a5f3f236e9e5f3e8344e9edd2841b41e312ba4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T06:15:38-07:00",
-          "message": "fix(daemon): the doctor's stores, the doctor's edge and the lane edge take the daemon's disk (candybar-testing-ihvy.5zt)\n\nReview follow-up to #667. productionAdapters bound these three to the\nsystem disk while the daemon's inputs name its disk separately as\n`filesystem`, so an inputs bundle could describe a daemon over two disks.\nEach now takes the disk as a parameter, as storage already does, and the\ndaemon hands each one inputs.filesystem.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-692",
       "ref": "refs/pull/692/merge",
-      "sha": "0a18071e1e6f71d1864fa5268fd9c5a25cd081c0",
-      "timestamp": "2026-11-08T13:50:46.606Z",
+      "sha": "a01da1c8ebb7893d2f4761647690ac32a93fb893",
+      "timestamp": "2026-11-08T14:09:24.876Z",
       "commits": [
         {
-          "sha": "0a18071e1e6f71d1864fa5268fd9c5a25cd081c0",
+          "sha": "a01da1c8ebb7893d2f4761647690ac32a93fb893",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T13:49:48Z",
-          "message": "Merge f0700dd92f638e271998d7958d7783c0d2e8e0a5 into 691cd171bcee77b6d424fd6a730ab3be4bd8d503\n"
+          "timestamp": "2026-11-08T14:08:24Z",
+          "message": "Merge 691e7fc9ac91aa02869a8cf15c8b51659f9dd8a0 into 4bfb7a074dcca9490925b9eb06692b43956d8765\n"
+        },
+        {
+          "sha": "691e7fc9ac91aa02869a8cf15c8b51659f9dd8a0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:08:20-07:00",
+          "message": "Merge branch 'main' into candybar-gather-renderer-76bb.1dh.izh"
         },
         {
           "sha": "f0700dd92f638e271998d7958d7783c0d2e8e0a5",
@@ -112,6 +76,49 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:14:46-07:00",
           "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-697",
+      "ref": "refs/pull/697/merge",
+      "sha": "6388ba248b05675a0489221ee5f8d27d81229aba",
+      "timestamp": "2026-11-08T13:50:56.376Z",
+      "commits": [
+        {
+          "sha": "6388ba248b05675a0489221ee5f8d27d81229aba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:49:53-07:00",
+          "message": "Merge 8f406be588c295e225425a38cb220fd36f53d0c8 into 691cd171bcee77b6d424fd6a730ab3be4bd8d503\n"
+        },
+        {
+          "sha": "8f406be588c295e225425a38cb220fd36f53d0c8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:49:50-07:00",
+          "message": "Merge branch 'main' into candybar-testing-ihvy.5zt-followup"
+        },
+        {
+          "sha": "000715406c5cf86091d85f44a66ca33ecbe96f20",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:46:53-07:00",
+          "message": "fix(daemon): the lane edge's disk comment says it never writes to the disk, not that it never writes (candybar-testing-ihvy.5zt)\n"
+        },
+        {
+          "sha": "8de199c824018aa8abd4d6517724b1307e1a4ab1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:41:19-07:00",
+          "message": "fix(daemon): the doctor-store comment claims only what the code does, and the two edges' disk is reads-only (candybar-testing-ihvy.5zt)\n"
+        },
+        {
+          "sha": "f9a5f3f236e9e5f3e8344e9edd2841b41e312ba4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:15:38-07:00",
+          "message": "fix(daemon): the doctor's stores, the doctor's edge and the lane edge take the daemon's disk (candybar-testing-ihvy.5zt)\n\nReview follow-up to #667. productionAdapters bound these three to the\nsystem disk while the daemon's inputs name its disk separately as\n`filesystem`, so an inputs bundle could describe a daemon over two disks.\nEach now takes the disk as a parameter, as storage already does, and the\ndaemon hands each one inputs.filesystem.\n"
         }
       ]
     },
