@@ -68872,7 +68872,7 @@ async function foldAppended(filePath2, prior, empty2, step4) {
       end = { size: window2.size, stamp: window2.stamp };
     }
     const next = window2.start + window2.lines.length;
-    value = await step4(
+    value = step4(
       value,
       decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
     );
@@ -81637,11 +81637,12 @@ function addUsage(into, u) {
 }
 function usageOfEntry(entry, counts) {
   const tokens = breakdownOf(counts);
-  return entry.costUSD === void 0 ? {
+  const cost = entry.costUSD ?? (totalTokens(tokens) === 0 ? 0 : void 0);
+  return cost === void 0 ? {
     carried: EMPTY_USAGE.carried,
     unpriced: /* @__PURE__ */ new Map([[modelIdOf(entry.raw), tokens]])
   } : {
-    carried: { cost: entry.costUSD, tokens },
+    carried: { cost, tokens },
     unpriced: EMPTY_USAGE.unpriced
   };
 }
@@ -81752,9 +81753,12 @@ function answer(box, value) {
 }
 var SessionUsageStore = class {
   // No count cap: `today` is a fold over every record, so a cap smaller than
-  // the day's sessions would drop work from it unseen. A record is a few
-  // scalars per file and retained day, and `sweepStale` bounds the map to the
-  // sessions seen within `staleAgeMs` plus those holding work done today.
+  // the day's sessions would drop work from it unseen. A record holds, per
+  // file and per retained day, a usage: a carried cost and token breakdown,
+  // plus one token breakdown per model priced by no entry, so it grows with
+  // files × retained days × unpriced models and never with entries.
+  // `sweepStale` bounds the map to the sessions seen within `staleAgeMs` plus
+  // those holding work done today.
   // Observable, shallowly: a slot replaced is the change the day sums read.
   sessions = observable.map(void 0, {
     deep: false

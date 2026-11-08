@@ -4,15 +4,22 @@
     {
       "version": "pr-691",
       "ref": "refs/pull/691/merge",
-      "sha": "70b8fb3e685f56b3c02f15ac082d823f7e379534",
-      "timestamp": "2026-11-08T12:01:58.214Z",
+      "sha": "a241f761d14c903b439b26381cbfaf1613f3102d",
+      "timestamp": "2026-11-08T12:09:53.035Z",
       "commits": [
         {
-          "sha": "70b8fb3e685f56b3c02f15ac082d823f7e379534",
+          "sha": "a241f761d14c903b439b26381cbfaf1613f3102d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T12:01:05Z",
-          "message": "Merge 472dc2dbef57a1dd7b204e42f0454dd2104139fb into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
+          "timestamp": "2026-11-08T12:09:00Z",
+          "message": "Merge 66719a02b9ab8cd6011bf2636f276124cd146ef3 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
+        },
+        {
+          "sha": "66719a02b9ab8cd6011bf2636f276124cd146ef3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T05:08:49-07:00",
+          "message": "fix(pricing): an entry with no tokens owes no price, so it never asks for the table (candybar-gather-renderer-76bb.6pj.wi3)\n\nA synthetic entry (an API error or an interrupt) carries an all-zero usage\nand no cost; held as unpriced it had a machine whose entries all price\nthemselves fetch the table. The usage comments say what a record holds now,\nand the transcript fold's step is synchronous, as every caller passes.\n\ncandybar-gather-renderer-76bb.6pj.wi3\n"
         },
         {
           "sha": "472dc2dbef57a1dd7b204e42f0454dd2104139fb",
