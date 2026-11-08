@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-699",
+      "ref": "refs/pull/699/merge",
+      "sha": "c3ccd99782eced6572e8de5fe0101322fbab4bb1",
+      "timestamp": "2026-11-08T14:28:00.709Z",
+      "commits": [
+        {
+          "sha": "c3ccd99782eced6572e8de5fe0101322fbab4bb1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:26:59-07:00",
+          "message": "Merge b4291bbdeece7951e5278f5f202fe6f0b96cd2b2 into eaa59b6d87c32073b040a97072a0fee0a6e048fc\n"
+        },
+        {
+          "sha": "b4291bbdeece7951e5278f5f202fe6f0b96cd2b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T07:26:41-07:00",
+          "message": "fix(watchers): on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens (brandon-unfiled-3248.slsx)\n\nA watch handle now says whether it rides the OS's one event stream, from the\nregistry's own choice of what is polled. A stall is the fault only of a watch\nthat rides it, so a polled `watch_file` name carries no stall fault and keeps\nrefreshing; the file-event probe asks the same question of its own watch. The\nstall row reads the disk's watch reach: on macOS it names a folder or tree\nwatched whole as what a stall deafens and says a file watched by name still\nrefreshes; on Linux, where every watch rides inotify, it reads as before.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-698",
       "ref": "refs/pull/698/merge",
       "sha": "3439a396295102bd4df6b670a605cc29b5d7b5d9",
