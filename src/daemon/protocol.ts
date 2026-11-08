@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Duplex } from "node:stream";
+import type { Duplex, Readable } from "node:stream";
 import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
@@ -691,6 +691,39 @@ export function makeFrameReader(
       }
     }
   };
+}
+
+// One frame read off a stream, then no more: the first complete frame or the
+// first error is delivered, and the reader detaches, so later bytes are
+// discarded by the flowing stream and nothing is buffered for them. A daemon's
+// connection reads this way, so a sender past the cap, or one writing on after
+// its frame, cannot grow the daemon's memory or run a second request.
+// [LAW:single-enforcer] The parse and the cap are the frame reader's; this only
+// stops it, and a frame after the first in the chunk that held it is dropped.
+// [LAW:no-silent-failure] The first outcome is delivered once the reader has
+// returned, outside its parse, so whatever `onFrame` throws reaches the
+// stream's emitter as itself, never as a parse failure nobody hears.
+export function readOneFrame(
+  stream: Readable,
+  onFrame: (frame: unknown) => void,
+  onError: (err: Error) => void,
+): void {
+  let first:
+    | { readonly ok: true; readonly frame: unknown }
+    | { readonly ok: false; readonly err: Error }
+    | null = null;
+  const reader = makeFrameReader(
+    (frame) => void (first ??= { ok: true, frame }),
+    (err) => void (first ??= { ok: false, err }),
+  );
+  const read = (chunk: Buffer): void => {
+    reader(chunk);
+    if (first === null) return;
+    stream.off("data", read);
+    if (first.ok) onFrame(first.frame);
+    else onError(first.err);
+  };
+  stream.on("data", read);
 }
 
 // Send one frame and await one response, giving up at `deadline` (epoch

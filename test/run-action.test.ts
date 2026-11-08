@@ -85,6 +85,7 @@ import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { pendingOf } from "../src/utils/outcome";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { InstalledLayerMemo } from "../src/config/dsl-loader";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -425,6 +426,8 @@ describe("a run's declaration", () => {
     const loaded = loadFromDisk(originAt(dir, config(["mine"])), {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locs(),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -454,6 +457,8 @@ describe("a run's declaration", () => {
     const loaded = loadFromDisk(originAt(dir, file), {
       clock: systemTimekeeper,
       stateDir: stateDir(WORLD.home),
+      filesystem: systemFilesystem,
+      memo: new InstalledLayerMemo(),
       locations: locs(),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,

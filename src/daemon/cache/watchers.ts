@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Filesystem, Watch } from "../../disk/filesystem";
+import type { Filesystem, FilesystemError, Watch } from "../../disk/filesystem";
 import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
 import { walkLinks } from "../../utils/link-chain";
@@ -34,14 +34,32 @@ const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 //
 // Opening or closing a DIRECTORY watch is not free on macOS: libuv ≤ 1.53.0
 // rebuilds its one FSEvents stream and leaks a CFString per watched directory
-// each time (fixed upstream in libuv 9ac5b3cee0). Hold a watch for as long as
-// its target matters, not for as long as one value derived from it.
+// each time (fixed upstream in libuv 9ac5b3cee0). Each rebuild registers a new
+// fseventsd client, and a close blocks the JS thread until fseventsd has
+// answered the new stream's start, so while fseventsd is backed up every close
+// stalls the daemon's event loop. Hold a watch for as long as its target
+// matters, not for as long as one value derived from it.
+//
+// Nor is holding one: an FSEvents stream has no depth, and libuv asks for
+// per-file events, so a macOS directory watch subscribes the process to every
+// file event in the directory's whole tree, and libuv drops all but the direct children only after fseventsd has
+// routed each one here. A config candidate at a repository's root, or in a
+// session started in the home directory, would pull every build, install and
+// test run beneath it through fseventsd. So on a disk whose directory watch
+// reaches the tree, a directory watched only for named entries is not an OS
+// watch at all: one sweep lstats those entries, and the cost is the names,
+// whatever happens in the tree around them.
 
 // [LAW:one-source-of-truth] Exported: the invalidation-debounce floor is the
 // single source consumers derive from (e.g. the load harness's git-churn
 // interval must sit above it). Restating "50" anywhere else would let the two
 // drift silently.
 export const DEBOUNCE_MS = 50;
+
+// [LAW:no-ambient-temporal-coupling] How often a polled directory's named
+// entries are lstat'd: the longest an edit to one waits before its window
+// opens.
+export const NAMES_POLL_MS = 1000;
 
 // Absolute directories the consumer wants invalidation for. A directory is
 // watched one level deep, optionally restricted to the child basenames that
@@ -173,7 +191,7 @@ export interface BoundWatch {
 
 // [LAW:single-enforcer] Why a watch may be missing changes, for every
 // consumer that shows it: each path whose link chain it could not walk, and
-// each directory the OS is not listening to (read live from the handle), and
+// each directory it is deaf to (read live from the handle), and
 // `beyond`, a reason the watch cannot know of itself. `null` while it hears
 // every place its paths can change.
 export function watchFault(
@@ -198,7 +216,7 @@ type Gathering =
   | Exclude<Invalidation, { kind: "changed" }>
   | { readonly kind: "changed"; readonly paths: Set<string> };
 
-// A target the OS is not listening to, and why: it refused the open, or the
+// A target the registry cannot hear, and why: it refused the open, or the
 // handle reported an error after it opened.
 export interface Deafness {
   readonly kind: "refused" | "failed";
@@ -218,21 +236,31 @@ export const deafnessReason = (d: Deafness): string =>
 // both. A listening one holds its handle and the folder it bound, read before
 // the open, so a folder replaced while it opens reads as moved at the next
 // judgment, never as the one the handle bound.
+//
+// A polled one holds no handle: the folder its path binds and each named
+// entry's lstat as the last sweep read it, so a sweep reports what differs.
 type DirState =
   | {
       readonly kind: "listening";
       readonly handle: Watch;
       readonly bound: string;
     }
+  | {
+      readonly kind: "polling";
+      bound: string;
+      readonly seen: Map<string, string>;
+    }
   | { readonly kind: "deaf"; readonly deafness: Deafness };
 
-// [LAW:single-enforcer] One OS watch per directory, shared by every slot
-// that targets it: a slot's key spells its name filters, so a link re-pointed
-// to a new name is a new slot on the same directory, and the handle stays.
+// [LAW:single-enforcer] One watch per directory and kind (its names polled,
+// every child, or its tree), shared by every slot that targets it: a slot's
+// key spells its name filters, so a link re-pointed to a new name is a new
+// slot on the same directory, and the handle stays.
 interface DirWatch {
   readonly id: string;
   readonly path: string;
   readonly recursive: boolean;
+  readonly polled: boolean;
   state: DirState;
   readonly listeners: Set<Listener>;
 }
@@ -266,6 +294,11 @@ interface WatcherSlot {
 export interface WatcherHandle {
   release(): void;
   readonly deaf: readonly Deafness[];
+  // [LAW:one-source-of-truth] Whether any directory this watch hears rides
+  // the OS's one event stream, so a stall of that stream deafens it. A
+  // polled directory rides none, and the registry alone decides which are
+  // polled.
+  readonly ridesStream: boolean;
 }
 
 // What a consumer asks to watch, under the key naming it. [LAW:one-source-of-truth]
@@ -292,12 +325,13 @@ export interface HeldWatch {
 export type WatchMove = "kept" | "rebound";
 
 // [LAW:nothing-unseen] Two kinds of fact. A slot is a consumer's watch:
-// `watchersOpened` counts slots whose every directory listened at acquire,
-// `watchRefusals` slots with one deaf then, and `watchersClosed` every slot
-// released, so the slots held now are opened plus refusals less closed. A
-// directory watch is an OS handle, which is what the cost scales with on
-// macOS: `dirWatchesOpened` counts each open, `dirWatchesClosed` each close (a
-// reopen's included), and `watchErrors` each error a handle reported.
+// `watchersOpened` counts slots whose every directory listened or was polled
+// at acquire, `watchRefusals` slots with one deaf then, and `watchersClosed`
+// every slot released, so the slots held now are opened plus refusals less
+// closed. An OS directory watch is a handle, which is what the cost scales
+// with on macOS: `dirWatchesOpened` counts each open, `dirWatchesClosed` each
+// close (a reopen's included), and `watchErrors` each error a handle reported.
+// A polled directory holds no handle and counts in none of them.
 export interface WatcherCounters {
   watchersOpened: number;
   watchersClosed: number;
@@ -344,8 +378,33 @@ const sameDeafness = (was: DirState | null, now: Deafness): boolean =>
   was.deafness.kind === now.kind &&
   was.deafness.reason === now.reason;
 
-const dirId = (target: DirTarget): string =>
-  `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+// A polled directory is its own watch: a slot that hears every child of the
+// same path needs an OS watch, and shares none with the names.
+const dirId = (target: DirTarget, polled: boolean): string =>
+  `${polled ? "names" : target.recursive === true ? "tree" : "dir"}:${target.path}`;
+
+// [LAW:one-source-of-truth] What a sweep compares for one named entry: what is
+// at the path now, or the error reading it gave. Any difference is an event,
+// as a directory watch reports a child made, removed, replaced, written or
+// chmod'ed. A directory's size and mtime are its children's, which a watch on
+// its parent never hears, so a named directory is its identity and mode alone.
+// [LAW:no-silent-failure] A read the disk refuses is not deafness: the name
+// fires as it starts failing and as it stops, and the holder's own read of it
+// fails loudly in between. Taking the directory deaf for it would fail every
+// other name there, and fail again each period.
+function entryAt(filesystem: Filesystem, dir: string, name: string): string {
+  try {
+    const s = filesystem.lstatSync(path.join(dir, name));
+    const contents = s.kind === "directory" ? "" : `${s.size}:${s.mtimeMs}`;
+    return `${s.kind}:${s.dev}:${s.ino}:${s.mode}:${contents}`;
+  } catch (e) {
+    return `error:${(e as FilesystemError).code}`;
+  }
+}
+
+// The names a polled directory's listeners hear now.
+const heardNames = (dir: DirWatch): Set<string> =>
+  new Set([...dir.listeners].flatMap(({ filter }) => [...(filter ?? [])]));
 
 export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
@@ -357,12 +416,16 @@ export class WatcherRegistry {
   // owner sharing this registry reads the folders and links it judges from,
   // so a watch and the identity it is judged by read one tree.
   readonly filesystem: Filesystem;
+  // The sweep armed while any directory is polled.
+  private sweep: (() => void) | null = null;
   private closed = false;
 
   constructor(opts: {
-    // [LAW:effects-at-boundaries] The disk the watches open on.
+    // [LAW:effects-at-boundaries] The disk the watches open on, and how far
+    // each of its directory watches reaches.
     filesystem: Filesystem;
-    // [LAW:effects-at-boundaries] The clock the debounce window runs on.
+    // [LAW:effects-at-boundaries] The clock the debounce window and the
+    // names' sweep run on.
     clock: Pick<Timekeeper, "after">;
     counters?: WatcherCounters;
     // [LAW:single-enforcer] One injection point per consumer. The daemon
@@ -375,6 +438,14 @@ export class WatcherRegistry {
     this.filesystem = opts.filesystem;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+  }
+
+  // [LAW:one-source-of-truth] Whether a watch for named entries is polled
+  // here, and so heard through a stall of the OS's stream: the one rule every
+  // directory opens by, and the one the bar's stall row reads. The disk says
+  // what a directory watch costs: where it reaches the tree, a name is polled.
+  get namesPolled(): boolean {
+    return this.filesystem.watchReach === "tree";
   }
 
   // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
@@ -393,6 +464,7 @@ export class WatcherRegistry {
       // so; releasing it is a no-op, so callers don't crash mid-shutdown.
       return {
         release: () => {},
+        ridesStream: false,
         deaf: targets.dirs.map((d) => ({
           kind: "refused",
           path: d.path,
@@ -459,10 +531,11 @@ export class WatcherRegistry {
       };
       dir.listeners.add(listener);
       slot.listeners.push(listener);
+      this.baseline(dir);
     }
     this.slots.set(key, slot);
     if (this.counters) {
-      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
+      if (slot.listeners.every((l) => l.dir.state.kind !== "deaf"))
         this.counters.watchersOpened++;
       else this.counters.watchRefusals++;
     }
@@ -472,13 +545,19 @@ export class WatcherRegistry {
   // The directory watch a new slot's target joins: the one already open
   // there, judged, or a new one.
   private dirFor(target: DirTarget): DirWatch {
-    const id = dirId(target);
+    // [LAW:one-source-of-truth] The registry's one polling rule.
+    const polled = this.namesPolled && target.filenames !== undefined;
+    const id = dirId(target, polled);
     const existing = this.dirs.get(id);
     if (existing !== undefined) {
       this.judged(existing, "acquire");
       return existing;
     }
-    const where = { path: target.path, recursive: target.recursive === true };
+    const where = {
+      path: target.path,
+      recursive: target.recursive === true,
+      polled,
+    };
     const dir: DirWatch = {
       id,
       ...where,
@@ -504,6 +583,8 @@ export class WatcherRegistry {
       this.reopen(dir, cause);
       return;
     }
+    // A poll follows the path: the sweep judges the folder there itself.
+    if (dir.state.kind === "polling") return;
     const now = boundOf(this.filesystem, dir.path);
     if (bindsFolder(now) && boundKey(now) !== dir.state.bound)
       this.reopen(dir, "another folder is at its path");
@@ -533,7 +614,8 @@ export class WatcherRegistry {
     const was = dir.state;
     if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
     dir.state = this.open(dir, () => dir, cause, was);
-    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
+    this.baseline(dir);
+    if (dir.state.kind !== "deaf") this.tell(dir, { kind: "unknown" });
     else if (!sameDeafness(was, dir.state.deafness))
       this.tell(dir, failedOf(dir.state.deafness));
   }
@@ -541,7 +623,11 @@ export class WatcherRegistry {
   // `dirOf` names the watch the handle belongs to; its callbacks run only
   // after the open returns, once the watch holds the state returned here.
   private open(
-    where: { readonly path: string; readonly recursive: boolean },
+    where: {
+      readonly path: string;
+      readonly recursive: boolean;
+      readonly polled: boolean;
+    },
     dirOf: () => DirWatch,
     cause: string,
     was: DirState | null,
@@ -554,8 +640,17 @@ export class WatcherRegistry {
       // on Node 20 and 22 (Node's own walk), which swallows the error and
       // returns a watch that never fires.
       // [LAW:dataflow-not-control-flow] So every open opens the directory
-      // first, recursive or not, and its error is the refusal's reason.
+      // first, recursive or not, polled or not, and its error is the
+      // refusal's reason.
       this.filesystem.opendirSync(at);
+      if (where.polled) {
+        this.logger(
+          "info",
+          `dir names polled path=${valueOf(at)} cause=${valueOf(cause)}`,
+        );
+        this.armSweep();
+        return { kind: "polling", bound, seen: new Map() };
+      }
       const handle = this.filesystem.watch(
         at,
         { recursive: where.recursive },
@@ -656,6 +751,7 @@ export class WatcherRegistry {
 
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
     return {
+      ridesStream: slot.listeners.some(({ dir }) => !dir.polled),
       get deaf() {
         return slot.listeners.flatMap(({ dir }) =>
           dir.state.kind === "deaf" ? [dir.state.deafness] : [],
@@ -690,12 +786,91 @@ export class WatcherRegistry {
     for (const listener of slot.listeners) {
       const { dir } = listener;
       dir.listeners.delete(listener);
+      // A name no listener hears any more is forgotten now, so a slot that
+      // asks for it again starts from what is there at its own acquire.
+      if (dir.state.kind === "polling") {
+        const names = heardNames(dir);
+        for (const name of dir.state.seen.keys())
+          if (!names.has(name)) dir.state.seen.delete(name);
+      }
       if (dir.listeners.size > 0) continue;
       if (dir.state.kind === "listening")
         this.closeHandle(dir.path, dir.state.handle, cause);
+      if (dir.state.kind === "polling")
+        this.logger(
+          "info",
+          `dir names unpolled path=${valueOf(dir.path)} cause=${valueOf(cause)}`,
+        );
       this.dirs.delete(dir.id);
     }
+    // [LAW:no-ambient-temporal-coupling] The sweep is armed exactly while a
+    // directory is polled, so the last one released leaves no timer.
+    if (this.sweep !== null && !this.polling()) {
+      this.sweep();
+      this.sweep = null;
+    }
     if (this.counters) this.counters.watchersClosed++;
+  }
+
+  private polling(): boolean {
+    return [...this.dirs.values()].some((d) => d.state.kind === "polling");
+  }
+
+  // Every name a polled directory's listeners hear is read now, unless the
+  // last sweep already read it: a name newly asked for starts from what is
+  // there, so only a change after the acquire is an event.
+  private baseline(dir: DirWatch): void {
+    const { state } = dir;
+    if (state.kind !== "polling") return;
+    for (const name of heardNames(dir))
+      if (!state.seen.has(name))
+        state.seen.set(name, entryAt(this.filesystem, dir.path, name));
+  }
+
+  // [LAW:no-ambient-temporal-coupling] Armed by the first polled open and
+  // cancelled by the last release, so a sweep runs only while a directory is
+  // polled; the next is armed before this one reads, so nothing a sweep meets
+  // can leave the polled names unheard.
+  private armSweep(): void {
+    if (this.sweep !== null || this.closed) return;
+    this.sweep = this.clock.after(
+      NAMES_POLL_MS,
+      () => {
+        this.sweep = null;
+        this.armSweep();
+        this.pollNames();
+      },
+      { unref: true },
+    );
+  }
+
+  // [LAW:dataflow-not-control-flow] The same steps for every polled directory
+  // each sweep: a folder other than the one last read at its path (removed,
+  // made again, renamed away) tells every slot on it an `unknown` window, as a
+  // directory watch reopened does, and every name is read again from there;
+  // otherwise each name whose entry differs fires the slots that hear it, by
+  // its path.
+  private pollNames(): void {
+    for (const dir of this.dirs.values()) {
+      const { state } = dir;
+      if (state.kind !== "polling") continue;
+      const bound = boundKey(boundOf(this.filesystem, dir.path));
+      const names = heardNames(dir);
+      if (bound !== state.bound) {
+        state.bound = bound;
+        for (const name of names)
+          state.seen.set(name, entryAt(this.filesystem, dir.path, name));
+        this.tell(dir, { kind: "unknown" });
+        continue;
+      }
+      for (const name of names) {
+        const now = entryAt(this.filesystem, dir.path, name);
+        if (state.seen.get(name) === now) continue;
+        state.seen.set(name, now);
+        for (const { slot, filter } of dir.listeners)
+          if (filter?.has(name)) this.fire(slot, namedOf(dir.path, name));
+      }
+    }
   }
 
   // The slots held now.
@@ -709,6 +884,12 @@ export class WatcherRegistry {
       .length;
   }
 
+  // The directories whose named entries are polled now: no OS watch each.
+  polledDirs(): number {
+    return [...this.dirs.values()].filter((d) => d.state.kind === "polling")
+      .length;
+  }
+
   // Every directory a held watch targets.
   watchedDirs(): string[] {
     return [...this.dirs.values()].map((d) => d.path);
@@ -716,6 +897,8 @@ export class WatcherRegistry {
 
   closeAll(): void {
     this.closed = true;
+    this.sweep?.();
+    this.sweep = null;
     for (const slot of this.slots.values()) this.closeSlot(slot, "close");
     this.slots.clear();
   }

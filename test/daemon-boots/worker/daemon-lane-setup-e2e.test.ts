@@ -27,6 +27,7 @@ import {
 } from "../../../src/click/wire";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { linkKeyFile, linkSignerFromKeyFile } from "../../../src/daemon/link-key";
+import type { ClaudeInputEdge } from "../../../src/claude-input/edge";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import { PROTOCOL_VERSION, type ClientHints } from "../../../src/daemon/protocol";
@@ -41,8 +42,14 @@ import { untilHeard } from "../../helpers/reload-signal";
 import { writeAtomic } from "../../../src/utils/atomic-write";
 import { valueOf } from "../../../src/utils/logfmt";
 import { until } from "../../helpers/until";
+import { bundleAt } from "../../helpers/worker-edges";
+import { systemFilesystem } from "../../../src/disk/system-filesystem";
 
 jest.setTimeout(30_000);
+
+// A Claude Code prompt with nothing in it: the screen a slash command is
+// typed into.
+const READY_SCREEN = ["─".repeat(30), "❯ ", "─".repeat(30)];
 
 // Every lane off: each test's own clicks switch them.
 const CONFIG = `{ segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`;
@@ -53,6 +60,9 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   let projectDir: string;
   let otherDir: string;
   let daemon: InWorkerDaemon;
+  let startLaneDaemon: () => InWorkerDaemon;
+  // Every line the daemon typed into Claude Code, as `<pane> <line>`.
+  const typed: string[] = [];
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-lane-e2e");
@@ -61,17 +71,38 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     otherDir = path.join(projectDir, "elsewhere");
     mkdirSync(otherDir);
     writeFileSync(path.join(projectDir, "lanes.json5"), CONFIG);
-    // A tmux first on the daemon's PATH whose server shows pane %7, attached
-    // and active, and answers anything else with nothing to say.
+    // A source checkout with the band mod's client built, which the band
+    // lane installs from.
+    const checkout = path.join(projectDir, "checkout");
+    mkdirSync(path.join(checkout, "src"), { recursive: true });
+    mkdirSync(path.join(checkout, "bin"));
+    writeFileSync(path.join(checkout, "bin", "cc-candybar-native"), "");
+    // First on the daemon's PATH: a tmux whose server shows pane %7, attached
+    // and active, and answers anything else with nothing to say, and a
+    // `claude` CLI whose plugin installs succeed.
     const bin = path.join(projectDir, "bin");
     mkdirSync(bin);
     writeFileSync(
       path.join(bin, "tmux"),
       `#!/bin/sh\ncase "$*" in *list-panes*) printf '%%7 $1 1 1 0 1\\n' ;; *) printf '' ;; esac\n`,
     );
+    writeFileSync(path.join(bin, "claude"), "#!/bin/sh\nexit 0\n");
     chmodSync(path.join(bin, "tmux"), 0o755);
+    chmodSync(path.join(bin, "claude"), 0o755);
     env = { ...prepared.env, PATH: `${bin}:${prepared.env.PATH ?? ""}` };
-    daemon = startDaemon(env);
+    const claudeInput: ClaudeInputEdge = {
+      read: async () => ({ inMode: false, screen: READY_SCREEN }),
+      type: async (hint, line) => {
+        typed.push(`${hint.pane} ${line}`);
+        return { kind: "typed" };
+      },
+    };
+    startLaneDaemon = () =>
+      startDaemon(env, {
+        bundle: bundleAt(checkout),
+        claudeInput: () => claudeInput,
+      });
+    daemon = startLaneDaemon();
   });
 
   afterAll(async () => {
@@ -231,17 +262,31 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     expect(event).toContain(" outcome=ok");
   });
 
-  test("one click of two lane toggles sets up both", async () => {
+  // [LAW:one-source-of-truth] A daemon types into Claude Code through the one
+  // claude-input edge it is built with: the band's setup reaches the same
+  // edge a click does, so this daemon, built over a stand-in edge, types
+  // nothing into Claude Code for real.
+  test("one click of two lane toggles sets up both, and the band's setup types through the daemon's claude-input edge", async () => {
     const sid = "lane-two";
     await renderIn(sid);
+    const typedBefore = typed.length;
     await switchLanes(sid, true, "tmuxStatus", "band");
-    await until(() => laneLines(sid).length >= 2, "both toggles' setups");
+    // Each toggle's setup, and the band's install finishing after its own.
+    await until(
+      () => laneLines(sid).length >= 3,
+      () =>
+        `both toggles' setups and the band's install (lane lines: ${JSON.stringify(laneLines(sid))})`,
+    );
     expect(
       laneLines(sid)
         .map((l) => l.match(/lane: (\w+ \w+)/)![1])
         .sort(),
-    ).toEqual(["band on", "tmuxStatus on"]);
+    ).toEqual(["band installed", "band on", "tmuxStatus on"]);
     for (const line of laneLines(sid)) expect(line).toContain(" by=click ");
+    expect(
+      laneLines(sid).find((l) => l.includes("lane: band installed")),
+    ).toContain("typed /reload-plugins into %7");
+    expect(typed.slice(typedBefore)).toEqual(["%7 /reload-plugins"]);
   });
 
   test("a status line switched off is released once, and nothing re-takes it", async () => {
@@ -356,7 +401,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     const sid = "lane-owed";
     await renderIn(sid);
     await daemon.stop();
-    daemon = startDaemon(env);
+    daemon = startLaneDaemon();
     await switchLanes(sid, true, "tmuxStatus");
     await renderedAgain(sid);
     await until(() => laneLines(sid).length > 1, "the owed setup");

@@ -300,7 +300,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -330,7 +330,8 @@ describe("WatcherRegistry", () => {
   // opens, except one `refuse` names (with the reason it gives), and every
   // handle fs.watch opens is recorded with the directory, the listener the
   // registry gave it, and whether it was closed. No real directory can be made
-  // to report or fail on demand.
+  // to report or fail on demand. Its watch reaches the directory alone, so a
+  // name-filtered directory is an OS watch on it too.
   function standIn() {
     const refuse = new Map<string, string>();
     type Opened = {
@@ -359,6 +360,7 @@ describe("WatcherRegistry", () => {
     })) as unknown as typeof fs.opendirSync);
     const opensOf = (dir: string) => opened.filter((o) => o.dir === dir);
     return {
+      filesystem: { ...systemFilesystem, watchReach: "directory" as const },
       opened,
       opensOf,
       refuse,
@@ -389,7 +391,7 @@ describe("WatcherRegistry", () => {
     fs.mkdirSync(conf);
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const seen: Invalidation[] = [];
@@ -426,7 +428,7 @@ describe("WatcherRegistry", () => {
     fs.mkdirSync(conf);
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const seen: Invalidation[] = [];
@@ -463,7 +465,7 @@ describe("WatcherRegistry", () => {
   test("an unnamed event under a name filter is unknown", async () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const seen: Invalidation[] = [];
@@ -482,7 +484,7 @@ describe("WatcherRegistry", () => {
   test("every holder of a key hears each window", async () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const first: Invalidation[] = [];
@@ -508,7 +510,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -546,7 +548,7 @@ describe("WatcherRegistry", () => {
   test("following to a key that changes only a name filter opens and closes no handle, and hears the new name", async () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const seen: Invalidation[] = [];
@@ -579,7 +581,7 @@ describe("WatcherRegistry", () => {
     fs.mkdirSync(dir);
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       reg.acquire("a", { dirs: [{ path: dir }] }, () => {});
@@ -611,7 +613,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -662,7 +664,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -726,7 +728,7 @@ describe("WatcherRegistry", () => {
   test("a deaf directory whose reopen is deaf another way tells every slot a failed window; the same deafness tells nothing", async () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const seen: Invalidation[] = [];
@@ -774,7 +776,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const counters = zeroCounters();
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         counters,
         logger: () => {},
       });
@@ -809,7 +811,7 @@ describe("WatcherRegistry", () => {
   test("acquiring a slot another holder holds reopens its deaf directory", () => {
     const fake = standIn();
     try {
-      const reg = new WatcherRegistry({ filesystem: systemFilesystem, clock: systemTimekeeper,
+      const reg = new WatcherRegistry({ filesystem: fake.filesystem, clock: systemTimekeeper,
         logger: () => {},
       });
       const first = reg.acquire("k", { dirs: [{ path: "/w" }] }, () => {});
@@ -841,7 +843,7 @@ describe("WatcherRegistry", () => {
 class StubInner extends GitService {
   public calls = 0;
   constructor(private repo: string) {
-    super(processLauncher);
+    super(processLauncher, systemFilesystem);
   }
   override findGitRoot(): Outcome<string> {
     return ok(this.repo);
@@ -875,7 +877,7 @@ async function hearsRefOnlyMove(
 ): Promise<void> {
   // The real reader: what it stores is what git reads off the repo, so the
   // test can ask whether the value is the ref's after a move.
-  const inner = new GitService(processLauncher);
+  const inner = new GitService(processLauncher, systemFilesystem);
   const svc = new GitDataProvider({
     clock: systemTimekeeper,
     inner,
@@ -1019,7 +1021,7 @@ describe("watchFault", () => {
 
   const held = (deaf: readonly Deafness[]) => ({
     key: "k",
-    handle: { release: () => {}, deaf },
+    handle: { release: () => {}, deaf, ridesStream: true },
   });
 
   test("a watch that hears every place its paths can change has no fault", () => {

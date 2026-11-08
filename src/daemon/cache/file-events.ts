@@ -192,7 +192,10 @@ export class FileEventDelivery {
       // [LAW:single-enforcer] The only acquirer of this registry key.
       handle: this.watchers.acquire(
         `file-events:${folder}`,
-        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
+        // [LAW:one-source-of-truth] Every child of a folder of its own: a
+        // watch for a named entry may be polled, and the probe measures the
+        // OS's delivery, which only an OS watch rides.
+        { dirs: [{ path: folder }] },
         (heard) => this.heard(probing, heard),
       ),
     };
@@ -393,12 +396,16 @@ export class FileEventDelivery {
 const stopped = (since: number): string =>
   `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
 
-// [LAW:one-source-of-truth] Why nothing that refreshes on file events can
-// refresh now, or `null` while delivery is not stalled: what each such
-// consumer shows. Unmeasured is no finding about delivery, so it is not one
-// here: those consumers read as usual, and the bar's row says it cannot check.
-export const stallReason = (d: Delivery): string | null =>
-  d.kind === "stalled" ? stopped(d.missedSince) : null;
+// [LAW:one-source-of-truth] Why a watch cannot refresh now, or `null` while
+// delivery is not stalled or the watch rides no OS stream: a polled watch is
+// heard through a stall, and the registry alone says which watches ride.
+// Unmeasured is no finding about delivery, so it is not one here: those
+// consumers read as usual, and the bar's row says it cannot check.
+export const stallReason = (
+  d: Delivery,
+  watch: Pick<WatcherHandle, "ridesStream">,
+): string | null =>
+  d.kind === "stalled" && watch.ridesStream ? stopped(d.missedSince) : null;
 
 // [LAW:no-silent-failure] The bar's row for as long as the span is open,
 // whatever state delivery is in: an edit made after the span's start may never
@@ -413,15 +420,29 @@ export interface FileEventsWarning {
   readonly message: string;
 }
 
-export function fileEventsWarnings(d: Delivery): FileEventsWarning[] {
+// [LAW:one-source-of-truth] What a stall deafens follows from whether the
+// registry polls a watch for named entries, which the registry alone decides:
+// where it does (macOS) a file watched by name is still heard, and only a
+// folder or tree watched whole rides the stream; where it does not (Linux)
+// every watch rides it. The row names no consumer: which shape each consumer
+// watches is that consumer's own.
+const deafened = (namesPolled: boolean): string =>
+  namesPolled
+    ? "so a folder or tree watched whole will not refresh until they resume; a file watched by name is checked on a timer and still refreshes"
+    : "so nothing that refreshes on file events will refresh until they resume";
+
+export function fileEventsWarnings(
+  d: Delivery,
+  namesPolled: WatcherRegistry["namesPolled"],
+): FileEventsWarning[] {
   if (d.missedSince === null) return [];
   const since = iso(d.missedSince);
   const message = (): string => {
     switch (d.kind) {
       case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so what refreshes on file events may have missed a change made since`;
       case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
+        return `${stopped(d.missedSince)}, ${deafened(namesPolled)}`;
       case "unmeasured":
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }

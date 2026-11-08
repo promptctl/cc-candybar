@@ -3,8 +3,8 @@
 // `<root>/<name>/plugin.json5` — into one of these roots, with no config
 // edit; a plugin is on exactly when one of its segments is placed.
 
-import fs from "node:fs";
 import path from "node:path";
+import type { DirectoryEntry, FilesystemReads } from "../../disk/filesystem.js";
 import {
   DEFINITION_FILE,
   pluginDefinition,
@@ -13,7 +13,7 @@ import {
 } from "./plugins.js";
 import type { PluginScope } from "./plugin-scope.js";
 import type { Locations } from "../../daemon/paths.js";
-import type { Unchecked } from "../../utils/presence.js";
+import { presence, type Unchecked } from "../../utils/presence.js";
 import type { ApprovedRepo } from "./repo-gate.js";
 
 /**
@@ -82,6 +82,7 @@ export interface InstalledPlugins {
 // [LAW:types-are-the-program] A root that does not exist holds no plugins;
 // one that cannot be listed is a fact the caller reports, never absence.
 export function installedPlugins(
+  reads: FilesystemReads,
   locs: Locations,
   repo: ApprovedRepo | null,
 ): InstalledPlugins {
@@ -92,7 +93,7 @@ export function installedPlugins(
   const unchecked: Unchecked[] = [];
   const strays: DroppedPlugin[] = [];
   for (const { dir: root, scope } of roots) {
-    const listed = listFolders(root);
+    const listed = listFolders(reads, root);
     if ("error" in listed) {
       unchecked.push(listed);
       continue;
@@ -126,24 +127,30 @@ export function installedPlugins(
 }
 
 export function listFolders(
+  reads: FilesystemReads,
   root: string,
 ):
   | { readonly folders: readonly string[]; readonly files: readonly string[] }
   | Unchecked {
   try {
     // A dot-entry (`.git`, `.DS_Store`, an editor's) is never an install.
-    const entries = fs
-      .readdirSync(root, { withFileTypes: true })
+    const entries = reads
+      .readdirSync(root)
       .filter((e) => !e.name.startsWith("."))
       .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    const isFolder = (e: fs.Dirent): boolean =>
-      e.isDirectory() || isDirectoryLink(root, e);
+    const isFolder = (e: DirectoryEntry): boolean =>
+      e.kind === "directory" || isDirectoryLink(reads, root, e);
     return {
       folders: entries.filter(isFolder).map((e) => e.name),
       files: entries.filter((e) => !isFolder(e)).map((e) => e.name),
     };
   } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "ENOENT"
+    // [LAW:single-enforcer] Absent as presence says it: a root behind a
+    // regular file holds no plugins, as it holds no config. A listing's
+    // ENOTDIR cannot tell that from a root that is itself a file, which is
+    // there and cannot be listed, so the stat that classifies every path
+    // decides.
+    return presence(reads, root) === "absent"
       ? { folders: [], files: [] }
       : { path: root, error: (e as Error).message };
   }
@@ -152,10 +159,14 @@ export function listFolders(
 // A symlinked plugin folder (a package manager linking its share/) counts;
 // a link to nothing is a folder whose definition is missing, and is listed
 // so the load names it.
-function isDirectoryLink(root: string, e: fs.Dirent): boolean {
-  if (!e.isSymbolicLink()) return false;
+function isDirectoryLink(
+  reads: FilesystemReads,
+  root: string,
+  e: DirectoryEntry,
+): boolean {
+  if (e.kind !== "symlink") return false;
   try {
-    return fs.statSync(path.join(root, e.name)).isDirectory();
+    return reads.statSync(path.join(root, e.name)).kind === "directory";
   } catch {
     return true;
   }

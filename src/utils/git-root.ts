@@ -7,19 +7,27 @@
 // [LAW:effects-at-boundaries] Pure fs, no `git` spawn: see `findGitRoot` in
 // src/segments/git.ts for where this differs from `git rev-parse`.
 
-import fs from "node:fs";
+import type { FilesystemReads } from "../disk/filesystem.js";
 import path from "node:path";
 import { ABSENT, failed, ok, type Outcome } from "./outcome";
+import { presence } from "./presence";
 
-export function holdsGit(dir: string): boolean {
-  return fs.existsSync(path.join(dir, ".git"));
+// Whether `dir` holds a `.git`, a link to one included.
+// [LAW:no-silent-failure] exception: a `.git` stat cannot see past is no `.git`
+// here, and the ascent goes on to the parent, until the ascent carries the
+// failure as data (candybar-testing-ihvy.izc.sv9).
+export function holdsGit(reads: FilesystemReads, dir: string): boolean {
+  return presence(reads, path.join(dir, ".git")) === "present";
 }
 
 // Undefined when no ancestor holds one: the path is in no checkout.
-export function gitRootOf(start: string): string | undefined {
+export function gitRootOf(
+  reads: FilesystemReads,
+  start: string,
+): string | undefined {
   let dir = path.resolve(start);
   for (;;) {
-    if (holdsGit(dir)) return dir;
+    if (holdsGit(reads, dir)) return dir;
     const parent = path.dirname(dir);
     // `path.dirname` is its own fixed point at the filesystem root, which is
     // the ascent's termination and the only one it needs.
@@ -36,8 +44,8 @@ export interface Checkout {
   readonly git: boolean;
 }
 
-export function checkoutOf(cwd: string): Checkout {
-  const root = gitRootOf(cwd);
+export function checkoutOf(reads: FilesystemReads, cwd: string): Checkout {
+  const root = gitRootOf(reads, cwd);
   return root === undefined
     ? { root: path.resolve(cwd), git: false }
     : { root, git: true };
@@ -55,8 +63,8 @@ function probe<T>(read: () => T): Outcome<T> {
   }
 }
 
-const realDir = (p: string): Outcome<string> =>
-  probe(() => fs.realpathSync.native(p));
+const realDir = (reads: FilesystemReads, p: string): Outcome<string> =>
+  probe(() => reads.realpathSync(p));
 
 // [LAW:no-silent-failure] Why a probe of `what` gave no value: the error a
 // failed read carries (it names its path), or that nothing is there.
@@ -68,8 +76,11 @@ const why = (
 // [LAW:one-source-of-truth] The git directory a checkout root's `.git` file
 // names (`gitdir: <path>`, relative to the root): a linked worktree's
 // metadata dir, a submodule's, or a `--separate-git-dir` checkout's.
-export function gitDirNamed(root: string): Outcome<string> {
-  const text = probe(() => fs.readFileSync(path.join(root, ".git"), "utf-8"));
+export function gitDirNamed(
+  reads: FilesystemReads,
+  root: string,
+): Outcome<string> {
+  const text = probe(() => reads.readFileSync(path.join(root, ".git")));
   if (text.kind !== "ok") return text;
   const named = text.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
   return named === undefined
@@ -80,10 +91,11 @@ export function gitDirNamed(root: string): Outcome<string> {
 // [LAW:one-source-of-truth] The common git directory a linked worktree's git
 // dir shares with its repository, from its `commondir` file (a path relative
 // to the git dir). `absent` is a git dir that is its own common dir.
-export function commonDirOf(gitDir: string): Outcome<string> {
-  const text = probe(() =>
-    fs.readFileSync(path.join(gitDir, "commondir"), "utf-8"),
-  );
+export function commonDirOf(
+  reads: FilesystemReads,
+  gitDir: string,
+): Outcome<string> {
+  const text = probe(() => reads.readFileSync(path.join(gitDir, "commondir")));
   if (text.kind !== "ok") return text;
   const common = text.value.trim();
   return common === ""
@@ -114,38 +126,42 @@ const unproven = (reason: string): WorktreeLink => ({
 // checkout's. `dir` is a present directory's real path (`realpathSync.native`,
 // the on-disk case git's back-pointer may not share). Total: every read
 // outside `dir` is a probe, so a moved or pruned worktree is `unproven`.
-export function worktreeLink(dir: string): WorktreeLink {
-  const root = gitRootOf(dir);
+export function worktreeLink(
+  reads: FilesystemReads,
+  dir: string,
+): WorktreeLink {
+  const root = gitRootOf(reads, dir);
   if (root === undefined) return UNLINKED;
   const dotGit = path.join(root, ".git");
   // A `.git` that is, or links to, a git directory claims no worktree: a
   // main checkout, or one whose `.git` a tool keeps elsewhere (Android's
   // `repo`). Only a regular file claims one, so a symlink to another
   // checkout's `.git` file borrows nothing.
-  const followed = probe(() => fs.statSync(dotGit));
-  if (followed.kind === "ok" && followed.value.isDirectory()) return UNLINKED;
-  const entry = probe(() => fs.lstatSync(dotGit));
+  const followed = probe(() => reads.statSync(dotGit));
+  if (followed.kind === "ok" && followed.value.kind === "directory")
+    return UNLINKED;
+  const entry = probe(() => reads.lstatSync(dotGit));
   if (entry.kind !== "ok") return unproven(why(dotGit, entry));
-  if (!entry.value.isFile()) return unproven(`${dotGit} is not a file`);
-  const named = gitDirNamed(root);
+  if (entry.value.kind !== "file") return unproven(`${dotGit} is not a file`);
+  const named = gitDirNamed(reads, root);
   if (named.kind !== "ok") return unproven(why(dotGit, named));
-  const gitDir = realDir(named.value);
+  const gitDir = realDir(reads, named.value);
   if (gitDir.kind !== "ok") return unproven(why(named.value, gitDir));
-  const common = commonDirOf(gitDir.value);
+  const common = commonDirOf(reads, gitDir.value);
   // A git dir with no `commondir` is its own repository's: a submodule or a
   // `--separate-git-dir` checkout, which no linked worktree's answer reaches.
   if (common.kind === "absent") return UNLINKED;
   if (common.kind === "failed") return unproven(common.reason);
-  const realCommon = realDir(common.value);
+  const realCommon = realDir(reads, common.value);
   if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
   if (path.dirname(gitDir.value) !== path.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
   const backFile = path.join(gitDir.value, "gitdir");
-  const back = probe(() => fs.readFileSync(backFile, "utf-8"));
+  const back = probe(() => reads.readFileSync(backFile));
   if (back.kind !== "ok") return unproven(why(backFile, back));
   const pointer = path.resolve(gitDir.value, back.value.trim());
-  const pointerDir = realDir(path.dirname(pointer));
+  const pointerDir = realDir(reads, path.dirname(pointer));
   if (
     path.basename(pointer) !== ".git" ||
     pointerDir.kind !== "ok" ||
@@ -174,15 +190,18 @@ export interface CheckoutLocation {
   readonly noRepo: boolean;
 }
 
-export function checkoutLocation(dir: string): CheckoutLocation {
-  const real = realDir(dir);
+export function checkoutLocation(
+  reads: FilesystemReads,
+  dir: string,
+): CheckoutLocation {
+  const real = realDir(reads, dir);
   const at = real.kind === "ok" ? real.value : path.resolve(dir);
-  const root = gitRootOf(at);
+  const root = gitRootOf(reads, at);
   if (root === undefined)
     return { main: "", worktree: "", subpath: "", noRepo: true };
   const sub = path.relative(root, at);
   const subpath = sub === "" ? "" : `/${sub.split(path.sep).join("/")}`;
-  const link = worktreeLink(at);
+  const link = worktreeLink(reads, at);
   return link.kind === "linked"
     ? {
         main: path.resolve(link.main, path.relative(at, root)),

@@ -43,11 +43,11 @@ describe("the filesystem fake moves and removes as the kernel does", () => {
     fake.mkdir("/d/x");
     fake.mkdir("/e/y");
     fake.write("/f", "");
-    expect(codeOf(() => fake.rename("/d", "/e"))).toBe("ENOTEMPTY");
-    expect(codeOf(() => fake.rename("/d", "/f"))).toBe("ENOTDIR");
-    expect(codeOf(() => fake.rename("/f", "/e"))).toBe("EISDIR");
+    expect(codeOf(() => fake.renameSync("/d", "/e"))).toBe("ENOTEMPTY");
+    expect(codeOf(() => fake.renameSync("/d", "/f"))).toBe("ENOTDIR");
+    expect(codeOf(() => fake.renameSync("/f", "/e"))).toBe("EISDIR");
     fake.mkdir("/g");
-    fake.rename("/d", "/g");
+    fake.renameSync("/d", "/g");
     expect(fake.statSync("/g/x").kind).toBe("directory");
   });
 
@@ -71,7 +71,7 @@ describe("the filesystem fake moves and removes as the kernel does", () => {
       fake.mkdir("/a/b");
       const names: string[] = [];
       fake.watch("/a/b", { recursive: false }, (_e, n) => names.push(n!));
-      fake.rename("/a", "/z");
+      fake.renameSync("/a", "/z");
       clock.advance(0);
       expect(names).toEqual(heard);
     }
@@ -80,7 +80,7 @@ describe("the filesystem fake moves and removes as the kernel does", () => {
   it("refuses to move a folder into its own subtree", () => {
     const { fake } = make("linux");
     fake.mkdir("/a/b");
-    expect(codeOf(() => fake.rename("/a", "/a/b/a"))).toBe("EINVAL");
+    expect(codeOf(() => fake.renameSync("/a", "/a/b/a"))).toBe("EINVAL");
     expect(fake.statSync("/a/b").kind).toBe("directory");
   });
 

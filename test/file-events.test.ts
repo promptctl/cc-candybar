@@ -293,7 +293,9 @@ describe("FileEventDelivery", () => {
       missedSince: first,
     });
     // A probe that landed is not one heard: the stall's span stays open.
-    expect(fileEventsWarnings(r.events.delivery())).toEqual([
+    expect(
+      fileEventsWarnings(r.events.delivery(), false),
+    ).toEqual([
       expect.objectContaining({
         state: "delivering",
         message: expect.stringContaining(new Date(first).toISOString()),
@@ -308,7 +310,9 @@ describe("FileEventDelivery", () => {
       kind: "delivering",
       missedSince: null,
     });
-    expect(fileEventsWarnings(r.events.delivery())).toEqual([]);
+    expect(
+      fileEventsWarnings(r.events.delivery(), false),
+    ).toEqual([]);
   });
 
   describe("an instrument that ends is unmeasured for good", () => {
@@ -515,10 +519,12 @@ describe("FileEventDelivery", () => {
 describe("the bar's row and daemon-stats' line", () => {
   const AT = Date.parse("2026-10-27T04:00:00.000Z");
   const LATER = AT + 90_000;
+  // Only a stall's row reads whether the registry polls a named entry.
+  const warnings = (d: Delivery) => fileEventsWarnings(d, false);
 
   test("nothing while delivering", () => {
     expect(
-      fileEventsWarnings({
+      warnings({
         kind: "delivering",
         unreported: [LATER],
         missedSince: null,
@@ -528,7 +534,7 @@ describe("the bar's row and daemon-stats' line", () => {
 
   test("delivering with the span still open names its start: nothing has been heard since", () => {
     expect(
-      fileEventsWarnings({
+      warnings({
         kind: "delivering",
         unreported: [LATER],
         missedSince: AT,
@@ -538,41 +544,63 @@ describe("the bar's row and daemon-stats' line", () => {
         kind: "file-events",
         state: "delivering",
         message:
-          "file events unconfirmed since 2026-10-27T04:00:00.000Z: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded",
+          "file events unconfirmed since 2026-10-27T04:00:00.000Z: the probe written to test them has not been heard yet, so what refreshes on file events may have missed a change made since",
       },
     ]);
   });
 
-  test("a stall names the span's start, and composes into one warning", () => {
-    const delivery: Delivery = { kind: "stalled", missedSince: AT };
-    const warned = fileEventsWarnings(delivery);
-    expect(warned).toEqual([
-      {
-        kind: "file-events",
-        state: "stalled",
-        message:
-          "file events stopped at 2026-10-27T04:00:00.000Z; the OS has delivered none since, not even for a file the daemon wrote to test it, so an edit to the config will not reload until they resume",
-      },
-    ]);
-    const diagnostics = collectDiagnostics(
-      MAIN_NAME,
-      "sid",
-      "request",
-      [],
-      [],
-      warned.map((w) => ({ about: w.kind, text: w.message, copy: w.message })),
-    );
-    expect(diagnostics).toEqual([
-      expect.objectContaining({
-        severity: WARNING_SEVERITY,
-        message: warned[0]!.message,
-      }),
-    ]);
-  });
+  // Where the disk's directory watch reaches the tree (macOS), a file watched
+  // by name is polled and heard through a stall, so the row names what rides
+  // the stream; where it reaches one directory (Linux), every watch rides it.
+  const STOPPED =
+    "file events stopped at 2026-10-27T04:00:00.000Z; the OS has delivered none since, not even for a file the daemon wrote to test it";
+  test.each([
+    [
+      "directory",
+      `${STOPPED}, so nothing that refreshes on file events will refresh until they resume`,
+    ],
+    [
+      "tree",
+      `${STOPPED}, so a folder or tree watched whole will not refresh until they resume; a file watched by name is checked on a timer and still refreshes`,
+    ],
+  ] as const)(
+    "a stall where the watch reaches the %s names what it deafens and the span's start, and composes into one warning",
+    (reach, message) => {
+      const delivery: Delivery = { kind: "stalled", missedSince: AT };
+      // [LAW:one-source-of-truth] The row reads the registry's polling rule
+      // for this disk, not one of its own.
+      const { namesPolled } = new WatcherRegistry({
+        filesystem: { ...systemFilesystem, watchReach: reach },
+        clock: systemTimekeeper,
+      });
+      const warned = fileEventsWarnings(delivery, namesPolled);
+      expect(warned).toEqual([
+        { kind: "file-events", state: "stalled", message },
+      ]);
+      const diagnostics = collectDiagnostics(
+        MAIN_NAME,
+        "sid",
+        "request",
+        [],
+        [],
+        warned.map((w) => ({
+          about: w.kind,
+          text: w.message,
+          copy: w.message,
+        })),
+      );
+      expect(diagnostics).toEqual([
+        expect.objectContaining({
+          severity: WARNING_SEVERITY,
+          message: warned[0]!.message,
+        }),
+      ]);
+    },
+  );
 
   test("unmeasured names its reason and the span's start", () => {
     expect(
-      fileEventsWarnings({
+      warnings({
         kind: "unmeasured",
         since: LATER,
         reason: "the probe could not be written: ENOSPC",
@@ -590,7 +618,7 @@ describe("the bar's row and daemon-stats' line", () => {
 
   test("nothing for an owner never started: no span is open, so no edit can have gone unheard", () => {
     expect(
-      fileEventsWarnings({
+      warnings({
         kind: "unmeasured",
         since: AT,
         reason: "not started",

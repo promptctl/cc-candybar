@@ -40,7 +40,7 @@ import { makeUpdateWatch, type UpdateWatch } from "./update-notice";
 import { newUpdateFact, type UpdateFact } from "./update-fact";
 import type { ProcessProbe } from "./process-fingerprint";
 import { makeBinaryWatch, type BinaryWatch } from "./binary-watch";
-import type { Filesystem } from "../disk/filesystem";
+import type { Filesystem, FilesystemReads } from "../disk/filesystem";
 import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
 import {
@@ -142,14 +142,20 @@ export interface DaemonAdapters {
   // Their files, for a daemon that won the socket, which makes it their sole
   // writer. Built over the daemon's log: a write in flight at the close finishes
   // after it, and what it logs says so like any other line of the daemon's work.
-  readonly storage: (log: DaemonLogger) => DaemonStorage;
+  // [LAW:one-source-of-truth] Over the daemon's own disk, so the undo journal
+  // is kept on the disk whose config files it puts back.
+  readonly storage: (log: DaemonLogger, disk: Filesystem) => DaemonStorage;
   // The doctor's stores, which this daemon files.
-  readonly doctorStores: DoctorStores;
+  // [LAW:one-source-of-truth] Over the daemon's own disk (`filesystem`), the
+  // one its storage writes, so the doctor's files land beside the daemon's.
+  readonly doctorStores: (disk: Filesystem) => DoctorStores;
   // The doctor's reads of the machine, over the config load it is handed.
   readonly doctorEdge: (
     launcher: Launcher,
     loadConfig: DoctorEdge["loadConfig"],
     host: Host,
+    // [LAW:types-are-the-program] Reads only: the doctor's edge never writes.
+    disk: FilesystemReads,
   ) => DoctorEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
   // What the daemon asks the machine about a pid: whether a process is there, and
@@ -163,6 +169,12 @@ export interface DaemonAdapters {
     closing: AbortSignal,
     probe: ProcessProbe,
     heldSession: HeldSessionOf,
+    // [LAW:types-are-the-program] Reads only: the lane edge never writes to
+    // the disk; its effects go to tmux panes and Claude Code.
+    disk: FilesystemReads,
+    // [LAW:one-source-of-truth] The daemon's one claude-input edge, so a lane
+    // types into Claude Code through the edge a click does.
+    claudeInput: ClaudeInputEdge,
   ) => LaneEdge;
   // The session a Claude Code process holds, by the records Claude Code keeps
   // under the user's home (`home`) or the directory a session names.
@@ -317,13 +329,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const probe = inputs.probe(launcher);
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
-  const storage = inputs.storage(log);
+  const storage = inputs.storage(log, inputs.filesystem);
   // [LAW:single-enforcer] The one owner of every journal's turn, and so of
   // when session state may be written: the store refuses a write while no
   // turn is held.
   const journalTurns = new JournalTurns();
   const sessionState = new SessionState(journalTurns, storage.session);
   const settingsHistory = new SettingsHistory(
+    inputs.filesystem,
     sessionState,
     log,
     storage.history,
@@ -344,7 +357,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:one-source-of-truth] The doctor's stores, under this daemon's state
   // directory: its click files them, and daemon-stats answers what they hold
   // to `cc-candybar doctor`.
-  const doctorStores = inputs.doctorStores;
+  const doctorStores = inputs.doctorStores(inputs.filesystem);
   // [LAW:single-enforcer] The daemon injects its log into both registries so
   // cache + watcher lifecycle events land in daemon.log at the right level.
   // Non-daemon consumers (var-system tests, future library use) take the
@@ -411,6 +424,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // process holds: the render checkpoint's stamp, a pane's lookup and a
   // restart's check before its kill all ask it.
   const heldSession = inputs.heldSession(host.home);
+  // [LAW:one-source-of-truth] The one edge every typing into Claude Code goes
+  // through: a click's slash command and a lane's setup alike.
+  const claudeInput = inputs.claudeInput(launcher);
   // [LAW:single-enforcer] The one owner of what turning an animation lane on or
   // off takes (src/daemon/lane-setup.ts), told the switches each of a session's
   // clicks moved, and each request's arrival for the setups owed to it.
@@ -421,6 +437,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       closing.signal,
       probe,
       heldSession,
+      inputs.filesystem,
+      claudeInput,
     ),
     // A bar pane runs this bundle under the node running it now, with the
     // flags it runs with (tsx's loader, under the test harness).
@@ -520,6 +538,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     gates,
     sessionState,
     stateDir: paths.state,
+    filesystem: inputs.filesystem,
+    installedLayers: renderCache.installedLayers,
     storedRoot: paths.storedRoot,
     locations: locs,
     journalTurns,
@@ -546,13 +566,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         };
       },
       host,
+      inputs.filesystem,
     ),
     doctorStores,
     probes: handlerProbes,
     clients: renderSightings,
     mismatchRuns,
     bundle: bundle.path,
-    claudeInput: inputs.claudeInput(launcher),
+    claudeInput,
     history: settingsHistory,
     navigation: navigationHistory,
     links,

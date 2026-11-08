@@ -17,10 +17,7 @@ import {
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { Lane } from "../config/lanes.js";
-import {
-  pasteLineArgs,
-  productionClaudeInputEdge,
-} from "../claude-input/edge.js";
+import { pasteLineArgs, type ClaudeInputEdge } from "../claude-input/edge.js";
 import { lineage, processTable } from "../proc/process-table.js";
 import type { ProcessProbe } from "./process-fingerprint.js";
 import { presence } from "../utils/presence.js";
@@ -39,6 +36,7 @@ import type {
   HeldSession,
   HeldSessionOf,
 } from "./session-pane.js";
+import type { FilesystemReads } from "../disk/filesystem.js";
 
 const SHELL_BUFFER = "cc-candybar-lane";
 // How often the wait for an exit looks again.
@@ -384,6 +382,7 @@ const FOLLOW_POLL_MS = 200;
 // follow a session's frames now. `closing` ends what is no launch, as the
 // daemon's launcher ends what is: a poll's wait, and the one signal sent
 // directly. `heldSession` is the daemon's one reader of a process's record.
+// `claudeInput` is the daemon's one edge for typing into Claude Code.
 export function productionLaneEdge(
   launcher: Launcher,
   following: (sessionId: string) => ReadonlySet<Lane>,
@@ -391,10 +390,12 @@ export function productionLaneEdge(
   clock: Timekeeper,
   probe: Pick<ProcessProbe, "alive">,
   heldSession: HeldSessionOf,
+  filesystem: FilesystemReads,
+  claudeInput: ClaudeInputEdge,
 ): LaneEdge {
   const wait = (ms: number): Promise<void> => sleep(clock, ms, closing);
   return {
-    claudeInput: productionClaudeInputEdge(launcher),
+    claudeInput,
     barPanes: async (hint) =>
       barPanesOf(
         await tmux(launcher, hint, [
@@ -443,8 +444,9 @@ export function productionLaneEdge(
           category: "lane.claude",
         }),
       ),
-    fileExists: (file) => fs.existsSync(file),
-    presence,
+    // [LAW:one-source-of-truth] Both existence questions ask the one disk.
+    fileExists: (file) => presence(filesystem, file) === "present",
+    presence: (file) => presence(filesystem, file),
     paneClaude: (hint) => paneClaude(launcher, hint),
     heldSession,
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the

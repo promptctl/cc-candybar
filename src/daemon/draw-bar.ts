@@ -342,7 +342,9 @@ export function setUpRender(
     hookData: {
       ...arrived.hookData,
       ...(dir !== undefined &&
-        path.isAbsolute(dir) && { location: checkoutLocation(dir) }),
+        path.isAbsolute(dir) && {
+          location: checkoutLocation(parts.watcherRegistry.filesystem, dir),
+        }),
     },
   };
   const hintsError = requestFacts(req, at, facts, parts.rendererName);
@@ -566,7 +568,10 @@ export function drawRender(
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
   const pipeShown = pipeWarning?.event ?? null;
   const standing: readonly StandingWarning[] = [
-    ...fileEventsWarnings(fileEvents.delivery()),
+    ...fileEventsWarnings(
+      fileEvents.delivery(),
+      parts.watcherRegistry.namesPolled,
+    ),
     ...launched,
     ...(configWatch === null
       ? []

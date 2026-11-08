@@ -68,7 +68,11 @@ const VIEWS: readonly View[] = [
  * every one the bundled bar draws is a palette role (`warning`, `error`), and
  * an authored colour that is not belongs on this list.
  */
-function grounds({ rows }: Frame): { readonly ch: string; readonly at: string; readonly bg: ColorSpec }[] {
+function grounds({ rows }: Frame): {
+  readonly ch: string;
+  readonly at: string;
+  readonly bg: ColorSpec;
+}[] {
   return rows.flatMap(({ runs }, row) => {
     // Columns counted along the row, so two depths that split one row into
     // different runs place it alike.
@@ -142,6 +146,22 @@ describe("the open door's ✖ is a red its palette names for its error role", ()
     }
     expect(wrong).toEqual([]);
     expect(measured).toBe(THEMES.length * SHADE_NAMES.length);
+  });
+
+  test("at ansi it is written as the terminal's red or bright red, on a door where a theme's red rounds to purple", () => {
+    // rose-pine-moon at the middle dial position opens its door on a ground
+    // drawn #ffffff at ansi, where every red the theme names rounds off red.
+    const bar = sessionBar(`{ globals: { colorCompatibility: 'ansi' } }`, COLS);
+    try {
+      bar.pick("theme", "rose-pine-moon");
+      bar.pick("shade", "middle");
+      bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
+      const { sgr, ground } = doorClose(bar.render(AT).frame, ColorDepth.STANDARD);
+      expect(ground.hex).toBe("#ffffff");
+      expect(["31", "91"]).toContain(sgr);
+    } finally {
+      bar.dispose();
+    }
   });
 });
 
