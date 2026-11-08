@@ -58809,8 +58809,11 @@ function chromeCell(name, template, artifacts) {
   artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
   return { kind: "segment", name };
 }
-function removeTerm(ctx, posIdent, id2) {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${posIdent}`;
+function chromeIdent(id2) {
+  return Array.from(id2, (ch) => ch.codePointAt(0).toString(36)).join("_");
+}
+function removeTerm(ctx, id2) {
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${chromeIdent(id2)}`;
   ctx.artifacts.actions[actionName] = {
     persist: ctx.rootKey,
     removeSegment: id2
@@ -58837,12 +58840,13 @@ function configureRefsIn(nodes) {
 function placementDraftKey(presetIdent, id2, setting) {
   return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
 }
-function configureParts(ctx, posIdent, node, decls) {
+function configureParts(ctx, node, decls) {
   const id2 = placementId(node);
+  const ci = chromeIdent(id2);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
   const member = configureMember(ctx.presetIdent, id2);
   ctx.configured.push(member);
-  const enter = `${prefix}.configure.${posIdent}`;
+  const enter = `${prefix}.configure.${ci}`;
   const listKey = sharedMenuStateKey(enter);
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
@@ -58856,14 +58860,14 @@ function configureParts(ctx, posIdent, node, decls) {
   const drafts = {};
   const controls = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id2, name);
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${posIdent}.${name}`;
+    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${ci}.${name}`;
     ctx.artifacts.variables[variable] = {
       kind: "state",
       key,
       default: settingSpelling(node.settings?.[name] ?? decl.default)
     };
     drafts[name] = { id: id2, key, variable };
-    const segName = `${prefix}.setting.${posIdent}.${name}`;
+    const segName = `${prefix}.setting.${ci}.${name}`;
     const control2 = settingControl(
       controlDeclOf(decl),
       key,
@@ -58939,12 +58943,11 @@ function labelSegment(ctx, key, child, decl, text4) {
 }
 function editableUnit(child, spliced, first2, ctx) {
   const id2 = placementId(child);
-  const leading = first2 ? [insertTerm(ctx, String(ctx.posCounter.n++), id2, "before")] : [];
-  const afterPos = String(ctx.posCounter.n++);
-  const after = insertTerm(ctx, afterPos, id2, "after");
-  const remove = removeTerm(ctx, afterPos, id2);
+  const leading = first2 ? [insertTerm(ctx, id2, "before")] : [];
+  const after = insertTerm(ctx, id2, "after");
+  const remove = removeTerm(ctx, id2);
   const decl = ctx.segments[child.name];
-  const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
+  const configure = configureParts(ctx, child, settingsOf(decl));
   const lead = inArrangeMode(remove);
   const trail = inArrangeMode(configure.term);
   return [
@@ -58992,10 +58995,11 @@ function insertedUnit(child, insertedBy, spliced, ctx) {
     }
   ];
 }
-function insertTerm(ctx, posIdent, anchor, relation) {
+function insertTerm(ctx, anchor, relation) {
   const { presetIdent, artifacts } = ctx;
-  const applyName = `${EDIT_NS}${presetIdent}.insert.${posIdent}`;
-  const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${posIdent}`;
+  const gap = `${relation}.${chromeIdent(anchor)}`;
+  const applyName = `${EDIT_NS}${presetIdent}.insert.${gap}`;
+  const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${gap}`;
   artifacts.actions[applyName] = {
     persist: ctx.rootKey,
     insertSegmentFrom: ADDABLE_DOMAIN,
@@ -59108,7 +59112,6 @@ function spliceEditChromeForPreset(config2, presetName, artifacts, lead, live, t
     rootKey: presetRootKey(presetName),
     segments: config2.segments,
     artifacts,
-    posCounter: { n: 0 },
     configured: []
   };
   const spliced = spliceContainer(node, ctx);
@@ -70164,7 +70167,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.212.1";
+var PACKAGE_VERSION = "1.212.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -72050,10 +72053,18 @@ var applyLayoutOp2 = (sid, args, ctx) => {
   const home = originHome(ctx, origin);
   const placed2 = applyLayoutOp(editStore(ctx, sid), home, key, op);
   ctx.reloadConfig(origin);
-  const released = endedSessionKeys(
-    endedPlacements(before, ctx.configFor(origin)),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
-  ).filter((key2) => ctx.sessionState.get(sid, key2) !== null);
+  const after = ctx.configFor(origin);
+  const declared = new Set(ctx.gates.state.gateFor(after).listKeys());
+  const undeclared = ctx.gates.state.gateFor(before).listKeys().filter((key2) => !declared.has(key2));
+  const released = [
+    .../* @__PURE__ */ new Set([
+      ...endedSessionKeys(
+        endedPlacements(before, after),
+        ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
+      ),
+      ...undeclared
+    ])
+  ].filter((key2) => ctx.sessionState.get(sid, key2) !== null);
   for (const key2 of released) ctx.sessionState.clear(sid, key2);
   ctx.log(
     "info",

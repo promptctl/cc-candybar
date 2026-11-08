@@ -2,67 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-695",
-      "ref": "refs/pull/695/merge",
-      "sha": "8a0f2799ffec31d90e4f847534048f4d56fabbf8",
-      "timestamp": "2026-11-08T20:59:29.001Z",
-      "commits": [
-        {
-          "sha": "8a0f2799ffec31d90e4f847534048f4d56fabbf8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T13:58:33-07:00",
-          "message": "Merge 6590264930f734ad4149534c41c02c695f927216 into ea9f892021ce76328d938eacb9b73d3d35311e9d\n"
-        },
-        {
-          "sha": "6590264930f734ad4149534c41c02c695f927216",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T13:58:31-07:00",
-          "message": "Merge branch 'main' into brandon-unfiled-3248.5bfl"
-        },
-        {
-          "sha": "71c7debd7436698fc22a7e1a136ef6828f7a3066",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T13:56:04-07:00",
-          "message": "fix(edit-chrome): a layout edit releases every state key it ends, so a leading-✚ pick lands without a click error (brandon-unfiled-3248.5bfl)\n\nThe leading ✚'s close-on-pick ran after the layout op had reloaded the config,\nwhen its key was no longer declared, so the state gate refused it and every\npick there showed a click error. The layout-op verb now releases, in the same\nclick, every session key the config declared before the edit and no longer\ndeclares: the leading library's key after a pick renames its gap, and every\nkey a removed placement's chrome held, which a later placement minted with the\nfreed id would otherwise inherit open. The per-gap close-on-pick is gone; the\ndefault-menu-bytes 'one + opened' entry returns to its links without it.\n"
-        },
-        {
-          "sha": "042a517ebf8249b4a8260719d24824d63d336600",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T13:28:15-07:00",
-          "message": "fix(edit-chrome): a pick at the row's leading ✚ closes its library, whose gap the pick renames (brandon-unfiled-3248.5bfl)\n\nA pick at a before gap makes the new placement the row's first content, so the\nreload names the leading gap after it and the library's state key is declared\nno more. Nothing closes an undeclared key, so it stayed open and reopened on\nits own when the anchor led its row again. The leading library now closes on\npick, while its key is still declared; an after gap keeps its name across its\nown pick and stays open.\n\nThe default-menu-bytes 'one + opened' entry moves: each leading-library option\nlink now carries the close write after its layout op.\n"
-        },
-        {
-          "sha": "335ba3e4ee9428a94719297ee0a208870a1ab88d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:24:50-07:00",
-          "message": "fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (brandon-unfiled-3248.5bfl)\n\nEdit chrome spelled every insert slot, removal, configure entry, draft\nvariable and setting control from one walk counter shared over the preset\ntree, so adding, removing or moving a placement shifted the name of every\ncontrol after it, and an open + library, its page cursor or an open\nconfigure list landed on a neighbour after the reload. Every name is now\nspelled from the placement it serves through chromeIdent, an injective\nbase-36 spelling of the id that is a fixed point of ident, and the counter\nis gone.\n\nThe default-menu bytes snapshot regenerates for the new link names; its\nplain text is unchanged.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "3f5670db72be5ec2abd20fa416f132125685c675",
-      "timestamp": "2026-11-08T20:17:57.876Z",
+      "sha": "9059da1b93913b94233ed0518558525dfaa91eff",
+      "timestamp": "2026-11-08T21:09:33.561Z",
       "commits": [
         {
-          "sha": "3f5670db72be5ec2abd20fa416f132125685c675",
+          "sha": "9059da1b93913b94233ed0518558525dfaa91eff",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T13:16:47-07:00",
-          "message": "fix(daemon): the lane edge takes the daemon's claude-input edge (candybar-testing-ihvy.izc.ubq) (#698)\n\n* fix(daemon): the lane edge takes the daemon's claude-input edge, so a daemon's claudeInput adapter reaches a lane's typing (candybar-testing-ihvy.izc.ubq)\n\nproductionLaneEdge built its own claude-input edge from the launcher, so a\ndaemon built over another claudeInput adapter still typed real input when a\nlane turned on. createDaemon now builds the claude-input edge once and hands\nthe same edge to the lane edge and to the click context, as it hands both\nedges its disk. With the production adapters the lane types through the same\nproductionClaudeInputEdge over the daemon's launcher as before.\n\n* test(daemon): the test parts hand one claude-input edge to verbs and lane edge, and the lane test's header claims only typing into Claude Code (candybar-testing-ihvy.izc.ubq)\n\n* test(daemon): the lane setup e2e case carries the claude-input assertion, so no case joins test/daemon-boots/ (candybar-testing-ihvy.izc.ubq)\n\nThe band's setup in the lane e2e daemon types through a stand-in claude-input\nedge: the stand-in receives exactly %7 /reload-plugins and the lane log says\nit typed into the pane. The separate file's one case is gone, so the boot\nratchet holds at 201.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+          "timestamp": "2026-11-08T14:08:32-07:00",
+          "message": "fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (#695)\n\n* fix(edit-chrome): a placement's chrome names are its own, so an edit beside it renames nothing (brandon-unfiled-3248.5bfl)\n\nEdit chrome spelled every insert slot, removal, configure entry, draft\nvariable and setting control from one walk counter shared over the preset\ntree, so adding, removing or moving a placement shifted the name of every\ncontrol after it, and an open + library, its page cursor or an open\nconfigure list landed on a neighbour after the reload. Every name is now\nspelled from the placement it serves through chromeIdent, an injective\nbase-36 spelling of the id that is a fixed point of ident, and the counter\nis gone.\n\nThe default-menu bytes snapshot regenerates for the new link names; its\nplain text is unchanged.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(edit-chrome): a pick at the row's leading ✚ closes its library, whose gap the pick renames (brandon-unfiled-3248.5bfl)\n\nA pick at a before gap makes the new placement the row's first content, so the\nreload names the leading gap after it and the library's state key is declared\nno more. Nothing closes an undeclared key, so it stayed open and reopened on\nits own when the anchor led its row again. The leading library now closes on\npick, while its key is still declared; an after gap keeps its name across its\nown pick and stays open.\n\nThe default-menu-bytes 'one + opened' entry moves: each leading-library option\nlink now carries the close write after its layout op.\n\n* fix(edit-chrome): a layout edit releases every state key it ends, so a leading-✚ pick lands without a click error (brandon-unfiled-3248.5bfl)\n\nThe leading ✚'s close-on-pick ran after the layout op had reloaded the config,\nwhen its key was no longer declared, so the state gate refused it and every\npick there showed a click error. The layout-op verb now releases, in the same\nclick, every session key the config declared before the edit and no longer\ndeclares: the leading library's key after a pick renames its gap, and every\nkey a removed placement's chrome held, which a later placement minted with the\nfreed id would otherwise inherit open. The per-gap close-on-pick is gone; the\ndefault-menu-bytes 'one + opened' entry returns to its links without it.\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         },
         {
-          "sha": "2c49054392b6ed6498c546ab75bd3ffae25e2629",
+          "sha": "ea9f892021ce76328d938eacb9b73d3d35311e9d",
           "author_name": "semantic-release-bot",
           "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-08T18:07:15Z",
-          "message": "chore(release): set `package.json` to 1.212.1 [skip ci]\n\n## [1.212.1](https://github.com/promptctl/cc-candybar/compare/v1.212.0...v1.212.1) (2026-11-08)\n\n### Bug Fixes\n\n* **watchers:** on macOS a file-events stall faults only watches that ride the OS stream, and its row names what it deafens ([#699](https://github.com/promptctl/cc-candybar/issues/699)) ([3b7ffb1](https://github.com/promptctl/cc-candybar/commit/3b7ffb140e9cd7ddb57c056cd4b741f9d4f8f695))\n"
+          "timestamp": "2026-11-08T20:29:43Z",
+          "message": "chore(release): set `package.json` to 1.212.2 [skip ci]\n\n## [1.212.2](https://github.com/promptctl/cc-candybar/compare/v1.212.1...v1.212.2) (2026-11-08)\n\n### Bug Fixes\n\n* **daemon:** the lane edge takes the daemon's claude-input edge (candybar-testing-ihvy.izc.ubq) ([#698](https://github.com/promptctl/cc-candybar/issues/698)) ([3f5670d](https://github.com/promptctl/cc-candybar/commit/3f5670db72be5ec2abd20fa416f132125685c675))\n"
         }
       ]
     },
