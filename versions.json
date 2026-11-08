@@ -2,6 +2,70 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-692",
+      "ref": "refs/pull/692/merge",
+      "sha": "5cbfc8a273dfc728297261c09922c7ce44bac86a",
+      "timestamp": "2026-11-08T13:12:44.848Z",
+      "commits": [
+        {
+          "sha": "5cbfc8a273dfc728297261c09922c7ce44bac86a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T13:11:47Z",
+          "message": "Merge 999447fe4acf1ef377511b1d6bf19b6ff5646bdb into 10f03f8b92a7ea6f004ace540fcfaeb89e89cbac\n"
+        },
+        {
+          "sha": "999447fe4acf1ef377511b1d6bf19b6ff5646bdb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T06:01:59-07:00",
+          "message": "test(facts): the live answer takes its setup's reference only once its waits end, so a wait that throws or never settles leaves the release to the case teardown ahead of the parts' close (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "3db8e72ffdd5be5343eb2f89729e317c65266e88",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T05:30:27-07:00",
+          "message": "test(facts): a live request's setup hold is the case teardown's until its answer takes it, so an unanswered overlap is released before the parts close; the wire deadline is named as the Node client's (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "7e0871dfdc67771ca8a8ca91a3b89eed67415d85",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T05:15:08-07:00",
+          "message": "test(facts): the live request's setup hold is released by an explicit try/catch, not DisposableStack, which Node 22 lacks (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "a5338da065a15b2b9a435d49d3b3b5d47b44ac55",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T05:00:46-07:00",
+          "message": "test(facts): the live request is a statusline client's (no encoding, the shared Status hook data), owns its setup's hold from the setup on, and its comments claim only the steps it takes (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "1189f2010876191e95b15f15d5898f943259ccb8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T04:47:56-07:00",
+          "message": "test(facts): the live request states its deadline from the instant it arrives, crosses the checkpoint before the setup's burn, and the header names the whole request path (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "b3349f126c430a5f5df24850e18abc58bf790ad9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:36:51-07:00",
+          "message": "test(facts): the live session states a client's deadline, spells its argv once, and checks the pane its checkpoint stamped (candybar-gather-renderer-76bb.1dh.izh)\n"
+        },
+        {
+          "sha": "b72b705f710b16fab4ba22a42c743a393f4044bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:14:46-07:00",
+          "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "10f03f8b92a7ea6f004ace540fcfaeb89e89cbac",
@@ -49,63 +113,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:15:32-07:00",
           "message": "fix(watchers): on macOS a directory watched only for named entries is polled, not an FSEvents stream over its whole tree (brandon-unfiled-3248.iywk)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-692",
-      "ref": "refs/pull/692/merge",
-      "sha": "7105edc722c7a1ff397e71dcec103042dff6b7a2",
-      "timestamp": "2026-11-08T12:31:35.814Z",
-      "commits": [
-        {
-          "sha": "7105edc722c7a1ff397e71dcec103042dff6b7a2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T12:30:38Z",
-          "message": "Merge 3db8e72ffdd5be5343eb2f89729e317c65266e88 into 0a394d3d93cccb884c28bb7b74e365fa6bef1695\n"
-        },
-        {
-          "sha": "3db8e72ffdd5be5343eb2f89729e317c65266e88",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T05:30:27-07:00",
-          "message": "test(facts): a live request's setup hold is the case teardown's until its answer takes it, so an unanswered overlap is released before the parts close; the wire deadline is named as the Node client's (candybar-gather-renderer-76bb.1dh.izh)\n"
-        },
-        {
-          "sha": "7e0871dfdc67771ca8a8ca91a3b89eed67415d85",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T05:15:08-07:00",
-          "message": "test(facts): the live request's setup hold is released by an explicit try/catch, not DisposableStack, which Node 22 lacks (candybar-gather-renderer-76bb.1dh.izh)\n"
-        },
-        {
-          "sha": "a5338da065a15b2b9a435d49d3b3b5d47b44ac55",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T05:00:46-07:00",
-          "message": "test(facts): the live request is a statusline client's (no encoding, the shared Status hook data), owns its setup's hold from the setup on, and its comments claim only the steps it takes (candybar-gather-renderer-76bb.1dh.izh)\n"
-        },
-        {
-          "sha": "1189f2010876191e95b15f15d5898f943259ccb8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T04:47:56-07:00",
-          "message": "test(facts): the live request states its deadline from the instant it arrives, crosses the checkpoint before the setup's burn, and the header names the whole request path (candybar-gather-renderer-76bb.1dh.izh)\n"
-        },
-        {
-          "sha": "b3349f126c430a5f5df24850e18abc58bf790ad9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:36:51-07:00",
-          "message": "test(facts): the live session states a client's deadline, spells its argv once, and checks the pane its checkpoint stamped (candybar-gather-renderer-76bb.1dh.izh)\n"
-        },
-        {
-          "sha": "b72b705f710b16fab4ba22a42c743a393f4044bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:14:46-07:00",
-          "message": "test(facts): the live session's request crosses the render checkpoint and the daemon's render setup (candybar-gather-renderer-76bb.1dh.izh)\n\nThe live session in facts-seam built its request by hand and cast it to\na checked request, leaving out the deadline, encoding, rate limits,\nrequested origin and the pane's start time, and built its render setup by\nhand beside the daemon's. It now sends the wire request a client run by\nClaude Code's pid 4242 sends, crosses checkRenderRequest with the daemon's\nown parts, and draws the setup setUpRender returns: the pane is stamped\nfrom the Claude Code record the case lays down, and no cast or hand-built\nsetup remains.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },
