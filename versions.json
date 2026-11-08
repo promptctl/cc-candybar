@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-693",
+      "ref": "refs/pull/693/merge",
+      "sha": "08ad4336c52ac715c55c200249927c406ae463bd",
+      "timestamp": "2026-11-08T11:52:15.228Z",
+      "commits": [
+        {
+          "sha": "08ad4336c52ac715c55c200249927c406ae463bd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T11:51:11Z",
+          "message": "Merge f60293291818464257a2743cd77c7ed62cb4b7a4 into b73c3b4c722203fa627fdf1bedaca72a2428f675\n"
+        },
+        {
+          "sha": "f60293291818464257a2743cd77c7ed62cb4b7a4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T04:50:11-07:00",
+          "message": "fix(watchers): a probe that sees no ctime move gives no verdict, every probe logs where it is made, and check judges folders by its own probe (brandon-unfiled-3248.0463)\n\n- No ctime movement inside the bound is no evidence either way, so the\n  probe answers unprobed with the reason, logged as a warning, instead\n  of supplied.\n- probeBirthtimeIn takes the process's logger and logs the verdict\n  itself, so the daemon, the page, the demo and the test daemon all\n  report it from one place; the server's own line is gone.\n- prepareConfig (check, gallery) builds its watch registry over its own\n  probed disk, the one production watch owner left on the unprobed one.\n- package.json devEngines states the repository's Node floor, which\n  jest's module.registerHooks needs (22.15 / 23.5), apart from the\n  package's runtime engines.\n\nbrandon-unfiled-3248.0463\n"
+        },
+        {
+          "sha": "d58dd3af1b13c8f923f6c452b6fba1720c81cc00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:34:00-07:00",
+          "message": "fix(watchers): the daemon probes birth time at boot, in its state directory, and builds its disk over the verdict (brandon-unfiled-3248.0463)\n\nThe probe ran ambiently on any process's first stat, on the real clock and\nin the spawning shell's TMPDIR, behind two disabled lint rules. A process\nmain now probes once with its own clock in a folder it owns, logs the\nverdict (warn when unprobed), and hands the daemon a disk built over it; no\nCLI process or client tick pays for a probe. Jest's global hooks resolve a\n`.js` specifier to its TypeScript source as a test's registry does, so src\nkeeps one import spelling.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        },
+        {
+          "sha": "36848c09d445bf8d7a1ce702698f8c157d6233c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T05:17:14-07:00",
+          "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-691",
       "ref": "refs/pull/691/merge",
       "sha": "7ec4c9a3e4166b6566294ec8be33fae17c1b7d5f",
@@ -142,35 +178,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-07T05:35:05-07:00",
           "message": "fix(colour)!: the door's ✖ is a red at every depth, chosen as the depth draws it (brandon-unfiled-3248.7u1g)\n\nAt ansi the open settings door's ✖ was drawn silver, yellow, purple or\nblack: the red was chosen as truecolor measures it, and keptOn's repair\nsearched the depth's table by contrast alone. The choice now measures\nevery candidate and the ground as the render's depth draws them, and\nthe candidates are per depth: the theme's named reds in truecolor and\nat 256 colours, the terminal's red and bright red (SGR 31/91) at ansi.\nkeptOn has no job left and is deleted.\n\nBREAKING CHANGE: the keptOn template function is removed (use\nreadableOn fg bg ratio instead), and roleTextOn accepts only the\nsemantic roles error, warning and success.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-693",
-      "ref": "refs/pull/693/merge",
-      "sha": "064cd754df8ebfda3b155bd60bca657c6d11d68f",
-      "timestamp": "2026-11-07T12:35:10.947Z",
-      "commits": [
-        {
-          "sha": "064cd754df8ebfda3b155bd60bca657c6d11d68f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T12:34:14Z",
-          "message": "Merge d58dd3af1b13c8f923f6c452b6fba1720c81cc00 into b21e989ab734befd8acc182d17139d743372d040\n"
-        },
-        {
-          "sha": "d58dd3af1b13c8f923f6c452b6fba1720c81cc00",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:34:00-07:00",
-          "message": "fix(watchers): the daemon probes birth time at boot, in its state directory, and builds its disk over the verdict (brandon-unfiled-3248.0463)\n\nThe probe ran ambiently on any process's first stat, on the real clock and\nin the spawning shell's TMPDIR, behind two disabled lint rules. A process\nmain now probes once with its own clock in a folder it owns, logs the\nverdict (warn when unprobed), and hands the daemon a disk built over it; no\nCLI process or client tick pays for a probe. Jest's global hooks resolve a\n`.js` specifier to its TypeScript source as a test's registry does, so src\nkeeps one import spelling.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "36848c09d445bf8d7a1ce702698f8c157d6233c0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T05:17:14-07:00",
-          "message": "fix(watchers): a folder's identity stays put across child writes where birth time is a ctime copy (brandon-unfiled-3248.0463)\n\nWhere statx fails, libuv copies ctime into birth time for the life of the\nprocess, and a directory's ctime moves on every child create, remove or\nrename, so every write in a watched folder read as another folder. The\ndisk adapter now probes once per process, on its first stat, whether birth\ntime moves with ctime, and Stat and FolderIdentity carry no birth time\n(null) where the host copies ctime or statx reports 0. The daemon logs the\nverdict at startup.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     },

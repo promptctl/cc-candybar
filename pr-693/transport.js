@@ -52077,7 +52077,10 @@ var verdictIn = (steps2, clock, folder) => {
     steps2.touch(folder);
     after = steps2.stat(folder);
   }
-  return after.ctimeNs !== before.ctimeNs && after.birthtimeNs !== before.birthtimeNs ? { kind: "ctime" } : { kind: "supplied" };
+  return after.ctimeNs === before.ctimeNs ? {
+    kind: "unprobed",
+    reason: `ctime did not move within ${CTIME_WAIT_MS} ms`
+  } : after.birthtimeNs !== before.birthtimeNs ? { kind: "ctime" } : { kind: "supplied" };
 };
 var probeBirthtime = (steps2, clock) => {
   try {
@@ -52095,20 +52098,31 @@ var probeBirthtime = (steps2, clock) => {
   }
 };
 var birthtimeOf = (verdict, birthtimeNs) => verdict.kind === "ctime" || birthtimeNs === 0n ? null : birthtimeNs;
+var birthtimeLine = (verdict) => verdict.kind === "supplied" ? ["info", "birth time: supplied by the disk"] : verdict.kind === "ctime" ? [
+  "info",
+  "birth time: a copy of ctime on this host (no statx), so folder identity is device and inode, and a folder made again on a reused inode reads as the same folder"
+] : [
+  "warn",
+  `birth time: unprobed (${verdict.reason}), read as the disk gives it`
+];
 
 // src/disk/system-filesystem.ts
 var kindOf = (st) => st.isSymbolicLink() ? "symlink" : st.isDirectory() ? "directory" : st.isFile() ? "file" : "other";
-var probeBirthtimeIn = (parent, clock) => probeBirthtime(
-  {
-    makeFolder: () => fs_default.mkdtempSync(import_node_path3.default.join(parent, "birthtime-")),
-    stat: (at) => fs_default.statSync(at, { bigint: true }),
-    // A chmod writes the folder's metadata, which moves its ctime and
-    // nothing else.
-    touch: (at) => fs_default.chmodSync(at, 448),
-    remove: (at) => fs_default.rmdirSync(at)
-  },
-  clock
-);
+var probeBirthtimeIn = (parent, clock, log) => {
+  const verdict = probeBirthtime(
+    {
+      makeFolder: () => fs_default.mkdtempSync(import_node_path3.default.join(parent, "birthtime-")),
+      stat: (at) => fs_default.statSync(at, { bigint: true }),
+      // A chmod writes the folder's metadata, which moves its ctime and
+      // nothing else.
+      touch: (at) => fs_default.chmodSync(at, 448),
+      remove: (at) => fs_default.rmdirSync(at)
+    },
+    clock
+  );
+  log(...birthtimeLine(verdict));
+  return verdict;
+};
 var statOf = (birthtime, st) => ({
   kind: kindOf(st),
   size: Number(st.size),
@@ -69999,7 +70013,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.210.4";
+var PACKAGE_VERSION = "1.210.5";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -89266,12 +89280,13 @@ seedWorld(onClock(INITIAL_REPO));
 var WORLD = processWorld();
 var HOST = WORLD.host;
 var paths = daemonPaths(WORLD.home);
+var pageLog = new DaemonLog(paths.log, WORLD.clock);
 var pageDaemon = createDaemon({
   ...productionAdapters(
     paths,
-    new DaemonLog(paths.log, WORLD.clock),
+    pageLog,
     WORLD.clock,
-    probeBirthtimeIn(paths.state, WORLD.clock)
+    probeBirthtimeIn(paths.state, WORLD.clock, pageLog.log)
   ),
   gates: daemonGates(),
   home: WORLD.home,
