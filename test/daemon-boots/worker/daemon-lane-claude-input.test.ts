@@ -1,6 +1,8 @@
 // [LAW:one-source-of-truth] A daemon types into Claude Code through the one
 // claude-input edge it is built with: a lane's setup reaches the same edge a
-// click does, so a daemon built over a stand-in edge types nothing for real.
+// click does, so a daemon built over a stand-in edge types nothing into Claude
+// Code for real. A restart's line into the pane's shell, once Claude Code has
+// exited, goes through the lane edge, not this one.
 
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";

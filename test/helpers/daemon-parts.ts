@@ -41,7 +41,6 @@ import { FEED_PERIODS, type FeedFrame } from "../../src/daemon/frame-feed";
 import { homeOf } from "../../src/daemon/home";
 import { JournalTurns } from "../../src/daemon/journal-turns";
 import { heldSessionUnder, productionLaneEdge } from "../../src/daemon/lane-edge";
-import { productionClaudeInputEdge } from "../../src/claude-input/edge";
 import { linkIdAllocator } from "../../src/daemon/link-id-allocator";
 import { makeLimits, memoryLimitBytes, realLimitsDeps } from "../../src/daemon/limits";
 import { MismatchRuns } from "../../src/daemon/mismatch-runs";
@@ -184,6 +183,18 @@ export function daemonParts({ host, clock, log, source, drew }: DaemonPartsOptio
   const links = { to: home.name, signer: TEST_SIGNER };
   const runs = sessionRuns({ managedStorage, launcher, log, clock });
   const heldSession = heldSessionUnder(host.home);
+  // The edges a click or a lane would reach the machine through, each the
+  // click context's stand-in, which throws if one reaches it. Taken by name,
+  // so every other verb field is the builder's to wire and the typecheck says
+  // so. [LAW:one-source-of-truth] The one claude-input edge goes to both the
+  // verbs and the lane edge, as src/daemon/daemon.ts hands its own.
+  const { doctor, doctorStores, claudeInput } = testVerbContext(
+    sessionState,
+    settingsHistory,
+    undefined,
+    host,
+    journalTurns,
+  );
   const laneSetups = sessionLaneSetups(() => parts, journalTurns, {
     edge: productionLaneEdge(
       launcher,
@@ -193,7 +204,7 @@ export function daemonParts({ host, clock, log, source, drew }: DaemonPartsOptio
       NO_PROCESSES,
       heldSession,
       systemFilesystem,
-      productionClaudeInputEdge(launcher),
+      claudeInput,
     ),
     host: { bundle, node: running.node, home, preload: stableAttachPreload(bundle, host) },
     log,
@@ -265,16 +276,6 @@ export function daemonParts({ host, clock, log, source, drew }: DaemonPartsOptio
     log,
   });
   const mismatchRuns = new MismatchRuns(journalTurns);
-  // The edges a click would reach the machine through, each the click
-  // context's stand-in, which throws if a click reaches it. Taken by name, so
-  // every other verb field is the builder's to wire and the typecheck says so.
-  const { doctor, doctorStores, claudeInput } = testVerbContext(
-    sessionState,
-    settingsHistory,
-    undefined,
-    host,
-    journalTurns,
-  );
   // [LAW:one-source-of-truth] One of each part the daemon hands both its
   // verbs and its draw (src/daemon/daemon.ts).
   const verbCtx: DaemonParts["verbCtx"] = {
