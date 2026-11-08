@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-701",
+      "ref": "refs/pull/701/merge",
+      "sha": "7652961c18ae831695d901848e31aa46a5615112",
+      "timestamp": "2026-11-08T21:45:07.337Z",
+      "commits": [
+        {
+          "sha": "7652961c18ae831695d901848e31aa46a5615112",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:44:02-07:00",
+          "message": "Merge 8c98e178f55e915c7bdabfd93243a8009a288ce0 into cc1efbe069bd704ecda3aa4731f6c19e89cd8de0\n"
+        },
+        {
+          "sha": "8c98e178f55e915c7bdabfd93243a8009a288ce0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T14:43:34-07:00",
+          "message": "test(edit-chrome): a placement re-added under a removed one's freed id finds its after-gap library closed (brandon-unfiled-3248.t2yz)\n\nThe layout-op verb already releases, in the removal's own click, every\nstate key the config declared before the edit and no longer declares, so\nthe removed placement's after-gap library key is cleared and a placement\nminted later under the freed id inherits nothing. This pins the ticket's\ndone-when end to end: open the library, remove, re-add under the bare id,\nand the library reads closed. It fails with that release disabled.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-700",
       "ref": "refs/pull/700/merge",
       "sha": "b8c4c6e17c175aa742f2ee35a39ab410c1d81976",
