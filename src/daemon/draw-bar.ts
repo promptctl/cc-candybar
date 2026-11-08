@@ -541,7 +541,9 @@ export function drawRender(
       ),
     ),
     sourced("load", entry.lastError),
-    sourced("update-act", updateWatch.error()),
+    ...updateWatch
+      .errors()
+      .map((e) => sourced(`update-act\0${e.about}`, e.text)),
     // [LAW:no-silent-failure] The home's link-id counter, faulted: no tmux
     // status line's link clicks until it can issue ids again.
     sourced("link-ids", linkIds.error()),

@@ -1386,10 +1386,8 @@ export function readJobEnd(status: string): JobEnd | null {
 // verdict written; `preceded`, the job's own landed first; `unrecorded`, the
 // verdict could not be written, and the group is ended all the same, since a
 // verdict's write is no condition of a job's end; `gone`, the job's files were
-// removed, so nothing was signalled and the caller says so. `signalled` says
-// whether the group took the SIGTERM. Only a group that took it gets the
-// SIGKILL, since an id that answered nothing may no longer be the job's by the
-// grace's end.
+// removed, so nothing was signalled and the caller, which may hold another
+// proof of the group, decides what follows. `signalled` is `endJobGroup`'s.
 type VerdictWrite =
   | { readonly verdict: "gone" }
   | { readonly verdict: "stands" | "preceded" }
@@ -1415,6 +1413,24 @@ function endJob(
 ): JobEnding {
   const verdict = writeVerdict(status, end);
   if (verdict.verdict === "gone") return verdict;
+  return { ...verdict, signalled: endJobGroup(spawner, clock, pid) };
+}
+
+// [LAW:types-are-the-program] A job's group id that something proved is still
+// the job's, beyond a status that stands. Only that proof makes one, so no
+// caller ends a group without a verdict on a bare pid.
+declare const provenJobGroup: unique symbol;
+export type ProvenJobGroup = number & { readonly [provenJobGroup]: true };
+
+// [LAW:single-enforcer] The one escalation a job's group is ended with: the
+// SIGTERM, then the SIGKILL after the grace. Whether the group took the
+// SIGTERM is the answer. Only a group that took it gets the SIGKILL, since an
+// id that answered nothing may no longer be the job's by the grace's end.
+function endJobGroup(
+  spawner: Spawner,
+  clock: Pick<Timekeeper, "after">,
+  pid: number,
+): boolean {
   const signalled = spawner.signalJob(pid, "SIGTERM");
   if (signalled) {
     clock.after(
@@ -1425,7 +1441,7 @@ function endJob(
       },
     );
   }
-  return { ...verdict, signalled };
+  return signalled;
 }
 
 // The verdict's write: staged, then linked, so the first verdict stands. The
@@ -1469,6 +1485,10 @@ export interface Launcher {
   // Ends a job's group with the timeout's own escalation, and gives it a verdict
   // of the launcher's unless its own landed first (see `endJob`).
   endJob(pid: number, status: string, end: JobEnd): JobEnding;
+  // Ends a job's group with that escalation and writes no verdict: for a job
+  // whose files are gone, proven the group's by other means. Whether the group
+  // took the SIGTERM.
+  endJobGroup(group: ProvenJobGroup): boolean;
   // What the launcher warns a render drawn at `at` for `render`.
   launcherWarnings(at: Instant, render: Drawing["by"]): LauncherWarning[];
   // An answer carrying `event` reached its client.
@@ -1548,6 +1568,7 @@ function launcherWithState(
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     jobGroupAlive: (pid) => spawner.signalJob(pid, 0),
     endJob: (pid, status, end) => endJob(spawner, clock, pid, status, end),
+    endJobGroup: (group) => endJobGroup(spawner, clock, group),
     launcherWarnings: (at, render) => launcherWarnings(state, at, render),
     answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {

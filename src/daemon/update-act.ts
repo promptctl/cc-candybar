@@ -14,7 +14,8 @@
 // Layout: `<state>/update-act/<bundle key>/<n>/` per act, `n` counting up.
 // Each act directory holds `record.json` (what was started, by whom it is
 // identified) beside the job's `stdout`, `stderr` and `status`, and
-// `awake.json` once a daemon has watched it running. The key is the
+// `awake.json` once a daemon has watched it running; `left/<pid>.json` names
+// a group an end could not prove and left running. The key is the
 // bundle's path, because the bundle is what an act writes: two daemons on one
 // state folder running two bundles never see each other's acts.
 
@@ -29,8 +30,10 @@ import {
   type JobFiles,
   type LaunchOpts,
   type Launcher,
+  type ProvenJobGroup,
 } from "../proc/launch";
 import { stagedPath } from "../utils/staged-path";
+import { writeAtomic } from "../utils/atomic-write";
 import { readTailSync } from "../utils/transcript-fs";
 import type { StartTimeRead } from "./process-fingerprint";
 import type { Timekeeper } from "../time.js";
@@ -235,26 +238,54 @@ function removeAct(dir: string, act: number): void {
   fs.rmSync(leaving, { recursive: true, force: true });
 }
 
-// Whether the job's group is the one the record names. A job started before
-// this boot is gone, whatever holds its pid now. A live leader whose start
-// time differs is someone else's. A live group whose leader has gone, or whose
-// job `ps` could not fingerprint, has no start time to tell by and is taken as
-// the job's: the sh leads it, so the program outliving it is the likelier
-// story.
-export async function isRecordedJob(
-  record: ActRecord,
+// [LAW:types-are-the-program] How the job's group stands against the record,
+// read now. `fingerprinted`: its leader is live and its start time is the
+// record's, the one proof that needs nothing but the group. `assumed`: a live
+// group whose leader has gone, or whose job `ps` could not fingerprint, has no
+// start time to tell by and is taken as the job's, since the sh leads it, so
+// the program outliving it is the likelier story. `absent`: a job started
+// before this boot is gone, whatever holds its pid now, and a live leader whose
+// start time differs is someone else's. Only the fingerprinted arm carries a
+// group the launcher can end without a verdict.
+export type JobProof =
+  | { readonly kind: "fingerprinted"; readonly group: ProvenJobGroup }
+  | { readonly kind: "assumed" | "absent" };
+
+// What a job's group is judged by: its pid, its leader's start time, and when
+// it started.
+type JobIdentity = Pick<ActRecord, "pid" | "startTime" | "started">;
+
+// A group of this boot that is still alive: the part of the proof that needs
+// no `ps`.
+const groupStands = (
+  record: JobIdentity,
+  jobs: Pick<Launcher, "jobGroupAlive">,
+  boot: number,
+): boolean => record.started > boot && jobs.jobGroupAlive(record.pid);
+
+export async function jobProof(
+  record: JobIdentity,
   read: (pid: number) => Promise<StartTimeRead>,
   jobs: Pick<Launcher, "jobGroupAlive">,
   boot: number,
-): Promise<boolean> {
-  if (record.started <= boot || !jobs.jobGroupAlive(record.pid)) return false;
+): Promise<JobProof> {
+  if (!groupStands(record, jobs, boot)) return { kind: "absent" };
   const leader = await read(record.pid);
-  return (
-    record.startTime === null ||
-    leader.kind === "unavailable" ||
-    leader.token === record.startTime
-  );
+  if (record.startTime === null || leader.kind === "unavailable") {
+    return { kind: "assumed" };
+  }
+  // [LAW:single-enforcer] The one place a group is proven by its fingerprint.
+  return leader.token === record.startTime
+    ? { kind: "fingerprinted", group: record.pid as ProvenJobGroup }
+    : { kind: "absent" };
 }
+
+// Whether the job's group is the one the record names.
+// [LAW:one-source-of-truth] Derived from the proof, so a reader and an end
+// judge a group by one rule.
+export const isRecordedJob = async (
+  ...args: Parameters<typeof jobProof>
+): Promise<boolean> => (await jobProof(...args)).kind !== "absent";
 
 // One of an act's files, or null when it is not there.
 function readActFile(file: string): string | null {
@@ -556,14 +587,213 @@ export function spendLook(
   return { awake, fault: faults.length === 0 ? null : faults.join("; ") };
 }
 
+// [LAW:types-are-the-program] What ending an overdue act did. An act whose
+// files went before its end (a newer claim pruned it, or the state directory
+// was removed) carries how its group stood at the end: signalled only when
+// `fingerprinted`, and `assumed` is a live group nothing proved, left running.
+export type ActEnding =
+  | Exclude<JobEnding, { verdict: "gone" }>
+  | {
+      readonly verdict: "gone";
+      readonly proof: "fingerprinted";
+      readonly signalled: boolean;
+    }
+  | { readonly verdict: "gone"; readonly proof: "absent" }
+  | {
+      readonly verdict: "gone";
+      readonly proof: "assumed";
+      readonly left: LeftGroup;
+      // Why the left group could not be written, null when it was.
+      readonly unwritten: string | null;
+    };
+
 // Ends an act whose group its reader saw alive past its budget, with a
 // `timeout` verdict unless the job's own landed first: a live read already
-// proved the group the recorded job.
-export function endOverdue(
+// proved the group the recorded job, and the act's standing status is what
+// keeps that proof. Once the act's files are gone nothing keeps it, so the
+// group is proven again, now, by its leader alone.
+export async function endOverdue(
   dir: string,
   facts: ActFacts,
-  jobs: Pick<Launcher, "endJob">,
-): JobEnding {
+  read: (pid: number) => Promise<StartTimeRead>,
+  jobs: Pick<Launcher, "endJob" | "endJobGroup" | "jobGroupAlive">,
+  boot: number,
+): Promise<ActEnding> {
+  const { record } = facts;
   const status = filesOf(path.join(dir, String(facts.act))).status;
-  return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
+  const ending = jobs.endJob(record.pid, status, { kind: "timeout" });
+  if (ending.verdict !== "gone") return ending;
+  const { pid, startTime, started } = record;
+  const left: LeftGroup = { act: facts.act, pid, startTime, started };
+  // [LAW:no-ambient-temporal-coupling] Left before the proof's `ps`, so a
+  // daemon that exits during it leaves the group for the next one to judge;
+  // a proof that settles it takes the entry back.
+  const unwritten = leaveGroup(dir, left);
+  // [LAW:no-silent-failure] A group left running beside a newer act is the
+  // harm. [LAW:single-enforcer] Signalled on the fingerprint and nothing else,
+  // read just before the signal, so a pid another process now leads is never
+  // signalled, and a group only the vanished status could prove stays left.
+  const proof = await jobProof(record, read, jobs, boot);
+  switch (proof.kind) {
+    case "fingerprinted": {
+      const signalled = jobs.endJobGroup(proof.group);
+      forgetGroup(dir, left);
+      return { verdict: "gone", proof: proof.kind, signalled };
+    }
+    case "absent":
+      forgetGroup(dir, left);
+      return { verdict: "gone", proof: proof.kind };
+    case "assumed":
+      return { verdict: "gone", proof: proof.kind, left, unwritten };
+  }
+}
+
+// A group an end left running because nothing proved it the job's once its
+// act's files were gone: the act it was, and the job it is judged by.
+export interface LeftGroup extends JobIdentity {
+  readonly act: number;
+}
+
+// [LAW:one-source-of-truth] Left groups live beside the acts, one file per
+// group, so every daemon on the bundle shows one until it is no longer the
+// job's: a restart, which the newer act's success sets off, must not forget a
+// group still running. A claim prunes only numbered acts, so it never removes
+// one.
+const leftDirOf = (dir: string): string => path.join(dir, "left");
+const leftFileOf = (dir: string, left: LeftGroup): string =>
+  path.join(leftDirOf(dir), `${left.pid}.json`);
+
+// Writes a left group for every daemon on the bundle, and says why it could
+// not, null when it did. [LAW:no-silent-failure] Never a throw: the caller
+// still owes the group its proof, and holds an unwritten one until it is.
+export function leaveGroup(dir: string, left: LeftGroup): string | null {
+  const { act, pid, startTime, started } = left;
+  try {
+    writeAtomic(
+      leftFileOf(dir, left),
+      JSON.stringify({ act, pid, startTime, started }),
+    );
+    return null;
+  } catch (err) {
+    // The code, not the message: that names the staging, a new path each
+    // try, and the fault would read as a new one at every tick.
+    const code = (err as NodeJS.ErrnoException).code;
+    return `left group (pid ${pid}): not written: ${code ?? (err as Error).message}`;
+  }
+}
+
+const forgetGroup = (dir: string, left: LeftGroup): void =>
+  fs.rmSync(leftFileOf(dir, left), { force: true });
+
+// [LAW:parse-dont-validate] A left group as its file holds it, or null when
+// the bytes are not one.
+function parseLeftGroup(text: string): LeftGroup | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const { act, pid, startTime, started } = (parsed ?? {}) as Partial<
+    Record<keyof LeftGroup, unknown>
+  >;
+  return Number.isSafeInteger(act) &&
+    Number.isSafeInteger(pid) &&
+    (pid as number) > 0 &&
+    (startTime === null || typeof startTime === "string") &&
+    typeof started === "number" &&
+    Number.isFinite(started)
+    ? {
+        act: act as number,
+        pid: pid as number,
+        startTime,
+        started,
+      }
+    : null;
+}
+
+// A left group a reader proved the job's, and whether it took the signal.
+export interface LeftEnded {
+  readonly left: LeftGroup;
+  readonly signalled: boolean;
+}
+
+// The left groups that still run, those the read proved and ended, and why
+// any entry could not be read as one.
+export interface LeftRead {
+  readonly groups: readonly LeftGroup[];
+  readonly ended: readonly LeftEnded[];
+  readonly faults: readonly string[];
+}
+
+export interface LeftReader {
+  // Reads must not overlap, as an act reader's must not: the act queue runs
+  // them in turn.
+  read(): Promise<LeftRead>;
+}
+
+// [LAW:effects-at-boundaries] The edge that reads left groups, judging each
+// by `jobProof` once per entry (a `ps`), since a group that died while no
+// daemon watched may have handed its pid to someone else's; after that only
+// whether its group is alive. An entry whose group is not the job's is
+// removed, and one its fingerprint proves is ended and removed. [LAW:no-silent-failure] An
+// entry that can't be parsed is left in place and named, since nothing else
+// repairs it.
+export function makeLeftReader(
+  dir: string,
+  read: (pid: number) => Promise<StartTimeRead>,
+  jobs: Pick<Launcher, "jobGroupAlive" | "endJobGroup">,
+  clock: Pick<Timekeeper, "bootTime">,
+): LeftReader {
+  // The entries this reader has fingerprinted, by everything they name.
+  let proven = new Set<string>();
+  return {
+    async read() {
+      const leftDir = leftDirOf(dir);
+      let names: string[];
+      try {
+        names = fs.readdirSync(leftDir);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        names = [];
+      }
+      const boot = clock.bootTime();
+      const groups: LeftGroup[] = [];
+      const ended: LeftEnded[] = [];
+      const faults: string[] = [];
+      const standing = new Set<string>();
+      for (const name of names.filter((n) => /^\d+\.json$/.test(n))) {
+        const file = path.join(leftDir, name);
+        // Another daemon may have removed it since the listing.
+        const text = readActFile(file);
+        if (text === null) continue;
+        const left = parseLeftGroup(text);
+        if (left === null) {
+          faults.push(`${file}: not a left group: ${text}; remove it`);
+          continue;
+        }
+        const key = JSON.stringify(left);
+        const proof: JobProof = proven.has(key)
+          ? { kind: groupStands(left, jobs, boot) ? "assumed" : "absent" }
+          : await jobProof(left, read, jobs, boot);
+        switch (proof.kind) {
+          // [LAW:single-enforcer] What the end does with a fingerprint, for
+          // an entry an end left before its proof ran: a daemon that exited
+          // during it.
+          case "fingerprinted":
+            ended.push({ left, signalled: jobs.endJobGroup(proof.group) });
+            fs.rmSync(file, { force: true });
+            break;
+          case "absent":
+            fs.rmSync(file, { force: true });
+            break;
+          case "assumed":
+            standing.add(key);
+            groups.push(left);
+        }
+      }
+      proven = standing;
+      return { groups, ended, faults };
+    },
+  };
 }

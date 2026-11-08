@@ -53,12 +53,15 @@ import {
   endOverdue,
   IDLE,
   judgeAct,
+  leaveGroup,
   makeActReader,
+  makeLeftReader,
   spendLook,
   type ActAwake,
   type ActFacts,
   type ActJob,
   type ActState,
+  type LeftGroup,
 } from "./update-act";
 import type { ProcessProbe } from "./process-fingerprint";
 import { runInAction } from "mobx";
@@ -312,6 +315,13 @@ export interface UpdateWatchOptions {
   readonly log: (level: LogLevel, msg: string) => void;
 }
 
+// One ⚠ message of the watch's, named by what it is about, never its text, so
+// a viewer open on it stays on it as its words move.
+export interface WatchError {
+  readonly about: string;
+  readonly text: string;
+}
+
 export interface UpdateWatch {
   arm(): void;
   close(): void;
@@ -324,9 +334,10 @@ export interface UpdateWatch {
   // it. False while its files can't be read: the error says so, and holding
   // every restart on a file nothing repairs would hold them for good.
   running(): Promise<boolean>;
-  // Why this bundle's act files can't be read or take a look, else why
-  // the act last read was ended with no verdict to say so; null when neither.
-  error(): string | null;
+  // What the ⚠ shows of this bundle's acts, each message its own: why the act
+  // files can't be read or take a look, why the act last read was ended with
+  // no verdict to say so, and each group an end left running.
+  errors(): readonly WatchError[];
 }
 
 // A build or an install is a long child; ten minutes of being watched running
@@ -340,6 +351,25 @@ const ACT_POLL_MS = 2_000;
 // machine that was not running the loop, and spends nothing, however many dark
 // wakes a sleep has.
 const LONGEST_LOOK_MS = 5 * ACT_POLL_MS;
+
+// [LAW:one-source-of-truth] The one spelling of an overdue act whose files
+// went before its end, for every way its group stood.
+const goneEnd = (act: number, pid: number): string =>
+  `apply-update: act ${act} timed out, and its files were removed before it could be ended; its group (pid ${pid})`;
+
+// [LAW:one-source-of-truth] The one spelling of what an end did to the
+// group, for the log and the ⚠ alike.
+const signalOf = (signalled: boolean): string =>
+  signalled ? "ending it" : "its group took no signal";
+
+// What an end of a group proven the job's by its leader logs.
+const provenEnd = (act: number, pid: number, signalled: boolean): string =>
+  `${goneEnd(act, pid)} is led by the job's own process; ${signalOf(signalled)}`;
+
+// What the log and every daemon's ⚠ say of a group an end left running, with
+// the one act that clears it.
+const leftReason = ({ act, pid }: LeftGroup): string =>
+  `${goneEnd(act, pid)} has no leader whose start time proves it the job's, so it was not signalled; if it is still the update, end it with \`kill -TERM -${pid}\``;
 
 function describeBuild(b: BuildCurrency): [LogLevel, string] {
   switch (b.kind) {
@@ -544,6 +574,19 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // it, so a read between ticks must not clear it.
   let spendFault: string | null = null;
   const logSpendFault = changeLogger(log);
+  // [LAW:one-source-of-truth] The groups an end left running, as last read
+  // from the acts directory, which every daemon on the bundle reads.
+  let left: readonly LeftGroup[] = [];
+  // Groups this daemon left that the directory has not taken yet: shown, and
+  // written again each tick, so a write that fails loses no group. A copy the
+  // directory outranks once it holds the group.
+  let unwritten: readonly LeftGroup[] = [];
+  // [LAW:one-source-of-truth] Why left groups could not be written or read.
+  // Its own, not `unreadable`: the act's own read stands whatever `left/`
+  // holds, and a read of the act alone must not clear it.
+  let leftFault: string | null = null;
+  const logLeftFault = changeLogger(log);
+  const lefts = makeLeftReader(actsDir, readStart, launcher, clock);
 
   // Spends a look on the act if its group is alive, and ends it once that has
   // spent its budget, with a timeout verdict unless the job's own landed first.
@@ -552,31 +595,47 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // Returns why the act's files could not take the look, null when they did
   // or no look was spent; the spend is judged first, so a write that fails
   // ends nothing early.
-  function endIfOverdue(facts: ActFacts | null): string | null {
+  async function endIfOverdue(facts: ActFacts | null): Promise<string | null> {
     if (!facts?.alive) return null;
     const own = lastLook?.job === facts.job ? lastLook.awake : null;
     const look = spendLook(actsDir, facts, own, clock.now(), LONGEST_LOOK_MS);
     if (look === null) return null;
     lastLook = { job: facts.job, awake: look.awake };
-    if (look.awake.spentMs > ACT_TIMEOUT_MS) endAct(facts);
+    if (look.awake.spentMs > ACT_TIMEOUT_MS) await endAct(facts);
     return look.fault === null ? null : actsFault(look.fault);
   }
 
-  function endAct(facts: ActFacts): void {
-    const ending = endOverdue(actsDir, facts, launcher);
-    // [LAW:no-silent-failure] The act's files went between the look and its
-    // end: a newer claim pruned it, or the state directory was removed. Either
-    // way a group this look proved alive is left unsignalled, so it is said.
+  async function endAct(facts: ActFacts): Promise<void> {
+    const ending = await endOverdue(
+      actsDir,
+      facts,
+      readStart,
+      launcher,
+      clock.bootTime(),
+    );
+    const { pid } = facts.record;
+    // The act's files went between the look and its end: a newer claim pruned
+    // it, or the state directory was removed.
     if (ending.verdict === "gone") {
-      log(
-        "error",
-        `apply-update: act ${facts.act} timed out, but its files were removed before it could be ended; its group (pid ${facts.record.pid}) was not signalled`,
-      );
-      return;
+      switch (ending.proof) {
+        case "fingerprinted":
+          log("error", provenEnd(facts.act, pid, ending.signalled));
+          return;
+        case "absent":
+          log("info", `${goneEnd(facts.act, pid)} had already ended`);
+          return;
+        case "assumed":
+          // [LAW:no-silent-failure] Left running, and written where every
+          // daemon's ⚠ reads it; one the directory did not take is held here
+          // and written again.
+          log("error", leftReason(ending.left));
+          if (ending.unwritten !== null) {
+            unwritten = [...unwritten, ending.left];
+          }
+          return;
+      }
     }
-    // [LAW:one-source-of-truth] The one spelling of what the end did to the
-    // group, for the log and the ⚠ alike.
-    const signal = ending.signalled ? "ending it" : "its group took no signal";
+    const signal = signalOf(ending.signalled);
     if (ending.verdict !== "unrecorded") {
       const why =
         ending.verdict === "stands" ? "timed out" : "outlived its verdict";
@@ -590,15 +649,43 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     unrecorded = { job: facts.job, reason };
   }
 
+  // Writes again the groups the directory did not take, then reads every left
+  // group. Its own step after the act's read, so that read stands whatever
+  // `left/` holds.
+  async function watchLeft(): Promise<void> {
+    const faults: string[] = [];
+    unwritten = unwritten.filter((group) => {
+      const fault = leaveGroup(actsDir, group);
+      if (fault !== null) faults.push(fault);
+      return fault !== null;
+    });
+    try {
+      const read = await lefts.read();
+      left = read.groups;
+      for (const { left: group, signalled } of read.ended) {
+        log("error", provenEnd(group.act, group.pid, signalled));
+      }
+      faults.push(...read.faults);
+    } catch (err) {
+      // A `ps` the close aborted says nothing of the group.
+      if (err instanceof DaemonClosing) return;
+      faults.push((err as Error).message);
+    }
+    leftFault = faults.length === 0 ? null : actsFault(faults.join("; "));
+    if (leftFault !== null) logLeftFault(["error", leftFault]);
+  }
+
   // Notices an act ending, whichever daemon started it: a success means the
   // bundle on disk changed, so the build is sampled and the binary watch asked
   // now.
   async function watchAct(): Promise<void> {
     const read = await touchActs(async () => {
       const facts = await acts.read();
-      if (!closed) spendFault = endIfOverdue(facts);
+      if (!closed) spendFault = await endIfOverdue(facts);
       return facts;
     });
+    if (closed) return;
+    await watchLeft();
     if (closed || !read.ok) return;
     if (spendFault !== null) logSpendFault(["error", spendFault]);
     if (unrecorded !== null && read.value?.job !== unrecorded.job) {
@@ -654,7 +741,24 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         const read = await touchActs(() => acts.read());
         return read.ok && judgeAct(read.value).kind === "running";
       }),
-    error: () => unreadable ?? spendFault ?? unrecorded?.reason ?? null,
+    // [LAW:dataflow-not-control-flow] Every message the watch holds, each its
+    // own, so none hides another; a group both written and still held shows
+    // once, by its pid.
+    errors: () =>
+      [
+        { about: "files", text: unreadable },
+        { about: "spend", text: spendFault },
+        { about: "unrecorded", text: unrecorded?.reason ?? null },
+        { about: "left-files", text: leftFault },
+        ...[
+          ...new Map(
+            [...left, ...unwritten].map((group) => [group.pid, group]),
+          ).values(),
+        ].map((group) => ({
+          about: `left\0${group.pid}`,
+          text: leftReason(group),
+        })),
+      ].flatMap(({ about, text }) => (text === null ? [] : [{ about, text }])),
     act: () =>
       actTurn(async () => {
         if (closed) throw new DaemonClosing("apply-update");

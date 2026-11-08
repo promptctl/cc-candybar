@@ -27,7 +27,7 @@ import {
   systemProbe,
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
-import { makeUpdateWatch } from "../src/daemon/update-notice";
+import { makeUpdateWatch, type UpdateWatch } from "../src/daemon/update-notice";
 import { newUpdateFact } from "../src/daemon/update-fact";
 import { daemonGates, UPDATE_DISMISSED_KEY } from "../src/daemon/update-keys";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -65,6 +65,12 @@ const sameLeader = async (): Promise<StartTimeRead> => ({
   kind: "start",
   token: "t",
 });
+// What the watch's ⚠ shows, every message on its own line, or null for none.
+const shown = (watch: UpdateWatch): string | null =>
+  watch
+    .errors()
+    .map((e) => e.text)
+    .join("\n") || null;
 // Root ignores directory permissions, so an unwritable act can't be built.
 const unlessRoot = process.getuid?.() === 0 ? test.skip : test;
 
@@ -608,14 +614,14 @@ describe("claimAct: one act per bundle", () => {
       log: (_level, msg) => logged.push(msg),
     });
     expect(await watch.running()).toBe(false);
-    expect(watch.error()).toMatch(/update act files .*JSON/);
-    expect(logged).toEqual([watch.error()]);
+    expect(shown(watch)).toMatch(/update act files .*JSON/);
+    expect(logged).toEqual([shown(watch)]);
     fs.writeFileSync(
       path.join(dir, "1", "record.json"),
       JSON.stringify({ ...RECORD, started: Date.now() }),
     );
     expect(await watch.running()).toBe(false);
-    expect(watch.error()).toBeNull();
+    expect(shown(watch)).toBeNull();
   });
 
   // [LAW:no-ambient-temporal-coupling] A release poll out when the daemon
@@ -975,7 +981,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     await new Promise((resolve) => setTimeout(resolve, 2_300));
     expect(h.applied()).toBe(0);
     expect(h.logged.filter((l) => /succeeded/.test(l))).toEqual([]);
-    expect(h.watch.error()).toBeNull();
+    expect(shown(h.watch)).toBeNull();
   });
 
   test("a claim whose `ps` close aborted withdraws, and its program never runs", async () => {
@@ -1014,13 +1020,26 @@ describe("the update watch: an act's budget is the time it was watched running",
   // turn of the real loop lets a fired tick answer and arm the next.
   const settled = () => new Promise((resolve) => setImmediate(resolve));
 
-  // One act on the bundle, claimed now and running for good.
-  function bench() {
+  // One act on the bundle, claimed now and running for good. `leader` is what
+  // a `ps` of its group's leader answers. `pruned` removes the act as the watch
+  // ends it, before the launcher sees the end: a newer claim landing between
+  // the look that found the act overdue and its end.
+  function bench({
+    leader = sameLeader,
+    pruned = false,
+  }: { leader?: (pid: number) => Promise<StartTimeRead>; pruned?: boolean } = {}) {
     const clock = heldClock(new Date());
-    const { launcher, spawner } = fakeLauncher(clock);
+    const { launcher: real, spawner } = fakeLauncher(clock);
     const pid = 41_000;
     const group = spawner.seedGroup(pid);
     const dir = actsDir(scratch, "/some/bundle/index.mjs");
+    const launcher: Launcher = {
+      ...real,
+      endJob: (jobPid, status, end) => {
+        if (pruned) fs.rmSync(path.join(dir, "1"), { recursive: true, force: true });
+        return real.endJob(jobPid, status, end);
+      },
+    };
     fs.mkdirSync(path.join(dir, "1"), { recursive: true });
     const started = clock.now();
     fs.writeFileSync(
@@ -1034,7 +1053,7 @@ describe("the update watch: an act's budget is the time it was watched running",
         fact: newUpdateFact(),
         clock,
         launcher,
-        probe: { startTime: sameLeader },
+        probe: { startTime: leader },
         digest: null,
         entryUrl: "file:///some/bundle/index.mjs",
         actsDir: dir,
@@ -1098,7 +1117,7 @@ describe("the update watch: an act's budget is the time it was watched running",
     const watch = b.daemon();
     await b.settled();
 
-    expect(watch.error()).toMatch(/awake\.json: not an act's spend: \{\}; its spend restarts/);
+    expect(shown(watch)).toMatch(/awake\.json: not an act's spend: \{\}; its spend restarts/);
     expect(b.verdict()).toBeNull();
 
     await b.awake(10 * MINUTE - POLL);
@@ -1126,16 +1145,16 @@ describe("the update watch: an act's budget is the time it was watched running",
     const watch = b.daemon();
     await b.settled();
     await b.awake(3 * POLL);
-    expect(watch.error()).toBeNull();
+    expect(shown(watch)).toBeNull();
 
     fs.chmodSync(actDir, 0o555);
     try {
       await b.awake(POLL);
-      expect(watch.error()).toMatch(/awake\.json/);
-      expect(watch.error()).toMatch(/EACCES/);
+      expect(shown(watch)).toMatch(/awake\.json/);
+      expect(shown(watch)).toMatch(/EACCES/);
       // A read between looks says nothing of the spend file: the ⚠ holds.
       await expect(watch.running()).resolves.toBe(true);
-      expect(watch.error()).toMatch(/awake\.json: not written: EACCES/);
+      expect(shown(watch)).toMatch(/awake\.json: not written: EACCES/);
 
       await b.awake(10 * MINUTE - 5 * POLL);
       expect(signal).not.toHaveBeenCalledWith(b.pid, "SIGTERM");
@@ -1150,13 +1169,165 @@ describe("the update watch: an act's budget is the time it was watched running",
 
       b.group.end();
       await b.awake(POLL);
-      expect(watch.error()).toMatch(
+      expect(shown(watch)).toMatch(
         /act 1 timed out; its verdict could not be written: .*EACCES.*; ending it$/,
       );
       expect(b.verdict()).toBeNull();
     } finally {
       fs.chmodSync(actDir, 0o755);
     }
+  });
+
+  test("an overdue act pruned before its end is still ended when its leader's start time proves the group the job's", async () => {
+    const b = bench({ pruned: true });
+    const signal = jest.spyOn(b.spawner, "signalJob");
+    const watch = b.daemon();
+    await b.settled();
+    await b.awake(10 * MINUTE + 2 * POLL);
+
+    expect(signal).toHaveBeenCalledWith(b.pid, "SIGTERM");
+    expect(b.logged).toContain(
+      "apply-update: act 1 timed out, and its files were removed before it could be ended; its group (pid 41000) is led by the job's own process; ending it",
+    );
+    expect(shown(watch)).toBeNull();
+  });
+
+  test("an overdue act pruned before its end, whose group only its files could prove, is not signalled, and the ⚠ names how to end it until the group is gone", async () => {
+    const b = bench({
+      leader: async () => ({ kind: "unavailable", detail: "no row" }),
+      pruned: true,
+    });
+    const signal = jest.spyOn(b.spawner, "signalJob");
+    const watch = b.daemon();
+    await b.settled();
+    await b.awake(10 * MINUTE + 2 * POLL);
+
+    expect(signal).not.toHaveBeenCalledWith(b.pid, "SIGTERM");
+    expect(shown(watch)).toMatch(/act 1 timed out.*pid 41000.*kill -TERM -41000/);
+    // The restart the newer act's success sets off forgets nothing.
+    watch.close();
+    const next = b.daemon();
+    await b.settled();
+    expect(shown(next)).toMatch(/act 1 timed out.*pid 41000.*kill -TERM -41000/);
+
+    b.group.end();
+    await b.awake(POLL);
+    expect(shown(next)).toBeNull();
+    expect(fs.readdirSync(b.dir)).toEqual(["left"]);
+    expect(fs.readdirSync(path.join(b.dir, "left"))).toEqual([]);
+  });
+
+  unlessRoot("a left group the directory won't take is still shown, and written once it will", async () => {
+    const b = bench({
+      leader: async () => ({ kind: "unavailable", detail: "no row" }),
+      pruned: true,
+    });
+    const leftDir = path.join(b.dir, "left");
+    fs.mkdirSync(leftDir);
+    fs.chmodSync(leftDir, 0o555);
+    try {
+      const watch = b.daemon();
+      await b.settled();
+      await b.awake(10 * MINUTE + 2 * POLL);
+      expect(shown(watch)).toMatch(/left group \(pid 41000\): not written: EACCES/);
+      expect(shown(watch)).toMatch(/act 1 timed out.*pid 41000.*kill -TERM -41000/);
+
+      fs.chmodSync(leftDir, 0o755);
+      await b.awake(POLL);
+      expect(shown(watch)).not.toMatch(/not written/);
+      expect(shown(watch)).toMatch(/kill -TERM -41000/);
+      expect(fs.readdirSync(leftDir)).toEqual(["41000.json"]);
+    } finally {
+      fs.chmodSync(leftDir, 0o755);
+    }
+  });
+
+  // The end's `ps` is the second: the daemon closes while it runs, and the
+  // next daemon reads what the end left. `leader` is what every `ps` answers.
+  async function closedMidProof(leader: StartTimeRead) {
+    let reads = 0;
+    let watch: UpdateWatch | null = null;
+    const b = bench({
+      leader: async () => {
+        if (++reads === 2) watch?.close();
+        return leader;
+      },
+      pruned: true,
+    });
+    const signal = jest.spyOn(b.spawner, "signalJob");
+    watch = b.daemon();
+    await b.settled();
+    await b.awake(10 * MINUTE + 2 * POLL);
+    expect(reads).toBe(2);
+    expect(signal).not.toHaveBeenCalledWith(b.pid, "SIGTERM");
+    const next = b.daemon();
+    await b.settled();
+    return { b, signal, next };
+  }
+
+  test("an overdue act pruned as the daemon closes mid-proof is ended by the next daemon when its leader proves the group the job's", async () => {
+    const { b, signal, next } = await closedMidProof({ kind: "start", token: "t" });
+
+    expect(signal).toHaveBeenCalledWith(b.pid, "SIGTERM");
+    expect(b.logged).toContain(
+      "apply-update: act 1 timed out, and its files were removed before it could be ended; its group (pid 41000) is led by the job's own process; ending it",
+    );
+    expect(shown(next)).toBeNull();
+    expect(fs.readdirSync(path.join(b.dir, "left"))).toEqual([]);
+  });
+
+  test("an overdue act pruned as the daemon closes mid-proof is left for the next daemon's ⚠ when nothing proves its group", async () => {
+    const { b, signal, next } = await closedMidProof({ kind: "unavailable", detail: "no row" });
+
+    expect(signal).not.toHaveBeenCalledWith(b.pid, "SIGTERM");
+    expect(shown(next)).toMatch(/act 1 timed out.*pid 41000.*kill -TERM -41000/);
+  });
+
+  test("a left group whose pid another process now leads is removed, and raises no ⚠", async () => {
+    const b = bench();
+    const leftDir = path.join(b.dir, "left");
+    fs.mkdirSync(leftDir);
+    fs.writeFileSync(
+      path.join(leftDir, "41000.json"),
+      JSON.stringify({ act: 0, pid: b.pid, startTime: "an earlier leader", started: b.clock.now() }),
+    );
+    const watch = b.daemon();
+    await b.settled();
+
+    expect(shown(watch)).toBeNull();
+    expect(fs.readdirSync(leftDir)).toEqual([]);
+  });
+
+  test("a left entry that can't be parsed is named, and the act beside it is still watched and ended", async () => {
+    const b = bench();
+    const leftDir = path.join(b.dir, "left");
+    fs.mkdirSync(leftDir);
+    fs.writeFileSync(path.join(leftDir, "7.json"), "{");
+    const watch = b.daemon();
+    await b.settled();
+    expect(shown(watch)).toMatch(/left[/\\]7\.json: not a left group: \{; remove it/);
+
+    await b.awake(10 * MINUTE + 2 * POLL);
+    expect(b.verdict()).toEqual({ kind: "timeout" });
+    expect(fs.readdirSync(leftDir)).toEqual(["7.json"]);
+  });
+
+  test("an overdue act pruned before its end, whose pid another process now leads, is not signalled and raises no ⚠", async () => {
+    let reads = 0;
+    const b = bench({
+      leader: async () => ({ kind: "start", token: reads++ === 0 ? "t" : "someone else's" }),
+      pruned: true,
+    });
+    const signal = jest.spyOn(b.spawner, "signalJob");
+    const watch = b.daemon();
+    await b.settled();
+    await b.awake(10 * MINUTE + 2 * POLL);
+
+    expect(signal).not.toHaveBeenCalledWith(b.pid, "SIGTERM");
+    expect(b.logged).toContain(
+      "apply-update: act 1 timed out, and its files were removed before it could be ended; its group (pid 41000) had already ended",
+    );
+    expect(shown(watch)).toBeNull();
   });
 
   test("two daemons looking in turn spend one budget between them: about ten minutes, not five", async () => {
