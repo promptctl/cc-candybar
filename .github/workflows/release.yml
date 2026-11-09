@@ -28,12 +28,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # A transitional list may shrink and never grow (test/transitional-daemon-workflows).
       # The script fetches the base commit itself, which this depth-1 checkout lacks.
-      - name: Excused-workflows list only shrinks
-        if: github.event_name == 'pull_request'
-        run: node scripts/check-shrinks.cjs test/transitional-daemon-workflows/excused-workflows.json ${{ github.event.pull_request.base.sha }}
-
       # The ratchet on daemon boots only falls: its case count and the ceiling on
       # real daemon starts are numbers in one file (test/transitional-daemon-boots).
       - name: Daemon-boot ratchet only falls

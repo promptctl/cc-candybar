@@ -60,8 +60,7 @@ import type { Timekeeper } from "../time";
 // leak trips the backstop while it is still a leak. The render cache's share
 // of it holds those hundred (render.ts). Below that the cache cannot hold the
 // directories being rendered from, every render misses, and a miss's config
-// load is longer than the client waits, so every render fails rather than some
-// (the load gate, scripts/load-gate.ts, serves that hundred).
+// load is longer than the client waits, so every render fails rather than some.
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
 export const DEFAULT_RSS_LIMIT_MB = 1024;
 export const HEAP_CAP_OVER_RSS = 2;

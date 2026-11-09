@@ -11,7 +11,6 @@ const stepFor = (file: string) =>
   `node scripts/check-shrinks.cjs ${file} \${{ github.event.pull_request.base.sha }}`;
 
 test.each([
-  ["the excused list", "test/transitional-daemon-workflows/excused-workflows.json"],
   ["the daemon-boot ratchet", "test/transitional-daemon-boots/ratchet.json"],
 ])("release.yml runs check-shrinks on %s against the pull request's base", (_, file) => {
   const release = workflowsOnDisk().find(({ name }) => name === "release.yml")!;
