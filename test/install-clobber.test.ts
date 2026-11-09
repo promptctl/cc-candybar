@@ -4,6 +4,7 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import path from "node:path";
 import os from "node:os";
 import { __test__ } from "../src/install";
+import { PLATFORM_PACKAGES } from "../src/install/platforms";
 import { shellWord } from "../src/shell-word";
 
 const {
@@ -278,15 +279,26 @@ describe("installSuccessMessage", () => {
 
 describe("resolveRenderEntry", () => {
   test("resolves the native binary from node_modules beside the dist", () => {
-    // The repo checkout installs every platform package (workspace-yaml
-    // supportedArchitectures), so the current platform's is always present.
-    const sourceDist = path.resolve(__dirname, "..", "dist", "index.mjs");
-    const entry = resolveRenderEntry(sourceDist);
-    expect(entry.kind).toBe("native");
-    expect(entry.sourcePath).toContain(
-      `cc-candybar-${process.platform}-${process.arch}`,
+    // The platform package is staged here, not read from the checkout: the
+    // repository's package.json names no platform package, because publishing
+    // writes those optionalDependencies (scripts/publish.mjs).
+    const dir = mkTmpDir("cpwl-entry-test-");
+    fs.mkdirSync(path.join(dir, "dist"));
+    const platform = `${process.platform}-${process.arch}`;
+    const pkgName = PLATFORM_PACKAGES[platform];
+    if (pkgName === undefined) throw new Error(`no package for ${platform}`);
+    const pkgDir = path.join(dir, "node_modules", ...pkgName.split("/"));
+    fs.mkdirSync(path.join(pkgDir, "bin"), { recursive: true });
+    fs.writeFileSync(
+      path.join(pkgDir, "package.json"),
+      JSON.stringify({ name: pkgName }),
     );
-    expect(fs.existsSync(entry.sourcePath)).toBe(true);
+    fs.writeFileSync(path.join(pkgDir, "bin", "cc-candybar"), "");
+    const entry = resolveRenderEntry(path.join(dir, "dist", "index.mjs"));
+    expect(entry).toEqual({
+      kind: "native",
+      sourcePath: fs.realpathSync(path.join(pkgDir, "bin", "cc-candybar")),
+    });
   });
 
   test("falls back to the sibling node shim when no platform package resolves", () => {
