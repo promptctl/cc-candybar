@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-704",
+      "ref": "refs/pull/704/merge",
+      "sha": "c1a88cab1cd3075ee29abefbe27028891222d3d0",
+      "timestamp": "2026-11-09T05:20:45.176Z",
+      "commits": [
+        {
+          "sha": "c1a88cab1cd3075ee29abefbe27028891222d3d0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T22:19:54-07:00",
+          "message": "Merge 5cd300dcb894ce4610281b401e4cf3355e9ced92 into c8d72d3d2b69dafb463c47cb6f1910efa83b2d56\n"
+        },
+        {
+          "sha": "5cd300dcb894ce4610281b401e4cf3355e9ced92",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T22:19:44-07:00",
+          "message": "docs(layered-test-plan): drop the release pin's hook; a packed main package names no platform package\n"
+        },
+        {
+          "sha": "53c9252c352b7f0fdd2179e9bd3c98e34af0388c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T22:16:08-07:00",
+          "message": "ci: publish to npm from the pushed release tag, never before it\n\nsemantic-release now only versions, commits, tags and creates the GitHub\nrelease (npmPublish: false). A pushed v* tag runs release.yml's publish job,\nwhich builds the binaries from the tagged commit and runs scripts/publish.mjs:\nplatform packages first, then the main package once the registry serves them.\nA tag the repository refuses publishes nothing.\n\nThe platform versions are no longer committed: optionalDependencies are written\ninto the published manifest only, so the lockfile never waits on the registry.\nThe release commit drops [skip ci], which would also stop the tag's run.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c8d72d3d2b69dafb463c47cb6f1910efa83b2d56",
