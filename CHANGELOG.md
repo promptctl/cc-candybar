@@ -1,3 +1,16 @@
+## [1.213.0](https://github.com/promptctl/cc-candybar/compare/v1.189.0...v1.213.0) (2026-11-09)
+
+### Reverts
+
+* main returns to the 1.189.0 tree. The work released as 1.190.0 through 1.212.6 is withdrawn and will be redone from a corrected spec (candybar-step-back-8us0).
+
+### Bug Fixes
+
+* **ci:** a failed early step shows its own red step, not the three that restate it (candybar-testing-0x6u.dsu)
+* **colour:** the door's ✖ keeps the contrast its red has on its ground at lower depths (brandon-unfiled-3248.692p)
+* **release:** publish to npm from the pushed release tag, never before it; no release-pin hook or major-version guard
+* **testing:** the load gate is gone; no job puts the machine under load to judge cost
+
 ## [1.189.0](https://github.com/promptctl/cc-candybar/compare/v1.188.0...v1.189.0) (2026-11-03)
 
 ### Features
