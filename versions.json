@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-703",
+      "ref": "refs/pull/703/merge",
+      "sha": "3c177bf6055387472d9c3477468d2582b0a5a56d",
+      "timestamp": "2026-11-09T05:10:34.965Z",
+      "commits": [
+        {
+          "sha": "3c177bf6055387472d9c3477468d2582b0a5a56d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T22:09:38-07:00",
+          "message": "Merge 2baa7628a1afe73ed99f2ed4139cc76dec0a2d76 into 8212c307c9432e3b217b80a0241c25b9a4157784\n"
+        },
+        {
+          "sha": "2baa7628a1afe73ed99f2ed4139cc76dec0a2d76",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T22:09:27-07:00",
+          "message": "chore: remove the release-pin hook, the major-version guard and the breaking-as-minor release rule\n\nThe GitHub tag ruleset stays. CLAUDE.md states the rule: never bump to 2.0.\nTests that pinned versions or breaking-change behaviour are deleted.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-702",
       "ref": "refs/pull/702/merge",
       "sha": "f8cc8d7a094d89b49956542226f84cf65a6f8a98",
