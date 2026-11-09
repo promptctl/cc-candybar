@@ -1517,12 +1517,12 @@ export class RenderCache<
   private stopSweep: (() => void) | null = null;
   private closed = false;
   // [LAW:one-source-of-truth] The entries an every-entry reload asked for that
-  // have not re-read the disk since. Keyed by the entry itself, so an entry
-  // evicted and opened again is a new one, whose own first load read the disk
-  // after the span.
-  private readonly due = new Set<CacheEntry>();
+  // have not re-read the disk since, each with the cause of the latest batch
+  // that asked. Keyed by the entry itself, so an entry evicted and opened
+  // again is a new one, whose own first load read the disk after the span.
+  private readonly due = new Map<CacheEntry, EveryEntryLoad>();
   // What cancels the one turn armed to reload the next due entry, while one
-  // is. The turn carries the cause of the latest every-entry reload.
+  // is.
   private walk: (() => void) | null = null;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
@@ -2240,18 +2240,16 @@ export class RenderCache<
   // later batch re-walks every entry for its own cause: one re-read of the
   // disk as it is now answers both.
   reloadEvery(cause: EveryEntryLoad): void {
-    for (const entry of this.entries.values()) this.due.add(entry);
-    this.walk?.();
-    this.walk = null;
-    this.armWalk(cause);
+    for (const entry of this.entries.values()) this.due.set(entry, cause);
+    this.armWalk();
   }
 
   // [LAW:single-enforcer] The one place a walk turn is armed: none while one
   // is armed, so a batch started from inside a turn leaves one walker, and
   // one whenever an entry is due.
-  private armWalk(cause: EveryEntryLoad): void {
+  private armWalk(): void {
     if (this.walk !== null || this.due.size === 0) return;
-    this.walk = this.deps.clock.defer(() => this.walkOne(cause));
+    this.walk = this.deps.clock.defer(() => this.walkOne());
   }
 
   // The turn takes the most recently used due entry, read off the map as it
@@ -2263,21 +2261,25 @@ export class RenderCache<
   // it is its own error boundary, as the watcher registry is for a reload a
   // watch drives: a reload that throws is logged and ends only its own turn,
   // where uncaught it would end the daemon.
-  private walkOne(cause: EveryEntryLoad): void {
+  private walkOne(): void {
     this.walk = null;
-    let next: CacheEntry | null = null;
-    for (const entry of this.entries.values())
-      if (this.due.has(entry)) next = entry;
+    let next: readonly [CacheEntry, EveryEntryLoad] | null = null;
+    for (const entry of this.entries.values()) {
+      const cause = this.due.get(entry);
+      if (cause !== undefined) next = [entry, cause];
+    }
     if (next === null) return;
+    const [entry, cause] = next;
     try {
-      this.reloadInto(next, cause);
+      this.reloadInto(entry, cause);
     } catch (e) {
       this.log(
         "error",
-        `catch-up reload threw dir=${next.projectDir} cause=${cause.kind}: ${inspect(e)}`,
+        `every-entry reload threw projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} configFile=${valueOf(entry.configFile ?? "-")} cause=${valueOf(causeField(cause))}: ${inspect(e)}`,
       );
+    } finally {
+      this.armWalk();
     }
-    this.armWalk(cause);
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch

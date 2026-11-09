@@ -20,6 +20,7 @@ import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper, type Timekeeper } from "../src/time";
 import { heldClock } from "./helpers/held-clock";
+import { valueOf } from "../src/utils/logfmt";
 import { SourceRuns } from "../src/var-system/source-runs";
 
 // [LAW:behavior-not-structure] A reload keeps the state it serves exactly when
@@ -73,7 +74,10 @@ function rig(
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
+      runs: new SourceRuns({
+        launcher: world.launcher,
+        clock: systemTimekeeper,
+      }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -383,10 +387,13 @@ describe("a catch-up walks the entries one per turn", () => {
     clock.advance(0);
     expect(walked(r, from)).toEqual([b, a]);
     expect(r.cache.stats.due).toBe(0);
-    const threw = r.lines.filter((l) => l.startsWith("catch-up reload threw "));
+    const threw = r.lines.filter((l) =>
+      l.startsWith("every-entry reload threw "),
+    );
     expect(threw).toHaveLength(1);
+    expect(threw[0]).toContain(`projectDir=${valueOf(b)} `);
     expect(threw[0]).toContain(
-      `catch-up reload threw dir=${b} cause=events-resumed: Error: observer failed`,
+      `cause=${valueOf(`events-resumed:${new Date(resumed.since).toISOString()}`)}: Error: observer failed`,
     );
     failing = null;
     r.cache.reloadEvery(resumed);
