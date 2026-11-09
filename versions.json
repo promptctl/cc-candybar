@@ -4,15 +4,22 @@
     {
       "version": "pr-677",
       "ref": "refs/pull/677/merge",
-      "sha": "e084e6ff6592d278b0d252ecf16caf7f032c6af1",
-      "timestamp": "2026-11-09T23:42:03.121Z",
+      "sha": "cd6de3d8e1d918461ac36d76cef3196b586e15b6",
+      "timestamp": "2026-11-09T23:44:28.279Z",
       "commits": [
         {
-          "sha": "e084e6ff6592d278b0d252ecf16caf7f032c6af1",
+          "sha": "cd6de3d8e1d918461ac36d76cef3196b586e15b6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T23:41:00Z",
-          "message": "Merge 24c3b52e26affc9059b1440251254bdbd2e3ae24 into 00bb2229b4a972bbbbff6177eaa0f0a9af3b70f3\n"
+          "timestamp": "2026-11-09T23:43:35Z",
+          "message": "Merge ae8b456089ea637ec139e1dd37cd6d9f55124d57 into 00bb2229b4a972bbbbff6177eaa0f0a9af3b70f3\n"
+        },
+        {
+          "sha": "ae8b456089ea637ec139e1dd37cd6d9f55124d57",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T16:43:23-07:00",
+          "message": "docs(cache): the walk's error boundary marks its no-silent-failure exception (candybar-animation-wbxz.v24)\n"
         },
         {
           "sha": "24c3b52e26affc9059b1440251254bdbd2e3ae24",
