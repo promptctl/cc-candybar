@@ -2,31 +2,45 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-704",
-      "ref": "refs/pull/704/merge",
-      "sha": "c1a88cab1cd3075ee29abefbe27028891222d3d0",
-      "timestamp": "2026-11-09T05:20:45.176Z",
+      "version": "pr-702",
+      "ref": "refs/pull/702/merge",
+      "sha": "a730f5f405d5a31f5f5ad0718ed3b0612b2f0153",
+      "timestamp": "2026-11-09T05:28:27.040Z",
       "commits": [
         {
-          "sha": "c1a88cab1cd3075ee29abefbe27028891222d3d0",
+          "sha": "a730f5f405d5a31f5f5ad0718ed3b0612b2f0153",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T22:19:54-07:00",
-          "message": "Merge 5cd300dcb894ce4610281b401e4cf3355e9ced92 into c8d72d3d2b69dafb463c47cb6f1910efa83b2d56\n"
+          "timestamp": "2026-11-09T05:27:27Z",
+          "message": "Merge 4e289137527916ca81a7cbd2ed482c41bb95719b into b0559b0bcd0488bc08f7dd8d9a6e60f1337276ee\n"
         },
         {
-          "sha": "5cd300dcb894ce4610281b401e4cf3355e9ced92",
+          "sha": "4e289137527916ca81a7cbd2ed482c41bb95719b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T22:19:44-07:00",
-          "message": "docs(layered-test-plan): drop the release pin's hook; a packed main package names no platform package\n"
+          "timestamp": "2026-11-08T22:27:23-07:00",
+          "message": "Merge branch 'main' into brandon-unfiled-3248.pj1z"
         },
         {
-          "sha": "53c9252c352b7f0fdd2179e9bd3c98e34af0388c",
+          "sha": "735c5ca3bdde1c7e1b8b0a760c95036f3297286a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T22:16:08-07:00",
-          "message": "ci: publish to npm from the pushed release tag, never before it\n\nsemantic-release now only versions, commits, tags and creates the GitHub\nrelease (npmPublish: false). A pushed v* tag runs release.yml's publish job,\nwhich builds the binaries from the tagged commit and runs scripts/publish.mjs:\nplatform packages first, then the main package once the registry serves them.\nA tag the repository refuses publishes nothing.\n\nThe platform versions are no longer committed: optionalDependencies are written\ninto the published manifest only, so the lockfile never waits on the registry.\nThe release commit drops [skip ci], which would also stop the tag's run.\n"
+          "timestamp": "2026-11-08T15:28:26-07:00",
+          "message": "Merge branch 'main' into brandon-unfiled-3248.pj1z"
+        },
+        {
+          "sha": "9813dfb5ee4ea6675bc670133e33c3868c092cd4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:27:58-07:00",
+          "message": "fix(update-act): a held group whose process has exited is dropped from the ⚠ before its write is retried (brandon-unfiled-3248.pj1z)\n"
+        },
+        {
+          "sha": "e4e6ec7335bc365d5ef42d797b41ff2d55466c83",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-08T15:17:42-07:00",
+          "message": "fix(update-act): an overdue act pruned before its end still has its group ended when its leader proves it, and otherwise shown in the ⚠ until it is gone (brandon-unfiled-3248.pj1z)\n\nWhen a newer claim removes a timed-out act between the look and the end,\nthe end now proves the group by its leader's fingerprint and signals it\nonly on that proof. A group nothing proves is written beside the acts, so\nevery daemon's ⚠ names it with the command that ends it until it is no\nlonger the job's. The watch's ⚠ messages are now each their own entry.\n"
         }
       ]
     },
@@ -49,42 +63,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-08T22:35:52Z",
           "message": "chore(release): set `package.json` to 1.212.6 [skip ci]\n\n## [1.212.6](https://github.com/promptctl/cc-candybar/compare/v1.212.5...v1.212.6) (2026-11-08)\n\n### Bug Fixes\n\n* **edit-chrome:** a layout edit releases every held value whose admission it changes, so a re-added placement's configure state is closed (brandon-unfiled-3248.t2yz) ([#701](https://github.com/promptctl/cc-candybar/issues/701)) ([832a6f6](https://github.com/promptctl/cc-candybar/commit/832a6f68075b46a5748841520726edb6914fefcb))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-702",
-      "ref": "refs/pull/702/merge",
-      "sha": "f8cc8d7a094d89b49956542226f84cf65a6f8a98",
-      "timestamp": "2026-11-08T22:30:24.306Z",
-      "commits": [
-        {
-          "sha": "f8cc8d7a094d89b49956542226f84cf65a6f8a98",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T22:28:30Z",
-          "message": "Merge 735c5ca3bdde1c7e1b8b0a760c95036f3297286a into 832a6f68075b46a5748841520726edb6914fefcb\n"
-        },
-        {
-          "sha": "735c5ca3bdde1c7e1b8b0a760c95036f3297286a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T15:28:26-07:00",
-          "message": "Merge branch 'main' into brandon-unfiled-3248.pj1z"
-        },
-        {
-          "sha": "9813dfb5ee4ea6675bc670133e33c3868c092cd4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T15:27:58-07:00",
-          "message": "fix(update-act): a held group whose process has exited is dropped from the ⚠ before its write is retried (brandon-unfiled-3248.pj1z)\n"
-        },
-        {
-          "sha": "e4e6ec7335bc365d5ef42d797b41ff2d55466c83",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T15:17:42-07:00",
-          "message": "fix(update-act): an overdue act pruned before its end still has its group ended when its leader proves it, and otherwise shown in the ⚠ until it is gone (brandon-unfiled-3248.pj1z)\n\nWhen a newer claim removes a timed-out act between the look and the end,\nthe end now proves the group by its leader's fingerprint and signals it\nonly on that proof. A group nothing proves is written beside the acts, so\nevery daemon's ⚠ names it with the command that ends it until it is no\nlonger the job's. The watch's ⚠ messages are now each their own entry.\n"
         }
       ]
     },
