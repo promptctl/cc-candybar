@@ -21,9 +21,7 @@ const GUARDED_DIRECTORIES = [
 
 const FILE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 
-// [LAW:one-source-of-truth] exception: release-pin.mjs's read-only list, copied.
-// That hook runs on import and exports nothing, and its file is under its own
-// pin, so this cannot import it. Running a test reads a guarded file and writes none.
+// Running a test reads a guarded file and writes none.
 // `ls` and `git add` write no file; staging a file main lacks stays free.
 const READ_ONLY =
   /^\s*(?:(?:cat|less|head|tail|grep|rg|ls)\b|git (?:add|diff|log|show|status)\b|(?:pnpm|npx)(?:\s+-\S+)*\s+(?:exec\s+)?(?:jest|test\S*)|node\s+\S*jest\.js\b)/;

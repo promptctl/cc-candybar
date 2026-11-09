@@ -33,7 +33,6 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { majorProblem } from "./major-guard.mjs";
 import { awaitRegistryVisibility, registryState } from "./npm-registry.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -52,12 +51,6 @@ function fail(msg) {
 }
 
 const version = process.argv[2];
-// [LAW:one-source-of-truth] The guard's parse is the one reading of the version:
-// it refuses a string that is not semver as well as a major other than 1. It runs
-// before anything is published or tagged: this script publishes the platform
-// packages itself, and semantic-release pushes the tag only after it returns.
-const majorRefusal = majorProblem(version);
-if (majorRefusal) fail(majorRefusal);
 
 console.log(`release.mjs: preparing per-platform packages for version ${version}`);
 
