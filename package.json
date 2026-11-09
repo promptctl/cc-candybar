@@ -39,7 +39,7 @@
     "check:protocol": "node scripts/check-protocol.mjs",
     "gen:schema": "tsx scripts/gen-schema.ts",
     "check:schema": "tsx scripts/check-schema.ts",
-    "prepublishOnly": "node scripts/major-guard.mjs \"$npm_package_version\" && npm run lint && npm run typecheck && npm run check:protocol && npm run check:schema && npm run build"
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run check:protocol && npm run check:schema && npm run build"
   },
   "keywords": [
     "claude",

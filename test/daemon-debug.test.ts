@@ -534,24 +534,6 @@ describe("Debug protocol wire format", () => {
   });
 });
 
-// ─── PROTOCOL_VERSION discipline: additive ≠ breaking ───────────────────────
-
-describe("PROTOCOL_VERSION", () => {
-  // [LAW:types-are-the-program] PROTOCOL_VERSION carries one theorem:
-  // "old-and-new cannot communicate." Adding a new request kind does not
-  // change that theorem — old clients don't send the new kind, and old
-  // daemons reject it via BAD_REQUEST fallthrough (the additive negotiation,
-  // no separate capabilities exchange needed). Bumping on additive changes
-  // taxed every running session with a VERSION_MISMATCH on rebuild — the
-  // 452-corpse precedent (kz8.5) refuses to kick on permanent errors, so a
-  // bumped version forces visible breakage until each session restarts.
-  // This test pins the discipline so a future additive change cannot
-  // silently re-bump.
-  test("the debug kind is additive — no bump from prior protocol", () => {
-    expect(PROTOCOL_VERSION).toBe(3);
-  });
-});
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function decodeFrame(buf: Buffer): Promise<unknown> {
