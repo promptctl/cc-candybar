@@ -2257,10 +2257,12 @@ export class RenderCache<
   // turn, not where it stood when the batch began. Nothing is due when every
   // entry left since the turn was armed: dropped, or re-read by its own
   // reload.
-  // [LAW:no-silent-failure] The turn runs outside any watcher's callback, so
-  // it is its own error boundary, as the watcher registry is for a reload a
-  // watch drives: a reload that throws is logged and ends only its own turn,
-  // where uncaught it would end the daemon.
+  // The turn runs outside any watcher's callback, so it is its own error
+  // boundary, as the watcher registry is for a reload a watch drives: a
+  // reload that throws is logged and ends only its own turn, where uncaught
+  // it would end the daemon. [LAW:no-silent-failure] exception: the throw
+  // reaches the log and not the bar's ⚠, as on the watch path; one fix at the
+  // reload itself answers both.
   private walkOne(): void {
     this.walk = null;
     let next: readonly [CacheEntry, EveryEntryLoad] | null = null;
