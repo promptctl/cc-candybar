@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-677",
-      "ref": "refs/pull/677/merge",
-      "sha": "cd6de3d8e1d918461ac36d76cef3196b586e15b6",
-      "timestamp": "2026-11-09T23:44:28.279Z",
-      "commits": [
-        {
-          "sha": "cd6de3d8e1d918461ac36d76cef3196b586e15b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T23:43:35Z",
-          "message": "Merge ae8b456089ea637ec139e1dd37cd6d9f55124d57 into 00bb2229b4a972bbbbff6177eaa0f0a9af3b70f3\n"
-        },
-        {
-          "sha": "ae8b456089ea637ec139e1dd37cd6d9f55124d57",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T16:43:23-07:00",
-          "message": "docs(cache): the walk's error boundary marks its no-silent-failure exception (candybar-animation-wbxz.v24)\n"
-        },
-        {
-          "sha": "24c3b52e26affc9059b1440251254bdbd2e3ae24",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T16:40:50-07:00",
-          "message": "fix(cache): each due entry carries its batch's cause, a turn re-arms in finally, and a throw logs the entry's fields (candybar-animation-wbxz.v24)\n"
-        },
-        {
-          "sha": "bb558e920b4c8a5a62b226d3994e3abd02ba6d98",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:55:54-07:00",
-          "message": "fix(cache): each catch-up turn takes the most recently used due entry as the map stands (candybar-animation-wbxz.v24)\n\nA session drawn during the walk is now re-read on the next turn, not\nwhere its entry stood when the batch began. A turn clears its handle\nbefore it reloads and arms only when none is armed, so a batch started\ninside a turn leaves one walker. A throw is logged with its stack.\n"
-        },
-        {
-          "sha": "b432c5eeea384b86813274fec333949a71b79f7a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:50:18-07:00",
-          "message": "fix(cache): a catch-up turn is its own error boundary and walks most recently used first (candybar-animation-wbxz.v24)\n\nA walk turn runs from setImmediate, outside the watcher registry's\ntry/catch, so a reload that threw there reached uncaughtException and\nshut the daemon down. The turn now logs the throw and arms the next.\n\nThe walk takes the most recently used entry first, so the bar in front\nof the user is re-read on the first turn. The due set is a Set: every\ndue entry always reloads for the latest batch's cause, which the armed\nturn carries.\n"
-        },
-        {
-          "sha": "a72550c83789ee10abfabc1189e7417ce51e3906",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T02:37:49-07:00",
-          "message": "fix(cache): a catch-up reloads one entry per turn, so requests are answered between entries (candybar-animation-wbxz.v24)\n\nWhen file events resumed after a stall, or the repo answers moved, the\nrender cache reloaded every entry in one synchronous turn. A reload that\nkeeps its state still resolves, validates and keys the whole chain, so\n105 entries held the live daemon's loop for 1.7s on a calm machine and\n11s on a loaded one, and every client waiting behind it hung up (the\nEPIPE bursts in daemon.log).\n\nThe walk now takes one due entry per turn of the loop. Any reload clears\nits entry's due mark, a drop clears a dropped entry's, a reload that\nthrows ends only its own turn, and close cancels the armed turn. The\nrender cache's stats count the entries still due.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "00bb2229b4a972bbbbff6177eaa0f0a9af3b70f3",
-      "timestamp": "2026-11-09T23:08:50.289Z",
+      "sha": "91570759512cb4bb0f6e21ccce8ec95db2011176",
+      "timestamp": "2026-11-09T23:53:48.561Z",
       "commits": [
         {
-          "sha": "00bb2229b4a972bbbbff6177eaa0f0a9af3b70f3",
+          "sha": "91570759512cb4bb0f6e21ccce8ec95db2011176",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T16:07:52-07:00",
-          "message": "test(install): the native-binary lookup is proved on a staged platform package\n\nThe repository's package.json names no platform package, since publishing\nwrites those optionalDependencies, so the checkout has none to resolve and the\nworker tier failed on every run, blocking the 1.213.0 publish.\n"
+          "timestamp": "2026-11-09T16:52:40-07:00",
+          "message": "fix(cache): a catch-up reloads one entry per turn, so requests are answered between entries (candybar-animation-wbxz.v24) (#677)\n\n* fix(cache): a catch-up reloads one entry per turn, so requests are answered between entries (candybar-animation-wbxz.v24)\n\nWhen file events resumed after a stall, or the repo answers moved, the\nrender cache reloaded every entry in one synchronous turn. A reload that\nkeeps its state still resolves, validates and keys the whole chain, so\n105 entries held the live daemon's loop for 1.7s on a calm machine and\n11s on a loaded one, and every client waiting behind it hung up (the\nEPIPE bursts in daemon.log).\n\nThe walk now takes one due entry per turn of the loop. Any reload clears\nits entry's due mark, a drop clears a dropped entry's, a reload that\nthrows ends only its own turn, and close cancels the armed turn. The\nrender cache's stats count the entries still due.\n\n* fix(cache): a catch-up turn is its own error boundary and walks most recently used first (candybar-animation-wbxz.v24)\n\nA walk turn runs from setImmediate, outside the watcher registry's\ntry/catch, so a reload that threw there reached uncaughtException and\nshut the daemon down. The turn now logs the throw and arms the next.\n\nThe walk takes the most recently used entry first, so the bar in front\nof the user is re-read on the first turn. The due set is a Set: every\ndue entry always reloads for the latest batch's cause, which the armed\nturn carries.\n\n* fix(cache): each catch-up turn takes the most recently used due entry as the map stands (candybar-animation-wbxz.v24)\n\nA session drawn during the walk is now re-read on the next turn, not\nwhere its entry stood when the batch began. A turn clears its handle\nbefore it reloads and arms only when none is armed, so a batch started\ninside a turn leaves one walker. A throw is logged with its stack.\n\n* fix(cache): each due entry carries its batch's cause, a turn re-arms in finally, and a throw logs the entry's fields (candybar-animation-wbxz.v24)\n\n* docs(cache): the walk's error boundary marks its no-silent-failure exception (candybar-animation-wbxz.v24)"
         }
       ]
     },
