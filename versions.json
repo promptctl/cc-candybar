@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-703",
-      "ref": "refs/pull/703/merge",
-      "sha": "3c177bf6055387472d9c3477468d2582b0a5a56d",
-      "timestamp": "2026-11-09T05:10:34.965Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "c8d72d3d2b69dafb463c47cb6f1910efa83b2d56",
+      "timestamp": "2026-11-09T05:18:00.454Z",
       "commits": [
         {
-          "sha": "3c177bf6055387472d9c3477468d2582b0a5a56d",
+          "sha": "c8d72d3d2b69dafb463c47cb6f1910efa83b2d56",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T22:09:38-07:00",
-          "message": "Merge 2baa7628a1afe73ed99f2ed4139cc76dec0a2d76 into 8212c307c9432e3b217b80a0241c25b9a4157784\n"
+          "timestamp": "2026-11-08T22:16:55-07:00",
+          "message": "chore: remove the release-pin hook, the major-version guard and the breaking-as-minor release rule (#703)\n\nThe GitHub tag ruleset stays. CLAUDE.md states the rule: never bump to 2.0.\nTests that pinned versions or breaking-change behaviour are deleted."
         },
         {
-          "sha": "2baa7628a1afe73ed99f2ed4139cc76dec0a2d76",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T22:09:27-07:00",
-          "message": "chore: remove the release-pin hook, the major-version guard and the breaking-as-minor release rule\n\nThe GitHub tag ruleset stays. CLAUDE.md states the rule: never bump to 2.0.\nTests that pinned versions or breaking-change behaviour are deleted.\n"
+          "sha": "8212c307c9432e3b217b80a0241c25b9a4157784",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-08T22:35:52Z",
+          "message": "chore(release): set `package.json` to 1.212.6 [skip ci]\n\n## [1.212.6](https://github.com/promptctl/cc-candybar/compare/v1.212.5...v1.212.6) (2026-11-08)\n\n### Bug Fixes\n\n* **edit-chrome:** a layout edit releases every held value whose admission it changes, so a re-added placement's configure state is closed (brandon-unfiled-3248.t2yz) ([#701](https://github.com/promptctl/cc-candybar/issues/701)) ([832a6f6](https://github.com/promptctl/cc-candybar/commit/832a6f68075b46a5748841520726edb6914fefcb))\n"
         }
       ]
     },
@@ -56,28 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-08T15:17:42-07:00",
           "message": "fix(update-act): an overdue act pruned before its end still has its group ended when its leader proves it, and otherwise shown in the ⚠ until it is gone (brandon-unfiled-3248.pj1z)\n\nWhen a newer claim removes a timed-out act between the look and the end,\nthe end now proves the group by its leader's fingerprint and signals it\nonly on that proof. A group nothing proves is written beside the acts, so\nevery daemon's ⚠ names it with the command that ends it until it is no\nlonger the job's. The watch's ⚠ messages are now each their own entry.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "832a6f68075b46a5748841520726edb6914fefcb",
-      "timestamp": "2026-11-08T22:28:05.620Z",
-      "commits": [
-        {
-          "sha": "832a6f68075b46a5748841520726edb6914fefcb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-08T15:27:05-07:00",
-          "message": "fix(edit-chrome): a layout edit releases every held value whose admission it changes, so a re-added placement's configure state is closed (brandon-unfiled-3248.t2yz) (#701)\n\n* test(edit-chrome): a placement re-added under a removed one's freed id finds its after-gap library closed (brandon-unfiled-3248.t2yz)\n\nThe layout-op verb already releases, in the removal's own click, every\nstate key the config declared before the edit and no longer declares, so\nthe removed placement's after-gap library key is cleared and a placement\nminted later under the freed id inherits nothing. This pins the ticket's\ndone-when end to end: open the library, remove, re-add under the bare id,\nand the library reads closed. It fails with that release disabled.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(edit-chrome): a placement's removed library state is released by any edit that begins or ends its key, so a re-added placement inherits nothing (brandon-unfiled-3248.t2yz)\n\nThe layout-op verb released only the keys an edit ends, so a placement\nremoved by a hand edit left its after-gap library key open, and the click\nthat re-added the same id did not release it (the key was not declared\nbefore that click). The release now covers the symmetric difference: a\nkey the edit begins holds nothing the current config wrote, so whatever\nit holds is left over from an earlier placement. Still one enforcer, and\nstill nothing released on reload, so session values outlive a transient\nhand edit.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(edit-chrome): a layout edit releases every held value whose admission it changes, so a re-added placement's configure state is closed (brandon-unfiled-3248.t2yz)\n\nThe release compared declarations, and the configure key is declared by\nevery config, so a configure value naming a placement removed by hand\nsurvived the click that re-added the same id. The layout-op verb now\nreads each stored value under the configs before and after the edit, as\nthe state gate reads it (undeclared, held, or foreign), and releases\nevery value the two read differently. That one comparison covers keys\nthe edit ends, keys it begins, and the configure member, so the ended-\nplacement walk and its configure clause are gone. Drafts are state-gate\nkeys (every setting control writes its key through a `set` action), so\nthe walk's drafts part goes too; the two-preset drafts test still pins\nthe exact released list.\n\n\"Undeclared\" is its own reading rather than folded into \"not admitted\",\nso a foreign value in a key the edit ends or begins is still released,\nas the declaration rule released it before.\n\nOut of scope: other sessions on the same origin keep their values; that\nis brandon-unfiled-3248.ce4m.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
-        },
-        {
-          "sha": "dcc0d9858406c27a4f4728c234ebd7ef48445799",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-08T22:16:46Z",
-          "message": "chore(release): set `package.json` to 1.212.5 [skip ci]\n\n## [1.212.5](https://github.com/promptctl/cc-candybar/compare/v1.212.4...v1.212.5) (2026-11-08)\n\n### Bug Fixes\n\n* **atomic-write:** a failed staging cleanup rides on the write's error as its cause instead of replacing it (brandon-unfiled-3248.8a7z) ([#700](https://github.com/promptctl/cc-candybar/issues/700)) ([ca24cbf](https://github.com/promptctl/cc-candybar/commit/ca24cbf5adbedbbea71a01319f2da901dfd775bd))\n"
         }
       ]
     },
