@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "0d7038f85bc6235040d66bc10d5a41e1bf34f952",
-      "timestamp": "2026-11-09T23:01:14.430Z",
+      "sha": "00bb2229b4a972bbbbff6177eaa0f0a9af3b70f3",
+      "timestamp": "2026-11-09T23:08:50.289Z",
       "commits": [
         {
-          "sha": "0d7038f85bc6235040d66bc10d5a41e1bf34f952",
+          "sha": "00bb2229b4a972bbbbff6177eaa0f0a9af3b70f3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T15:59:55-07:00",
-          "message": "ci: the publish job waits only for jobs this tree has\n\nIt named test-rust-darwin, a job that came with work the step-back rolled back,\nso GitHub refused the workflow and no run started.\n"
+          "timestamp": "2026-11-09T16:07:52-07:00",
+          "message": "test(install): the native-binary lookup is proved on a staged platform package\n\nThe repository's package.json names no platform package, since publishing\nwrites those optionalDependencies, so the checkout has none to resolve and the\nworker tier failed on every run, blocking the 1.213.0 publish.\n"
         }
       ]
     },
