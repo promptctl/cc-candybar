@@ -82068,12 +82068,12 @@ var RenderCache = class {
   stopSweep = null;
   closed = false;
   // [LAW:one-source-of-truth] The entries an every-entry reload asked for that
-  // have not re-read the disk since. Keyed by the entry itself, so an entry
-  // evicted and opened again is a new one, whose own first load read the disk
-  // after the span.
-  due = /* @__PURE__ */ new Set();
+  // have not re-read the disk since, each with the cause of the latest batch
+  // that asked. Keyed by the entry itself, so an entry evicted and opened
+  // again is a new one, whose own first load read the disk after the span.
+  due = /* @__PURE__ */ new Map();
   // What cancels the one turn armed to reload the next due entry, while one
-  // is. The turn carries the cause of the latest every-entry reload.
+  // is.
   walk = null;
   // Every state the map serves or served, until reclaimed.
   holds = /* @__PURE__ */ new Map();
@@ -82611,17 +82611,15 @@ var RenderCache = class {
   // later batch re-walks every entry for its own cause: one re-read of the
   // disk as it is now answers both.
   reloadEvery(cause) {
-    for (const entry of this.entries.values()) this.due.add(entry);
-    this.walk?.();
-    this.walk = null;
-    this.armWalk(cause);
+    for (const entry of this.entries.values()) this.due.set(entry, cause);
+    this.armWalk();
   }
   // [LAW:single-enforcer] The one place a walk turn is armed: none while one
   // is armed, so a batch started from inside a turn leaves one walker, and
   // one whenever an entry is due.
-  armWalk(cause) {
+  armWalk() {
     if (this.walk !== null || this.due.size === 0) return;
-    this.walk = this.deps.clock.defer(() => this.walkOne(cause));
+    this.walk = this.deps.clock.defer(() => this.walkOne());
   }
   // The turn takes the most recently used due entry, read off the map as it
   // is now, so a bar someone draws during the walk is re-read on the next
@@ -82632,21 +82630,25 @@ var RenderCache = class {
   // it is its own error boundary, as the watcher registry is for a reload a
   // watch drives: a reload that throws is logged and ends only its own turn,
   // where uncaught it would end the daemon.
-  walkOne(cause) {
+  walkOne() {
     this.walk = null;
     let next = null;
-    for (const entry of this.entries.values())
-      if (this.due.has(entry)) next = entry;
+    for (const entry2 of this.entries.values()) {
+      const cause2 = this.due.get(entry2);
+      if (cause2 !== void 0) next = [entry2, cause2];
+    }
     if (next === null) return;
+    const [entry, cause] = next;
     try {
-      this.reloadInto(next, cause);
+      this.reloadInto(entry, cause);
     } catch (e) {
       this.log(
         "error",
-        `catch-up reload threw dir=${next.projectDir} cause=${cause.kind}: ${inspect(e)}`
+        `every-entry reload threw projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} configFile=${valueOf(entry.configFile ?? "-")} cause=${valueOf(causeField(cause))}: ${inspect(e)}`
       );
+    } finally {
+      this.armWalk();
     }
-    this.armWalk(cause);
   }
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch
   // target set is DERIVED from disk (which candidate resolved, which

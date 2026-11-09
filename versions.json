@@ -4,15 +4,22 @@
     {
       "version": "pr-677",
       "ref": "refs/pull/677/merge",
-      "sha": "567b65afe49444f19d9a68dd2744e901dfb887a2",
-      "timestamp": "2026-11-09T23:34:41.274Z",
+      "sha": "e084e6ff6592d278b0d252ecf16caf7f032c6af1",
+      "timestamp": "2026-11-09T23:42:03.121Z",
       "commits": [
         {
-          "sha": "567b65afe49444f19d9a68dd2744e901dfb887a2",
+          "sha": "e084e6ff6592d278b0d252ecf16caf7f032c6af1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T23:33:49Z",
-          "message": "Merge bb558e920b4c8a5a62b226d3994e3abd02ba6d98 into 00bb2229b4a972bbbbff6177eaa0f0a9af3b70f3\n"
+          "timestamp": "2026-11-09T23:41:00Z",
+          "message": "Merge 24c3b52e26affc9059b1440251254bdbd2e3ae24 into 00bb2229b4a972bbbbff6177eaa0f0a9af3b70f3\n"
+        },
+        {
+          "sha": "24c3b52e26affc9059b1440251254bdbd2e3ae24",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T16:40:50-07:00",
+          "message": "fix(cache): each due entry carries its batch's cause, a turn re-arms in finally, and a throw logs the entry's fields (candybar-animation-wbxz.v24)\n"
         },
         {
           "sha": "bb558e920b4c8a5a62b226d3994e3abd02ba6d98",
