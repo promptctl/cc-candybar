@@ -1,3 +1,9 @@
+## [1.212.6](https://github.com/promptctl/cc-candybar/compare/v1.212.5...v1.212.6) (2026-11-08)
+
+### Bug Fixes
+
+* **edit-chrome:** a layout edit releases every held value whose admission it changes, so a re-added placement's configure state is closed (brandon-unfiled-3248.t2yz) ([#701](https://github.com/promptctl/cc-candybar/issues/701)) ([832a6f6](https://github.com/promptctl/cc-candybar/commit/832a6f68075b46a5748841520726edb6914fefcb))
+
 ## [1.212.5](https://github.com/promptctl/cc-candybar/compare/v1.212.4...v1.212.5) (2026-11-08)
 
 ### Bug Fixes

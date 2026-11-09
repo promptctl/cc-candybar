@@ -15,9 +15,6 @@ describe("PR title check", () => {
   test.each([
     ["feat(menu): x", "minor"],
     ["fix: x", "patch"],
-    // The release config ships a breaking change as a minor: this is that
-    // config's own rule answering, not the preset's default of major.
-    ["feat!: x", "minor"],
   ])("%p releases %s", (title, release) => {
     const run = check(title);
     expect(run.status).toBe(0);

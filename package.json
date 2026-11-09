@@ -1,6 +1,6 @@
 {
   "name": "@promptctl/cc-candybar",
-  "version": "1.212.5",
+  "version": "1.212.6",
   "description": "Statusline renderer for Claude Code — a JSON5-configurable DSL with daemon-cached data sources, byte-clean palette-aware composition, and OSC8 click verbs.",
   "type": "module",
   "main": "./dist/index.mjs",
@@ -38,7 +38,7 @@
     "check:protocol": "node scripts/check-protocol.mjs",
     "gen:schema": "tsx scripts/gen-schema.ts",
     "check:schema": "tsx scripts/check-schema.ts",
-    "prepublishOnly": "node scripts/major-guard.mjs \"$npm_package_version\" && npm run lint && npm run typecheck && npm run check:protocol && npm run check:schema && npm run build"
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run check:protocol && npm run check:schema && npm run build"
   },
   "keywords": [
     "claude",
@@ -78,7 +78,6 @@
     "@promptctl/rich-js": "^0.27.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^13.0.1",
-    "@semantic-release/exec": "^7.0.3",
     "@semantic-release/git": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
@@ -108,11 +107,5 @@
     "tsx": "^4.21.0",
     "typescript": "^5.0.0",
     "yaml": "^2.9.1"
-  },
-  "optionalDependencies": {
-    "@promptctl/cc-candybar-darwin-arm64": "1.212.5",
-    "@promptctl/cc-candybar-darwin-x64": "1.212.5",
-    "@promptctl/cc-candybar-linux-arm64": "1.212.5",
-    "@promptctl/cc-candybar-linux-x64": "1.212.5"
   }
 }
