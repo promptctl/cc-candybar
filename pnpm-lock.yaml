@@ -26,9 +26,6 @@ importers:
       '@semantic-release/commit-analyzer':
         specifier: ^13.0.1
         version: 13.0.1(semantic-release@25.0.3(typescript@5.9.3))
-      '@semantic-release/exec':
-        specifier: ^7.0.3
-        version: 7.1.0(semantic-release@25.0.3(typescript@5.9.3))
       '@semantic-release/git':
         specifier: ^10.0.1
         version: 10.0.1(semantic-release@25.0.3(typescript@5.9.3))
@@ -116,19 +113,6 @@ importers:
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
-    optionalDependencies:
-      '@promptctl/cc-candybar-darwin-arm64':
-        specifier: 1.189.0
-        version: 1.189.0
-      '@promptctl/cc-candybar-darwin-x64':
-        specifier: 1.189.0
-        version: 1.189.0
-      '@promptctl/cc-candybar-linux-arm64':
-        specifier: 1.189.0
-        version: 1.189.0
-      '@promptctl/cc-candybar-linux-x64':
-        specifier: 1.189.0
-        version: 1.189.0
 
 packages:
 
@@ -1027,26 +1011,6 @@ packages:
     resolution: {integrity: sha512-h104Kh26rR8tm+a3Qkc5S4VLYint3FE48as7+/5oCEcKR2idC/pF1G6AhIXKI+eHPJa/3J9i5z0Al47IeGHPkA==}
     engines: {node: '>=12'}
 
-  '@promptctl/cc-candybar-darwin-arm64@1.189.0':
-    resolution: {integrity: sha512-DZjfQNTeRU/M+gZd9Z2Adg2m1fncdofZDwstY8RGdgxYcqtr/UaxhygED8Zrg/D2o5TbqYOBxO7Jpw1erSPGmQ==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@promptctl/cc-candybar-darwin-x64@1.189.0':
-    resolution: {integrity: sha512-0I9P+x266fK1C7dpv56ddKnErWXIozrYs6QWZlCQtytgRpT42HZAdWDKXNfHCOGrTPtoAWj55aEQwqerBFmXug==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@promptctl/cc-candybar-linux-arm64@1.189.0':
-    resolution: {integrity: sha512-6rhcXsLfG05CvXf/tHdEszyG/AymofJ5XzRkqfx39/fHknkmqcwxy1dgnfHxa14lRoBWMir9m9rSzDqPN44VFg==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@promptctl/cc-candybar-linux-x64@1.189.0':
-    resolution: {integrity: sha512-oTNNuNmAtU1dqyS5tRjhyIfsJdEoE5z4CfJzvz8+8c+x7gHHwA9T49hevZZv6o8BB51K97bgR3wM2oeWSOmqow==}
-    cpu: [x64]
-    os: [linux]
-
   '@promptctl/go-template-js@0.10.0':
     resolution: {integrity: sha512-yi4RcDJ8cTsSpL1qSIUJDjfXYpqVfZFO6BeWwiJ1R/wuoWVn7uI3MnHA6kpmeT4apYStlU6sDl7nSexnQiDvjA==}
     engines: {node: '>=20.19.0'}
@@ -1186,12 +1150,6 @@ packages:
   '@semantic-release/error@4.0.0':
     resolution: {integrity: sha512-mgdxrHTLOjOddRVYIYDo0fR3/v61GNN1YGkfbrjuIKg/uMgCd+Qzo3UAXJ+woLQQpos4pl5Esuw5A7AoNlzjUQ==}
     engines: {node: '>=18'}
-
-  '@semantic-release/exec@7.1.0':
-    resolution: {integrity: sha512-4ycZ2atgEUutspPZ2hxO6z8JoQt4+y/kkHvfZ1cZxgl9WKJId1xPj+UadwInj+gMn2Gsv+fLnbrZ4s+6tK2TFQ==}
-    engines: {node: '>=20.8.1'}
-    peerDependencies:
-      semantic-release: '>=24.1.0'
 
   '@semantic-release/git@10.0.1':
     resolution: {integrity: sha512-eWrx5KguUcU2wUPaO6sfvZI0wPafUKAMNC18aXY4EnNcrZL86dEmpNVnC9uMpGZkmZJ9EfCVJBQx4pV4EMGT1w==}
@@ -4526,18 +4484,6 @@ snapshots:
       '@pnpm/network.ca-file': 1.0.2
       config-chain: 1.1.13
 
-  '@promptctl/cc-candybar-darwin-arm64@1.189.0':
-    optional: true
-
-  '@promptctl/cc-candybar-darwin-x64@1.189.0':
-    optional: true
-
-  '@promptctl/cc-candybar-linux-arm64@1.189.0':
-    optional: true
-
-  '@promptctl/cc-candybar-linux-x64@1.189.0':
-    optional: true
-
   '@promptctl/go-template-js@0.10.0':
     dependencies:
       '@noble/hashes': 2.2.0
@@ -4629,18 +4575,6 @@ snapshots:
   '@semantic-release/error@3.0.0': {}
 
   '@semantic-release/error@4.0.0': {}
-
-  '@semantic-release/exec@7.1.0(semantic-release@25.0.3(typescript@5.9.3))':
-    dependencies:
-      '@semantic-release/error': 4.0.0
-      aggregate-error: 3.1.0
-      debug: 4.4.3
-      execa: 9.6.1
-      lodash-es: 4.18.1
-      parse-json: 8.3.0
-      semantic-release: 25.0.3(typescript@5.9.3)
-    transitivePeerDependencies:
-      - supports-color
 
   '@semantic-release/git@10.0.1(semantic-release@25.0.3(typescript@5.9.3))':
     dependencies:

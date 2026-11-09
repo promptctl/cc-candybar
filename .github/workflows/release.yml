@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -193,13 +194,47 @@ jobs:
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
-      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: npx semantic-release
+
+  # The tag is the release: semantic-release pushes it from the job above, and
+  # a tag the repository refuses never starts this job, so nothing reaches npm
+  # for it. The binaries are built from the tagged commit.
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs: [test, test-rust-darwin, build-rust, build-url-handler]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -241,12 +276,7 @@ jobs:
             file "npm/cc-candybar-${platform}/bin/cc-candybar-url-handler"
           done
 
-      - name: Build TypeScript
-        run: pnpm run build
-
-      - name: Release
+      - name: Publish
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npx semantic-release
+        run: node scripts/publish.mjs "${{ github.ref_name }}"

@@ -65,7 +65,7 @@ orphans. The structural fix is detailed in **Findings → F2** below.
 All Node-side spawns go through `src/proc/launch.ts`. This is enforced by
 having `node:child_process` imported in exactly one source file (verified by
 grep: `import.*from "node:child_process"` matches only `src/proc/launch.ts`
-and the unrelated `scripts/release.mjs`).
+and the unrelated `scripts/publish.mjs`).
 
 ### The launch primitive — `src/proc/launch.ts`
 
@@ -420,7 +420,7 @@ rm -f ~/.local/state/cc-candybar/socket ~/.local/state/cc-candybar/spawn.lock
 
 ```
 src/proc/launch.ts              import { spawn, spawnSync } from "node:child_process";
-scripts/release.mjs              import { execFileSync } from "node:child_process";  (build script, not runtime)
+scripts/publish.mjs              import { execFileSync } from "node:child_process";  (build script, not runtime)
 rust-client/src/launch.rs       use std::process::{Command, Stdio};
 ```
 

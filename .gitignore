@@ -20,7 +20,7 @@ demo-recording/
 # Rust client build artifacts (Cargo.lock IS committed — reproducible builds)
 rust-client/target/
 
-# Per-platform package binaries — populated only by CI / release.mjs
+# Per-platform package binaries — populated only by CI / publish.mjs
 npm/*/bin/
 
 # Native fast-path binary staged by `just install-rust`. Never committed —

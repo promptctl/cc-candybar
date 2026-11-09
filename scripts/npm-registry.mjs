@@ -1,10 +1,10 @@
 // One question to the npm registry, asked one way by everyone who asks it:
 // "does the registry serve <pkg>@<version> yet?"
 //
-// scripts/release.mjs asks it twice for different reasons — to skip a platform
-// package it already published (so a rerun after a partial failure is safe), and
-// to know when those publishes have become VISIBLE, which is what the lockfile
-// regen needs to be true before it can resolve them. Same fact, one spelling
+// scripts/publish.mjs asks it twice for different reasons — to skip a package it
+// already published (so a rerun after a partial failure is safe), and to know
+// when the platform publishes have become VISIBLE, which must be true before the
+// main package that names them is published. Same fact, one spelling
 // [LAW:one-source-of-truth].
 //
 // Lives beside the release script rather than under src/: this is release-time
