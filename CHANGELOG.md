@@ -1,3 +1,9 @@
+## [1.213.1](https://github.com/promptctl/cc-candybar/compare/v1.213.0...v1.213.1) (2026-11-10)
+
+### Bug Fixes
+
+* **cache:** a catch-up reloads one entry per turn, so requests are answered between entries (candybar-animation-wbxz.v24) ([#677](https://github.com/promptctl/cc-candybar/issues/677)) ([9157075](https://github.com/promptctl/cc-candybar/commit/91570759512cb4bb0f6e21ccce8ec95db2011176))
+
 ## [1.213.0](https://github.com/promptctl/cc-candybar/compare/v1.189.0...v1.213.0) (2026-11-09)
 
 ### Reverts
