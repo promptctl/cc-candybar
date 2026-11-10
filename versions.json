@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-707",
-      "ref": "refs/pull/707/merge",
-      "sha": "b0d422b06a949cbe642daad0686bf7606ce48e92",
-      "timestamp": "2026-11-10T05:03:53.591Z",
-      "commits": [
-        {
-          "sha": "b0d422b06a949cbe642daad0686bf7606ce48e92",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T05:02:54Z",
-          "message": "Merge 70cb5da30ada4aa420abcf1021bb199b38dedb82 into edfc3a230459f9018cfa3781421f503d998476ff\n"
-        },
-        {
-          "sha": "70cb5da30ada4aa420abcf1021bb199b38dedb82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T22:02:43-07:00",
-          "message": "docs(facts): comments stop arguing with the deleted gate (candybar-skeleton-wj0c.660)\n"
-        },
-        {
-          "sha": "895778c24177960c30cc7a3bfe5d3db99d607f90",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T21:57:50-07:00",
-          "message": "fix(facts): a hold during a new repo's first read asks no second read; the dead worktree flag goes (candybar-skeleton-wj0c.660)\n\nReview (high) of the totality change:\n- A PR no pass has keyed yet is keyed by the repo's first pass, so a second\n  home holding the repo while that pass is out no longer queues a redundant\n  git read (and the first pass's event no longer claims `owed`).\n- `isWorktree` reached no payload, template or event, the same reason `tag`\n  went; the worktree tests state the behaviour through the branch read.\n- `GitFacts` was a second name for `GitRead`.\n- The doctor's config walk gets back the edge cases its deleted tests held:\n  partials, root-dot helpers, a dict-handed helper, namespace reads, action\n  texts and cache keys.\n- The classifier's comment names a command that still runs; gather.md says\n  the option set goes rather than becomes constant.\n"
-        },
-        {
-          "sha": "3fb26789deaeab7db78740ca84f49af7a364d6c4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T21:42:42-07:00",
-          "message": "feat(facts): every session gathers every built-in, and the wants closure goes (candybar-skeleton-wj0c.660)\n\nWhat a session gathers no longer depends on what its layout shows. Every\nbuilt-in lane is declared, refreshed, read and stamped for every session,\nand every plugin source a config declares is declared, so the facts\ndocument is total and a preset pick moves no hold.\n\n- The closure that gated declaration, refresh, reading and composition\n  is gone; the doctor keeps its own walk to say which data a preset reads.\n- Git reads every field on each pass (the tag read is dropped), holds one\n  value per repo, and runs the repo's PR lookup while the repo is held.\n- The PR and today's sums stay off a request's wait, so the first bar\n  never waits on the forge or a transcript scan.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "edfc3a230459f9018cfa3781421f503d998476ff",
-      "timestamp": "2026-11-10T03:59:48.048Z",
+      "sha": "effe8f6ccd73837e94fbf8322194bfc66b7f5d1a",
+      "timestamp": "2026-11-10T05:21:03.344Z",
       "commits": [
         {
-          "sha": "edfc3a230459f9018cfa3781421f503d998476ff",
+          "sha": "effe8f6ccd73837e94fbf8322194bfc66b7f5d1a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T20:58:50-07:00",
-          "message": "docs(design): the spec sets no memory ceilings or Node baseline, and the restart beat is no question (candybar-skeleton-wj0c.aak) (#706)\n\n* docs(design): the spec sets no memory ceilings or Node baseline, and the restart beat is no question (candybar-skeleton-wj0c.aak)\n\nBuild first, optimise later: the ceilings and the baseline decision were sized\nfrom load runs, and a restart is not a problem.\n\n* docs(design): no memory backstop or budget ticket outlives the deleted ceilings (candybar-skeleton-wj0c.aak)\n\n* docs(design): Gather keeps the daemon's memory backstop as it is, sized by no number (candybar-skeleton-wj0c.aak)"
+          "timestamp": "2026-11-09T22:20:05-07:00",
+          "message": "feat(facts): every session gathers every built-in, and the wants closure goes (#707)\n\n* feat(facts): every session gathers every built-in, and the wants closure goes (candybar-skeleton-wj0c.660)\n\nWhat a session gathers no longer depends on what its layout shows. Every\nbuilt-in lane is declared, refreshed, read and stamped for every session,\nand every plugin source a config declares is declared, so the facts\ndocument is total and a preset pick moves no hold.\n\n- The closure that gated declaration, refresh, reading and composition\n  is gone; the doctor keeps its own walk to say which data a preset reads.\n- Git reads every field on each pass (the tag read is dropped), holds one\n  value per repo, and runs the repo's PR lookup while the repo is held.\n- The PR and today's sums stay off a request's wait, so the first bar\n  never waits on the forge or a transcript scan.\n\n* fix(facts): a hold during a new repo's first read asks no second read; the dead worktree flag goes (candybar-skeleton-wj0c.660)\n\nReview (high) of the totality change:\n- A PR no pass has keyed yet is keyed by the repo's first pass, so a second\n  home holding the repo while that pass is out no longer queues a redundant\n  git read (and the first pass's event no longer claims `owed`).\n- `isWorktree` reached no payload, template or event, the same reason `tag`\n  went; the worktree tests state the behaviour through the branch read.\n- `GitFacts` was a second name for `GitRead`.\n- The doctor's config walk gets back the edge cases its deleted tests held:\n  partials, root-dot helpers, a dict-handed helper, namespace reads, action\n  texts and cache keys.\n- The classifier's comment names a command that still runs; gather.md says\n  the option set goes rather than becomes constant.\n\n* docs(facts): comments stop arguing with the deleted gate (candybar-skeleton-wj0c.660)"
         }
       ]
     }

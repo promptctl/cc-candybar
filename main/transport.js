@@ -34145,14 +34145,14 @@ function standOff(ink, ground, depth) {
   if (ink === void 0 || ground === void 0)
     return ink;
   const drawn = (color, at) => new Style({ color, bgcolor: ground }).drawnColors(at);
-  const { color: shown, bgcolor: under2 } = drawn(ink, depth);
-  if (standsOff(shown, under2))
+  const { color: shown, bgcolor: under3 } = drawn(ink, depth);
+  if (standsOff(shown, under3))
     return ink;
   const laid = drawn(ink).color;
   const kind = shown.fixedValue === void 0 ? ColorDepth.STANDARD : ColorDepth.TRUECOLOR;
   for (const step4 of lightnessRay(Oklch.fromRgba(laid.getTruecolor()))) {
     const candidate = drawn(ColorSpec.fromRgba(step4.toRgba()).downgrade(kind), depth).color;
-    if (standsOff(candidate, under2))
+    if (standsOff(candidate, under3))
       return candidate;
   }
   throw new Error(`no colour on the lightness ray of ${ink.name} stands off ${ground.name} at depth ${ColorDepth[depth]}`);
@@ -44173,9 +44173,9 @@ function omit(d, ...drop2) {
   for (const [k, v] of Object.entries(d)) if (!set2.has(k)) out[k] = v;
   return out;
 }
-function pick(d, ...wanted2) {
+function pick(d, ...wanted) {
   const out = {};
-  for (const key of wanted2) if (key in d) out[key] = d[key];
+  for (const key of wanted) if (key in d) out[key] = d[key];
   return out;
 }
 function pluck(key, ...dicts) {
@@ -53313,7 +53313,7 @@ function sourceReading(name, resolved) {
   const raw = resolved.value;
   if (raw === void 0) {
     return failed(
-      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the preset reads`,
+      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the config declares`,
       "read"
     );
   }
@@ -53480,7 +53480,7 @@ var SourceRegistry = class _SourceRegistry {
   // carries at the source's own name — ok, absent or failed as the storage
   // owner read the session's file, or pending while it has not answered.
   // [LAW:no-silent-failure] A payload with nothing there is a declaration
-  // that did not take the source the preset reads: a bug, read as a failure
+  // that did not take the source the config declares: a bug, read as a failure
   // naming the variable, never as absent.
   declareSourceDocument(name) {
     this.store.defineDerivedDocument(
@@ -59713,7 +59713,7 @@ function applyPlugins(definitions, ctx, base, validate) {
         );
       }
       taken.set(ns, file);
-      const under2 = withoutPlugin(layer.config, ns);
+      const under3 = withoutPlugin(layer.config, ns);
       const merged = attempt3(() => {
         const source = fs_default.readFileSync(file, "utf-8");
         const config2 = mergeWithDefault(
@@ -59723,10 +59723,10 @@ function applyPlugins(definitions, ctx, base, validate) {
             { source, json: import_json52.default.parse(source) },
             ctx
           ),
-          under2
+          under3
         );
         requireOneSourcePerFile(file, ns, config2);
-        validate(config2, ns, under2 !== layer.config);
+        validate(config2, ns, under3 !== layer.config);
         return config2;
       });
       if (merged.ok) {
@@ -59738,7 +59738,7 @@ function applyPlugins(definitions, ctx, base, validate) {
         };
       }
       const dropped = { ...definition, reason: merged.reason };
-      return drop2(merged.reason, tombstone(under2, ns, dropped));
+      return drop2(merged.reason, tombstone(under3, ns, dropped));
     },
     { config: base.config, rendering: base.rendering, loaded: [], dropped: [] }
   );
@@ -62073,7 +62073,7 @@ function parseDslConfig(filePath2, source, allowedPalettes = new Set(listResolva
     layer: null
   })).raw;
 }
-function parseDslFile(filePath2, source, allowedPalettes, under2) {
+function parseDslFile(filePath2, source, allowedPalettes, under3) {
   const json2 = parseJson5OrThrow(filePath2, source);
   const notice = editabilityNotice(filePath2, source);
   const warnings = notice === null ? [] : [notice];
@@ -62098,7 +62098,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
       warnings
     );
   }
-  const { inherited, layer } = under2(
+  const { inherited, layer } = under3(
     json2.plugins === void 0 ? [] : validatePluginRefs({ ...ctx, issues: [] }, json2.plugins) ?? [],
     isPlainObject(json2.segments) ? Object.keys(json2.segments) : []
   );
@@ -62327,10 +62327,9 @@ var RAW_DEFAULT_DSL_CONFIG = {
     // The tmux session name of the pane this session's client reported flows
     // through the daemon's augmented payload (TmuxService asks at most once
     // per pane per 30 s, so this stays cheap; `tmux.pane` itself is in
-    // PAYLOAD_INPUTS). A `kind: "shell"` declaration would
-    // spawn the subprocess at every cache-entry creation regardless of
-    // whether the tmux segment is in the active layout — buildNeededPrefixes
-    // gates the input variant so unused segments cost nothing.
+    // PAYLOAD_INPUTS). A `kind: "shell"` declaration would spawn the
+    // subprocess at every cache-entry creation, where the daemon's one owner
+    // asks once per pane for every session on it.
     "tmux.session": { kind: "input", path: "tmux.session", default: "" },
     // Host identity — which machine this session is on, and whether the user
     // arrived over SSH. All three come through the augmented payload rather
@@ -65983,7 +65982,6 @@ var READ_FIELD_NAMES = {
   head: "head",
   sha: "sha",
   operation: "operation",
-  tag: "tag",
   committedAt: "committedAt",
   stashCount: "stash",
   upstream: "upstream",
@@ -65993,7 +65991,7 @@ var READ_FIELD_NAMES = {
 function gitInfoFailures(info) {
   return Object.keys(READ_FIELD_NAMES).flatMap((field) => {
     const outcome = info[field];
-    return outcome?.kind === "failed" ? [`git.${READ_FIELD_NAMES[field]}: ${outcome.reason}`] : [];
+    return outcome.kind === "failed" ? [`git.${READ_FIELD_NAMES[field]}: ${outcome.reason}`] : [];
   });
 }
 function classify(label2, result, nonZero) {
@@ -66343,9 +66341,9 @@ var GitService = class {
   // construction, and an unexpected throw (a bug) is surfaced as a `failed`
   // outcome whose reason reaches the consuming boundary's log — not a blank
   // bar, not a swallowed branch.
-  async getGitInfo(workingDir, options = {}, projectDir) {
+  async getGitInfo(workingDir, projectDir) {
     try {
-      return await this.computeGitInfo(workingDir, options, projectDir);
+      return await this.computeGitInfo(workingDir, projectDir);
     } catch (e) {
       return failed(
         `git: ${e instanceof Error ? e.message : String(e)}`,
@@ -66353,10 +66351,9 @@ var GitService = class {
       );
     }
   }
-  async computeGitInfo(workingDir, options = {}, projectDir) {
+  async computeGitInfo(workingDir, projectDir) {
     let gitDir;
-    const isWorktreeDir = this.isWorktree(workingDir);
-    if (isWorktreeDir) {
+    if (this.isWorktree(workingDir)) {
       gitDir = workingDir;
     } else if (projectDir && this.isGitRepo(projectDir)) {
       gitDir = projectDir;
@@ -66369,36 +66366,32 @@ var GitService = class {
     }
     const core = await this.getCoreAsync(gitDir);
     if (core.kind !== "ok") return core;
-    const result = {
+    const committedAt = await this.committedAt(gitDir, core.value.oid);
+    const remotes = await this.getRemotesAsync(gitDir);
+    return ok({
       branch: core.value.branch,
       status: core.value.status,
       aheadBehind: core.value.aheadBehind,
-      head: core.value.oid
-    };
-    if (options.showWorkingTree) result.workingTree = core.value.workingTree;
-    if (options.showSha) {
-      result.sha = derived2(core.value.oid, (o) => o.slice(0, 7));
-    }
-    if (options.showUpstream) result.upstream = core.value.upstream;
-    if (options.showTag) {
-      result.tag = await this.getNearestTagAsync(gitDir);
-    }
-    if (options.showCommittedAt) {
-      result.committedAt = await this.committedAt(gitDir, core.value.oid);
-    }
-    if (options.showStashCount) result.stashCount = this.getStashCount(gitDir);
-    const remotes = options.showRepoName || options.showRepoUrl ? await this.getRemotesAsync(gitDir) : void 0;
-    if (remotes !== void 0 && options.showRepoName) {
-      result.repoName = derived2(remotes, (r) => this.repoNameFrom(r, gitDir));
-      result.isWorktree = isWorktreeDir;
-    }
-    if (remotes !== void 0 && options.showRepoUrl) {
-      result.repoUrl = derived2(remotes, repoWebUrl);
-    }
-    if (options.showOperation) {
-      result.operation = this.getOngoingOperation(gitDir);
-    }
-    return ok(result);
+      head: core.value.oid,
+      // sha, upstream, and the worktree counts all rode in on the core call —
+      // attaching them here is a memory read, not another spawn.
+      workingTree: core.value.workingTree,
+      // [LAW:locality-or-seam] The 7-char truncation is a DISPLAY policy, so it
+      // lives with the display field rather than in the parser: `CoreStatus`
+      // keeps the one fact git reported. `git rev-parse --short` auto-lengthens
+      // on collision, but re-spawning it to recover that would undo this
+      // segment's whole point — one porcelain=v2 read instead of a fan-out — and
+      // this value is display-only. The full oid is what keys the
+      // commit-timestamp cache, so ambiguity here stays cosmetic instead of
+      // becoming a wrong lookup.
+      sha: derived2(core.value.oid, (o) => o.slice(0, 7)),
+      upstream: core.value.upstream,
+      committedAt,
+      stashCount: this.getStashCount(gitDir),
+      repoName: derived2(remotes, (r) => this.repoNameFrom(r, gitDir)),
+      repoUrl: derived2(remotes, repoWebUrl),
+      operation: this.getOngoingOperation(gitDir)
+    });
   }
   // [LAW:locality-or-seam] Public so the daemon-side provider can watch the
   // real HEAD/index files even for git worktrees. For a regular repo this is
@@ -66430,18 +66423,6 @@ var GitService = class {
         "read"
       );
     }
-  }
-  async getNearestTagAsync(workingDir) {
-    return nonEmpty(
-      classify(
-        "git describe --tags",
-        await this.execGitAsync(["describe", "--tags", "--abbrev=0"], {
-          cwd: workingDir,
-          timeout: 2e3
-        }),
-        "absent"
-      )
-    );
   }
   // [LAW:decomposition] Two facts were folded into one call, and only one of them
   // is a property of the repo. The commit's TIMESTAMP never changes — a sha names
@@ -66938,8 +66919,7 @@ var PR_FIELDS = {
   prError: true,
   prEarlier: true
 };
-function prFactOf(git, readsPr) {
-  if (!readsPr) return "-";
+function prFactOf(git) {
   if (isPending(git)) return "pending";
   const { prState, prError, prEarlier } = git ?? {};
   if (isPending(prState)) return "pending";
@@ -67012,124 +66992,6 @@ function projectSpeedHistory(obs) {
   if (rates.length === 0) return void 0;
   return rates.join(",");
 }
-function buildNeededPrefixes(config2, preset) {
-  const declared = presetGlobals(config2, preset);
-  const rules = EXPRESSION_SLOTS.flatMap((slot) => {
-    const authored = declared[slot];
-    return isExpression(authored) ? [authored] : [];
-  });
-  const seeds = [...rules];
-  for (const node of walkNodes(presetRoot(config2, preset).node)) {
-    if (node.when) seeds.push(node.when);
-    if (node.kind !== "segment") continue;
-    seeds.push(...segmentTemplates(config2, node.name));
-  }
-  return inputClosure(config2, seeds);
-}
-function segmentTemplates(config2, name) {
-  const seg2 = config2.segments[name];
-  if (!seg2) return [];
-  return [
-    ...[seg2.template, seg2.when, seg2.bg, seg2.fg].flatMap(
-      (src) => src ? [src] : []
-    ),
-    ...Object.values(seg2.partials ?? {})
-  ];
-}
-function segmentInputPaths(config2, name, whens) {
-  return inputClosure(config2, [...segmentTemplates(config2, name), ...whens]);
-}
-function inputClosure(config2, seeds) {
-  const reads = valueReadsOf(config2);
-  const decls = new Map(declaredVariables(config2));
-  const frontier = seeds.flatMap(
-    (template) => reads.ofTemplate(template).flatMap(({ reaches }) => reaches)
-  );
-  const visited = /* @__PURE__ */ new Set();
-  const inputPaths = /* @__PURE__ */ new Set();
-  while (frontier.length > 0) {
-    const name = frontier.pop();
-    if (visited.has(name)) continue;
-    visited.add(name);
-    const decl = decls.get(name);
-    const read2 = payloadPathOf(name, decl);
-    if (read2 !== void 0) inputPaths.add(read2);
-    for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
-  }
-  return inputPaths;
-}
-function neededPrefixesByPreset(config2) {
-  const byPreset = /* @__PURE__ */ new Map();
-  return (preset) => {
-    const cached = byPreset.get(preset);
-    if (cached !== void 0) return cached;
-    const needed = buildNeededPrefixes(config2, preset);
-    byPreset.set(preset, needed);
-    return needed;
-  };
-}
-function anyPathStartsWith(paths2, prefix) {
-  for (const p2 of paths2) {
-    if (p2 === prefix || p2.startsWith(prefix + ".")) return true;
-  }
-  return false;
-}
-function gitOptionsFromClosure(needed) {
-  const has3 = (path42) => needed.has(path42);
-  const wantsWorkingTree = has3("git.staged") || has3("git.unstaged") || has3("git.untracked") || has3("git.conflicts");
-  return {
-    ...has3("git.sha") && { showSha: true },
-    ...wantsWorkingTree && { showWorkingTree: true },
-    ...has3("git.stash") && { showStashCount: true },
-    ...(has3("git.upstream") || has3("git.tracking")) && {
-      showUpstream: true
-    },
-    ...has3("git.repoName") && { showRepoName: true },
-    ...has3("git.repoUrl") && { showRepoUrl: true },
-    ...has3("git.operation") && { showOperation: true },
-    ...has3("git.committedAt") && { showCommittedAt: true },
-    // Any PR field laid out turns on the (network) forge lookup.
-    ...Object.keys(PR_FIELDS).some((f) => has3(`git.${f}`)) && {
-      showPullRequest: true
-    }
-  };
-}
-var wantedOf = /* @__PURE__ */ new WeakMap();
-function wanted(neededInputPaths) {
-  let want = wantedOf.get(neededInputPaths);
-  if (want === void 0) {
-    want = wantsOf(neededInputPaths);
-    wantedOf.set(neededInputPaths, want);
-  }
-  return want;
-}
-function wantsOf(neededInputPaths) {
-  const wants = (prefix) => anyPathStartsWith(neededInputPaths, prefix);
-  return {
-    git: wants("git"),
-    // The burn segment reads `burn.costPerHour`, a derivative of session cost
-    // and metrics duration — so wanting `burn` pulls in exactly the two lanes
-    // it is folded from.
-    session: wants("session.cost") || wants("session.tokens") || wants("burn"),
-    today: wants("today"),
-    // autocompact's controls are capped to the model's context window, so the
-    // lane runs for either family, as metrics runs for burn.
-    context: wants("context") || wants("autocompact"),
-    metrics: wants("metrics") || wants("burn"),
-    burn: wants("burn"),
-    activity: wants("activity"),
-    // Only the session NAME costs a spawn; `tmux.pane` is the hint itself, so
-    // a config that reads only the pane (every slash gate) runs nothing here.
-    tmux: wants("tmux.session"),
-    // `host.ssh` is the hint itself; the name and the user are each a read.
-    hostName: wants("host.name"),
-    hostUser: wants("host.user"),
-    cache: wants("cache"),
-    speed: wants("speed"),
-    autocompact: wants("autocompact"),
-    block: wants("block")
-  };
-}
 function renderWidth(hints) {
   return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 }
@@ -67141,11 +67003,9 @@ function refreshedFact(refreshed) {
 }
 async function refreshPayload(inputs, at, refreshed) {
   const { hookData: hookData2, deps, hints } = inputs;
-  const want = wanted(inputs.neededInputPaths);
   const sessionId2 = hookData2.session_id;
   const session = deps.usageStore.request(sessionId2, hookData2.transcript_path);
-  const lane = async (name, needed, run3) => {
-    if (!needed) return;
+  const lane = async (name, run3) => {
     const startedAt = deps.clock.monotonic();
     refreshed.set(name, null);
     let threw2 = null;
@@ -67159,43 +67019,32 @@ async function refreshPayload(inputs, at, refreshed) {
     deps.faults.refreshed(sessionId2, name, threw2);
   };
   await Promise.all([
-    lane("session", want.session, () => session.usage(hookData2)),
-    lane("today", want.today, () => session.today()),
-    lane(
-      "context",
-      want.context,
-      () => deps.contextProvider.getContextInfo(hookData2)
-    ),
+    lane("session", () => session.usage(hookData2)),
+    lane("today", () => session.today()),
+    lane("context", () => deps.contextProvider.getContextInfo(hookData2)),
     lane(
       "metrics",
-      want.metrics,
       () => deps.metricsProvider.getMetricsInfo(sessionId2, hookData2)
     ),
     lane(
       "activity",
-      want.activity,
       () => deps.activityProvider.getActivityInfo(sessionId2, hookData2)
     ),
     // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
     // seam, made only when the transcript's stamp moved.
     lane(
       "cache",
-      want.cache,
       () => deps.cacheExpiry.refresh(sessionId2, hookData2.transcript_path)
     ),
     // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
     // lane reads, one sample per request: a frame takes none, so how often the
     // bar is drawn moves no rate.
-    lane("speed", want.speed, () => session.speed(dateOf(at).getTime())),
+    lane("speed", () => session.speed(dateOf(at).getTime())),
     lane(
       "autocompact",
-      want.autocompact,
       async () => deps.autoCompact.window(settingsPathOf(hints, deps.home))
     )
   ]);
-}
-function sourcesRead(closure, sources) {
-  return [...sources.keys()].filter((name) => closure.has(name));
 }
 function settledLanes(outcome, sources) {
   const lane = settledLane(outcome);
@@ -67208,19 +67057,19 @@ function settledLanes(outcome, sources) {
     sources: new Map(sources.map((name) => [name, lane]))
   };
 }
-function gitAt({ cwd: cwd2, hookData: hookData2 }, closure) {
+function gitAt({
+  cwd: cwd2,
+  hookData: hookData2
+}) {
   return [
     cwd2 ?? hookData2.workspace?.current_dir,
-    gitOptionsFromClosure(closure),
     hookData2.workspace?.project_dir
   ];
 }
-function declareLanes(owners, holds2, facts, closure, sources) {
-  const want = wanted(closure);
+function declareLanes(owners, holds2, facts, sources) {
   const pane = facts.hints.tmux ?? null;
   const faults = [];
-  const declare = (lane, needed, take) => {
-    if (!needed) return settledLane(ABSENT2);
+  const declare = (lane, take) => {
     try {
       return take();
     } catch (e) {
@@ -67231,55 +67080,34 @@ function declareLanes(owners, holds2, facts, closure, sources) {
   const lanes = {
     git: declare(
       "git",
-      want.git,
-      () => owners.gitProvider.declare(holds2, ...gitAt(facts, closure))
+      () => owners.gitProvider.declare(holds2, ...gitAt(facts))
     ),
-    tmux: declare(
-      "tmux",
-      want.tmux && pane !== null,
-      () => owners.tmuxService.declare(holds2, pane)
-    ),
-    hostName: declare(
-      "host.name",
-      want.hostName,
-      () => owners.hostService.declareName(holds2)
-    ),
-    hostUser: declare(
-      "host.user",
-      want.hostUser,
-      () => owners.hostService.declareUser(holds2)
-    ),
+    tmux: pane === null ? settledLane(ABSENT2) : declare("tmux", () => owners.tmuxService.declare(holds2, pane)),
+    hostName: declare("host.name", () => owners.hostService.declareName(holds2)),
+    hostUser: declare("host.user", () => owners.hostService.declareUser(holds2)),
     today: declare(
       "today",
-      want.today,
       () => owners.usageStore.declareToday(holds2, facts.hints.claudeConfigDir)
     ),
     // [LAW:one-source-of-truth] Each source's hold at (its folder's storage
     // key, the session the checkpoint parsed).
     sources: new Map(
-      sourcesRead(closure, sources).map((name) => [
+      [...sources].map(([name, storage]) => [
         name,
         declare(
           name,
-          true,
-          () => owners.managedStorage.declare(
-            holds2,
-            sources.get(name),
-            facts.sessionId
-          )
+          () => owners.managedStorage.declare(holds2, storage, facts.sessionId)
         )
       ])
     )
   };
   return { lanes, faults };
 }
-function readingsOf(inputs, declared) {
+function readingsOf(inputs) {
   const { hookData: hookData2, deps } = inputs;
-  const want = wanted(inputs.neededInputPaths);
   const sessionId2 = hookData2.session_id;
   const lanes = deps.lanes();
-  const read2 = (lane, needed, value) => {
-    if (!needed) return ABSENT2;
+  const read2 = (lane, value) => {
     const fault = deps.faults.of(sessionId2, lane);
     if (fault !== void 0) return fault;
     try {
@@ -67291,38 +67119,23 @@ function readingsOf(inputs, declared) {
   };
   const laneReadings = {
     git: lanes.git.current(),
-    usage: read2(
-      "session",
-      want.session,
-      () => deps.usageStore.usageOf(sessionId2, hookData2)
-    ),
-    context: read2(
-      "context",
-      want.context,
-      () => deps.contextProvider.contextOf(hookData2)
-    ),
+    usage: read2("session", () => deps.usageStore.usageOf(sessionId2, hookData2)),
+    context: read2("context", () => deps.contextProvider.contextOf(hookData2)),
     metrics: read2(
       "metrics",
-      want.metrics,
       () => deps.metricsProvider.metricsOf(sessionId2, hookData2)
     ),
     activity: read2(
       "activity",
-      want.activity,
       () => deps.activityProvider.activityOf(sessionId2)
     ),
     tmuxSession: lanes.tmux.current(),
     hostName: lanes.hostName.current(),
     hostUser: lanes.hostUser.current(),
-    cache: read2(
-      "cache",
-      want.cache,
-      () => deps.cacheExpiry.expiryOf(sessionId2)
-    ),
-    speed: read2("speed", want.speed, () => deps.usageStore.speedOf(sessionId2)),
+    cache: read2("cache", () => deps.cacheExpiry.expiryOf(sessionId2)),
+    speed: read2("speed", () => deps.usageStore.speedOf(sessionId2)),
     autoCompact: read2(
       "autocompact",
-      want.autocompact,
       () => deps.autoCompact.stored(settingsPathOf(inputs.hints, deps.home))
     ),
     sources: new Map(
@@ -67333,11 +67146,8 @@ function readingsOf(inputs, declared) {
     lanes: laneReadings,
     today: read2(
       "today",
-      want.today,
       () => todayReading(lanes.today, deps.usageStore, sessionId2)
     ),
-    gathered: want,
-    declaredSources: [...declared.keys()],
     faults: REFRESH_LANES.flatMap((lane) => {
       const fault = deps.faults.of(sessionId2, lane);
       return fault === void 0 ? [] : [{ lane, reason: fault.reason }];
@@ -67363,7 +67173,7 @@ function waitsOf(lanes) {
   );
 }
 function firstPending(...lanes) {
-  const lane = lanes.find((l) => l?.kind === "pending");
+  const lane = lanes.find((l) => l.kind === "pending");
   return lane?.kind === "pending" ? pendingOf(lane.why) : void 0;
 }
 var unstamped = (fact) => {
@@ -67382,7 +67192,6 @@ function composePayload(facts, inputs, draw2) {
   const { hookData: hookData2, hints } = inputs;
   const { effective, configFacts: configFacts2 } = draw2;
   const { configPath, ...settingCounts2 } = configFacts2;
-  const want = wanted(inputs.neededInputPaths);
   const built = facts.builtins;
   const lanes = {
     usage: unstamped(built.session),
@@ -67415,10 +67224,10 @@ function composePayload(facts, inputs, draw2) {
   const tmuxValue = lanes.tmux.kind === "pending" ? pendingOf(lanes.tmux.why) : valueOf3(lanes.tmux)?.session;
   const hostName = lanes.hostName.kind === "pending" ? pendingOf(lanes.hostName.why) : valueOf3(lanes.hostName);
   const hostUser = lanes.hostUser.kind === "pending" ? pendingOf(lanes.hostUser.why) : valueOf3(lanes.hostUser);
-  const autoCompactValue = firstPending(want.autocompact ? lanes.context : void 0) ?? projectAutoCompact(lanes.autoCompact, valueOf3(lanes.context)?.maxTokens);
+  const autoCompactValue = firstPending(lanes.context) ?? projectAutoCompact(lanes.autoCompact, valueOf3(lanes.context)?.maxTokens);
   const fiveHour = hookData2.rate_limits?.five_hour;
   const sevenDay = hookData2.rate_limits?.seven_day;
-  const burn = !want.burn ? void 0 : firstPending(lanes.usage, lanes.metrics) ?? burnOf(
+  const burn = firstPending(lanes.usage, lanes.metrics) ?? burnOf(
     valueOf3(lanes.usage)?.session.cost,
     valueOf3(lanes.metrics)?.sessionDuration
   );
@@ -67486,8 +67295,8 @@ function composePayload(facts, inputs, draw2) {
     },
     // [LAW:one-source-of-truth] Always present — the daemon resolves every
     // one of these each render (for BuildLineOptions/basePalette), and these
-    // are those exact values. No `wants` gate: each costs nothing (already in
-    // hand) and a config reading e.g. `.padding.effective` must always find it.
+    // are those exact values, so a config reading e.g. `.padding.effective`
+    // always finds it.
     ...effectiveInputs(effective),
     history: draw2.history,
     navigation: { back: draw2.back },
@@ -67500,7 +67309,7 @@ function composePayload(facts, inputs, draw2) {
     ...sessionPayload !== void 0 && { session: sessionPayload },
     ...burn !== void 0 && { burn },
     ...speedPayload !== void 0 && { speed: speedPayload },
-    ...want.block && fiveHour !== void 0 && {
+    ...fiveHour !== void 0 && {
       block: {
         // [LAW:one-source-of-truth] Both fields read straight from the
         // hookData rate-limit window; the DSL composes minutesUntilReset
@@ -67639,14 +67448,14 @@ function posixify(s) {
   return s.replace(/\\/g, "/");
 }
 function projectGitInfo(info, pullRequest, pending2) {
-  const field = (oc) => oc?.kind === "ok" ? oc.value : void 0;
+  const field = (oc) => oc.kind === "ok" ? oc.value : void 0;
   const aheadBehind = field(info.aheadBehind);
   const sha = field(info.sha);
   const operation = field(info.operation);
   const committedAt = field(info.committedAt);
   const stash = field(info.stashCount);
   const upstream = field(info.upstream);
-  const tracking = info.upstream === void 0 ? void 0 : field(trackingOf(info.upstream, info.aheadBehind));
+  const tracking = field(trackingOf(info.upstream, info.aheadBehind));
   const repoName = field(info.repoName);
   const repoUrl = field(info.repoUrl);
   const pr = pullRequest.kind === "pending" ? pullRequest : prOfHead(pullRequest, info.head);
@@ -67686,12 +67495,10 @@ function projectGitInfo(info, pullRequest, pending2) {
       ahead: aheadBehind.ahead,
       behind: aheadBehind.behind
     },
-    ...info.workingTree !== void 0 && {
-      staged: info.workingTree.staged,
-      unstaged: info.workingTree.unstaged,
-      untracked: info.workingTree.untracked,
-      conflicts: info.workingTree.conflicts
-    },
+    staged: info.workingTree.staged,
+    unstaged: info.workingTree.unstaged,
+    untracked: info.workingTree.untracked,
+    conflicts: info.workingTree.conflicts,
     ...sha !== void 0 && { sha },
     ...operation !== void 0 && { operation },
     ...committedAt !== void 0 && { committedAt },
@@ -67705,10 +67512,40 @@ function projectGitInfo(info, pullRequest, pending2) {
 }
 
 // src/doctor/data-needs.ts
+var under = (paths2, prefix) => [...paths2].some((p2) => p2 === prefix || p2.startsWith(`${prefix}.`));
 var READS = {
-  pullRequests: (paths2) => gitOptionsFromClosure(paths2).showPullRequest === true,
-  rateLimits: (paths2) => anyPathStartsWith(paths2, "block") || anyPathStartsWith(paths2, "weekly")
+  pullRequests: (paths2) => Object.keys(PR_FIELDS).some((field) => paths2.has(`git.${field}`)),
+  rateLimits: (paths2) => under(paths2, "block") || under(paths2, "weekly")
 };
+function segmentTemplates(config2, name) {
+  const seg2 = config2.segments[name];
+  if (!seg2) return [];
+  return [
+    ...[seg2.template, seg2.when, seg2.bg, seg2.fg].flatMap(
+      (src) => src ? [src] : []
+    ),
+    ...Object.values(seg2.partials ?? {})
+  ];
+}
+function inputClosure(config2, seeds) {
+  const reads = valueReadsOf(config2);
+  const decls = new Map(declaredVariables(config2));
+  const frontier = seeds.flatMap(
+    (template) => reads.ofTemplate(template).flatMap(({ reaches }) => reaches)
+  );
+  const visited = /* @__PURE__ */ new Set();
+  const inputPaths = /* @__PURE__ */ new Set();
+  while (frontier.length > 0) {
+    const name = frontier.pop();
+    if (visited.has(name)) continue;
+    visited.add(name);
+    const decl = decls.get(name);
+    const read2 = payloadPathOf(name, decl);
+    if (read2 !== void 0) inputPaths.add(read2);
+    for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
+  }
+  return inputPaths;
+}
 function dataNeeds(config2, preset) {
   const placed2 = /* @__PURE__ */ new Map();
   for (const node of walkNodes(presetRoot(config2, preset).node)) {
@@ -67723,7 +67560,10 @@ function dataNeeds(config2, preset) {
   const paths2 = new Map(
     failing.map((name) => [
       name,
-      segmentInputPaths(config2, name, placed2.get(name))
+      inputClosure(config2, [
+        ...segmentTemplates(config2, name),
+        ...placed2.get(name)
+      ])
     ])
   );
   const needs = (source) => failing.filter((name) => READS[source](paths2.get(name)));
@@ -68868,15 +68708,15 @@ function profileReading(p2, version) {
   return { kind: "ok", value: { font: p2.font, from, lacks } };
 }
 var drawsEvery = (r) => r.kind === "ok" && r.value.lacks !== null && r.value.lacks.length === 0;
-function itermFontInUse(profiles, wanted2, version) {
+function itermFontInUse(profiles, wanted, version) {
   if (profiles.length === 0) {
     return {
       kind: "failed",
-      reason: wanted2 === null ? "iTerm2 has no profiles in its preferences" : `iTerm2 has no profile named ${JSON.stringify(wanted2)}`
+      reason: wanted === null ? "iTerm2 has no profiles in its preferences" : `iTerm2 has no profile named ${JSON.stringify(wanted)}`
     };
   }
   const readings = profiles.map((p2) => profileReading(p2, version));
-  if (wanted2 !== null) return readings[0];
+  if (wanted !== null) return readings[0];
   const short = readings.find((r) => !drawsEvery(r));
   if (short !== void 0) {
     return short.kind === "failed" ? short : {
@@ -68905,14 +68745,14 @@ async function itermFont(launcher, version, env2, glyphs) {
   if (process_default.platform !== "darwin") {
     return { kind: "failed", reason: "iTerm2 runs only on macOS" };
   }
-  const wanted2 = env2.ITERM_PROFILE ?? null;
-  const answer2 = await jxa(launcher, ["iterm", wanted2 ?? "", pointsArg(glyphs)]);
+  const wanted = env2.ITERM_PROFILE ?? null;
+  const answer2 = await jxa(launcher, ["iterm", wanted ?? "", pointsArg(glyphs)]);
   if (answer2.kind === "failed") return answer2;
   const profiles = answer2.value.profiles.map((p2) => ({
     ...p2,
     lacks: p2.lacks === null ? null : glyphsOf2(p2.lacks)
   }));
-  return itermFontInUse(profiles, wanted2, version);
+  return itermFontInUse(profiles, wanted, version);
 }
 function fcMatchCoverage(output, glyphs) {
   const lines2 = output.split("\n").filter((l) => l !== "");
@@ -71067,7 +70907,7 @@ async function clickGather(ctx, sid, doctor, load) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
     throw e;
   }
-  const gathered2 = {
+  const gathered = {
     facts,
     // The client that drew the bar this click came from, and the daemon the
     // click reached — this process.
@@ -71079,10 +70919,10 @@ async function clickGather(ctx, sid, doctor, load) {
     current: async (now2) => {
       const stands = doctor.loadConfig(sessionOrigin(now2, sid));
       const same2 = stands.config === load.config && stands.error === load.error && stands.warning === load.warning;
-      return same2 ? gathered2 : clickGather(now2, sid, doctor, stands);
+      return same2 ? gathered : clickGather(now2, sid, doctor, stands);
     }
   };
-  return gathered2;
+  return gathered;
 }
 var gatherClick = (ctx, sid) => {
   const doctor = oneAskPerClick(ctx.doctor);
@@ -71093,8 +70933,8 @@ var gatherClick = (ctx, sid) => {
     doctor.loadConfig(sessionOrigin(ctx, sid))
   );
 };
-async function clickFacts(ctx, sid, gathered2) {
-  const { facts, install: install2 } = await ctx.gather(gathered2.current);
+async function clickFacts(ctx, sid, gathered) {
+  const { facts, install: install2 } = await ctx.gather(gathered.current);
   const stores = readStores(ctx.doctorStores);
   const read2 = {
     ...facts,
@@ -71128,8 +70968,8 @@ var doctorRun = {
   gathers: true,
   prepare: async (value, ctx) => {
     const sid = requireSessionId(oneArg(value));
-    const gathered2 = await gatherClick(ctx, sid);
-    return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered2));
+    const gathered = await gatherClick(ctx, sid);
+    return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered));
   }
 };
 var doctorProbe = async (value, ctx) => {
@@ -71157,9 +70997,9 @@ var doctorFix = {
     if (check === void 0) {
       throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
     }
-    const gathered2 = await gatherClick(ctx, sid);
+    const gathered = await gatherClick(ctx, sid);
     return async (c) => {
-      const facts = await clickFacts(c, sid, gathered2);
+      const facts = await clickFacts(c, sid, gathered);
       const verdict = check.probe(facts);
       if (verdict.ok || verdict.fix === void 0) {
         throw new BadVerbArgs(
@@ -71194,9 +71034,9 @@ var doctorMark = {
         `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
       );
     }
-    const gathered2 = await gatherClick(ctx, sid);
+    const gathered = await gatherClick(ctx, sid);
     return async (c) => {
-      const facts = await clickFacts(c, sid, gathered2);
+      const facts = await clickFacts(c, sid, gathered);
       const verdict = check.probe(facts);
       if (verdict.ok || verdict.sighting === void 0) {
         throw new BadVerbArgs(
@@ -71450,8 +71290,8 @@ function sessionOfEffects(effects) {
 var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepare(value, ctx)).catch(
   (e) => () => Promise.reject(e)
 );
-async function perform(verb, value, ctx, gathered2) {
-  const step4 = gathered2 ?? await ctx.gather((full) => verb.prepare(value, full));
+async function perform(verb, value, ctx, gathered) {
+  const step4 = gathered ?? await ctx.gather((full) => verb.prepare(value, full));
   await step4(ctx);
 }
 async function headGather(rawValue, ctx) {
@@ -71459,7 +71299,7 @@ async function headGather(rawValue, ctx) {
   const leaf = head === void 0 ? void 0 : LEAF_VERBS.get(head.verb);
   return leaf?.gathers ? hoisted(leaf, head.value, ctx) : void 0;
 }
-async function foldEffects(rawValue, ctx, gathered2) {
+async function foldEffects(rawValue, ctx, gathered) {
   const errors2 = [];
   let operational = false;
   const effects = parseEffects(rawValue);
@@ -71471,7 +71311,7 @@ async function foldEffects(rawValue, ctx, gathered2) {
       continue;
     }
     try {
-      await perform(leaf, value, ctx, i === 0 ? gathered2 : void 0);
+      await perform(leaf, value, ctx, i === 0 ? gathered : void 0);
     } catch (e) {
       if (e instanceof DaemonClosing) {
         if (errors2.length > 0)
@@ -71586,9 +71426,9 @@ function click(verb, gather, handler) {
         gathered: ctx.gatherTook
       },
       () => gather(value, ctx),
-      (gathered2, turn) => journaled(sid, ctx, turn, async (c) => {
+      (gathered, turn) => journaled(sid, ctx, turn, async (c) => {
         try {
-          await handler(value, c, gathered2);
+          await handler(value, c, gathered);
         } finally {
           if (sid !== null) ctx.clickLanded(sid);
         }
@@ -71603,7 +71443,7 @@ var VERBS = new Map([
       click(
         verb,
         async (value, ctx) => leaf.gathers ? hoisted(leaf, value, ctx) : void 0,
-        (value, ctx, gathered2) => perform(leaf, value, ctx, gathered2)
+        (value, ctx, gathered) => perform(leaf, value, ctx, gathered)
       )
     ]
   ),
@@ -76653,7 +76493,6 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
   try {
     const { entry, state, view } = hold2;
     const { sessionId: sessionId2, hints } = req;
-    const effective = view.source.effective();
     const payloadInputs = {
       hookData: req.hookData,
       deps: {
@@ -76663,7 +76502,6 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
         lanes: view.lanes
       },
       cwd: req.cwd,
-      neededInputPaths: state.neededInputPaths(effective.preset),
       hints
     };
     return {
@@ -76790,10 +76628,7 @@ function drawRender(parts, setup, drawing2) {
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
-    pr: prFactOf(
-      payload.git,
-      gitOptionsFromClosure(setup.payloadInputs.neededInputPaths).showPullRequest === true
-    ),
+    pr: prFactOf(payload.git),
     feeds: feedsFact(projected.feeds)
   });
   const drawnWarnings = [];
@@ -78679,17 +78514,11 @@ function prPeriodOf({ failures }) {
   return backedOffMs(PR_PERIOD, failures, PR_BACKOFF_CEILING_MS);
 }
 function triggerOf(asked2) {
-  if (asked2.includes("first") || asked2.includes("pr")) return "first";
+  if (asked2.includes("first")) return "first";
   return asked2.length === 0 ? "period" : "change";
 }
-function holdKey(root, value, showsPr) {
-  return `git:${root}|${value}|${showsPr ? "pr" : "-"}`;
-}
-function optionsKey(options) {
-  const keys2 = Object.keys(options).sort();
-  const normalized = {};
-  for (const k of keys2) normalized[k] = options[k];
-  return JSON.stringify(normalized);
+function holdKey(root) {
+  return `git:${root}`;
 }
 function watchSpec(root, gitDir, commonDir) {
   const dirs = [
@@ -78704,8 +78533,8 @@ function watchSpec(root, gitDir, commonDir) {
     unbound: bounds.some((b) => typeof b === "string" || "unreadable" in b)
   };
 }
-function branchOf(outcomes) {
-  return outcomes.find((outcome) => outcome.kind === "ok")?.value.branch;
+function branchOf(outcome) {
+  return outcome.kind === "ok" ? outcome.value.branch : void 0;
 }
 function owe(pr) {
   pr.missed = true;
@@ -78720,9 +78549,9 @@ function unkeyedPr(pr, failures) {
   }
   return "unkeyed";
 }
-function composed(value, pr) {
+function composed({ value, pr }) {
   const info = currentOf(value);
-  if (pr === null || info.kind !== "ok") return info;
+  if (info.kind !== "ok") return info;
   return ok({ ...info.value, pullRequest: currentOf(pr) });
 }
 var CLOSED = failed("git cache closed", "read");
@@ -78834,25 +78663,25 @@ var GitDataProvider = class {
     return known;
   }
   // [LAW:single-enforcer] The one way into a repo: a home's declaration of
-  // what its draws read. `holds` takes the repo, the option set and, when
-  // shown, its PR — held until a declaration of the home's takes them no
-  // more, or the home is disposed, which is what keeps the repo on the
-  // period — and the lane reads them as they stand, never awaited and taking
-  // nothing. A value never read is pending, its first pass queued; a PR is
-  // composed from its own source, pending on its own while its key is not
-  // answered, so the rest of the value draws as it stands.
+  // what its draws read. `holds` takes the repo, its value and its PR — held
+  // until a declaration of the home's takes them no more, or the home is
+  // disposed, which is what keeps the repo on its periods — and the lane reads
+  // them as they stand, never awaited and taking nothing. A value never read
+  // is pending, its first pass queued; the PR is composed from its own source,
+  // pending on its own while its key is not answered, so the rest of the value
+  // draws as it stands.
   //
   // [LAW:no-silent-failure] Git logs its own failures — a refresh's by the
   // refresh, a resolution's by the resolution — so its caller logs none. A
   // declaration that THROWS is a bug none of those saw, reported by the view's
   // declaration (declareLanes).
-  declare(holds2, workingDir, options = {}, projectDir) {
-    const asked2 = this.asked(holds2, workingDir, options, projectDir);
+  declare(holds2, workingDir, projectDir) {
+    const asked2 = this.asked(holds2, workingDir, projectDir);
     if (asked2.kind === "settled") return settledLane(asked2.outcome);
-    const { value, pr } = asked2;
-    if (value.reading.get().kind === "pending") this.misses++;
+    const { state } = asked2;
+    if (state.value.reading.get().kind === "pending") this.misses++;
     else this.hits++;
-    return { current: () => composed(value, pr) };
+    return { current: () => composed(state) };
   }
   // [LAW:one-source-of-truth] The one place a home asks a repo by directory:
   // the effective gitDir is the state + watch identity, and an absent (not a
@@ -78861,20 +78690,11 @@ var GitDataProvider = class {
   // that was mid-wait) would otherwise build a repo, and its watch, that
   // nothing drops, whose period re-arms after every pass while that home
   // holds it.
-  asked(holds2, workingDir, options, projectDir) {
+  asked(holds2, workingDir, projectDir) {
     if (this.closed) return { kind: "settled", outcome: CLOSED };
     const dir = this.resolution(workingDir, projectDir);
     if (dir.kind !== "ok") return { kind: "settled", outcome: dir };
-    const { showPullRequest, ...gitOptions } = options;
-    return {
-      kind: "asked",
-      ...this.ask(
-        this.repo(dir.value),
-        holds2,
-        gitOptions,
-        showPullRequest === true
-      )
-    };
+    return { kind: "asked", state: this.ask(dir.value, holds2) };
   }
   // A watch's window, whatever it says: the repo changed since any read in
   // flight began.
@@ -78883,7 +78703,7 @@ var GitDataProvider = class {
     if (!state) return;
     this.changes++;
     if (state.holders === 0) {
-      for (const value of state.values.values()) value.missed = true;
+      state.value.missed = true;
       return;
     }
     this.changedPass(state, "watch");
@@ -78895,12 +78715,22 @@ var GitDataProvider = class {
     this.repos.delete(state.root);
     this.repos.set(state.root, state);
   }
-  repo(root) {
-    const existing = this.repos.get(root);
-    if (existing) {
-      this.touch(existing);
-      return existing;
-    }
+  // A repo's state, built pending on its first ask: its value is unread and
+  // its PR has no key until the first pass reads the branch it pairs with
+  // ([LAW:single-enforcer] the key moves only in a pass).
+  built(root) {
+    const pr = {
+      period: new Period(() => {
+        void this.readPr(state, pr, "period");
+      }, this.clock),
+      seen: /* @__PURE__ */ new Map(),
+      // Its key is the first pass's to set.
+      missed: true,
+      key: "",
+      remote: ABSENT2,
+      reading: unread(),
+      inFlight: null
+    };
     const state = {
       root,
       refresh: new TrailingEdge(),
@@ -78908,10 +78738,10 @@ var GitDataProvider = class {
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }, this.clock),
-      values: /* @__PURE__ */ new Map(),
+      value: { reading: unread(), missed: false },
+      pr,
       holders: 0,
-      asked: /* @__PURE__ */ new Set(),
-      pr: null
+      asked: /* @__PURE__ */ new Set()
     };
     this.repos.set(root, state);
     return state;
@@ -78954,28 +78784,24 @@ var GitDataProvider = class {
       state.period.landed(this.periodMs);
     }
   }
-  // One hold of a home: the repo, the value it reads and the PR it shows. A
-  // value or a PR key a pass went by without is read by the pass `ask` queues,
-  // while this reader takes what is stored. [LAW:one-source-of-truth] A PR read
-  // beside a value a pass went by without would answer the branch the latest
-  // pass read, not the one that value holds, so it is owed: the reader waits
-  // for the pass that reads the value and keys the PR in one turn
-  // ([LAW:single-enforcer] `movePr`).
-  hold(state, value, pr) {
+  // One hold of a home: the repo, its value and its PR. A value or a PR key a
+  // change went by is read by the pass `ask` queues, while this reader takes
+  // what is stored. [LAW:one-source-of-truth] A PR read beside a value a
+  // change went by would answer the branch the latest pass read, not the one
+  // the repo is on now, so it is owed: the reader waits for the pass that
+  // reads the value and keys the PR in one turn ([LAW:single-enforcer]
+  // `movePr`).
+  hold(state) {
     state.holders++;
-    if (pr !== null) {
-      pr.holders++;
-      if (value.missed) owe(pr);
-      if (pr.missed) state.asked.add("owed");
+    if (state.value.missed) {
+      owe(state.pr);
+      state.asked.add("resume");
     }
-    value.readers++;
-    if (value.missed) state.asked.add("resume");
+    if (state.pr.missed && state.pr.key !== "") state.asked.add("owed");
     this.held(state);
     this.evict();
     return () => {
       state.holders--;
-      value.readers--;
-      if (pr !== null) pr.holders--;
       this.held(state);
     };
   }
@@ -78990,48 +78816,26 @@ var GitDataProvider = class {
   }
   held(state) {
     state.period.hold(state.holders > 0);
-    state.pr?.period.hold(state.pr.holders > 0 && !state.pr.missed);
+    state.pr.period.hold(state.holders > 0 && !state.pr.missed);
   }
-  // A repo's value for one option set, created pending on its first ask.
-  valueOf(state, key, options) {
-    const known = state.values.get(key);
-    if (known !== void 0) return known;
-    const value = {
-      options,
-      reading: unread(),
-      readers: 0,
-      missed: false
-    };
-    state.values.set(key, value);
-    state.asked.add("first");
-    return value;
-  }
-  // What one read asks of its repo: its option set's value and, when it shows
-  // the PR, the PR source — each created pending on first ask — held by `holds`
-  // before any pass is queued, so the pass sees its reader, and a first value
-  // and the PR's first key ride one pass (which reads the remote beside the
-  // values).
-  ask(state, holds2, options, showsPr) {
+  // What one read asks of its repo: the repo's state, built pending on its
+  // first ask, held by `holds` before any pass is queued, so the pass sees its
+  // reader, and a first value and the PR's first key ride one pass (which reads
+  // the remote beside the value).
+  ask(root, holds2) {
+    const known = this.repos.get(root);
+    if (known !== void 0) this.touch(known);
+    const state = known ?? this.built(root);
     const before = state.asked.size;
-    const key = optionsKey(options);
-    const value = this.valueOf(state, key, options);
-    if (showsPr && state.pr === null) {
-      state.pr = this.prSource(state);
-      state.asked.add("pr");
-    }
-    const pr = showsPr ? state.pr : null;
-    holds2.take(
-      holdKey(state.root, key, showsPr),
-      () => this.hold(state, value, pr)
-    );
+    if (known === void 0) state.asked.add("first");
+    holds2.take(holdKey(root), () => this.hold(state));
     this.queue(state, before);
-    return { value, pr };
+    return state;
   }
-  // One pass: read every option set something reads and, for a PR something
-  // shows, the remote beside the branch they read; store the outcomes, log
-  // each failure once, and move the PR's key — all in
-  // one turn once the reads land, so no read sees a branch's values beside
-  // another branch's PR. Each pass that lands writes one refresh event.
+  // One pass: read the repo and the remote beside the branch it read; store
+  // the outcome, log each failure once, and move the PR's key — all in one
+  // turn once the reads land, so no read sees a branch's value beside another
+  // branch's PR. Each pass that lands writes one refresh event.
   async pass(state) {
     if (this.repos.get(state.root) !== state) return;
     const startedAt = this.clock.monotonic();
@@ -79039,60 +78843,27 @@ var GitDataProvider = class {
     state.asked.clear();
     const followed = this.followWatch(state.root, state.watch);
     state.watch = followed.watch;
-    const values2 = [];
-    for (const value of state.values.values()) {
-      if (value.readers > 0 || value.reading.get().kind === "pending") {
-        values2.push(value);
-      } else value.missed = true;
-    }
-    const pr = state.pr;
-    const [outcomes, remote] = await Promise.all([
-      Promise.all(
-        values2.map(
-          (value) => this.inner.getGitInfo(state.root, value.options).catch(threw("git fetch"))
-        )
-      ),
-      pr !== null && pr.holders > 0 ? this.remoteOf(state) : null
+    const [outcome, remote] = await Promise.all([
+      this.inner.getGitInfo(state.root).catch(threw("git fetch")),
+      this.remoteOf(state)
     ]);
     if (this.repos.get(state.root) !== state) return;
     const failures = /* @__PURE__ */ new Set();
-    values2.forEach((value, i) => {
-      const outcome = outcomes[i];
-      value.missed = false;
-      settle(value, outcome);
-      if (outcome.kind === "failed") failures.add(outcome.reason);
-      if (outcome.kind === "ok") {
-        for (const f of gitInfoFailures(outcome.value)) failures.add(f);
-      }
-    });
-    const branch = branchOf(outcomes);
-    const prMove = pr === null || values2.length === 0 ? "-" : branch === void 0 ? unkeyedPr(pr, failures) : this.movePr(state, pr, branch, remote ?? pr.remote);
+    state.value.missed = false;
+    settle(state.value, outcome);
+    if (outcome.kind === "failed") failures.add(outcome.reason);
+    if (outcome.kind === "ok") {
+      for (const f of gitInfoFailures(outcome.value)) failures.add(f);
+    }
+    const branch = branchOf(outcome);
+    const prMove = branch === void 0 ? unkeyedPr(state.pr, failures) : this.movePr(state, branch, remote);
     this.held(state);
     this.gitRefreshes.recorded(
-      `${state.root} asked=${asked2.join(",") || "-"} values=${values2.length} pr=${prMove} watch=${followed.move}`,
+      `${state.root} asked=${asked2.join(",") || "-"} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked2),
       failures.size === 0 ? ok(null) : failed([...failures].join("; "), "read"),
       elapsedMs(this.clock, startedAt)
     );
-  }
-  // The branch's PR source, pending until the pass its first ask queues gives
-  // it a key: [LAW:single-enforcer] the key moves only in a pass, beside the
-  // values it pairs with.
-  prSource(state) {
-    const pr = {
-      period: new Period(() => {
-        void this.readPr(state, pr, "period");
-      }, this.clock),
-      seen: /* @__PURE__ */ new Map(),
-      holders: 0,
-      // Its key is the first pass's to set.
-      missed: true,
-      key: "",
-      remote: ABSENT2,
-      reading: unread(),
-      inFlight: null
-    };
-    return pr;
   }
   // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
   // PR's failure; only `absent` (no remote configured) means "no forge PR".
@@ -79106,7 +78877,8 @@ var GitDataProvider = class {
   // own period. [LAW:decomposition] The lookup is the PR source's own work,
   // started here and never awaited by a git pass, so a slow forge never holds
   // back the next local refresh.
-  movePr(state, pr, branch, remote) {
+  movePr(state, branch, remote) {
+    const { pr } = state;
     const key = `${branch}|${remote.kind === "ok" ? remote.value : remote.kind}`;
     if (key === pr.key && !pr.missed) return "kept";
     pr.key = key;
@@ -79120,7 +78892,7 @@ var GitDataProvider = class {
       pr.period.landed(prPeriodOf(known), known.at);
       return "recalled";
     }
-    if (pr.holders === 0) {
+    if (state.holders === 0) {
       owe(pr);
       return "owed";
     }
@@ -79171,13 +78943,13 @@ var GitDataProvider = class {
   }
   drop(state) {
     const gone = failed(`git state dropped: ${state.root}`, "read");
-    for (const value of state.values.values()) answerPending(value, gone);
-    if (state.pr !== null) answerPending(state.pr, gone);
+    answerPending(state.value, gone);
+    answerPending(state.pr, gone);
     this.repos.delete(state.root);
     state.refresh.clear();
     state.watch.handle.release();
     state.period.dispose();
-    state.pr?.period.dispose();
+    state.pr.period.dispose();
   }
   // The LRU bounds the repos nothing holds; a held repo is never evicted, so
   // those are bounded by their holders (the render cache's budget).
@@ -79873,13 +79645,13 @@ function mergeFolds(files) {
     days
   };
 }
-function under(path42, roots) {
+function under2(path42, roots) {
   return path42 !== void 0 && roots.some((root) => path42.startsWith(root));
 }
 function daySumsOver(slots, roots) {
   const sums = /* @__PURE__ */ new Map();
   for (const { record: record2 } of slots) {
-    if (record2 === void 0 || !under(record2.transcriptPath, roots)) continue;
+    if (record2 === void 0 || !under2(record2.transcriptPath, roots)) continue;
     for (const [day, d] of record2.days) {
       const sum = sums.get(day) ?? { ...EMPTY_DAY };
       addDay(sum, d);
@@ -80133,7 +79905,7 @@ var SessionUsageStore = class {
     const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
     const record2 = slot.record;
-    if (record2 === void 0 || under(record2.transcriptPath, roots)) {
+    if (record2 === void 0 || under2(record2.transcriptPath, roots)) {
       return ABSENT2;
     }
     return ok(Object.fromEntries(record2.days));
@@ -81854,7 +81626,6 @@ function buildRenderState(load, deps) {
       store,
       registry,
       compiled: registration.compiled,
-      neededInputPaths: neededPrefixesByPreset(config2),
       // What a reset clears is the home's: resets write nowhere else.
       authoredRoots: authoredRoots(merged, homeRaw),
       fileHeldSettings: fileHeldSettings(homeRaw),
@@ -81961,20 +81732,18 @@ function fallbackState(cwd2, repo2, deps) {
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
-function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf, changed, log }) {
+function openView(state, cwd2, facts, { declare, source: sourceOf, changed, log }) {
   const { sessionId: sessionId2 } = facts;
   const registry = state.registry.view();
   const holds2 = new Holds();
   declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
-  const presetNow = () => presetOf(state.config, (key) => sessionState.get(sessionId2, key));
-  const lanesFor = (facts2, preset) => {
+  const lanesFor = (facts2) => {
     try {
-      const reads = state.neededInputPaths(preset);
       const {
         result: { lanes: taken, faults },
         acquired,
         released
-      } = holds2.declare(() => declare(holds2, facts2, reads, state.sources));
+      } = holds2.declare(() => declare(holds2, facts2, state.sources));
       for (const fault of faults) {
         log(
           "error",
@@ -81999,28 +81768,18 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
       );
     }
   };
-  const declaration = (facts2, preset) => ({
+  const declaration = (facts2) => ({
     facts: facts2,
-    preset,
-    lanes: lanesFor(facts2, preset)
+    lanes: lanesFor(facts2)
   });
-  const declared = observable.box(declaration(facts, presetNow()), {
-    deep: false
-  });
-  const redeclare = (facts2, preset) => {
-    const now2 = declared.get();
-    if (facts2 === now2.facts && preset === now2.preset) return;
-    const next = declaration(facts2, preset);
+  const declared = observable.box(declaration(facts), { deep: false });
+  const redeclare = (facts2) => {
+    if (facts2 === declared.get().facts) return;
+    const next = declaration(facts2);
     runInAction(() => declared.set(next));
   };
-  const stop2 = reaction(
-    presetNow,
-    (preset) => redeclare(declared.get().facts, preset),
-    { fireImmediately: true }
-  );
   const sourceStops = [];
   const release3 = () => {
-    stop2();
     for (const stopSource of sourceStops) stopSource();
     holds2.close();
     return registry.dispose();
@@ -82063,7 +81822,7 @@ function openView(state, cwd2, facts, { sessionState, declare, source: sourceOf,
     registry,
     holds: holds2,
     source,
-    requested: (next) => redeclare(next, presetNow()),
+    requested: redeclare,
     facts: () => declared.get().facts,
     lanes: () => declared.get().lanes,
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
@@ -82358,7 +82117,6 @@ var RenderCache = class {
     let view;
     try {
       view = openView(state, entry.cwd, facts, {
-        sessionState: this.deps.sessionState,
         declare: this.deps.declare,
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),
@@ -82857,7 +82615,6 @@ init_globals();
 // src/daemon/facts-assembly.ts
 init_globals();
 var FACTS_VERSION = 1;
-var gathered = (on2, reading) => on2 ? reading : pendingOf("unread");
 var over = (reading, project) => reading.kind === "ok" ? ok(project(reading.value)) : reading;
 function prOf(git) {
   switch (git.kind) {
@@ -82867,7 +82624,7 @@ function prOf(git) {
     case "absent":
       return ABSENT2;
     case "ok":
-      return git.value.pullRequest ?? pendingOf("unread");
+      return git.value.pullRequest;
   }
 }
 var sameFacts = (now2, held) => {
@@ -82878,38 +82635,31 @@ function gitFactsOf({ pullRequest: _pullRequest, ...git }) {
   return git;
 }
 function assembleFacts(prior, session, readings, update, at) {
-  const { lanes, gathered: on2 } = readings;
-  const git = gathered(on2.git, lanes.git);
+  const { lanes } = readings;
   const stamp2 = (held2, reading) => restamp(held2, reading, at);
   const held = prior?.builtins;
   const builtins = {
-    session: stamp2(held?.session, gathered(on2.session, lanes.usage)),
-    today: stamp2(held?.today, gathered(on2.today, readings.today)),
-    speed: stamp2(held?.speed, gathered(on2.speed, lanes.speed)),
-    context: stamp2(held?.context, gathered(on2.context, lanes.context)),
-    metrics: stamp2(held?.metrics, gathered(on2.metrics, lanes.metrics)),
-    activity: stamp2(held?.activity, gathered(on2.activity, lanes.activity)),
-    cache: stamp2(held?.cache, gathered(on2.cache, lanes.cache)),
-    autocompact: stamp2(
-      held?.autocompact,
-      gathered(on2.autocompact, lanes.autoCompact)
-    ),
-    git: stamp2(held?.git, over(git, gitFactsOf)),
-    pr: stamp2(held?.pr, prOf(git)),
+    session: stamp2(held?.session, lanes.usage),
+    today: stamp2(held?.today, readings.today),
+    speed: stamp2(held?.speed, lanes.speed),
+    context: stamp2(held?.context, lanes.context),
+    metrics: stamp2(held?.metrics, lanes.metrics),
+    activity: stamp2(held?.activity, lanes.activity),
+    cache: stamp2(held?.cache, lanes.cache),
+    autocompact: stamp2(held?.autocompact, lanes.autoCompact),
+    git: stamp2(held?.git, over(lanes.git, gitFactsOf)),
+    pr: stamp2(held?.pr, prOf(lanes.git)),
     tmux: stamp2(
       held?.tmux,
-      over(gathered(on2.tmux, lanes.tmuxSession), (name) => ({ session: name }))
+      over(lanes.tmuxSession, (name) => ({ session: name }))
     ),
-    hostName: stamp2(held?.hostName, gathered(on2.hostName, lanes.hostName)),
-    hostUser: stamp2(held?.hostUser, gathered(on2.hostUser, lanes.hostUser))
+    hostName: stamp2(held?.hostName, lanes.hostName),
+    hostUser: stamp2(held?.hostUser, lanes.hostUser)
   };
   const sources = Object.fromEntries(
-    readings.declaredSources.map((name) => [
+    [...lanes.sources].map(([name, reading]) => [
       name,
-      stamp2(
-        prior?.sources[name],
-        lanes.sources.get(name) ?? pendingOf("unread")
-      )
+      stamp2(prior?.sources[name], reading)
     ])
   );
   const parts = { builtins, sources, update, diagnostics: readings.faults };
@@ -82965,12 +82715,11 @@ function sessionSource(deps) {
       "session.inputs",
       "computed",
       () => {
-        const { facts, lanes, preset } = declared();
+        const { facts, lanes } = declared();
         return {
           hookData: facts.hookData,
           cwd: facts.cwd,
           hints: facts.hints,
-          neededInputPaths: state.neededInputPaths(preset),
           deps: { ...deps.providers, lanes: () => lanes }
         };
       }
@@ -82978,19 +82727,14 @@ function sessionSource(deps) {
     const readings = store.derive(
       "session.readings",
       "computed",
-      () => readingsOf(inputs.read(), state.sources)
+      () => readingsOf(inputs.read())
     );
     const compose = store.derive(
       "session.compose",
       "computed",
       () => {
-        const { hookData: hookData2, hints, neededInputPaths } = inputs.read();
-        return {
-          hookData: hookData2,
-          hints,
-          neededInputPaths,
-          home: deps.providers.home
-        };
+        const { hookData: hookData2, hints } = inputs.read();
+        return { hookData: hookData2, hints, home: deps.providers.home };
       }
     );
     const draw2 = store.derive(
@@ -84664,7 +84408,7 @@ var JournalTurns = class {
   // gather while the turn was awaited, refuses the click; one that left during
   // the gather does not, since a gather outlasts a client's budget through no
   // fault of a re-click. With no gather `left` is false, as it was just read.
-  click(verb, session, { placed: placed2, waited, gone, gathered: gathered2 }, gather, body) {
+  click(verb, session, { placed: placed2, waited, gone, gathered }, gather, body) {
     const arrived3 = this.deps.monotonic();
     const inPlace = async () => {
       placed2(elapsedMs(this.deps, arrived3));
@@ -84672,7 +84416,7 @@ var JournalTurns = class {
       if (gone()) throw new ClickAbandoned(verb);
       const started2 = this.deps.monotonic();
       const gathering = await gather();
-      gathered2(elapsedMs(this.deps, started2));
+      gathered(elapsedMs(this.deps, started2));
       const left = gone();
       return this.take(
         verb,
@@ -85082,7 +84826,7 @@ function createDaemon(inputs) {
       storage: managedStorage,
       signer: linkSigner2,
       gates,
-      declare: (holds2, facts, closure, sources) => declareLanes(payloadProviders, holds2, facts, closure, sources),
+      declare: (holds2, facts, sources) => declareLanes(payloadProviders, holds2, facts, sources),
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // derived over its declaration, its picks and its histories' depths.
       source: sessionSource({
