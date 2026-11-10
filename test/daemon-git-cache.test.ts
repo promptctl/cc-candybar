@@ -50,7 +50,6 @@ class StubGitService extends GitService {
     upstream: ok("origin/main"),
     repoName: ok("widget"),
     repoUrl: ok("https://github.com/acme/widget"),
-    isWorktree: false,
   };
   public prCalls: Array<{ workingDir: string; remoteUrl: string }> = [];
   public stubPr: Outcome<PullRequest> = ok({
@@ -358,6 +357,21 @@ describe("GitDataProvider", () => {
     expect(inner.computeCalls).toHaveLength(1);
     // Both waited for the first value.
     expect(svc.getStats()).toMatchObject({ size: 1, hits: 0, misses: 2 });
+  });
+
+  test("a second home holding a new repo during its first read reads it no further", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.infoGate = deferred();
+
+    const first = gitOf(svc, holds, "/repo");
+    await tick();
+    const second = gitOf(svc, new Holds(), "/repo");
+    inner.infoGate.resolve();
+    await Promise.all([first, second]);
+    await tick();
+
+    expect(inner.computeCalls).toHaveLength(1);
   });
 
   test("two cwds with same projectDir share one state", async () => {
@@ -1218,7 +1232,7 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     expect(inner.prCalls).toHaveLength(2);
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
       expect.stringMatching(
-        / asked=first,owed pr=looked-up watch=kept by=first /,
+        / asked=first pr=looked-up watch=kept by=first /,
       ),
       expect.stringMatching(/ asked=watch pr=looked-up watch=kept by=change /),
       expect.stringMatching(/ asked=watch pr=recalled watch=kept by=change /),
@@ -1246,7 +1260,7 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
 
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
       expect.stringMatching(
-        / asked=first,owed pr=looked-up watch=kept by=first outcome=ok took=\d+ms$/,
+        / asked=first pr=looked-up watch=kept by=first outcome=ok took=\d+ms$/,
       ),
       expect.stringMatching(
         / asked=- pr=kept watch=kept by=period outcome=ok took=\d+ms$/,

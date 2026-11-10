@@ -77,7 +77,6 @@ const GIT: GitRead = {
   upstream: ABSENT,
   repoName: ok("project"),
   repoUrl: ABSENT,
-  isWorktree: false,
 };
 
 // Every lane over a counted reader; `pr` is the PR the git value carries

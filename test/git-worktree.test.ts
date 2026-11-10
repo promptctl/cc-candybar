@@ -15,7 +15,7 @@ function run(cmd: string, cwd: string): void {
   execSync(cmd, { cwd, stdio: "pipe" });
 }
 
-describe("GitService isWorktree", () => {
+describe("GitService and a linked worktree", () => {
   let root: string;
   let mainRepo: string;
   let worktree: string;
@@ -36,34 +36,23 @@ describe("GitService isWorktree", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  describe("worktree detection", () => {
-    it("should set isWorktree to true when .git is a file (worktree)", async () => {
-      const info = await gitService.getGitInfo(worktree);
-
-      expect(info).toMatchObject({
-        kind: "ok",
-        value: { branch: "wt", isWorktree: true },
-      });
-    });
-
-    it("should set isWorktree to false when .git is a directory (normal repo)", async () => {
-      const info = await gitService.getGitInfo(mainRepo);
-
-      expect(info).toMatchObject({
-        kind: "ok",
-        value: { branch: "main", isWorktree: false },
-      });
+  it("reads the worktree where .git is a file", async () => {
+    await expect(gitService.getGitInfo(worktree)).resolves.toMatchObject({
+      kind: "ok",
+      value: { branch: "wt" },
     });
   });
 
-  describe("gitDir resolution", () => {
-    it("should detect isWorktree based on workingDir, not gitDir from projectDir", async () => {
-      const info = await gitService.getGitInfo(worktree, mainRepo);
-
-      expect(info).toMatchObject({
-        kind: "ok",
-        value: { branch: "wt", isWorktree: true },
-      });
+  it("reads the main repo where .git is a directory", async () => {
+    await expect(gitService.getGitInfo(mainRepo)).resolves.toMatchObject({
+      kind: "ok",
+      value: { branch: "main" },
     });
+  });
+
+  it("reads the worktree its working directory is in, whatever repo projectDir names", async () => {
+    await expect(
+      gitService.getGitInfo(worktree, mainRepo),
+    ).resolves.toMatchObject({ kind: "ok", value: { branch: "wt" } });
   });
 });

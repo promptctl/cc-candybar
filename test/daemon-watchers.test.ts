@@ -824,7 +824,6 @@ class StubInner extends GitService {
       upstream: ok("origin/main"),
       repoName: ok("repo"),
       repoUrl: ABSENT,
-      isWorktree: false,
     });
   }
 }

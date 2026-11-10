@@ -609,7 +609,10 @@ export class GitDataProvider {
       owe(state.pr);
       state.asked.add("resume");
     }
-    if (state.pr.missed) state.asked.add("owed");
+    // A key a pass left owed asks a pass of its own. A PR no pass has keyed
+    // yet (`key` "") is keyed by the repo's first pass, which its build asked
+    // for, so a hold landing while that pass is out asks for nothing more.
+    if (state.pr.missed && state.pr.key !== "") state.asked.add("owed");
     this.held(state);
     this.evict();
     return () => {
@@ -642,7 +645,7 @@ export class GitDataProvider {
     if (known !== undefined) this.touch(known);
     const state = known ?? this.built(root);
     // A new repo's first pass is asked for here, so `queue` sees it.
-    const before = known === undefined ? 0 : state.asked.size;
+    const before = state.asked.size;
     if (known === undefined) state.asked.add("first");
     holds.take(holdKey(root), () => this.hold(state));
     this.queue(state, before);

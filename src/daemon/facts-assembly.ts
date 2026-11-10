@@ -2,12 +2,11 @@ import { compareStructural } from "mobx";
 import { restamp, type Fact } from "../facts/fact";
 import type {
   BuiltinFacts,
-  GitFacts,
   SessionFacts,
   SourceValue,
   UpdateNotice,
 } from "../facts/session-facts";
-import type { GitInfo, PullRequest } from "../segments/git";
+import type { GitInfo, GitRead, PullRequest } from "../segments/git";
 import type { Instant } from "../utils/instant";
 import { ABSENT, ok, type Reading } from "../utils/outcome";
 import type { SessionId } from "./session-id";
@@ -47,7 +46,7 @@ const sameFacts = <T extends object>(now: T, held: T): boolean => {
   );
 };
 
-function gitFactsOf({ pullRequest: _pullRequest, ...git }: GitInfo): GitFacts {
+function gitFactsOf({ pullRequest: _pullRequest, ...git }: GitInfo): GitRead {
   return git;
 }
 

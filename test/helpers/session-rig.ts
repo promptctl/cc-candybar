@@ -91,7 +91,6 @@ export function fixedOwners(
           upstream: ABSENT,
           repoName: ok("project"),
           repoUrl: ABSENT,
-          isWorktree: false,
           pullRequest: ok({
             number: 7,
             state: "open",

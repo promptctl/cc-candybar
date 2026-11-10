@@ -271,7 +271,6 @@ function checkReadings(
         upstream: ok("origin/main"),
         repoName: ok("cc-candybar"),
         repoUrl: ok("https://github.com/promptctl/cc-candybar"),
-        isWorktree: false,
         // A branch with no PR: no PR keys, as the fixture has always had none.
         pullRequest: ABSENT,
       }),

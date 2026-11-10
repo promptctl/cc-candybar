@@ -88,7 +88,6 @@ function gitRead(over: Partial<GitInfo> = {}): GitInfo {
     upstream: ABSENT,
     repoName: ABSENT,
     repoUrl: ABSENT,
-    isWorktree: false,
     pullRequest: ABSENT,
     ...over,
   };

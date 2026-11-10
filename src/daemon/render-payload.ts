@@ -37,6 +37,7 @@ import {
   prOfHead,
   trackingOf,
   type GitInfo,
+  type GitRead,
   type PrState,
   type PullRequest,
   type Tracking,
@@ -102,7 +103,6 @@ import {
 import type { Fact } from "../facts/fact.js";
 import type {
   FactsDiagnostic,
-  GitFacts as DocumentGitFacts,
   SessionFacts,
   SourceValue,
 } from "../facts/session-facts.js";
@@ -1600,7 +1600,7 @@ function posixify(s: string | undefined): string | undefined {
 // performs no effect ([LAW:effects-at-boundaries]): the git refresh that read a
 // failure is what logged it.
 function projectGitInfo<P>(
-  info: DocumentGitFacts,
+  info: GitRead,
   pullRequest: Reading<PullRequest>,
   pending: (why: PendingWhy) => P,
 ): GitPayloadOf<P> {

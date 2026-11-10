@@ -71,7 +71,6 @@ const GIT: GitRead = {
   upstream: ABSENT,
   repoName: ok("project"),
   repoUrl: ABSENT,
-  isWorktree: false,
 };
 const PR = {
   number: 7,

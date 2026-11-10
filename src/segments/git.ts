@@ -134,7 +134,6 @@ export interface GitRead {
   // is. `absent` = the repo has no remote a browser can open (local-only, a
   // bare-path remote); `failed` = the remotes read itself failed.
   repoUrl: Outcome<string>;
-  isWorktree: boolean;
 }
 
 // A read with its branch's PR composed onto it: the PR is its own source, on
@@ -185,8 +184,8 @@ export function gitInfoFailures(info: GitRead): string[] {
 }
 
 // [LAW:dataflow-not-control-flow] One classifier for every git invocation.
-// Whether a non-zero exit is the domain answering "there is none" (describe
-// with no tags, rev-parse @{u} with no upstream) or a real failure is
+// Whether a non-zero exit is the domain answering "there is none" (a commit
+// that is not there to read, a config with no matching key) or a real failure is
 // per-command knowledge — it enters here as data, not as a catch block at
 // every callsite. Transport failures (timeout, spawn error, signal) are
 // always `failed`: git did not answer.
@@ -194,9 +193,9 @@ function classify(
   label: string,
   result: LaunchResult,
   // How this command spells "there is none":
-  //   "absent" — ANY non-zero exit is the domain answer. `git describe --tags`
-  //     and `git rev-parse @{u}` both exit 128 for their genuine absences, so a
-  //     narrower rule would misread them as failures.
+  //   "absent" — ANY non-zero exit is the domain answer. `git log -1` of an oid
+  //     the repo no longer holds exits 128 for that genuine absence, so a
+  //     narrower rule would misread it as a failure.
   //   a number — ONLY that exit code is the domain answer; every other non-zero
   //     is a real failure. `git config --get-regexp` exits 1 for "no matches"
   //     but 128 for an unreadable config, and folding those together would
@@ -968,9 +967,8 @@ export class GitService {
     projectDir?: string,
   ): Promise<Outcome<GitRead>> {
     let gitDir: string;
-    const isWorktreeDir = this.isWorktree(workingDir);
 
-    if (isWorktreeDir) {
+    if (this.isWorktree(workingDir)) {
       // Worktree's .git is a file pointing to the main repo;
       // git commands must run from the worktree directory.
       gitDir = workingDir;
@@ -1021,7 +1019,6 @@ export class GitService {
       stashCount: this.getStashCount(gitDir),
       repoName: derived(remotes, (r) => this.repoNameFrom(r, gitDir)),
       repoUrl: derived(remotes, repoWebUrl),
-      isWorktree: isWorktreeDir,
       operation: this.getOngoingOperation(gitDir),
     });
   }

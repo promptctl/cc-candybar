@@ -73,7 +73,6 @@ class OneRepo extends GitService {
       upstream: ok("origin/main"),
       repoName: ok("widget"),
       repoUrl: ok("https://github.com/acme/widget"),
-      isWorktree: false,
     });
   }
 
