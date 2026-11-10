@@ -551,7 +551,6 @@ describe("the payload projection", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      new Set(["activity"]),
       EFFECTIVE_GLOBALS,
       {},
       NO_CONFIG_FILE,

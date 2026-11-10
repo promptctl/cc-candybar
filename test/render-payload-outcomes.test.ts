@@ -20,12 +20,7 @@ import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import { VALUED_FIELDS } from "../src/config/globals-fields";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import type {
-  GitInfo,
-  GitInfoOptions,
-  PrState,
-  PullRequest,
-} from "../src/segments/git";
+import type { GitInfo, PrState, PullRequest } from "../src/segments/git";
 import {
   ABSENT,
   pendingOf,
@@ -77,6 +72,31 @@ function depsWith(
   } as unknown as RenderPayloadDeps;
 }
 
+// One read of a clean repo on `main` with no upstream, stash, remote or PR —
+// every field a read carries — with what a test exercises laid over it.
+function gitRead(over: Partial<GitInfo> = {}): GitInfo {
+  return {
+    branch: "main",
+    status: "clean",
+    aheadBehind: ABSENT,
+    head: ok("c0ffee"),
+    workingTree: { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 },
+    sha: ABSENT,
+    operation: ABSENT,
+    committedAt: ABSENT,
+    stashCount: ABSENT,
+    upstream: ABSENT,
+    repoName: ABSENT,
+    repoUrl: ABSENT,
+    isWorktree: false,
+    pullRequest: ABSENT,
+    ...over,
+  };
+}
+
+// What `gitRead`'s clean, empty working tree projects to.
+const CLEAN_TREE = { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 };
+
 // The effective globals the daemon resolves per render; these lane tests
 // don't exercise them, so any well-formed struct serves as the required
 // argument.
@@ -87,14 +107,6 @@ const NO_HINTS: ClientHints = {};
 const TMUX_PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
-
-const GIT_PATHS = new Set([
-  "git.branch",
-  "git.ahead",
-  "git.sha",
-  "git.stash",
-  "git.upstream",
-]);
 
 function hookData(transcriptPath: string) {
   return {
@@ -123,7 +135,6 @@ describe("payloadOf — git outcome lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -142,7 +153,6 @@ describe("payloadOf — git outcome lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -155,15 +165,13 @@ describe("payloadOf — git outcome lane", () => {
   test("per-field failure: field missing, siblings present, nothing logged here", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(
-      ok({
-        branch: "main",
-        status: "clean",
-        aheadBehind: ok({ ahead: 1, behind: 2 }),
-        head: ok("c0ffee"),
-        sha: ok("abc1234"),
-        stashCount: failed("git stash list: timeout, exit null", "read"),
-        upstream: ABSENT,
-      }),
+      ok(
+        gitRead({
+          aheadBehind: ok({ ahead: 1, behind: 2 }),
+          sha: ok("abc1234"),
+          stashCount: failed("git stash list: timeout, exit null", "read"),
+        }),
+      ),
       logs,
     );
 
@@ -172,7 +180,6 @@ describe("payloadOf — git outcome lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      GIT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -185,15 +192,10 @@ describe("payloadOf — git outcome lane", () => {
       status: "clean",
       ahead: 1,
       behind: 2,
+      ...CLEAN_TREE,
       sha: "abc1234",
       // Read, and the branch has none.
       tracking: "none",
-      // No PR lookup was asked, so the document holds the PR fields unread.
-      prNumber: pendingOf("unread"),
-      prState: pendingOf("unread"),
-      prUrl: pendingOf("unread"),
-      prError: pendingOf("unread"),
-      prEarlier: pendingOf("unread"),
     });
     expect("stash" in payload.git!).toBe(false);
     // Neither the absent upstream nor the failed stash is logged here: the
@@ -208,16 +210,7 @@ describe("payloadOf — git outcome lane", () => {
     // git.timeSinceCommit): a payload holding an age would be stale in every
     // frame drawn after the read that built it.
     const committedAt = Date.UTC(2026, 9, 15, 12, 0, 0) / 1000;
-    const deps = depsWith(
-      ok({
-        branch: "main",
-        status: "clean",
-        aheadBehind: ABSENT,
-        head: ok("c0ffee"),
-        committedAt: ok(committedAt),
-      }),
-      [],
-    );
+    const deps = depsWith(ok(gitRead({ committedAt: ok(committedAt) })), []);
     const storedAt = async (secondsLater: number) =>
       (
         settled(
@@ -227,7 +220,6 @@ describe("payloadOf — git outcome lane", () => {
               instantOf(new Date((committedAt + secondsLater) * 1000)),
               deps,
               undefined,
-              new Set(["git.committedAt"]),
               EFFECTIVE_GLOBALS,
               NO_HINTS,
               NO_CONFIG_FILE,
@@ -242,8 +234,6 @@ describe("payloadOf — git outcome lane", () => {
 });
 
 describe("payloadOf — cache outcome lane", () => {
-  const CACHE_PATHS = new Set(["cache.expiresAt"]);
-
   test("unreadable transcript: no cache key, one warn log", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cc-payload-cache-"));
     const transcript = join(dir, "transcript.jsonl");
@@ -262,7 +252,6 @@ describe("payloadOf — cache outcome lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      CACHE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -294,7 +283,6 @@ describe("payloadOf — cache outcome lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      CACHE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -310,14 +298,6 @@ describe("payloadOf — cache outcome lane", () => {
 // The five lanes migrated after PR #96 (session/today/context/metrics/tmux)
 // share the exact same contract as git/cache — one behavior, one type.
 describe("payloadOf — migrated lanes share the outcome contract", () => {
-  const LANE_PATHS = new Set([
-    "session.cost",
-    "today.cost",
-    "context.totalTokens",
-    "metrics.messageCount",
-    "tmux.session",
-  ]);
-
   // [LAW:no-silent-failure] A failed lane was logged by the refresh that
   // failed, its owner's (these stubs stand in for owners); the payload
   // derived from it logs nothing again.
@@ -337,7 +317,6 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      LANE_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -372,7 +351,6 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      LANE_PATHS,
       EFFECTIVE_GLOBALS,
       { tmux: TMUX_PANE },
       NO_CONFIG_FILE,
@@ -398,7 +376,6 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      LANE_PATHS,
       EFFECTIVE_GLOBALS,
       { tmux: TMUX_PANE },
       NO_CONFIG_FILE,
@@ -434,7 +411,6 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      LANE_PATHS,
       EFFECTIVE_GLOBALS,
       hints,
       NO_CONFIG_FILE,
@@ -459,7 +435,6 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      LANE_PATHS,
       EFFECTIVE_GLOBALS,
       { tmux: TMUX_PANE },
       NO_CONFIG_FILE,
@@ -495,7 +470,6 @@ describe("payloadOf — effective globals projection", () => {
       instantOf(new Date()),
       depsWith(ABSENT, logs),
       undefined,
-      new Set(), // no provider lane needed for this projection
       effective,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -530,30 +504,20 @@ describe("payloadOf — git PR projection", () => {
   // [LAW:no-silent-failure] The PR field is the one git field whose `failed`
   // does NOT collapse to a missing key: it surfaces as `prError` (a visible
   // render value) AND logs, so a forge outage is distinct from "no PR".
-  const PR_PATHS = new Set([
-    "git.branch",
-    "git.prNumber",
-    "git.prState",
-    "git.prUrl",
-    "git.prError",
-    "git.prEarlier",
-  ]);
-
   test("open PR (ok) → prNumber/prState/prUrl projected, nothing logged", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(
-      ok({
-        branch: "feature",
-        status: "clean",
-        aheadBehind: ABSENT,
-        head: ok("c0ffee"),
-        pullRequest: ok({
-          number: 76,
-          state: "open",
-          url: "https://github.com/x/y/pull/76",
-          head: "c0ffee",
+      ok(
+        gitRead({
+          branch: "feature",
+          pullRequest: ok({
+            number: 76,
+            state: "open",
+            url: "https://github.com/x/y/pull/76",
+            head: "c0ffee",
+          }),
         }),
-      }),
+      ),
       logs,
     );
 
@@ -562,7 +526,6 @@ describe("payloadOf — git PR projection", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -589,18 +552,18 @@ describe("payloadOf — git PR projection", () => {
     async (state, head) => {
       const logs: LogEntry[] = [];
       const deps = depsWith(
-        ok({
-          branch: "feature",
-          status: "clean",
-          aheadBehind: ABSENT,
-          head,
-          pullRequest: ok({
-            number: 76,
-            state,
-            url: "https://github.com/x/y/pull/76",
-            head: "0ld0id",
+        ok(
+          gitRead({
+            branch: "feature",
+            head,
+            pullRequest: ok({
+              number: 76,
+              state,
+              url: "https://github.com/x/y/pull/76",
+              head: "0ld0id",
+            }),
           }),
-        }),
+        ),
         logs,
       );
 
@@ -609,7 +572,6 @@ describe("payloadOf — git PR projection", () => {
         instantOf(new Date()),
         deps,
         undefined,
-        PR_PATHS,
         EFFECTIVE_GLOBALS,
         NO_HINTS,
         NO_CONFIG_FILE,
@@ -618,54 +580,29 @@ describe("payloadOf — git PR projection", () => {
       expect(payload.git).toEqual({
         branch: "feature",
         status: "clean",
+        ...CLEAN_TREE,
+        tracking: "none",
         prEarlier: state,
       });
-      expect(prFactOf(payload.git, true)).toBe(`earlier-${state}`);
+      expect(prFactOf(payload.git)).toBe(`earlier-${state}`);
       expect(logs).toEqual([]);
     },
   );
 
-  test("a render reading no PR has no PR fact, whatever git's state", () => {
-    expect(prFactOf(pendingOf("unread"), false)).toBe("-");
-    expect(prFactOf(pendingOf("unread"), true)).toBe("pending");
-  });
-
-  test("a layout reading only git.prEarlier still asks the forge", async () => {
-    const asked: GitInfoOptions[] = [];
-    const deps = depsWith(ABSENT, [], {
-      ...absentOwners(),
-      gitProvider: fakeGit(
-        async (_holds: unknown, _dir: string, options: GitInfoOptions) => {
-          asked.push(options);
-          return ABSENT;
-        },
-      ),
-    });
-
-    await requestPayload(
-      hookData("/no/such/transcript.jsonl"),
-      instantOf(new Date()),
-      deps,
-      "/repo",
-      new Set(["git.prEarlier"]),
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
-    );
-
-    expect(asked).toEqual([expect.objectContaining({ showPullRequest: true })]);
+  test("the PR fact is pending while git is, and none without a repository", () => {
+    expect(prFactOf(pendingOf("unread"))).toBe("pending");
+    expect(prFactOf(undefined)).toBe("-");
   });
 
   test("lookup failed → prError surfaced (visible, distinct); the lookup logged it", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(
-      ok({
-        branch: "feature",
-        status: "clean",
-        aheadBehind: ABSENT,
-        head: ok("c0ffee"),
-        pullRequest: failed("gh pr view: non-zero, exit 1, HTTP 401", "read"),
-      }),
+      ok(
+        gitRead({
+          branch: "feature",
+          pullRequest: failed("gh pr view: non-zero, exit 1, HTTP 401", "read"),
+        }),
+      ),
       logs,
     );
 
@@ -674,7 +611,6 @@ describe("payloadOf — git PR projection", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -691,13 +627,7 @@ describe("payloadOf — git PR projection", () => {
   test("no PR (absent) → no pr* fields, nothing logged", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(
-      ok({
-        branch: "feature",
-        status: "clean",
-        aheadBehind: ABSENT,
-        head: ok("c0ffee"),
-        pullRequest: ABSENT,
-      }),
+      ok(gitRead({ branch: "feature", pullRequest: ABSENT })),
       logs,
     );
 
@@ -706,7 +636,6 @@ describe("payloadOf — git PR projection", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      PR_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -725,7 +654,6 @@ describe("payloadOf — git PR projection", () => {
 // segment shows. The refusal is logged by its owner, once per read that
 // failed (test/autocompact-provider.test.ts), never by the render.
 describe("payloadOf — autocompact lane", () => {
-  const AUTOCOMPACT_PATHS = new Set(["autocompact.window"]);
   const run = async (
     read: Outcome<number | "auto">,
     hints: ClientHints,
@@ -743,7 +671,6 @@ describe("payloadOf — autocompact lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       hints,
       NO_CONFIG_FILE,
@@ -769,9 +696,9 @@ describe("payloadOf — autocompact lane", () => {
     expect(logs).toEqual([]);
   });
 
-  // Asked for autocompact alone, the context lane still runs: the controls
-  // are capped to the model's window, which only it knows.
-  test("the cap comes from the context lane even when no template reads context", async () => {
+  // The controls are capped to the model's window, which only the context
+  // lane knows.
+  test("the cap comes from the context lane's window", async () => {
     const deps = depsWith(ABSENT, [], {
       autoCompact: fakeAutoCompact(() => ok(800_000)),
       contextProvider: fakeContext(async () =>
@@ -783,7 +710,6 @@ describe("payloadOf — autocompact lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -810,7 +736,6 @@ describe("payloadOf — autocompact lane", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      AUTOCOMPACT_PATHS,
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -840,7 +765,7 @@ describe("payloadOf — autocompact lane", () => {
 // brandon-client-hints-7ua: the today lane answers for the Claude Code THIS
 // render's client runs under — its config directory — never the daemon's env.
 describe("payloadOf — the lanes that read a session's Claude Code", () => {
-  const run = async (paths: string[], hints: ClientHints) => {
+  const run = async (hints: ClientHints) => {
     const seeded: unknown[] = [];
     const deps = depsWith(ABSENT, [], {
       usageStore: fakeUsage({
@@ -856,7 +781,6 @@ describe("payloadOf — the lanes that read a session's Claude Code", () => {
       instantOf(new Date()),
       deps,
       undefined,
-      new Set(paths),
       EFFECTIVE_GLOBALS,
       hints,
       NO_CONFIG_FILE,
@@ -865,11 +789,11 @@ describe("payloadOf — the lanes that read a session's Claude Code", () => {
   };
 
   test("today seeds the client's directory", async () => {
-    const zai = await run(["today.cost"], {
+    const zai = await run({
       claudeConfigDir: "/home/u/.claude.zai",
     });
     expect(zai.seeded).toEqual(["/home/u/.claude.zai"]);
-    expect((await run(["today.cost"], NO_HINTS)).seeded).toEqual([undefined]);
+    expect((await run(NO_HINTS)).seeded).toEqual([undefined]);
   });
 });
 
@@ -884,7 +808,6 @@ describe("payloadOf — config file and resume command", () => {
       instantOf(new Date()),
       depsWith(ABSENT, []),
       undefined,
-      new Set(),
       EFFECTIVE_GLOBALS,
       hints,
       { ...NO_CONFIG_FILE, configPath },
@@ -916,7 +839,6 @@ describe("payloadOf — config file and resume command", () => {
       instantOf(new Date()),
       depsWith(ABSENT, []),
       undefined,
-      new Set(),
       EFFECTIVE_GLOBALS,
       NO_HINTS,
       NO_CONFIG_FILE,
@@ -949,7 +871,6 @@ describe("settlePayload — what a request waits on", () => {
         instantOf(new Date()),
         deps,
         undefined,
-        new Set(["tmux.session"]),
         EFFECTIVE_GLOBALS,
         { tmux: { socket: "/s", pane: "%7", truecolor: null } },
         NO_CONFIG_FILE,
@@ -987,14 +908,7 @@ describe("settlePayload — what a request waits on", () => {
     const deps = depsWith(ABSENT, [], {
       gitProvider: {
         declare: () => ({
-          current: () =>
-            ok({
-              branch: "feature",
-              status: "clean",
-              aheadBehind: ABSENT,
-              head: ok("c0ffee"),
-              pullRequest,
-            }),
+          current: () => ok(gitRead({ branch: "feature", pullRequest })),
         }),
       },
       usageStore: {
@@ -1010,7 +924,6 @@ describe("settlePayload — what a request waits on", () => {
         at,
         deps,
         undefined,
-        new Set(["git.branch", "git.prNumber", "today.cost"]),
         EFFECTIVE_GLOBALS,
         NO_HINTS,
         NO_CONFIG_FILE,

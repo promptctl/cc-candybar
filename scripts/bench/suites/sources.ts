@@ -26,19 +26,6 @@ import fs from "node:fs";
 
 const SESSION = "bench-usage";
 
-// Everything the richest preset asks git: the heaviest read the daemon makes.
-const EVERYTHING = {
-  showSha: true,
-  showWorkingTree: true,
-  showOperation: true,
-  showTag: true,
-  showCommittedAt: true,
-  showStashCount: true,
-  showUpstream: true,
-  showRepoName: true,
-  showRepoUrl: true,
-} as const;
-
 const REPOS: ReadonlyArray<readonly [string, RepoShape, number]> = [
   ["small", { files: 100, commits: 20, modified: 5, untracked: 3 }, 40],
   ["large", { files: 10_000, commits: 50, modified: 200, untracked: 100 }, 20],
@@ -51,7 +38,7 @@ const gitBenchmark = ([
 ]: (typeof REPOS)[number]): Benchmark => ({
   id: `sources.git.${name}`,
   group: "sources",
-  about: `every git fact the bundled presets ask, read from a checkout of ${shape.files} files with ${shape.modified} modified and ${shape.untracked} untracked (git spawned as the daemon spawns it)`,
+  about: `one repository read, every git fact the daemon gathers, from a checkout of ${shape.files} files with ${shape.modified} modified and ${shape.untracked} untracked (git spawned as the daemon spawns it)`,
   samples,
   async run(plan) {
     const root = scratchDir("ccbn-git");
@@ -60,7 +47,7 @@ const gitBenchmark = ([
       makeRepo(repo, shape);
       const service = new GitService(processWorld().launcher);
       const ms = await repeat(plan.samples, async () => {
-        const info = await service.getGitInfo(repo, EVERYTHING);
+        const info = await service.getGitInfo(repo);
         // [LAW:no-silent-failure] A read that failed, or saw a tree other
         // than the fixture's, is not a fast read.
         if (info.kind !== "ok") {
@@ -69,7 +56,7 @@ const gitBenchmark = ([
         const tree = info.value.workingTree;
         if (
           info.value.branch !== "main" ||
-          tree?.unstaged !== shape.modified ||
+          tree.unstaged !== shape.modified ||
           tree.untracked !== shape.untracked
         ) {
           throw new Error(

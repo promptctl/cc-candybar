@@ -6,7 +6,7 @@ import type { Update } from "../daemon/update-notice";
 import type { ActivityInfo } from "../segments/activity";
 import type { AutoCompactWindow } from "../segments/autocompact";
 import type { ContextInfo } from "../segments/context";
-import type { GitInfo, PullRequest } from "../segments/git";
+import type { GitRead, PullRequest } from "../segments/git";
 import type { MetricsInfo } from "../segments/metrics";
 import type { UsageInfo } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
@@ -35,7 +35,7 @@ export interface TmuxFacts {
 
 // The git read of a repository before a PR is composed onto it: the PR is its
 // own fact, because its cost is its own.
-export type GitFacts = Omit<GitInfo, "pullRequest">;
+export type GitFacts = GitRead;
 
 // The release check: something newer than the running code, or absent.
 export type UpdateNotice = Update;

@@ -15,6 +15,13 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
       "lower": 300000,
       "window": 400000,
     },
+    "block": {
+      "nativeUtilization": 63,
+      "resetsAt": 1700007200,
+    },
+    "burn": {
+      "costPerHour": 1.5096774193548388,
+    },
     "cache": {
       "expiresAt": 1700000900,
     },
@@ -197,6 +204,9 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
     "block": {
       "nativeUtilization": 63,
       "resetsAt": 1700007200,
+    },
+    "burn": {
+      "costPerHour": 1.5096774193548388,
     },
     "cache": {
       "expiresAt": 1700000900,
@@ -381,6 +391,9 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
       "nativeUtilization": 63,
       "resetsAt": 1700007200,
     },
+    "burn": {
+      "costPerHour": 1.5096774193548388,
+    },
     "cache": {
       "expiresAt": 1700000900,
     },
@@ -559,6 +572,13 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
       "higher": 500000,
       "lower": 300000,
       "window": 400000,
+    },
+    "block": {
+      "nativeUtilization": 63,
+      "resetsAt": 1700007200,
+    },
+    "burn": {
+      "costPerHour": 1.5096774193548388,
     },
     "cache": {
       "expiresAt": 1700000900,
@@ -1111,6 +1131,13 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
       "lower": 300000,
       "window": 400000,
     },
+    "block": {
+      "nativeUtilization": 63,
+      "resetsAt": 1700007200,
+    },
+    "burn": {
+      "costPerHour": 1.5096774193548388,
+    },
     "cache": {
       "expiresAt": 1700000900,
     },
@@ -1275,14 +1302,10 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
 }
 `;
 
-exports[`a session's view, drawn from fixed owners at a fixed instant preset compact: the bar 1`] = `"[7;38;2;100;142;225m[0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;122;162;247;48;2;143;182;255m[0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;73;97;150;48;2;143;182;255m~/c/project[0m]8;;\\[38;2;143;182;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m⎇ [0m[38;2;74;38;121;48;2;122;162;247mmain[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;40;65;0;48;2;122;162;247m+2[0m[38;2;59;82;141;48;2;122;162;247m/[0m[38;2;81;52;0;48;2;122;162;247m-1[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;59;82;141;48;2;122;162;247m▸[0m]8;;\\[38;2;122;162;247;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;223;175;104m[0m"`;
+exports[`a session's view, drawn from fixed owners at a fixed instant preset compact: the bar 1`] = `"[7;38;2;100;142;225m[0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;122;162;247;48;2;143;182;255m[0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;73;97;150;48;2;143;182;255m~/c/project[0m]8;;\\[38;2;143;182;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m⎇ [0m[38;2;74;38;121;48;2;122;162;247mmain[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;40;65;0;48;2;122;162;247m+2[0m[38;2;59;82;141;48;2;122;162;247m/[0m[38;2;81;52;0;48;2;122;162;247m-1[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;81;52;0;48;2;122;162;247mU[0m[38;2;97;42;0;48;2;122;162;247m?[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;59;82;141;48;2;122;162;247m▸[0m]8;;\\[38;2;122;162;247;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;223;175;104m[0m"`;
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset compact: the payload a template reads 1`] = `
 {
-  "activity": {
-    "kind": "pending",
-    "why": "unread",
-  },
   "animationSpeed": {
     "effective": "1x",
   },
@@ -1295,9 +1318,15 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
     "lower": 300000,
     "window": 400000,
   },
+  "block": {
+    "nativeUtilization": 63,
+    "resetsAt": 1700007200,
+  },
+  "burn": {
+    "costPerHour": 1.5096774193548388,
+  },
   "cache": {
-    "kind": "pending",
-    "why": "unread",
+    "expiresAt": 1700000900,
   },
   "colorCompatibility": {
     "effective": "truecolor",
@@ -1327,13 +1356,19 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
     "ahead": 2,
     "behind": 1,
     "branch": "main",
+    "committedAt": 1699996400,
+    "conflicts": 0,
     "prNumber": 7,
     "prState": "open",
     "prUrl": "https://example.test/pr/7",
+    "repoName": "project",
     "sha": "abc1234",
+    "staged": 0,
     "stash": 1,
     "status": "dirty",
     "tracking": "none",
+    "unstaged": 2,
+    "untracked": 1,
   },
   "history": {
     "redo": 0,
@@ -1343,21 +1378,19 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
   "home": "/home/tester",
   "hook_event_name": "Status",
   "host": {
-    "name": {
-      "kind": "pending",
-      "why": "unread",
-    },
-    "user": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "name": "tester-box",
+    "user": "tester",
   },
   "menuTimeout": {
     "effective": 120,
   },
   "metrics": {
-    "kind": "pending",
-    "why": "unread",
+    "lastResponseTime": 8.2,
+    "linesAdded": 512,
+    "linesRemoved": 88,
+    "messageCount": 8,
+    "responseTime": 4.2,
+    "sessionDuration": 930,
   },
   "model": {
     "display_name": "M",
@@ -1410,16 +1443,12 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
-    "kind": "pending",
-    "why": "unread",
+    "cost": 0.39,
+    "tokens": 241400,
   },
   "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "shade": {
     "effective": "middle",
-  },
-  "speed": {
-    "kind": "pending",
-    "why": "unread",
   },
   "term": {
     "cols": 118,
@@ -1429,10 +1458,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
   },
   "tmux": {
     "pane": "%7",
-    "session": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "session": "work",
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1459,7 +1485,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
 `;
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset default: the bar 1`] = `
-"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;137;175;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;43;65;123;48;2;100;142;225m [0m[38;2;100;142;225m[0m
+"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;137;175;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;58;36;0;48;2;100;142;225mU[0m[38;2;71;29;0;48;2;100;142;225m?[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;43;65;123;48;2;100;142;225m [0m[38;2;100;142;225m[0m
 [7;38;2;231;138;81m[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;26;27;38;48;2;231;138;81m✱ [0m[38;2;26;27;38;48;2;231;138;81mM[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;95;41;0;48;2;231;138;81m󰶼[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;231;138;81;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;255;178;119m[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;26;27;38;48;2;255;178;119m⇲ [0m[38;2;26;27;38;48;2;255;178;119m400.0[0m[38;2;26;27;38;48;2;255;178;119mK[0m[38;2;26;27;38;48;2;255;178;119m [0m]8;id=2653b15e;cc-candybar://dispatch/does=type+/autocompact+300000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520300000\\[38;2;26;27;38;48;2;255;178;119m−[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=7b50309e;cc-candybar://dispatch/does=type+/autocompact+500000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520500000\\[38;2;26;27;38;48;2;255;178;119m+[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=cd7a1bd2;cc-candybar://dispatch/does=type+/autocompact+auto&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520auto\\[38;2;26;27;38;48;2;255;178;119m↺[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m[38;2;255;178;119;48;2;254;158;100m[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;98;65;0;48;2;254;158;100m◴ [0m[38;2;98;65;0;48;2;254;158;100m15[0m[38;2;98;65;0;48;2;254;158;100mm[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;254;158;100;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◱ [0m[38;2;26;27;38;48;2;223;175;104m63[0m[38;2;26;27;38;48;2;223;175;104m% ([0m[38;2;26;27;38;48;2;223;175;104m2[0m[38;2;26;27;38;48;2;223;175;104mh [0m[38;2;26;27;38;48;2;223;175;104m1[0m[38;2;26;27;38;48;2;223;175;104mm[0m[38;2;26;27;38;48;2;223;175;104m)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;254;158;100m[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;26;27;38;48;2;254;158;100m◑ [0m[38;2;26;27;38;48;2;254;158;100m21[0m[38;2;26;27;38;48;2;254;158;100m% ([0m[38;2;26;27;38;48;2;254;158;100m5[0m[38;2;26;27;38;48;2;254;158;100md[0m[38;2;26;27;38;48;2;254;158;100m)[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;254;158;100m[0m"
 `;
 
@@ -1480,6 +1506,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
   "block": {
     "nativeUtilization": 63,
     "resetsAt": 1700007200,
+  },
+  "burn": {
+    "costPerHour": 1.5096774193548388,
   },
   "cache": {
     "expiresAt": 1700000900,
@@ -1512,13 +1541,19 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
     "ahead": 2,
     "behind": 1,
     "branch": "main",
+    "committedAt": 1699996400,
+    "conflicts": 0,
     "prNumber": 7,
     "prState": "open",
     "prUrl": "https://example.test/pr/7",
+    "repoName": "project",
     "sha": "abc1234",
+    "staged": 0,
     "stash": 1,
     "status": "dirty",
     "tracking": "none",
+    "unstaged": 2,
+    "untracked": 1,
   },
   "history": {
     "redo": 0,
@@ -1535,8 +1570,12 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
     "effective": 120,
   },
   "metrics": {
-    "kind": "pending",
-    "why": "unread",
+    "lastResponseTime": 8.2,
+    "linesAdded": 512,
+    "linesRemoved": 88,
+    "messageCount": 8,
+    "responseTime": 4.2,
+    "sessionDuration": 930,
   },
   "model": {
     "display_name": "M",
@@ -1589,16 +1628,12 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
-    "kind": "pending",
-    "why": "unread",
+    "cost": 0.39,
+    "tokens": 241400,
   },
   "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "shade": {
     "effective": "middle",
-  },
-  "speed": {
-    "kind": "pending",
-    "why": "unread",
   },
   "term": {
     "cols": 118,
@@ -1608,10 +1643,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
   },
   "tmux": {
     "pane": "%7",
-    "session": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "session": "work",
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1638,7 +1670,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
 `;
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset dense: the bar 1`] = `
-"[7;38;2;100;142;225m[0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;137;175;255;48;2;122;162;247m[0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m✱ [0m[38;2;26;27;38;48;2;122;162;247mM[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;97;42;0;48;2;122;162;247m󰶼[0m[38;2;122;162;247;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;223;175;104;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m⇲ [0m[38;2;26;27;38;48;2;122;162;247m400.0[0m[38;2;26;27;38;48;2;122;162;247mK[0m[38;2;26;27;38;48;2;122;162;247m [0m]8;id=2653b15e;cc-candybar://dispatch/does=type+/autocompact+300000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520300000\\[38;2;26;27;38;48;2;122;162;247m−[0m]8;;\\[38;2;26;27;38;48;2;122;162;247m [0m]8;id=7b50309e;cc-candybar://dispatch/does=type+/autocompact+500000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520500000\\[38;2;26;27;38;48;2;122;162;247m+[0m]8;;\\[38;2;26;27;38;48;2;122;162;247m [0m]8;id=cd7a1bd2;cc-candybar://dispatch/does=type+/autocompact+auto&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520auto\\[38;2;26;27;38;48;2;122;162;247m↺[0m]8;;\\[38;2;122;162;247;48;2;100;142;225m[0m[38;2;58;36;0;48;2;100;142;225m◴ [0m[38;2;58;36;0;48;2;100;142;225m15[0m[38;2;58;36;0;48;2;100;142;225mm[0m[38;2;100;142;225;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m◱ [0m[38;2;26;27;38;48;2;223;175;104m63[0m[38;2;26;27;38;48;2;223;175;104m% ([0m[38;2;26;27;38;48;2;223;175;104m2[0m[38;2;26;27;38;48;2;223;175;104mh [0m[38;2;26;27;38;48;2;223;175;104m1[0m[38;2;26;27;38;48;2;223;175;104mm[0m[38;2;26;27;38;48;2;223;175;104m)[0m[38;2;223;175;104;48;2;143;182;255m[0m[38;2;26;27;38;48;2;143;182;255m◑ [0m[38;2;26;27;38;48;2;143;182;255m21[0m[38;2;26;27;38;48;2;143;182;255m% ([0m[38;2;26;27;38;48;2;143;182;255m5[0m[38;2;26;27;38;48;2;143;182;255md[0m[38;2;26;27;38;48;2;143;182;255m)[0m[38;2;143;182;255m[0m
+"[7;38;2;100;142;225m[0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;137;175;255;48;2;122;162;247m[0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;58;36;0;48;2;100;142;225mU[0m[38;2;71;29;0;48;2;100;142;225m?[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m✱ [0m[38;2;26;27;38;48;2;122;162;247mM[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;97;42;0;48;2;122;162;247m󰶼[0m[38;2;122;162;247;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;223;175;104;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m⇲ [0m[38;2;26;27;38;48;2;122;162;247m400.0[0m[38;2;26;27;38;48;2;122;162;247mK[0m[38;2;26;27;38;48;2;122;162;247m [0m]8;id=2653b15e;cc-candybar://dispatch/does=type+/autocompact+300000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520300000\\[38;2;26;27;38;48;2;122;162;247m−[0m]8;;\\[38;2;26;27;38;48;2;122;162;247m [0m]8;id=7b50309e;cc-candybar://dispatch/does=type+/autocompact+500000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520500000\\[38;2;26;27;38;48;2;122;162;247m+[0m]8;;\\[38;2;26;27;38;48;2;122;162;247m [0m]8;id=cd7a1bd2;cc-candybar://dispatch/does=type+/autocompact+auto&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520auto\\[38;2;26;27;38;48;2;122;162;247m↺[0m]8;;\\[38;2;122;162;247;48;2;100;142;225m[0m[38;2;58;36;0;48;2;100;142;225m◴ [0m[38;2;58;36;0;48;2;100;142;225m15[0m[38;2;58;36;0;48;2;100;142;225mm[0m[38;2;100;142;225;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m◱ [0m[38;2;26;27;38;48;2;223;175;104m63[0m[38;2;26;27;38;48;2;223;175;104m% ([0m[38;2;26;27;38;48;2;223;175;104m2[0m[38;2;26;27;38;48;2;223;175;104mh [0m[38;2;26;27;38;48;2;223;175;104m1[0m[38;2;26;27;38;48;2;223;175;104mm[0m[38;2;26;27;38;48;2;223;175;104m)[0m[38;2;223;175;104;48;2;143;182;255m[0m[38;2;26;27;38;48;2;143;182;255m◑ [0m[38;2;26;27;38;48;2;143;182;255m21[0m[38;2;26;27;38;48;2;143;182;255m% ([0m[38;2;26;27;38;48;2;143;182;255m5[0m[38;2;26;27;38;48;2;143;182;255md[0m[38;2;26;27;38;48;2;143;182;255m)[0m[38;2;143;182;255m[0m
 [7;38;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m§ [0m[38;2;26;27;38;48;2;122;162;247m$[0m[38;2;26;27;38;48;2;122;162;247m0.39[0m[38;2;26;27;38;48;2;122;162;247m ([0m[38;2;26;27;38;48;2;122;162;247m241.4[0m[38;2;26;27;38;48;2;122;162;247mK[0m[38;2;26;27;38;48;2;122;162;247m tokens[0m[38;2;26;27;38;48;2;122;162;247m)[0m[38;2;122;162;247m[0m"
 `;
 
@@ -1659,6 +1691,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
   "block": {
     "nativeUtilization": 63,
     "resetsAt": 1700007200,
+  },
+  "burn": {
+    "costPerHour": 1.5096774193548388,
   },
   "cache": {
     "expiresAt": 1700000900,
@@ -1691,13 +1726,19 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
     "ahead": 2,
     "behind": 1,
     "branch": "main",
+    "committedAt": 1699996400,
+    "conflicts": 0,
     "prNumber": 7,
     "prState": "open",
     "prUrl": "https://example.test/pr/7",
+    "repoName": "project",
     "sha": "abc1234",
+    "staged": 0,
     "stash": 1,
     "status": "dirty",
     "tracking": "none",
+    "unstaged": 2,
+    "untracked": 1,
   },
   "history": {
     "redo": 0,
@@ -1714,8 +1755,12 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
     "effective": 120,
   },
   "metrics": {
-    "kind": "pending",
-    "why": "unread",
+    "lastResponseTime": 8.2,
+    "linesAdded": 512,
+    "linesRemoved": 88,
+    "messageCount": 8,
+    "responseTime": 4.2,
+    "sessionDuration": 930,
   },
   "model": {
     "display_name": "M",
@@ -1775,10 +1820,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
   "shade": {
     "effective": "middle",
   },
-  "speed": {
-    "kind": "pending",
-    "why": "unread",
-  },
   "term": {
     "cols": 118,
   },
@@ -1787,10 +1828,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
   },
   "tmux": {
     "pane": "%7",
-    "session": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "session": "work",
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1817,7 +1855,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
 `;
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset git: the bar 1`] = `
-"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;137;175;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;43;65;123;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m]8;id=96baeaf3;https://example.test/pr/7\\[38;2;26;27;38;48;2;122;162;247m⇆ #7[0m]8;;\\[38;2;26;27;38;48;2;122;162;247m [0m[38;2;122;162;247m[0m
+"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;137;175;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;58;36;0;48;2;100;142;225mU[0m[38;2;71;29;0;48;2;100;142;225m?[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;43;65;123;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m]8;id=96baeaf3;https://example.test/pr/7\\[38;2;26;27;38;48;2;122;162;247m⇆ #7[0m]8;;\\[38;2;26;27;38;48;2;122;162;247m [0m[38;2;122;162;247m[0m
 [7;38;2;231;138;81m[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;26;27;38;48;2;231;138;81m✱ [0m[38;2;26;27;38;48;2;231;138;81mM[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;95;41;0;48;2;231;138;81m󰶼[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;231;138;81;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104m[0m"
 `;
 
@@ -1835,9 +1873,15 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
     "lower": 300000,
     "window": 400000,
   },
+  "block": {
+    "nativeUtilization": 63,
+    "resetsAt": 1700007200,
+  },
+  "burn": {
+    "costPerHour": 1.5096774193548388,
+  },
   "cache": {
-    "kind": "pending",
-    "why": "unread",
+    "expiresAt": 1700000900,
   },
   "colorCompatibility": {
     "effective": "truecolor",
@@ -1867,13 +1911,19 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
     "ahead": 2,
     "behind": 1,
     "branch": "main",
+    "committedAt": 1699996400,
+    "conflicts": 0,
     "prNumber": 7,
     "prState": "open",
     "prUrl": "https://example.test/pr/7",
+    "repoName": "project",
     "sha": "abc1234",
+    "staged": 0,
     "stash": 1,
     "status": "dirty",
     "tracking": "none",
+    "unstaged": 2,
+    "untracked": 1,
   },
   "history": {
     "redo": 0,
@@ -1890,8 +1940,12 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
     "effective": 120,
   },
   "metrics": {
-    "kind": "pending",
-    "why": "unread",
+    "lastResponseTime": 8.2,
+    "linesAdded": 512,
+    "linesRemoved": 88,
+    "messageCount": 8,
+    "responseTime": 4.2,
+    "sessionDuration": 930,
   },
   "model": {
     "display_name": "M",
@@ -1944,16 +1998,12 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
-    "kind": "pending",
-    "why": "unread",
+    "cost": 0.39,
+    "tokens": 241400,
   },
   "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "shade": {
     "effective": "middle",
-  },
-  "speed": {
-    "kind": "pending",
-    "why": "unread",
   },
   "term": {
     "cols": 118,
@@ -1963,10 +2013,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
   },
   "tmux": {
     "pane": "%7",
-    "session": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "session": "work",
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -1993,7 +2040,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
 `;
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset null: the bar 1`] = `
-"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;137;175;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;43;65;123;48;2;100;142;225m [0m[38;2;100;142;225m[0m
+"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;137;175;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;59;82;141;48;2;122;162;247m~/c/project[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;43;65;123;48;2;100;142;225m⎇ [0m[38;2;57;17;101;48;2;100;142;225mmain[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;27;46;0;48;2;100;142;225m+2[0m[38;2;43;65;123;48;2;100;142;225m/[0m[38;2;58;36;0;48;2;100;142;225m-1[0m[38;2;43;65;123;48;2;100;142;225m [0m[38;2;58;36;0;48;2;100;142;225mU[0m[38;2;71;29;0;48;2;100;142;225m?[0m[38;2;43;65;123;48;2;100;142;225m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;43;65;123;48;2;100;142;225m▸[0m]8;;\\[38;2;43;65;123;48;2;100;142;225m [0m[38;2;100;142;225m[0m
 [7;38;2;231;138;81m[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;26;27;38;48;2;231;138;81m✱ [0m[38;2;26;27;38;48;2;231;138;81mM[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;95;41;0;48;2;231;138;81m󰶼[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;231;138;81;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;255;178;119m[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;26;27;38;48;2;255;178;119m⇲ [0m[38;2;26;27;38;48;2;255;178;119m400.0[0m[38;2;26;27;38;48;2;255;178;119mK[0m[38;2;26;27;38;48;2;255;178;119m [0m]8;id=2653b15e;cc-candybar://dispatch/does=type+/autocompact+300000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520300000\\[38;2;26;27;38;48;2;255;178;119m−[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=7b50309e;cc-candybar://dispatch/does=type+/autocompact+500000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520500000\\[38;2;26;27;38;48;2;255;178;119m+[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=cd7a1bd2;cc-candybar://dispatch/does=type+/autocompact+auto&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520auto\\[38;2;26;27;38;48;2;255;178;119m↺[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m[38;2;255;178;119;48;2;254;158;100m[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;98;65;0;48;2;254;158;100m◴ [0m[38;2;98;65;0;48;2;254;158;100m15[0m[38;2;98;65;0;48;2;254;158;100mm[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;254;158;100;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◱ [0m[38;2;26;27;38;48;2;223;175;104m63[0m[38;2;26;27;38;48;2;223;175;104m% ([0m[38;2;26;27;38;48;2;223;175;104m2[0m[38;2;26;27;38;48;2;223;175;104mh [0m[38;2;26;27;38;48;2;223;175;104m1[0m[38;2;26;27;38;48;2;223;175;104mm[0m[38;2;26;27;38;48;2;223;175;104m)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;254;158;100m[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;26;27;38;48;2;254;158;100m◑ [0m[38;2;26;27;38;48;2;254;158;100m21[0m[38;2;26;27;38;48;2;254;158;100m% ([0m[38;2;26;27;38;48;2;254;158;100m5[0m[38;2;26;27;38;48;2;254;158;100md[0m[38;2;26;27;38;48;2;254;158;100m)[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;254;158;100m[0m"
 `;
 
@@ -2014,6 +2061,9 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
   "block": {
     "nativeUtilization": 63,
     "resetsAt": 1700007200,
+  },
+  "burn": {
+    "costPerHour": 1.5096774193548388,
   },
   "cache": {
     "expiresAt": 1700000900,
@@ -2046,13 +2096,19 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
     "ahead": 2,
     "behind": 1,
     "branch": "main",
+    "committedAt": 1699996400,
+    "conflicts": 0,
     "prNumber": 7,
     "prState": "open",
     "prUrl": "https://example.test/pr/7",
+    "repoName": "project",
     "sha": "abc1234",
+    "staged": 0,
     "stash": 1,
     "status": "dirty",
     "tracking": "none",
+    "unstaged": 2,
+    "untracked": 1,
   },
   "history": {
     "redo": 0,
@@ -2069,8 +2125,12 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
     "effective": 120,
   },
   "metrics": {
-    "kind": "pending",
-    "why": "unread",
+    "lastResponseTime": 8.2,
+    "linesAdded": 512,
+    "linesRemoved": 88,
+    "messageCount": 8,
+    "responseTime": 4.2,
+    "sessionDuration": 930,
   },
   "model": {
     "display_name": "M",
@@ -2123,16 +2183,12 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
-    "kind": "pending",
-    "why": "unread",
+    "cost": 0.39,
+    "tokens": 241400,
   },
   "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "shade": {
     "effective": "middle",
-  },
-  "speed": {
-    "kind": "pending",
-    "why": "unread",
   },
   "term": {
     "cols": 118,
@@ -2142,10 +2198,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
   },
   "tmux": {
     "pane": "%7",
-    "session": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "session": "work",
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -2179,10 +2232,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset usage: the payload a template reads 1`] = `
 {
-  "activity": {
-    "kind": "pending",
-    "why": "unread",
-  },
   "animationSpeed": {
     "effective": "1x",
   },
@@ -2233,13 +2282,19 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
     "ahead": 2,
     "behind": 1,
     "branch": "main",
+    "committedAt": 1699996400,
+    "conflicts": 0,
     "prNumber": 7,
     "prState": "open",
     "prUrl": "https://example.test/pr/7",
+    "repoName": "project",
     "sha": "abc1234",
+    "staged": 0,
     "stash": 1,
     "status": "dirty",
     "tracking": "none",
+    "unstaged": 2,
+    "untracked": 1,
   },
   "history": {
     "redo": 0,
@@ -2249,14 +2304,8 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
   "home": "/home/tester",
   "hook_event_name": "Status",
   "host": {
-    "name": {
-      "kind": "pending",
-      "why": "unread",
-    },
-    "user": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "name": "tester-box",
+    "user": "tester",
   },
   "menuTimeout": {
     "effective": 120,
@@ -2335,10 +2384,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
   },
   "tmux": {
     "pane": "%7",
-    "session": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "session": "work",
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -2365,7 +2411,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
 `;
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset verbose: the bar 1`] = `
-"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;122;162;247;48;2;143;182;255m[0m[38;2;73;97;150;48;2;143;182;255m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;73;97;150;48;2;143;182;255m~/c/project[0m]8;;\\[38;2;73;97;150;48;2;143;182;255m [0m[38;2;143;182;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;59;82;141;48;2;122;162;247m⎇ [0m[38;2;74;38;121;48;2;122;162;247mmain[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;40;65;0;48;2;122;162;247m+2[0m[38;2;59;82;141;48;2;122;162;247m/[0m[38;2;81;52;0;48;2;122;162;247m-1[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;59;82;141;48;2;122;162;247m▸[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=96baeaf3;https://example.test/pr/7\\[38;2;26;27;38;48;2;100;142;225m⇆ #7[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225m[0m
+"[7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=94ee9e0c;cc-candybar://dispatch/does=open+candybar.menu+and+2+more&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.menu%2Fopen&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.resetAll.armed%2Fdisarmed&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fcandybar.commands.clear.armed%2Fdisarmed\\[38;2;26;27;38;48;2;100;142;225m🍫[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225;48;2;122;162;247m[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;26;27;38;48;2;122;162;247m polled[0m[38;2;26;27;38;48;2;122;162;247m [0m[38;2;122;162;247;48;2;143;182;255m[0m[38;2;73;97;150;48;2;143;182;255m [0m]8;id=b197edfd;cc-candybar://dispatch/does=copy+/home/tester/code/project&e=copy%2F%252Fhome%252Ftester%252Fcode%252Fproject\\[38;2;73;97;150;48;2;143;182;255m~/c/project[0m]8;;\\[38;2;73;97;150;48;2;143;182;255m [0m[38;2;143;182;255;48;2;122;162;247m[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;59;82;141;48;2;122;162;247m⎇ [0m[38;2;74;38;121;48;2;122;162;247mmain[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;40;65;0;48;2;122;162;247m+2[0m[38;2;59;82;141;48;2;122;162;247m/[0m[38;2;81;52;0;48;2;122;162;247m-1[0m[38;2;59;82;141;48;2;122;162;247m [0m[38;2;81;52;0;48;2;122;162;247mU[0m[38;2;97;42;0;48;2;122;162;247m?[0m[38;2;59;82;141;48;2;122;162;247m [0m]8;id=6343e001;cc-candybar://dispatch/does=set+git-detail+to+expanded&e=set-state%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2Fgit-detail%2Fexpanded\\[38;2;59;82;141;48;2;122;162;247m▸[0m]8;;\\[38;2;59;82;141;48;2;122;162;247m [0m[38;2;122;162;247;48;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m]8;id=96baeaf3;https://example.test/pr/7\\[38;2;26;27;38;48;2;100;142;225m⇆ #7[0m]8;;\\[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225m[0m
 [7;38;2;231;138;81m[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;26;27;38;48;2;231;138;81m✱ [0m[38;2;26;27;38;48;2;231;138;81mM[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;95;41;0;48;2;231;138;81m󰶼[0m[38;2;26;27;38;48;2;231;138;81m [0m[38;2;231;138;81;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◔ [0m[38;2;26;27;38;48;2;223;175;104m48,487[0m[38;2;26;27;38;48;2;223;175;104m ([0m[38;2;26;27;38;48;2;223;175;104m24[0m[38;2;26;27;38;48;2;223;175;104m%)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;255;178;119m[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;26;27;38;48;2;255;178;119m⇲ [0m[38;2;26;27;38;48;2;255;178;119m400.0[0m[38;2;26;27;38;48;2;255;178;119mK[0m[38;2;26;27;38;48;2;255;178;119m [0m]8;id=2653b15e;cc-candybar://dispatch/does=type+/autocompact+300000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520300000\\[38;2;26;27;38;48;2;255;178;119m−[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=7b50309e;cc-candybar://dispatch/does=type+/autocompact+500000&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520500000\\[38;2;26;27;38;48;2;255;178;119m+[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m]8;id=cd7a1bd2;cc-candybar://dispatch/does=type+/autocompact+auto&e=slash%2Fgolden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a%2F%252Fautocompact%2520auto\\[38;2;26;27;38;48;2;255;178;119m↺[0m]8;;\\[38;2;26;27;38;48;2;255;178;119m [0m[38;2;255;178;119;48;2;254;158;100m[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;98;65;0;48;2;254;158;100m◴ [0m[38;2;98;65;0;48;2;254;158;100m15[0m[38;2;98;65;0;48;2;254;158;100mm[0m[38;2;98;65;0;48;2;254;158;100m [0m[38;2;254;158;100;48;2;223;175;104m[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;26;27;38;48;2;223;175;104m◱ [0m[38;2;26;27;38;48;2;223;175;104m63[0m[38;2;26;27;38;48;2;223;175;104m% ([0m[38;2;26;27;38;48;2;223;175;104m2[0m[38;2;26;27;38;48;2;223;175;104mh [0m[38;2;26;27;38;48;2;223;175;104m1[0m[38;2;26;27;38;48;2;223;175;104mm[0m[38;2;26;27;38;48;2;223;175;104m)[0m[38;2;26;27;38;48;2;223;175;104m [0m[38;2;223;175;104;48;2;254;158;100m[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;26;27;38;48;2;254;158;100m◑ [0m[38;2;26;27;38;48;2;254;158;100m21[0m[38;2;26;27;38;48;2;254;158;100m% ([0m[38;2;26;27;38;48;2;254;158;100m5[0m[38;2;26;27;38;48;2;254;158;100md[0m[38;2;26;27;38;48;2;254;158;100m)[0m[38;2;26;27;38;48;2;254;158;100m [0m[38;2;254;158;100m[0m
 [7;38;2;255;178;119m[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;26;27;38;48;2;255;178;119m⚡ [0m[38;2;26;27;38;48;2;255;178;119m$[0m[38;2;26;27;38;48;2;255;178;119m1.51[0m[38;2;26;27;38;48;2;255;178;119m/hr[0m[38;2;26;27;38;48;2;255;178;119m · [0m[38;2;26;27;38;48;2;255;178;119m1[0m[38;2;26;27;38;48;2;255;178;119mh [0m[38;2;26;27;38;48;2;255;178;119m46[0m[38;2;26;27;38;48;2;255;178;119mm[0m[38;2;26;27;38;48;2;255;178;119m to 5h · [0m[38;2;26;27;38;48;2;255;178;119m7[0m[38;2;26;27;38;48;2;255;178;119md [0m[38;2;26;27;38;48;2;255;178;119m12[0m[38;2;26;27;38;48;2;255;178;119mh[0m[38;2;26;27;38;48;2;255;178;119m to wk[0m[38;2;26;27;38;48;2;255;178;119m [0m[38;2;255;178;119m[0m
 [7;38;2;100;142;225m[0m[38;2;26;27;38;48;2;100;142;225m [0m[38;2;26;27;38;48;2;100;142;225m⇅ out [0m[38;2;26;27;38;48;2;100;142;225m—[0m[38;2;26;27;38;48;2;100;142;225m · in [0m[38;2;26;27;38;48;2;100;142;225m—[0m[38;2;26;27;38;48;2;100;142;225m · tot [0m[38;2;26;27;38;48;2;100;142;225m—[0m[38;2;26;27;38;48;2;100;142;225m [0m[38;2;100;142;225m[0m"
@@ -2373,10 +2419,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset verbose: the payload a template reads 1`] = `
 {
-  "activity": {
-    "kind": "pending",
-    "why": "unread",
-  },
   "animationSpeed": {
     "effective": "1x",
   },
@@ -2427,13 +2469,19 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
     "ahead": 2,
     "behind": 1,
     "branch": "main",
+    "committedAt": 1699996400,
+    "conflicts": 0,
     "prNumber": 7,
     "prState": "open",
     "prUrl": "https://example.test/pr/7",
+    "repoName": "project",
     "sha": "abc1234",
+    "staged": 0,
     "stash": 1,
     "status": "dirty",
     "tracking": "none",
+    "unstaged": 2,
+    "untracked": 1,
   },
   "history": {
     "redo": 0,
@@ -2443,14 +2491,8 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
   "home": "/home/tester",
   "hook_event_name": "Status",
   "host": {
-    "name": {
-      "kind": "pending",
-      "why": "unread",
-    },
-    "user": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "name": "tester-box",
+    "user": "tester",
   },
   "menuTimeout": {
     "effective": 120,
@@ -2529,10 +2571,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
   },
   "tmux": {
     "pane": "%7",
-    "session": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "session": "work",
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {
@@ -2562,10 +2601,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
 
 exports[`a session's view, drawn from fixed owners at a fixed instant preset zen: the payload a template reads 1`] = `
 {
-  "activity": {
-    "kind": "pending",
-    "why": "unread",
-  },
   "animationSpeed": {
     "effective": "1x",
   },
@@ -2578,9 +2613,15 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
     "lower": 300000,
     "window": 400000,
   },
+  "block": {
+    "nativeUtilization": 63,
+    "resetsAt": 1700007200,
+  },
+  "burn": {
+    "costPerHour": 1.5096774193548388,
+  },
   "cache": {
-    "kind": "pending",
-    "why": "unread",
+    "expiresAt": 1700000900,
   },
   "colorCompatibility": {
     "effective": "truecolor",
@@ -2610,13 +2651,19 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
     "ahead": 2,
     "behind": 1,
     "branch": "main",
+    "committedAt": 1699996400,
+    "conflicts": 0,
     "prNumber": 7,
     "prState": "open",
     "prUrl": "https://example.test/pr/7",
+    "repoName": "project",
     "sha": "abc1234",
+    "staged": 0,
     "stash": 1,
     "status": "dirty",
     "tracking": "none",
+    "unstaged": 2,
+    "untracked": 1,
   },
   "history": {
     "redo": 0,
@@ -2626,21 +2673,19 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
   "home": "/home/tester",
   "hook_event_name": "Status",
   "host": {
-    "name": {
-      "kind": "pending",
-      "why": "unread",
-    },
-    "user": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "name": "tester-box",
+    "user": "tester",
   },
   "menuTimeout": {
     "effective": 120,
   },
   "metrics": {
-    "kind": "pending",
-    "why": "unread",
+    "lastResponseTime": 8.2,
+    "linesAdded": 512,
+    "linesRemoved": 88,
+    "messageCount": 8,
+    "responseTime": 4.2,
+    "sessionDuration": 930,
   },
   "model": {
     "display_name": "M",
@@ -2693,16 +2738,12 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "session": {
-    "kind": "pending",
-    "why": "unread",
+    "cost": 0.39,
+    "tokens": 241400,
   },
   "session_id": "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
   "shade": {
     "effective": "middle",
-  },
-  "speed": {
-    "kind": "pending",
-    "why": "unread",
   },
   "term": {
     "cols": 118,
@@ -2712,10 +2753,7 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
   },
   "tmux": {
     "pane": "%7",
-    "session": {
-      "kind": "pending",
-      "why": "unread",
-    },
+    "session": "work",
   },
   "transcript_path": "/home/tester/code/project/golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a.jsonl",
   "transitions": {

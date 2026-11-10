@@ -16,7 +16,7 @@ import type { Holds } from "../../src/utils/holds";
 import { HOST } from "./host";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { sessionIdOf } from "../../src/daemon/session-id";
-import type { GitInfo, GitInfoOptions } from "../../src/segments/git";
+import type { GitInfo } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
 import type { ContextInfo } from "../../src/segments/context";
 import type { MetricsInfo } from "../../src/segments/metrics";
@@ -114,37 +114,29 @@ export function fakeGit(
   read: (
     holds: Holds,
     workingDir: string,
-    options: GitInfoOptions,
     projectDir: string | undefined,
   ) => Loose,
 ) {
-  const current = keyed<[string, GitInfoOptions, string | undefined], GitInfo>(
-    read,
-  );
+  const current = keyed<[string, string | undefined], GitInfo>(read);
   return {
     declare: (
       holds: Holds,
       workingDir: string,
-      options: GitInfoOptions = {},
       projectDir?: string,
     ): Lane<GitInfo> => ({
-      current: () => current(holds, workingDir, options, projectDir),
+      current: () => current(holds, workingDir, projectDir),
     }),
   };
 }
 
-// The payload a view's source derives, over the owners the inputs name and the
-// sources a config declares (none, unless given): the facts document stamped
-// from what the owners hold, and the payload composed from it.
-export function payloadOf(
-  inputs: PayloadInputs,
-  draw: DrawInputs,
-  declared: Parameters<typeof readingsOf>[1] = new Map(),
-) {
+// The payload a view's source derives, over the owners and lanes the inputs
+// name: the facts document stamped from what the owners hold, and the payload
+// composed from it.
+export function payloadOf(inputs: PayloadInputs, draw: DrawInputs) {
   const document = assembleFacts(
     undefined,
     sessionIdOf(inputs.hookData.session_id),
-    readingsOf(inputs, declared),
+    readingsOf(inputs),
     pendingOf("unread"),
     instantOf(new Date(0)),
   );
@@ -153,7 +145,6 @@ export function payloadOf(
     {
       hookData: inputs.hookData,
       hints: inputs.hints,
-      neededInputPaths: inputs.neededInputPaths,
       home: inputs.deps.home,
     },
     draw,
@@ -329,8 +320,8 @@ export function absentOwners() {
 }
 
 // A request's payload as the daemon draws one: the lanes declared over the
-// owners at the request's facts and closure, as the session's view declares
-// them (brandon-unfiled-3248.8ro6, 4a), the request's refresh and wait
+// owners at the request's facts, as the session's view declares them
+// (brandon-unfiled-3248.8ro6, 4a), the request's refresh and wait
 // (settlePayload), then the view's payload as it stands (payloadOf) with the
 // draw's own projections beside it — `today` at `at`, no feeds. The failures
 // it projected are logged as the daemon's request logs them.
@@ -339,7 +330,6 @@ export async function requestPayload(
   at: Instant,
   deps: Omit<RenderPayloadDeps, "lanes">,
   cwd: string | undefined,
-  closure: ReadonlySet<string>,
   effective: EffectiveGlobals,
   hints: ClientHints,
   configFacts: ConfigFileFacts,
@@ -348,14 +338,12 @@ export async function requestPayload(
     deps as unknown as KeyedOwners,
     new HoldsClass(),
     { sessionId: sessionIdOf(hookData.session_id), hookData, cwd, hints },
-    closure,
     new Map(),
   );
   const inputs: PayloadInputs = {
     hookData,
     cwd,
     hints,
-    neededInputPaths: closure,
     deps: { ...deps, lanes: () => lanes } as RenderPayloadDeps,
   };
   await settlePayload(inputs, at, new Map());
@@ -368,7 +356,7 @@ export async function requestPayload(
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,
-    today: todayOf(readingsOf(inputs, new Map()).today, at),
+    today: todayOf(readingsOf(inputs).today, at),
   };
 }
 
@@ -379,18 +367,16 @@ export function settled<T extends PayloadNode>(value: T | Pending): T {
   return value;
 }
 
-// The lanes a view declared at `facts` over `owners` and every lane read, for
-// a test that draws frames over deps it built itself.
+// The lanes a view declared at `facts` over `owners`, for a test that draws
+// frames over deps it built itself.
 export function declaredLanes(
   owners: unknown,
   facts: Parameters<typeof declareLanes>[2],
-  closure: ReadonlySet<string>,
 ): () => ReturnType<typeof declareLanes>["lanes"] {
   const { lanes } = declareLanes(
     owners as KeyedOwners,
     new HoldsClass(),
     facts,
-    closure,
     new Map(),
   );
   return () => lanes;

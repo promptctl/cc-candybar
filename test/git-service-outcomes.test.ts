@@ -1,6 +1,6 @@
 // Classification contract for GitService against real git: a non-zero exit
-// that is the domain answering "there is none" (no upstream, no tags, no
-// remote) is `absent`; a real value — including 0 stashes — is `ok`; only a
+// that is the domain answering "there is none" (no upstream, no remote) is
+// `absent`; a real value — including 0 stashes — is `ok`; only a
 // transport failure is `failed` (covered at the boundary by stub tests).
 // [LAW:types-are-the-program] These assert the states the old
 // catch-and-substitute blocks made unrepresentable.
@@ -45,22 +45,15 @@ describe("GitService outcome classification", () => {
   });
 
   test("no upstream: aheadBehind and upstream are absent — not a confident 0", async () => {
-    const info = await svc.getGitInfo(repo, { showUpstream: true });
+    const info = await svc.getGitInfo(repo);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
     expect(info.value.aheadBehind).toEqual(ABSENT);
     expect(info.value.upstream).toEqual(ABSENT);
   });
 
-  test("no tags: tag is absent", async () => {
-    const info = await svc.getGitInfo(repo, { showTag: true });
-    expect(info.kind).toBe("ok");
-    if (info.kind !== "ok") return;
-    expect(info.value.tag).toEqual(ABSENT);
-  });
-
   test("empty stash list is a REAL ok(0), distinct from absent/failed", async () => {
-    const info = await svc.getGitInfo(repo, { showStashCount: true });
+    const info = await svc.getGitInfo(repo);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
     expect(info.value.stashCount).toEqual(ok(0));
@@ -69,7 +62,7 @@ describe("GitService outcome classification", () => {
   test("a stashed change counts as ok(1)", async () => {
     writeFileSync(join(repo, "f.txt"), "x");
     run("git add f.txt && git stash -q", repo);
-    const info = await svc.getGitInfo(repo, { showStashCount: true });
+    const info = await svc.getGitInfo(repo);
     run("git stash pop -q && git reset -q && rm f.txt", repo);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
@@ -77,7 +70,7 @@ describe("GitService outcome classification", () => {
   });
 
   test("repoName without a remote is the basename POLICY, as ok", async () => {
-    const info = await svc.getGitInfo(repo, { showRepoName: true });
+    const info = await svc.getGitInfo(repo);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
     expect(info.value.repoName).toEqual(ok("repo"));
@@ -85,7 +78,7 @@ describe("GitService outcome classification", () => {
 
   test("repoName with a remote parses the remote URL", async () => {
     run("git remote add origin git@github.com:user/myrepo.git", repo);
-    const info = await svc.getGitInfo(repo, { showRepoName: true });
+    const info = await svc.getGitInfo(repo);
     run("git remote remove origin", repo);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
@@ -93,7 +86,7 @@ describe("GitService outcome classification", () => {
   });
 
   test("repoUrl without a remote is absent — no page, not an empty string", async () => {
-    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    const info = await svc.getGitInfo(repo);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
     expect(info.value.repoUrl).toEqual(ABSENT);
@@ -101,7 +94,7 @@ describe("GitService outcome classification", () => {
 
   test("repoUrl transposes an ssh remote to its browsable page", async () => {
     run("git remote add origin git@github.com:user/myrepo.git", repo);
-    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    const info = await svc.getGitInfo(repo);
     run("git remote remove origin", repo);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
@@ -110,7 +103,7 @@ describe("GitService outcome classification", () => {
 
   test("repoUrl of a bare-path remote is absent — nothing serves it a page", async () => {
     run(`git remote add origin "${join(root, "remote.git")}"`, repo);
-    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    const info = await svc.getGitInfo(repo);
     run("git remote remove origin", repo);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
@@ -123,10 +116,7 @@ describe("GitService outcome classification", () => {
   // spawns; asserting them TOGETHER is what pins it.
   test("repoName and repoUrl agree, read together", async () => {
     run("git remote add origin https://gitlab.com/group/sub/proj.git", repo);
-    const info = await svc.getGitInfo(repo, {
-      showRepoName: true,
-      showRepoUrl: true,
-    });
+    const info = await svc.getGitInfo(repo);
     run("git remote remove origin", repo);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
@@ -137,7 +127,7 @@ describe("GitService outcome classification", () => {
   test("origin is the repo's page even when other remotes exist", async () => {
     run("git remote add upstream git@github.com:upstream/proj.git", repo);
     run("git remote add origin git@github.com:me/proj.git", repo);
-    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    const info = await svc.getGitInfo(repo);
     run("git remote remove origin && git remote remove upstream", repo);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;

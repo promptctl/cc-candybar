@@ -47,7 +47,6 @@ import {
 } from "../render/frame.js";
 import {
   renderOptionsOf,
-  gitOptionsFromClosure,
   prFactOf,
   sourcesFactOf,
   settlePayload,
@@ -399,9 +398,6 @@ function setUpDraw(
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
     // and output = diagnostics + body, with no "did the config load" branch.
-    // The picks as the request arrived: what its refresh reads. The draw
-    // settles its own (drawRender).
-    const effective: EffectiveGlobals = view.source.effective();
     const payloadInputs: PayloadInputs = {
       hookData: req.hookData,
       deps: {
@@ -411,7 +407,6 @@ function setUpDraw(
         lanes: view.lanes,
       },
       cwd: req.cwd,
-      neededInputPaths: state.neededInputPaths(effective.preset),
       hints,
     };
     return {
@@ -618,11 +613,7 @@ export function drawRender(
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
-    pr: prFactOf(
-      payload.git,
-      gitOptionsFromClosure(setup.payloadInputs.neededInputPaths)
-        .showPullRequest === true,
-    ),
+    pr: prFactOf(payload.git),
     feeds: feedsFact(projected.feeds),
   });
   // [LAW:no-silent-failure] What drawDsl had to settle for itself and could

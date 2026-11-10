@@ -29,6 +29,7 @@ import { ABSENT, failed, pendingOf, ok } from "../src/utils/outcome";
 import type { ClientHints } from "../src/daemon/protocol";
 import { sessionIdOf } from "../src/daemon/session-id";
 import type { ClaudeHookData } from "../src/utils/claude";
+import type { GitRead } from "../src/segments/git";
 import {
   absentOwners,
   declaredLanes,
@@ -63,33 +64,25 @@ const HOOK = {
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
 } as unknown as ClaudeHookData;
 
-// One path per lane, so every lane is read.
-const EVERY_LANE = new Set([
-  "git.branch",
-  "git.prNumber",
-  "tmux.session",
-  "session.cost",
-  "today.cost",
-  "speed.output",
-  "context.totalTokens",
-  "metrics.messageCount",
-  "activity.running",
-  "cache.expiresAt",
-  "autocompact.window",
-]);
-
-const GIT = {
+const GIT: GitRead = {
   branch: "main",
   status: "clean",
   aheadBehind: ok({ ahead: 0, behind: 0 }),
   head: ok("c0ffee"),
+  workingTree: { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 },
   sha: ok("abc1234"),
+  operation: ABSENT,
+  committedAt: ok(1_699_996_400),
   stashCount: ok(0),
   upstream: ABSENT,
+  repoName: ok("project"),
+  repoUrl: ABSENT,
+  isWorktree: false,
 };
 
-// Every lane over a counted reader; `pr` is the PR the git value carries.
-function counted(pr?: unknown) {
+// Every lane over a counted reader; `pr` is the PR the git value carries
+// (none, unless given).
+function counted(pr: unknown = ABSENT) {
   const reads: Record<string, number> = {};
   const logs: string[] = [];
   const count =
@@ -100,9 +93,7 @@ function counted(pr?: unknown) {
     };
   const owners = {
     ...absentOwners(),
-    gitProvider: fakeGit(
-      count("git", ok(pr === undefined ? GIT : { ...GIT, pullRequest: pr })),
-    ),
+    gitProvider: fakeGit(count("git", ok({ ...GIT, pullRequest: pr }))),
     tmuxService: fakeTmux(count("tmux", ok("work"))),
     usageStore: fakeUsage({
       usage: count("session", ok({ session: { cost: 2, tokens: 10 } })),
@@ -120,22 +111,17 @@ function counted(pr?: unknown) {
   // the same handles, as the daemon's do.
   const deps = {
     ...owners,
-    lanes: declaredLanes(
-      owners,
-      {
-        sessionId: sessionIdOf(HOOK.session_id),
-        hookData: HOOK,
-        cwd: undefined,
-        hints: HINTS,
-      },
-      EVERY_LANE,
-    ),
+    lanes: declaredLanes(owners, {
+      sessionId: sessionIdOf(HOOK.session_id),
+      hookData: HOOK,
+      cwd: undefined,
+      hints: HINTS,
+    }),
   } as unknown as RenderPayloadDeps;
   const inputs = (): PayloadInputs => ({
     hookData: HOOK,
     deps,
     cwd: undefined,
-    neededInputPaths: EVERY_LANE,
     hints: HINTS,
   });
   // A request: its refresh and wait, then the view's payload it draws.
@@ -145,7 +131,7 @@ function counted(pr?: unknown) {
   };
   // `today` as a draw at `at` projects it.
   const today = (at = AT) =>
-    todayOf(readingsOf(inputs(), new Map()).today, at);
+    todayOf(readingsOf(inputs()).today, at);
   return { reads, inputs, request, today, deps, logs };
 }
 
@@ -220,7 +206,7 @@ describe("a frame's payload", () => {
     deps.usageStore.daysOutside = () => {
       throw new Error("days bug");
     };
-    expect(readingsOf(inputs(), new Map()).today).toMatchObject({
+    expect(readingsOf(inputs()).today).toMatchObject({
       kind: "failed",
     });
     expect(payloadOf(inputs(), DRAW).git).toMatchObject({ branch: "main" });
@@ -234,21 +220,10 @@ describe("a frame's payload", () => {
     await request();
     const before = reads["today"];
     deps.faults.refreshed(HOOK.session_id, "today", "scan threw");
-    expect(readingsOf(inputs(), new Map()).today).toEqual(
+    expect(readingsOf(inputs()).today).toEqual(
       failed("scan threw", "read"),
     );
     expect(reads["today"]).toBe(before);
-  });
-
-  test("a frame reading the context window and no autocompact leaves autocompact pending unread", () => {
-    const { inputs } = counted();
-    const contextOnly = {
-      ...inputs(),
-      neededInputPaths: new Set(["context.contextLeft"]),
-    };
-    const payload = payloadOf(contextOnly, DRAW);
-    expect(payload.context).toEqual(pendingOf("unread"));
-    expect(payload.autocompact).toEqual(pendingOf("unread"));
   });
 
   test("autocompact's controls are not answered while the context window they are capped to is not", async () => {

@@ -220,8 +220,8 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(providers, holds, facts, closure, sources),
+      declare: (holds, facts, sources) =>
+        declareLanes(providers, holds, facts, sources),
       source: sessionSource({
         providers,
         sessionState,

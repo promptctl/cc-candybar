@@ -55,7 +55,7 @@ describe("stash count reads the refs/stash reflog", () => {
   });
 
   async function count(dir: string): Promise<unknown> {
-    const info = await git.getGitInfo(dir, { showStashCount: true });
+    const info = await git.getGitInfo(dir);
     expect(info.kind).toBe("ok");
     return info.kind === "ok" ? info.value.stashCount : undefined;
   }
@@ -116,7 +116,7 @@ describe("stash count reads the refs/stash reflog", () => {
       recursive: true,
     });
 
-    const info = await git.getGitInfo(broken, { showStashCount: true });
+    const info = await git.getGitInfo(broken);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
     expect(info.value.stashCount).toMatchObject({ kind: "failed" });

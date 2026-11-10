@@ -81,16 +81,12 @@ const HOOK = {
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
 } as never;
 
-// The host segment's reads: its name and user are sources, `ssh` the hint.
-const HOST_PATHS = new Set(["host.name", "host.user", "host.ssh"]);
-
 const payloadWith = (hints: ClientHints) =>
   requestPayload(
     HOOK,
     instantOf(new Date()),
     DEPS,
     "/tmp",
-    HOST_PATHS,
     EFFECTIVE_GLOBALS,
     hints,
     NO_CONFIG_FILE,

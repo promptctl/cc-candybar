@@ -4,10 +4,8 @@
 // keep it fixed is one that names each invocation. A subclass counting
 // `execGitAsync` is the seam, which is why that method is `protected`.
 //
-// [LAW:behavior-not-structure] The option set is the bundled default's
-// `gitaculous` segment, read off src/config/default-dsl-config.ts, not an
-// invented one: this budget is only meaningful for the flags production asks
-// for.
+// [LAW:behavior-not-structure] Every read runs every field, as the daemon reads
+// every repo, so the budget is the one read production makes.
 
 import { execSync } from "node:child_process";
 import { processLauncher } from "./helpers/host";
@@ -22,20 +20,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { GitService, type GitInfoOptions } from "../src/segments/git";
+import { GitService } from "../src/segments/git";
 import type { LaunchResult } from "../src/proc/launch";
-
-// The seven flags gitaculous asks for: sha, the four worktree counts, stash,
-// upstream, repoName, operation, committedAt.
-const GITACULOUS_OPTIONS: GitInfoOptions = {
-  showSha: true,
-  showWorkingTree: true,
-  showStashCount: true,
-  showUpstream: true,
-  showRepoName: true,
-  showOperation: true,
-  showCommittedAt: true,
-};
 
 class CountingGitService extends GitService {
   readonly invocations: string[] = [];
@@ -74,9 +60,9 @@ describe("git spawns per cache miss", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("one fetch with the gitaculous option set costs the invocations listed here", async () => {
+  test("one fetch costs the invocations listed here", async () => {
     const svc = new CountingGitService(processLauncher);
-    const info = await svc.getGitInfo(repo, GITACULOUS_OPTIONS);
+    const info = await svc.getGitInfo(repo);
 
     expect(info.kind).toBe("ok");
     expect(svc.invocations).toEqual([
@@ -92,7 +78,7 @@ describe("git spawns per cache miss", () => {
   // render, forever, by every non-repo session. The ascent takes it to nothing.
   test("a cwd outside any repo spawns no git at all", async () => {
     const svc = new CountingGitService(processLauncher);
-    const info = await svc.getGitInfo(root, GITACULOUS_OPTIONS);
+    const info = await svc.getGitInfo(root);
 
     expect(info.kind).toBe("absent");
     expect(svc.invocations).toEqual([]);
@@ -103,10 +89,10 @@ describe("git spawns per cache miss", () => {
   // lifetime for it is "until HEAD moves" — which is what this measures.
   test("a second fetch at the same commit does not re-ask for the timestamp", async () => {
     const svc = new CountingGitService(processLauncher);
-    await svc.getGitInfo(repo, GITACULOUS_OPTIONS);
+    await svc.getGitInfo(repo);
 
     svc.invocations.length = 0;
-    const again = await svc.getGitInfo(repo, GITACULOUS_OPTIONS);
+    const again = await svc.getGitInfo(repo);
 
     expect(again.kind).toBe("ok");
     // Both memos are warm on the second fetch, so the irreducible call is all that
@@ -125,16 +111,16 @@ describe("git spawns per cache miss", () => {
     const logCalls = (): string[] =>
       svc.invocations.filter((i) => i.startsWith("log -1"));
 
-    await svc.getGitInfo(moving, { showCommittedAt: true });
+    await svc.getGitInfo(moving);
     expect(logCalls()).toHaveLength(1);
 
     run("git commit -q --allow-empty -m two", moving);
     svc.invocations.length = 0;
-    await svc.getGitInfo(moving, { showCommittedAt: true });
+    await svc.getGitInfo(moving);
     expect(logCalls()).toHaveLength(1);
 
     svc.invocations.length = 0;
-    await svc.getGitInfo(moving, { showCommittedAt: true });
+    await svc.getGitInfo(moving);
     expect(logCalls()).toHaveLength(0);
   });
 
@@ -147,11 +133,15 @@ describe("git spawns per cache miss", () => {
     mkdirSync(empty);
     run("git init -q -b main", empty);
 
-    const info = await svc.getGitInfo(empty, { showCommittedAt: true });
+    const info = await svc.getGitInfo(empty);
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
     expect(info.value.committedAt).toEqual({ kind: "absent" });
-    expect(svc.invocations).toEqual(["status --porcelain=v2 --branch"]);
+    // The remotes read is every read's, commit or none.
+    expect(svc.invocations).toEqual([
+      "status --porcelain=v2 --branch",
+      "config --local --get-regexp ^remote\\..*\\.url$",
+    ]);
   });
 
   // [LAW:verifiable-goals] The remotes memo, and the two ways it must come loose:
@@ -168,12 +158,12 @@ describe("git spawns per cache miss", () => {
     const configCalls = (): string[] =>
       svc.invocations.filter((i) => i.startsWith("config --local"));
 
-    const first = await svc.getGitInfo(stable, { showRepoName: true });
+    const first = await svc.getGitInfo(stable);
     expect(first).toMatchObject({ value: { repoName: { value: "r" } } });
     expect(configCalls()).toHaveLength(1);
 
     svc.invocations.length = 0;
-    const second = await svc.getGitInfo(stable, { showRepoName: true });
+    const second = await svc.getGitInfo(stable);
     expect(second).toMatchObject({ value: { repoName: { value: "r" } } });
     expect(configCalls()).toHaveLength(0);
 
@@ -183,7 +173,7 @@ describe("git spawns per cache miss", () => {
     // the file: a NEW inode, which the identity key notices on its own.
     run("git remote set-url origin https://github.com/o/renamed.git", stable);
     svc.invocations.length = 0;
-    const third = await svc.getGitInfo(stable, { showRepoName: true });
+    const third = await svc.getGitInfo(stable);
     expect(configCalls()).toHaveLength(1);
     expect(third).toMatchObject({ value: { repoName: { value: "renamed" } } });
   });
@@ -203,7 +193,7 @@ describe("git spawns per cache miss", () => {
     run("git remote add origin https://github.com/o/before.git", inplace);
 
     const configPath = join(inplace, ".git", "config");
-    const before = await svc.getGitInfo(inplace, { showRepoName: true });
+    const before = await svc.getGitInfo(inplace);
     expect(before).toMatchObject({ value: { repoName: { value: "before" } } });
     const inode = statSync(configPath).ino;
 
@@ -214,7 +204,7 @@ describe("git spawns per cache miss", () => {
     expect(statSync(configPath).ino).toBe(inode);
 
     svc.invocations.length = 0;
-    const after = await svc.getGitInfo(inplace, { showRepoName: true });
+    const after = await svc.getGitInfo(inplace);
     expect(
       svc.invocations.filter((i) => i.startsWith("config --local")),
     ).toHaveLength(1);
@@ -235,9 +225,9 @@ describe("git spawns per cache miss", () => {
     const wt = join(root, "shared-wt");
     run(`git worktree add -q "${wt}"`, shared);
 
-    await svc.getGitInfo(shared, { showRepoName: true });
+    await svc.getGitInfo(shared);
     svc.invocations.length = 0;
-    const fromWorktree = await svc.getGitInfo(wt, { showRepoName: true });
+    const fromWorktree = await svc.getGitInfo(wt);
 
     expect(fromWorktree).toMatchObject({
       value: { repoName: { value: "shared" } },
@@ -249,7 +239,7 @@ describe("git spawns per cache miss", () => {
 
   test("a cwd below the repo root finds the root without spawning git", async () => {
     const svc = new CountingGitService(processLauncher);
-    const info = await svc.getGitInfo(nested, GITACULOUS_OPTIONS);
+    const info = await svc.getGitInfo(nested);
 
     expect(info.kind).toBe("ok");
     expect(svc.invocations[0]).toBe("status --porcelain=v2 --branch");

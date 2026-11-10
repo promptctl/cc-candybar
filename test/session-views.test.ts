@@ -230,7 +230,7 @@ test("a move to another directory declares the new view before the old releases 
   let holders = 0;
   let dropsToZero = 0;
   const { cache } = makeCache({
-    declare: (holds, facts, closure, sources) => {
+    declare: (holds, facts, sources) => {
       holds.take("repo", () => {
         holders++;
         return () => {
@@ -238,7 +238,7 @@ test("a move to another directory declares the new view before the old releases 
           if (holders === 0) dropsToZero++;
         };
       });
-      return DECLARES_NOTHING(holds, facts, closure, sources);
+      return DECLARES_NOTHING(holds, facts, sources);
     },
   });
   cache
@@ -323,9 +323,9 @@ test("a kept view is declared with each request holdSession is given, inside a b
   configure(dir);
   const declaredFor: ViewFacts[] = [];
   const { cache } = makeCache({
-    declare: (holds, facts, closure, sources) => {
+    declare: (holds, facts, sources) => {
       declaredFor.push(facts);
-      return DECLARES_NOTHING(holds, facts, closure, sources);
+      return DECLARES_NOTHING(holds, facts, sources);
     },
   });
   const first = viewFacts(dir, "s-a");
@@ -346,18 +346,18 @@ test("a view whose declaration throws answers that failure on its lanes", () => 
   configure(dir);
   const { cache, lines } = makeCache({
     declare: () => {
-      throw new Error("closure exploded");
+      throw new Error("declaration exploded");
     },
   });
   using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
   expect(held.view.lanes().git.current()).toEqual({
     kind: "failed",
     failedAt: "read",
-    reason: expect.stringContaining("closure exploded"),
+    reason: expect.stringContaining("declaration exploded"),
   });
   expect(lines).toContainEqual(
     expect.stringMatching(
-      /^session view declaration threw sid="s-a": .*closure exploded/,
+      /^session view declaration threw sid="s-a": .*declaration exploded/,
     ),
   );
 });

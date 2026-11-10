@@ -1493,7 +1493,6 @@ describe("RenderCache idle sweep", () => {
         dir,
         viewFacts(dir, "s1"),
         {
-          sessionState: new SessionState(),
           source: SOURCES_NOTHING,
           declare: DECLARES_NOTHING,
           changed: () => {},
@@ -1516,16 +1515,15 @@ describe("RenderCache idle sweep", () => {
     }
   });
 
-  test("a view holds what its declaration takes: a request naming other keys, or the session's preset moving, declares again at once", () => {
+  test("a view holds what its declaration takes: a request naming other keys declares again at once, and a preset pick declares nothing", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({
       clock: systemTimekeeper,
       logger: () => {},
     });
     const sessionState = new SessionState();
-    // Each declaration takes one hold per key its request names and one per
-    // closure, so what it holds says which request and which preset it read.
-    const closures: Array<ReadonlySet<string>> = [];
+    // Each declaration takes one hold per key its request names, so what it
+    // holds says which request it read.
     const declarations: string[] = [];
     const released: string[] = [];
     const take = (holds: Holds, key: string): void =>
@@ -1547,13 +1545,10 @@ describe("RenderCache idle sweep", () => {
         watchers,
         log: (_level, message) => logs.push(message),
         source: SOURCES_NOTHING,
-        declare: (holds, facts, closure, sources) => {
-          if (!closures.includes(closure)) closures.push(closure);
-          const preset = `closure:${closures.indexOf(closure)}`;
-          declarations.push(`${facts.cwd} ${preset}`);
+        declare: (holds, facts, sources) => {
+          declarations.push(`${facts.cwd}`);
           take(holds, `repo:${facts.cwd}`);
-          take(holds, preset);
-          return DECLARES_NOTHING(holds, facts, closure, sources);
+          return DECLARES_NOTHING(holds, facts, sources);
         },
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
@@ -1578,53 +1573,38 @@ describe("RenderCache idle sweep", () => {
         return hold.view;
       })();
       // A view opens declared, at the request it opens with.
-      expect(declarations).toEqual(["/a closure:0"]);
-      expect(view.holds.size).toBe(2);
+      expect(declarations).toEqual(["/a"]);
+      expect(view.holds.size).toBe(1);
       // The same request — a frame drawn by it — declares nothing again.
       view.requested(a);
       expect(declarations).toHaveLength(1);
 
       // A request naming another key: the one it no longer names goes now.
       view.requested(request("/b"));
-      expect(declarations).toEqual(["/a closure:0", "/b closure:0"]);
+      expect(declarations).toEqual(["/a", "/b"]);
       expect(released).toEqual(["repo:/a"]);
 
-      // A pick of another session's, or of this one's that moves no preset,
-      // declares nothing.
+      // No pick declares: another session's, this one's theme, nor this
+      // one's preset — every built-in is gathered whatever it shows.
       sessionState.set("s2", "preset", "compact");
       sessionState.set("s1", "theme", "nord");
-      expect(declarations).toHaveLength(2);
-
-      // The session's preset moving declares its closure, with no render.
       sessionState.set("s1", "preset", "compact");
-      expect(declarations).toEqual([
-        "/a closure:0",
-        "/b closure:0",
-        "/b closure:1",
-      ]);
-      expect(released).toEqual(["repo:/a", "closure:0"]);
-      expect(view.holds.size).toBe(2);
+      expect(declarations).toEqual(["/a", "/b"]);
+      expect(released).toEqual(["repo:/a"]);
+      expect(view.holds.size).toBe(1);
       // Each declaration that moved a hold says so; the repeat of `a` and the
-      // picks that moved no preset wrote nothing.
+      // picks wrote nothing.
       expect(logs.filter((l) => l.startsWith("session view declared"))).toEqual(
         [
-          'session view declared sid="s1" acquired=2 released=0 held=2',
-          'session view declared sid="s1" acquired=1 released=1 held=2',
-          'session view declared sid="s1" acquired=1 released=1 held=2',
+          'session view declared sid="s1" acquired=1 released=0 held=1',
+          'session view declared sid="s1" acquired=1 released=1 held=1',
         ],
       );
 
-      // Closing the view stops its declarations and releases what it held.
+      // Closing the view releases what it held.
       cache.releaseIdle();
       cache.releaseIdle();
-      expect(released).toEqual([
-        "repo:/a",
-        "closure:0",
-        "repo:/b",
-        "closure:1",
-      ]);
-      sessionState.set("s1", "preset", "verbose");
-      expect(declarations).toHaveLength(3);
+      expect(released).toEqual(["repo:/a", "repo:/b"]);
     } finally {
       cache.close();
       watchers.closeAll();

@@ -275,7 +275,7 @@ function sourceReading(name: string, resolved: Resolved): Reading<JsonValue> {
   const raw = resolved.value;
   if (raw === undefined) {
     return failed(
-      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the preset reads`,
+      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the config declares`,
       "read",
     );
   }
@@ -477,7 +477,7 @@ export class SourceRegistry {
   // carries at the source's own name — ok, absent or failed as the storage
   // owner read the session's file, or pending while it has not answered.
   // [LAW:no-silent-failure] A payload with nothing there is a declaration
-  // that did not take the source the preset reads: a bug, read as a failure
+  // that did not take the source the config declares: a bug, read as a failure
   // naming the variable, never as absent.
   declareSourceDocument(name: string): void {
     this.store.defineDerivedDocument(name, () =>

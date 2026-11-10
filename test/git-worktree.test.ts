@@ -38,9 +38,7 @@ describe("GitService isWorktree", () => {
 
   describe("worktree detection", () => {
     it("should set isWorktree to true when .git is a file (worktree)", async () => {
-      const info = await gitService.getGitInfo(worktree, {
-        showRepoName: true,
-      });
+      const info = await gitService.getGitInfo(worktree);
 
       expect(info).toMatchObject({
         kind: "ok",
@@ -49,9 +47,7 @@ describe("GitService isWorktree", () => {
     });
 
     it("should set isWorktree to false when .git is a directory (normal repo)", async () => {
-      const info = await gitService.getGitInfo(mainRepo, {
-        showRepoName: true,
-      });
+      const info = await gitService.getGitInfo(mainRepo);
 
       expect(info).toMatchObject({
         kind: "ok",
@@ -62,11 +58,7 @@ describe("GitService isWorktree", () => {
 
   describe("gitDir resolution", () => {
     it("should detect isWorktree based on workingDir, not gitDir from projectDir", async () => {
-      const info = await gitService.getGitInfo(
-        worktree,
-        { showRepoName: true },
-        mainRepo,
-      );
+      const info = await gitService.getGitInfo(worktree, mainRepo);
 
       expect(info).toMatchObject({
         kind: "ok",
