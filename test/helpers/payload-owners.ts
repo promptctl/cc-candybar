@@ -334,17 +334,17 @@ export async function requestPayload(
   hints: ClientHints,
   configFacts: ConfigFileFacts,
 ): Promise<DrawnPayload> {
-  const { lanes } = declareLanes(
-    deps as unknown as KeyedOwners,
-    new HoldsClass(),
-    { sessionId: sessionIdOf(hookData.session_id), hookData, cwd, hints },
-    new Map(),
-  );
+  using declared = declaredLanes(deps, {
+    sessionId: sessionIdOf(hookData.session_id),
+    hookData,
+    cwd,
+    hints,
+  });
   const inputs: PayloadInputs = {
     hookData,
     cwd,
     hints,
-    deps: { ...deps, lanes: () => lanes } as RenderPayloadDeps,
+    deps: { ...deps, lanes: declared.lanes } as RenderPayloadDeps,
   };
   await settlePayload(inputs, at, new Map());
   const payload = payloadOf(inputs, {
@@ -368,16 +368,23 @@ export function settled<T extends PayloadNode>(value: T | Pending): T {
 }
 
 // The lanes a view declared at `facts` over `owners`, for a test that draws
-// frames over deps it built itself.
+// frames over deps it built itself. Its holds are the view's home, so
+// disposing it closes the home: [LAW:no-ambient-temporal-coupling] a held
+// entry's period re-arms after every read, so a home left open keeps ticking
+// for the life of the Jest worker, inside whichever file runs next.
 export function declaredLanes(
   owners: unknown,
   facts: Parameters<typeof declareLanes>[2],
-): () => ReturnType<typeof declareLanes>["lanes"] {
+): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
+  const holds = new HoldsClass();
   const { lanes } = declareLanes(
     owners as KeyedOwners,
-    new HoldsClass(),
+    holds,
     facts,
     new Map(),
   );
-  return () => lanes;
+  return {
+    lanes: () => lanes,
+    [Symbol.dispose]: () => void holds.close(),
+  };
 }

@@ -169,6 +169,7 @@ function makeCache(
       logs.push(message);
     },
   });
+  built.push(svc);
   return { svc, inner, logs, holds: new Holds() };
 }
 
@@ -222,7 +223,15 @@ async function tick(times = 5): Promise<void> {
   }
 }
 
+// [LAW:no-ambient-temporal-coupling] Every provider a case built, closed as
+// the case ends: a held repo's period re-arms after every pass, so one left
+// open keeps ticking for the life of the Jest worker, inside whichever file
+// runs next. Closed before the real timers return, so its timers are cleared
+// on the clock that armed them.
+const built: GitDataProvider[] = [];
+
 afterEach(() => {
+  for (const svc of built.splice(0)) svc.close();
   jest.useRealTimers();
 });
 
@@ -1299,6 +1308,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       watchers,
       logger,
     });
+    built.push(svc);
     return { svc, inner, counters, logs, watchers };
   }
 

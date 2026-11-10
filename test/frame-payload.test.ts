@@ -79,6 +79,12 @@ const GIT: GitRead = {
   repoUrl: ABSENT,
 };
 
+// Every home a case's view opened, closed as the case ends.
+const homes: Disposable[] = [];
+afterEach(() => {
+  for (const home of homes.splice(0)) home[Symbol.dispose]();
+});
+
 // Every lane over a counted reader; `pr` is the PR the git value carries
 // (none, unless given).
 function counted(pr: unknown = ABSENT) {
@@ -108,14 +114,16 @@ function counted(pr: unknown = ABSENT) {
   };
   // The lanes the session's view declared: every frame and the request read
   // the same handles, as the daemon's do.
+  const declared = declaredLanes(owners, {
+    sessionId: sessionIdOf(HOOK.session_id),
+    hookData: HOOK,
+    cwd: undefined,
+    hints: HINTS,
+  });
+  homes.push(declared);
   const deps = {
     ...owners,
-    lanes: declaredLanes(owners, {
-      sessionId: sessionIdOf(HOOK.session_id),
-      hookData: HOOK,
-      cwd: undefined,
-      hints: HINTS,
-    }),
+    lanes: declared.lanes,
   } as unknown as RenderPayloadDeps;
   const inputs = (): PayloadInputs => ({
     hookData: HOOK,
