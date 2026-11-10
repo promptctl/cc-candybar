@@ -93,7 +93,6 @@ The gap is listed per proposal section: what the code does today, what the backl
 
 **Change.**
 - Edit `.cd0`: the request event carries the correlation id that the facts push and the applied events reuse, so one wide event per unit of work exists before the process split, not after.
-- New ticket under daemon memory: *Gather's memory budget is measured and set.* Before §3 lands, because two processes each with a Node baseline is the proposal's one open cost question.
 
 ## What the backlog already has that the proposal keeps
 
