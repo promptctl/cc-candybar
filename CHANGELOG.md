@@ -1,3 +1,9 @@
+## [1.214.0](https://github.com/promptctl/cc-candybar/compare/v1.213.2...v1.214.0) (2026-11-10)
+
+### Features
+
+* **facts:** every session gathers every built-in, and the wants closure goes ([#707](https://github.com/promptctl/cc-candybar/issues/707)) ([effe8f6](https://github.com/promptctl/cc-candybar/commit/effe8f6ccd73837e94fbf8322194bfc66b7f5d1a))
+
 ## [1.213.2](https://github.com/promptctl/cc-candybar/compare/v1.213.1...v1.213.2) (2026-11-10)
 
 ### Bug Fixes
