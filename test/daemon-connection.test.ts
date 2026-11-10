@@ -352,23 +352,40 @@ describe("a connection over a stream", () => {
     expect(ended()).toBe(true);
   });
 
-  test("a handler that throws is answered RENDER_FAILED", async () => {
-    const { send, received } = open(
-      standIn({
-        handle: async () => {
-          throw new Error("the handler broke");
-        },
-      }),
-    );
-    send(STATS);
+  // [LAW:verifiable-goals] A failed request costs its own answer and nothing
+  // more: the daemon neither exits nor keeps it in flight, and the next
+  // connection is served as if nothing had failed.
+  test("a handler that throws is answered RENDER_FAILED, and the next request is served", async () => {
+    let calls = 0;
+    const daemon = standIn({
+      handle: async () => {
+        if (calls++ === 0) throw new Error("the handler broke");
+        return replyWith();
+      },
+    });
+    const failed = open(daemon);
+    failed.send(STATS);
     await settled();
-    expect(received).toEqual([
-      expect.objectContaining({
-        ok: false,
-        code: "RENDER_FAILED",
-        error: "the handler broke",
-      }),
-    ]);
+    const next = open(daemon);
+    next.send(STATS);
+    await settled();
+    expect({
+      failed: failed.received,
+      next: next.received,
+      exits: exit.mock.calls,
+      inFlight: daemon.stats.inFlight,
+    }).toEqual({
+      failed: [
+        expect.objectContaining({
+          ok: false,
+          code: "RENDER_FAILED",
+          error: "the handler broke",
+        }),
+      ],
+      next: [ANSWER],
+      exits: [],
+      inFlight: 0,
+    });
   });
 
   describe("a subscribe", () => {

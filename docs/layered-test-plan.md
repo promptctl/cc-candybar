@@ -276,12 +276,12 @@ Done when `draw-reserve` boots no daemon and runs on the schedule, outside every
 
 | The gate's checks | Where each goes | Tier |
 |---|---|---|
-| Held counts flat | Drawing, a hundred sessions each from its own directory, over fake ports | Unit |
-| No watcher churn | Sources, over the fake watched store | Unit |
-| Click subscriptions released | Actions over Sessions | Unit |
-| Session writes landed | Sessions, over the fake store | Unit |
-| Feed holds its pace | Feeds, over the fake clock and a fake draw | Unit |
-| Stats answered, one daemon | Requests: a request that fails answers its error, and the piece keeps serving the next | Unit |
+| Held counts flat | Drawing: a few sessions from several directories draw again, and the cache's counts hold (`render-cache-sharing`, "a steady stream of renders") | Unit |
+| No watcher churn | Sources: the same renders open and close no watcher (`render-cache-sharing`); the git watch across refreshes and changes (`daemon-git-cache`) | Unit |
+| Click subscriptions released | Actions over Sessions: a second walk through a session's menu keeps no observer of the session state (`render-cache-sharing`) | Unit |
+| Session writes landed | Sessions: a stage and a branch switch reach the git facts (`daemon-git-cache`), a turn reaches the usage record (`daemon-session-usage-store`) | Unit |
+| Feed holds its pace | Feeds, over the held clock and a fake draw (`frame-feed`) | Unit |
+| Stats answered, one daemon | Requests: a request that fails answers its error, and the next is served (`daemon-connection`) | Unit |
 | Stubs answered everything | Goes, because a fake's contract states what it answers | None |
 | Charge within the budget, heap and charge not climbing | A small program over Drawing, Sources and Sessions that holds a hundred sessions, collects, and reads the charge through the backstop's own probe. The budget is re-measured for what it holds | Integration |
 | Warm, steady renders, steady clicks, statusline p90 with a feed | The same program with Actions for the clicks and Feeds for the p90, on the schedule beside `draw-reserve`. These are wall-clock numbers, so they report through ticket 38 | Scheduled |
