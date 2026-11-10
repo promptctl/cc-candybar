@@ -4,15 +4,22 @@
     {
       "version": "pr-710",
       "ref": "refs/pull/710/merge",
-      "sha": "b39a77b0aa8a9e92b37ab84c86b32922cf7ad30c",
-      "timestamp": "2026-11-10T17:01:44.294Z",
+      "sha": "a18e5ee196e4b4b7149a1f16b08058ea07077152",
+      "timestamp": "2026-11-10T17:03:35.617Z",
       "commits": [
         {
-          "sha": "b39a77b0aa8a9e92b37ab84c86b32922cf7ad30c",
+          "sha": "a18e5ee196e4b4b7149a1f16b08058ea07077152",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T16:59:44Z",
-          "message": "Merge b1dedf2ba8e642cdcb014d08d8c42820a30c34b7 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+          "timestamp": "2026-11-10T17:02:25Z",
+          "message": "Merge bdf7bcc37c8e1a12b90521ab790eaed19f60ccb2 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "bdf7bcc37c8e1a12b90521ab790eaed19f60ccb2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T10:02:09-07:00",
+          "message": "docs(design): Proposal 3 answers its second review: only a chain's own layer is writable, layers carry what their role can have, sessions run in their own environment (candybar-gather-renderer-76bb.215)\n"
         },
         {
           "sha": "b1dedf2ba8e642cdcb014d08d8c42820a30c34b7",
