@@ -85,7 +85,7 @@ The gap is listed per proposal section: what the code does today, what the backl
 - New ticket, or a second half of `.go6`: *A facts recording replays into a renderer with zero I/O.* The facts source is a union `gather | recording`; a CLI records a session's facts stream with timestamps; the replay drives Drawing through the same seam Gather would; the disk and process counters from `docs/render-path-subprocess-accounting.md` are armed and must read zero. This is the acceptance test for §1 and should be filed with it, not after.
 - Edit `.ncz` (Drawing) so `src/check.ts` and `src/demo/dsl.ts` take a facts source too; the plan already has them assemble Drawing "instead of their own rigs", and a recording is the rig.
 
-## §9 Observability and memory
+## §9 Observability
 
 **Code today.** One logfmt line per request (`requestEvent`, `src/daemon/request-event.ts`): the render arm carries `queued`, `waited`, `drew`, `lanes`, `refreshed` and more; the click arm carries `via`, `verb`, `gather`, `turnWait`, `took` and `outcome`, but not the effects that ran, what they wrote, or the resulting revision. Nothing correlates a request with the facts it waited on or the frame it produced. There is no idle shutdown of the daemon (`MenuIdle` closes menus), which matters because Proposal 1 gives Gather an idle grace.
 
