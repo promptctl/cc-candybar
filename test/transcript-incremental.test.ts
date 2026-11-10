@@ -38,7 +38,7 @@ import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
 import { todayInfo, todayNow } from "./helpers/today";
 import { until } from "./helpers/until";
-import { usageFold } from "./helpers/usage-info";
+import { usageFold } from "./helpers/usage-fold";
 
 let seq = 0;
 // One newline-terminated usage line. Unique tags keep every entry distinct.
@@ -374,7 +374,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       for (const c of contents) {
         appendFileSync(incPath, c);
         touch(incPath);
-        incInfo = await usageFold(incStore, "INC", hook("INC", incPath));
+        incInfo = await usageFold(incStore, "INC", incPath);
       }
     } finally {
       incStore.close();
@@ -390,7 +390,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     });
     let freshInfo;
     try {
-      freshInfo = await usageFold(freshStore, "FULL", hook("FULL", fullPath));
+      freshInfo = await usageFold(freshStore, "FULL", fullPath);
     } finally {
       freshStore.close();
     }
@@ -430,21 +430,21 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       // Prior established.
       writeFileSync(t, l1);
       touch(t);
-      await usageFold(store, "R", hook("R", t));
+      await usageFold(store, "R", t);
 
       // Grow to mtime M1, fire A (sees M1) WITHOUT awaiting.
       appendFileSync(t, l2);
       touch(t);
-      const a = usageFold(store, "R", hook("R", t));
+      const a = usageFold(store, "R", t);
       // Grow again to mtime M2, fire B (sees M2) WITHOUT awaiting → different
       // flight keys, both racing off the same prior.
       appendFileSync(t, l3);
       touch(t);
-      const b = usageFold(store, "R", hook("R", t));
+      const b = usageFold(store, "R", t);
       await Promise.all([a, b]);
 
       // A settling read must reflect the whole file regardless of who won.
-      const finalInfo = await usageFold(store, "R", hook("R", t));
+      const finalInfo = await usageFold(store, "R", t);
       if (finalInfo.kind !== "ok") throw new Error("expected ok");
 
       const fullPath = join(dir, "Rfull.jsonl");
@@ -455,7 +455,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
         sweepIntervalMs: 0,
       });
       try {
-        const freshInfo = await usageFold(fresh, "Rf", hook("Rf", fullPath));
+        const freshInfo = await usageFold(fresh, "Rf", fullPath);
         if (freshInfo.kind !== "ok") throw new Error("expected ok");
         expect(finalInfo.value.calculatedCost).toBeCloseTo(
           freshInfo.value.calculatedCost!,
@@ -499,11 +499,11 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     try {
       writeFileSync(t, line(new Date(), 0.01, 100, 20));
       touch(t);
-      const older = usageFold(store, "N", hook("N", t));
+      const older = usageFold(store, "N", t);
       await heldCount(1);
       appendFileSync(t, line(new Date(), 0.02, 200, 40));
       touch(t);
-      const newer = usageFold(store, "N", hook("N", t));
+      const newer = usageFold(store, "N", t);
       await heldCount(2);
       held[0]!();
       await older;
@@ -549,13 +549,13 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       sweepIntervalMs: 0,
     });
     try {
-      const first = await usageFold(store, sid, hook(sid, mainPath));
+      const first = await usageFold(store, sid, mainPath);
       if (first.kind !== "ok") throw new Error("expected ok");
       expect(first.value.calculatedCost).toBeCloseTo(0.03, 5);
 
       // A warm re-read (mtime unchanged) must return the same total — the old
       // push-into-shared-array bug double-counted agents here.
-      const second = await usageFold(store, sid, hook(sid, mainPath));
+      const second = await usageFold(store, sid, mainPath);
       if (second.kind !== "ok") throw new Error("expected ok");
       expect(second.value.calculatedCost).toBeCloseTo(0.03, 5);
     } finally {
@@ -593,7 +593,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
         sweepIntervalMs: 0,
       });
       try {
-        const usage = await usageFold(store, "P", hook("P", t));
+        const usage = await usageFold(store, "P", t);
         const today = await todayInfo(
           store,
           new Holds(),
@@ -627,14 +627,14 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       sweepIntervalMs: 0,
     });
     try {
-      const before = await usageFold(store, "C", hook("C", t));
+      const before = await usageFold(store, "C", t);
       if (before.kind !== "ok") throw new Error("expected ok");
       expect(before.value.calculatedCost).toBeCloseTo(0.06, 5);
 
       // /compact: fewer, different entries; file shrinks below the cursor.
       writeFileSync(t, line(new Date(), 0.005));
       touch(t);
-      const after = await usageFold(store, "C", hook("C", t));
+      const after = await usageFold(store, "C", t);
       if (after.kind !== "ok") throw new Error("expected ok");
       expect(after.value.calculatedCost).toBeCloseTo(0.005, 5);
     } finally {

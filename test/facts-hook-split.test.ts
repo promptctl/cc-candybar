@@ -101,23 +101,24 @@ function hookAt(path: string, n: number): ClaudeHookData {
 }
 
 let dir: string;
-let usageStore: SessionUsageStore;
+const stores: SessionUsageStore[] = [];
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "ccb-hook-split-"));
-  usageStore = new SessionUsageStore({
+});
+afterEach(() => {
+  for (const store of stores.splice(0)) store.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// A request under `hookData` over owners of its own, so what one hook's
+// refresh stores cannot reach the other's document.
+function inputsOf(hookData: ClaudeHookData): PayloadInputs {
+  const usageStore = new SessionUsageStore({
     clock: systemTimekeeper,
     host: HOST,
     sweepIntervalMs: 0,
   });
-});
-afterEach(() => {
-  usageStore.close();
-  rmSync(dir, { recursive: true, force: true });
-});
-
-test("two hooks that differ only in their instantaneous fields read one document and compose two payloads", async () => {
-  const path = join(dir, "t.jsonl");
-  transcript(path);
+  stores.push(usageStore);
   const deps = {
     ...absentOwners(),
     usageStore,
@@ -126,21 +127,29 @@ test("two hooks that differ only in their instantaneous fields read one document
     lanes: () => settledLanes(ABSENT, []),
     log: () => {},
   } as unknown as RenderPayloadDeps;
-  const inputsOf = (hookData: ClaudeHookData): PayloadInputs => ({
-    hookData,
-    deps,
-    cwd: "/tmp",
-    hints: {},
-  });
+  return { hookData, deps, cwd: "/tmp", hints: {} };
+}
+
+test("two hooks that differ only in their instantaneous fields read one document and compose two payloads", async () => {
+  const path = join(dir, "t.jsonl");
+  transcript(path);
   const one = inputsOf(hookAt(path, 1));
   const two = inputsOf(hookAt(path, 2));
-  await refreshPayload(one, AT, new Map());
-  await refreshPayload(two, AT, new Map());
 
-  const documentOf = (inputs: PayloadInputs) =>
-    assembleFacts(undefined, SID, readingsOf(inputs), pendingOf("unread"), AT);
-  const document = documentOf(one);
-  expect(documentOf(two)).toEqual(document);
+  // Each document is its own hook's refresh and read, so a hook value either
+  // one stored would show as a difference.
+  const documentOf = async (inputs: PayloadInputs) => {
+    await refreshPayload(inputs, AT, new Map());
+    return assembleFacts(
+      undefined,
+      SID,
+      readingsOf(inputs),
+      pendingOf("unread"),
+      AT,
+    );
+  };
+  const document = await documentOf(one);
+  expect(await documentOf(two)).toEqual(document);
   // The folds answered: a document of pending facts would be equal too.
   expect(document.builtins.session).toMatchObject({ kind: "ok" });
   expect(document.builtins.context).toMatchObject({ kind: "ok" });
@@ -149,7 +158,11 @@ test("two hooks that differ only in their instantaneous fields read one document
   const payloadOf = (inputs: PayloadInputs) =>
     composePayload(
       document,
-      { hookData: inputs.hookData, hints: inputs.hints, home: deps.home },
+      {
+        hookData: inputs.hookData,
+        hints: inputs.hints,
+        home: inputs.deps.home,
+      },
       DRAW,
     );
   const first = payloadOf(one);

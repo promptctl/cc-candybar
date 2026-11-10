@@ -2,12 +2,11 @@
 // them.
 
 import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-store";
-import type { ClaudeHookData } from "../../src/utils/claude";
 
 export function usageFold(
   store: SessionUsageStore,
   sessionId: string,
-  hookData: ClaudeHookData,
+  transcriptPath: string | undefined,
 ) {
-  return store.request(sessionId, hookData.transcript_path).usage();
+  return store.request(sessionId, transcriptPath).usage();
 }

@@ -40,7 +40,7 @@ import { ABSENT, pendingOf, failed } from "../src/utils/outcome";
 import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
 import { until } from "./helpers/until";
 import { todayInfo, todayNow } from "./helpers/today";
-import { usageFold } from "./helpers/usage-info";
+import { usageFold } from "./helpers/usage-fold";
 
 // Count cumulative FSREQPROMISE inits (libuv fs requests) over `body`.
 async function countFsOps(body: () => Promise<unknown>): Promise<number> {
@@ -116,15 +116,15 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       const hd = hook("A", t);
-      await usageFold(store, "A", hd);
+      await usageFold(store, "A", hd.transcript_path);
       expect(store.getStats()).toMatchObject({ misses: 1, hits: 0 });
 
-      await usageFold(store, "A", hd);
+      await usageFold(store, "A", hd.transcript_path);
       expect(store.getStats()).toMatchObject({ misses: 1, hits: 1 });
 
       const future = Math.floor(Date.now() / 1000) + 3600;
       utimesSync(t, future, future);
-      await usageFold(store, "A", hd);
+      await usageFold(store, "A", hd.transcript_path);
       expect(store.getStats()).toMatchObject({ misses: 2, hits: 1 });
     } finally {
       store.close();
@@ -151,7 +151,7 @@ describe("SessionUsageStore — session projection", () => {
       writeFileSync(t, usageLine("a", new Date(), 0.01));
       const hd = hook("A", t);
       await Promise.all([
-        usageFold(store, "A", hd),
+        usageFold(store, "A", hd.transcript_path),
         store.observeSpeed("A", t, Date.now()),
       ]);
       expect(usage()).toMatchObject({ refreshes: { request: 1 }, failures: 0 });
@@ -161,7 +161,7 @@ describe("SessionUsageStore — session projection", () => {
       mkdirSync(broken);
       const hb = hook("B", broken);
       await Promise.all([
-        usageFold(store, "B", hb),
+        usageFold(store, "B", hb.transcript_path),
         store.observeSpeed("B", broken, Date.now()),
       ]);
       expect(usage()).toMatchObject({ refreshes: { request: 2 }, failures: 1 });
@@ -199,7 +199,7 @@ describe("SessionUsageStore — session projection", () => {
       sweepIntervalMs: 0,
     });
     try {
-      const info = await usageFold(store, "A", hook("A", t));
+      const info = await usageFold(store, "A", t);
       expect(info).toMatchObject({
         kind: "ok",
         value: { calculatedCost: expect.closeTo(0.03, 5), tokens: 30 },
@@ -217,7 +217,7 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       const bare = { session_id: "" } as ClaudeHookData;
-      const info = await usageFold(store, "", bare);
+      const info = await usageFold(store, "", bare.transcript_path);
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
       expect(info.value.calculatedCost).toBeNull();
@@ -271,7 +271,7 @@ describe("SessionUsageStore — session projection", () => {
       logger: (_level, msg) => lines.push(msg),
     });
     try {
-      const info = await usageFold(store, "W", hook("W", t));
+      const info = await usageFold(store, "W", t);
       if (info.kind !== "ok") throw new Error("expected ok");
       expect(info.value.calculatedCost).toBeCloseTo(
         1500 * 0.001 + 0.5 + 0.25,
@@ -302,7 +302,7 @@ describe("SessionUsageStore — session projection", () => {
       logger: (_level, msg) => lines.push(msg),
     });
     try {
-      await usageFold(store, "A", hook("A", t));
+      await usageFold(store, "A", t);
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(1);
       expect(store.getStats()).toMatchObject({ sweeps: 1, size: 0 });
@@ -351,7 +351,7 @@ describe("SessionUsageStore — session projection", () => {
       staleAgeMs: 1,
     });
     try {
-      await usageFold(store, "A", hook("A", t));
+      await usageFold(store, "A", t);
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(0);
       expect(store.getStats()).toMatchObject({ size: 1 });
@@ -409,14 +409,12 @@ describe("SessionUsageStore — session projection", () => {
       staleAgeMs: 300,
     });
     try {
-      await usageFold(store, "A", hook("A", a));
-      await usageFold(store, "B", hook("B", b));
+      await usageFold(store, "A", a);
+      await usageFold(store, "B", b);
       now += 400;
-      await usageFold(store, "B", { session_id: "B" } as ClaudeHookData);
+      await usageFold(store, "B", undefined);
       expect(store.sweepStale()).toBe(1);
-      const info = await usageFold(store, "B", {
-        session_id: "B",
-      } as ClaudeHookData);
+      const info = await usageFold(store, "B", undefined);
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
       expect(info.value.calculatedCost).toBeCloseTo(0.01, 5);
@@ -438,13 +436,13 @@ describe("SessionUsageStore — session projection", () => {
     try {
       const bare = { session_id: "H" } as ClaudeHookData;
       expect(store.usageOf("H")).toEqual(pendingOf("unread"));
-      const answered = await usageFold(store, "H", bare);
+      const answered = await usageFold(store, "H", bare.transcript_path);
       expect(answered.kind).toBe("ok");
       expect(store.usageOf("H")).toEqual(answered);
       // The session-less ask stores nothing.
       expect(await store.observeSpeed("", undefined, 1_000)).toEqual(ABSENT);
       expect(store.getStats()).toMatchObject({ size: 1 });
-      const failed = await usageFold(store, "G", hook("G", dir));
+      const failed = await usageFold(store, "G", dir);
       expect(failed.kind).toBe("failed");
       // A draw between requests reads the failure the last refresh met.
       expect(store.usageOf("G")).toEqual(failed);
@@ -467,13 +465,13 @@ describe("SessionUsageStore — session projection", () => {
     try {
       const elsewhere = ["/not/this/dir/"];
       expect(store.daysOutside("A", elsewhere)).toEqual(ABSENT);
-      await usageFold(store, "A", hook("A", t));
+      await usageFold(store, "A", t);
       const own = store.daysOutside("A", elsewhere);
       expect(Object.keys(own.kind === "ok" ? own.value : {})).toHaveLength(1);
       // Under the set's roots the days are in its sums already.
       expect(store.daysOutside("A", [dir])).toEqual(ABSENT);
       // A directory is no transcript: the refresh fails, and so does the read.
-      await usageFold(store, "G", hook("G", dir));
+      await usageFold(store, "G", dir);
       expect(store.daysOutside("G", elsewhere).kind).toBe("failed");
       expect(store.daysOutside("G", [dir]).kind).toBe("failed");
     } finally {
@@ -492,7 +490,7 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       // The session's own refresh has landed, but no scan has.
-      await usageFold(store, "A", hook("A", t));
+      await usageFold(store, "A", t);
       expect(todayNow(store, holds, hook("A", t), dir, instantOf(at))).toBe(
         pendingOf("unread"),
       );
@@ -522,7 +520,9 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       const hd = hook("A", t);
-      const oneParse = await countFsOps(() => usageFold(store, "A", hd));
+      const oneParse = await countFsOps(() =>
+        usageFold(store, "A", hd.transcript_path),
+      );
 
       // Fresh store: K concurrent first-reads coalesce onto
       // one flight, so cumulative fs ops stay near a single parse, not K×.
@@ -533,7 +533,9 @@ describe("SessionUsageStore — session projection", () => {
       });
       const kConcurrent = await countFsOps(() =>
         Promise.all(
-          Array.from({ length: 8 }, () => usageFold(store2, "A", hd)),
+          Array.from({ length: 8 }, () =>
+            usageFold(store2, "A", hd.transcript_path),
+          ),
         ),
       );
       store2.close();
@@ -641,7 +643,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       // `today` itself still counts there, and only there.
       const late = join(odir, "other-late.jsonl");
       writeFileSync(late, usageLine("other-late", new Date(), 3));
-      await usageFold(store, "other-late", hook("other-late", late));
+      await usageFold(store, "other-late", late);
       const joined = await todayInfo(
         store,
         holds,
