@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-705",
+      "ref": "refs/pull/705/merge",
+      "sha": "bd318c2db5f86527fb7bf6c07371e9534f7b9d6a",
+      "timestamp": "2026-11-10T01:02:56.485Z",
+      "commits": [
+        {
+          "sha": "bd318c2db5f86527fb7bf6c07371e9534f7b9d6a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T18:01:58-07:00",
+          "message": "Merge 5730d3f934ce0d6412a1fc83ef5a0d4c1c617fa3 into cdb0ca4d72af9f51f1fb1d4e0d37def3a225e1af\n"
+        },
+        {
+          "sha": "5730d3f934ce0d6412a1fc83ef5a0d4c1c617fa3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T18:01:34-07:00",
+          "message": "test(daemon): the load gate's structural checks are cases at their pieces (candybar-testing-ihvy.u05)\n\nEach behaviour the removed load gate checked besides load is one event\nchecked once at the piece that owns it, with no daemon and no timed run:\n\n- Drawing: a few sessions from three directories draw again, and the\n  render cache's entries, compiles, views and watches hold, none retired.\n- Sources: the same renders open and close no watcher.\n- Actions over Sessions: a second walk through a session's menu keeps no\n  observer of the session state.\n- Requests: a handler that throws is answered RENDER_FAILED, the daemon\n  neither exits nor keeps it in flight, and the next request is served.\n\nFeed pace and session writes (stage, branch switch, turn) were already\nproven in process, by frame-feed, daemon-git-cache and\ndaemon-session-usage-store; the plan's table names where each check lives.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "cdb0ca4d72af9f51f1fb1d4e0d37def3a225e1af",
