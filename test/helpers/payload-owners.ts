@@ -324,7 +324,8 @@ export function absentOwners() {
 // (brandon-unfiled-3248.8ro6, 4a), the request's refresh and wait
 // (settlePayload), then the view's payload as it stands (payloadOf) with the
 // draw's own projections beside it — `today` at `at`, no feeds. The failures
-// it projected are logged as the daemon's request logs them.
+// it projected are logged as the daemon's request logs them. The home lives
+// for this one request, where the daemon's view keeps it across requests.
 export async function requestPayload(
   hookData: ClaudeHookData,
   at: Instant,
@@ -374,12 +375,18 @@ function openHome(
   facts: Parameters<typeof declareLanes>[2],
 ): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
   const holds = new HoldsClass();
-  const { lanes } = declareLanes(
+  const { lanes, faults } = declareLanes(
     owners as KeyedOwners,
     holds,
     facts,
     new Map(),
   );
+  // [LAW:no-silent-failure] An owner whose declaration throws is a broken
+  // fixture, failed here with its stack, as the daemon logs it as an error.
+  if (faults.length > 0) {
+    holds.close();
+    throw new Error(`a lane's declaration threw:\n${faults.join("\n")}`);
+  }
   return {
     lanes: () => lanes,
     [Symbol.dispose]: () => void holds.close(),
@@ -395,6 +402,6 @@ export function declaredLanes(
   cleanups: Array<() => void>,
 ): () => ReturnType<typeof declareLanes>["lanes"] {
   const home = openHome(owners, facts);
-  cleanups.push(() => home[Symbol.dispose]());
+  cleanups.push(home[Symbol.dispose]);
   return home.lanes;
 }
