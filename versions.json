@@ -4,15 +4,22 @@
     {
       "version": "pr-705",
       "ref": "refs/pull/705/merge",
-      "sha": "5e39d0a0633e6ec3d3b57cd003c6a84adb790af2",
-      "timestamp": "2026-11-10T01:15:15.126Z",
+      "sha": "21241298647987fe43fabd5558ff1eb5baeac359",
+      "timestamp": "2026-11-10T01:19:37.179Z",
       "commits": [
         {
-          "sha": "5e39d0a0633e6ec3d3b57cd003c6a84adb790af2",
+          "sha": "21241298647987fe43fabd5558ff1eb5baeac359",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T01:14:10Z",
-          "message": "Merge 78b5fd30fb061cdbddc83466fc9f53589394d240 into cdb0ca4d72af9f51f1fb1d4e0d37def3a225e1af\n"
+          "timestamp": "2026-11-10T01:18:37Z",
+          "message": "Merge c0975aff186cdad752d8bb54570a6bf42b84a4bd into cdb0ca4d72af9f51f1fb1d4e0d37def3a225e1af\n"
+        },
+        {
+          "sha": "c0975aff186cdad752d8bb54570a6bf42b84a4bd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T18:18:26-07:00",
+          "message": "test(daemon): each steady round ends its turn, so what a render deferred runs before the next (candybar-testing-ihvy.u05)\n\nThe rounds ran back to back in one turn, so a rebuild a render deferred to a\nlater turn ran after the case had read its counts and log. Each round now\nyields, as statusline ticks arrive on separate turns; a view retired on a\ndeferred turn passes without the yield and fails with it.\n\nThe plan's ticket 42 table says its Tier is the layer each check joins: every\nfile it names runs in the worker tier today.\n"
         },
         {
           "sha": "78b5fd30fb061cdbddc83466fc9f53589394d240",
