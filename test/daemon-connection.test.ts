@@ -356,12 +356,10 @@ describe("a connection over a stream", () => {
   // more: the daemon neither exits nor keeps it in flight, and the next
   // connection is served as if nothing had failed.
   test("a handler that throws is answered RENDER_FAILED, and the next request is served", async () => {
-    let calls = 0;
     const daemon = standIn({
-      handle: async () => {
-        if (calls++ === 0) throw new Error("the handler broke");
-        return replyWith();
-      },
+      handle: jest
+        .fn(async () => replyWith())
+        .mockRejectedValueOnce(new Error("the handler broke")),
     });
     const failed = open(daemon);
     failed.send(STATS);

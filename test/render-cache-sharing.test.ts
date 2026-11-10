@@ -576,12 +576,14 @@ const MENU_WALK = [
 describe("a steady stream of renders", () => {
   const DIRS = ["a", "b", "c"];
   const SESSIONS_PER_DIR = 2;
+  beforeEach(() => {
+    for (const d of DIRS) fs.mkdirSync(path.join(dir, d));
+  });
 
   // Every session draws once from its directory, as each statusline tick does.
   const round = (cache: RenderCache): void => {
     for (const d of DIRS) {
       const cwd = path.join(dir, d);
-      fs.mkdirSync(cwd, { recursive: true });
       for (let s = 0; s < SESSIONS_PER_DIR; s++) {
         using held = cache.holdSession(
           cwd,
@@ -594,30 +596,28 @@ describe("a steady stream of renders", () => {
     }
   };
 
-  test("holds flat counts: no entry, compile, view or watch is added or retired", () => {
-    const { cache, watchers } = makeCache(64 * COMPILE_BYTES);
+  // The cache logs every entry it builds and every view it opens or closes, so
+  // a rebuild on every render, disposed as soon as it is replaced, holds the
+  // counts flat and still shows here as a line.
+  test("builds and retires nothing: the counts hold and nothing is logged", () => {
+    const { cache, lines, watchers } = makeCache(64 * COMPILE_BYTES);
     const held = () => {
-      const { size, compiles, views, retired, retiredViews } = cache.stats;
-      return {
-        size,
-        compiles,
-        views,
-        retired,
-        retiredViews,
-        watches: watchers.size(),
-      };
+      const { size, compiles, views } = cache.stats;
+      return { size, compiles, views, watches: watchers.size() };
     };
     round(cache);
     const first = held();
     expect(first).toMatchObject({
       size: DIRS.length,
       views: DIRS.length * SESSIONS_PER_DIR,
-      retired: 0,
-      retiredViews: 0,
     });
+    const logged = lines.length;
     round(cache);
     round(cache);
-    expect(held()).toEqual(first);
+    expect({ held: held(), logged: lines.slice(logged) }).toEqual({
+      held: first,
+      logged: [],
+    });
   });
 
   test("opens and closes no watcher", () => {
@@ -634,22 +634,33 @@ describe("a steady stream of renders", () => {
 
   // A view keeps the parts of every placement it has drawn (src/dsl/parts.ts),
   // so a session's observers rise the first time its menu draws each list and
-  // tab. What a click must not do is keep any of its own: a second walk over
-  // what the view has drawn leaves the count where the first left it.
+  // tab. A click keeps none of its own: a second walk over what the view has
+  // drawn leaves the count where the first left it, and once the cache closes
+  // its views nothing observes the session state at all.
   test("a session's clicks through its menu keep no observer of the session state", async () => {
     const { cache, sessionState } = makeCache(64 * COMPILE_BYTES);
-    round(cache);
     const cwd = path.join(dir, DIRS[0]!);
-    using held = cache.holdSession(
-      cwd,
-      cwd,
-      undefined,
-      viewFacts(cwd, `${DIRS[0]}0`),
-    );
-    await walkMenu(held.view, sessionState, held.state.config);
-    const walked = sessionState.observers();
-    expect(walked).toBeGreaterThan(0);
-    await walkMenu(held.view, sessionState, held.state.config);
-    expect(sessionState.observers()).toBe(walked);
+    const walks = async () => {
+      using held = cache.holdSession(
+        cwd,
+        cwd,
+        undefined,
+        viewFacts(cwd, `${DIRS[0]}0`),
+      );
+      drawn(held.view);
+      const bar = sessionState.observers();
+      await walkMenu(held.view, sessionState, held.state.config);
+      const walked = sessionState.observers();
+      await walkMenu(held.view, sessionState, held.state.config);
+      return { bar, walked, again: sessionState.observers() };
+    };
+    const { bar, walked, again } = await walks();
+    // The walk drew lists and tabs the bar alone does not, so its clicks landed.
+    expect(walked).toBeGreaterThan(bar);
+    cache.close();
+    expect({ again, released: sessionState.observers() }).toEqual({
+      again: walked,
+      released: 0,
+    });
   });
 });
