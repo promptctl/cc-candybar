@@ -125,7 +125,7 @@ interface SessionFacts {
   readonly session: SessionId;
   readonly seq: number;                     // per session, monotonic, Gather's
   readonly builtins: {
-    readonly session: Fact<TranscriptUsage>; // the transcript's priced totals and tokens
+    readonly session: Fact<UsageFacts>;     // the transcript's priced totals and tokens
     readonly today: Fact<DaySums>;          // the day Gather is in; the renderer re-cuts at its instant
     readonly speed: Fact<Speed>;
     readonly context: Fact<ContextFacts>;
