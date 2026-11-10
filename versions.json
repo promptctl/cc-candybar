@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-710",
+      "ref": "refs/pull/710/merge",
+      "sha": "c803fc54befff19f1e791a9fd4bf6f63690a47fa",
+      "timestamp": "2026-11-10T16:45:46.702Z",
+      "commits": [
+        {
+          "sha": "c803fc54befff19f1e791a9fd4bf6f63690a47fa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T16:43:09Z",
+          "message": "Merge 743d022036f543aa5ef05da57d103d207b4e2bcb into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "743d022036f543aa5ef05da57d103d207b4e2bcb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T09:42:44-07:00",
+          "message": "docs(design): goals record Brandon's intent with reasons, not his words, and the spec cites them by ID (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "8d70e4f241955c0a5da4c150d3a65f9bfb394992",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T09:36:42-07:00",
+          "message": "docs(design): Proposal 3, one host owns the world and renderers answer it, with its intent stated to be falsified (candybar-gather-renderer-76bb.215)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-709",
       "ref": "refs/pull/709/merge",
       "sha": "328ef3b6634ae493f42db3d616becd44fce4aae5",
