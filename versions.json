@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-686",
+      "ref": "refs/pull/686/merge",
+      "sha": "8b1dbfbdaf07a30cf4da783c9254228959d8e6ca",
+      "timestamp": "2026-11-10T00:19:43.692Z",
+      "commits": [
+        {
+          "sha": "8b1dbfbdaf07a30cf4da783c9254228959d8e6ca",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T00:18:43Z",
+          "message": "Merge 9ef8ad94c81d8b6d2c042101b82d43043ec72390 into ab338bef54c2615eb740f9e487dad793f8003ce3\n"
+        },
+        {
+          "sha": "9ef8ad94c81d8b6d2c042101b82d43043ec72390",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-07T03:41:45-07:00",
+          "message": "fix(diagnostics): a list with nothing wrong in it draws ℹ N in blue, not an amber ⚠ (brandon-unfiled-3248.gm3h)\n\nA third diagnostic level, info, carried in one level table (rank, the\nindicator's glyph, the colours). An update offer, a repository question and\nthe lane handoff line are info. The indicator wears the list's worst level\nand the list runs worst first, so its click opens a message of that level.\nA failed update act is a plain warning of its own beside the offer, so the\nfailure still raises an amber ⚠ while the offer keeps its identity.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ab338bef54c2615eb740f9e487dad793f8003ce3",
@@ -13,28 +35,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-10T00:01:23Z",
           "message": "chore(release): set `package.json` to 1.213.1\n\n## [1.213.1](https://github.com/promptctl/cc-candybar/compare/v1.213.0...v1.213.1) (2026-11-10)\n\n### Bug Fixes\n\n* **cache:** a catch-up reloads one entry per turn, so requests are answered between entries (candybar-animation-wbxz.v24) ([#677](https://github.com/promptctl/cc-candybar/issues/677)) ([9157075](https://github.com/promptctl/cc-candybar/commit/91570759512cb4bb0f6e21ccce8ec95db2011176))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-686",
-      "ref": "refs/pull/686/merge",
-      "sha": "1d67aebaa7c871ad8223db0a724d4aba63cab16e",
-      "timestamp": "2026-11-07T10:43:58.687Z",
-      "commits": [
-        {
-          "sha": "1d67aebaa7c871ad8223db0a724d4aba63cab16e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:42:13-07:00",
-          "message": "Merge bf4ad4adfc43dd0e12b91073eceba120fe8f2b5a into 2a63ae55593d80d6590080431d83cf19e539622e\n"
-        },
-        {
-          "sha": "bf4ad4adfc43dd0e12b91073eceba120fe8f2b5a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:41:45-07:00",
-          "message": "fix(diagnostics): a list with nothing wrong in it draws ℹ N in blue, not an amber ⚠ (brandon-unfiled-3248.gm3h)\n\nA third diagnostic level, info, carried in one level table (rank, the\nindicator's glyph, the colours). An update offer, a repository question and\nthe lane handoff line are info. The indicator wears the list's worst level\nand the list runs worst first, so its click opens a message of that level.\nA failed update act is a plain warning of its own beside the offer, so the\nfailure still raises an amber ⚠ while the offer keeps its identity.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     }
