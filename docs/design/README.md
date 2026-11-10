@@ -5,6 +5,7 @@ The Frame is built. The rest is design. Each area says where it stands.
 | Read | For |
 |---|---|
 | [goals.md](goals.md) | Brandon's goals, constraints and rulings, verbatim. Everything answers to this |
+| [host-and-renderer.md](host-and-renderer.md) | Proposal 3, a draft under review: one host owns the world and calls renderers that answer it. Its intent table is what a review checks it against |
 | [architecture.md](architecture.md) | Gather, renderers, and how they fit |
 | [contracts.md](contracts.md) | Every shape that crosses between parts |
 

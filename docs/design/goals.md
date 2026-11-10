@@ -109,3 +109,15 @@ On browsers:
 On a floating window, for the record:
 
 > For the record i love that idea and if it could be attached to the iterm2 window it would be perfect.  i will def use it for something at some point
+
+On the world boundary, from his question:
+
+> Why does gather never see an event or click handler?  Isn't Cather supposed to be the single source of truth for inputs, side effects?
+
+> A renderer can't 'send a message' to gather.  that completely violates one way data flow.  who came up with the idea of the renderer being the owner of side effecting click handlers anyway?  that seems kinda dumb
+
+On how designs are checked:
+
+> Lets take lessons from real world software.  How do the pros do this?  How does Apple?
+
+> Id like you to include the intent in the spec, so we have something we can review and falsify later.
