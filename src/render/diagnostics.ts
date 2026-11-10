@@ -67,13 +67,14 @@ export interface DiagnosticSeverity {
   readonly level: DiagnosticLevel;
   readonly glyph: string;
 }
+// A plain error or warning leads with its level's own glyph.
 export const ERROR_SEVERITY: DiagnosticSeverity = {
   level: "error",
-  glyph: "⚠",
+  glyph: DIAGNOSTIC_LEVELS.error.glyph,
 };
 export const WARNING_SEVERITY: DiagnosticSeverity = {
   level: "warning",
-  glyph: "⚠",
+  glyph: DIAGNOSTIC_LEVELS.warning.glyph,
 };
 // An update notice: nothing is wrong and the bar runs. It is an offer with
 // three answers, not an alarm, and its glyph says so.
@@ -138,8 +139,13 @@ export interface DiagnosticMessage {
 export type ChannelMessage = Pick<DiagnosticMessage, "severity" | "lines">;
 
 // [LAW:types-are-the-program] Every message one draw owes its reader, in the
-// order the viewer pages them. Empty is "nothing to show".
-export type DiagnosticList = readonly DiagnosticMessage[];
+// order the viewer pages them: worst level first, stamped so by its one
+// constructor, so the first message is of the level the list counts as.
+// Empty is "nothing to show".
+declare const worstFirst: unique symbol;
+export type DiagnosticList = readonly DiagnosticMessage[] & {
+  readonly [worstFirst]: true;
+};
 
 // A message's text and what it is about (see DiagnosticMessage).
 export interface SourcedText {
@@ -184,22 +190,25 @@ export function collectDiagnostics(
   // A message's key depends on the whole list (which occurrence it is), so
   // its first line's click is minted once the list stands.
   const keys = copyKeys(list);
-  return list.map((m, i) =>
-    plain.has(m)
-      ? {
-          ...m,
-          lines: [
-            [
-              diagnosticSpan(
-                m.lines[0][0].text,
-                copyLink(sessionId, by, keys[i]!, i + 1),
-              ),
+  const minted: readonly DiagnosticMessage[] = list.map(
+    (m, i): DiagnosticMessage =>
+      plain.has(m)
+        ? {
+            ...m,
+            lines: [
+              [
+                diagnosticSpan(
+                  m.lines[0][0].text,
+                  copyLink(sessionId, by, keys[i]!, i + 1),
+                ),
+              ],
+              ...m.lines.slice(1),
             ],
-            ...m.lines.slice(1),
-          ],
-        }
-      : m,
+          }
+        : m,
   );
+  // [LAW:parse-dont-validate] The stamp: the list was just sorted worst first.
+  return minted as DiagnosticList;
 }
 
 // A plain message: every visible line one span with no click (its first
@@ -221,7 +230,9 @@ function plainMessage(
 
 // [LAW:one-source-of-truth] The key a copy click names each message by: the
 // key the viewer opens it at, so one identity names a message for both.
-export function copyKeys(list: DiagnosticList): readonly string[] {
+export function copyKeys(
+  list: readonly DiagnosticMessage[],
+): readonly string[] {
   return stopsOf(list).map((stop) => String(stop * PAGES + 1));
 }
 
@@ -243,15 +254,10 @@ function copyLink(
 const rankOf = (message: DiagnosticMessage): number =>
   DIAGNOSTIC_LEVELS[message.severity.level].rank;
 
-// The level the list counts as: the worst of its members, none when empty.
+// The level the list counts as: its first message's, the worst, since the
+// list runs worst first; none when empty.
 export function worstLevel(list: DiagnosticList): DiagnosticLevel | null {
-  return list.reduce<DiagnosticLevel | null>(
-    (worst, m) =>
-      worst === null || rankOf(m) < DIAGNOSTIC_LEVELS[worst].rank
-        ? m.severity.level
-        : worst,
-    null,
-  );
+  return list[0]?.severity.level ?? null;
 }
 
 // [LAW:one-source-of-truth] Which message the viewer shows is stored as the
@@ -279,7 +285,7 @@ function identityOf(message: DiagnosticMessage): number {
 }
 
 // Each message's identity and the occurrence of it, in list order.
-function stopsOf(list: DiagnosticList): readonly number[] {
+function stopsOf(list: readonly DiagnosticMessage[]): readonly number[] {
   const seen = new Map<number, number>();
   return list.map((m) => {
     const id = identityOf(m);

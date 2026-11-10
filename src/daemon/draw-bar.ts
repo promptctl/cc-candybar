@@ -757,7 +757,12 @@ export function drawRender(
         return w.kind;
     }
   };
-  const warned = [...standing, ...drawnWarnings].map(tagOf).join(",") || "-";
+  // A failed update act is a warning of its own, so it is tagged here too.
+  const warned =
+    [
+      ...updates.failure.map(() => "update-failed"),
+      ...[...standing, ...drawnWarnings].map(tagOf),
+    ].join(",") || "-";
   noteFacts(facts, {
     git: `${g.size}/${g.hits}h/${g.misses}m`,
     usage: `${u.size}/${u.hits}h/${u.misses}m`,

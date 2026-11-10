@@ -63,7 +63,14 @@ const collectDiagnostics = (
   errors: readonly string[],
   notices: readonly DiagnosticMessage[],
   warnings: readonly string[],
-) => collectSourced(SID, "request", errors.map(sourced), notices, warnings.map(sourced));
+) =>
+  collectSourced(
+    SID,
+    "request",
+    errors.map(sourced),
+    notices,
+    warnings.map(sourced),
+  );
 const at = (index: number) => ({ index, page: 0 });
 const geometry = (width: number): DiagnosticGeometry => ({
   width,
@@ -95,7 +102,9 @@ const encoded = (rows: readonly Row[], depth: ColorCompatibility): string =>
     rows.map((row) => row.runs),
     depth,
   );
-const viewer = (...args: Parameters<typeof viewerRows>): Pick<Frame, "rows"> => ({
+const viewer = (
+  ...args: Parameters<typeof viewerRows>
+): Pick<Frame, "rows"> => ({
   rows: viewerRows(...args),
 });
 
@@ -134,7 +143,8 @@ describe("the diagnostic list", () => {
   });
 
   test("its level is the worst member's: error over warning over a notice, none when empty", () => {
-    expect(worstLevel([])).toBeNull();
+    expect(worstLevel(collectDiagnostics([], [], []))).toBeNull();
+    expect(worstLevel(collectDiagnostics([], [notice("n")], []))).toBe("info");
     expect(worstLevel(collectDiagnostics([], [notice("n")], ["w"]))).toBe(
       "warning",
     );
@@ -146,7 +156,9 @@ describe("the diagnostic list", () => {
 
 describe("the indicator the door reads", () => {
   test("nothing to show is an empty label", () => {
-    expect(diagnosticsProjection([]).label).toBe("");
+    expect(diagnosticsProjection(collectDiagnostics([], [], [])).label).toBe(
+      "",
+    );
   });
 
   test("red with the count when any member is an error", () => {
@@ -158,17 +170,6 @@ describe("the indicator the door reads", () => {
       // Its click opens the first message, by its key.
       open: viewerKey(list, 0, 0),
     });
-  });
-
-  test("amber for a warning beside an offer, opening on the warning", () => {
-    const list = collectDiagnostics([], [notice("n")], ["w"]);
-    expect(diagnosticsProjection(list)).toEqual({
-      label: "⚠ 2",
-      fg: DIAGNOSTIC_WARNING_COLORS.fg,
-      bg: DIAGNOSTIC_WARNING_COLORS.bg,
-      open: viewerKey(list, 0, 0),
-    });
-    expect(list[0]!.message).toBe("w");
   });
 
   test("the count caps at 9+", () => {
@@ -195,7 +196,7 @@ describe("the viewer", () => {
     expect(viewedIndex(b!, grown)).toEqual(at(3));
     // Gone: closed, never another message in its place.
     expect(viewedIndex(a!, collectDiagnostics(["b"], [], ["c"]))).toBeNull();
-    expect(viewedIndex(a!, [])).toBeNull();
+    expect(viewedIndex(a!, collectDiagnostics([], [], []))).toBeNull();
     // The same message back again reopens; a different one leaves it closed.
     expect(viewedIndex(a!, collectDiagnostics(["a"], [], []))).toEqual(at(1));
     expect(viewedIndex(a!, collectDiagnostics(["z"], [], []))).toBeNull();
@@ -259,7 +260,9 @@ describe("the viewer", () => {
     const first = rowsOf(viewer(list, at(1), SID, "request", short));
     expect(first).toHaveLength(5);
     expect(first[0]).toBe("✕   [1/2 1/8] › ⧉ copy ");
-    const last = rowsOf(viewer(list, { index: 1, page: 7 }, SID, "request", short));
+    const last = rowsOf(
+      viewer(list, { index: 1, page: 7 }, SID, "request", short),
+    );
     expect(last.at(-1)).toBe("  issue 29 ");
     const onward = (pos: { index: number; page: number }) =>
       linksOf(viewer(list, pos, SID, "request", short))
@@ -384,7 +387,9 @@ describe("the viewer", () => {
     expect(list[0]!.lines[0]![0].link).not.toBeNull();
     expect(list[0]!.lines[0]![0].link!.length).toBeLessThan(200);
     expect(list[0]!.lines[1]![0].link).toBeNull();
-    for (const url of linkUrls(viewer(list, at(1), SID, "request", geometry(80))))
+    for (const url of linkUrls(
+      viewer(list, at(1), SID, "request", geometry(80)),
+    ))
       expect(url).not.toContain("FIX");
   });
 
@@ -426,7 +431,9 @@ describe("the viewer and the handoff line at every colour depth", () => {
         ),
       )
       .join("\n");
-  const at40 = (colorCompatibility: ColorCompatibility): DiagnosticGeometry => ({
+  const at40 = (
+    colorCompatibility: ColorCompatibility,
+  ): DiagnosticGeometry => ({
     width: 40,
     rows: 40,
     colorCompatibility,

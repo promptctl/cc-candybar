@@ -13,7 +13,6 @@ import {
   HANDOFF_SEVERITY,
   UPDATE_SEVERITY,
   viewedIndex,
-  worstLevel,
   type DiagnosticMessage,
   type DiagnosticSeverity,
 } from "../../src/render/diagnostics";
@@ -35,7 +34,10 @@ const shaped = (
   copy: text,
   lines: [[diagnosticSpan(text, null)]],
 });
-const offer = shaped(UPDATE_SEVERITY, "Newer release: 1.210.0. You're on 1.209.0.");
+const offer = shaped(
+  UPDATE_SEVERITY,
+  "Newer release: 1.210.0. You're on 1.209.0.",
+);
 const question = shaped(APPROVAL_SEVERITY, "run this repository's config?");
 const list = (
   errors: readonly string[],
@@ -104,13 +106,6 @@ describe("a list that also holds something wrong reads as its worst level", () =
       offer.message,
     ]);
     expect(opened(shown)).toBe("an error");
-  });
-
-  test("worstLevel ranks error over warning over info, and none when empty", () => {
-    expect(worstLevel([])).toBeNull();
-    expect(worstLevel(list([], [offer, question], []))).toBe("info");
-    expect(worstLevel(list([], [offer], ["w"]))).toBe("warning");
-    expect(worstLevel(list(["e"], [offer], ["w"]))).toBe("error");
   });
 });
 

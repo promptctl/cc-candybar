@@ -169,10 +169,14 @@ export interface NoticeContext {
 // [LAW:no-silent-failure]. Folding the failure into the offer would change
 // the offer's level, and so its identity, closing a viewer open on it the
 // moment the failure lands.
-export interface UpdateNotice {
-  readonly offer: DiagnosticMessage[];
-  readonly failure: SourcedText[];
-}
+// [LAW:types-are-the-program] At most one of each, and no failure without its
+// offer: a failure with nothing to retry is unrepresentable.
+export type UpdateNotice =
+  | { readonly offer: readonly []; readonly failure: readonly [] }
+  | {
+      readonly offer: readonly [DiagnosticMessage];
+      readonly failure: readonly [] | readonly [SourcedText];
+    };
 const NO_NOTICE: UpdateNotice = { offer: [], failure: [] };
 
 // [LAW:dataflow-not-control-flow] One update becomes zero or one offer and
@@ -190,9 +194,14 @@ export function updateNotice(
   if (!ctx.enabled || ctx.dismissed === identity) return NO_NOTICE;
   const facts = factsOf(update);
   const sentence = `${facts.headline}: ${facts.newer}. You're on ${facts.running}.`;
-  const failure =
+  const failedText = (text: string): SourcedText => ({
+    about: `update-failed\0${identity}`,
+    text,
+    copy: text,
+  });
+  const failure: readonly [] | readonly [SourcedText] =
     act.kind === "failed" && act.identity === identity
-      ? [`${facts.act} failed: ${act.reason}`]
+      ? [failedText(`${facts.act} failed: ${act.reason}`)]
       : [];
   // The sentence is plain text (the viewer's ⧉ copies it); the affordances
   // each carry their own effect.
@@ -239,11 +248,7 @@ export function updateNotice(
         lines: [first],
       },
     ],
-    failure: failure.map((text) => ({
-      about: `update-failed\0${identity}`,
-      text,
-      copy: text,
-    })),
+    failure,
   };
 }
 
