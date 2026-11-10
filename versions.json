@@ -4,15 +4,22 @@
     {
       "version": "pr-706",
       "ref": "refs/pull/706/merge",
-      "sha": "e55f24dd558b5cf6c4dd19ddcf78356ce683ca5a",
-      "timestamp": "2026-11-10T03:46:42.269Z",
+      "sha": "eb44ae8a989408af9417dd4398888a8f18ad4acb",
+      "timestamp": "2026-11-10T03:49:47.079Z",
       "commits": [
         {
-          "sha": "e55f24dd558b5cf6c4dd19ddcf78356ce683ca5a",
+          "sha": "eb44ae8a989408af9417dd4398888a8f18ad4acb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T20:45:40-07:00",
-          "message": "Merge 1e5de0e8a1cc286a569eaa508b1b6396df27468e into 2353a70b777601e41f45fd7367e2cd1ba6055901\n"
+          "timestamp": "2026-11-10T03:48:47Z",
+          "message": "Merge 3ab8037a410ee56d5bb4612e804aeb30118509eb into 2353a70b777601e41f45fd7367e2cd1ba6055901\n"
+        },
+        {
+          "sha": "3ab8037a410ee56d5bb4612e804aeb30118509eb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T20:48:35-07:00",
+          "message": "docs(design): no memory backstop or budget ticket outlives the deleted ceilings (candybar-skeleton-wj0c.aak)\n"
         },
         {
           "sha": "1e5de0e8a1cc286a569eaa508b1b6396df27468e",
