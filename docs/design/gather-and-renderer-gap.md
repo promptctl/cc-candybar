@@ -87,7 +87,7 @@ The gap is listed per proposal section: what the code does today, what the backl
 
 ## §9 Observability and memory
 
-**Code today.** One logfmt line per request (`requestEvent`, `src/daemon/request-event.ts`): the render arm carries `queued`, `waited`, `drew`, `lanes`, `refreshed` and more; the click arm carries `via`, `verb`, `gather`, `turnWait`, `took` and `outcome`, but not the effects that ran, what they wrote, or the resulting revision. Nothing correlates a request with the facts it waited on or the frame it produced. There is no idle shutdown of the daemon (`MenuIdle` closes menus), which matters because Proposal 1 gives Gather an idle grace. Memory is governed by `src/daemon/limits.ts` and the render cache's budget, both assuming one process.
+**Code today.** One logfmt line per request (`requestEvent`, `src/daemon/request-event.ts`): the render arm carries `queued`, `waited`, `drew`, `lanes`, `refreshed` and more; the click arm carries `via`, `verb`, `gather`, `turnWait`, `took` and `outcome`, but not the effects that ran, what they wrote, or the resulting revision. Nothing correlates a request with the facts it waited on or the frame it produced. There is no idle shutdown of the daemon (`MenuIdle` closes menus), which matters because Proposal 1 gives Gather an idle grace.
 
 **Backlog today.** `.cd0` moves `RuntimeStats` into Requests and has "each lower piece take only the counters it writes". `candybar-daemon-health-ajx0.djg` and `.r2i` make a dead or starved daemon visible on the bar.
 
@@ -112,7 +112,7 @@ Eight new tickets, in dependency order, all under `candybar-isolated-daemon-bfab
 5. A renderer has one home.
 6. No stored path is absolute.
 7. A link names the renderer that drew it (direct URLs, bare copy links, `load-config`, the install URL removed; the doctor probe, the tmux `CLICK_URL` and config-authored links go through the minter or a typed address).
-8. Gather listens at a versioned socket and a renderer starts it on a miss, and ends after an idle grace, which no process has today (plus the memory-budget ticket beside it).
+8. Gather listens at a versioned socket and a renderer starts it on a miss, and ends after an idle grace, which no process has today.
 
 Six edits to existing tickets: `.cbz` outputs `SessionFacts`; `.ncz` takes `SessionFacts` and a facts source, and moves `FrameMemory`'s write out of the draw into Apply's state so Draw writes nothing; `.2rl` is the reducer and deletes `journaled`; `.cd0` enqueues requests and carries the correlation id; `.65c` takes the home; `.go6` names the facts recording or hands it to ticket 3. One note each on `.c3x` and `.8es`.
 
