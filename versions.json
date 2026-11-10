@@ -4,15 +4,22 @@
     {
       "version": "pr-708",
       "ref": "refs/pull/708/merge",
-      "sha": "2c14a950c83351d1a53e92f9df2a417550c88195",
-      "timestamp": "2026-11-10T05:37:00.504Z",
+      "sha": "7326e124676f8939a8e69a317f7e90e57e7bda81",
+      "timestamp": "2026-11-10T05:47:05.142Z",
       "commits": [
         {
-          "sha": "2c14a950c83351d1a53e92f9df2a417550c88195",
+          "sha": "7326e124676f8939a8e69a317f7e90e57e7bda81",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T22:35:58-07:00",
-          "message": "Merge 24f0d8a352baa3ea5a40abd11b5edb4eb2fb438e into ebe96e86b847c52f272f266af63444e1034ae33f\n"
+          "timestamp": "2026-11-10T05:46:12Z",
+          "message": "Merge 633061be00688f9bb9370d609d5dd946da76959f into ebe96e86b847c52f272f266af63444e1034ae33f\n"
+        },
+        {
+          "sha": "633061be00688f9bb9370d609d5dd946da76959f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T22:46:00-07:00",
+          "message": "test(daemon): a home closes through the case's cleanups, and each test's one close path is its afterEach (candybar-skeleton-wj0c.88o)\n\ndeclaredLanes takes the cleanups array the other rig helpers take, so a\ncaller cannot open a home without handing over its close. The git cache\ncases drop the trailing closes their afterEach now repeats; the closes a\ncase asserts across, or orders before a repo's removal, stay.\n"
         },
         {
           "sha": "24f0d8a352baa3ea5a40abd11b5edb4eb2fb438e",
