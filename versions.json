@@ -4,15 +4,22 @@
     {
       "version": "pr-709",
       "ref": "refs/pull/709/merge",
-      "sha": "5d4ec4e8c01ff32a0b88e5d56f5bc4cc2ca7d90e",
-      "timestamp": "2026-11-10T06:51:33.486Z",
+      "sha": "328ef3b6634ae493f42db3d616becd44fce4aae5",
+      "timestamp": "2026-11-10T06:58:06.640Z",
       "commits": [
         {
-          "sha": "5d4ec4e8c01ff32a0b88e5d56f5bc4cc2ca7d90e",
+          "sha": "328ef3b6634ae493f42db3d616becd44fce4aae5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T06:49:57Z",
-          "message": "Merge 976c128642c08a0fb20a86015cf668a077d98f5b into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+          "timestamp": "2026-11-10T06:57:10Z",
+          "message": "Merge aa7cb5406ebdb2ef9f0e141a3e6dad26228b2105 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "aa7cb5406ebdb2ef9f0e141a3e6dad26228b2105",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T23:56:59-07:00",
+          "message": "test(metrics): the provider's fold is read by transcript path, and the spec block names the usage fact abstractly (candybar-skeleton-wj0c.yb3)\n\nReview (high, after medium) fixes: the metrics tests build no hook to read a hook-free fold, and the SessionFacts block names session's fact UsageFacts beside ContextFacts and MetricsFacts, with the code names mapped in the paragraph below it.\n"
         },
         {
           "sha": "976c128642c08a0fb20a86015cf668a077d98f5b",
