@@ -286,6 +286,8 @@ Done when `draw-reserve` boots no daemon and runs on the schedule, outside every
 | Charge within the budget, heap and charge not climbing | A small program over Drawing, Sources and Sessions that holds a hundred sessions, collects, and reads the charge through the backstop's own probe. The budget is re-measured for what it holds | Integration |
 | Warm, steady renders, steady clicks, statusline p90 with a feed | The same program with Actions for the clicks and Feeds for the p90, on the schedule beside `draw-reserve`. These are wall-clock numbers, so they report through ticket 38 | Scheduled |
 
+Tier is the layer each check joins. Every file named runs in the worker tier today, and joins the unit tier once the ports beneath its piece land.
+
 The small program assembles only the pieces it measures. One that assembled them all would be the daemon under another name, so it does not import the root or Requests.
 
 The cost is plain: nothing measures the assembled daemon under load any more. A cost that appears only when all the pieces run together, or in a piece the program leaves out, reaches a release, and so does a crash that only load provokes. The memory backstop catches a leak in the field, and the launch epic's build check refuses a synchronous launch on the loop, which is the known way to block it.

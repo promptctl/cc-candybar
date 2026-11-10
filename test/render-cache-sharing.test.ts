@@ -580,8 +580,9 @@ describe("a steady stream of renders", () => {
     for (const d of DIRS) fs.mkdirSync(path.join(dir, d));
   });
 
-  // Every session draws once from its directory, as each statusline tick does.
-  const round = (cache: RenderCache): void => {
+  // Every session draws once from its directory, as each statusline tick does,
+  // and the turn ends, so what a render deferred has run before the next.
+  const round = async (cache: RenderCache): Promise<void> => {
     for (const d of DIRS) {
       const cwd = path.join(dir, d);
       for (let s = 0; s < SESSIONS_PER_DIR; s++) {
@@ -594,20 +595,21 @@ describe("a steady stream of renders", () => {
         drawn(held.view);
       }
     }
+    await new Promise((turn) => setImmediate(turn));
   };
 
   // The cache logs every entry it builds and every view it opens or closes, so
   // a rebuild on every render, disposed as soon as it is replaced, holds the
   // counts flat and still shows here as a line.
-  test("builds and retires nothing: the counts hold and nothing is logged", () => {
+  test("builds and retires nothing: the counts hold and nothing is logged", async () => {
     const { cache, lines, watchers } = makeCache(64 * COMPILE_BYTES);
-    // `due` is the reload a render would leave for a later turn, so a case
-    // that never yields still sees it.
+    // A catch-up reloads one entry a turn, so `due` is the rest of a reload a
+    // render left behind.
     const counts = () => {
       const { size, compiles, views, due } = cache.stats;
       return { size, compiles, views, due, watches: watchers.size() };
     };
-    round(cache);
+    await round(cache);
     const first = counts();
     expect(first).toMatchObject({
       size: DIRS.length,
@@ -615,23 +617,23 @@ describe("a steady stream of renders", () => {
       due: 0,
     });
     const logged = lines.length;
-    round(cache);
-    round(cache);
+    await round(cache);
+    await round(cache);
     expect({ counts: counts(), logged: lines.slice(logged) }).toEqual({
       counts: first,
       logged: [],
     });
   });
 
-  test("opens and closes no watcher", () => {
+  test("opens and closes no watcher", async () => {
     const { cache, counters } = makeCache(64 * COMPILE_BYTES);
-    round(cache);
+    await round(cache);
     const first = { ...counters };
     // The first round's entries each watch their config, so a reopened watch
     // would count here.
     expect(first.watchersOpened).toBeGreaterThan(0);
-    round(cache);
-    round(cache);
+    await round(cache);
+    await round(cache);
     expect(counters).toEqual(first);
   });
 
