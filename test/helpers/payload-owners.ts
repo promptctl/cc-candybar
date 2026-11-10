@@ -324,7 +324,8 @@ export function absentOwners() {
 // (brandon-unfiled-3248.8ro6, 4a), the request's refresh and wait
 // (settlePayload), then the view's payload as it stands (payloadOf) with the
 // draw's own projections beside it — `today` at `at`, no feeds. The failures
-// it projected are logged as the daemon's request logs them.
+// it projected are logged as the daemon's request logs them. The home lives
+// for this one request, where the daemon's view keeps it across requests.
 export async function requestPayload(
   hookData: ClaudeHookData,
   at: Instant,
@@ -334,17 +335,17 @@ export async function requestPayload(
   hints: ClientHints,
   configFacts: ConfigFileFacts,
 ): Promise<DrawnPayload> {
-  const { lanes } = declareLanes(
-    deps as unknown as KeyedOwners,
-    new HoldsClass(),
-    { sessionId: sessionIdOf(hookData.session_id), hookData, cwd, hints },
-    new Map(),
-  );
+  using home = openHome(deps, {
+    sessionId: sessionIdOf(hookData.session_id),
+    hookData,
+    cwd,
+    hints,
+  });
   const inputs: PayloadInputs = {
     hookData,
     cwd,
     hints,
-    deps: { ...deps, lanes: () => lanes } as RenderPayloadDeps,
+    deps: { ...deps, lanes: home.lanes } as RenderPayloadDeps,
   };
   await settlePayload(inputs, at, new Map());
   const payload = payloadOf(inputs, {
@@ -367,17 +368,40 @@ export function settled<T extends PayloadNode>(value: T | Pending): T {
   return value;
 }
 
-// The lanes a view declared at `facts` over `owners`, for a test that draws
-// frames over deps it built itself.
-export function declaredLanes(
+// The lanes a view declared at `facts` over `owners`; disposing it closes the
+// view's home.
+function openHome(
   owners: unknown,
   facts: Parameters<typeof declareLanes>[2],
-): () => ReturnType<typeof declareLanes>["lanes"] {
-  const { lanes } = declareLanes(
+): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
+  const holds = new HoldsClass();
+  const { lanes, faults } = declareLanes(
     owners as KeyedOwners,
-    new HoldsClass(),
+    holds,
     facts,
     new Map(),
   );
-  return () => lanes;
+  // [LAW:no-silent-failure] An owner whose declaration throws is a broken
+  // fixture, failed here with its stack, as the daemon logs it as an error.
+  if (faults.length > 0) {
+    holds.close();
+    throw new Error(`a lane's declaration threw:\n${faults.join("\n")}`);
+  }
+  return {
+    lanes: () => lanes,
+    [Symbol.dispose]: () => void holds.close(),
+  };
+}
+
+// The lanes a view declared at `facts` over `owners`, for a test that draws
+// frames over deps it built itself. [LAW:no-ambient-temporal-coupling] The
+// view's home closes with the case's cleanups.
+export function declaredLanes(
+  owners: unknown,
+  facts: Parameters<typeof declareLanes>[2],
+  cleanups: Array<() => void>,
+): () => ReturnType<typeof declareLanes>["lanes"] {
+  const home = openHome(owners, facts);
+  cleanups.push(home[Symbol.dispose]);
+  return home.lanes;
 }

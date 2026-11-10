@@ -142,6 +142,16 @@ class StubGitService extends GitService {
   }
 }
 
+// [LAW:no-ambient-temporal-coupling] Every provider a case built, closed as
+// the case ends, before the real timers return, so its timers are cleared on
+// the clock that armed them.
+const built: GitDataProvider[] = [];
+
+afterEach(() => {
+  for (const svc of built.splice(0)) svc.close();
+  jest.useRealTimers();
+});
+
 function makeCache(
   opts: {
     periodMs?: number;
@@ -169,6 +179,7 @@ function makeCache(
       logs.push(message);
     },
   });
+  built.push(svc);
   return { svc, inner, logs, holds: new Holds() };
 }
 
@@ -221,10 +232,6 @@ async function tick(times = 5): Promise<void> {
     await new Promise<void>((r) => setImmediate(r));
   }
 }
-
-afterEach(() => {
-  jest.useRealTimers();
-});
 
 describe("GitDataProvider", () => {
   test("two cwds in same repo share one state", async () => {
@@ -439,7 +446,6 @@ describe("GitDataProvider and the holds that come and go", () => {
       kind: "ok",
       value: { branch: "feature", pullRequest: { kind: "ok" } },
     });
-    svc.close();
   });
 
   test("a value something waits on is read though its hold was released", async () => {
@@ -460,7 +466,6 @@ describe("GitDataProvider and the holds that come and go", () => {
     void waiting.then((a) => (answer = a));
     await jest.advanceTimersByTimeAsync(0);
     expect(answer).toMatchObject({ kind: "ok" });
-    svc.close();
   });
 
   test("a reader waiting on an owed PR is answered when the pass reads no branch", async () => {
@@ -479,7 +484,6 @@ describe("GitDataProvider and the holds that come and go", () => {
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.at(-1)).toMatch(/ pr=unkeyed /);
     expect(answer).toMatchObject({ kind: "failed" });
-    svc.close();
   });
 });
 
@@ -600,7 +604,6 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     holds.declare(() => {});
     await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 5);
     expect(inner.computeCalls).toHaveLength(3);
-    svc.close();
   });
 
   test("a declaration after close is answered as closed: it builds no state, reads nothing and arms no period", async () => {
@@ -641,7 +644,6 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     await gitOf(svc, new Holds(), "/repo");
     await jest.advanceTimersByTimeAsync(0);
     expect(inner.computeCalls).toHaveLength(3);
-    svc.close();
   });
 
   test("a change on a repo nobody holds reads nothing until it is held again, then at once", async () => {
@@ -767,7 +769,6 @@ describe("GitDataProvider gitDir resolution cache", () => {
     const after = await gitOf(svc, holds, "/nowhere");
     expect(after.kind).toBe("ok");
     expect(inner.resolveCalls.length).toBe(2);
-    svc.close();
   });
 
   test("a failed resolution is cached too — the timeout case is the costly one", async () => {
@@ -799,7 +800,6 @@ describe("GitDataProvider gitDir resolution cache", () => {
     }
     expect(inner.resolveCalls).toHaveLength(1);
     expect(holds.size).toBe(1);
-    svc.close();
   });
 
   test("a first declaration knows its repo and holds it in its own turn", () => {
@@ -809,7 +809,6 @@ describe("GitDataProvider gitDir resolution cache", () => {
     svc.declare(holds, "/repo/sub");
 
     expect(svc.getStats().held).toBe(1);
-    svc.close();
   });
 
   test("projectDir is part of the key, so it cannot be answered by the wrong entry", async () => {
@@ -1008,7 +1007,6 @@ describe("GitDataProvider PR source", () => {
     expect(inner.prCalls).toHaveLength(2);
     await jest.advanceTimersByTimeAsync(1);
     expect(inner.prCalls).toHaveLength(3);
-    svc.close();
   });
 
   // A forge that stays down is asked less often the longer it does, and the
@@ -1043,7 +1041,6 @@ describe("GitDataProvider PR source", () => {
     // The failure after a success is the first of a new run.
     await jest.advanceTimersByTimeAsync(PR_PERIOD.failedMs);
     expect(inner.prCalls).toHaveLength(++calls);
-    svc.close();
   });
 
   test("lookups across repos never exceed the cap in flight, and every repo is looked up", async () => {
@@ -1063,7 +1060,6 @@ describe("GitDataProvider PR source", () => {
       "/b",
       "/c",
     ]);
-    svc.close();
   });
 
   test("a PR whose repo nobody holds is not looked up on its period", async () => {
@@ -1076,7 +1072,6 @@ describe("GitDataProvider PR source", () => {
     await jest.advanceTimersByTimeAsync(PR_PERIOD.okMs * 3);
     expect(inner.prCalls).toHaveLength(1);
     expect(inner.computeCalls).toHaveLength(1);
-    svc.close();
   });
 });
 
@@ -1177,7 +1172,6 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(5);
     inner.prGate.resolve();
-    svc.close();
   });
 
   test("a refresh that throws is logged, and the repo keeps its period", async () => {
@@ -1198,7 +1192,6 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);
     expect(failuresIn(logs)).toEqual(["git status: boom"]);
-    svc.close();
   });
 });
 
@@ -1266,7 +1259,6 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
         / asked=- pr=kept watch=kept by=period outcome=ok took=\d+ms$/,
       ),
     ]);
-    svc.close();
   });
 });
 
@@ -1299,6 +1291,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       watchers,
       logger,
     });
+    built.push(svc);
     return { svc, inner, counters, logs, watchers };
   }
 
@@ -1324,7 +1317,6 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       dirWatchesClosed: 0,
     });
     expect(watchers.size()).toBe(1);
-    svc.close();
   });
 
   // Git writes HEAD and index by renaming a `.lock` file over them. A watch
@@ -1454,7 +1446,6 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       dirWatchesClosed: 0,
     });
     expect(watchers.size()).toBe(1);
-    svc.close();
   });
 
   // The pass between a worktree's removal and its re-add finds the git
@@ -1598,6 +1589,5 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     });
-    svc.close();
   });
 });

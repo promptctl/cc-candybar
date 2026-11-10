@@ -79,6 +79,11 @@ const GIT: GitRead = {
   repoUrl: ABSENT,
 };
 
+const cleanups: Array<() => void> = [];
+afterEach(() => {
+  for (const cleanup of cleanups.splice(0)) cleanup();
+});
+
 // Every lane over a counted reader; `pr` is the PR the git value carries
 // (none, unless given).
 function counted(pr: unknown = ABSENT) {
@@ -110,12 +115,16 @@ function counted(pr: unknown = ABSENT) {
   // the same handles, as the daemon's do.
   const deps = {
     ...owners,
-    lanes: declaredLanes(owners, {
-      sessionId: sessionIdOf(HOOK.session_id),
-      hookData: HOOK,
-      cwd: undefined,
-      hints: HINTS,
-    }),
+    lanes: declaredLanes(
+      owners,
+      {
+        sessionId: sessionIdOf(HOOK.session_id),
+        hookData: HOOK,
+        cwd: undefined,
+        hints: HINTS,
+      },
+      cleanups,
+    ),
   } as unknown as RenderPayloadDeps;
   const inputs = (): PayloadInputs => ({
     hookData: HOOK,

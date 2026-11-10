@@ -98,16 +98,20 @@ function owners(git: Outcome<unknown> = ok({ ...GIT, pullRequest: ok(PR) })) {
   };
 }
 
+const cleanups: Array<() => void> = [];
+afterEach(() => {
+  for (const cleanup of cleanups.splice(0)) cleanup();
+});
+
 function rig(git?: Outcome<unknown>) {
   const held = owners(git);
   const deps = {
     ...held,
-    lanes: declaredLanes(held, {
-      sessionId: SID,
-      hookData: HOOK,
-      cwd: undefined,
-      hints: HINTS,
-    }),
+    lanes: declaredLanes(
+      held,
+      { sessionId: SID, hookData: HOOK, cwd: undefined, hints: HINTS },
+      cleanups,
+    ),
   } as unknown as RenderPayloadDeps;
   const inputs: PayloadInputs = {
     hookData: HOOK,
