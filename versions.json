@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-686",
-      "ref": "refs/pull/686/merge",
-      "sha": "544ec97585ec18a9043faa32a867c754132cf526",
-      "timestamp": "2026-11-10T00:40:26.037Z",
-      "commits": [
-        {
-          "sha": "544ec97585ec18a9043faa32a867c754132cf526",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T00:39:15Z",
-          "message": "Merge 0c76ea767f16d9e0ca10608c05bd674d4ea93ec5 into ab338bef54c2615eb740f9e487dad793f8003ce3\n"
-        },
-        {
-          "sha": "0c76ea767f16d9e0ca10608c05bd674d4ea93ec5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T17:39:04-07:00",
-          "message": "fix(diagnostics): a repository question left alone reads ℹ 1, and the handoff's indicator is not called the error indicator\n\nFrom the medium review of #686:\n- The loop e2e still waited for an amber ⚠ 1 once only the repository\n  question was left; that question is info, so the bar reads ℹ 1.\n- The handoff row's indicator wears the list's worst level, so its comment\n  and the lanes memory call it the diagnostics indicator.\n- The warnings map straight to their texts, without an intermediate shape.\n- Why the failure is its own message lives in the rendering memory alone.\n- The handoff line's info colours are proved once, at every depth; the unit\n  test keeps the indicator after it in the worst level.\n- The diagnostics test keeps its own line wrapping.\n\nRejected: inlining the one-use failure text helper, which would spell the\ntext twice.\n"
-        },
-        {
-          "sha": "8ec540fbcb4d25e0389bdde078e8cf5e4bafa018",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T17:28:59-07:00",
-          "message": "fix(diagnostics): the list is stamped worst first, and a failed update act is on the frame's record\n\nFrom the high review of #686:\n- A diagnostics list is branded worst first by its one constructor, so the\n  level it counts as is its first message's and the indicator's colour and\n  the message its click opens cannot disagree.\n- A plain error's and warning's glyph is its level's row, not a second copy.\n- An update notice is one offer with at most one failure, or nothing: a\n  failure with no offer to retry is unrepresentable.\n- A frame that drew a failed update act tags it in warn=, proved on the\n  failed-rebuild e2e.\n- The architecture memory no longer calls the update notice a warning.\n- Each worst-level and opens-on-the-warning case lives in one test file.\n\nRejected: opening the viewer on the offer after a failed act. The indicator\nopens on a message of the level it wears, the failure's reason is what the\nreader needs first, and retry is one step away.\n"
-        },
-        {
-          "sha": "9ef8ad94c81d8b6d2c042101b82d43043ec72390",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-07T03:41:45-07:00",
-          "message": "fix(diagnostics): a list with nothing wrong in it draws ℹ N in blue, not an amber ⚠ (brandon-unfiled-3248.gm3h)\n\nA third diagnostic level, info, carried in one level table (rank, the\nindicator's glyph, the colours). An update offer, a repository question and\nthe lane handoff line are info. The indicator wears the list's worst level\nand the list runs worst first, so its click opens a message of that level.\nA failed update act is a plain warning of its own beside the offer, so the\nfailure still raises an amber ⚠ while the offer keeps its identity.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "ab338bef54c2615eb740f9e487dad793f8003ce3",
-      "timestamp": "2026-11-10T00:02:31.650Z",
+      "sha": "dc86b43b9a2c02cdf5144c6eec2130a4431fa9ab",
+      "timestamp": "2026-11-10T00:45:38.741Z",
       "commits": [
         {
-          "sha": "ab338bef54c2615eb740f9e487dad793f8003ce3",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-10T00:01:23Z",
-          "message": "chore(release): set `package.json` to 1.213.1\n\n## [1.213.1](https://github.com/promptctl/cc-candybar/compare/v1.213.0...v1.213.1) (2026-11-10)\n\n### Bug Fixes\n\n* **cache:** a catch-up reloads one entry per turn, so requests are answered between entries (candybar-animation-wbxz.v24) ([#677](https://github.com/promptctl/cc-candybar/issues/677)) ([9157075](https://github.com/promptctl/cc-candybar/commit/91570759512cb4bb0f6e21ccce8ec95db2011176))\n"
+          "sha": "dc86b43b9a2c02cdf5144c6eec2130a4431fa9ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T17:44:33-07:00",
+          "message": "fix(diagnostics): a list with nothing wrong in it draws ℹ N in blue, not an amber ⚠ (#686)\n\n* fix(diagnostics): a list with nothing wrong in it draws ℹ N in blue, not an amber ⚠ (brandon-unfiled-3248.gm3h)\n\nA third diagnostic level, info, carried in one level table (rank, the\nindicator's glyph, the colours). An update offer, a repository question and\nthe lane handoff line are info. The indicator wears the list's worst level\nand the list runs worst first, so its click opens a message of that level.\nA failed update act is a plain warning of its own beside the offer, so the\nfailure still raises an amber ⚠ while the offer keeps its identity.\n\n* fix(diagnostics): the list is stamped worst first, and a failed update act is on the frame's record\n\nFrom the high review of #686:\n- A diagnostics list is branded worst first by its one constructor, so the\n  level it counts as is its first message's and the indicator's colour and\n  the message its click opens cannot disagree.\n- A plain error's and warning's glyph is its level's row, not a second copy.\n- An update notice is one offer with at most one failure, or nothing: a\n  failure with no offer to retry is unrepresentable.\n- A frame that drew a failed update act tags it in warn=, proved on the\n  failed-rebuild e2e.\n- The architecture memory no longer calls the update notice a warning.\n- Each worst-level and opens-on-the-warning case lives in one test file.\n\nRejected: opening the viewer on the offer after a failed act. The indicator\nopens on a message of the level it wears, the failure's reason is what the\nreader needs first, and retry is one step away.\n\n* fix(diagnostics): a repository question left alone reads ℹ 1, and the handoff's indicator is not called the error indicator\n\nFrom the medium review of #686:\n- The loop e2e still waited for an amber ⚠ 1 once only the repository\n  question was left; that question is info, so the bar reads ℹ 1.\n- The handoff row's indicator wears the list's worst level, so its comment\n  and the lanes memory call it the diagnostics indicator.\n- The warnings map straight to their texts, without an intermediate shape.\n- Why the failure is its own message lives in the rendering memory alone.\n- The handoff line's info colours are proved once, at every depth; the unit\n  test keeps the indicator after it in the worst level.\n- The diagnostics test keeps its own line wrapping.\n\nRejected: inlining the one-use failure text helper, which would spell the\ntext twice."
         }
       ]
     }

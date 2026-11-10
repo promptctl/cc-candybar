@@ -55164,6 +55164,10 @@ var DIAGNOSTIC_WARNING_COLORS = {
   fg: "#000000",
   bg: "#dca028"
 };
+var DIAGNOSTIC_INFO_COLORS = {
+  fg: "#ffffff",
+  bg: "#2f6db5"
+};
 function sgrOf(layer, hex3) {
   const channels = [1, 3, 5].map(
     (at) => Number.parseInt(hex3.slice(at, at + 2), 16)
@@ -65377,31 +65381,32 @@ function stateFile(dir, name, empty2, parse3) {
 
 // src/render/diagnostics.ts
 init_globals();
+var DIAGNOSTIC_LEVELS = {
+  error: { rank: 0, glyph: "\u26A0", colors: DIAGNOSTIC_ERROR_COLORS },
+  warning: { rank: 1, glyph: "\u26A0", colors: DIAGNOSTIC_WARNING_COLORS },
+  info: { rank: 2, glyph: "\u2139", colors: DIAGNOSTIC_INFO_COLORS }
+};
 var ERROR_SEVERITY = {
   level: "error",
-  glyph: "\u26A0",
-  colors: DIAGNOSTIC_ERROR_COLORS
+  glyph: DIAGNOSTIC_LEVELS.error.glyph
 };
 var WARNING_SEVERITY = {
   level: "warning",
-  glyph: "\u26A0",
-  colors: DIAGNOSTIC_WARNING_COLORS
+  glyph: DIAGNOSTIC_LEVELS.warning.glyph
 };
 var UPDATE_SEVERITY = {
-  level: "warning",
-  glyph: "\u2B06",
-  colors: DIAGNOSTIC_WARNING_COLORS
+  level: "info",
+  glyph: "\u2B06"
 };
 var APPROVAL_SEVERITY = {
-  level: "warning",
-  glyph: "\u{1F512}",
-  colors: DIAGNOSTIC_WARNING_COLORS
+  level: "info",
+  glyph: "\u{1F512}"
 };
 var HANDOFF_SEVERITY = {
-  level: "warning",
-  glyph: "\u{1F9EA}",
-  colors: DIAGNOSTIC_WARNING_COLORS
+  level: "info",
+  glyph: "\u{1F9EA}"
 };
+var colorsOf = (severity) => DIAGNOSTIC_LEVELS[severity.level].colors;
 function diagnosticSpan(text4, link) {
   return { text: sanitizeText(text4), link };
 }
@@ -65416,9 +65421,9 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
     ...errors2.flatMap((e) => plainOf3(e, ERROR_SEVERITY)),
     ...notices,
     ...warnings.flatMap((w) => plainOf3(w, WARNING_SEVERITY))
-  ];
+  ].sort((a, b) => rankOf(a) - rankOf(b));
   const keys2 = copyKeys(list2);
-  return list2.map(
+  const minted = list2.map(
     (m, i) => plain.has(m) ? {
       ...m,
       lines: [
@@ -65432,6 +65437,7 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
       ]
     } : m
   );
+  return minted;
 }
 function plainMessage({ about, text: message, copy: copy3 }, severity) {
   const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
@@ -65446,8 +65452,9 @@ function copyLink(sessionId2, by, key, position) {
     `copy diagnostic ${position}`
   );
 }
+var rankOf = (message) => DIAGNOSTIC_LEVELS[message.severity.level].rank;
 function worstLevel(list2) {
-  return list2.length === 0 ? null : list2.some((m) => m.severity.level === "error") ? "error" : "warning";
+  return list2[0]?.severity.level ?? null;
 }
 var IDENTITY_BITS = 32;
 var OCCURRENCES = 256;
@@ -65471,16 +65478,12 @@ function viewerKey(list2, at, page2) {
   return String(stopsOf(list2)[at] * PAGES + page2 + 1);
 }
 var INDICATOR_CAP = 9;
-var LEVEL_COLORS = {
-  error: DIAGNOSTIC_ERROR_COLORS,
-  warning: DIAGNOSTIC_WARNING_COLORS
-};
 function diagnosticsProjection(list2) {
   const level = worstLevel(list2);
   const n = list2.length;
-  const colors = LEVEL_COLORS[level ?? "warning"];
+  const { glyph, colors } = DIAGNOSTIC_LEVELS[level ?? "info"];
   return {
-    label: level === null ? "" : `\u26A0 ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
+    label: level === null ? "" : `${glyph} ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
     fg: colors.fg,
     bg: colors.bg,
     open: list2.length === 0 ? DIAGNOSTICS_CLOSED : viewerKey(list2, 0, 0)
@@ -65500,10 +65503,8 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
   const shown = list2[index - 1];
   const opts = viewerOptions(geometry);
   const body = channelRows(shown, opts, []);
-  const style = new Style({
-    bgcolor: shown.severity.colors.bg,
-    color: shown.severity.colors.fg
-  });
+  const colors = colorsOf(shown.severity);
+  const style = new Style({ bgcolor: colors.bg, color: colors.fg });
   const button = (text4, link) => cell(text4, link === null ? style : style.withLink(link));
   const step4 = (glyph, to) => to === null ? button(" ", null) : button(
     glyph,
@@ -65589,10 +65590,8 @@ var drawnRows = (cells, opts) => drawStripCells(cells, opts).lines.map((runs) =>
 }));
 var ISSUE_INDENT = " ";
 function channelRows(message, opts, trailing) {
-  const base = new Style({
-    bgcolor: message.severity.colors.bg,
-    color: message.severity.colors.fg
-  });
+  const colors = colorsOf(message.severity);
+  const base = new Style({ bgcolor: colors.bg, color: colors.fg });
   const styled = (link) => link === null ? base : base.withLink(link);
   const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
   return message.lines.flatMap((line, i) => {
@@ -70489,7 +70488,7 @@ var copyDiagnostic = async (value, ctx) => {
   const text4 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
   if (text4 === void 0)
     throw new BadVerbArgs(
-      `that message is no longer listed in session ${sid}'s diagnostics \u2014 open \u26A0 again and copy from there`
+      `that message is no longer listed in session ${sid}'s diagnostics \u2014 open the indicator beside the settings door again and copy from there`
     );
   await pbcopy(text4, ctx);
 };
@@ -76760,14 +76759,24 @@ function drawRender(parts, setup, drawing2) {
     sessionId2,
     drawing2.by,
     errors2,
-    [...updates, ...questions],
-    // A standing warning is one per kind whose words change as it does (a
-    // pipe event's counts), so its kind alone is what it is about: a viewer
-    // open on it stays open. A render warning is about its words.
+    [...updates.offer, ...questions],
     [
-      ...standing.map((w) => ({ about: w.kind, message: w.message })),
-      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({ about: `${w.kind}\0${w.message}`, message: w.message }))
-    ].map((w) => ({ about: w.about, text: w.message, copy: w.message }))
+      // [LAW:no-silent-failure] A failed update act is a warning of its own.
+      ...updates.failure,
+      // A standing warning is one per kind whose words change as it does (a
+      // pipe event's counts), so its kind alone is what it is about: a viewer
+      // open on it stays open. A render warning is about its words.
+      ...standing.map((w) => ({
+        about: w.kind,
+        text: w.message,
+        copy: w.message
+      })),
+      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({
+        about: `${w.kind}\0${w.message}`,
+        text: w.message,
+        copy: w.message
+      }))
+    ]
   );
   const document = view.source.facts();
   const projected = {
@@ -76879,7 +76888,10 @@ function drawRender(parts, setup, drawing2) {
         return w.kind;
     }
   };
-  const warned = [...standing, ...drawnWarnings].map(tagOf).join(",") || "-";
+  const warned = [
+    ...updates.failure.map(() => "update-failed"),
+    ...[...standing, ...drawnWarnings].map(tagOf)
+  ].join(",") || "-";
   noteFacts(facts, {
     git: `${g.size}/${g.hits}h/${g.misses}m`,
     usage: `${u.size}/${u.hits}h/${u.misses}m`,
@@ -76909,7 +76921,7 @@ function drawRender(parts, setup, drawing2) {
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     // The launcher's pipe event as this frame showed it: `-` for not at all.
     pipeEvent: pipeWarning?.hold ?? "-",
-    upd: String(updates.length),
+    upd: String(updates.offer.length),
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
@@ -78202,14 +78214,19 @@ function factsOf(update) {
       };
   }
 }
+var NO_NOTICE = { offer: [], failure: [] };
 function updateNotice(update, act, ctx) {
-  if (update === null) return [];
+  if (update === null) return NO_NOTICE;
   const identity2 = updateIdentity(update);
-  if (!ctx.enabled || ctx.dismissed === identity2) return [];
+  if (!ctx.enabled || ctx.dismissed === identity2) return NO_NOTICE;
   const facts = factsOf(update);
   const sentence = `${facts.headline}: ${facts.newer}. You're on ${facts.running}.`;
-  const failure = act.kind === "failed" && act.identity === identity2 ? [`${facts.act} failed: ${act.reason}`] : [];
-  const message = [sentence, ...failure].join("\n");
+  const failedText = (text4) => ({
+    about: `update-failed\0${identity2}`,
+    text: text4,
+    copy: text4
+  });
+  const failure = act.kind === "failed" && act.identity === identity2 ? [failedText(`${facts.act} failed: ${act.reason}`)] : [];
   const actSpan = act.kind === "running" ? diagnosticSpan(`[${facts.busy}]`, null) : diagnosticSpan(
     `[${facts.act}]`,
     effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }])
@@ -78240,16 +78257,18 @@ function updateNotice(update, act, ctx) {
       ])
     )
   ];
-  const rest2 = failure.map((f) => [diagnosticSpan(f, null)]);
-  return [
-    {
-      severity: UPDATE_SEVERITY,
-      about: `update\0${identity2}`,
-      message,
-      copy: message,
-      lines: [first2, ...rest2]
-    }
-  ];
+  return {
+    offer: [
+      {
+        severity: UPDATE_SEVERITY,
+        about: `update\0${identity2}`,
+        message: sentence,
+        copy: sentence,
+        lines: [first2]
+      }
+    ],
+    failure
+  };
 }
 function updateReading(build, release3) {
   if (build.kind === "pending") return build;
