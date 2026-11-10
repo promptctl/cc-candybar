@@ -4,15 +4,22 @@
     {
       "version": "pr-710",
       "ref": "refs/pull/710/merge",
-      "sha": "c803fc54befff19f1e791a9fd4bf6f63690a47fa",
-      "timestamp": "2026-11-10T16:45:46.702Z",
+      "sha": "b39a77b0aa8a9e92b37ab84c86b32922cf7ad30c",
+      "timestamp": "2026-11-10T17:01:44.294Z",
       "commits": [
         {
-          "sha": "c803fc54befff19f1e791a9fd4bf6f63690a47fa",
+          "sha": "b39a77b0aa8a9e92b37ab84c86b32922cf7ad30c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T16:43:09Z",
-          "message": "Merge 743d022036f543aa5ef05da57d103d207b4e2bcb into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+          "timestamp": "2026-11-10T16:59:44Z",
+          "message": "Merge b1dedf2ba8e642cdcb014d08d8c42820a30c34b7 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "b1dedf2ba8e642cdcb014d08d8c42820a30c34b7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T09:57:12-07:00",
+          "message": "docs(design): Proposal 3 answers its first review: a total start, discovery as a value, Gather judges reads, every effect today has a home (candybar-gather-renderer-76bb.215)\n"
         },
         {
           "sha": "743d022036f543aa5ef05da57d103d207b4e2bcb",
