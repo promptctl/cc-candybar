@@ -67243,16 +67243,10 @@ function ratioPercentages(totalTokens, contextLimit) {
 }
 function contextFromHook(hookData2) {
   const cw = hookData2.context_window;
-  if (!cw?.current_usage) {
-    debug("No current_usage in hook data, falling back to transcript parsing");
-    return null;
-  }
+  if (!cw?.current_usage) return null;
   const currentUsage = cw.current_usage;
   const contextLimit = cw.context_window_size;
   const totalTokens = (currentUsage.input_tokens || 0) + (currentUsage.cache_creation_input_tokens || 0) + (currentUsage.cache_read_input_tokens || 0);
-  debug(
-    `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens} (limit: ${contextLimit})`
-  );
   const ratio = ratioPercentages(totalTokens, contextLimit);
   return {
     totalTokens,
@@ -67266,9 +67260,6 @@ function contextOver(tokens, hookData2) {
   if (native2 !== null) return ok(native2);
   if (tokens.kind !== "ok") return tokens;
   const contextLimit = contextLimitOf(hookData2);
-  debug(
-    `Most recent main chain context: ${tokens.value} tokens (limit: ${contextLimit})`
-  );
   return ok({
     totalTokens: tokens.value,
     maxTokens: contextLimit,
@@ -67371,13 +67362,9 @@ function metricsOver(fold, hookData2) {
 init_globals();
 function usageOver(fold, hookData2) {
   if (fold.kind !== "ok") return fold;
-  const officialCost = hookData2.cost?.total_cost_usd ?? null;
   return ok({
-    session: {
-      ...fold.value,
-      cost: officialCost ?? fold.value.calculatedCost,
-      officialCost
-    }
+    cost: hookData2.cost?.total_cost_usd ?? fold.value.calculatedCost,
+    tokens: fold.value.tokens
   });
 }
 
@@ -67789,14 +67776,11 @@ function composePayload(facts, inputs, draw2) {
   const autoCompactValue = firstPending(lanes.context) ?? projectAutoCompact(lanes.autoCompact, valueOf3(lanes.context)?.maxTokens);
   const fiveHour = hookData2.rate_limits?.five_hour;
   const sevenDay = hookData2.rate_limits?.seven_day;
-  const burn = firstPending(lanes.usage, lanes.metrics) ?? burnOf(
-    valueOf3(lanes.usage)?.session.cost,
-    valueOf3(lanes.metrics)?.sessionDuration
-  );
+  const burn = firstPending(lanes.usage, lanes.metrics) ?? burnOf(valueOf3(lanes.usage)?.cost, valueOf3(lanes.metrics)?.sessionDuration);
   const speedPayload = over2(lanes.speed, speedPayloadOf);
   const sessionPayload = over2(
     lanes.usage,
-    (usage) => pickNonNull({ cost: usage.session.cost, tokens: usage.session.tokens })
+    (usage) => pickNonNull({ cost: usage.cost, tokens: usage.tokens })
   );
   const metricsPayload = over2(
     lanes.metrics,

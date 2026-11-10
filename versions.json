@@ -4,15 +4,22 @@
     {
       "version": "pr-709",
       "ref": "refs/pull/709/merge",
-      "sha": "1600d2be4ba7098b5950e9bb47fce6b296dc53dc",
-      "timestamp": "2026-11-10T06:30:08.640Z",
+      "sha": "fdb216296ab35611301c3569d31a8ae0db43bcce",
+      "timestamp": "2026-11-10T06:41:39.698Z",
       "commits": [
         {
-          "sha": "1600d2be4ba7098b5950e9bb47fce6b296dc53dc",
+          "sha": "fdb216296ab35611301c3569d31a8ae0db43bcce",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T23:29:19-07:00",
-          "message": "Merge d23ffde5e0afbd8e80ed8fcbfa89e727cd43a952 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+          "timestamp": "2026-11-10T06:40:40Z",
+          "message": "Merge e87e8aaef0965f6957ca5f78bd0952842990cc6d into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "e87e8aaef0965f6957ca5f78bd0952842990cc6d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T23:40:28-07:00",
+          "message": "refactor(facts): the composed usage is the cost and tokens the payload reads, the metrics fold is the base type, and the owners' tests assert their folds (candybar-skeleton-wj0c.yb3)\n\nReview (high) fixes: usageOver answers { cost, tokens } and the one-field wrapper, officialCost and the spread of the fold's other fields go; MetricsFold is declared on its own and MetricsInfo extends it; the pure context overlay no longer logs; the store and metrics tests assert the folds, and usageOver and metricsOver have in-process tests of their own.\n"
         },
         {
           "sha": "d23ffde5e0afbd8e80ed8fcbfa89e727cd43a952",
