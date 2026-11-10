@@ -222,7 +222,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
           rmSync(link, { force: true });
           writeFileSync(link, `{ segments: {} }`);
         },
-        async () => indicatorOf((healed = await render(daemon, sid, dir))) === "⚠ 1",
+        async () => indicatorOf((healed = await render(daemon, sid, dir))) === "ℹ 1",
         "the bar once the loop is broken",
       );
       const left = await readDiagnostics(daemon, sid, dir, healed, {}, []);

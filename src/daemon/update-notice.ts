@@ -166,9 +166,7 @@ export interface NoticeContext {
 // the sentence and the three affordances, and the failure of the last act on
 // it, a plain warning of its own. They are two messages because they are two
 // levels: the offer is nothing going wrong, a failed click is
-// [LAW:no-silent-failure]. Folding the failure into the offer would change
-// the offer's level, and so its identity, closing a viewer open on it the
-// moment the failure lands.
+// [LAW:no-silent-failure].
 // [LAW:types-are-the-program] At most one of each, and no failure without its
 // offer: a failure with nothing to retry is unrepresentable.
 export type UpdateNotice =

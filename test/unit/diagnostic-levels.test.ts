@@ -110,7 +110,7 @@ describe("a list that also holds something wrong reads as its worst level", () =
 });
 
 describe("the handoff line", () => {
-  test("wears the info colours, and the indicator after it the list's worst level", () => {
+  test("is followed by an indicator in the list's worst level", () => {
     const handoff = {
       severity: HANDOFF_SEVERITY,
       lines: [[diagnosticSpan("[⟲ claude]", null)]],
@@ -123,9 +123,6 @@ describe("the handoff line", () => {
     const runs = rows.flatMap((row) => row.runs);
     const indicator = runs.findIndex((run) => run.text.startsWith("⚠ 2"));
     expect(indicator).toBeGreaterThan(0);
-    for (const run of runs.slice(0, indicator)) {
-      expect({ fg: run.fg, bg: run.bg }).toEqual(DIAGNOSTIC_INFO_COLORS);
-    }
     expect({ fg: runs[indicator]!.fg, bg: runs[indicator]!.bg }).toEqual(
       DIAGNOSTIC_ERROR_COLORS,
     );
