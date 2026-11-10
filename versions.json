@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-706",
+      "ref": "refs/pull/706/merge",
+      "sha": "e55f24dd558b5cf6c4dd19ddcf78356ce683ca5a",
+      "timestamp": "2026-11-10T03:46:42.269Z",
+      "commits": [
+        {
+          "sha": "e55f24dd558b5cf6c4dd19ddcf78356ce683ca5a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T20:45:40-07:00",
+          "message": "Merge 1e5de0e8a1cc286a569eaa508b1b6396df27468e into 2353a70b777601e41f45fd7367e2cd1ba6055901\n"
+        },
+        {
+          "sha": "1e5de0e8a1cc286a569eaa508b1b6396df27468e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T20:45:27-07:00",
+          "message": "docs(design): the spec sets no memory ceilings or Node baseline, and the restart beat is no question (candybar-skeleton-wj0c.aak)\n\nBuild first, optimise later: the ceilings and the baseline decision were sized\nfrom load runs, and a restart is not a problem.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "2353a70b777601e41f45fd7367e2cd1ba6055901",
