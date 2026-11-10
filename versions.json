@@ -4,15 +4,22 @@
     {
       "version": "pr-686",
       "ref": "refs/pull/686/merge",
-      "sha": "8b1dbfbdaf07a30cf4da783c9254228959d8e6ca",
-      "timestamp": "2026-11-10T00:19:43.692Z",
+      "sha": "66c114fc108adad2d5b4e2d55d121c8836413829",
+      "timestamp": "2026-11-10T00:30:18.763Z",
       "commits": [
         {
-          "sha": "8b1dbfbdaf07a30cf4da783c9254228959d8e6ca",
+          "sha": "66c114fc108adad2d5b4e2d55d121c8836413829",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T00:18:43Z",
-          "message": "Merge 9ef8ad94c81d8b6d2c042101b82d43043ec72390 into ab338bef54c2615eb740f9e487dad793f8003ce3\n"
+          "timestamp": "2026-11-10T00:29:17Z",
+          "message": "Merge 8ec540fbcb4d25e0389bdde078e8cf5e4bafa018 into ab338bef54c2615eb740f9e487dad793f8003ce3\n"
+        },
+        {
+          "sha": "8ec540fbcb4d25e0389bdde078e8cf5e4bafa018",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T17:28:59-07:00",
+          "message": "fix(diagnostics): the list is stamped worst first, and a failed update act is on the frame's record\n\nFrom the high review of #686:\n- A diagnostics list is branded worst first by its one constructor, so the\n  level it counts as is its first message's and the indicator's colour and\n  the message its click opens cannot disagree.\n- A plain error's and warning's glyph is its level's row, not a second copy.\n- An update notice is one offer with at most one failure, or nothing: a\n  failure with no offer to retry is unrepresentable.\n- A frame that drew a failed update act tags it in warn=, proved on the\n  failed-rebuild e2e.\n- The architecture memory no longer calls the update notice a warning.\n- Each worst-level and opens-on-the-warning case lives in one test file.\n\nRejected: opening the viewer on the offer after a failed act. The indicator\nopens on a message of the level it wears, the failure's reason is what the\nreader needs first, and retry is one step away.\n"
         },
         {
           "sha": "9ef8ad94c81d8b6d2c042101b82d43043ec72390",

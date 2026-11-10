@@ -65388,11 +65388,11 @@ var DIAGNOSTIC_LEVELS = {
 };
 var ERROR_SEVERITY = {
   level: "error",
-  glyph: "\u26A0"
+  glyph: DIAGNOSTIC_LEVELS.error.glyph
 };
 var WARNING_SEVERITY = {
   level: "warning",
-  glyph: "\u26A0"
+  glyph: DIAGNOSTIC_LEVELS.warning.glyph
 };
 var UPDATE_SEVERITY = {
   level: "info",
@@ -65423,7 +65423,7 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
     ...warnings.flatMap((w) => plainOf3(w, WARNING_SEVERITY))
   ].sort((a, b) => rankOf(a) - rankOf(b));
   const keys2 = copyKeys(list2);
-  return list2.map(
+  const minted = list2.map(
     (m, i) => plain.has(m) ? {
       ...m,
       lines: [
@@ -65437,6 +65437,7 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
       ]
     } : m
   );
+  return minted;
 }
 function plainMessage({ about, text: message, copy: copy3 }, severity) {
   const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
@@ -65453,10 +65454,7 @@ function copyLink(sessionId2, by, key, position) {
 }
 var rankOf = (message) => DIAGNOSTIC_LEVELS[message.severity.level].rank;
 function worstLevel(list2) {
-  return list2.reduce(
-    (worst, m) => worst === null || rankOf(m) < DIAGNOSTIC_LEVELS[worst].rank ? m.severity.level : worst,
-    null
-  );
+  return list2[0]?.severity.level ?? null;
 }
 var IDENTITY_BITS = 32;
 var OCCURRENCES = 256;
@@ -76887,7 +76885,10 @@ function drawRender(parts, setup, drawing2) {
         return w.kind;
     }
   };
-  const warned = [...standing, ...drawnWarnings].map(tagOf).join(",") || "-";
+  const warned = [
+    ...updates.failure.map(() => "update-failed"),
+    ...[...standing, ...drawnWarnings].map(tagOf)
+  ].join(",") || "-";
   noteFacts(facts, {
     git: `${g.size}/${g.hits}h/${g.misses}m`,
     usage: `${u.size}/${u.hits}h/${u.misses}m`,
@@ -78217,7 +78218,12 @@ function updateNotice(update, act, ctx) {
   if (!ctx.enabled || ctx.dismissed === identity2) return NO_NOTICE;
   const facts = factsOf(update);
   const sentence = `${facts.headline}: ${facts.newer}. You're on ${facts.running}.`;
-  const failure = act.kind === "failed" && act.identity === identity2 ? [`${facts.act} failed: ${act.reason}`] : [];
+  const failedText = (text4) => ({
+    about: `update-failed\0${identity2}`,
+    text: text4,
+    copy: text4
+  });
+  const failure = act.kind === "failed" && act.identity === identity2 ? [failedText(`${facts.act} failed: ${act.reason}`)] : [];
   const actSpan = act.kind === "running" ? diagnosticSpan(`[${facts.busy}]`, null) : diagnosticSpan(
     `[${facts.act}]`,
     effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }])
@@ -78258,11 +78264,7 @@ function updateNotice(update, act, ctx) {
         lines: [first2]
       }
     ],
-    failure: failure.map((text4) => ({
-      about: `update-failed\0${identity2}`,
-      text: text4,
-      copy: text4
-    }))
+    failure
   };
 }
 function updateReading(build, release3) {
