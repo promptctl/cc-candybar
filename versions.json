@@ -4,15 +4,22 @@
     {
       "version": "pr-705",
       "ref": "refs/pull/705/merge",
-      "sha": "34ea9d93bee3daec5ef64a5f67dd8fcfa8b06610",
-      "timestamp": "2026-11-10T01:09:47.923Z",
+      "sha": "5e39d0a0633e6ec3d3b57cd003c6a84adb790af2",
+      "timestamp": "2026-11-10T01:15:15.126Z",
       "commits": [
         {
-          "sha": "34ea9d93bee3daec5ef64a5f67dd8fcfa8b06610",
+          "sha": "5e39d0a0633e6ec3d3b57cd003c6a84adb790af2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T01:08:49Z",
-          "message": "Merge 7898506aa1b251ee6371311cabf9b681f5a0609a into cdb0ca4d72af9f51f1fb1d4e0d37def3a225e1af\n"
+          "timestamp": "2026-11-10T01:14:10Z",
+          "message": "Merge 78b5fd30fb061cdbddc83466fc9f53589394d240 into cdb0ca4d72af9f51f1fb1d4e0d37def3a225e1af\n"
+        },
+        {
+          "sha": "78b5fd30fb061cdbddc83466fc9f53589394d240",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T18:13:58-07:00",
+          "message": "test(daemon): a steady render leaves no reload due, and a failed request logs its throw (candybar-testing-ihvy.u05)\n\nA catch-up reloads one entry a turn, so a render that marked entries due\nwould rebuild after the case read its counts. The counts now carry `due`, which\nthe render leaves behind at once.\n\nThe failed-request case reads the daemon's log: the `handler threw` error is\nthe operator's only trace of the failure, and no case asserted it.\n\nThe plan's ticket 42 table records, per check, the break that fails it, as its\ndone line asks.\n"
         },
         {
           "sha": "7898506aa1b251ee6371311cabf9b681f5a0609a",
