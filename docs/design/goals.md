@@ -13,7 +13,7 @@ They are related and handled one at a time.
 
 - **C-1. Build from generally useful primitives.** A primitive is judged by its potential consumers, not its current ones: nothing can consume what does not exist, so having no consumer yet is expected and is no reason not to build it.
 - **C-2. Variability is decided by data, not by inline checks.** Different paths exist, but a value selects between them; no conditional path is kept beside another to maintain.
-- **C-3. The design conforms to the laws of code.** They are what has made the project work so far, so they decide over how today's code happens to work.
+- **C-3. The design generally conforms to the laws of code.** They are what has made the project work so far; how today's code happens to work is not the measure of how it must.
 
 ## Rulings
 
@@ -26,7 +26,7 @@ They are related and handled one at a time.
 
 ### The payload
 
-- **R-5. Metrics, activity and session are part of the payload.** The payload is where a template's data lives. *(Inferred:* a value that reaches the bar any other way is a second path to keep in step.)
+- **R-5. Metrics, activity and session are part of the payload, and the payload carries the data a template reads.** Something beyond the payload may also exist. *(Inferred:* a value that reaches a template any other way is a second path to keep in step.)
 
 ### Clicks and effects
 
@@ -37,7 +37,7 @@ They are related and handled one at a time.
 
 ### Draw and isolation
 
-- **R-10. Gathering facts is one process, and Events → Apply → Draw runs in a separate process, or several.** This serves G-2: drawing can be iterated, restarted and multiplied without a second reader of the world.
+- **R-10. Gathering facts is one process, and Events → Apply → Draw runs in a separate process, or several,** as Brandon reads the split. *(Inferred:* this serves G-2: drawing can be iterated, restarted and multiplied without a second reader of the world.)
 - **R-11. Draw writes nothing; it only draws.** *(Inferred:* a draw that writes cannot be replayed or tested without mocks, and its frame may show something that did not happen.)
 - **R-12. There is no dev renderer and no dev mode.** Every renderer draws and acts the same way. A worktree's renderer is isolated by where it reads and writes and is pointed to by a session's values; anything it shows that main does not comes from instrumentation, never from performing a subset of actions. An allow-list of verbs is a dev-mode toggle by another name, and the primitive is an isolated renderer.
 - **R-13. No absolute path is stored in undo history;** every stored path sits under the renderer's isolated state directory. *(Inferred:* a history copied between renderers must not be able to write the user's files.)
@@ -54,7 +54,7 @@ They are related and handled one at a time.
 ### How designs are made
 
 - **R-17. Decisions draw on how mature systems solved the same problem,** Apple's among them, *(Inferred:* their shape has been tested where ours has not.)
-- **R-18. A spec states its intent so it can be reviewed and falsified later:** what each part is for, where the need came from, and the observation that would show the design fails it.
+- **R-18. A spec states its intent so it can be reviewed and falsified later.** *(Inferred:* that is what each part is for, where its need came from, and the observation that would show the design fails it.)
 
 ## Noted for later
 
