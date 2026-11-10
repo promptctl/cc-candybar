@@ -86,8 +86,6 @@ From the state today's daemon builds, the drafts' table holds and I would not re
 
 Cut, because each is a second path or a dev-mode toggle in disguise: `journaled`'s inference; `load-config`; the `env` source; direct verb URLs and bare `cc-candybar://<value>` links; the install test URL; the attach-id table and its state file; hook forwarding. Keep, because it is the point: every effect a click can perform, in every renderer.
 
-Memory divides across two Node runtimes, each with its baseline. The renderer's cost is the compile and each session's variable store, which stay per renderer; Gather's cost is transcripts, scans and the usage index, which are now paid once however many renderers run. Measured on today's daemon, Gather's part is the minority of a session's cost, because a session's source values live in the variable store that drawing keeps (§15, Memory).
-
 ## 10. Order of work
 
 Each step leaves a working bar, because the transport between the halves is a value and the first transport is in-process.
@@ -104,7 +102,6 @@ Steps 1 to 4 are the real work and are inside one process. Step 5 is a transport
 ## 11. What I would ask you to decide
 
 - **The version-addressed Gather's residual risk** in §3: accept the one-build exposure, or require that only the main renderer's bundle may start a Gather. I recommend accepting it; the alternative is a mode.
-- **Two Node baselines.** Decided: Gather is a Node process. A second Node process is unacceptable only if its idle charge passes a tenth of the daemon's limit (102 MB), or if the state both processes would hold passes a tenth of the daemon's charge at 100 sessions. Measured on today's daemon it is about 55 to 65 MB idle, and the state both would hold is about 5% (`pnpm load-gate` for the charge at each population, `scripts/capture-heap.ts`, macOS only, for the heap and the differential between configs). A Rust Gather stays a separate proposal that nothing here waits on.
 
 ---
 
@@ -199,9 +196,8 @@ A **recording** is a file of lines `{ at: Instant, facts: SessionFacts }`, writt
 - **Address.** `<runtime dir>/gather.v<N>.sock`, where `<runtime dir>` is `/tmp/cc-candybar-<uid>/`, the directory the socket lives in today, under the same owner and mode checks `ensureSocketParentSafe` applies now. `N` is `FACTS_PROTOCOL_MAJOR`, one constant in `src/daemon/protocol.ts`, mirrored into `scripts/check-protocol.mjs` and nowhere else; the Rust client and the Swift forwarder never dial Gather.
 - **Start.** A renderer that gets a refused connect takes the spawn lock beside the Gather socket (the daemon's own `spawn.lock` rules, keyed by socket) and runs `node <its own bundle> gather`, detached, then dials again with the existing backoff. Two renderers racing start one Gather because the lock is one.
 - **Lease.** `<gather socket>.lease`, the daemon's `LeaseRecord` and `arbitrateSocket` reused as they are; `binPath` names the bundle it runs.
-- **End.** Gather exits when its bundle changes (the daemon's `binaryWatch`, same 60 s stat), when its memory backstop fires, or when it has had no connected renderer for the idle grace. The grace is 120 s, a parameter. There is no idle shutdown for renderers, as today, and nothing here adds one.
+- **End.** Gather exits when its bundle changes (the daemon's `binaryWatch`, same 60 s stat), when its memory backstop fires (the daemon's `limits`, as it is), or when it has had no connected renderer for the idle grace. The grace is 120 s, a parameter. There is no idle shutdown for renderers, as today, and nothing here adds one.
 - **Population.** The fork-bomb registry gains Gather as a second population with its own ceiling of 2 (one live, one starting), a parameter. The breaker's `isolated` flag, derived today from whether `CC_CANDYBAR_SOCKET` is set, is derived from the home instead: a renderer is isolated when its name is not `main`. The guarantee it carries stays, because it is the point of the breaker: the main renderer is never denied, however many worktree renderers are registered, and a Gather start is counted against Gather's ceiling alone, never the renderers'. No second flag and no new mode; the same distinction read from the one place that now states identity. [LAW:one-source-of-truth]
-- **Memory.** Gather gets its own `limits` with `GATHER_RSS_LIMIT_MB` = 448. The renderer's `RENDERER_RSS_LIMIT_MB` = 896 replaces `DEFAULT_RSS_LIMIT_MB`, its mirror in the Rust client and its pin in `check-protocol` in the one change that starts the renderer as its own process. Gather's is the charge at 100 sessions (167 MB) times the headroom the single daemon's default already carries (about 2.6), rounded up to 64 MB, so a leak trips its backstop while it is still a leak. The renderer's charge (331 MB) times the same headroom gives 861, but its render cache sets the binding rule, and 896 is that rule rounded up to 64 MB. The ceiling falls by about a tenth and not by what moved out, because the cache must hold the 100 sessions: the cache's budget is three quarters of the limit less its 64 MB reserve, and the 100 sessions account for 587 MB of it, so no limit under 868 MB serves them. The cache's per-entry and per-view costs are measured again when a view's contents change, and these two values move with them. Each process writes its own heap snapshots and post-mortems under its own log.
 
 ## 16. Events and Apply, concretely
 
@@ -310,8 +306,4 @@ A design we cannot change later without replacing it is the wrong design. Each d
 | The link grammar after the name | The TS parser only; the forwarder reads the name and passes the tail through. *Changed by this check*: the first draft had the forwarder parse the verb (§18) |
 | A renderer's name | At most 32 characters (§17), a bound derived from the socket path limit in that one place. *Changed by this check*: the first draft bound names to six characters so the tmux range id could carry them; the row's tmux option carries the name instead (§17, §18) |
 | Every timeout, grace, ceiling and width | A parameter named where it is chosen (§15, §19) |
-| Gather's language | The wire is the contract; a Rust Gather speaks the same `v` at the same address (§11) |
-
-## 23. What is still a question
-
-- **The Gather restart beat.** Accepted as an annoyance by ruling. If it turns out to be more than a beat in practice (a cold `today` scan is 1.7 s), the answer is a faster first scan, not a mode.
+| Gather's language | The wire is the contract; a Rust Gather speaks the same `v` at the same address (§13) |
