@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-705",
-      "ref": "refs/pull/705/merge",
-      "sha": "e76128710a1451d563bd1c04d840ac5964c33ede",
-      "timestamp": "2026-11-10T01:25:50.813Z",
-      "commits": [
-        {
-          "sha": "e76128710a1451d563bd1c04d840ac5964c33ede",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T01:25:03Z",
-          "message": "Merge ac4e44f53ece5a9adafc686475cce0f0ecc9655d into cdb0ca4d72af9f51f1fb1d4e0d37def3a225e1af\n"
-        },
-        {
-          "sha": "ac4e44f53ece5a9adafc686475cce0f0ecc9655d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T18:18:26-07:00",
-          "message": "test(daemon): each steady round ends its turn, so what a render deferred runs before the next (candybar-testing-ihvy.u05)\n\nThe rounds ran back to back in one turn, so a rebuild a render deferred to a\nlater turn ran after the case had read its counts and log. Each round now\nyields, as statusline ticks arrive on separate turns; a view retired on a\ndeferred turn passes without the yield and fails with it.\n\nThe plan's ticket 42 table says its Tier is the layer each check joins: every\nfile it names runs in the worker tier today.\n"
-        },
-        {
-          "sha": "17848b2f8dd649fd28be28805318c3cf3e5c035a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T18:13:58-07:00",
-          "message": "test(daemon): a steady render leaves no reload due, and a failed request logs its throw (candybar-testing-ihvy.u05)\n\nA catch-up reloads one entry a turn, so a render that marked entries due\nwould rebuild after the case read its counts. The counts now carry `due`, which\nthe render leaves behind at once.\n\nThe failed-request case reads the daemon's log: the `handler threw` error is\nthe operator's only trace of the failure, and no case asserted it.\n\nThe plan's ticket 42 table records, per check, the break that fails it, as its\ndone line asks.\n"
-        },
-        {
-          "sha": "70c49b1fa21ea37e20170fe179f2dbcfb1ee4228",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T18:08:37-07:00",
-          "message": "test(daemon): a steady render logs nothing, and a closed cache leaves no session-state observer (candybar-testing-ihvy.u05)\n\nThe held-counts case read `retired` and `retiredViews`, which count only\nteardowns still waiting on a render, so a view rebuilt and disposed on every\nrender held every count flat and passed. The cache logs each entry it builds\nand each view it opens or closes, so the steady rounds now assert they log\nnothing; the view rebuild fails it.\n\nThe observer case compared a second walk with the first, so a click that kept\none observer per session and never released it passed. It now also closes the\ncache and reads zero, and its precondition compares the walk with the bar drawn\nalone rather than with a count the earlier round had already raised.\n\nThe failing handler is a one-shot jest stub, and the case's directories are\nmade once rather than every round.\n"
-        },
-        {
-          "sha": "2f0d25f385d5fe1f8c0cde466bb36d781bd71727",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T18:01:34-07:00",
-          "message": "test(daemon): the load gate's structural checks are cases at their pieces (candybar-testing-ihvy.u05)\n\nEach behaviour the removed load gate checked besides load is one event\nchecked once at the piece that owns it, with no daemon and no timed run:\n\n- Drawing: a few sessions from three directories draw again, and the\n  render cache's entries, compiles, views and watches hold, none retired.\n- Sources: the same renders open and close no watcher.\n- Actions over Sessions: a second walk through a session's menu keeps no\n  observer of the session state.\n- Requests: a handler that throws is answered RENDER_FAILED, the daemon\n  neither exits nor keeps it in flight, and the next request is served.\n\nFeed pace and session writes (stage, branch switch, turn) were already\nproven in process, by frame-feed, daemon-git-cache and\ndaemon-session-usage-store; the plan's table names where each check lives.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "cdb0ca4d72af9f51f1fb1d4e0d37def3a225e1af",
-      "timestamp": "2026-11-10T00:54:31.556Z",
+      "sha": "2353a70b777601e41f45fd7367e2cd1ba6055901",
+      "timestamp": "2026-11-10T01:34:47.758Z",
       "commits": [
         {
-          "sha": "cdb0ca4d72af9f51f1fb1d4e0d37def3a225e1af",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-10T00:53:30Z",
-          "message": "chore(release): set `package.json` to 1.213.2\n\n## [1.213.2](https://github.com/promptctl/cc-candybar/compare/v1.213.1...v1.213.2) (2026-11-10)\n\n### Bug Fixes\n\n* **diagnostics:** a list with nothing wrong in it draws ℹ N in blue, not an amber ⚠ ([#686](https://github.com/promptctl/cc-candybar/issues/686)) ([dc86b43](https://github.com/promptctl/cc-candybar/commit/dc86b43b9a2c02cdf5144c6eec2130a4431fa9ab))\n"
+          "sha": "2353a70b777601e41f45fd7367e2cd1ba6055901",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T18:33:50-07:00",
+          "message": "test(daemon): the load gate's structural checks are cases at their pieces (candybar-testing-ihvy.u05) (#705)\n\n* test(daemon): the load gate's structural checks are cases at their pieces (candybar-testing-ihvy.u05)\n\nEach behaviour the removed load gate checked besides load is one event\nchecked once at the piece that owns it, with no daemon and no timed run:\n\n- Drawing: a few sessions from three directories draw again, and the\n  render cache's entries, compiles, views and watches hold, none retired.\n- Sources: the same renders open and close no watcher.\n- Actions over Sessions: a second walk through a session's menu keeps no\n  observer of the session state.\n- Requests: a handler that throws is answered RENDER_FAILED, the daemon\n  neither exits nor keeps it in flight, and the next request is served.\n\nFeed pace and session writes (stage, branch switch, turn) were already\nproven in process, by frame-feed, daemon-git-cache and\ndaemon-session-usage-store; the plan's table names where each check lives.\n\n* test(daemon): a steady render logs nothing, and a closed cache leaves no session-state observer (candybar-testing-ihvy.u05)\n\nThe held-counts case read `retired` and `retiredViews`, which count only\nteardowns still waiting on a render, so a view rebuilt and disposed on every\nrender held every count flat and passed. The cache logs each entry it builds\nand each view it opens or closes, so the steady rounds now assert they log\nnothing; the view rebuild fails it.\n\nThe observer case compared a second walk with the first, so a click that kept\none observer per session and never released it passed. It now also closes the\ncache and reads zero, and its precondition compares the walk with the bar drawn\nalone rather than with a count the earlier round had already raised.\n\nThe failing handler is a one-shot jest stub, and the case's directories are\nmade once rather than every round.\n\n* test(daemon): a steady render leaves no reload due, and a failed request logs its throw (candybar-testing-ihvy.u05)\n\nA catch-up reloads one entry a turn, so a render that marked entries due\nwould rebuild after the case read its counts. The counts now carry `due`, which\nthe render leaves behind at once.\n\nThe failed-request case reads the daemon's log: the `handler threw` error is\nthe operator's only trace of the failure, and no case asserted it.\n\nThe plan's ticket 42 table records, per check, the break that fails it, as its\ndone line asks.\n\n* test(daemon): each steady round ends its turn, so what a render deferred runs before the next (candybar-testing-ihvy.u05)\n\nThe rounds ran back to back in one turn, so a rebuild a render deferred to a\nlater turn ran after the case had read its counts and log. Each round now\nyields, as statusline ticks arrive on separate turns; a view retired on a\ndeferred turn passes without the yield and fails with it.\n\nThe plan's ticket 42 table says its Tier is the layer each check joins: every\nfile it names runs in the worker tier today."
         }
       ]
     }
