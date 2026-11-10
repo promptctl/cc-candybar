@@ -4,15 +4,22 @@
     {
       "version": "pr-706",
       "ref": "refs/pull/706/merge",
-      "sha": "eb44ae8a989408af9417dd4398888a8f18ad4acb",
-      "timestamp": "2026-11-10T03:49:47.079Z",
+      "sha": "655ee5328cfd9bdf9d275448efe2827908634874",
+      "timestamp": "2026-11-10T03:52:48.886Z",
       "commits": [
         {
-          "sha": "eb44ae8a989408af9417dd4398888a8f18ad4acb",
+          "sha": "655ee5328cfd9bdf9d275448efe2827908634874",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T03:48:47Z",
-          "message": "Merge 3ab8037a410ee56d5bb4612e804aeb30118509eb into 2353a70b777601e41f45fd7367e2cd1ba6055901\n"
+          "timestamp": "2026-11-10T03:51:48Z",
+          "message": "Merge a0bd13ea30b780eae8ed99ca6e7121c0c1906932 into 2353a70b777601e41f45fd7367e2cd1ba6055901\n"
+        },
+        {
+          "sha": "a0bd13ea30b780eae8ed99ca6e7121c0c1906932",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T20:51:28-07:00",
+          "message": "docs(design): Gather keeps the daemon's memory backstop as it is, sized by no number (candybar-skeleton-wj0c.aak)\n"
         },
         {
           "sha": "3ab8037a410ee56d5bb4612e804aeb30118509eb",
