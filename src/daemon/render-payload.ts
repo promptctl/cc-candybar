@@ -1251,10 +1251,7 @@ export function composePayload(
   // either. Its two lanes' failures are theirs to report, below.
   const burn: BurnPayload | Pending | undefined =
     firstPending(lanes.usage, lanes.metrics) ??
-    burnOf(
-      valueOf(lanes.usage)?.session.cost,
-      valueOf(lanes.metrics)?.sessionDuration,
-    );
+    burnOf(valueOf(lanes.usage)?.cost, valueOf(lanes.metrics)?.sessionDuration);
   // [LAW:dataflow-not-control-flow] The instantaneous rates and the burn-rate
   // history fold independently from one observation — either can be present
   // without the other (a fresh burst has rates but a one-sample history; an
@@ -1267,7 +1264,7 @@ export function composePayload(
   // null sub-fields become absent keys here; an input's fallback chain
   // fills in the declared DSL default and records a last_error per field.
   const sessionPayload = over(lanes.usage, (usage) =>
-    pickNonNull({ cost: usage.session.cost, tokens: usage.session.tokens }),
+    pickNonNull({ cost: usage.cost, tokens: usage.tokens }),
   );
   const metricsPayload = over(lanes.metrics, (metrics) =>
     pickNonNull({

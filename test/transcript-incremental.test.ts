@@ -38,7 +38,7 @@ import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
 import { todayInfo, todayNow } from "./helpers/today";
 import { until } from "./helpers/until";
-import { drawnUsage, usageInfo } from "./helpers/usage-info";
+import { usageFold } from "./helpers/usage-info";
 
 let seq = 0;
 // One newline-terminated usage line. Unique tags keep every entry distinct.
@@ -374,7 +374,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       for (const c of contents) {
         appendFileSync(incPath, c);
         touch(incPath);
-        incInfo = await usageInfo(incStore, "INC", hook("INC", incPath));
+        incInfo = await usageFold(incStore, "INC", hook("INC", incPath));
       }
     } finally {
       incStore.close();
@@ -390,7 +390,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     });
     let freshInfo;
     try {
-      freshInfo = await usageInfo(freshStore, "FULL", hook("FULL", fullPath));
+      freshInfo = await usageFold(freshStore, "FULL", hook("FULL", fullPath));
     } finally {
       freshStore.close();
     }
@@ -399,13 +399,13 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     expect(freshInfo?.kind).toBe("ok");
     if (incInfo?.kind !== "ok" || freshInfo?.kind !== "ok") return;
     // The whole point: incremental output == from-scratch output.
-    expect(incInfo.value.session.cost).toBeCloseTo(
-      freshInfo.value.session.cost!,
+    expect(incInfo.value.calculatedCost).toBeCloseTo(
+      freshInfo.value.calculatedCost!,
       5,
     );
-    expect(incInfo.value.session.tokens).toBe(freshInfo.value.session.tokens);
-    expect(incInfo.value.session.cost).toBeCloseTo(0.1, 5);
-    expect(incInfo.value.session.tokens).toBe(1000 + 200); // inputs + outputs
+    expect(incInfo.value.tokens).toBe(freshInfo.value.tokens);
+    expect(incInfo.value.calculatedCost).toBeCloseTo(0.1, 5);
+    expect(incInfo.value.tokens).toBe(1000 + 200); // inputs + outputs
   });
 
   test("concurrent different-stamp refolds do not double-count (the first to land wins)", async () => {
@@ -430,21 +430,21 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       // Prior established.
       writeFileSync(t, l1);
       touch(t);
-      await usageInfo(store, "R", hook("R", t));
+      await usageFold(store, "R", hook("R", t));
 
       // Grow to mtime M1, fire A (sees M1) WITHOUT awaiting.
       appendFileSync(t, l2);
       touch(t);
-      const a = usageInfo(store, "R", hook("R", t));
+      const a = usageFold(store, "R", hook("R", t));
       // Grow again to mtime M2, fire B (sees M2) WITHOUT awaiting → different
       // flight keys, both racing off the same prior.
       appendFileSync(t, l3);
       touch(t);
-      const b = usageInfo(store, "R", hook("R", t));
+      const b = usageFold(store, "R", hook("R", t));
       await Promise.all([a, b]);
 
       // A settling read must reflect the whole file regardless of who won.
-      const finalInfo = await usageInfo(store, "R", hook("R", t));
+      const finalInfo = await usageFold(store, "R", hook("R", t));
       if (finalInfo.kind !== "ok") throw new Error("expected ok");
 
       const fullPath = join(dir, "Rfull.jsonl");
@@ -455,17 +455,15 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
         sweepIntervalMs: 0,
       });
       try {
-        const freshInfo = await usageInfo(fresh, "Rf", hook("Rf", fullPath));
+        const freshInfo = await usageFold(fresh, "Rf", hook("Rf", fullPath));
         if (freshInfo.kind !== "ok") throw new Error("expected ok");
-        expect(finalInfo.value.session.cost).toBeCloseTo(
-          freshInfo.value.session.cost!,
+        expect(finalInfo.value.calculatedCost).toBeCloseTo(
+          freshInfo.value.calculatedCost!,
           5,
         );
-        expect(finalInfo.value.session.tokens).toBe(
-          freshInfo.value.session.tokens,
-        );
+        expect(finalInfo.value.tokens).toBe(freshInfo.value.tokens);
         // And concretely: 0.06 total, 660 input+output tokens — folded once.
-        expect(finalInfo.value.session.cost).toBeCloseTo(0.06, 5);
+        expect(finalInfo.value.calculatedCost).toBeCloseTo(0.06, 5);
       } finally {
         fresh.close();
       }
@@ -501,21 +499,21 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     try {
       writeFileSync(t, line(new Date(), 0.01, 100, 20));
       touch(t);
-      const older = usageInfo(store, "N", hook("N", t));
+      const older = usageFold(store, "N", hook("N", t));
       await heldCount(1);
       appendFileSync(t, line(new Date(), 0.02, 200, 40));
       touch(t);
-      const newer = usageInfo(store, "N", hook("N", t));
+      const newer = usageFold(store, "N", hook("N", t));
       await heldCount(2);
       held[0]!();
       await older;
       held[1]!();
       await newer;
 
-      const stored = drawnUsage(store, "N", hook("N", t));
+      const stored = store.usageOf("N");
       expect(stored).toMatchObject({
         kind: "ok",
-        value: { session: { cost: expect.closeTo(0.03, 5), tokens: 360 } },
+        value: { calculatedCost: expect.closeTo(0.03, 5), tokens: 360 },
       });
     } finally {
       store.close();
@@ -551,15 +549,15 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       sweepIntervalMs: 0,
     });
     try {
-      const first = await usageInfo(store, sid, hook(sid, mainPath));
+      const first = await usageFold(store, sid, hook(sid, mainPath));
       if (first.kind !== "ok") throw new Error("expected ok");
-      expect(first.value.session.cost).toBeCloseTo(0.03, 5);
+      expect(first.value.calculatedCost).toBeCloseTo(0.03, 5);
 
       // A warm re-read (mtime unchanged) must return the same total — the old
       // push-into-shared-array bug double-counted agents here.
-      const second = await usageInfo(store, sid, hook(sid, mainPath));
+      const second = await usageFold(store, sid, hook(sid, mainPath));
       if (second.kind !== "ok") throw new Error("expected ok");
-      expect(second.value.session.cost).toBeCloseTo(0.03, 5);
+      expect(second.value.calculatedCost).toBeCloseTo(0.03, 5);
     } finally {
       store.close();
     }
@@ -595,7 +593,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
         sweepIntervalMs: 0,
       });
       try {
-        const usage = await usageInfo(store, "P", hook("P", t));
+        const usage = await usageFold(store, "P", hook("P", t));
         const today = await todayInfo(
           store,
           new Holds(),
@@ -605,7 +603,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
         );
         if (usage.kind !== "ok" || today.kind !== "ok")
           throw new Error("expected ok");
-        expect(usage.value.session.cost).toBeCloseTo(18, 5);
+        expect(usage.value.calculatedCost).toBeCloseTo(18, 5);
         // The regression this pins: today MUST equal the session's priced cost,
         // not 0 (which the pre-fix `costUSD ?? 0` day bucket produced).
         expect(today.value.cost).toBeCloseTo(18, 5);
@@ -629,16 +627,16 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       sweepIntervalMs: 0,
     });
     try {
-      const before = await usageInfo(store, "C", hook("C", t));
+      const before = await usageFold(store, "C", hook("C", t));
       if (before.kind !== "ok") throw new Error("expected ok");
-      expect(before.value.session.cost).toBeCloseTo(0.06, 5);
+      expect(before.value.calculatedCost).toBeCloseTo(0.06, 5);
 
       // /compact: fewer, different entries; file shrinks below the cursor.
       writeFileSync(t, line(new Date(), 0.005));
       touch(t);
-      const after = await usageInfo(store, "C", hook("C", t));
+      const after = await usageFold(store, "C", hook("C", t));
       if (after.kind !== "ok") throw new Error("expected ok");
-      expect(after.value.session.cost).toBeCloseTo(0.005, 5);
+      expect(after.value.calculatedCost).toBeCloseTo(0.005, 5);
     } finally {
       store.close();
     }

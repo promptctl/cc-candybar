@@ -10,19 +10,16 @@ import {
 import { join } from "path";
 import { tmpdir } from "os";
 import type { ClaudeHookData } from "../src/utils/claude";
+import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
 import { systemTimekeeper } from "../src/time";
 
-// The session's metrics as the renderer composes them: the provider's fold of
-// the transcript, with the hook's durations and lines laid over it.
-async function metricsInfo(
+// A request's refresh of the session's metrics fold.
+function metricsFold(
   provider: MetricsProvider,
   sessionId: string,
   hookData: ClaudeHookData,
 ) {
-  return metricsOver(
-    await provider.refresh(sessionId, hookData.transcript_path),
-    hookData,
-  );
+  return provider.refresh(sessionId, hookData.transcript_path);
 }
 
 describe("Metrics Provider", () => {
@@ -81,20 +78,17 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, transcriptContent);
 
     const mockHookData = createMockHookData("test-session", transcriptPath);
-    const outcome = await metricsInfo(metricsProvider, 
+    const outcome = await metricsFold(
+      metricsProvider,
       "test-session",
-      mockHookData
+      mockHookData,
     );
 
     expect(outcome.kind).toBe("ok");
     if (outcome.kind !== "ok") return;
     const metrics = outcome.value;
     expect(metrics.messageCount).toBe(2);
-    expect(metrics.sessionDuration).toBe(120);
-    expect(metrics.responseTime).toBe(5);
     expect(metrics.lastResponseTime).toBeGreaterThan(0);
-    expect(metrics.linesAdded).toBe(25);
-    expect(metrics.linesRemoved).toBe(10);
   });
 
   // brandon-effects-2gka.2rm: Claude Code writes user entries no person typed (a
@@ -116,7 +110,8 @@ describe("Metrics Provider", () => {
       ].join("\n"),
     );
 
-    const outcome = await metricsInfo(metricsProvider, 
+    const outcome = await metricsFold(
+      metricsProvider,
       "meta-session",
       createMockHookData("meta-session", transcriptPath),
     );
@@ -141,7 +136,8 @@ describe("Metrics Provider", () => {
       ].join("\n"),
     );
 
-    const outcome = await metricsInfo(metricsProvider, 
+    const outcome = await metricsFold(
+      metricsProvider,
       "clock-session",
       createMockHookData("clock-session", transcriptPath),
     );
@@ -163,7 +159,8 @@ describe("Metrics Provider", () => {
       ].join("\n"),
     );
 
-    const outcome = await metricsInfo(metricsProvider, 
+    const outcome = await metricsFold(
+      metricsProvider,
       "turn-session",
       createMockHookData("turn-session", transcriptPath),
     );
@@ -171,26 +168,21 @@ describe("Metrics Provider", () => {
   });
 
   // A transcript that doesn't exist yet is the domain's "no entries" (new
-  // session pre-first-write): the cost-block fields are real, the
-  // transcript-derived counts are genuinely zero.
+  // session pre-first-write): the counts are genuinely zero.
   it("handles missing transcript gracefully", async () => {
     const mockHookData = createMockHookData(
       "nonexistent-session",
       join(tempDir, "nonexistent.jsonl"),
     );
-    const outcome = await metricsInfo(metricsProvider, 
+    const outcome = await metricsFold(
+      metricsProvider,
       "nonexistent-session",
-      mockHookData
+      mockHookData,
     );
 
-    expect(outcome.kind).toBe("ok");
-    if (outcome.kind !== "ok") return;
-    expect(outcome.value.messageCount).toBe(0);
-    expect(outcome.value.sessionDuration).toBe(120);
-    expect(outcome.value.responseTime).toBe(5);
-    expect(outcome.value.lastResponseTime).toBeNull();
-    expect(outcome.value.linesAdded).toBe(25);
-    expect(outcome.value.linesRemoved).toBe(10);
+    expect(outcome).toEqual(
+      ok({ messageCount: 0, nonPrompts: 0, lastResponseTime: null }),
+    );
   });
 
   // [LAW:no-silent-failure] An UNREADABLE transcript (exists, can't be read)
@@ -202,28 +194,16 @@ describe("Metrics Provider", () => {
     chmodSync(transcriptPath, 0o000);
 
     const mockHookData = createMockHookData("locked-session", transcriptPath);
-    const outcome = await metricsInfo(metricsProvider, 
+    const outcome = await metricsFold(
+      metricsProvider,
       "locked-session",
-      mockHookData
+      mockHookData,
     );
     chmodSync(transcriptPath, 0o644);
 
     expect(outcome.kind).toBe("failed");
     if (outcome.kind !== "failed") return;
     expect(outcome.reason).toContain("locked-session");
-  });
-
-  it("reports absent when the hook data has no cost block", async () => {
-    const mockHookData = {
-      ...createMockHookData("no-cost-session", join(tempDir, "test.jsonl")),
-      cost: undefined,
-    };
-    const outcome = await metricsInfo(metricsProvider, 
-      "no-cost-session",
-      mockHookData
-    );
-
-    expect(outcome.kind).toBe("absent");
   });
 
   it("reuses the folded result when transcript mtime is unchanged (foldMetrics fast-hit, no re-read)", async () => {
@@ -245,7 +225,7 @@ describe("Metrics Provider", () => {
 
     writeFileSync(transcriptPath, v1);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);
-    const warm = await metricsInfo(metricsProvider, "cache-session", hookData);
+    const warm = await metricsFold(metricsProvider, "cache-session", hookData);
     expect(warm.kind === "ok" && warm.value.messageCount).toBe(2);
 
     // Mutate content but hold mtime identical: foldMetrics's mtime gate is
@@ -254,7 +234,8 @@ describe("Metrics Provider", () => {
     expect(v2.length).toBe(v1.length);
     writeFileSync(transcriptPath, v2);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);
-    const cached = await metricsInfo(metricsProvider, 
+    const cached = await metricsFold(
+      metricsProvider,
       "cache-session",
       hookData,
     );
@@ -276,7 +257,7 @@ describe("Metrics Provider", () => {
     utimesSync(transcriptPath, mtime, mtime);
     const hd = createMockHookData("inc-session", transcriptPath);
 
-    const first = await metricsInfo(metricsProvider, "inc-session", hd);
+    const first = await metricsFold(metricsProvider, "inc-session", hd);
     expect(first.kind === "ok" && first.value.messageCount).toBe(2);
     // No assistant turn yet → no user→assistant pair → no response time.
     expect(first.kind === "ok" && first.value.lastResponseTime).toBeNull();
@@ -286,7 +267,7 @@ describe("Metrics Provider", () => {
     // that happens to also be 3 — verified next by appending a non-user line.
     appendFileSync(transcriptPath, userLine());
     utimesSync(transcriptPath, ++mtime, mtime);
-    const second = await metricsInfo(metricsProvider, "inc-session", hd);
+    const second = await metricsFold(metricsProvider, "inc-session", hd);
     expect(second.kind === "ok" && second.value.messageCount).toBe(3);
     expect(second.kind === "ok" && second.value.lastResponseTime).toBeNull();
 
@@ -303,7 +284,7 @@ describe("Metrics Provider", () => {
       }) + "\n",
     );
     utimesSync(transcriptPath, ++mtime, mtime);
-    const third = await metricsInfo(metricsProvider, "inc-session", hd);
+    const third = await metricsFold(metricsProvider, "inc-session", hd);
     expect(third.kind === "ok" && third.value.messageCount).toBe(3);
     expect(third.kind === "ok" && third.value.lastResponseTime).toBeCloseTo(
       1.0,
@@ -316,18 +297,54 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, "");
 
     const mockHookData = createMockHookData("empty-session", transcriptPath);
-    const outcome = await metricsInfo(metricsProvider, 
+    const outcome = await metricsFold(
+      metricsProvider,
       "empty-session",
-      mockHookData
+      mockHookData,
     );
 
-    expect(outcome.kind).toBe("ok");
-    if (outcome.kind !== "ok") return;
-    expect(outcome.value.messageCount).toBe(0);
-    expect(outcome.value.sessionDuration).toBe(120);
-    expect(outcome.value.responseTime).toBe(5);
-    expect(outcome.value.lastResponseTime).toBeNull();
-    expect(outcome.value.linesAdded).toBe(25);
-    expect(outcome.value.linesRemoved).toBe(10);
+    expect(outcome).toEqual(
+      ok({ messageCount: 0, nonPrompts: 0, lastResponseTime: null }),
+    );
+  });
+});
+
+// The session's metrics as the renderer composes them: the hook's durations
+// and lines over the transcript's fold.
+describe("metricsOver", () => {
+  const fold = { messageCount: 2, nonPrompts: 1, lastResponseTime: 4 };
+  const hook = (cost?: ClaudeHookData["cost"]) =>
+    ({ session_id: "s", cost }) as ClaudeHookData;
+  const cost = {
+    total_cost_usd: 0.5,
+    total_duration_ms: 120000,
+    total_api_duration_ms: 5000,
+    total_lines_added: 25,
+    total_lines_removed: 10,
+  };
+
+  it("lays the hook's durations and lines over the fold", () => {
+    expect(metricsOver(ok(fold), hook(cost))).toEqual(
+      ok({
+        ...fold,
+        responseTime: 5,
+        sessionDuration: 120,
+        linesAdded: 25,
+        linesRemoved: 10,
+      }),
+    );
+  });
+
+  it("is absent when the hook has no cost block, whatever the fold says", () => {
+    expect(metricsOver(ok(fold), hook())).toBe(ABSENT);
+    expect(metricsOver(failed("unreadable", "read"), hook())).toBe(ABSENT);
+  });
+
+  it("carries a fold not answered or failed as it stands", () => {
+    expect(metricsOver(pendingOf("unread"), hook(cost))).toEqual(
+      pendingOf("unread"),
+    );
+    const failure = failed("unreadable", "read");
+    expect(metricsOver(failure, hook(cost))).toBe(failure);
   });
 });

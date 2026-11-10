@@ -121,10 +121,7 @@ function ratioPercentages(
 // Claude Code 2.0.70+ sends with its current_usage field.
 function contextFromHook(hookData: ClaudeHookData): ContextInfo | null {
   const cw = hookData.context_window;
-  if (!cw?.current_usage) {
-    debug("No current_usage in hook data, falling back to transcript parsing");
-    return null;
-  }
+  if (!cw?.current_usage) return null;
 
   const currentUsage = cw.current_usage;
   // [LAW:no-defensive-null-guards] context_window_size is a required `number`
@@ -135,10 +132,6 @@ function contextFromHook(hookData: ClaudeHookData): ContextInfo | null {
     (currentUsage.input_tokens || 0) +
     (currentUsage.cache_creation_input_tokens || 0) +
     (currentUsage.cache_read_input_tokens || 0);
-
-  debug(
-    `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens} (limit: ${contextLimit})`,
-  );
 
   // [LAW:one-source-of-truth] Claude's reported used/remaining percentages
   // are authoritative; the token-ratio is only a floor for the window whose
@@ -171,9 +164,6 @@ export function contextOver(
   if (native !== null) return ok(native);
   if (tokens.kind !== "ok") return tokens;
   const contextLimit = contextLimitOf(hookData);
-  debug(
-    `Most recent main chain context: ${tokens.value} tokens (limit: ${contextLimit})`,
-  );
   return ok({
     totalTokens: tokens.value,
     maxTokens: contextLimit,

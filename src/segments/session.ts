@@ -23,13 +23,10 @@ export interface TranscriptUsage {
   tokenBreakdown: TokenBreakdown | null;
 }
 
-export interface SessionInfo extends TranscriptUsage {
+// The session's usage as the `session` payload reads it.
+export interface SessionUsage {
   cost: number | null;
-  officialCost: number | null;
-}
-
-export interface UsageInfo {
-  session: SessionInfo;
+  tokens: number | null;
 }
 
 // [LAW:one-source-of-truth] The `session` projection's last step, the
@@ -40,17 +37,15 @@ export interface UsageInfo {
 // transcripts, not a live cost figure). The hook's cost changes every request
 // while the transcript total moves only when the file does, so it is laid over
 // the fold where the hook is, never stored with it.
+// [LAW:no-silent-failure] A fold not answered or failed stays so: the hook
+// carries the cost alone, and its tokens would read as none.
 export function usageOver(
   fold: Reading<TranscriptUsage>,
   hookData: ClaudeHookData,
-): Reading<UsageInfo> {
+): Reading<SessionUsage> {
   if (fold.kind !== "ok") return fold;
-  const officialCost = hookData.cost?.total_cost_usd ?? null;
   return ok({
-    session: {
-      ...fold.value,
-      cost: officialCost ?? fold.value.calculatedCost,
-      officialCost,
-    },
+    cost: hookData.cost?.total_cost_usd ?? fold.value.calculatedCost,
+    tokens: fold.value.tokens,
   });
 }
