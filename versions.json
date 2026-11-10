@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-709",
+      "ref": "refs/pull/709/merge",
+      "sha": "1600d2be4ba7098b5950e9bb47fce6b296dc53dc",
+      "timestamp": "2026-11-10T06:30:08.640Z",
+      "commits": [
+        {
+          "sha": "1600d2be4ba7098b5950e9bb47fce6b296dc53dc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T23:29:19-07:00",
+          "message": "Merge d23ffde5e0afbd8e80ed8fcbfa89e727cd43a952 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "d23ffde5e0afbd8e80ed8fcbfa89e727cd43a952",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T23:29:00-07:00",
+          "message": "refactor(facts): a session's facts carry each transcript fold alone, and the payload lays the hook over it (candybar-skeleton-wj0c.yb3)\n\nGather will know a session by its locator alone, so no fact may mix the\nrequest's hook into a transcript fold. Three did: usage (the hook's cost over\nthe priced fold), context (the hook's native window over the fold's tokens)\nand metrics (the hook's durations and lines over the fold's counts).\n\nThe usage store, the context provider and the metrics provider now refresh and\nanswer their folds alone, keyed by the session and read from its transcript.\nThe overlays are pure functions beside their contract types (`usageOver`,\n`contextOver`, `metricsOver`), applied where the payload is composed, which\nalready holds the hook. The document types those three facts as the folds, so\nthe compiler refuses a hook value in it. The stored usage record loses its\n`cost`/`officialCost` copies.\n\nThe context fold is now read for every session, where before it was read only\nwhen the hook carried no native window: the document is total and cannot know\nwhich hook it will be composed with.\n\nThe bar is unchanged. `check`'s fixture and the session rig carry their cost,\ndurations and window in their hooks, as Claude Code sends them, so the\npayload goldens gain the raw `cost` and `context_window` blocks and nothing\nelse.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "005be159ec58ef64c57076aeff631ad80f4b4f7f",
