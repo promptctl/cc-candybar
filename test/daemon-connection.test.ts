@@ -352,23 +352,42 @@ describe("a connection over a stream", () => {
     expect(ended()).toBe(true);
   });
 
-  test("a handler that throws is answered RENDER_FAILED", async () => {
-    const { send, received } = open(
-      standIn({
-        handle: async () => {
-          throw new Error("the handler broke");
-        },
-      }),
-    );
-    send(STATS);
+  // [LAW:verifiable-goals] A failed request costs its own answer and nothing
+  // more: the daemon logs the throw, neither exits nor keeps it in flight, and
+  // the next connection is served as if nothing had failed.
+  test("a handler that throws is answered RENDER_FAILED, and the next request is served", async () => {
+    const log = jest.fn();
+    const daemon = standIn({
+      log,
+      handle: jest
+        .fn(async () => replyWith())
+        .mockRejectedValueOnce(new Error("the handler broke")),
+    });
+    const failed = open(daemon);
+    failed.send(STATS);
     await settled();
-    expect(received).toEqual([
-      expect.objectContaining({
-        ok: false,
-        code: "RENDER_FAILED",
-        error: "the handler broke",
-      }),
-    ]);
+    const next = open(daemon);
+    next.send(STATS);
+    await settled();
+    expect({
+      failed: failed.received,
+      next: next.received,
+      exits: exit.mock.calls,
+      inFlight: daemon.stats.inFlight,
+      logged: log.mock.calls,
+    }).toEqual({
+      failed: [
+        expect.objectContaining({
+          ok: false,
+          code: "RENDER_FAILED",
+          error: "the handler broke",
+        }),
+      ],
+      next: [ANSWER],
+      exits: [],
+      inFlight: 0,
+      logged: [["error", expect.stringContaining("the handler broke")]],
+    });
   });
 
   describe("a subscribe", () => {
