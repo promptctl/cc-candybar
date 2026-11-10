@@ -76766,13 +76766,16 @@ function drawRender(parts, setup, drawing2) {
       // A standing warning is one per kind whose words change as it does (a
       // pipe event's counts), so its kind alone is what it is about: a viewer
       // open on it stays open. A render warning is about its words.
-      ...[
-        ...standing.map((w) => ({ about: w.kind, message: w.message })),
-        ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({
-          about: `${w.kind}\0${w.message}`,
-          message: w.message
-        }))
-      ].map((w) => ({ about: w.about, text: w.message, copy: w.message }))
+      ...standing.map((w) => ({
+        about: w.kind,
+        text: w.message,
+        copy: w.message
+      })),
+      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({
+        about: `${w.kind}\0${w.message}`,
+        text: w.message,
+        copy: w.message
+      }))
     ]
   );
   const document = view.source.facts();

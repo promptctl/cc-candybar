@@ -4,15 +4,22 @@
     {
       "version": "pr-686",
       "ref": "refs/pull/686/merge",
-      "sha": "66c114fc108adad2d5b4e2d55d121c8836413829",
-      "timestamp": "2026-11-10T00:30:18.763Z",
+      "sha": "544ec97585ec18a9043faa32a867c754132cf526",
+      "timestamp": "2026-11-10T00:40:26.037Z",
       "commits": [
         {
-          "sha": "66c114fc108adad2d5b4e2d55d121c8836413829",
+          "sha": "544ec97585ec18a9043faa32a867c754132cf526",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T00:29:17Z",
-          "message": "Merge 8ec540fbcb4d25e0389bdde078e8cf5e4bafa018 into ab338bef54c2615eb740f9e487dad793f8003ce3\n"
+          "timestamp": "2026-11-10T00:39:15Z",
+          "message": "Merge 0c76ea767f16d9e0ca10608c05bd674d4ea93ec5 into ab338bef54c2615eb740f9e487dad793f8003ce3\n"
+        },
+        {
+          "sha": "0c76ea767f16d9e0ca10608c05bd674d4ea93ec5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T17:39:04-07:00",
+          "message": "fix(diagnostics): a repository question left alone reads ℹ 1, and the handoff's indicator is not called the error indicator\n\nFrom the medium review of #686:\n- The loop e2e still waited for an amber ⚠ 1 once only the repository\n  question was left; that question is info, so the bar reads ℹ 1.\n- The handoff row's indicator wears the list's worst level, so its comment\n  and the lanes memory call it the diagnostics indicator.\n- The warnings map straight to their texts, without an intermediate shape.\n- Why the failure is its own message lives in the rendering memory alone.\n- The handoff line's info colours are proved once, at every depth; the unit\n  test keeps the indicator after it in the worst level.\n- The diagnostics test keeps its own line wrapping.\n\nRejected: inlining the one-use failure text helper, which would spell the\ntext twice.\n"
         },
         {
           "sha": "8ec540fbcb4d25e0389bdde078e8cf5e4bafa018",
