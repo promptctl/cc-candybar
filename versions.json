@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-708",
-      "ref": "refs/pull/708/merge",
-      "sha": "86ffb42f1d63ebb9573ede5a461a5fd6751f8da3",
-      "timestamp": "2026-11-10T05:56:29.808Z",
-      "commits": [
-        {
-          "sha": "86ffb42f1d63ebb9573ede5a461a5fd6751f8da3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T05:55:33Z",
-          "message": "Merge 49f81d54c582b85252216320c7b1a3485aa24a57 into ebe96e86b847c52f272f266af63444e1034ae33f\n"
-        },
-        {
-          "sha": "49f81d54c582b85252216320c7b1a3485aa24a57",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T22:54:09-07:00",
-          "message": "test(daemon): a lane declaration that throws fails the payload helper with its stack (candybar-skeleton-wj0c.88o)\n\nThe helper dropped declareLanes' faults, so a broken owner fixture read as\nan unexplained failed cell; it closes the home and throws them instead, as\nthe daemon logs them as errors. requestPayload's header says its home lives\nfor one request.\n"
-        },
-        {
-          "sha": "7187b6ab072879b9223650947ea9b1e7a0814df4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T22:46:00-07:00",
-          "message": "test(daemon): a home closes through the case's cleanups, and each test's one close path is its afterEach (candybar-skeleton-wj0c.88o)\n\ndeclaredLanes takes the cleanups array the other rig helpers take, so a\ncaller cannot open a home without handing over its close. The git cache\ncases drop the trailing closes their afterEach now repeats; the closes a\ncase asserts across, or orders before a repo's removal, stay.\n"
-        },
-        {
-          "sha": "936218bab7182c4ce5891670ec1bf627225ca007",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T22:35:33-07:00",
-          "message": "test(daemon): a test closes every home it opens, so no file's periods tick inside a later file's close case (candybar-skeleton-wj0c.88o)\n\nThe daemon close case's leftover timers were never its daemon's. The\npayload-owners helpers held a real host source through a home nobody\nclosed, and the git cache tests left their providers open, so their\nperiods re-armed for the life of the Jest worker. Held together, they\nre-arm together, so the close case failed only when that turn fell inside\nit. An audit of armed periods at each file's end now reads zero in every\nworker-tier file.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "ebe96e86b847c52f272f266af63444e1034ae33f",
-      "timestamp": "2026-11-10T05:29:32.000Z",
+      "sha": "005be159ec58ef64c57076aeff631ad80f4b4f7f",
+      "timestamp": "2026-11-10T06:05:26.210Z",
       "commits": [
         {
-          "sha": "ebe96e86b847c52f272f266af63444e1034ae33f",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-10T05:28:30Z",
-          "message": "chore(release): set `package.json` to 1.214.0\n\n## [1.214.0](https://github.com/promptctl/cc-candybar/compare/v1.213.2...v1.214.0) (2026-11-10)\n\n### Features\n\n* **facts:** every session gathers every built-in, and the wants closure goes ([#707](https://github.com/promptctl/cc-candybar/issues/707)) ([effe8f6](https://github.com/promptctl/cc-candybar/commit/effe8f6ccd73837e94fbf8322194bfc66b7f5d1a))\n"
+          "sha": "005be159ec58ef64c57076aeff631ad80f4b4f7f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T23:04:21-07:00",
+          "message": "test(daemon): a test closes every home it opens, so no file's periods tick inside a later file's close case (candybar-skeleton-wj0c.88o) (#708)\n\n* test(daemon): a test closes every home it opens, so no file's periods tick inside a later file's close case (candybar-skeleton-wj0c.88o)\n\nThe daemon close case's leftover timers were never its daemon's. The\npayload-owners helpers held a real host source through a home nobody\nclosed, and the git cache tests left their providers open, so their\nperiods re-armed for the life of the Jest worker. Held together, they\nre-arm together, so the close case failed only when that turn fell inside\nit. An audit of armed periods at each file's end now reads zero in every\nworker-tier file.\n\n* test(daemon): a home closes through the case's cleanups, and each test's one close path is its afterEach (candybar-skeleton-wj0c.88o)\n\ndeclaredLanes takes the cleanups array the other rig helpers take, so a\ncaller cannot open a home without handing over its close. The git cache\ncases drop the trailing closes their afterEach now repeats; the closes a\ncase asserts across, or orders before a repo's removal, stay.\n\n* test(daemon): a lane declaration that throws fails the payload helper with its stack (candybar-skeleton-wj0c.88o)\n\nThe helper dropped declareLanes' faults, so a broken owner fixture read as\nan unexplained failed cell; it closes the home and throws them instead, as\nthe daemon logs them as errors. requestPayload's header says its home lives\nfor one request."
         }
       ]
     }
