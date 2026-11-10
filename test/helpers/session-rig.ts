@@ -106,26 +106,16 @@ export function fixedOwners(
       declareUser: () => settledLane(ok("tester")),
     },
     usageStore: fakeUsage({
-      usage: () => ok({ session: { cost: 0.39, tokens: 241_400 } }),
+      usage: () =>
+        ok({ calculatedCost: 0.39, tokens: 241_400, tokenBreakdown: null }),
       today: () => ok(sumsOf(AT, 12.5, 3_400_000)),
       speed: () => ABSENT,
     }),
-    contextProvider: fakeContext(() =>
-      ok({
-        maxTokens: 1_000_000,
-        totalTokens: 48_487,
-        contextLeftPercentage: 24,
-      }),
-    ),
+    // The transcript's folds; the request's hook carries the native window,
+    // the cost, the durations and the lines laid over them (`requestOf`).
+    contextProvider: fakeContext(() => ok(48_487)),
     metricsProvider: fakeMetrics(() =>
-      ok({
-        lastResponseTime: 8.2,
-        responseTime: 4.2,
-        sessionDuration: 930,
-        messageCount: 8,
-        linesAdded: 512,
-        linesRemoved: 88,
-      }),
+      ok({ lastResponseTime: 8.2, messageCount: 8 }),
     ),
     activityProvider: fakeActivity(() => failed("no transcript", "read")),
     cacheExpiry: fakeCacheExpiry(() => ok(NOW_SEC + 900)),
@@ -209,6 +199,26 @@ export function requestOf(dir: string) {
       workspace: { current_dir: PROJECT, project_dir: PROJECT, added_dirs: [] },
       version: "1.15.0",
       effort: { level: "xhigh" },
+      cost: {
+        total_cost_usd: 0.39,
+        total_duration_ms: 930_000,
+        total_api_duration_ms: 4_200,
+        total_lines_added: 512,
+        total_lines_removed: 88,
+      },
+      context_window: {
+        total_input_tokens: 241_400,
+        total_output_tokens: 0,
+        context_window_size: 1_000_000,
+        used_percentage: 76,
+        remaining_percentage: 24,
+        current_usage: {
+          input_tokens: 48_487,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
       rate_limits: {
         five_hour: { used_percentage: 63, resets_at: NOW_SEC + 2 * 3600 },
         seven_day: { used_percentage: 21, resets_at: NOW_SEC + 5 * 86400 },

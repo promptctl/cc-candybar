@@ -22,11 +22,6 @@ export interface ContextInfo {
   maxTokens: number;
 }
 
-interface ContextUsageThresholds {
-  LOW: number;
-  MEDIUM: number;
-}
-
 // [LAW:one-source-of-truth] The context-window size is NEVER guessed from the
 // model name. Claude Code reports the real size for the active model in
 // `context_window.context_window_size` (1M for the [1m] variants, 200k
@@ -76,145 +71,114 @@ export class ContextProvider {
     );
   }
 
-  private readonly thresholds: ContextUsageThresholds = {
-    LOW: 50,
-    MEDIUM: 80,
-  };
-
-  getContextUsageThresholds(): ContextUsageThresholds {
-    return this.thresholds;
-  }
-
-  // Token-ratio percentages — the fallback ONLY. Used when Claude doesn't
-  // report used_percentage / remaining_percentage natively (transcript path,
-  // or a native window whose percentages are still null pre-first-call). No
-  // auto-compact buffer: that was a hardcoded guess at Claude's threshold and
-  // a soft second source; the native remaining_percentage is authoritative.
-  private ratioPercentages(
-    totalTokens: number,
-    contextLimit: number,
-  ): Pick<ContextInfo, "percentage" | "contextLeftPercentage"> {
-    const percentage = Math.min(
-      100,
-      Math.max(0, Math.round((totalTokens / contextLimit) * 100)),
-    );
-    return { percentage, contextLeftPercentage: Math.max(0, 100 - percentage) };
-  }
-
-  /**
-   * Calculate context info from native Claude Code context_window data (preferred).
-   * Requires Claude Code 2.0.70+ with current_usage field.
-   */
-  calculateContextFromHookData(hookData: ClaudeHookData): ContextInfo | null {
-    const cw = hookData.context_window;
-    if (!cw?.current_usage) {
-      debug(
-        "No current_usage in hook data, falling back to transcript parsing",
-      );
-      return null;
-    }
-
-    const currentUsage = cw.current_usage;
-    // [LAW:no-defensive-null-guards] context_window_size is a required `number`
-    // within context_window; reaching here proves cw is present, so the size
-    // is too. No `|| default` — that would mask a malformed payload as 200k.
-    const contextLimit = cw.context_window_size;
-    const totalTokens =
-      (currentUsage.input_tokens || 0) +
-      (currentUsage.cache_creation_input_tokens || 0) +
-      (currentUsage.cache_read_input_tokens || 0);
-
-    debug(
-      `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens} (limit: ${contextLimit})`,
-    );
-
-    // [LAW:one-source-of-truth] Claude's reported used/remaining percentages
-    // are authoritative; the token-ratio is only a floor for the window whose
-    // percentages are still null (pre-first-call). remaining_percentage is NOT
-    // recomputed from a local buffer — it measures real headroom to the limit.
-    const ratio = this.ratioPercentages(totalTokens, contextLimit);
-    return {
-      totalTokens,
-      maxTokens: contextLimit,
-      percentage:
-        cw.used_percentage != null
-          ? Math.round(cw.used_percentage)
-          : ratio.percentage,
-      contextLeftPercentage:
-        cw.remaining_percentage != null
-          ? Math.round(cw.remaining_percentage)
-          : ratio.contextLeftPercentage,
-    };
-  }
-
-  /**
-   * Calculate context tokens from the transcript (fallback), for older Claude
-   * Code versions that don't provide context_window.
-   *
-   * [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
-   * boundary logs it); a transcript with no usable usage entry is `absent`.
-   */
-  async calculateContextTokensFromTranscript(
+  // The session's context tokens, folded from the transcript's newest
+  // main-chain usage entry.
+  // [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
+  // boundary logs it); a transcript with no usable usage entry is `absent`.
+  async refresh(
     sessionId: string,
     transcriptPath: string,
-    contextLimit: number,
-  ): Promise<Outcome<ContextInfo>> {
-    return this.contextFrom(
-      await this.fold.read(sessionId, transcriptPath),
-      contextLimit,
-    );
+  ): Promise<Outcome<number>> {
+    return tokensFrom(await this.fold.read(sessionId, transcriptPath));
   }
 
-  /**
-   * Get context info using native data if available, falling back to transcript parsing.
-   */
-  async getContextInfo(
-    hookData: ClaudeHookData,
-  ): Promise<Outcome<ContextInfo>> {
-    const nativeContext = this.calculateContextFromHookData(hookData);
-    if (nativeContext) {
-      return ok(nativeContext);
-    }
-    return this.calculateContextTokensFromTranscript(
-      hookData.session_id,
-      hookData.transcript_path,
-      contextLimitOf(hookData),
-    );
+  // The session's context tokens as its last refresh left them, for a draw.
+  tokensOf(sessionId: string): Reading<number> {
+    const answer = this.fold.answer(sessionId);
+    return answer.kind === "pending" ? answer : tokensFrom(answer);
+  }
+}
+
+// [LAW:one-source-of-truth] The one projection of the fold's answer.
+function tokensFrom(read: FoldOutcome<ContextState>): Outcome<number> {
+  if (read.kind === "failed") {
+    return failed(`context transcript: ${read.reason}`, read.failedAt);
+  }
+  if (read.value === undefined) {
+    debug("No main chain entries with usage data found");
+    return ABSENT;
+  }
+  return ok(read.value);
+}
+
+// Token-ratio percentages — the fallback ONLY. Used when Claude doesn't
+// report used_percentage / remaining_percentage natively (transcript path,
+// or a native window whose percentages are still null pre-first-call). No
+// auto-compact buffer: that was a hardcoded guess at Claude's threshold and
+// a soft second source; the native remaining_percentage is authoritative.
+function ratioPercentages(
+  totalTokens: number,
+  contextLimit: number,
+): Pick<ContextInfo, "percentage" | "contextLeftPercentage"> {
+  const percentage = Math.min(
+    100,
+    Math.max(0, Math.round((totalTokens / contextLimit) * 100)),
+  );
+  return { percentage, contextLeftPercentage: Math.max(0, 100 - percentage) };
+}
+
+// Context info from native Claude Code context_window data (preferred), which
+// Claude Code 2.0.70+ sends with its current_usage field.
+function contextFromHook(hookData: ClaudeHookData): ContextInfo | null {
+  const cw = hookData.context_window;
+  if (!cw?.current_usage) {
+    debug("No current_usage in hook data, falling back to transcript parsing");
+    return null;
   }
 
-  // The session's context as it stands, for a draw: the native data the
-  // request carried, else the fold as its last refresh left it.
-  contextOf(hookData: ClaudeHookData): Reading<ContextInfo> {
-    const nativeContext = this.calculateContextFromHookData(hookData);
-    if (nativeContext) return ok(nativeContext);
-    const answer = this.fold.answer(hookData.session_id);
-    return answer.kind === "pending"
-      ? answer
-      : this.contextFrom(answer, contextLimitOf(hookData));
-  }
+  const currentUsage = cw.current_usage;
+  // [LAW:no-defensive-null-guards] context_window_size is a required `number`
+  // within context_window; reaching here proves cw is present, so the size
+  // is too. No `|| default` — that would mask a malformed payload as 200k.
+  const contextLimit = cw.context_window_size;
+  const totalTokens =
+    (currentUsage.input_tokens || 0) +
+    (currentUsage.cache_creation_input_tokens || 0) +
+    (currentUsage.cache_read_input_tokens || 0);
 
-  // [LAW:one-source-of-truth] The one projection of the fold's answer.
-  private contextFrom(
-    read: FoldOutcome<ContextState>,
-    contextLimit: number,
-  ): Outcome<ContextInfo> {
-    if (read.kind === "failed") {
-      return failed(`context transcript: ${read.reason}`, read.failedAt);
-    }
-    const totalTokens = read.value;
-    if (totalTokens === undefined) {
-      debug("No main chain entries with usage data found");
-      return ABSENT;
-    }
-    debug(
-      `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`,
-    );
-    return ok({
-      totalTokens,
-      maxTokens: contextLimit,
-      ...this.ratioPercentages(totalTokens, contextLimit),
-    });
-  }
+  debug(
+    `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens} (limit: ${contextLimit})`,
+  );
+
+  // [LAW:one-source-of-truth] Claude's reported used/remaining percentages
+  // are authoritative; the token-ratio is only a floor for the window whose
+  // percentages are still null (pre-first-call). remaining_percentage is NOT
+  // recomputed from a local buffer — it measures real headroom to the limit.
+  const ratio = ratioPercentages(totalTokens, contextLimit);
+  return {
+    totalTokens,
+    maxTokens: contextLimit,
+    percentage:
+      cw.used_percentage != null
+        ? Math.round(cw.used_percentage)
+        : ratio.percentage,
+    contextLeftPercentage:
+      cw.remaining_percentage != null
+        ? Math.round(cw.remaining_percentage)
+        : ratio.contextLeftPercentage,
+  };
+}
+
+// [LAW:one-source-of-truth] The session's context as the renderer composes
+// it: the native window the request carried, else the transcript's tokens
+// against the window size the hook reports. The native answer stands whatever
+// the fold says, pending or failed, since the fold is only its fallback.
+export function contextOver(
+  tokens: Reading<number>,
+  hookData: ClaudeHookData,
+): Reading<ContextInfo> {
+  const native = contextFromHook(hookData);
+  if (native !== null) return ok(native);
+  if (tokens.kind !== "ok") return tokens;
+  const contextLimit = contextLimitOf(hookData);
+  debug(
+    `Most recent main chain context: ${tokens.value} tokens (limit: ${contextLimit})`,
+  );
+  return ok({
+    totalTokens: tokens.value,
+    maxTokens: contextLimit,
+    ...ratioPercentages(tokens.value, contextLimit),
+  });
 }
 
 // [LAW:one-source-of-truth] current_usage can be null (pre-first-call or

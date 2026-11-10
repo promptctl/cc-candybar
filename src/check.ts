@@ -82,9 +82,8 @@ import { sessionIdOf } from "./daemon/session-id.js";
 import type { ClientHints } from "./daemon/protocol.js";
 import type { ClaudeHookData } from "./utils/claude.js";
 import type { GitInfo } from "./segments/git.js";
-import type { UsageInfo } from "./segments/session.js";
-import type { ContextInfo } from "./segments/context.js";
-import type { MetricsInfo } from "./segments/metrics.js";
+import type { TranscriptUsage } from "./segments/session.js";
+import type { MetricsFold } from "./segments/metrics.js";
 import type { AutoCompactWindow } from "./segments/autocompact.js";
 import { oneDay, type TodayFacts } from "./daemon/cache/today-facts.js";
 import { ABSENT, ok } from "./utils/outcome.js";
@@ -235,6 +234,29 @@ function checkHook(at: Instant): ClaudeHookData {
       project_dir: `${CHECK_HOME}/code/cc-candybar`,
       added_dirs: [],
     },
+    // The hook's instantaneous fields the payload lays over the document's
+    // transcript folds: the session's cost, durations and lines, and the
+    // native context window.
+    cost: {
+      total_cost_usd: 0.39,
+      total_duration_ms: 930_000,
+      total_api_duration_ms: 4_200,
+      total_lines_added: 512,
+      total_lines_removed: 88,
+    },
+    context_window: {
+      total_input_tokens: 241_400,
+      total_output_tokens: 0,
+      context_window_size: 1_000_000,
+      used_percentage: 76,
+      remaining_percentage: 24,
+      current_usage: {
+        input_tokens: 48_487,
+        output_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+    },
     rate_limits: {
       five_hour: { used_percentage: 63, resets_at: nowSec + 2 * 3600 },
       seven_day: { used_percentage: 21, resets_at: nowSec + 5 * 86400 },
@@ -274,29 +296,16 @@ function checkReadings(
         // A branch with no PR: no PR keys, as the fixture has always had none.
         pullRequest: ABSENT,
       }),
-      usage: ok<UsageInfo>({
-        session: {
-          cost: 0.39,
-          calculatedCost: 0.39,
-          officialCost: null,
-          tokens: 241400,
-          tokenBreakdown: null,
-        },
+      usage: ok<TranscriptUsage>({
+        calculatedCost: 0.39,
+        tokens: 241400,
+        tokenBreakdown: null,
       }),
-      context: ok<ContextInfo>({
-        totalTokens: 48487,
-        percentage: 76,
-        contextLeftPercentage: 24,
-        maxTokens: 1_000_000,
-      }),
-      metrics: ok<MetricsInfo>({
+      context: ok(48487),
+      metrics: ok<MetricsFold>({
         lastResponseTime: 8.2,
-        responseTime: 4.2,
-        sessionDuration: 930,
         messageCount: 8,
         nonPrompts: 0,
-        linesAdded: 512,
-        linesRemoved: 88,
       }),
       activity: ABSENT,
       tmuxSession: ok("work"),

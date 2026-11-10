@@ -33,6 +33,26 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
       "contextLeft": 24,
       "totalTokens": 48487,
     },
+    "context_window": {
+      "context_window_size": 1000000,
+      "current_usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 48487,
+        "output_tokens": 0,
+      },
+      "remaining_percentage": 24,
+      "total_input_tokens": 241400,
+      "total_output_tokens": 0,
+      "used_percentage": 76,
+    },
+    "cost": {
+      "total_api_duration_ms": 4200,
+      "total_cost_usd": 0.39,
+      "total_duration_ms": 930000,
+      "total_lines_added": 512,
+      "total_lines_removed": 88,
+    },
     "cwd": "/home/tester/code/cc-candybar/src",
     "effort": {
       "level": "xhigh",
@@ -218,6 +238,26 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
     "context": {
       "contextLeft": 24,
       "totalTokens": 48487,
+    },
+    "context_window": {
+      "context_window_size": 1000000,
+      "current_usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 48487,
+        "output_tokens": 0,
+      },
+      "remaining_percentage": 24,
+      "total_input_tokens": 241400,
+      "total_output_tokens": 0,
+      "used_percentage": 76,
+    },
+    "cost": {
+      "total_api_duration_ms": 4200,
+      "total_cost_usd": 0.39,
+      "total_duration_ms": 930000,
+      "total_lines_added": 512,
+      "total_lines_removed": 88,
     },
     "cwd": "/home/tester/code/cc-candybar/src",
     "effort": {
@@ -405,6 +445,26 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
       "contextLeft": 24,
       "totalTokens": 48487,
     },
+    "context_window": {
+      "context_window_size": 1000000,
+      "current_usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 48487,
+        "output_tokens": 0,
+      },
+      "remaining_percentage": 24,
+      "total_input_tokens": 241400,
+      "total_output_tokens": 0,
+      "used_percentage": 76,
+    },
+    "cost": {
+      "total_api_duration_ms": 4200,
+      "total_cost_usd": 0.39,
+      "total_duration_ms": 930000,
+      "total_lines_added": 512,
+      "total_lines_removed": 88,
+    },
     "cwd": "/home/tester/code/cc-candybar/src",
     "effort": {
       "level": "xhigh",
@@ -590,6 +650,26 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
     "context": {
       "contextLeft": 24,
       "totalTokens": 48487,
+    },
+    "context_window": {
+      "context_window_size": 1000000,
+      "current_usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 48487,
+        "output_tokens": 0,
+      },
+      "remaining_percentage": 24,
+      "total_input_tokens": 241400,
+      "total_output_tokens": 0,
+      "used_percentage": 76,
+    },
+    "cost": {
+      "total_api_duration_ms": 4200,
+      "total_cost_usd": 0.39,
+      "total_duration_ms": 930000,
+      "total_lines_added": 512,
+      "total_lines_removed": 88,
     },
     "cwd": "/home/tester/code/cc-candybar/src",
     "effort": {
@@ -777,6 +857,26 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
       "contextLeft": 24,
       "totalTokens": 48487,
     },
+    "context_window": {
+      "context_window_size": 1000000,
+      "current_usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 48487,
+        "output_tokens": 0,
+      },
+      "remaining_percentage": 24,
+      "total_input_tokens": 241400,
+      "total_output_tokens": 0,
+      "used_percentage": 76,
+    },
+    "cost": {
+      "total_api_duration_ms": 4200,
+      "total_cost_usd": 0.39,
+      "total_duration_ms": 930000,
+      "total_lines_added": 512,
+      "total_lines_removed": 88,
+    },
     "cwd": "/home/tester/code/cc-candybar/src",
     "effort": {
       "level": "xhigh",
@@ -963,6 +1063,26 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
       "contextLeft": 24,
       "totalTokens": 48487,
     },
+    "context_window": {
+      "context_window_size": 1000000,
+      "current_usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 48487,
+        "output_tokens": 0,
+      },
+      "remaining_percentage": 24,
+      "total_input_tokens": 241400,
+      "total_output_tokens": 0,
+      "used_percentage": 76,
+    },
+    "cost": {
+      "total_api_duration_ms": 4200,
+      "total_cost_usd": 0.39,
+      "total_duration_ms": 930000,
+      "total_lines_added": 512,
+      "total_lines_removed": 88,
+    },
     "cwd": "/home/tester/code/cc-candybar/src",
     "effort": {
       "level": "xhigh",
@@ -1148,6 +1268,26 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
     "context": {
       "contextLeft": 24,
       "totalTokens": 48487,
+    },
+    "context_window": {
+      "context_window_size": 1000000,
+      "current_usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 48487,
+        "output_tokens": 0,
+      },
+      "remaining_percentage": 24,
+      "total_input_tokens": 241400,
+      "total_output_tokens": 0,
+      "used_percentage": 76,
+    },
+    "cost": {
+      "total_api_duration_ms": 4200,
+      "total_cost_usd": 0.39,
+      "total_duration_ms": 930000,
+      "total_lines_added": 512,
+      "total_lines_removed": 88,
     },
     "cwd": "/home/tester/code/cc-candybar/src",
     "effort": {
@@ -1336,6 +1476,26 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
     "contextLeft": 24,
     "totalTokens": 48487,
   },
+  "context_window": {
+    "context_window_size": 1000000,
+    "current_usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 48487,
+      "output_tokens": 0,
+    },
+    "remaining_percentage": 24,
+    "total_input_tokens": 241400,
+    "total_output_tokens": 0,
+    "used_percentage": 76,
+  },
+  "cost": {
+    "total_api_duration_ms": 4200,
+    "total_cost_usd": 0.39,
+    "total_duration_ms": 930000,
+    "total_lines_added": 512,
+    "total_lines_removed": 88,
+  },
   "cwd": "/home/tester/code/project",
   "effort": {
     "level": "xhigh",
@@ -1520,6 +1680,26 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
   "context": {
     "contextLeft": 24,
     "totalTokens": 48487,
+  },
+  "context_window": {
+    "context_window_size": 1000000,
+    "current_usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 48487,
+      "output_tokens": 0,
+    },
+    "remaining_percentage": 24,
+    "total_input_tokens": 241400,
+    "total_output_tokens": 0,
+    "used_percentage": 76,
+  },
+  "cost": {
+    "total_api_duration_ms": 4200,
+    "total_cost_usd": 0.39,
+    "total_duration_ms": 930000,
+    "total_lines_added": 512,
+    "total_lines_removed": 88,
   },
   "cwd": "/home/tester/code/project",
   "effort": {
@@ -1706,6 +1886,26 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
     "contextLeft": 24,
     "totalTokens": 48487,
   },
+  "context_window": {
+    "context_window_size": 1000000,
+    "current_usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 48487,
+      "output_tokens": 0,
+    },
+    "remaining_percentage": 24,
+    "total_input_tokens": 241400,
+    "total_output_tokens": 0,
+    "used_percentage": 76,
+  },
+  "cost": {
+    "total_api_duration_ms": 4200,
+    "total_cost_usd": 0.39,
+    "total_duration_ms": 930000,
+    "total_lines_added": 512,
+    "total_lines_removed": 88,
+  },
   "cwd": "/home/tester/code/project",
   "effort": {
     "level": "xhigh",
@@ -1890,6 +2090,26 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
   "context": {
     "contextLeft": 24,
     "totalTokens": 48487,
+  },
+  "context_window": {
+    "context_window_size": 1000000,
+    "current_usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 48487,
+      "output_tokens": 0,
+    },
+    "remaining_percentage": 24,
+    "total_input_tokens": 241400,
+    "total_output_tokens": 0,
+    "used_percentage": 76,
+  },
+  "cost": {
+    "total_api_duration_ms": 4200,
+    "total_cost_usd": 0.39,
+    "total_duration_ms": 930000,
+    "total_lines_added": 512,
+    "total_lines_removed": 88,
   },
   "cwd": "/home/tester/code/project",
   "effort": {
@@ -2076,6 +2296,26 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
     "contextLeft": 24,
     "totalTokens": 48487,
   },
+  "context_window": {
+    "context_window_size": 1000000,
+    "current_usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 48487,
+      "output_tokens": 0,
+    },
+    "remaining_percentage": 24,
+    "total_input_tokens": 241400,
+    "total_output_tokens": 0,
+    "used_percentage": 76,
+  },
+  "cost": {
+    "total_api_duration_ms": 4200,
+    "total_cost_usd": 0.39,
+    "total_duration_ms": 930000,
+    "total_lines_added": 512,
+    "total_lines_removed": 88,
+  },
   "cwd": "/home/tester/code/project",
   "effort": {
     "level": "xhigh",
@@ -2261,6 +2501,26 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
   "context": {
     "contextLeft": 24,
     "totalTokens": 48487,
+  },
+  "context_window": {
+    "context_window_size": 1000000,
+    "current_usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 48487,
+      "output_tokens": 0,
+    },
+    "remaining_percentage": 24,
+    "total_input_tokens": 241400,
+    "total_output_tokens": 0,
+    "used_percentage": 76,
+  },
+  "cost": {
+    "total_api_duration_ms": 4200,
+    "total_cost_usd": 0.39,
+    "total_duration_ms": 930000,
+    "total_lines_added": 512,
+    "total_lines_removed": 88,
   },
   "cwd": "/home/tester/code/project",
   "effort": {
@@ -2449,6 +2709,26 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
     "contextLeft": 24,
     "totalTokens": 48487,
   },
+  "context_window": {
+    "context_window_size": 1000000,
+    "current_usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 48487,
+      "output_tokens": 0,
+    },
+    "remaining_percentage": 24,
+    "total_input_tokens": 241400,
+    "total_output_tokens": 0,
+    "used_percentage": 76,
+  },
+  "cost": {
+    "total_api_duration_ms": 4200,
+    "total_cost_usd": 0.39,
+    "total_duration_ms": 930000,
+    "total_lines_added": 512,
+    "total_lines_removed": 88,
+  },
   "cwd": "/home/tester/code/project",
   "effort": {
     "level": "xhigh",
@@ -2630,6 +2910,26 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
   "context": {
     "contextLeft": 24,
     "totalTokens": 48487,
+  },
+  "context_window": {
+    "context_window_size": 1000000,
+    "current_usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 48487,
+      "output_tokens": 0,
+    },
+    "remaining_percentage": 24,
+    "total_input_tokens": 241400,
+    "total_output_tokens": 0,
+    "used_percentage": 76,
+  },
+  "cost": {
+    "total_api_duration_ms": 4200,
+    "total_cost_usd": 0.39,
+    "total_duration_ms": 930000,
+    "total_lines_added": 512,
+    "total_lines_removed": 88,
   },
   "cwd": "/home/tester/code/project",
   "effort": {

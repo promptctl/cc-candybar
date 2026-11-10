@@ -332,15 +332,7 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
       tmuxService: fakeTmux(async () => ok("main-session")),
       usageStore: fakeUsage({
         usage: async () =>
-          ok({
-            session: {
-              cost: 1.25,
-              calculatedCost: 1.25,
-              officialCost: null,
-              tokens: 42,
-              tokenBreakdown: null,
-            },
-          }),
+          ok({ calculatedCost: 1.25, tokens: 42, tokenBreakdown: null }),
         today: () => ABSENT,
       }),
     });
@@ -700,9 +692,9 @@ describe("payloadOf — autocompact lane", () => {
   test("the cap comes from the context lane's window", async () => {
     const deps = depsWith(ABSENT, [], {
       autoCompact: fakeAutoCompact(() => ok(800_000)),
-      contextProvider: fakeContext(async () =>
-        ok({ totalTokens: 1, maxTokens: 200_000, contextLeftPercentage: 99 }),
-      ),
+      // The transcript's tokens, against the window the hook reports: none,
+      // so the 200k floor.
+      contextProvider: fakeContext(async () => ok(1)),
     });
     const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),

@@ -5,10 +5,9 @@ import type { SessionId } from "../daemon/session-id";
 import type { Update } from "../daemon/update-notice";
 import type { ActivityInfo } from "../segments/activity";
 import type { AutoCompactWindow } from "../segments/autocompact";
-import type { ContextInfo } from "../segments/context";
 import type { GitRead, PullRequest } from "../segments/git";
-import type { MetricsInfo } from "../segments/metrics";
-import type { UsageInfo } from "../segments/session";
+import type { MetricsFold } from "../segments/metrics";
+import type { TranscriptUsage } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
 import type { Fact } from "./fact";
 
@@ -42,12 +41,18 @@ export interface FactsDiagnostic {
   readonly reason: string;
 }
 
+// [LAW:types-are-the-program] `session`, `context` and `metrics` are the
+// transcript's folds alone: the hook's instantaneous fields (cost, the
+// context window, durations, lines) are the renderer's, laid over them when
+// the payload is composed, so a document is gathered from the session's
+// locator and never from a request.
 export interface BuiltinFacts {
-  readonly session: Fact<UsageInfo>;
+  readonly session: Fact<TranscriptUsage>;
   readonly today: Fact<TodayFacts>;
   readonly speed: Fact<SpeedObservation>;
-  readonly context: Fact<ContextInfo>;
-  readonly metrics: Fact<MetricsInfo>;
+  // The transcript's context tokens: its newest main-chain usage entry's.
+  readonly context: Fact<number>;
+  readonly metrics: Fact<MetricsFold>;
   readonly activity: Fact<ActivityInfo>;
   readonly cache: Fact<number>;
   readonly autocompact: Fact<AutoCompactWindow>;

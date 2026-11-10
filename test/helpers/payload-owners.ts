@@ -18,10 +18,9 @@ import type { ClaudeHookData } from "../../src/utils/claude";
 import { sessionIdOf } from "../../src/daemon/session-id";
 import type { GitInfo } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
-import type { ContextInfo } from "../../src/segments/context";
-import type { MetricsInfo } from "../../src/segments/metrics";
+import type { MetricsFold } from "../../src/segments/metrics";
 import type { ActivityInfo } from "../../src/segments/activity";
-import type { UsageInfo } from "../../src/segments/session";
+import type { TranscriptUsage } from "../../src/segments/session";
 import type {
   DaySums,
   SpeedObservation,
@@ -162,7 +161,7 @@ export function fakeTmux(read: (holds: Holds, hint: TmuxHint) => Loose) {
 
 export function fakeUsage(
   readers: {
-    readonly usage?: (sessionId: string, hookData?: ClaudeHookData) => Loose;
+    readonly usage?: (sessionId: string) => Loose;
     // The day sums of the directory set declared at `claudeConfigDir`, read
     // once, when the first request has refreshed `today`.
     readonly today?: (claudeConfigDir: string | undefined) => Outcome<DaySums>;
@@ -173,13 +172,13 @@ export function fakeUsage(
     ) => Loose;
   } = {},
 ) {
-  const usage = refreshed<UsageInfo>();
+  const usage = refreshed<TranscriptUsage>();
   // The sessions whose request refreshed `today`: before one has, a draw
   // reads it as not answered yet.
   const todayRefreshed = observable.set<string>();
   const speed = refreshed<SpeedObservation>();
-  const getUsageInfo = (sessionId: string, hookData?: ClaudeHookData) =>
-    usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT);
+  const refreshUsage = (sessionId: string) =>
+    usage.store(sessionId, readers.usage?.(sessionId) ?? ABSENT);
   const observeSpeed = (
     sessionId: string,
     transcriptPath: string | undefined,
@@ -190,17 +189,16 @@ export function fakeUsage(
       readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
     );
   return {
-    getUsageInfo,
     // A request's lanes over its session, as the real store's `request`.
     request: (sessionId: string, transcriptPath: string | undefined) => ({
-      usage: (hookData: ClaudeHookData | undefined) =>
-        getUsageInfo(sessionId, hookData),
+      usage: () => refreshUsage(sessionId),
       speed: (nowMs: number) => observeSpeed(sessionId, transcriptPath, nowMs),
       today: async () => {
         runInAction(() => todayRefreshed.add(sessionId));
       },
     }),
-    usageOf: (sessionId: string): Reading<UsageInfo> => usage.read(sessionId),
+    usageOf: (sessionId: string): Reading<TranscriptUsage> =>
+      usage.read(sessionId),
     // Not answered yet until some request has refreshed `today`, then what
     // the reader gave for the set, as the real lane's first scan lands.
     declareToday: (
@@ -234,25 +232,29 @@ export function fakeUsage(
   };
 }
 
-export function fakeContext(read: (hookData: ClaudeHookData) => Loose) {
-  const lane = refreshed<ContextInfo>();
+// The transcript's context tokens, as the context owner folds them; the
+// payload lays the hook's window over them.
+export function fakeContext(
+  read: (sessionId: string, transcriptPath: string) => Loose,
+) {
+  const lane = refreshed<number>();
   return {
-    getContextInfo: (hookData: ClaudeHookData) =>
-      lane.store(hookData.session_id, read(hookData)),
-    contextOf: (hookData: ClaudeHookData): Reading<ContextInfo> =>
-      lane.read(hookData.session_id),
+    refresh: (sessionId: string, transcriptPath: string) =>
+      lane.store(sessionId, read(sessionId, transcriptPath)),
+    tokensOf: (sessionId: string): Reading<number> => lane.read(sessionId),
   };
 }
 
+// The transcript's metrics fold; the payload lays the hook's durations and
+// lines over it.
 export function fakeMetrics(
-  read: (sessionId: string, hookData: ClaudeHookData) => Loose,
+  read: (sessionId: string, transcriptPath: string) => Loose,
 ) {
-  const lane = refreshed<MetricsInfo>();
+  const lane = refreshed<MetricsFold>();
   return {
-    getMetricsInfo: (sessionId: string, hookData: ClaudeHookData) =>
-      lane.store(sessionId, read(sessionId, hookData)),
-    metricsOf: (sessionId: string): Reading<MetricsInfo> =>
-      lane.read(sessionId),
+    refresh: (sessionId: string, transcriptPath: string) =>
+      lane.store(sessionId, read(sessionId, transcriptPath)),
+    foldOf: (sessionId: string): Reading<MetricsFold> => lane.read(sessionId),
   };
 }
 

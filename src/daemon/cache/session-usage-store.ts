@@ -3,8 +3,7 @@ import { dirname, join, sep } from "node:path";
 import { observable, runInAction, type IObservableValue } from "mobx";
 
 import {
-  type SessionInfo,
-  type UsageInfo,
+  type TranscriptUsage,
   type TokenBreakdown,
 } from "../../segments/session";
 import type { Host } from "../../host";
@@ -126,10 +125,10 @@ function speedSampleOf(
 
 interface SessionRecord {
   // [LAW:one-source-of-truth] `files` is canonical (main transcript + agent
-  // sidechains, each its own incremental FileFold); `sessionInfo`/`days` are
+  // sidechains, each its own incremental FileFold); `usage`/`days` are
   // derived from mergeFolds and re-synced on every ingest — the single writer.
   files: Map<string, Folded<FileFold>>;
-  sessionInfo: SessionInfo;
+  usage: TranscriptUsage;
   days: Map<string, DayUsage>;
   transcriptStamp: string;
   transcriptPath: string | undefined;
@@ -174,7 +173,7 @@ interface SessionRefresh {
 // What one statusline request reads of its session's record: each lane over
 // the request's one refresh of it.
 export interface SessionRequest {
-  usage(hookData: ClaudeHookData | undefined): Promise<Outcome<UsageInfo>>;
+  usage(): Promise<Outcome<TranscriptUsage>>;
   speed(nowMs: number): Promise<Outcome<SpeedObservation>>;
   today(): Promise<void>;
 }
@@ -209,10 +208,8 @@ const MAX_UNHELD_SCANS = 8;
 // unbounded burst gn4 exists to kill.
 const SEED_CONCURRENCY = 8;
 
-const EMPTY_SESSION_INFO: SessionInfo = {
-  cost: null,
+const EMPTY_USAGE: TranscriptUsage = {
   calculatedCost: null,
-  officialCost: null,
   tokens: null,
   tokenBreakdown: null,
 };
@@ -304,10 +301,10 @@ async function foldFile(
 
 // [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
 // derived record shape the read path serves. `entries === 0` across all files is
-// the empty session (all-null SessionInfo, whose fields the payload drops) — the
+// the empty session (all-null TranscriptUsage, whose fields the payload drops) — the
 // same distinction the old `entries.length === 0` arm carried.
 function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
-  sessionInfo: SessionInfo;
+  usage: TranscriptUsage;
   days: Map<string, DayUsage>;
 } {
   let count = 0;
@@ -327,13 +324,11 @@ function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
       days.set(k, d);
     }
   }
-  if (count === 0) return { sessionInfo: EMPTY_SESSION_INFO, days };
+  if (count === 0) return { usage: EMPTY_USAGE, days };
   const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
   return {
-    sessionInfo: {
-      cost,
+    usage: {
       calculatedCost: cost,
-      officialCost: null,
       tokens,
       tokenBreakdown: bd,
     },
@@ -401,23 +396,6 @@ async function mapPool<T>(
   };
   const width = Math.min(limit, items.length);
   await Promise.all(Array.from({ length: width }, worker));
-}
-
-// The `session` projection's last step, shared by a request's refresh and a
-// draw. [LAW:one-source-of-truth] Claude's reported total_cost_usd is the
-// authoritative cost of the active session. base.cost (transcript entries
-// priced by PricingService against a hand-maintained rate table) is a
-// reimplementation — kept ONLY as a fallback for clients that omit cost, and
-// to feed the cross-session `today` total, which has no native source (past
-// sessions expose only their transcripts, not a live cost figure). The native
-// cost is overlaid at READ time, not frozen into the stamp-keyed record,
-// because it changes every render while the transcript total moves only when
-// the file does.
-function usageOver(base: SessionInfo, hookData?: ClaudeHookData): UsageInfo {
-  const officialCost = hookData?.cost?.total_cost_usd ?? null;
-  return {
-    session: { ...base, cost: officialCost ?? base.cost, officialCost },
-  };
 }
 
 // A slot's answer, stored in the turn it lands.
@@ -541,19 +519,6 @@ export class SessionUsageStore {
     return this.scans.stats();
   }
 
-  // The `session` projection: whole-session totals for the active session.
-  // [LAW:no-silent-failure] A failed transcript parse flows out as `failed`
-  // (the payload boundary logs it); an unknown/empty session is the all-null
-  // SessionInfo whose fields the boundary drops per-field — top-level
-  // `absent` is reserved for ingest, since the native officialCost overlay
-  // applies even with no record.
-  getUsageInfo(
-    sessionId: string,
-    hookData?: ClaudeHookData,
-  ): Promise<Outcome<UsageInfo>> {
-    return this.request(sessionId, hookData?.transcript_path).usage(hookData);
-  }
-
   // [LAW:no-ambient-temporal-coupling] One statusline request's refresh of
   // its session, as a value: the request's session, speed and today lanes
   // read the one refresh it starts, whichever asks first and whenever the
@@ -573,17 +538,14 @@ export class SessionUsageStore {
       return refresh;
     };
     return {
-      usage: async (hookData) => {
+      // [LAW:no-silent-failure] A failed transcript parse flows out as
+      // `failed`; an unknown or empty session is the all-null totals, whose
+      // fields the payload drops one by one, so the hook's cost still lands
+      // over a session with no record.
+      usage: async () => {
         const record = await once().record;
         if (record.kind === "failed") return record;
-        return ok(
-          usageOver(
-            record.kind === "ok"
-              ? record.value.sessionInfo
-              : EMPTY_SESSION_INFO,
-            hookData,
-          ),
-        );
+        return ok(record.kind === "ok" ? record.value.usage : EMPTY_USAGE);
       },
       speed: (nowMs) => this.observed(sessionId, once, nowMs),
       // [LAW:no-ambient-temporal-coupling] `today` sums the session's own
@@ -601,14 +563,12 @@ export class SessionUsageStore {
   // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
   // dropped) is not answered yet; one whose refresh found no transcript is the
   // empty record its refresh answers for it.
-  usageOf(sessionId: string, hookData: ClaudeHookData): Reading<UsageInfo> {
+  usageOf(sessionId: string): Reading<TranscriptUsage> {
     const slot = this.sessions.get(sessionId);
     if (slot === undefined) return pendingOf("unread");
     const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
-    return ok(
-      usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData),
-    );
+    return ok(slot.record?.usage ?? EMPTY_USAGE);
   }
 
   // A request's ingest of its own session, whose outcome the session's slot
@@ -752,7 +712,7 @@ export class SessionUsageStore {
         return record;
       }
       const breakdown =
-        record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
+        record.kind === "ok" ? record.value.usage.tokenBreakdown : null;
       const cur = speedSampleOf(breakdown, nowMs);
       const { ring } = this.hold(sessionId);
       // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the render
@@ -837,7 +797,7 @@ export class SessionUsageStore {
       prior: SessionRecord | undefined;
       outcome: Outcome<{
         files: Map<string, Folded<FileFold>>;
-        sessionInfo: SessionInfo;
+        usage: TranscriptUsage;
         days: Map<string, DayUsage>;
         mainStamp: string;
       }>;
@@ -860,7 +820,7 @@ export class SessionUsageStore {
     if (outcome.kind !== "ok") return outcome;
     const record: SessionRecord = {
       files: outcome.value.files,
-      sessionInfo: outcome.value.sessionInfo,
+      usage: outcome.value.usage,
       days: outcome.value.days,
       transcriptStamp: outcome.value.mainStamp,
       transcriptPath,
@@ -944,7 +904,7 @@ export class SessionUsageStore {
   ): Promise<
     Outcome<{
       files: Map<string, Folded<FileFold>>;
-      sessionInfo: SessionInfo;
+      usage: TranscriptUsage;
       days: Map<string, DayUsage>;
       mainStamp: string;
     }>

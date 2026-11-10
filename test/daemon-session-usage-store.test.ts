@@ -40,6 +40,7 @@ import { ABSENT, pendingOf, failed } from "../src/utils/outcome";
 import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
 import { until } from "./helpers/until";
 import { todayInfo, todayNow } from "./helpers/today";
+import { drawnUsage, usageInfo } from "./helpers/usage-info";
 
 // Count cumulative FSREQPROMISE inits (libuv fs requests) over `body`.
 async function countFsOps(body: () => Promise<unknown>): Promise<number> {
@@ -115,15 +116,15 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       const hd = hook("A", t);
-      await store.getUsageInfo("A", hd);
+      await usageInfo(store, "A", hd);
       expect(store.getStats()).toMatchObject({ misses: 1, hits: 0 });
 
-      await store.getUsageInfo("A", hd);
+      await usageInfo(store, "A", hd);
       expect(store.getStats()).toMatchObject({ misses: 1, hits: 1 });
 
       const future = Math.floor(Date.now() / 1000) + 3600;
       utimesSync(t, future, future);
-      await store.getUsageInfo("A", hd);
+      await usageInfo(store, "A", hd);
       expect(store.getStats()).toMatchObject({ misses: 2, hits: 1 });
     } finally {
       store.close();
@@ -150,7 +151,7 @@ describe("SessionUsageStore — session projection", () => {
       writeFileSync(t, usageLine("a", new Date(), 0.01));
       const hd = hook("A", t);
       await Promise.all([
-        store.getUsageInfo("A", hd),
+        usageInfo(store, "A", hd),
         store.observeSpeed("A", t, Date.now()),
       ]);
       expect(usage()).toMatchObject({ refreshes: { request: 1 }, failures: 0 });
@@ -160,7 +161,7 @@ describe("SessionUsageStore — session projection", () => {
       mkdirSync(broken);
       const hb = hook("B", broken);
       await Promise.all([
-        store.getUsageInfo("B", hb),
+        usageInfo(store, "B", hb),
         store.observeSpeed("B", broken, Date.now()),
       ]);
       expect(usage()).toMatchObject({ refreshes: { request: 2 }, failures: 1 });
@@ -173,7 +174,7 @@ describe("SessionUsageStore — session projection", () => {
       mkdirSync(late);
       const request = store.request("C", late);
       await Promise.all([
-        request.usage(hook("C", late)),
+        request.usage(),
         request.speed(Date.now()),
         request.today(),
       ]);
@@ -200,7 +201,7 @@ describe("SessionUsageStore — session projection", () => {
     try {
       // hook() carries no cost block → officialCost null → display the
       // transcript total.
-      const info = await store.getUsageInfo("A", hook("A", t));
+      const info = await usageInfo(store, "A", hook("A", t));
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
       expect(info.value.session.cost).toBeCloseTo(0.03, 5);
@@ -232,7 +233,7 @@ describe("SessionUsageStore — session projection", () => {
         total_lines_added: 0,
         total_lines_removed: 0,
       };
-      const info = await store.getUsageInfo("A", hd);
+      const info = await usageInfo(store, "A", hd);
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
       // Displayed cost is the native number; the priced sum is retained
@@ -253,12 +254,12 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       const bare = { session_id: "" } as ClaudeHookData;
-      const info = await store.getUsageInfo("", bare);
+      const info = await usageInfo(store, "", bare);
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
       expect(info.value.session.cost).toBeNull();
       expect(store.getStats()).toMatchObject({ misses: 0, hits: 0 });
-      expect(store.usageOf("", bare)).toEqual(info);
+      expect(drawnUsage(store, "", bare)).toEqual(info);
     } finally {
       store.close();
     }
@@ -307,7 +308,7 @@ describe("SessionUsageStore — session projection", () => {
       logger: (_level, msg) => lines.push(msg),
     });
     try {
-      const info = await store.getUsageInfo("W", hook("W", t));
+      const info = await usageInfo(store, "W", hook("W", t));
       if (info.kind !== "ok") throw new Error("expected ok");
       expect(info.value.session.cost).toBeCloseTo(1500 * 0.001 + 0.5 + 0.25, 5);
       const long = lines.filter((l) => l.startsWith("transcript long line"));
@@ -335,7 +336,7 @@ describe("SessionUsageStore — session projection", () => {
       logger: (_level, msg) => lines.push(msg),
     });
     try {
-      await store.getUsageInfo("A", hook("A", t));
+      await usageInfo(store, "A", hook("A", t));
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(1);
       expect(store.getStats()).toMatchObject({ sweeps: 1, size: 0 });
@@ -384,7 +385,7 @@ describe("SessionUsageStore — session projection", () => {
       staleAgeMs: 1,
     });
     try {
-      await store.getUsageInfo("A", hook("A", t));
+      await usageInfo(store, "A", hook("A", t));
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(0);
       expect(store.getStats()).toMatchObject({ size: 1 });
@@ -442,12 +443,12 @@ describe("SessionUsageStore — session projection", () => {
       staleAgeMs: 300,
     });
     try {
-      await store.getUsageInfo("A", hook("A", a));
-      await store.getUsageInfo("B", hook("B", b));
+      await usageInfo(store, "A", hook("A", a));
+      await usageInfo(store, "B", hook("B", b));
       now += 400;
-      await store.getUsageInfo("B", { session_id: "B" } as ClaudeHookData);
+      await usageInfo(store, "B", { session_id: "B" } as ClaudeHookData);
       expect(store.sweepStale()).toBe(1);
-      const info = await store.getUsageInfo("B", {
+      const info = await usageInfo(store, "B", {
         session_id: "B",
       } as ClaudeHookData);
       expect(info.kind).toBe("ok");
@@ -470,17 +471,17 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       const bare = { session_id: "H" } as ClaudeHookData;
-      expect(store.usageOf("H", bare)).toEqual(pendingOf("unread"));
-      const answered = await store.getUsageInfo("H", bare);
+      expect(drawnUsage(store, "H", bare)).toEqual(pendingOf("unread"));
+      const answered = await usageInfo(store, "H", bare);
       expect(answered.kind).toBe("ok");
-      expect(store.usageOf("H", bare)).toEqual(answered);
+      expect(drawnUsage(store, "H", bare)).toEqual(answered);
       // The session-less ask stores nothing.
       expect(await store.observeSpeed("", undefined, 1_000)).toEqual(ABSENT);
       expect(store.getStats()).toMatchObject({ size: 1 });
-      const failed = await store.getUsageInfo("G", hook("G", dir));
+      const failed = await usageInfo(store, "G", hook("G", dir));
       expect(failed.kind).toBe("failed");
       // A draw between requests reads the failure the last refresh met.
-      expect(store.usageOf("G", hook("G", dir))).toEqual(failed);
+      expect(drawnUsage(store, "G", hook("G", dir))).toEqual(failed);
       expect(store.getStats()).toMatchObject({ size: 2 });
     } finally {
       store.close();
@@ -500,13 +501,13 @@ describe("SessionUsageStore — session projection", () => {
     try {
       const elsewhere = ["/not/this/dir/"];
       expect(store.daysOutside("A", elsewhere)).toEqual(ABSENT);
-      await store.getUsageInfo("A", hook("A", t));
+      await usageInfo(store, "A", hook("A", t));
       const own = store.daysOutside("A", elsewhere);
       expect(Object.keys(own.kind === "ok" ? own.value : {})).toHaveLength(1);
       // Under the set's roots the days are in its sums already.
       expect(store.daysOutside("A", [dir])).toEqual(ABSENT);
       // A directory is no transcript: the refresh fails, and so does the read.
-      await store.getUsageInfo("G", hook("G", dir));
+      await usageInfo(store, "G", hook("G", dir));
       expect(store.daysOutside("G", elsewhere).kind).toBe("failed");
       expect(store.daysOutside("G", [dir]).kind).toBe("failed");
     } finally {
@@ -525,7 +526,7 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       // The session's own refresh has landed, but no scan has.
-      await store.getUsageInfo("A", hook("A", t));
+      await usageInfo(store, "A", hook("A", t));
       expect(todayNow(store, holds, hook("A", t), dir, instantOf(at))).toBe(
         pendingOf("unread"),
       );
@@ -555,7 +556,7 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       const hd = hook("A", t);
-      const oneParse = await countFsOps(() => store.getUsageInfo("A", hd));
+      const oneParse = await countFsOps(() => usageInfo(store, "A", hd));
 
       // Fresh store: K concurrent first-reads coalesce onto
       // one flight, so cumulative fs ops stay near a single parse, not K×.
@@ -566,7 +567,7 @@ describe("SessionUsageStore — session projection", () => {
       });
       const kConcurrent = await countFsOps(() =>
         Promise.all(
-          Array.from({ length: 8 }, () => store2.getUsageInfo("A", hd)),
+          Array.from({ length: 8 }, () => usageInfo(store2, "A", hd)),
         ),
       );
       store2.close();
@@ -674,7 +675,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       // `today` itself still counts there, and only there.
       const late = join(odir, "other-late.jsonl");
       writeFileSync(late, usageLine("other-late", new Date(), 3));
-      await store.getUsageInfo("other-late", hook("other-late", late));
+      await usageInfo(store, "other-late", hook("other-late", late));
       const joined = await todayInfo(
         store,
         holds,

@@ -42,7 +42,7 @@ An input variable stays pending until its view's source is bound and answers its
 
 ## The facts document
 
-Each session's view holds one facts document, and the payload a template reads is composed from it, so the two cannot disagree about what an owner holds. Every built-in and every declared source has a key in it. A stamp is the instant an answer first differed from the one before, so it is taken in a reaction's effect, never in a derivation: a derivation that read the clock and its own prior answer would answer by when it ran.
+Each session's view holds one facts document, and the payload a template reads is composed from it, so the two cannot disagree about what an owner holds. Every built-in and every declared source has a key in it. The document carries what the transcript says and nothing of the hook, because Gather will know a session by its locator alone: the hook's cost, context window, durations and lines are laid over the folds where the payload is composed. So the context fold is read for every session even though the hook's native window wins whenever it is sent, since the document cannot know which hook it will be composed with. A stamp is the instant an answer first differed from the one before, so it is taken in a reaction's effect, never in a derivation: a derivation that read the clock and its own prior answer would answer by when it ran.
 
 The stamps live on the view, so a rebuilt state or the idle sweep restarts them, and a document's instants mean first seen by that view. The update is the exception: one fact for the daemon, stamped by the watch that owns it and shared by every session's document, so one change has one instant everywhere.
 

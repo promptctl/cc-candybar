@@ -1,4 +1,4 @@
-import { MetricsProvider } from "../src/segments/metrics";
+import { MetricsProvider, metricsOver } from "../src/segments/metrics";
 import {
   writeFileSync,
   appendFileSync,
@@ -11,6 +11,19 @@ import { join } from "path";
 import { tmpdir } from "os";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { systemTimekeeper } from "../src/time";
+
+// The session's metrics as the renderer composes them: the provider's fold of
+// the transcript, with the hook's durations and lines laid over it.
+async function metricsInfo(
+  provider: MetricsProvider,
+  sessionId: string,
+  hookData: ClaudeHookData,
+) {
+  return metricsOver(
+    await provider.refresh(sessionId, hookData.transcript_path),
+    hookData,
+  );
+}
 
 describe("Metrics Provider", () => {
   let tempDir: string;
@@ -68,7 +81,7 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, transcriptContent);
 
     const mockHookData = createMockHookData("test-session", transcriptPath);
-    const outcome = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsInfo(metricsProvider, 
       "test-session",
       mockHookData
     );
@@ -103,7 +116,7 @@ describe("Metrics Provider", () => {
       ].join("\n"),
     );
 
-    const outcome = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsInfo(metricsProvider, 
       "meta-session",
       createMockHookData("meta-session", transcriptPath),
     );
@@ -128,7 +141,7 @@ describe("Metrics Provider", () => {
       ].join("\n"),
     );
 
-    const outcome = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsInfo(metricsProvider, 
       "clock-session",
       createMockHookData("clock-session", transcriptPath),
     );
@@ -150,7 +163,7 @@ describe("Metrics Provider", () => {
       ].join("\n"),
     );
 
-    const outcome = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsInfo(metricsProvider, 
       "turn-session",
       createMockHookData("turn-session", transcriptPath),
     );
@@ -165,7 +178,7 @@ describe("Metrics Provider", () => {
       "nonexistent-session",
       join(tempDir, "nonexistent.jsonl"),
     );
-    const outcome = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsInfo(metricsProvider, 
       "nonexistent-session",
       mockHookData
     );
@@ -189,7 +202,7 @@ describe("Metrics Provider", () => {
     chmodSync(transcriptPath, 0o000);
 
     const mockHookData = createMockHookData("locked-session", transcriptPath);
-    const outcome = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsInfo(metricsProvider, 
       "locked-session",
       mockHookData
     );
@@ -205,7 +218,7 @@ describe("Metrics Provider", () => {
       ...createMockHookData("no-cost-session", join(tempDir, "test.jsonl")),
       cost: undefined,
     };
-    const outcome = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsInfo(metricsProvider, 
       "no-cost-session",
       mockHookData
     );
@@ -232,7 +245,7 @@ describe("Metrics Provider", () => {
 
     writeFileSync(transcriptPath, v1);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);
-    const warm = await metricsProvider.getMetricsInfo("cache-session", hookData);
+    const warm = await metricsInfo(metricsProvider, "cache-session", hookData);
     expect(warm.kind === "ok" && warm.value.messageCount).toBe(2);
 
     // Mutate content but hold mtime identical: foldMetrics's mtime gate is
@@ -241,7 +254,7 @@ describe("Metrics Provider", () => {
     expect(v2.length).toBe(v1.length);
     writeFileSync(transcriptPath, v2);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);
-    const cached = await metricsProvider.getMetricsInfo(
+    const cached = await metricsInfo(metricsProvider, 
       "cache-session",
       hookData,
     );
@@ -263,7 +276,7 @@ describe("Metrics Provider", () => {
     utimesSync(transcriptPath, mtime, mtime);
     const hd = createMockHookData("inc-session", transcriptPath);
 
-    const first = await metricsProvider.getMetricsInfo("inc-session", hd);
+    const first = await metricsInfo(metricsProvider, "inc-session", hd);
     expect(first.kind === "ok" && first.value.messageCount).toBe(2);
     // No assistant turn yet → no user→assistant pair → no response time.
     expect(first.kind === "ok" && first.value.lastResponseTime).toBeNull();
@@ -273,7 +286,7 @@ describe("Metrics Provider", () => {
     // that happens to also be 3 — verified next by appending a non-user line.
     appendFileSync(transcriptPath, userLine());
     utimesSync(transcriptPath, ++mtime, mtime);
-    const second = await metricsProvider.getMetricsInfo("inc-session", hd);
+    const second = await metricsInfo(metricsProvider, "inc-session", hd);
     expect(second.kind === "ok" && second.value.messageCount).toBe(3);
     expect(second.kind === "ok" && second.value.lastResponseTime).toBeNull();
 
@@ -290,7 +303,7 @@ describe("Metrics Provider", () => {
       }) + "\n",
     );
     utimesSync(transcriptPath, ++mtime, mtime);
-    const third = await metricsProvider.getMetricsInfo("inc-session", hd);
+    const third = await metricsInfo(metricsProvider, "inc-session", hd);
     expect(third.kind === "ok" && third.value.messageCount).toBe(3);
     expect(third.kind === "ok" && third.value.lastResponseTime).toBeCloseTo(
       1.0,
@@ -303,7 +316,7 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, "");
 
     const mockHookData = createMockHookData("empty-session", transcriptPath);
-    const outcome = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsInfo(metricsProvider, 
       "empty-session",
       mockHookData
     );

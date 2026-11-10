@@ -272,7 +272,7 @@ function depsWith(
     ...absentOwners(),
     gitProvider: fakeGit(async () => ABSENT),
     usageStore: fakeUsage({
-      usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+      usage: async () => ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
       today: () => ABSENT,
       speed: async () => {
         const prev = { input: 1000, output: 1000, total: 2000, atMs: 0 };
@@ -334,7 +334,7 @@ describe("payloadOf — speed lane", () => {
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
-          usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          usage: async () => ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
           today: () => ABSENT,
           speed: async () => {
             const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
@@ -356,7 +356,7 @@ describe("payloadOf — speed lane", () => {
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
-          usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          usage: async () => ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
           today: () => ABSENT,
           speed: async () => {
             // total/atMs: 0@0, 100@1s (+100/s), 100@2s (idle ⇒ 0), 400@3s (+300/s).
@@ -388,7 +388,7 @@ describe("payloadOf — speed lane", () => {
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
-          usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          usage: async () => ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
           today: () => ABSENT,
           speed: async () => {
             // total/atMs: 0@0, 100@1s (+100/s, in-window), 400@30s (29s gap ⇒
@@ -419,7 +419,7 @@ describe("payloadOf — speed lane", () => {
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
-          usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          usage: async () => ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
           today: () => ABSENT,
           speed: async () => {
             const cur = { input: 10, output: 5, total: 15, atMs: 1000 };

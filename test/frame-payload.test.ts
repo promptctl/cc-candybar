@@ -62,6 +62,14 @@ const HOOK = {
   cwd: "/tmp",
   model: { id: "claude-opus-4-7", display_name: "Opus" },
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+  // A cost block, so the metrics the payload composes follow their fold.
+  cost: {
+    total_cost_usd: 2,
+    total_duration_ms: 60_000,
+    total_api_duration_ms: 1_000,
+    total_lines_added: 0,
+    total_lines_removed: 0,
+  },
 } as unknown as ClaudeHookData;
 
 const GIT: GitRead = {
@@ -100,7 +108,7 @@ function counted(pr: unknown = ABSENT) {
     gitProvider: fakeGit(count("git", ok({ ...GIT, pullRequest: pr }))),
     tmuxService: fakeTmux(count("tmux", ok("work"))),
     usageStore: fakeUsage({
-      usage: count("session", ok({ session: { cost: 2, tokens: 10 } })),
+      usage: count("session", ok({ calculatedCost: 2, tokens: 10, tokenBreakdown: null })),
       today: count("today", ok(sumsOf(AT, 5, 50))),
       speed: count("speed", ABSENT),
     }),
@@ -195,7 +203,7 @@ describe("a frame's payload", () => {
   test("a lane whose read throws is that lane's failure; the rest of the frame draws", async () => {
     const { inputs, request, deps, logs } = counted();
     await request();
-    deps.contextProvider.contextOf = () => {
+    deps.contextProvider.tokensOf = () => {
       throw new Error("context bug");
     };
     const payload = payloadOf(inputs(), DRAW);
@@ -281,15 +289,15 @@ describe("a frame's payload", () => {
 
   test("a lane whose refresh threw is its failure on every frame, until a refresh runs clean", async () => {
     const { inputs, request, deps } = counted();
-    const getContextInfo = deps.contextProvider.getContextInfo;
-    deps.contextProvider.getContextInfo = () => {
+    const refresh = deps.contextProvider.refresh;
+    deps.contextProvider.refresh = () => {
       throw new Error("refresh bug");
     };
     await request();
     for (let frame = 0; frame < 2; frame++) {
       expect(payloadOf(inputs(), DRAW).context).toBeUndefined();
     }
-    deps.contextProvider.getContextInfo = getContextInfo;
+    deps.contextProvider.refresh = refresh;
     await request();
     expect(deps.faults.of(HOOK.session_id, "context")).toBeUndefined();
   });
@@ -300,7 +308,7 @@ describe("a frame's payload", () => {
   test("a failed lane draws as missing, and its payload logs nothing of it", async () => {
     const { inputs, request, deps, logs } = counted();
     await request();
-    deps.contextProvider.contextOf = () => ({
+    deps.contextProvider.tokensOf = () => ({
       kind: "failed",
       reason: "context: no window",
       failedAt: "read",

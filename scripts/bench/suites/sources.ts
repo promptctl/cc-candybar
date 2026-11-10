@@ -11,7 +11,6 @@ import { processWorld } from "../../../src/host.js";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
 import { GitService } from "../../../src/segments/git.js";
-import { hookData } from "../../lib/hook-data.js";
 import {
   appendTurn,
   makeRepo,
@@ -80,17 +79,14 @@ const outputTokens = (turns: number): number =>
 // it, so a short or empty read cannot pass for a fast one.
 async function folded(
   store: SessionUsageStore,
-  cwd: string,
   transcript: string,
   turns: number,
 ): Promise<void> {
-  const usage = await store
-    .request(SESSION, transcript)
-    .usage(hookData(cwd, transcript));
+  const usage = await store.request(SESSION, transcript).usage();
   if (usage.kind !== "ok") {
     throw new Error(`usage fold ended ${JSON.stringify(usage)}`);
   }
-  const output = usage.value.session?.tokenBreakdown?.output;
+  const output = usage.value.tokenBreakdown?.output;
   if (output !== outputTokens(turns)) {
     throw new Error(
       `usage fold summed ${output} output tokens over a transcript of ${turns} turns, which hold ${outputTokens(turns)}`,
@@ -123,7 +119,7 @@ const coldFold = ([
           clock: processWorld().clock,
           sweepIntervalMs: 0,
         });
-        await folded(store, root, transcript, turns);
+        await folded(store, transcript, turns);
       });
       return measured([{ name: "fold", samples: ms }], {
         bytes: fs.statSync(transcript).size,
@@ -158,11 +154,11 @@ const warmFold = (
         sweepIntervalMs: 0,
       });
       let turns = WARM_TURNS;
-      await folded(store, root, transcript, turns);
+      await folded(store, transcript, turns);
       // The writer's cost stays out of the timed fold.
       const ms = await repeat(
         plan.samples,
-        () => folded(store, root, transcript, turns),
+        () => folded(store, transcript, turns),
         () => {
           if (appends) appendTurn(transcript, SESSION, root, turns++);
         },
