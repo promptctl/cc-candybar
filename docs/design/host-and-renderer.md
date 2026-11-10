@@ -169,22 +169,49 @@ interface RendererOutput {
 }
 
 interface Wants {
-  readonly sources: Readonly<Record<SessionId, readonly SourceDecl[]>>;
+  readonly sources: Readonly<Record<SessionId, readonly Wanted[]>>;
+}
+
+// Where a declaration came from is what repository trust is judged on.
+interface Wanted {
+  readonly decl: SourceDecl;
+  readonly from: { kind: "bundled" } | { kind: "layer"; layer: LayerId } | { kind: "plugin"; plugin: PluginId };
 }
 
 // What the host's config discovery found for one session's directories: the
 // impure half of today's load, as a value. Parse, merge and validate are the
-// renderer's pure half.
+// renderer's pure half. The bundled layer ships in the renderer's own bundle.
+// [LAW:types-are-the-program] Each layer carries only what its role can have.
+// A LayerId is derived, never minted: the role plus a digest of the layer's
+// real directory, so it names the same layer across restarts and sessions.
 interface ConfigBundle {
-  readonly layers: readonly {
-    readonly layer: LayerId;
-    readonly role: "bundled" | "user" | "project" | "cwd" | "explicit";
-    readonly display: string;               // the path, for messages only
-    readonly text: string | null;           // null: the layer's file is absent
-    readonly trust: "approved" | "refused" | "unasked";
-  }[];
-  readonly plugins: readonly { readonly layer: LayerId; readonly name: string; readonly files: Readonly<Record<string, string>> }[];
+  readonly chain: Chain;
+  readonly plugins: readonly Plugin[];
   readonly checkout: CheckoutId | null;      // the session's repository, opaque
+}
+
+// An explicit target replaces the chain, as today, so it stands alone.
+type Chain =
+  | { kind: "explicit"; own: OwnLayer }
+  | { kind: "layered"; own: OwnLayer; repo: readonly RepoLayer[] };   // project, then cwd
+
+// The one layer of a chain a click may write: the user's file or the explicit target.
+interface OwnLayer {
+  readonly layer: LayerId;
+  readonly display: string;                  // the path, for messages only
+  readonly text: string | null;              // null: not written yet
+}
+
+// An unapproved layer carries no text: it is not merged, and the bar asks its question.
+type RepoLayer =
+  | { layer: LayerId; role: "project" | "cwd"; display: string; trust: "approved"; text: string }
+  | { layer: LayerId; role: "project" | "cwd"; display: string; trust: "refused" | "unasked" };
+
+interface Plugin {
+  readonly plugin: PluginId;                 // derived like a LayerId
+  readonly origin: { kind: "data-root" } | { kind: "project"; layer: LayerId };   // a project's plugins come with its approval
+  readonly name: string;
+  readonly files: Readonly<Record<string, string>>;
 }
 ```
 
@@ -193,7 +220,8 @@ interface ConfigBundle {
 - **Time is handed in.** Every input carries `at`. A renderer that wants to be woken asks with a `schedule` effect and is woken by a `due` event carrying the token it chose. Animation is a renderer scheduling its next frame.
 - **The state a draw used to write is Apply's.** Frame memory, the range ids a frame minted, and effect clocks are renderer state keyed by session and surface. The draw returns a frame and its memory as values; Apply stores them. A frame drawn for a session reflects every event whose turn completed before the draw began, and no part of one whose turn has not. [LAW:effects-at-boundaries]
 - **Wants replace `follow`, `declare` and `key`.** The host knows every session's locator from the requests it receives. A source's key is evaluated by the renderer over its own store, as today, and its digest travels in `wants`; two renderers wanting one digest share one run, and a new key is a new run with the old reading standing until the new one lands. That is still a loop from facts to keys to reads to facts, but it is the one loop and the host owns it, the way the Elm runtime owns subscriptions.
-- **Gather is the one checkpoint for reads.** A want asks the host to read a path or run a shell command, so Gather judges every declaration when it arrives: absolute paths, regex captures and the shell floor with the loader's own specs, and repository trust for a declaration from a repository's layer. A refused declaration is a failed fact for that source, with the reason. The renderer's loader parses declarations and does not judge them. [LAW:single-enforcer]
+- **Gather is the one checkpoint for reads.** A want asks the host to read a path or run a shell command, so Gather judges every declaration when it arrives: absolute paths, regex captures and the shell floor with the loader's own specs, and repository trust by the layer or plugin a declaration came from. A refused declaration is a failed fact for that source, with the reason. The renderer's loader parses declarations and does not judge them. [LAW:single-enforcer]
+- **A session's commands run in that session's environment.** The client sends the environment Claude Code gave it as a hint. Gather runs a session's `shell` sources with it, the `env` source reads it, and a `launch` lays its program's `env` over it. A source's identity includes a digest of the environment it runs in, so two sessions share a run only when the run would be the same. The host's own environment is never a session's.
 - **Config arrives as discovery's result.** The host resolves a session's layers, real directories, plugin folders, repository trust and checkout, reads their texts, creates plugin storage folders, and hands the result in, again whenever a watched file changes. The renderer parses, merges, validates and compiles it and opens no file. A path appears only as display text for messages; a renderer names a file by the layer it was handed. [LAW:effects-at-boundaries]
 - **Stored state arrives at start.** Settings history, session picks and every other durable store are read by the host from the renderer's home and handed in with `start`. They change only by `store` effects.
 - **Clicks arrive verified.** The host checks a link's signature over its opaque tail with that renderer's link key before routing it, so an unsigned URL never reaches a renderer. The renderer decides what the click means. [LAW:single-enforcer]
@@ -223,14 +251,14 @@ type PushedSurface = "band" | "pane" | "tmux-status" | "browser";
 // path, so no stored effect or undo entry can hold an absolute path (R-13).
 type FileTarget =
   | { kind: "home"; path: HomePath }                    // under the renderer's home
-  | { kind: "layer"; layer: LayerId }                   // a config layer, the explicit target included
+  | { kind: "own-config"; layer: LayerId }              // a chain's own layer; no repository layer is writable
   | { kind: "claude-settings"; session: SessionId };    // the session's Claude Code settings, from its hints
 
-// Today's run action, with its directory named as a layer.
+// Today's run action, with its directory named, never spelled.
 interface Program {
   readonly argv: readonly [string, ...string[]];
-  readonly env: Readonly<Record<string, string>>;
-  readonly cwd: { kind: "layer"; layer: LayerId } | { kind: "user-home" };
+  readonly env: Readonly<Record<string, string>>;   // laid over the session's environment
+  readonly cwd: { kind: "layer"; layer: LayerId } | { kind: "plugin"; plugin: PluginId } | { kind: "user-home" };
 }
 
 type Expected = { kind: "text"; text: string } | { kind: "absent" };
@@ -241,16 +269,18 @@ type Expected = { kind: "text"; text: string } | { kind: "absent" };
 - **Every effect names its operation.** There is no `tmux { args }` and no free-form command, because a raw command admits every command and the safety of a slash line or a run could not be expressed in it. A run link's program is the declaration its link signed, as today. [LAW:types-are-the-program]
 - **Writes are guarded.** `write-file` lands only if the target still reads as `expect`; otherwise it fails with what the file holds now. That is how undo refuses a target someone else changed, how save cannot overwrite a hand edit made after its config was read, and how the doctor's fix applies only to the settings it diagnosed.
 - **`type-slash` checks, then acts.** The performer reads the pane and refuses unless it shows Claude Code's bare input box, then stashes, pastes and submits. Nothing in the bar can come between the check and the act, because the performer runs one effect at a time; the user can, in the gap between two tmux calls, as today.
-- **`launch` carries its refreshes.** Gather holds each named source pending from the launch until the program exits and the source has been re-read. The host owns that order. A launched program gets its session's environment, from that session's client hints.
+- **`launch` carries its refreshes.** Gather holds each named source pending from the launch until the program exits and the source has been re-read. The host owns that order. A launched program runs in its session's environment (above).
 - **Repository trust is the host's.** Which repositories may run commands is a security decision, so the host keeps the answers and resolves config by them; a click that answers the question returns `approve-repo` for the layer it asked about. [LAW:single-enforcer]
 - **The performer is the one checkpoint for effects.** It parses each effect from the wire, refuses a target the renderer was not handed and a slash line that does not parse, and reports a refusal as a failed `effect-done`. A refusal is a fact the renderer holds for the bar like any other failed effect. Every renderer may ask for every effect; validation is about where, never what. [LAW:parse-dont-validate]
-- **Everything the bar does today has a home.** The tmux status options and the status-line binding are part of the host turning the `tmux-status` surface on, and splitting or killing the bar pane, with the plugin install lane setup runs, part of turning `pane` on; each surface's setup lives in the host's adapter for that surface. Plugin storage folders are created by discovery. The doctor's probes are wants for doctor sources, its verdicts the renderer's, and its fixes `write-file`. Applying an update is `apply-update`. Nothing is removed.
+- **Everything the bar does today has a home.** The tmux status options and the status-line binding are part of the host turning the `tmux-status` surface on, and splitting or killing the bar pane, with the plugin install lane setup runs, part of turning `pane` on; each surface's setup lives in the host's adapter for that surface. Plugin storage folders are created by discovery. The doctor's probes are wants for doctor sources, its verdicts the renderer's, and its fixes `write-file` or, for the marks book, `store`. Applying an update is `apply-update`. The `env` source stays, reading the session's environment rather than the daemon's.
+- **One verb is removed under goals.md R-4:** `load-config`, which points a session at a path a click supplies and so would store an absolute path (R-13). A session's explicit target, set when Claude Code starts, is how a session uses another file.
 
 ## 8. Addressing and lifetime
 
 - **The host** listens at the socket installed clients already dial, `/tmp/cc-candybar-<uid>/socket`. launchd starts it on the first connect and restarts it when it exits (A-4). No client and no renderer starts the host, so no dependant chooses which code owns the world.
 - **The host's bundle is a value the install sets.** The LaunchAgent names the bundle it runs, and installing from a bundle repoints it; the host exits when its bundle changes, as today's daemon does. Host code is tried from a worktree by installing it there, which moves every bar on the machine, as any change to the daemon does today. G-2 asks for the drawing to be iterated per session, and renderers give that.
-- **The host's environment is recorded, not inherited.** launchd starts a process with a minimal `PATH`, so the install records the paths of the tools the host itself runs (`node`, `tmux`, `git`, `gh`) into the LaunchAgent. A program a session launches gets that session's environment, from its client's hints.
+- **The host's environment is recorded, not inherited.** launchd starts a process with a minimal `PATH`, so the install records the paths of the tools the host itself runs (`node`, `tmux`, `git`, `gh`) into the LaunchAgent. Everything a session runs uses that session's environment, which its client sends (§7).
+- **What needs an install.** A new built-in fact, a change to how a source is read, a new effect or a new surface adapter is host code, tried by installing it.
 - **A renderer** is named by the client's `renderer` hint: its name from `CC_CANDYBAR_NAME`, absent meaning `main`, and its bundle, the client's own. A session is moved to another renderer by starting Claude Code with other values (goals.md R-16). Only a Claude Code client's request binds a name to a bundle; no click, timer or later input names code.
 - **Every renderer runs in its own process,** `main` included. The supervisor starts one from the bound bundle on that name's first input, `main` from the host's own bundle, and restarts it after a crash or a bundle change on the next input. A name bound to one bundle refuses a second bundle loudly until the first is retired. The in-process transport is the one `cc-candybar check`, the demo and tests use, since they draw through the same renderer with no host process.
 - **A home is a function of the name alone.** `main` is today's XDG layout; any other name is `<state root>/renderers/<name>/` with `state/`, `config/` and `cache/` beneath it. Isolation is one value. [LAW:one-source-of-truth]
@@ -297,7 +327,7 @@ Each step leaves a working bar, and every step is inside one process, over the i
 1. **The seam in process.** Today's daemon divides into a host side and a renderer side behind `answer(input)`, with only the main renderer. *Done when* every request and click passes through `answer` and the renderer side's I/O counters read zero over a recorded stream.
 2. **Effects returned, not performed.** Every verb and timer returns effects; the performer runs them. *Done when* no renderer-side code calls a write, a launch, tmux or a clock.
 3. **Config and stored state handed in.** The host reads the config chain and the home's stores and hands them in. *Done when* the renderer side opens no file (A-2).
-4. **Wants.** Gather runs sources from the renderers' wants; `declare` and `key` are deleted. *Done when* two configs that declare one source share one run, and a key change starts a new run with no pending flash.
+4. **Wants.** Gather runs sources from the renderers' wants, each in its session's environment, which the client now sends as a hint in both runtimes; `declare` and `key` are deleted. *Done when* two configs that declare one source share one run, and a key change starts a new run with no pending flash.
 5. **The recorder and the replay test** (§11).
 6. **Renderers out of process.** The supervisor runs every renderer, `main` included, from its bundle through the socket transport. *Done when* a worktree renderer draws one session while main draws the others, no transcript is read twice (I-1, I-2), and A-1 holds.
 7. **The host under launchd** (A-4), once the probe passes.
@@ -333,7 +363,7 @@ Each step leaves a working bar, and every step is inside one process, over the i
 
 ## 15. What stands from Proposal 1
 
-**Stands:** §1, total facts with pending as a value, with its seam test widened in §11; §4's split of the hook into instantaneous fields and a locator, except that the host keeps the locator itself; §6's home, refined by ADR-6; §8, recording as a primitive, which now records renderer inputs; §12, `SessionFacts`; §16's ordering invariant and its move of frame memory and effect clocks into Apply's state, both now in §7; §17's derived paths and `HomePath`, under ADR-6, without the per-name socket, which ADR-7 removes; §18's link grammar, constant tmux binding and range ids; §19's source digest, shared runs and the key change with no pending flash, now carried by wants.
+**Stands:** §1, total facts with pending as a value, with its seam test widened in §11; §4's split of the hook into instantaneous fields and a locator, except that the host keeps the locator itself; §6's home, refined by ADR-6, with `load-config` removed and the `env` source kept on the session's environment (§7); §8, recording as a primitive, which now records renderer inputs; §12, `SessionFacts`; §16's ordering invariant and its move of frame memory and effect clocks into Apply's state, both now in §7; §17's derived paths and `HomePath`, under ADR-6, without the per-name socket, which ADR-7 removes; §18's link grammar, constant tmux binding and range ids; §19's source digest, shared runs and the key change with no pending flash, now carried by wants.
 
 **Replaced:** §2 (Gather does only facts), §3 (Gather addressed by version), §5's performer, §7 (how a session reaches a renderer), §9's table, §10 (order of work), §11 (its questions, answered by this draft or open in §17 here), §13 (the facts wire, deleted), §14 (the facts source, now the renderer transport), §15 (Gather's process, now the host's), §16's effects, §19's `follow` and Gather's consistency guard (now Gather's judgement of each want, §7), §20, §21 and §22.
 
