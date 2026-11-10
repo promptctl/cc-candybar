@@ -609,9 +609,10 @@ export class GitDataProvider {
       owe(state.pr);
       state.asked.add("resume");
     }
-    // A key a pass left owed asks a pass of its own. A PR no pass has keyed
-    // yet (`key` "") is keyed by the repo's first pass, which its build asked
-    // for, so a hold landing while that pass is out asks for nothing more.
+    // A key a pass left owed asks a pass of its own. A PR no branch has keyed
+    // (`key` "") has nothing a hold could ask: the first pass, which the
+    // build asked for, is still out, or it read no branch and the PR stands
+    // answered by it until a pass reads one.
     if (state.pr.missed && state.pr.key !== "") state.asked.add("owed");
     this.held(state);
     this.evict();

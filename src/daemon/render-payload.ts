@@ -393,9 +393,10 @@ export type PrPayload =
 // reads of it is `P`, so the rest of git draws as it stands.
 type PrPendingOf<P> = { readonly [F in keyof PrFieldTypes]: P };
 
-// [LAW:one-source-of-truth] Every PR field a template can lay out: a segment
-// reading any of them needs the forge (src/doctor/data-needs.ts), so a new
-// arm's field is a compile error here until the doctor sees it too.
+// [LAW:one-source-of-truth] Every PR field a template can lay out: the mapped
+// type admits no PR field missing here, and the doctor reads this record to say
+// which segment needs the forge (src/doctor/data-needs.ts), so the two cannot
+// drift.
 export const PR_FIELDS: { readonly [F in keyof PrFieldTypes]: true } = {
   prNumber: true,
   prState: true,
@@ -1282,7 +1283,6 @@ export function composePayload(
   }));
 
   // home is always available — the host's value, no I/O cost.
-  // Letting the gate skip it would add a branch with no win.
   // [LAW:single-enforcer] All path-shaped payload fields are normalized
   // to forward-slash separators at this boundary. The DSL's directory
   // template (and any user template that does prefix/relative-path math)
@@ -1333,8 +1333,8 @@ export function composePayload(
     },
     // [LAW:one-source-of-truth] Always present — the daemon resolves every
     // one of these each render (for BuildLineOptions/basePalette), and these
-    // are those exact values. No `wants` gate: each costs nothing (already in
-    // hand) and a config reading e.g. `.padding.effective` must always find it.
+    // are those exact values, so a config reading e.g. `.padding.effective`
+    // always finds it.
     ...effectiveInputs(effective),
     history: draw.history,
     navigation: { back: draw.back },
@@ -1497,7 +1497,7 @@ export async function settlePayload(
 
 // [LAW:effects-at-boundaries] Pure: the settings read and the model's context
 // window in, the payload shape out. The read never answers `absent` (a missing
-// file is `auto`), so the family is dropped only when no segment asked for it.
+// file is `auto`), so the family is in every payload once it is read.
 export function projectAutoCompact(
   outcome: Reading<AutoCompactWindow>,
   contextWindow: number | undefined,
