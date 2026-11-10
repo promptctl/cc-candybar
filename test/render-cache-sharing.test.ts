@@ -137,7 +137,6 @@ const render = (
   state: ReturnType<RenderCache["getOrCreate"]>["state"],
 ): Frame => {
   const view = openView(state, dir, viewFacts(dir, "s"), {
-    sessionState: new SessionState(),
     source: SOURCES_NOTHING,
     declare: DECLARES_NOTHING,
     changed: () => {},

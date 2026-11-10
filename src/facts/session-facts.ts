@@ -6,7 +6,7 @@ import type { Update } from "../daemon/update-notice";
 import type { ActivityInfo } from "../segments/activity";
 import type { AutoCompactWindow } from "../segments/autocompact";
 import type { ContextInfo } from "../segments/context";
-import type { GitInfo, PullRequest } from "../segments/git";
+import type { GitRead, PullRequest } from "../segments/git";
 import type { MetricsInfo } from "../segments/metrics";
 import type { UsageInfo } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
@@ -33,10 +33,6 @@ export interface TmuxFacts {
   readonly session: string;
 }
 
-// The git read of a repository before a PR is composed onto it: the PR is its
-// own fact, because its cost is its own.
-export type GitFacts = Omit<GitInfo, "pullRequest">;
-
 // The release check: something newer than the running code, or absent.
 export type UpdateNotice = Update;
 
@@ -55,7 +51,8 @@ export interface BuiltinFacts {
   readonly activity: Fact<ActivityInfo>;
   readonly cache: Fact<number>;
   readonly autocompact: Fact<AutoCompactWindow>;
-  readonly git: Fact<GitFacts>;
+  // The repository's read; its PR is its own fact, because its cost is its own.
+  readonly git: Fact<GitRead>;
   readonly pr: Fact<PullRequest>;
   readonly tmux: Fact<TmuxFacts>;
   // The host's name and its user are read apart and fail apart (a directory

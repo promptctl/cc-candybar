@@ -63,6 +63,65 @@ describe("dataNeeds", () => {
     ).toEqual(["block", "weekly", "alert"]);
   });
 
+  describe("a segment needs what it reads through every edge the draw follows", () => {
+    const BUNDLED = ["block", "weekly"];
+    const placing = (decls: string): readonly string[] =>
+      needsIn(
+        `{ ${decls}, root: { rows: { extra: { h: ["mine"] } } } }`,
+        "default",
+      ).rateLimits;
+
+    test("a read only inside one of its partials", () => {
+      expect(
+        placing(`segments: { mine: {
+          template: '{{ template "p" . }}',
+          partials: { p: "{{ .weekly.percentage }}" },
+        } }`),
+      ).toEqual([...BUNDLED, "mine"]);
+    });
+
+    test("a read only inside a helper handed the root", () => {
+      expect(
+        placing(`helpers: { pct: "{{ .weekly.percentage }}" },
+          segments: { mine: { template: '{{ template "pct" . }}' } }`),
+      ).toEqual([...BUNDLED, "mine"]);
+    });
+
+    test("and not a helper handed a dict, which reads the dict", () => {
+      expect(
+        placing(`helpers: { pct: "{{ .weekly.percentage }}" },
+          segments: { mine: {
+            template: '{{ template "pct" (dict "weekly" .current_dir) }}',
+          } }`),
+      ).toEqual(BUNDLED);
+    });
+
+    test("a read of the whole namespace", () => {
+      expect(
+        placing(`segments: { mine: { template: "{{ toJson .weekly }}" } }`),
+      ).toEqual([...BUNDLED, "mine"]);
+    });
+
+    // The bundled settings segments bind actions by a name they compute, which
+    // reaches every action's text, so they need the read too.
+    test("a read only in the text of an action it binds", () => {
+      expect(
+        placing(`actions: { cp: { copy: "{{ .weekly.percentage }}" } },
+          segments: { mine: { template: '{{ action "cp" "copy" }}' } }`),
+      ).toContain("mine");
+    });
+
+    test("a read only in the cache key of a source it reads", () => {
+      expect(
+        placing(`variables: { stamp: {
+            kind: "shell", command: "echo hi", parse: { text: true },
+            cache: { key: "{{ .weekly.percentage }}" },
+          } },
+          segments: { mine: { template: "{{ .stamp }}" } }`),
+      ).toEqual([...BUNDLED, "mine"]);
+    });
+  });
+
   test("missingData outside its two words is a load error", () => {
     expect(() =>
       needsIn(`{ segments: { block: { missingData: "warn" } } }`, "default"),

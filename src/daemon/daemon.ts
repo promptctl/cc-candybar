@@ -529,8 +529,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       storage: managedStorage,
       signer: linkSigner,
       gates,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(payloadProviders, holds, facts, closure, sources),
+      declare: (holds, facts, sources) =>
+        declareLanes(payloadProviders, holds, facts, sources),
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // derived over its declaration, its picks and its histories' depths.
       source: sessionSource({

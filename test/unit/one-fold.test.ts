@@ -6,17 +6,13 @@
 
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import {
-  mergeWithDefault,
-  parseDslConfig,
   unauthored,
 } from "../../src/config/dsl-loader";
 import { declaredVariables } from "../../src/config/loader/refs";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 import type { DslConfig } from "../../src/config/dsl-types";
-import { PRESET_FLOOR } from "../../src/config/presets";
-import { buildNeededPrefixes } from "../../src/daemon/render-payload";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
-import { EMPTY_DEFAULT, parseAndValidate, validateConfig } from "../helpers/parse-and-validate";
+import { parseAndValidate, validateConfig } from "../helpers/parse-and-validate";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -154,51 +150,5 @@ describe("no declared name sits under another", () => {
         `{ variables: { "menupages.x": { kind: "literal", value: "x" } } }`,
       ),
     ).toThrow(/"menupages\.x" is in the reserved "menupages\." namespace/);
-  });
-});
-
-describe("the input closure follows every edge the draw does", () => {
-  // The config as merged, before synthesis: the settings menu binds an action
-  // by a name it computes, which reaches every action's text, so a negative
-  // control needs a bar without it.
-  const closureOf = (src: string): ReadonlySet<string> =>
-    buildNeededPrefixes(
-      mergeWithDefault(parseDslConfig("<user>", src, ALLOWED), EMPTY_DEFAULT),
-      PRESET_FLOOR,
-    );
-
-  test("a copy text's read of an input no segment reads", () => {
-    const placing = (template: string): ReadonlySet<string> =>
-      closureOf(`{
-        variables: { dir: { kind: "input", path: "fixture.dir", default: "" } },
-        actions: { cp: { copy: "{{ .dir }}" } },
-        segments: { s: { template: '${template}' }, t: { template: '{{ action "cp" "copy" }}' } },
-        root: { h: ["s"] },
-      }`);
-    expect(placing(`{{ action "cp" "copy" }}`).has("fixture.dir")).toBe(true);
-    expect(placing("plain").has("fixture.dir")).toBe(false);
-  });
-
-  test("a source's cache key's read of an input no segment reads", () => {
-    const needed = closureOf(`{
-      variables: {
-        dir: { kind: "input", path: "fixture.dir", default: "" },
-        stamp: { kind: "shell", command: "echo hi", parse: { text: true }, cache: { key: "{{ .dir }}" } },
-      },
-      segments: { s: { template: "{{ .stamp }}" } },
-      root: { h: ["s"] },
-    }`);
-    expect(needed.has("fixture.dir")).toBe(true);
-  });
-  test("and not one no placed template reaches", () => {
-    const needed = closureOf(`{
-      variables: {
-        dir: { kind: "input", path: "fixture.dir", default: "" },
-        stamp: { kind: "shell", command: "echo hi", parse: { text: true }, cache: { key: "{{ .dir }}" } },
-      },
-      segments: { s: { template: "plain" }, t: { template: "{{ .stamp }}" } },
-      root: { h: ["s"] },
-    }`);
-    expect(needed.has("fixture.dir")).toBe(false);
   });
 });

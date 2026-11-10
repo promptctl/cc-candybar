@@ -5,6 +5,7 @@
 
 import { restamp, type Fact } from "../src/facts/fact";
 import type { BuiltinFacts } from "../src/facts/session-facts";
+import type { GitRead } from "../src/segments/git";
 import { assembleFacts, FACTS_VERSION } from "../src/daemon/facts-assembly";
 import type { Update } from "../src/daemon/update-notice";
 import {
@@ -57,32 +58,26 @@ const at = (seconds: number): Instant =>
   instantOf(new Date(1_700_000_000_000 + seconds * 1000));
 const T0 = at(0);
 
-const EVERY_LANE = new Set([
-  "git.branch",
-  "git.prNumber",
-  "tmux.session",
-  "host.name",
-  "host.user",
-  "session.cost",
-  "today.cost",
-  "speed.output",
-  "context.totalTokens",
-  "metrics.messageCount",
-  "activity.running",
-  "cache.expiresAt",
-  "autocompact.window",
-]);
-
-const GIT = {
+const GIT: GitRead = {
   branch: "main",
   status: "clean",
   aheadBehind: ok({ ahead: 0, behind: 0 }),
   head: ok("c0ffee"),
+  workingTree: { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 },
   sha: ok("abc1234"),
+  operation: ABSENT,
+  committedAt: ok(1_699_996_400),
   stashCount: ok(0),
   upstream: ABSENT,
+  repoName: ok("project"),
+  repoUrl: ABSENT,
 };
-const PR = { number: 7, state: "open", url: "https://example.test/pr/7" };
+const PR = {
+  number: 7,
+  state: "open",
+  url: "https://example.test/pr/7",
+  head: "c0ffee",
+};
 
 // Every lane over the value it is given; the git lane answers `git`.
 function owners(git: Outcome<unknown> = ok({ ...GIT, pullRequest: ok(PR) })) {
@@ -103,24 +98,21 @@ function owners(git: Outcome<unknown> = ok({ ...GIT, pullRequest: ok(PR) })) {
   };
 }
 
-function rig(
-  closure: ReadonlySet<string> = EVERY_LANE,
-  git?: Outcome<unknown>,
-) {
+function rig(git?: Outcome<unknown>) {
   const held = owners(git);
   const deps = {
     ...held,
-    lanes: declaredLanes(
-      held,
-      { sessionId: SID, hookData: HOOK, cwd: undefined, hints: HINTS },
-      closure,
-    ),
+    lanes: declaredLanes(held, {
+      sessionId: SID,
+      hookData: HOOK,
+      cwd: undefined,
+      hints: HINTS,
+    }),
   } as unknown as RenderPayloadDeps;
   const inputs: PayloadInputs = {
     hookData: HOOK,
     deps,
     cwd: undefined,
-    neededInputPaths: closure,
     hints: HINTS,
   };
   return { held, deps, inputs };
@@ -154,7 +146,7 @@ describe("a session's facts document", () => {
     const doc = assembleFacts(
       undefined,
       SID,
-      readingsOf(r.inputs, new Map()),
+      readingsOf(r.inputs),
       PENDING,
       T0,
     );
@@ -192,7 +184,7 @@ describe("a session's facts document", () => {
     const doc = assembleFacts(
       undefined,
       SID,
-      readingsOf(r.inputs, new Map()),
+      readingsOf(r.inputs),
       PENDING,
       T0,
     );
@@ -202,27 +194,13 @@ describe("a session's facts document", () => {
     }
   });
 
-  test("a built-in the closure does not gather is pending, never absent", async () => {
-    const r = await sampled(rig(new Set()));
-    const doc = assembleFacts(
-      undefined,
-      SID,
-      readingsOf(r.inputs, new Map()),
-      PENDING,
-      T0,
-    );
-    for (const key of BUILTIN_KEYS) {
-      expect(doc.builtins[key]).toEqual(PENDING);
-    }
-  });
-
   describe("the PR", () => {
     const prOf = async (git: Outcome<unknown>) => {
-      const r = await sampled(rig(EVERY_LANE, git));
+      const r = await sampled(rig(git));
       return assembleFacts(
         undefined,
         SID,
-        readingsOf(r.inputs, new Map()),
+        readingsOf(r.inputs),
         PENDING,
         T0,
       ).builtins.pr;
@@ -240,10 +218,6 @@ describe("a session's facts document", () => {
       });
     });
 
-    test("is pending unread when the repository read asked for none", async () => {
-      expect(await prOf(ok(GIT))).toEqual(PENDING);
-    });
-
     test("is absent when there is no repository", async () => {
       expect(await prOf(ABSENT)).toEqual({ kind: "absent", at: T0 });
     });
@@ -259,31 +233,29 @@ describe("a session's facts document", () => {
   });
 
   describe("the declared sources", () => {
-    const declared = new Map([
-      ["reached", { folder: "/a", generation: 0 }],
-      ["unreached", { folder: "/b", generation: 0 }],
-    ]);
-
-    test("every one has a key: the reached one its reading, the other pending", async () => {
+    test("every one has a key carrying its lane's reading", async () => {
       const r = await sampled(rig());
       const lanes = r.deps.lanes();
       const deps = {
         ...r.deps,
         lanes: () => ({
           ...lanes,
-          sources: new Map([["reached", settledLane(ok({ home: "/h" }))]]),
+          sources: new Map([
+            ["written", settledLane(ok({ home: "/h" }))],
+            ["unwritten", settledLane(ABSENT)],
+          ]),
         }),
       } as RenderPayloadDeps;
       const doc = assembleFacts(
         undefined,
         SID,
-        readingsOf({ ...r.inputs, deps }, declared),
+        readingsOf({ ...r.inputs, deps }),
         PENDING,
         T0,
       );
       expect(doc.sources).toEqual({
-        reached: { kind: "ok", value: { home: "/h" }, at: T0 },
-        unreached: PENDING,
+        written: { kind: "ok", value: { home: "/h" }, at: T0 },
+        unwritten: { kind: "absent", at: T0 },
       });
     });
   });
@@ -294,14 +266,14 @@ describe("a session's facts document", () => {
       const first = assembleFacts(
         undefined,
         SID,
-        readingsOf(r.inputs, new Map()),
+        readingsOf(r.inputs),
         PENDING,
         T0,
       );
       const again = assembleFacts(
         first,
         SID,
-        readingsOf(r.inputs, new Map()),
+        readingsOf(r.inputs),
         PENDING,
         at(60),
       );
@@ -313,7 +285,7 @@ describe("a session's facts document", () => {
       const first = assembleFacts(
         undefined,
         SID,
-        readingsOf(r.inputs, new Map()),
+        readingsOf(r.inputs),
         PENDING,
         T0,
       );
@@ -321,7 +293,7 @@ describe("a session's facts document", () => {
       const second = assembleFacts(
         first,
         SID,
-        readingsOf(r.inputs, new Map()),
+        readingsOf(r.inputs),
         PENDING,
         at(60),
       );
@@ -345,7 +317,7 @@ describe("a session's facts document", () => {
       const third = assembleFacts(
         second,
         SID,
-        readingsOf(r.inputs, new Map()),
+        readingsOf(r.inputs),
         PENDING,
         at(120),
       );
@@ -360,7 +332,7 @@ describe("a session's facts document", () => {
 
     test("the update is the fact it is handed, by reference", async () => {
       const r = await sampled(rig());
-      const readings = readingsOf(r.inputs, new Map());
+      const readings = readingsOf(r.inputs);
       const none = restamp(undefined, ABSENT, T0);
       const first = assembleFacts(undefined, SID, readings, none, T0);
       expect(first.update).toBe(none);

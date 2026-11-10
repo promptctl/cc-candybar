@@ -180,8 +180,8 @@ function rig(): Rig {
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(providers, holds, facts, closure, sources),
+      declare: (holds, facts, sources) =>
+        declareLanes(providers, holds, facts, sources),
       source: sessionSource({
         providers,
         sessionState,
@@ -729,13 +729,13 @@ describe("a source's document", () => {
     expect(sourceDoc(() => ({ plugins: {} }))()).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `variable "${STATUS}": the view's payload has no "${STATUS}": its declaration did not take the source the preset reads`,
+      reason: `variable "${STATUS}": the view's payload has no "${STATUS}": its declaration did not take the source the config declares`,
     });
   });
 });
 
-describe("the view declares the sources its preset reads", () => {
-  test("a preset reading a source holds its key; one not reading it holds nothing; a switch releases it", async () => {
+describe("the view declares every source the config declares", () => {
+  test("a pick of a preset reading no source keeps its key held", async () => {
     const r = rig();
     const file = config(
       ["plugins.p.gated"],
@@ -746,17 +746,16 @@ describe("the view declares the sources its preset reads", () => {
     expect([...view.lanes().sources.keys()]).toEqual([STATUS]);
     expect(r.providers.managedStorage.stats().held).toBe(1);
     r.sessionState.set("s1", "preset", "bare");
-    expect([...view.lanes().sources.keys()]).toEqual([]);
-    expect(r.providers.managedStorage.stats().held).toBe(0);
+    expect([...view.lanes().sources.keys()]).toEqual([STATUS]);
+    expect(r.providers.managedStorage.stats().held).toBe(1);
     expect(draw(view).text).toContain("mine");
   });
 
-  test("a config placing no segment that reads the source holds nothing", async () => {
+  test("a config placing no segment that reads the source still declares and holds it", async () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
-    expect(view.lanes().sources.size).toBe(0);
-    expect(r.providers.managedStorage.stats().held).toBe(0);
-    // The state still holds its folder's watch: a source is the config's.
+    expect([...view.lanes().sources.keys()]).toEqual([STATUS]);
+    expect(r.providers.managedStorage.stats().held).toBe(1);
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
 
@@ -807,7 +806,7 @@ describe("a session's facts document", () => {
     instantOf(new Date(1_700_000_000_000)),
   );
 
-  test("is total as the view opens; a declared source its preset does not read is pending, not missing", () => {
+  test("is total as the view opens; a declared source no segment reads is pending until its first read lands, not missing", () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
     const doc = view.source.facts();

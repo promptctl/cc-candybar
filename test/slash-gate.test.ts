@@ -20,10 +20,8 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { PRESET_FLOOR } from "../src/config/presets";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
-  buildNeededPrefixes,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
@@ -69,14 +67,13 @@ const HOOK_DATA = {
 // text, and the line each slash control would type, in drawing order.
 async function bar(
   hints: ClientHints,
-): Promise<{ text: string; lines: string[]; sessionLookups: number }> {
+): Promise<{ text: string; lines: string[] }> {
   const config = parseAndValidate(
     "<user>",
     `{ globals: {}, root: { h: ['commands', 'autocompact'] } }`,
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
-  let sessionLookups = 0;
   const deps = {
     ...absentOwners(),
     gitProvider: fakeGit(async () => ABSENT),
@@ -88,7 +85,6 @@ async function bar(
     metricsProvider: fakeMetrics(async () => ABSENT),
     activityProvider: fakeActivity(async () => ABSENT),
     tmuxService: fakeTmux(async () => {
-      sessionLookups++;
       return ok("work");
     }),
     autoCompact: fakeAutoCompact(() => ok(400_000)),
@@ -102,7 +98,6 @@ async function bar(
     instantOf(new Date()),
     deps,
     undefined,
-    buildNeededPrefixes(config, PRESET_FLOOR),
     EFFECTIVE,
     hints,
     NO_CONFIG_FILE,
@@ -136,11 +131,8 @@ async function bar(
       .flatMap((u) => effectsOf(u))
       .filter((e) => e.verb === VERB_SLASH)
       .map((e) => e.args[1]!),
-    sessionLookups,
   };
 }
-
-const PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 
 describe("slash controls and the session's tmux pane", () => {
 
@@ -159,8 +151,4 @@ describe("slash controls and the session's tmux pane", () => {
       expect(text).not.toMatch(/⇲ 400\.0K\s*[−+↺]/);
     },
   );
-
-  test("gating on the pane asks tmux nothing", async () => {
-    expect((await bar({ tmux: PANE })).sessionLookups).toBe(0);
-  });
 });

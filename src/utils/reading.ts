@@ -152,8 +152,8 @@ export interface Lane<T> {
   current(): Current<T>;
 }
 
-// A lane answering one outcome for good: a lane the closure does not read
-// (`ABSENT`), or one whose declaration threw.
+// A lane answering one outcome for good: a lane with no key to read (`ABSENT`,
+// a session outside tmux), or one whose declaration threw.
 export function settledLane<T>(outcome: Outcome<T>): Lane<T> {
   return { current: () => outcome };
 }

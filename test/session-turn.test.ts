@@ -18,7 +18,6 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { presetNames } from "../src/config/presets";
 import { assembleFacts } from "../src/daemon/facts-assembly";
 import {
-  buildNeededPrefixes,
   composePayload,
   settlePayload,
   type Readings,
@@ -76,14 +75,25 @@ describe("one turn", () => {
     expect(view.source.facts().session).toBe(SESSION);
   });
 
-  // Guards the end state and every value the box takes on the way: the lane the
-  // new preset wants is never stamped absent. It cannot force the order of the
-  // preset's redeclaration against the turn (MobX runs the redeclaration first
-  // here); the closure is taken from the declaration so that order is moot.
-  test("a preset that newly wants a lane never stamps that lane absent for want of a declaration", async () => {
+  // Every built-in is declared for every session, so what a pick shows takes
+  // no hold: the view keeps the lanes it opened with, and the repository's
+  // read stands through the pick.
+  test("a preset pick declares nothing new, and the repository's fact stands", async () => {
     const rig = sessionRig(dir, cleanups);
+    let declarations = 0;
+    const declare = rig.providers.gitProvider.declare;
+    rig.providers.gitProvider.declare = ((...args: Parameters<typeof declare>) => {
+      declarations++;
+      return declare(...args);
+    }) as typeof declare;
     const view = await openSettled(rig, dir, cleanups, "compact");
-    // Every value the box takes while the pick lands, in order.
+    await until(
+      () => view.source.facts().builtins.git.kind === "ok",
+      "the repository's first read",
+    );
+    const lanes = view.lanes();
+    const declaredAtOpen = declarations;
+    // Every value the git fact takes while the pick lands, in order.
     const seen: string[] = [];
     cleanups.push(
       reaction(
@@ -93,12 +103,10 @@ describe("one turn", () => {
       ),
     );
     runInAction(() => rig.sessionState.set(SESSION, "preset", "git"));
-    await until(
-      () => view.source.facts().builtins.git.kind === "ok",
-      "the new preset's repository read",
-    );
-    expect(seen).not.toContain("absent");
     expect(view.source.effective().preset).toBe("git");
+    expect(declarations).toBe(declaredAtOpen);
+    expect(view.lanes()).toBe(lanes);
+    expect(seen).toEqual(["ok"]);
   });
 });
 
@@ -170,7 +178,7 @@ describe("a fault that persists", () => {
 });
 
 describe("a view that fails to open", () => {
-  test("is reported, and what it began is released: a later pick declares nothing", () => {
+  test("is reported, and what it began is released: the holds its declaration took", () => {
     const rig = sessionRig(dir, cleanups, {
       source: {
         update: () => {
@@ -178,10 +186,20 @@ describe("a view that fails to open", () => {
         },
       },
     });
-    let declarations = 0;
+    // The repository's declaration takes a hold, as the real owner's does,
+    // and counts its release.
+    let taken = 0;
+    let released = 0;
     const declare = rig.providers.gitProvider.declare;
-    rig.providers.gitProvider.declare = ((...args: Parameters<typeof declare>) => {
-      declarations++;
+    rig.providers.gitProvider.declare = ((
+      ...args: Parameters<typeof declare>
+    ) => {
+      args[0].take("git:probe", () => {
+        taken++;
+        return () => {
+          released++;
+        };
+      });
       return declare(...args);
     }) as typeof declare;
     const configFile = path.join(dir, "config.json5");
@@ -190,11 +208,8 @@ describe("a view that fails to open", () => {
     expect(() =>
       rig.cache.holdSession(dir, dir, configFile, requestOf(dir)),
     ).toThrow(/no update fact/);
-    const declaredAtOpen = declarations;
-
-    // The view's preset reaction would redeclare on this pick if it ran on.
-    runInAction(() => rig.sessionState.set(SESSION, "preset", "git"));
-    expect(declarations).toBe(declaredAtOpen);
+    expect(taken).toBe(1);
+    expect(released).toBe(1);
   });
 });
 
@@ -248,9 +263,6 @@ describe("what wakes a view", () => {
         hookData: requestOf(dir).hookData,
         deps: { ...rig.providers, lanes: view.lanes } as never,
         cwd: PROJECT,
-        neededInputPaths: view.state.neededInputPaths(
-          view.source.effective().preset,
-        ),
         hints: requestOf(dir).hints,
       },
       AT,
@@ -287,21 +299,6 @@ describe("the all-pending document", () => {
       sources: new Map(),
     },
     today: waiting,
-    gathered: {
-      git: true,
-      session: true,
-      today: true,
-      context: true,
-      metrics: true,
-      activity: true,
-      tmux: true,
-      hostName: true,
-      hostUser: true,
-      cache: true,
-      speed: true,
-      autocompact: true,
-    },
-    declaredSources: [],
     faults: [],
   };
 
@@ -333,7 +330,6 @@ describe("the all-pending document", () => {
           {
             hookData: requestOf(dir).hookData,
             hints: requestOf(dir).hints,
-            neededInputPaths: buildNeededPrefixes(config, effective.preset),
             home: "/home/tester",
           },
           {

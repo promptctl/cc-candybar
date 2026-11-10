@@ -83,13 +83,19 @@ export function fixedOwners(
           status: "dirty",
           aheadBehind: ok({ ahead: 2, behind: 1 }),
           head: ok("c0ffee"),
+          workingTree: { staged: 0, unstaged: 2, untracked: 1, conflicts: 0 },
           sha: ok("abc1234"),
+          operation: ABSENT,
+          committedAt: ok(NOW_SEC - 3600),
           stashCount: ok(1),
           upstream: ABSENT,
+          repoName: ok("project"),
+          repoUrl: ABSENT,
           pullRequest: ok({
             number: 7,
             state: "open",
             url: "https://example.test/pr/7",
+            head: "c0ffee",
           }),
         }),
       ),
@@ -169,8 +175,8 @@ export function sessionRig(
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(providers as never, holds, facts, closure, sources),
+      declare: (holds, facts, sources) =>
+        declareLanes(providers as never, holds, facts, sources),
       source: sessionSource({
         providers: providers as never,
         sessionState,
@@ -231,9 +237,6 @@ export async function openSettled(
       hookData: request.hookData,
       deps: { ...rig.providers, lanes: view.lanes } as never,
       cwd: PROJECT,
-      neededInputPaths: view.state.neededInputPaths(
-        view.source.effective().preset,
-      ),
       hints: request.hints,
     },
     AT,

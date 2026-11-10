@@ -238,10 +238,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // The tmux session name of the pane this session's client reported flows
     // through the daemon's augmented payload (TmuxService asks at most once
     // per pane per 30 s, so this stays cheap; `tmux.pane` itself is in
-    // PAYLOAD_INPUTS). A `kind: "shell"` declaration would
-    // spawn the subprocess at every cache-entry creation regardless of
-    // whether the tmux segment is in the active layout — buildNeededPrefixes
-    // gates the input variant so unused segments cost nothing.
+    // PAYLOAD_INPUTS). A `kind: "shell"` declaration would spawn the
+    // subprocess at every cache-entry creation, where the daemon's one owner
+    // asks once per pane for every session on it.
     "tmux.session": { kind: "input", path: "tmux.session", default: "" },
 
     // Host identity — which machine this session is on, and whether the user

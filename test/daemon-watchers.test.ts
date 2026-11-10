@@ -13,8 +13,8 @@ import {
   type Invalidation,
 } from "../src/daemon/cache/watchers";
 import { GitDataProvider } from "../src/daemon/cache/git";
-import { GitService, type GitInfo } from "../src/segments/git";
-import { ok, type Outcome } from "../src/utils/outcome";
+import { GitService, type GitRead } from "../src/segments/git";
+import { ABSENT, ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
@@ -809,13 +809,21 @@ class StubInner extends GitService {
   override findGitRoot(): Outcome<string> {
     return ok(this.repo);
   }
-  override async getGitInfo(): Promise<Outcome<GitInfo>> {
+  override async getGitInfo(): Promise<Outcome<GitRead>> {
     this.calls++;
     return ok({
       branch: "main",
       status: "clean",
       aheadBehind: ok({ ahead: 0, behind: 0 }),
       head: ok("c0ffee"),
+      workingTree: { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 },
+      sha: ok("c0ffee"),
+      operation: ABSENT,
+      committedAt: ok(1_700_000_000),
+      stashCount: ok(0),
+      upstream: ok("origin/main"),
+      repoName: ok("repo"),
+      repoUrl: ABSENT,
     });
   }
 }
@@ -844,7 +852,7 @@ async function hearsRefOnlyMove(
     inner,
     periodMs: 600_000,
   });
-  const lane = svc.declare(new Holds(), workingDir, {});
+  const lane = svc.declare(new Holds(), workingDir);
   await laneOutcome(lane);
   const storedHead = (): string | undefined => {
     const info = lane.current();
@@ -1065,8 +1073,8 @@ describe("GitDataProvider + watchers integration", () => {
     const svc = new GitDataProvider({ clock: systemTimekeeper, inner });
     const holds = new Holds();
     try {
-      await laneOutcome(svc.declare(holds, repo, {}));
-      await laneOutcome(svc.declare(holds, repo, {}));
+      await laneOutcome(svc.declare(holds, repo));
+      await laneOutcome(svc.declare(holds, repo));
       expect(inner.calls).toBe(1);
 
       // HEAD is rewritten until the watch proves itself live by a change and
@@ -1084,7 +1092,7 @@ describe("GitDataProvider + watchers integration", () => {
       // miss that waits on a read. The reader's count is not the measure
       // here, because a re-read a late event queued may begin on any turn.
       const { hits, misses } = svc.getStats();
-      await laneOutcome(svc.declare(holds, repo, {}));
+      await laneOutcome(svc.declare(holds, repo));
       expect(svc.getStats()).toMatchObject({ hits: hits + 1, misses });
     } finally {
       svc.close();
@@ -1102,7 +1110,7 @@ describe("GitDataProvider + watchers integration", () => {
     });
     const holds = new Holds();
 
-    await laneOutcome(svc.declare(holds, repo, {}));
+    await laneOutcome(svc.declare(holds, repo));
     expect(inner.calls).toBe(1);
     await new Promise((r) => setTimeout(r, 400));
     expect(inner.calls).toBeGreaterThanOrEqual(3);
@@ -1120,7 +1128,7 @@ describe("GitDataProvider + watchers integration", () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
     const svc = new GitDataProvider({ clock: systemTimekeeper, inner });
-    await laneOutcome(svc.declare(new Holds(), repo, {}));
+    await laneOutcome(svc.declare(new Holds(), repo));
     expect(svc.getStats().watchers).toBe(1);
     svc.close();
     expect(svc.getStats().watchers).toBe(0);

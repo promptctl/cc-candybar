@@ -106,57 +106,55 @@ function prStateOf(
     : failed(`${cli}: unknown state ${JSON.stringify(word)}`, "parse");
 }
 
-// [LAW:types-are-the-program] Every on-demand field is an Outcome, so "this
-// value is unknown because the fetch failed" is representable distinct from
-// a real 0/""/basename — the states the old catch-and-substitute blocks
-// erased. An undefined field means "not requested" (its `show*` flag was
-// off); `absent` means the domain genuinely has none (no upstream, no tags,
-// no stash); `failed` carries the reason to the consuming boundary, which
-// owns the log effect. branch/status stay plain: a fetch that cannot
-// determine them is a failed fetch, not a GitInfo.
-export interface GitInfo {
+// [LAW:types-are-the-program] One read of a repository. Every field past the
+// core is an Outcome, so "this value is unknown because the fetch failed" is
+// representable distinct from a real 0/""/basename — the states the old
+// catch-and-substitute blocks erased. `absent` means the domain genuinely has
+// none (no upstream, no stash); `failed` carries the reason to the consuming
+// boundary, which owns the log effect. branch/status stay plain: a fetch that
+// cannot determine them is a failed fetch, not a read. Every field is read on
+// every pass, so none is ever "not asked".
+export interface GitRead {
   branch: string;
   status: "clean" | "dirty" | "conflicts";
   aheadBehind: Outcome<AheadBehind>;
   // HEAD's full object id, absent on an unborn HEAD — what a PR's `head` is
   // compared against (`prOfHead`).
   head: Outcome<string>;
-  workingTree?: WorkingTree;
-  sha?: Outcome<string>;
-  operation?: Outcome<string>;
-  tag?: Outcome<string>;
+  workingTree: WorkingTree;
+  sha: Outcome<string>;
+  operation: Outcome<string>;
   // The last commit's committer date, epoch seconds — a fact of the repo;
   // its age is a fact of the draw that subtracts it.
-  committedAt?: Outcome<number>;
-  stashCount?: Outcome<number>;
-  upstream?: Outcome<string>;
-  repoName?: Outcome<string>;
+  committedAt: Outcome<number>;
+  stashCount: Outcome<number>;
+  upstream: Outcome<string>;
+  repoName: Outcome<string>;
   // The repo's browsable web page, derived from the same remotes read repoName
   // is. `absent` = the repo has no remote a browser can open (local-only, a
   // bare-path remote); `failed` = the remotes read itself failed.
-  repoUrl?: Outcome<string>;
-  isWorktree?: boolean;
+  repoUrl: Outcome<string>;
+}
+
+// A read with its branch's PR composed onto it: the PR is its own source, on
+// its own period, so a git pass never awaits the forge.
+export interface GitInfo extends GitRead {
   // [LAW:no-silent-failure] The forge lookup's three outcomes are all kept
   // distinct here: `ok` is the branch's PR, `absent` is "this branch has none / no
   // forge / no forge CLI", `failed` is "the forge was asked but couldn't
   // answer" (auth, network, API error). The render boundary surfaces `failed`
   // as a VISIBLE marker — collapsing it to `absent` would make a transient
-  // outage look like the PR vanished. Undefined = `showPullRequest` was off.
-  // `pending` = the branch's key is not answered yet (a branch just checked
-  // out): never another key's answer, and never drawn as one.
-  pullRequest?: Current<PullRequest>;
+  // outage look like the PR vanished. `pending` = the branch's key is not
+  // answered yet (a branch just checked out): never another key's answer, and
+  // never drawn as one.
+  pullRequest: Current<PullRequest>;
 }
 
 // The fields of one git read that carry an outcome. The PR is its own source,
 // whose lookup logs its own failures.
-type ReadField = Exclude<
-  {
-    [K in keyof GitInfo]-?: NonNullable<GitInfo[K]> extends Outcome<unknown>
-      ? K
-      : never;
-  }[keyof GitInfo],
-  "pullRequest"
->;
+type ReadField = {
+  [K in keyof GitRead]: GitRead[K] extends Outcome<unknown> ? K : never;
+}[keyof GitRead];
 
 // [LAW:types-are-the-program] Every outcome field of a read, named as the
 // payload names it: a field added to GitInfo is a compile error here until it
@@ -166,7 +164,6 @@ const READ_FIELD_NAMES: Record<ReadField, string> = {
   head: "head",
   sha: "sha",
   operation: "operation",
-  tag: "tag",
   committedAt: "committedAt",
   stashCount: "stash",
   upstream: "upstream",
@@ -177,42 +174,18 @@ const READ_FIELD_NAMES: Record<ReadField, string> = {
 // [LAW:no-silent-failure] Every field of one read that git could not answer.
 // The refresh that read them logs these once (src/daemon/cache/git.ts); a draw
 // of the stored value never logs them again.
-export function gitInfoFailures(info: GitInfo): string[] {
+export function gitInfoFailures(info: GitRead): string[] {
   return (Object.keys(READ_FIELD_NAMES) as ReadField[]).flatMap((field) => {
     const outcome = info[field];
-    return outcome?.kind === "failed"
+    return outcome.kind === "failed"
       ? [`git.${READ_FIELD_NAMES[field]}: ${outcome.reason}`]
       : [];
   });
 }
 
-// [LAW:one-source-of-truth] The one shape of getGitInfo's `show*` toggles. Each
-// flag opts into an extra git invocation; an unset flag leaves its GitInfo field
-// undefined (not requested). Every caller that builds these options
-// (render-payload's gitOptionsFromClosure, the cache override) references THIS
-// type, so the toggle set cannot drift between producer and consumer.
-export interface GitInfoOptions {
-  showSha?: boolean;
-  showWorkingTree?: boolean;
-  showOperation?: boolean;
-  showTag?: boolean;
-  showCommittedAt?: boolean;
-  showStashCount?: boolean;
-  showUpstream?: boolean;
-  showRepoName?: boolean;
-  // Shares ONE `git config --get-regexp` with showRepoName — turning both on
-  // costs the same single spawn as turning either on alone.
-  showRepoUrl?: boolean;
-  // Opts into the forge (gh/glab) PR/MR lookup — a network call, so it is the
-  // one option whose fetch the daemon caches on a longer, independent TTL than
-  // the rest of GitInfo (see src/daemon/cache/git.ts). Never resolved by the
-  // inner GitService's computeGitInfo; the cache layer owns the lookup+cache.
-  showPullRequest?: boolean;
-}
-
 // [LAW:dataflow-not-control-flow] One classifier for every git invocation.
-// Whether a non-zero exit is the domain answering "there is none" (describe
-// with no tags, rev-parse @{u} with no upstream) or a real failure is
+// Whether a non-zero exit is the domain answering "there is none" (a commit
+// that is not there to read, a config with no matching key) or a real failure is
 // per-command knowledge — it enters here as data, not as a catch block at
 // every callsite. Transport failures (timeout, spawn error, signal) are
 // always `failed`: git did not answer.
@@ -220,9 +193,9 @@ function classify(
   label: string,
   result: LaunchResult,
   // How this command spells "there is none":
-  //   "absent" — ANY non-zero exit is the domain answer. `git describe --tags`
-  //     and `git rev-parse @{u}` both exit 128 for their genuine absences, so a
-  //     narrower rule would misread them as failures.
+  //   "absent" — ANY non-zero exit is the domain answer. `git log -1` of an oid
+  //     the repo no longer holds exits 128 for that genuine absence, so a
+  //     narrower rule would misread it as a failure.
   //   a number — ONLY that exit code is the domain answer; every other non-zero
   //     is a real failure. `git config --get-regexp` exits 1 for "no matches"
   //     but 128 for an unreadable config, and folding those together would
@@ -977,11 +950,10 @@ export class GitService {
   // bar, not a swallowed branch.
   async getGitInfo(
     workingDir: string,
-    options: GitInfoOptions = {},
     projectDir?: string,
-  ): Promise<Outcome<GitInfo>> {
+  ): Promise<Outcome<GitRead>> {
     try {
-      return await this.computeGitInfo(workingDir, options, projectDir);
+      return await this.computeGitInfo(workingDir, projectDir);
     } catch (e) {
       return failed(
         `git: ${e instanceof Error ? e.message : String(e)}`,
@@ -992,13 +964,11 @@ export class GitService {
 
   private async computeGitInfo(
     workingDir: string,
-    options: GitInfoOptions = {},
     projectDir?: string,
-  ): Promise<Outcome<GitInfo>> {
+  ): Promise<Outcome<GitRead>> {
     let gitDir: string;
-    const isWorktreeDir = this.isWorktree(workingDir);
 
-    if (isWorktreeDir) {
+    if (this.isWorktree(workingDir)) {
       // Worktree's .git is a file pointing to the main repo;
       // git commands must run from the worktree directory.
       gitDir = workingDir;
@@ -1014,67 +984,43 @@ export class GitService {
 
     // branch/status/ahead-behind/sha/upstream are the core, and one
     // `git status --porcelain=v2 --branch` yields them all: without branch and
-    // status there is no useful GitInfo, so a failed core fetch fails the whole
+    // status there is no useful read, so a failed core fetch fails the whole
     // outcome rather than dressing up as a clean repo on a fallback branch.
     const core = await this.getCoreAsync(gitDir);
     if (core.kind !== "ok") return core;
 
-    const result: GitInfo = {
+    // Heavy operations stay serial — each is an expensive git invocation and
+    // running them one at a time bounds concurrent git load per fetch.
+    const committedAt = await this.committedAt(gitDir, core.value.oid);
+    // [LAW:one-source-of-truth] repoName and repoUrl are two projections of ONE
+    // remotes read, so they can never disagree about origin, and a failed read
+    // fails both alike, by construction.
+    const remotes = await this.getRemotesAsync(gitDir);
+
+    return ok({
       branch: core.value.branch,
       status: core.value.status,
       aheadBehind: core.value.aheadBehind,
       head: core.value.oid,
-    };
-
-    // sha, upstream, and the worktree counts all rode in on the core call —
-    // attaching them here is a memory read, not another spawn.
-    if (options.showWorkingTree) result.workingTree = core.value.workingTree;
-    // [LAW:locality-or-seam] The 7-char truncation is a DISPLAY policy, so it
-    // lives with the display field rather than in the parser: `CoreStatus` keeps
-    // the one fact git reported. `git rev-parse --short` auto-lengthens on
-    // collision, but re-spawning it to recover that would undo this segment's
-    // whole point — one porcelain=v2 read instead of a fan-out — and this value is
-    // display-only. The full oid is what keys the commit-timestamp cache, so
-    // ambiguity here stays cosmetic instead of becoming a wrong lookup.
-    if (options.showSha) {
-      result.sha = derived(core.value.oid, (o) => o.slice(0, 7));
-    }
-    if (options.showUpstream) result.upstream = core.value.upstream;
-
-    // Heavy operations stay serial — each is an expensive git invocation and
-    // running them one at a time bounds concurrent git load per fetch.
-    if (options.showTag) {
-      result.tag = await this.getNearestTagAsync(gitDir);
-    }
-    if (options.showCommittedAt) {
-      result.committedAt = await this.committedAt(gitDir, core.value.oid);
-    }
-
-    // [LAW:polishing-by-subtraction] These two used to overlap in a `Promise.all`
-    // because both were spawns worth running at once. The stash count is a file
-    // read now, so the parallelism had one side left and the await is plain.
-    if (options.showStashCount) result.stashCount = this.getStashCount(gitDir);
-
-    // [LAW:one-source-of-truth] repoName and repoUrl are two projections of ONE
-    // remotes read, so they can never disagree about origin and asking for both
-    // costs exactly one spawn. A failed read fails both alike, by construction.
-    const remotes =
-      options.showRepoName || options.showRepoUrl
-        ? await this.getRemotesAsync(gitDir)
-        : undefined;
-    if (remotes !== undefined && options.showRepoName) {
-      result.repoName = derived(remotes, (r) => this.repoNameFrom(r, gitDir));
-      result.isWorktree = isWorktreeDir;
-    }
-    if (remotes !== undefined && options.showRepoUrl) {
-      result.repoUrl = derived(remotes, repoWebUrl);
-    }
-
-    if (options.showOperation) {
-      result.operation = this.getOngoingOperation(gitDir);
-    }
-
-    return ok(result);
+      // sha, upstream, and the worktree counts all rode in on the core call —
+      // attaching them here is a memory read, not another spawn.
+      workingTree: core.value.workingTree,
+      // [LAW:locality-or-seam] The 7-char truncation is a DISPLAY policy, so it
+      // lives with the display field rather than in the parser: `CoreStatus`
+      // keeps the one fact git reported. `git rev-parse --short` auto-lengthens
+      // on collision, but re-spawning it to recover that would undo this
+      // segment's whole point — one porcelain=v2 read instead of a fan-out — and
+      // this value is display-only. The full oid is what keys the
+      // commit-timestamp cache, so ambiguity here stays cosmetic instead of
+      // becoming a wrong lookup.
+      sha: derived(core.value.oid, (o) => o.slice(0, 7)),
+      upstream: core.value.upstream,
+      committedAt,
+      stashCount: this.getStashCount(gitDir),
+      repoName: derived(remotes, (r) => this.repoNameFrom(r, gitDir)),
+      repoUrl: derived(remotes, repoWebUrl),
+      operation: this.getOngoingOperation(gitDir),
+    });
   }
 
   // [LAW:locality-or-seam] Public so the daemon-side provider can watch the
@@ -1113,22 +1059,6 @@ export class GitService {
         "read",
       );
     }
-  }
-
-  private async getNearestTagAsync(
-    workingDir: string,
-  ): Promise<Outcome<string>> {
-    // non-zero = no tags reachable — describe's domain answer.
-    return nonEmpty(
-      classify(
-        "git describe --tags",
-        await this.execGitAsync(["describe", "--tags", "--abbrev=0"], {
-          cwd: workingDir,
-          timeout: 2000,
-        }),
-        "absent",
-      ),
-    );
   }
 
   // [LAW:decomposition] Two facts were folded into one call, and only one of them

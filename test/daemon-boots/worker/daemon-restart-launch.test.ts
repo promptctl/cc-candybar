@@ -35,9 +35,10 @@ import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
 
-// Reads the commit date and the repo's name, and no PR field: the remotes are
-// then read after the commit date, so a pass whose commit read is out has a
-// launch still to make. A shown PR reads them at the start of the pass.
+// Reads the commit date and the repo's name. A pass reads the remote for the
+// PR at its start, beside the status, and the repo's remotes again after the
+// commit date — the repo has no config file to memoise them by — so a pass
+// whose commit read is out has a launch still to make.
 const CONFIG = `{
   segments: {
     repo: {
@@ -131,13 +132,15 @@ esac
     // same whether the pass went on to it or had not got there yet.
     const refused = () => first.daemon.stats.subprocessRefused.get("git");
     await until(() => refused() === 1, "the pass's next launch refused");
-    expect(asked()).toEqual(["status", "log"]);
+    // The remote read and the status are launched at once, so which reaches
+    // `git` first is the scheduler's.
+    expect(asked().sort()).toEqual(["config", "log", "status"]);
     expect(second.daemon.stats.subprocessTotal).toBe(0);
     expect(second.daemon.stats.subprocessRefused.size).toBe(0);
 
     await second.daemon.close(NO_TMUX_AT_EXIT);
     expect(refused()).toBe(1);
-    expect(asked()).toEqual(["status", "log"]);
+    expect(asked().sort()).toEqual(["config", "log", "status"]);
     for (const daemon of up.splice(0).reverse()) await daemon.stop();
     await answer;
   });

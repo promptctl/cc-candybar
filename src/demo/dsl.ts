@@ -190,9 +190,8 @@ async function renderFrames(): Promise<void> {
     cwd,
     { sessionId, hookData, cwd, hints },
     {
-      sessionState,
-      declare: (holds, facts, closure, sources) =>
-        declareLanes(providers, holds, facts, closure, sources),
+      declare: (holds, facts, sources) =>
+        declareLanes(providers, holds, facts, sources),
       source: sessionSource({
         providers,
         sessionState,
@@ -226,7 +225,6 @@ async function renderFrames(): Promise<void> {
           hookData,
           deps: { ...providers, lanes: view.lanes },
           cwd,
-          neededInputPaths: state.neededInputPaths(effective.preset),
           hints,
         },
         at,

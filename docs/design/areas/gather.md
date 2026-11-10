@@ -25,7 +25,7 @@ Measured on one session and a 2 MB transcript (`probes/p5.mts`):
 | `session`, `metrics`, `activity`, `context`, `cache`, `speed` refresh | About 1 ms each; 113 ms first load in all |
 | `today` | 1.7 s first scan, then 1 ms |
 
-The closure gating is deleted: `wantsOf`, `buildNeededPrefixes`, `sourcesRead`, `neededInputPaths`, the `closure` parameters, `prFactOf`'s `readsPr`, and `openView`'s preset reaction. `gitOptionsFromClosure` becomes one constant set. `doctor/data-needs.ts` keeps its own config walk.
+The closure gating is deleted: `wantsOf`, `buildNeededPrefixes`, `sourcesRead`, `neededInputPaths`, the `closure` parameters, `prFactOf`'s `readsPr`, and `openView`'s preset reaction. Git's option set goes with `gitOptionsFromClosure`, because every caller would pass every option: every read runs. `doctor/data-needs.ts` keeps its own config walk.
 
 Two changes must land first, or every built-in source joins the first bar's wait:
 

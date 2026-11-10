@@ -159,29 +159,25 @@ export function sessionSource(
         state.authoredRoots.has(preset),
       ),
     );
-    // [LAW:one-source-of-truth] What the owners are read by: the request, and
-    // the closure and lanes of ONE declaration. The closure is the preset the
-    // declaration was taken for, never a second resolution through the picks:
-    // the redeclaration that follows a preset pick is its own reaction, so a
-    // closure read from the picks could pair a new preset's closure with the
-    // old preset's lanes.
+    // [LAW:one-source-of-truth] What the owners are read by: the request and
+    // the lanes of ONE declaration, so a read never pairs one request's keys
+    // with another's lanes.
     const inputs = store.derive(
       "session.inputs",
       "computed",
       (): PayloadInputs => {
-        const { facts, lanes, preset } = declared();
+        const { facts, lanes } = declared();
         return {
           hookData: facts.hookData,
           cwd: facts.cwd,
           hints: facts.hints,
-          neededInputPaths: state.neededInputPaths(preset),
           deps: { ...deps.providers, lanes: () => lanes },
         };
       },
     );
     // [LAW:one-source-of-truth] What the session's owners hold now, read once.
     const readings = store.derive("session.readings", "computed", () =>
-      readingsOf(inputs.read(), state.sources),
+      readingsOf(inputs.read()),
     );
     // Derivations, so each keeps its identity until an input of it moves, and
     // a turn that moved nothing of them is the turn before.
@@ -189,13 +185,8 @@ export function sessionSource(
       "session.compose",
       "computed",
       (): ComposeInputs => {
-        const { hookData, hints, neededInputPaths } = inputs.read();
-        return {
-          hookData,
-          hints,
-          neededInputPaths,
-          home: deps.providers.home,
-        };
+        const { hookData, hints } = inputs.read();
+        return { hookData, hints, home: deps.providers.home };
       },
     );
     const draw = store.derive(
