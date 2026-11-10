@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "effe8f6ccd73837e94fbf8322194bfc66b7f5d1a",
-      "timestamp": "2026-11-10T05:21:03.344Z",
+      "sha": "ebe96e86b847c52f272f266af63444e1034ae33f",
+      "timestamp": "2026-11-10T05:29:32.000Z",
       "commits": [
         {
-          "sha": "effe8f6ccd73837e94fbf8322194bfc66b7f5d1a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T22:20:05-07:00",
-          "message": "feat(facts): every session gathers every built-in, and the wants closure goes (#707)\n\n* feat(facts): every session gathers every built-in, and the wants closure goes (candybar-skeleton-wj0c.660)\n\nWhat a session gathers no longer depends on what its layout shows. Every\nbuilt-in lane is declared, refreshed, read and stamped for every session,\nand every plugin source a config declares is declared, so the facts\ndocument is total and a preset pick moves no hold.\n\n- The closure that gated declaration, refresh, reading and composition\n  is gone; the doctor keeps its own walk to say which data a preset reads.\n- Git reads every field on each pass (the tag read is dropped), holds one\n  value per repo, and runs the repo's PR lookup while the repo is held.\n- The PR and today's sums stay off a request's wait, so the first bar\n  never waits on the forge or a transcript scan.\n\n* fix(facts): a hold during a new repo's first read asks no second read; the dead worktree flag goes (candybar-skeleton-wj0c.660)\n\nReview (high) of the totality change:\n- A PR no pass has keyed yet is keyed by the repo's first pass, so a second\n  home holding the repo while that pass is out no longer queues a redundant\n  git read (and the first pass's event no longer claims `owed`).\n- `isWorktree` reached no payload, template or event, the same reason `tag`\n  went; the worktree tests state the behaviour through the branch read.\n- `GitFacts` was a second name for `GitRead`.\n- The doctor's config walk gets back the edge cases its deleted tests held:\n  partials, root-dot helpers, a dict-handed helper, namespace reads, action\n  texts and cache keys.\n- The classifier's comment names a command that still runs; gather.md says\n  the option set goes rather than becomes constant.\n\n* docs(facts): comments stop arguing with the deleted gate (candybar-skeleton-wj0c.660)"
+          "sha": "ebe96e86b847c52f272f266af63444e1034ae33f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-10T05:28:30Z",
+          "message": "chore(release): set `package.json` to 1.214.0\n\n## [1.214.0](https://github.com/promptctl/cc-candybar/compare/v1.213.2...v1.214.0) (2026-11-10)\n\n### Features\n\n* **facts:** every session gathers every built-in, and the wants closure goes ([#707](https://github.com/promptctl/cc-candybar/issues/707)) ([effe8f6](https://github.com/promptctl/cc-candybar/commit/effe8f6ccd73837e94fbf8322194bfc66b7f5d1a))\n"
         }
       ]
     }
