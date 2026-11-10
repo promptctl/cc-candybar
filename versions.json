@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-708",
+      "ref": "refs/pull/708/merge",
+      "sha": "2c14a950c83351d1a53e92f9df2a417550c88195",
+      "timestamp": "2026-11-10T05:37:00.504Z",
+      "commits": [
+        {
+          "sha": "2c14a950c83351d1a53e92f9df2a417550c88195",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T22:35:58-07:00",
+          "message": "Merge 24f0d8a352baa3ea5a40abd11b5edb4eb2fb438e into ebe96e86b847c52f272f266af63444e1034ae33f\n"
+        },
+        {
+          "sha": "24f0d8a352baa3ea5a40abd11b5edb4eb2fb438e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T22:35:33-07:00",
+          "message": "test(daemon): a test closes every home it opens, so no file's periods tick inside a later file's close case (candybar-skeleton-wj0c.88o)\n\nThe daemon close case's leftover timers were never its daemon's. The\npayload-owners helpers held a real host source through a home nobody\nclosed, and the git cache tests left their providers open, so their\nperiods re-armed for the life of the Jest worker. Held together, they\nre-arm together, so the close case failed only when that turn fell inside\nit. An audit of armed periods at each file's end now reads zero in every\nworker-tier file.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ebe96e86b847c52f272f266af63444e1034ae33f",
