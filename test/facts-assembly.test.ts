@@ -98,24 +98,20 @@ function owners(git: Outcome<unknown> = ok({ ...GIT, pullRequest: ok(PR) })) {
   };
 }
 
-// Every home a case's rig opened, closed as the case ends.
-const homes: Disposable[] = [];
+const cleanups: Array<() => void> = [];
 afterEach(() => {
-  for (const home of homes.splice(0)) home[Symbol.dispose]();
+  for (const cleanup of cleanups.splice(0)) cleanup();
 });
 
 function rig(git?: Outcome<unknown>) {
   const held = owners(git);
-  const declared = declaredLanes(held, {
-    sessionId: SID,
-    hookData: HOOK,
-    cwd: undefined,
-    hints: HINTS,
-  });
-  homes.push(declared);
   const deps = {
     ...held,
-    lanes: declared.lanes,
+    lanes: declaredLanes(
+      held,
+      { sessionId: SID, hookData: HOOK, cwd: undefined, hints: HINTS },
+      cleanups,
+    ),
   } as unknown as RenderPayloadDeps;
   const inputs: PayloadInputs = {
     hookData: HOOK,

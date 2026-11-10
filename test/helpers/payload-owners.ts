@@ -334,7 +334,7 @@ export async function requestPayload(
   hints: ClientHints,
   configFacts: ConfigFileFacts,
 ): Promise<DrawnPayload> {
-  using declared = declaredLanes(deps, {
+  using home = openHome(deps, {
     sessionId: sessionIdOf(hookData.session_id),
     hookData,
     cwd,
@@ -344,7 +344,7 @@ export async function requestPayload(
     hookData,
     cwd,
     hints,
-    deps: { ...deps, lanes: declared.lanes } as RenderPayloadDeps,
+    deps: { ...deps, lanes: home.lanes } as RenderPayloadDeps,
   };
   await settlePayload(inputs, at, new Map());
   const payload = payloadOf(inputs, {
@@ -367,12 +367,9 @@ export function settled<T extends PayloadNode>(value: T | Pending): T {
   return value;
 }
 
-// The lanes a view declared at `facts` over `owners`, for a test that draws
-// frames over deps it built itself. Its holds are the view's home, so
-// disposing it closes the home: [LAW:no-ambient-temporal-coupling] a held
-// entry's period re-arms after every read, so a home left open keeps ticking
-// for the life of the Jest worker, inside whichever file runs next.
-export function declaredLanes(
+// The lanes a view declared at `facts` over `owners`; disposing it closes the
+// view's home.
+function openHome(
   owners: unknown,
   facts: Parameters<typeof declareLanes>[2],
 ): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
@@ -387,4 +384,17 @@ export function declaredLanes(
     lanes: () => lanes,
     [Symbol.dispose]: () => void holds.close(),
   };
+}
+
+// The lanes a view declared at `facts` over `owners`, for a test that draws
+// frames over deps it built itself. [LAW:no-ambient-temporal-coupling] The
+// view's home closes with the case's cleanups.
+export function declaredLanes(
+  owners: unknown,
+  facts: Parameters<typeof declareLanes>[2],
+  cleanups: Array<() => void>,
+): () => ReturnType<typeof declareLanes>["lanes"] {
+  const home = openHome(owners, facts);
+  cleanups.push(() => home[Symbol.dispose]());
+  return home.lanes;
 }
