@@ -37,7 +37,7 @@ import {
 } from "../src/render/diagnostics";
 import {
   DIAGNOSTIC_ERROR_COLORS,
-  DIAGNOSTIC_WARNING_COLORS,
+  DIAGNOSTIC_INFO_COLORS,
   type DiagnosticColors,
 } from "../src/render/diagnostic-style";
 import {
@@ -103,7 +103,7 @@ const rowsOf = ({ rows }: Pick<Frame, "rows">): string[] =>
 const cellWidth = (row: string): number => new RichText(row).cellLength;
 
 describe("the diagnostic list", () => {
-  test("errors first, then notices and questions, then warnings — each its own message", () => {
+  test("worst first: errors, then warnings, then notices and questions — each its own message, in its producer's order", () => {
     const question: DiagnosticMessage = {
       severity: APPROVAL_SEVERITY,
       about: "run it?",
@@ -119,10 +119,10 @@ describe("the diagnostic list", () => {
     expect(list.map((m) => [m.severity, m.message])).toEqual([
       [ERROR_SEVERITY, "first error"],
       [ERROR_SEVERITY, "second error"],
-      [UPDATE_SEVERITY, "newer"],
-      [APPROVAL_SEVERITY, "run it?"],
       [WARNING_SEVERITY, "a warning"],
       [WARNING_SEVERITY, "another"],
+      [UPDATE_SEVERITY, "newer"],
+      [APPROVAL_SEVERITY, "run it?"],
     ]);
   });
 
@@ -132,8 +132,8 @@ describe("the diagnostic list", () => {
     );
   });
 
-  test("its level is the worst member's: error over any warning, none when empty", () => {
-    expect(worstLevel([])).toBeNull();
+  test("its level is the worst member's: error over warning over a notice, none when empty", () => {
+    expect(worstLevel(collectDiagnostics([], [], []))).toBeNull();
     expect(worstLevel(collectDiagnostics([], [notice("n")], ["w"]))).toBe(
       "warning",
     );
@@ -145,7 +145,7 @@ describe("the diagnostic list", () => {
 
 describe("the indicator the door reads", () => {
   test("nothing to show is an empty label", () => {
-    expect(diagnosticsProjection([]).label).toBe("");
+    expect(diagnosticsProjection(collectDiagnostics([], [], [])).label).toBe("");
   });
 
   test("red with the count when any member is an error", () => {
@@ -155,16 +155,6 @@ describe("the indicator the door reads", () => {
       fg: DIAGNOSTIC_ERROR_COLORS.fg,
       bg: DIAGNOSTIC_ERROR_COLORS.bg,
       // Its click opens the first message, by its key.
-      open: viewerKey(list, 0, 0),
-    });
-  });
-
-  test("amber when every member is a warning or a notice", () => {
-    const list = collectDiagnostics([], [notice("n")], ["w"]);
-    expect(diagnosticsProjection(list)).toEqual({
-      label: "⚠ 2",
-      fg: DIAGNOSTIC_WARNING_COLORS.fg,
-      bg: DIAGNOSTIC_WARNING_COLORS.bg,
       open: viewerKey(list, 0, 0),
     });
   });
@@ -193,7 +183,7 @@ describe("the viewer", () => {
     expect(viewedIndex(b!, grown)).toEqual(at(3));
     // Gone: closed, never another message in its place.
     expect(viewedIndex(a!, collectDiagnostics(["b"], [], ["c"]))).toBeNull();
-    expect(viewedIndex(a!, [])).toBeNull();
+    expect(viewedIndex(a!, collectDiagnostics([], [], []))).toBeNull();
     // The same message back again reopens; a different one leaves it closed.
     expect(viewedIndex(a!, collectDiagnostics(["a"], [], []))).toEqual(at(1));
     expect(viewedIndex(a!, collectDiagnostics(["z"], [], []))).toBeNull();
@@ -436,7 +426,8 @@ describe("the viewer and the handoff line at every colour depth", () => {
     severity: HANDOFF_SEVERITY,
     lines: [[diagnosticSpan("the bar is drawn in the band", null)]],
   } as const;
-  const warned = collectDiagnostics([], [], ["a warning"]);
+  // Nothing wrong, so the indicator after the line is in its colours too.
+  const offered = collectDiagnostics([], [notice("newer")], []);
 
   test.each(COLOR_COMPATIBILITIES)("the viewer at %s", (depth) => {
     const list = collectDiagnostics([ERROR, "second"], [], []);
@@ -450,9 +441,9 @@ describe("the viewer and the handoff line at every colour depth", () => {
   });
 
   test.each(COLOR_COMPATIBILITIES)("the handoff line at %s", (depth) => {
-    const rows = handoffRows(handoff, warned, SID, at40(depth));
+    const rows = handoffRows(handoff, offered, SID, at40(depth));
     expect(encoded(rows, depth)).toBe(
-      written(rows, DIAGNOSTIC_WARNING_COLORS, depth),
+      written(rows, DIAGNOSTIC_INFO_COLORS, depth),
     );
     expect(clicks(rows)).toBeGreaterThan(0);
   });

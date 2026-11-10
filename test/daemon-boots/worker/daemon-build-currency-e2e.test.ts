@@ -20,6 +20,7 @@ import {
 import {
   click,
 } from "../../helpers/daemon-e2e";
+import { keptRenders, loggedLines } from "../../helpers/daemon-log";
 import {
   prepareIsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
@@ -30,6 +31,7 @@ import {
 } from "../../helpers/in-worker-daemon";
 import { answerRepo } from "../../helpers/repo-approval";
 import {
+  actFailureOf,
   affordance,
   hasNotice,
   noticeOf,
@@ -56,17 +58,18 @@ const RELEASE_ROW = new RegExp(
 async function withDaemon<T>(
   scratch: Scratch,
   envOverride: NodeJS.ProcessEnv,
-  body: (daemon: InWorkerDaemon) => Promise<T>,
+  body: (daemon: InWorkerDaemon, env: NodeJS.ProcessEnv) => Promise<T>,
 ): Promise<T> {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-bc");
   // The project's config (the collision the bar warns of) is approved.
   answerRepo(scratch.projectDir, "approved", env);
+  const daemonEnv = { ...env, ...envOverride };
   const daemon = startArmedDaemon(
-    { ...env, ...envOverride },
+    daemonEnv,
     bundleAt(scratch.root, REPO_DIGEST),
   );
   try {
-    return await body(daemon);
+    return await body(daemon, daemonEnv);
   } finally {
     await daemon.stop();
     removeTmpDirs();
@@ -75,13 +78,13 @@ async function withDaemon<T>(
 }
 
 describe("brandon-build-notice-5d6: the daemon renders what is newer than it, with its clicks", () => {
-  test("edited source: the notice leads, then the config warning", async () => {
+  test("edited source: the config warning leads, then the notice", async () => {
     const s = scratchLayout("edited");
     await withDaemon(s, {}, async (sock) => {
       const pages = await pagesOf(sock, "bc-stale", s.projectDir);
       expect(pages).toHaveLength(2);
-      expect(pages[0]!.text).toMatch(SOURCE_ROW);
-      expect(pages[1]!.text).toContain("config-extension collision");
+      expect(pages[0]!.text).toContain("config-extension collision");
+      expect(pages[1]!.text).toMatch(SOURCE_ROW);
     });
   });
 
@@ -167,23 +170,34 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
     });
   });
 
-  test("[rebuild] runs pnpm build in the checkout; a failure is said on the notice's second line", async () => {
+  test("[rebuild] runs pnpm build in the checkout; a failure is a warning of its own beside the notice", async () => {
     const s = scratchLayout("edited");
-    await withDaemon(s, {}, async (sock) => {
+    await withDaemon(s, {}, async (sock, env) => {
       const before = noticeOf(await pagesOf(sock, "bc-rebuild", s.projectDir))!;
       await click(sock, affordance(before.rendered, "apply-update"));
       const failed = await pagesUntil(
         sock,
         "bc-rebuild",
         s.projectDir,
-        (pages) => /rebuild failed:/.test(noticeOf(pages)?.text ?? ""),
+        (pages) => /rebuild failed:/.test(actFailureOf(pages)?.text ?? ""),
         "the rebuild failure",
         20_000,
       );
-      expect(noticeOf(failed)!.text).toMatch(
+      expect(actFailureOf(failed)!.text).toMatch(
         /rebuild failed: non-zero \(exit \d+\): \S/,
       );
       expect(noticeOf(failed)!.text).toMatch(SOURCE_ROW);
+      // [LAW:nothing-unseen] The frame that drew the failure records it
+      // among its warnings.
+      await loggedLines(
+        env,
+        (lines) =>
+          keptRenders(lines, "bc-rebuild").filter((l) =>
+            / warn=update-failed[ ,]/.test(l),
+          ),
+        (recorded) => recorded.length > 0,
+        "a render recording the update failure",
+      );
     });
   });
 

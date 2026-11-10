@@ -2,8 +2,8 @@
 // the band above the prompt (A), a tmux pane or the tmux status line (C) — the
 // statusline shows one small row instead of a second copy of the bar: a button
 // that draws the bar back in Claude Code's statusline, in case the place the
-// lane draws it has broken, and the error indicator beside it, so an error is
-// seen even where the lane's bar is not.
+// lane draws it has broken, and the diagnostics indicator beside it, so an
+// error is seen even where the lane's bar is not.
 //
 // [LAW:one-source-of-truth] Only the bytes Claude Code's statusline receives
 // change: the lanes draw from the session's full render, which the feed is

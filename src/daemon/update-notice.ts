@@ -15,8 +15,8 @@
 //
 // [LAW:effects-at-boundaries] `updateReading` / `updateNotice` are pure:
 // (currency samples) → the update's reading, and (update, act state, session
-// context) → diagnostic channels. The watch below is the edge: the clocks, the
-// registry fetch, the act's record, the validator registrations.
+// context) → the offer and the failure. The watch below is the edge: the
+// clocks, the registry fetch, the act's record, the validator registrations.
 
 import {
   effectsUrl,
@@ -38,6 +38,7 @@ import {
   UPDATE_SEVERITY,
   type DiagnosticLine,
   type DiagnosticMessage,
+  type SourcedText,
 } from "../render/diagnostics";
 import { shortDigest } from "../source-digest";
 import { PACKAGE_VERSION } from "../version";
@@ -161,26 +162,45 @@ export interface NoticeContext {
   readonly enabled: boolean;
 }
 
-// [LAW:dataflow-not-control-flow] One update becomes zero or one channel —
-// the list IS the answer, so the diagnostics fold it beside the errors and
-// warnings with no "is there a notice" branch. Line one is the
-// sentence and the three affordances; a failed act adds a second line naming
-// the failure, and while the act runs its affordance is a busy label.
+// What one update tells a session: the offer, an info message whose line is
+// the sentence and the three affordances, and the failure of the last act on
+// it, a plain warning of its own. They are two messages because they are two
+// levels: the offer is nothing going wrong, a failed click is
+// [LAW:no-silent-failure].
+// [LAW:types-are-the-program] At most one of each, and no failure without its
+// offer: a failure with nothing to retry is unrepresentable.
+export type UpdateNotice =
+  | { readonly offer: readonly []; readonly failure: readonly [] }
+  | {
+      readonly offer: readonly [DiagnosticMessage];
+      readonly failure: readonly [] | readonly [SourcedText];
+    };
+const NO_NOTICE: UpdateNotice = { offer: [], failure: [] };
+
+// [LAW:dataflow-not-control-flow] One update becomes zero or one offer and
+// zero or one failure — the lists ARE the answer, so the diagnostics fold
+// them beside the errors and warnings with no "is there a notice" branch.
+// Both stand under the one gate: a dismissed or disabled offer hides its
+// failure too. While the act runs the offer's affordance is a busy label.
 export function updateNotice(
   update: Update | null,
   act: ActState,
   ctx: NoticeContext,
-): DiagnosticMessage[] {
-  if (update === null) return [];
+): UpdateNotice {
+  if (update === null) return NO_NOTICE;
   const identity = updateIdentity(update);
-  if (!ctx.enabled || ctx.dismissed === identity) return [];
+  if (!ctx.enabled || ctx.dismissed === identity) return NO_NOTICE;
   const facts = factsOf(update);
   const sentence = `${facts.headline}: ${facts.newer}. You're on ${facts.running}.`;
-  const failure =
+  const failedText = (text: string): SourcedText => ({
+    about: `update-failed\0${identity}`,
+    text,
+    copy: text,
+  });
+  const failure: readonly [] | readonly [SourcedText] =
     act.kind === "failed" && act.identity === identity
-      ? [`${facts.act} failed: ${act.reason}`]
+      ? [failedText(`${facts.act} failed: ${act.reason}`)]
       : [];
-  const message = [sentence, ...failure].join("\n");
   // The sentence is plain text (the viewer's ⧉ copies it); the affordances
   // each carry their own effect.
   const actSpan =
@@ -216,16 +236,18 @@ export function updateNotice(
       ]),
     ),
   ];
-  const rest = failure.map((f): DiagnosticLine => [diagnosticSpan(f, null)]);
-  return [
-    {
-      severity: UPDATE_SEVERITY,
-      about: `update\0${identity}`,
-      message,
-      copy: message,
-      lines: [first, ...rest],
-    },
-  ];
+  return {
+    offer: [
+      {
+        severity: UPDATE_SEVERITY,
+        about: `update\0${identity}`,
+        message: sentence,
+        copy: sentence,
+        lines: [first],
+      },
+    ],
+    failure,
+  };
 }
 
 // [LAW:dataflow-not-control-flow] The two currency samples folded into the one
@@ -307,7 +329,7 @@ export interface UpdateWatchOptions {
 export interface UpdateWatch {
   arm(): void;
   close(): void;
-  notice(ctx: NoticeContext): DiagnosticMessage[];
+  notice(ctx: NoticeContext): UpdateNotice;
   // The apply-update verb's effect. Rejects with BadVerbArgs when there is
   // nothing to apply or an act is already running on this bundle, and with
   // DaemonClosing when the daemon closed before the claim stood.
