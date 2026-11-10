@@ -4,15 +4,22 @@
     {
       "version": "pr-709",
       "ref": "refs/pull/709/merge",
-      "sha": "fdb216296ab35611301c3569d31a8ae0db43bcce",
-      "timestamp": "2026-11-10T06:41:39.698Z",
+      "sha": "cc654a27d854c70403e569cb5c8f7b089fe10d24",
+      "timestamp": "2026-11-10T06:50:34.841Z",
       "commits": [
         {
-          "sha": "fdb216296ab35611301c3569d31a8ae0db43bcce",
+          "sha": "cc654a27d854c70403e569cb5c8f7b089fe10d24",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T06:40:40Z",
-          "message": "Merge e87e8aaef0965f6957ca5f78bd0952842990cc6d into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+          "timestamp": "2026-11-10T06:49:42Z",
+          "message": "Merge a59e922aebd6318c4bea854d150341a2de4fc796 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "a59e922aebd6318c4bea854d150341a2de4fc796",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T23:49:31-07:00",
+          "message": "test(facts): each hook's document is its own refresh over its own owners, and the spec names the document's fold types (candybar-skeleton-wj0c.yb3)\n\nReview (medium) fixes: the hook-split test refreshed both hooks before assembling either document, so a refresh that stored a hook value would pass; each hook now refreshes and reads over owners of its own (one shared store differs anyway by the second request's speed sample). The design spec's SessionFacts names TranscriptUsage, the context tokens and MetricsFold, so SessionUsage names only the composed value. The usage test helper takes the transcript path, not a hook.\n"
         },
         {
           "sha": "e87e8aaef0965f6957ca5f78bd0952842990cc6d",
