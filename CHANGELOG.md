@@ -1,3 +1,9 @@
+## [1.213.2](https://github.com/promptctl/cc-candybar/compare/v1.213.1...v1.213.2) (2026-11-10)
+
+### Bug Fixes
+
+* **diagnostics:** a list with nothing wrong in it draws ℹ N in blue, not an amber ⚠ ([#686](https://github.com/promptctl/cc-candybar/issues/686)) ([dc86b43](https://github.com/promptctl/cc-candybar/commit/dc86b43b9a2c02cdf5144c6eec2130a4431fa9ab))
+
 ## [1.213.1](https://github.com/promptctl/cc-candybar/compare/v1.213.0...v1.213.1) (2026-11-10)
 
 ### Bug Fixes
