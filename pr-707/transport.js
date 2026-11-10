@@ -67295,8 +67295,8 @@ function composePayload(facts, inputs, draw2) {
     },
     // [LAW:one-source-of-truth] Always present — the daemon resolves every
     // one of these each render (for BuildLineOptions/basePalette), and these
-    // are those exact values. No `wants` gate: each costs nothing (already in
-    // hand) and a config reading e.g. `.padding.effective` must always find it.
+    // are those exact values, so a config reading e.g. `.padding.effective`
+    // always finds it.
     ...effectiveInputs(effective),
     history: draw2.history,
     navigation: { back: draw2.back },
