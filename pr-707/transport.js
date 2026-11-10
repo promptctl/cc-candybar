@@ -66353,8 +66353,7 @@ var GitService = class {
   }
   async computeGitInfo(workingDir, projectDir) {
     let gitDir;
-    const isWorktreeDir = this.isWorktree(workingDir);
-    if (isWorktreeDir) {
+    if (this.isWorktree(workingDir)) {
       gitDir = workingDir;
     } else if (projectDir && this.isGitRepo(projectDir)) {
       gitDir = projectDir;
@@ -66391,7 +66390,6 @@ var GitService = class {
       stashCount: this.getStashCount(gitDir),
       repoName: derived2(remotes, (r) => this.repoNameFrom(r, gitDir)),
       repoUrl: derived2(remotes, repoWebUrl),
-      isWorktree: isWorktreeDir,
       operation: this.getOngoingOperation(gitDir)
     });
   }
@@ -78799,7 +78797,7 @@ var GitDataProvider = class {
       owe(state.pr);
       state.asked.add("resume");
     }
-    if (state.pr.missed) state.asked.add("owed");
+    if (state.pr.missed && state.pr.key !== "") state.asked.add("owed");
     this.held(state);
     this.evict();
     return () => {
@@ -78828,7 +78826,7 @@ var GitDataProvider = class {
     const known = this.repos.get(root);
     if (known !== void 0) this.touch(known);
     const state = known ?? this.built(root);
-    const before = known === void 0 ? 0 : state.asked.size;
+    const before = state.asked.size;
     if (known === void 0) state.asked.add("first");
     holds2.take(holdKey(root), () => this.hold(state));
     this.queue(state, before);

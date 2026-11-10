@@ -4,15 +4,22 @@
     {
       "version": "pr-707",
       "ref": "refs/pull/707/merge",
-      "sha": "9c354e90b85faee2f2dc7cb9296456fb2950676d",
-      "timestamp": "2026-11-10T04:44:01.025Z",
+      "sha": "9aaf1a10c00f77e143872392b55508fe7abcaf56",
+      "timestamp": "2026-11-10T04:59:00.945Z",
       "commits": [
         {
-          "sha": "9c354e90b85faee2f2dc7cb9296456fb2950676d",
+          "sha": "9aaf1a10c00f77e143872392b55508fe7abcaf56",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T21:43:09-07:00",
-          "message": "Merge 3fb26789deaeab7db78740ca84f49af7a364d6c4 into edfc3a230459f9018cfa3781421f503d998476ff\n"
+          "timestamp": "2026-11-10T04:58:02Z",
+          "message": "Merge 895778c24177960c30cc7a3bfe5d3db99d607f90 into edfc3a230459f9018cfa3781421f503d998476ff\n"
+        },
+        {
+          "sha": "895778c24177960c30cc7a3bfe5d3db99d607f90",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T21:57:50-07:00",
+          "message": "fix(facts): a hold during a new repo's first read asks no second read; the dead worktree flag goes (candybar-skeleton-wj0c.660)\n\nReview (high) of the totality change:\n- A PR no pass has keyed yet is keyed by the repo's first pass, so a second\n  home holding the repo while that pass is out no longer queues a redundant\n  git read (and the first pass's event no longer claims `owed`).\n- `isWorktree` reached no payload, template or event, the same reason `tag`\n  went; the worktree tests state the behaviour through the branch read.\n- `GitFacts` was a second name for `GitRead`.\n- The doctor's config walk gets back the edge cases its deleted tests held:\n  partials, root-dot helpers, a dict-handed helper, namespace reads, action\n  texts and cache keys.\n- The classifier's comment names a command that still runs; gather.md says\n  the option set goes rather than becomes constant.\n"
         },
         {
           "sha": "3fb26789deaeab7db78740ca84f49af7a364d6c4",
