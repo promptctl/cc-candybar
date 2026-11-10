@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-707",
+      "ref": "refs/pull/707/merge",
+      "sha": "9c354e90b85faee2f2dc7cb9296456fb2950676d",
+      "timestamp": "2026-11-10T04:44:01.025Z",
+      "commits": [
+        {
+          "sha": "9c354e90b85faee2f2dc7cb9296456fb2950676d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T21:43:09-07:00",
+          "message": "Merge 3fb26789deaeab7db78740ca84f49af7a364d6c4 into edfc3a230459f9018cfa3781421f503d998476ff\n"
+        },
+        {
+          "sha": "3fb26789deaeab7db78740ca84f49af7a364d6c4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-09T21:42:42-07:00",
+          "message": "feat(facts): every session gathers every built-in, and the wants closure goes (candybar-skeleton-wj0c.660)\n\nWhat a session gathers no longer depends on what its layout shows. Every\nbuilt-in lane is declared, refreshed, read and stamped for every session,\nand every plugin source a config declares is declared, so the facts\ndocument is total and a preset pick moves no hold.\n\n- The closure that gated declaration, refresh, reading and composition\n  is gone; the doctor keeps its own walk to say which data a preset reads.\n- Git reads every field on each pass (the tag read is dropped), holds one\n  value per repo, and runs the repo's PR lookup while the repo is held.\n- The PR and today's sums stay off a request's wait, so the first bar\n  never waits on the forge or a transcript scan.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "edfc3a230459f9018cfa3781421f503d998476ff",
