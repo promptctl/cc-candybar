@@ -601,21 +601,24 @@ describe("a steady stream of renders", () => {
   // counts flat and still shows here as a line.
   test("builds and retires nothing: the counts hold and nothing is logged", () => {
     const { cache, lines, watchers } = makeCache(64 * COMPILE_BYTES);
-    const held = () => {
-      const { size, compiles, views } = cache.stats;
-      return { size, compiles, views, watches: watchers.size() };
+    // `due` is the reload a render would leave for a later turn, so a case
+    // that never yields still sees it.
+    const counts = () => {
+      const { size, compiles, views, due } = cache.stats;
+      return { size, compiles, views, due, watches: watchers.size() };
     };
     round(cache);
-    const first = held();
+    const first = counts();
     expect(first).toMatchObject({
       size: DIRS.length,
       views: DIRS.length * SESSIONS_PER_DIR,
+      due: 0,
     });
     const logged = lines.length;
     round(cache);
     round(cache);
-    expect({ held: held(), logged: lines.slice(logged) }).toEqual({
-      held: first,
+    expect({ counts: counts(), logged: lines.slice(logged) }).toEqual({
+      counts: first,
       logged: [],
     });
   });

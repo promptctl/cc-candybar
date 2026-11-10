@@ -353,10 +353,12 @@ describe("a connection over a stream", () => {
   });
 
   // [LAW:verifiable-goals] A failed request costs its own answer and nothing
-  // more: the daemon neither exits nor keeps it in flight, and the next
-  // connection is served as if nothing had failed.
+  // more: the daemon logs the throw, neither exits nor keeps it in flight, and
+  // the next connection is served as if nothing had failed.
   test("a handler that throws is answered RENDER_FAILED, and the next request is served", async () => {
+    const log = jest.fn();
     const daemon = standIn({
+      log,
       handle: jest
         .fn(async () => replyWith())
         .mockRejectedValueOnce(new Error("the handler broke")),
@@ -372,6 +374,7 @@ describe("a connection over a stream", () => {
       next: next.received,
       exits: exit.mock.calls,
       inFlight: daemon.stats.inFlight,
+      logged: log.mock.calls,
     }).toEqual({
       failed: [
         expect.objectContaining({
@@ -383,6 +386,7 @@ describe("a connection over a stream", () => {
       next: [ANSWER],
       exits: [],
       inFlight: 0,
+      logged: [["error", expect.stringContaining("the handler broke")]],
     });
   });
 
