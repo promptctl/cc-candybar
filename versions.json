@@ -4,15 +4,22 @@
     {
       "version": "pr-710",
       "ref": "refs/pull/710/merge",
-      "sha": "a18e5ee196e4b4b7149a1f16b08058ea07077152",
-      "timestamp": "2026-11-10T17:03:35.617Z",
+      "sha": "d2f1cf5063e2d92116264ede6582b25bc6de49e0",
+      "timestamp": "2026-11-10T17:05:20.739Z",
       "commits": [
         {
-          "sha": "a18e5ee196e4b4b7149a1f16b08058ea07077152",
+          "sha": "d2f1cf5063e2d92116264ede6582b25bc6de49e0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T17:02:25Z",
-          "message": "Merge bdf7bcc37c8e1a12b90521ab790eaed19f60ccb2 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+          "timestamp": "2026-11-10T17:04:34Z",
+          "message": "Merge aebec607458058ca574cb9f8e9ba65486bf02d86 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "aebec607458058ca574cb9f8e9ba65486bf02d86",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T10:04:20-07:00",
+          "message": "docs(design): Proposal 3 answers its third review: a session's environment stays in the host and out of every recording (candybar-gather-renderer-76bb.215)\n"
         },
         {
           "sha": "bdf7bcc37c8e1a12b90521ab790eaed19f60ccb2",
