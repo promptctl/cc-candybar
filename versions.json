@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-711",
+      "ref": "refs/pull/711/merge",
+      "sha": "7a8071cfb0089cb2be59185d234840a04080cf2e",
+      "timestamp": "2026-11-11T15:56:57.332Z",
+      "commits": [
+        {
+          "sha": "7a8071cfb0089cb2be59185d234840a04080cf2e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T08:55:57-07:00",
+          "message": "Merge 5d776864fa4fc8551e6db33577c007d1198eb150 into 063f5d7eba46bdf34965fbd84da03760986aab69\n"
+        },
+        {
+          "sha": "5d776864fa4fc8551e6db33577c007d1198eb150",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T08:55:44-07:00",
+          "message": "feat(renderer): a statusline request is answered through Renderer.answer, in process, by the present its turn returns (candybar-host-renderer-x96a.2xo)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "063f5d7eba46bdf34965fbd84da03760986aab69",
