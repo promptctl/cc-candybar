@@ -66767,7 +66767,7 @@ init_globals();
 
 // src/daemon/render-payload.ts
 init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // src/utils/terminal-width.ts
 init_globals();
@@ -66816,6 +66816,555 @@ function projectToday(facts, at) {
       cacheRead: total.cacheRead
     },
     date: today
+  });
+}
+
+// src/segments/context.ts
+init_globals();
+
+// src/utils/transcript-fold.ts
+init_globals();
+
+// src/utils/claude.ts
+init_globals();
+var import_node_path21 = __toESM(require_path_browserify(), 1);
+
+// src/utils/transcript-activity.ts
+init_globals();
+var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
+function slashCommand(text4) {
+  if (typeof text4 !== "string") return void 0;
+  return COMMAND_NAME.exec(text4)?.[1];
+}
+function todoItems(input) {
+  const todos2 = input?.todos;
+  if (!Array.isArray(todos2)) return void 0;
+  const items = [];
+  for (const raw of todos2) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const { content, activeForm, status } = raw;
+    const active2 = status === "in_progress";
+    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
+    if (typeof text4 !== "string") continue;
+    items.push({ text: text4, active: active2, done: status === "completed" });
+  }
+  return items;
+}
+function turnText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const block = content.find(
+    (b) => typeof b === "object" && b !== null && b.type === "text" && typeof b.text === "string"
+  );
+  return block?.text ?? "";
+}
+function entryActivity(parsed2, userEntry) {
+  const msg = parsed2.message;
+  const content = msg?.content;
+  const started2 = [];
+  const finished = [];
+  let todos2;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (typeof block !== "object" || block === null) continue;
+      const b = block;
+      switch (b.type) {
+        case "tool_use": {
+          const { id: id2, name } = b;
+          if (typeof id2 !== "string" || typeof name !== "string") break;
+          started2.push({ id: id2, name });
+          if (name === "TodoWrite") todos2 = todoItems(b.input) ?? todos2;
+          break;
+        }
+        case "tool_result": {
+          const id2 = b.tool_use_id;
+          if (typeof id2 === "string") finished.push(id2);
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
+  const command = userEntry === "prompt" ? slashCommand(turnText(content)) : void 0;
+  if (started2.length === 0 && finished.length === 0 && todos2 === void 0 && command === void 0) {
+    return void 0;
+  }
+  return {
+    ...started2.length > 0 && { started: started2 },
+    ...finished.length > 0 && { finished },
+    ...todos2 !== void 0 && { todos: todos2 },
+    ...command !== void 0 && { command }
+  };
+}
+
+// src/utils/claude.ts
+function getClaudePaths(detected, homeDir) {
+  if (detected !== void 0) return [detected];
+  return [(0, import_node_path21.join)(homeDir, ".config", "claude"), (0, import_node_path21.join)(homeDir, ".claude")].filter(
+    (dir) => existsSync(dir)
+  );
+}
+async function findProjectPaths(claudePaths) {
+  const projectPaths = [];
+  for (const claudePath of claudePaths) {
+    const projectsDir = (0, import_node_path21.join)(claudePath, "projects");
+    const entries = await unlessGone(
+      readdir2(projectsDir, { withFileTypes: true })
+    );
+    for (const entry of entries ?? []) {
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path21.join)(projectsDir, entry.name));
+    }
+  }
+  return projectPaths;
+}
+async function unlessGone(read2) {
+  try {
+    return await read2;
+  } catch (e) {
+    if (e.code === "ENOENT") return void 0;
+    throw e;
+  }
+}
+async function findAgentTranscripts(sessionId2, projectPath, verified) {
+  const paths2 = [];
+  let longLines = [];
+  const subagentsDir = (0, import_node_path21.join)(projectPath, sessionId2, "subagents");
+  try {
+    const files = await readdir2(subagentsDir);
+    const agentFileNames = files.filter(
+      (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
+    );
+    for (const fileName2 of agentFileNames) {
+      const filePath2 = (0, import_node_path21.join)(subagentsDir, fileName2);
+      if (verified?.has(filePath2)) {
+        paths2.push(filePath2);
+        continue;
+      }
+      const read2 = await readAppended(filePath2, void 0, void 0);
+      if (read2.kind !== "ok") {
+        debug(`Failed to check agent file ${filePath2}`);
+        continue;
+      }
+      longLines = longLinesWith(longLines, filePath2, read2.value);
+      const line = jsonLine(
+        decodeLines(
+          read2.value,
+          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
+        )
+      );
+      if (line.kind === "object" && line.value.sessionId === sessionId2) {
+        paths2.push(filePath2);
+      }
+    }
+  } catch (error) {
+    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
+  }
+  return { paths: paths2, longLines };
+}
+function userEntryOf(parsed2) {
+  const msg = parsed2.message;
+  const messageType = parsed2.type || msg?.role || msg?.type;
+  if (messageType !== "user") return void 0;
+  if (firstBlockType(msg) === "tool_result") return "tool-result";
+  const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
+  if (origin !== void 0 && origin !== "human") return "turn";
+  const text4 = turnText(msg?.content).trimStart();
+  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
+  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
+}
+var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
+function firstBlockType(msg) {
+  const content = msg?.content;
+  return Array.isArray(content) && typeof content[0] === "object" && content[0] ? content[0].type : void 0;
+}
+function makeEntry(parsed2) {
+  if (!parsed2.timestamp) return null;
+  const msg = parsed2.message;
+  const usage = msg?.usage;
+  const userEntry = userEntryOf(parsed2);
+  return {
+    timestamp: new Date(parsed2.timestamp),
+    type: typeof parsed2.type === "string" ? parsed2.type : void 0,
+    message: msg ? {
+      id: typeof msg.id === "string" ? msg.id : void 0,
+      model: typeof msg.model === "string" ? msg.model : void 0,
+      usage,
+      role: typeof msg.role === "string" ? msg.role : void 0,
+      type: typeof msg.type === "string" ? msg.type : void 0
+    } : void 0,
+    costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
+    isSidechain: parsed2.isSidechain === true,
+    userEntry,
+    activity: entryActivity(parsed2, userEntry),
+    raw: {
+      model: typeof parsed2.model === "string" ? parsed2.model : void 0,
+      message: msg ? {
+        id: typeof msg.id === "string" ? msg.id : void 0,
+        model: typeof msg.model === "string" ? msg.model : void 0,
+        usage
+      } : void 0,
+      requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
+    }
+  };
+}
+function jsonLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return { kind: "blank" };
+  try {
+    const value = JSON.parse(trimmed);
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? { kind: "object", value } : { kind: "unparsed", reason: "not a JSON object" };
+  } catch (parseError) {
+    return { kind: "unparsed", reason: String(parseError) };
+  }
+}
+function entryOf3(line) {
+  const read2 = jsonLine(line);
+  if (read2.kind === "unparsed") {
+    debug(`Failed to parse JSONL line: ${read2.reason}`);
+    return null;
+  }
+  if (read2.kind === "blank") return null;
+  try {
+    return makeEntry(read2.value);
+  } catch (projectionError) {
+    debug(`Failed to project JSONL line: ${projectionError}`);
+    return null;
+  }
+}
+function parseJsonlLines(text4) {
+  const entries = [];
+  for (const line of text4.split("\n")) {
+    const entry = entryOf3(line);
+    if (entry) entries.push(entry);
+  }
+  return entries;
+}
+function longLinesWith(longLines, path42, read2) {
+  return read2.longLine === 0 ? longLines : [...longLines, { path: path42, offset: read2.start, bytes: read2.longLine }];
+}
+function longLineLog(longLines) {
+  return longLines.map(
+    (l) => `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`
+  );
+}
+async function foldAppended(filePath2, prior, empty2, step4) {
+  let longLines = [];
+  let cursor = prior?.cursor;
+  let value = prior?.value ?? empty2;
+  let end;
+  for (; ; ) {
+    const read2 = await readAppended(
+      filePath2,
+      cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
+      end?.size
+    );
+    if (read2.kind !== "ok") return read2;
+    const window2 = read2.value;
+    if (window2.reset) value = empty2;
+    longLines = longLinesWith(window2.reset ? [] : longLines, filePath2, window2);
+    if (end === void 0 || window2.reset) {
+      end = { size: window2.size, stamp: window2.stamp };
+    }
+    const next = window2.start + window2.lines.length;
+    value = await step4(
+      value,
+      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
+    );
+    cursor = {
+      offset: next,
+      stamp: end.stamp,
+      ino: window2.ino
+    };
+    if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
+  }
+}
+
+// src/utils/observable-lru.ts
+init_globals();
+var ObservableLru = class {
+  constructor(max2) {
+    this.max = max2;
+  }
+  max;
+  values = observable.map(void 0, { deep: false });
+  // Least recently used first.
+  order = /* @__PURE__ */ new Set();
+  get(key) {
+    return this.values.get(key);
+  }
+  get size() {
+    return this.order.size;
+  }
+  // The key was used and its value stands.
+  touch(key) {
+    if (this.order.delete(key)) this.order.add(key);
+  }
+  // The key's value now, used now. A value identical to the one held wakes
+  // nobody.
+  set(key, value) {
+    this.order.delete(key);
+    this.order.add(key);
+    runInAction(() => {
+      this.values.set(key, value);
+      for (const oldest of this.order) {
+        if (this.order.size <= this.max) break;
+        this.order.delete(oldest);
+        this.values.delete(oldest);
+      }
+    });
+  }
+};
+
+// src/utils/transcript-fold.ts
+var MAX_SESSIONS3 = 256;
+var TranscriptFold = class {
+  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS3) {
+    this.empty = empty2;
+    this.step = step4;
+    this.refreshes = refreshes;
+    this.clock = clock;
+    this.log = log;
+    this.sessions = new ObservableLru(maxSessions);
+  }
+  empty;
+  step;
+  refreshes;
+  clock;
+  log;
+  // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
+  // instance per projection per daemon. Observable, so a view's payload over
+  // an answer is recomputed in the turn the answer is stored.
+  sessions;
+  // [LAW:effects-at-boundaries] The session's refresh: folds what was
+  // appended since its last read, and stores what it answered.
+  async read(sessionId2, transcriptPath) {
+    const held = this.sessions.get(sessionId2);
+    const prior = held?.folded;
+    const stamp2 = statStamp(transcriptPath);
+    if (held?.folded && stamp2 !== "" && held.folded.cursor.stamp === stamp2) {
+      const { folded: folded3, answer: answer2 } = held;
+      if (answer2.kind === "ok" && answer2.value === folded3.value) {
+        this.sessions.touch(sessionId2);
+        return answer2;
+      }
+      return this.store(sessionId2, folded3, { kind: "ok", value: folded3.value });
+    }
+    const startedAt = this.clock.monotonic();
+    const read2 = await foldAppended(
+      transcriptPath,
+      prior,
+      this.empty,
+      (state, entries) => entries.reduce(this.step, state)
+    );
+    this.refreshes.recorded(
+      `sid=${valueOf(sessionId2)}`,
+      "request",
+      read2,
+      elapsedMs(this.clock, startedAt)
+    );
+    if (read2.kind === "failed") return this.store(sessionId2, prior, read2);
+    if (read2.kind === "absent") {
+      return this.store(sessionId2, prior, {
+        kind: "ok",
+        value: prior?.value ?? this.empty
+      });
+    }
+    const { folded: folded2, longLines } = read2.value;
+    for (const line of longLineLog(longLines)) this.log("info", line);
+    return this.store(sessionId2, folded2, { kind: "ok", value: folded2.value });
+  }
+  // What the session's last read answered, as it stands: never read is
+  // pending, its first read the next request's.
+  answer(sessionId2) {
+    return this.sessions.get(sessionId2)?.answer ?? pendingOf("unread");
+  }
+  store(sessionId2, folded2, answer2) {
+    this.sessions.set(sessionId2, { folded: folded2, answer: answer2 });
+    return answer2;
+  }
+};
+
+// src/segments/context.ts
+var DEFAULT_CONTEXT_WINDOW = 2e5;
+function step(state, entry) {
+  const usage = entry.message?.usage;
+  if (!usage?.input_tokens || entry.isSidechain === true) return state;
+  return usage.input_tokens + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+}
+var ContextProvider = class {
+  // [LAW:one-source-of-truth] The context fallback is a fold like metrics and
+  // activity: one number per session, kept incrementally, rather than every
+  // entry of the transcript re-parsed to find the last one.
+  fold;
+  constructor(opts) {
+    const logger = opts.logger ?? quietLogger;
+    this.fold = new TranscriptFold(
+      void 0,
+      step,
+      (opts.ledger ?? new RefreshLedger(logger)).declare({
+        name: "context",
+        scope: "session",
+        refresh: ["request"]
+      }),
+      opts.clock,
+      logger
+    );
+  }
+  // The session's context tokens, folded from the transcript's newest
+  // main-chain usage entry.
+  // [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
+  // boundary logs it); a transcript with no usable usage entry is `absent`.
+  async refresh(sessionId2, transcriptPath) {
+    return tokensFrom(await this.fold.read(sessionId2, transcriptPath));
+  }
+  // The session's context tokens as its last refresh left them, for a draw.
+  tokensOf(sessionId2) {
+    const answer2 = this.fold.answer(sessionId2);
+    return answer2.kind === "pending" ? answer2 : tokensFrom(answer2);
+  }
+};
+function tokensFrom(read2) {
+  if (read2.kind === "failed") {
+    return failed(`context transcript: ${read2.reason}`, read2.failedAt);
+  }
+  if (read2.value === void 0) {
+    debug("No main chain entries with usage data found");
+    return ABSENT2;
+  }
+  return ok(read2.value);
+}
+function ratioPercentages(totalTokens, contextLimit) {
+  const percentage = Math.min(
+    100,
+    Math.max(0, Math.round(totalTokens / contextLimit * 100))
+  );
+  return { percentage, contextLeftPercentage: Math.max(0, 100 - percentage) };
+}
+function contextFromHook(hookData2) {
+  const cw = hookData2.context_window;
+  if (!cw?.current_usage) return null;
+  const currentUsage = cw.current_usage;
+  const contextLimit = cw.context_window_size;
+  const totalTokens = (currentUsage.input_tokens || 0) + (currentUsage.cache_creation_input_tokens || 0) + (currentUsage.cache_read_input_tokens || 0);
+  const ratio = ratioPercentages(totalTokens, contextLimit);
+  return {
+    totalTokens,
+    maxTokens: contextLimit,
+    percentage: cw.used_percentage != null ? Math.round(cw.used_percentage) : ratio.percentage,
+    contextLeftPercentage: cw.remaining_percentage != null ? Math.round(cw.remaining_percentage) : ratio.contextLeftPercentage
+  };
+}
+function contextOver(tokens, hookData2) {
+  const native2 = contextFromHook(hookData2);
+  if (native2 !== null) return ok(native2);
+  if (tokens.kind !== "ok") return tokens;
+  const contextLimit = contextLimitOf(hookData2);
+  return ok({
+    totalTokens: tokens.value,
+    maxTokens: contextLimit,
+    ...ratioPercentages(tokens.value, contextLimit)
+  });
+}
+function contextLimitOf(hookData2) {
+  return hookData2.context_window?.context_window_size ?? DEFAULT_CONTEXT_WINDOW;
+}
+
+// src/segments/metrics.ts
+init_globals();
+var RECENT_WINDOW = 20;
+var EMPTY2 = {
+  messageCount: 0,
+  nonPrompts: 0,
+  recent: []
+};
+var NON_PROMPTS = /* @__PURE__ */ new Set([
+  "turn",
+  "interrupt",
+  "claude-code"
+]);
+function step2(state, entry) {
+  if (entry.isSidechain) return state;
+  const grown = [...state.recent, entry];
+  return {
+    messageCount: state.messageCount + (entry.userEntry === "prompt" ? 1 : 0),
+    nonPrompts: state.nonPrompts + (NON_PROMPTS.has(entry.userEntry) ? 1 : 0),
+    recent: grown.length > RECENT_WINDOW ? grown.slice(-RECENT_WINDOW) : grown
+  };
+}
+function lastResponseTime(entries) {
+  let lastUserTime = null;
+  let best = null;
+  for (const entry of entries) {
+    const messageType = entry.type || entry.message?.role || entry.message?.type;
+    if (entry.userEntry === "prompt" || entry.userEntry === "turn") {
+      lastUserTime = entry.timestamp;
+    } else if (messageType === "assistant" && lastUserTime) {
+      const elapsed = (entry.timestamp.getTime() - lastUserTime.getTime()) / 1e3;
+      if (elapsed > 0.1 && elapsed < 300) best = elapsed;
+    }
+  }
+  return best;
+}
+var MetricsProvider = class {
+  fold;
+  constructor(opts) {
+    const logger = opts.logger ?? quietLogger;
+    this.fold = new TranscriptFold(
+      EMPTY2,
+      step2,
+      (opts.ledger ?? new RefreshLedger(logger)).declare({
+        name: "metrics",
+        scope: "session",
+        refresh: ["request"]
+      }),
+      opts.clock,
+      logger
+    );
+  }
+  // The session's metrics fold, read from its transcript.
+  // [LAW:no-silent-failure] A transcript parse error is `failed`, carried to
+  // the payload boundary.
+  async refresh(sessionId2, transcriptPath) {
+    debug(`Getting metrics from the transcript for session: ${sessionId2}`);
+    return foldFrom(sessionId2, await this.fold.read(sessionId2, transcriptPath));
+  }
+  // The session's metrics fold as its last refresh left it, for a draw.
+  foldOf(sessionId2) {
+    const answer2 = this.fold.answer(sessionId2);
+    return answer2.kind === "pending" ? answer2 : foldFrom(sessionId2, answer2);
+  }
+};
+function foldFrom(sessionId2, folded2) {
+  if (folded2.kind === "failed") {
+    return failed(`metrics (${sessionId2}): ${folded2.reason}`, folded2.failedAt);
+  }
+  return ok({
+    lastResponseTime: lastResponseTime(folded2.value.recent),
+    messageCount: folded2.value.messageCount,
+    nonPrompts: folded2.value.nonPrompts
+  });
+}
+function metricsOver(fold, hookData2) {
+  const cost = hookData2.cost;
+  if (!cost) return ABSENT2;
+  if (fold.kind !== "ok") return fold;
+  return ok({
+    ...fold.value,
+    responseTime: cost.total_api_duration_ms / 1e3,
+    sessionDuration: cost.total_duration_ms / 1e3,
+    linesAdded: cost.total_lines_added,
+    linesRemoved: cost.total_lines_removed
+  });
+}
+
+// src/segments/session.ts
+init_globals();
+function usageOver(fold, hookData2) {
+  if (fold.kind !== "ok") return fold;
+  return ok({
+    cost: hookData2.cost?.total_cost_usd ?? fold.value.calculatedCost,
+    tokens: fold.value.tokens
   });
 }
 
@@ -67019,12 +67568,15 @@ async function refreshPayload(inputs, at, refreshed) {
     deps.faults.refreshed(sessionId2, name, threw2);
   };
   await Promise.all([
-    lane("session", () => session.usage(hookData2)),
+    lane("session", () => session.usage()),
     lane("today", () => session.today()),
-    lane("context", () => deps.contextProvider.getContextInfo(hookData2)),
+    lane(
+      "context",
+      () => deps.contextProvider.refresh(sessionId2, hookData2.transcript_path)
+    ),
     lane(
       "metrics",
-      () => deps.metricsProvider.getMetricsInfo(sessionId2, hookData2)
+      () => deps.metricsProvider.refresh(sessionId2, hookData2.transcript_path)
     ),
     lane(
       "activity",
@@ -67119,12 +67671,9 @@ function readingsOf(inputs) {
   };
   const laneReadings = {
     git: lanes.git.current(),
-    usage: read2("session", () => deps.usageStore.usageOf(sessionId2, hookData2)),
-    context: read2("context", () => deps.contextProvider.contextOf(hookData2)),
-    metrics: read2(
-      "metrics",
-      () => deps.metricsProvider.metricsOf(sessionId2, hookData2)
-    ),
+    usage: read2("session", () => deps.usageStore.usageOf(sessionId2)),
+    context: read2("context", () => deps.contextProvider.tokensOf(sessionId2)),
+    metrics: read2("metrics", () => deps.metricsProvider.foldOf(sessionId2)),
     activity: read2(
       "activity",
       () => deps.activityProvider.activityOf(sessionId2)
@@ -67194,9 +67743,9 @@ function composePayload(facts, inputs, draw2) {
   const { configPath, ...settingCounts2 } = configFacts2;
   const built = facts.builtins;
   const lanes = {
-    usage: unstamped(built.session),
-    context: unstamped(built.context),
-    metrics: unstamped(built.metrics),
+    usage: usageOver(unstamped(built.session), hookData2),
+    context: contextOver(unstamped(built.context), hookData2),
+    metrics: metricsOver(unstamped(built.metrics), hookData2),
     activity: unstamped(built.activity),
     cache: unstamped(built.cache),
     speed: unstamped(built.speed),
@@ -67227,14 +67776,11 @@ function composePayload(facts, inputs, draw2) {
   const autoCompactValue = firstPending(lanes.context) ?? projectAutoCompact(lanes.autoCompact, valueOf3(lanes.context)?.maxTokens);
   const fiveHour = hookData2.rate_limits?.five_hour;
   const sevenDay = hookData2.rate_limits?.seven_day;
-  const burn = firstPending(lanes.usage, lanes.metrics) ?? burnOf(
-    valueOf3(lanes.usage)?.session.cost,
-    valueOf3(lanes.metrics)?.sessionDuration
-  );
+  const burn = firstPending(lanes.usage, lanes.metrics) ?? burnOf(valueOf3(lanes.usage)?.cost, valueOf3(lanes.metrics)?.sessionDuration);
   const speedPayload = over2(lanes.speed, speedPayloadOf);
   const sessionPayload = over2(
     lanes.usage,
-    (usage) => pickNonNull({ cost: usage.session.cost, tokens: usage.session.tokens })
+    (usage) => pickNonNull({ cost: usage.cost, tokens: usage.tokens })
   );
   const metricsPayload = over2(
     lanes.metrics,
@@ -67444,7 +67990,7 @@ function pickNonNull(src) {
 }
 function posixify(s) {
   if (s === void 0 || s.length === 0) return s;
-  if (import_node_path21.default.sep !== "\\") return s;
+  if (import_node_path22.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
 function projectGitInfo(info, pullRequest, pending2) {
@@ -67571,261 +68117,6 @@ function dataNeeds(config2, preset) {
     pullRequests: needs("pullRequests"),
     rateLimits: needs("rateLimits")
   };
-}
-
-// src/utils/claude.ts
-init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
-
-// src/utils/transcript-activity.ts
-init_globals();
-var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
-function slashCommand(text4) {
-  if (typeof text4 !== "string") return void 0;
-  return COMMAND_NAME.exec(text4)?.[1];
-}
-function todoItems(input) {
-  const todos2 = input?.todos;
-  if (!Array.isArray(todos2)) return void 0;
-  const items = [];
-  for (const raw of todos2) {
-    if (typeof raw !== "object" || raw === null) continue;
-    const { content, activeForm, status } = raw;
-    const active2 = status === "in_progress";
-    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
-    if (typeof text4 !== "string") continue;
-    items.push({ text: text4, active: active2, done: status === "completed" });
-  }
-  return items;
-}
-function turnText(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const block = content.find(
-    (b) => typeof b === "object" && b !== null && b.type === "text" && typeof b.text === "string"
-  );
-  return block?.text ?? "";
-}
-function entryActivity(parsed2, userEntry) {
-  const msg = parsed2.message;
-  const content = msg?.content;
-  const started2 = [];
-  const finished = [];
-  let todos2;
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (typeof block !== "object" || block === null) continue;
-      const b = block;
-      switch (b.type) {
-        case "tool_use": {
-          const { id: id2, name } = b;
-          if (typeof id2 !== "string" || typeof name !== "string") break;
-          started2.push({ id: id2, name });
-          if (name === "TodoWrite") todos2 = todoItems(b.input) ?? todos2;
-          break;
-        }
-        case "tool_result": {
-          const id2 = b.tool_use_id;
-          if (typeof id2 === "string") finished.push(id2);
-          break;
-        }
-        default:
-          break;
-      }
-    }
-  }
-  const command = userEntry === "prompt" ? slashCommand(turnText(content)) : void 0;
-  if (started2.length === 0 && finished.length === 0 && todos2 === void 0 && command === void 0) {
-    return void 0;
-  }
-  return {
-    ...started2.length > 0 && { started: started2 },
-    ...finished.length > 0 && { finished },
-    ...todos2 !== void 0 && { todos: todos2 },
-    ...command !== void 0 && { command }
-  };
-}
-
-// src/utils/claude.ts
-function getClaudePaths(detected, homeDir) {
-  if (detected !== void 0) return [detected];
-  return [(0, import_node_path22.join)(homeDir, ".config", "claude"), (0, import_node_path22.join)(homeDir, ".claude")].filter(
-    (dir) => existsSync(dir)
-  );
-}
-async function findProjectPaths(claudePaths) {
-  const projectPaths = [];
-  for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path22.join)(claudePath, "projects");
-    const entries = await unlessGone(
-      readdir2(projectsDir, { withFileTypes: true })
-    );
-    for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path22.join)(projectsDir, entry.name));
-    }
-  }
-  return projectPaths;
-}
-async function unlessGone(read2) {
-  try {
-    return await read2;
-  } catch (e) {
-    if (e.code === "ENOENT") return void 0;
-    throw e;
-  }
-}
-async function findAgentTranscripts(sessionId2, projectPath, verified) {
-  const paths2 = [];
-  let longLines = [];
-  const subagentsDir = (0, import_node_path22.join)(projectPath, sessionId2, "subagents");
-  try {
-    const files = await readdir2(subagentsDir);
-    const agentFileNames = files.filter(
-      (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
-    );
-    for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path22.join)(subagentsDir, fileName2);
-      if (verified?.has(filePath2)) {
-        paths2.push(filePath2);
-        continue;
-      }
-      const read2 = await readAppended(filePath2, void 0, void 0);
-      if (read2.kind !== "ok") {
-        debug(`Failed to check agent file ${filePath2}`);
-        continue;
-      }
-      longLines = longLinesWith(longLines, filePath2, read2.value);
-      const line = jsonLine(
-        decodeLines(
-          read2.value,
-          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
-        )
-      );
-      if (line.kind === "object" && line.value.sessionId === sessionId2) {
-        paths2.push(filePath2);
-      }
-    }
-  } catch (error) {
-    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
-  }
-  return { paths: paths2, longLines };
-}
-function userEntryOf(parsed2) {
-  const msg = parsed2.message;
-  const messageType = parsed2.type || msg?.role || msg?.type;
-  if (messageType !== "user") return void 0;
-  if (firstBlockType(msg) === "tool_result") return "tool-result";
-  const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
-  if (origin !== void 0 && origin !== "human") return "turn";
-  const text4 = turnText(msg?.content).trimStart();
-  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
-  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
-}
-var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
-function firstBlockType(msg) {
-  const content = msg?.content;
-  return Array.isArray(content) && typeof content[0] === "object" && content[0] ? content[0].type : void 0;
-}
-function makeEntry(parsed2) {
-  if (!parsed2.timestamp) return null;
-  const msg = parsed2.message;
-  const usage = msg?.usage;
-  const userEntry = userEntryOf(parsed2);
-  return {
-    timestamp: new Date(parsed2.timestamp),
-    type: typeof parsed2.type === "string" ? parsed2.type : void 0,
-    message: msg ? {
-      id: typeof msg.id === "string" ? msg.id : void 0,
-      model: typeof msg.model === "string" ? msg.model : void 0,
-      usage,
-      role: typeof msg.role === "string" ? msg.role : void 0,
-      type: typeof msg.type === "string" ? msg.type : void 0
-    } : void 0,
-    costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
-    isSidechain: parsed2.isSidechain === true,
-    userEntry,
-    activity: entryActivity(parsed2, userEntry),
-    raw: {
-      model: typeof parsed2.model === "string" ? parsed2.model : void 0,
-      message: msg ? {
-        id: typeof msg.id === "string" ? msg.id : void 0,
-        model: typeof msg.model === "string" ? msg.model : void 0,
-        usage
-      } : void 0,
-      requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
-    }
-  };
-}
-function jsonLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed) return { kind: "blank" };
-  try {
-    const value = JSON.parse(trimmed);
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? { kind: "object", value } : { kind: "unparsed", reason: "not a JSON object" };
-  } catch (parseError) {
-    return { kind: "unparsed", reason: String(parseError) };
-  }
-}
-function entryOf3(line) {
-  const read2 = jsonLine(line);
-  if (read2.kind === "unparsed") {
-    debug(`Failed to parse JSONL line: ${read2.reason}`);
-    return null;
-  }
-  if (read2.kind === "blank") return null;
-  try {
-    return makeEntry(read2.value);
-  } catch (projectionError) {
-    debug(`Failed to project JSONL line: ${projectionError}`);
-    return null;
-  }
-}
-function parseJsonlLines(text4) {
-  const entries = [];
-  for (const line of text4.split("\n")) {
-    const entry = entryOf3(line);
-    if (entry) entries.push(entry);
-  }
-  return entries;
-}
-function longLinesWith(longLines, path42, read2) {
-  return read2.longLine === 0 ? longLines : [...longLines, { path: path42, offset: read2.start, bytes: read2.longLine }];
-}
-function longLineLog(longLines) {
-  return longLines.map(
-    (l) => `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`
-  );
-}
-async function foldAppended(filePath2, prior, empty2, step4) {
-  let longLines = [];
-  let cursor = prior?.cursor;
-  let value = prior?.value ?? empty2;
-  let end;
-  for (; ; ) {
-    const read2 = await readAppended(
-      filePath2,
-      cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
-      end?.size
-    );
-    if (read2.kind !== "ok") return read2;
-    const window2 = read2.value;
-    if (window2.reset) value = empty2;
-    longLines = longLinesWith(window2.reset ? [] : longLines, filePath2, window2);
-    if (end === void 0 || window2.reset) {
-      end = { size: window2.size, stamp: window2.stamp };
-    }
-    const next = window2.start + window2.lines.length;
-    value = await step4(
-      value,
-      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
-    );
-    cursor = {
-      offset: next,
-      stamp: end.stamp,
-      ino: window2.ino
-    };
-    if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
-  }
 }
 
 // src/doctor/font-edge.ts
@@ -79563,10 +79854,8 @@ var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
 var DEFAULT_RESCAN = { okMs: 60 * 1e3, failedMs: 10 * 1e3 };
 var MAX_UNHELD_SCANS = 8;
 var SEED_CONCURRENCY = 8;
-var EMPTY_SESSION_INFO = {
-  cost: null,
+var EMPTY_USAGE = {
   calculatedCost: null,
-  officialCost: null,
   tokens: null,
   tokenBreakdown: null
 };
@@ -79632,13 +79921,11 @@ function mergeFolds(files) {
       days.set(k, d);
     }
   }
-  if (count === 0) return { sessionInfo: EMPTY_SESSION_INFO, days };
+  if (count === 0) return { usage: EMPTY_USAGE, days };
   const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
   return {
-    sessionInfo: {
-      cost,
+    usage: {
       calculatedCost: cost,
-      officialCost: null,
       tokens,
       tokenBreakdown: bd
     },
@@ -79670,12 +79957,6 @@ async function mapPool(items, limit, fn) {
   };
   const width = Math.min(limit, items.length);
   await Promise.all(Array.from({ length: width }, worker));
-}
-function usageOver(base, hookData2) {
-  const officialCost = hookData2?.cost?.total_cost_usd ?? null;
-  return {
-    session: { ...base, cost: officialCost ?? base.cost, officialCost }
-  };
 }
 function answer(box, value) {
   runInAction(() => box.set(value));
@@ -79771,15 +80052,6 @@ var SessionUsageStore = class {
   scanStats() {
     return this.scans.stats();
   }
-  // The `session` projection: whole-session totals for the active session.
-  // [LAW:no-silent-failure] A failed transcript parse flows out as `failed`
-  // (the payload boundary logs it); an unknown/empty session is the all-null
-  // SessionInfo whose fields the boundary drops per-field — top-level
-  // `absent` is reserved for ingest, since the native officialCost overlay
-  // applies even with no record.
-  getUsageInfo(sessionId2, hookData2) {
-    return this.request(sessionId2, hookData2?.transcript_path).usage(hookData2);
-  }
   // [LAW:no-ambient-temporal-coupling] One statusline request's refresh of
   // its session, as a value: the request's session, speed and today lanes
   // read the one refresh it starts, whichever asks first and whenever the
@@ -79796,15 +80068,14 @@ var SessionUsageStore = class {
       return refresh;
     };
     return {
-      usage: async (hookData2) => {
+      // [LAW:no-silent-failure] A failed transcript parse flows out as
+      // `failed`; an unknown or empty session is the all-null totals, whose
+      // fields the payload drops one by one, so the hook's cost still lands
+      // over a session with no record.
+      usage: async () => {
         const record2 = await once2().record;
         if (record2.kind === "failed") return record2;
-        return ok(
-          usageOver(
-            record2.kind === "ok" ? record2.value.sessionInfo : EMPTY_SESSION_INFO,
-            hookData2
-          )
-        );
+        return ok(record2.kind === "ok" ? record2.value.usage : EMPTY_USAGE);
       },
       speed: (nowMs) => this.observed(sessionId2, once2, nowMs),
       // [LAW:no-ambient-temporal-coupling] `today` sums the session's own
@@ -79821,14 +80092,12 @@ var SessionUsageStore = class {
   // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
   // dropped) is not answered yet; one whose refresh found no transcript is the
   // empty record its refresh answers for it.
-  usageOf(sessionId2, hookData2) {
+  usageOf(sessionId2) {
     const slot = this.sessions.get(sessionId2);
     if (slot === void 0) return pendingOf("unread");
     const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
-    return ok(
-      usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData2)
-    );
+    return ok(slot.record?.usage ?? EMPTY_USAGE);
   }
   // A request's ingest of its own session, whose outcome the session's slot
   // keeps for the draws until the next one.
@@ -79930,7 +80199,7 @@ var SessionUsageStore = class {
         answer(this.hold(sessionId2).speed, record2);
         return record2;
       }
-      const breakdown = record2.kind === "ok" ? record2.value.sessionInfo.tokenBreakdown : null;
+      const breakdown = record2.kind === "ok" ? record2.value.usage.tokenBreakdown : null;
       const cur = speedSampleOf(breakdown, nowMs);
       const { ring } = this.hold(sessionId2);
       let prev;
@@ -79990,7 +80259,7 @@ var SessionUsageStore = class {
     if (outcome.kind !== "ok") return outcome;
     const record2 = {
       files: outcome.value.files,
-      sessionInfo: outcome.value.sessionInfo,
+      usage: outcome.value.usage,
       days: outcome.value.days,
       transcriptStamp: outcome.value.mainStamp,
       transcriptPath
@@ -80186,336 +80455,6 @@ var SessionUsageStore = class {
     this.daySets.clear();
   }
 };
-
-// src/segments/context.ts
-init_globals();
-
-// src/utils/transcript-fold.ts
-init_globals();
-
-// src/utils/observable-lru.ts
-init_globals();
-var ObservableLru = class {
-  constructor(max2) {
-    this.max = max2;
-  }
-  max;
-  values = observable.map(void 0, { deep: false });
-  // Least recently used first.
-  order = /* @__PURE__ */ new Set();
-  get(key) {
-    return this.values.get(key);
-  }
-  get size() {
-    return this.order.size;
-  }
-  // The key was used and its value stands.
-  touch(key) {
-    if (this.order.delete(key)) this.order.add(key);
-  }
-  // The key's value now, used now. A value identical to the one held wakes
-  // nobody.
-  set(key, value) {
-    this.order.delete(key);
-    this.order.add(key);
-    runInAction(() => {
-      this.values.set(key, value);
-      for (const oldest of this.order) {
-        if (this.order.size <= this.max) break;
-        this.order.delete(oldest);
-        this.values.delete(oldest);
-      }
-    });
-  }
-};
-
-// src/utils/transcript-fold.ts
-var MAX_SESSIONS3 = 256;
-var TranscriptFold = class {
-  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS3) {
-    this.empty = empty2;
-    this.step = step4;
-    this.refreshes = refreshes;
-    this.clock = clock;
-    this.log = log;
-    this.sessions = new ObservableLru(maxSessions);
-  }
-  empty;
-  step;
-  refreshes;
-  clock;
-  log;
-  // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
-  // instance per projection per daemon. Observable, so a view's payload over
-  // an answer is recomputed in the turn the answer is stored.
-  sessions;
-  // [LAW:effects-at-boundaries] The session's refresh: folds what was
-  // appended since its last read, and stores what it answered.
-  async read(sessionId2, transcriptPath) {
-    const held = this.sessions.get(sessionId2);
-    const prior = held?.folded;
-    const stamp2 = statStamp(transcriptPath);
-    if (held?.folded && stamp2 !== "" && held.folded.cursor.stamp === stamp2) {
-      const { folded: folded3, answer: answer2 } = held;
-      if (answer2.kind === "ok" && answer2.value === folded3.value) {
-        this.sessions.touch(sessionId2);
-        return answer2;
-      }
-      return this.store(sessionId2, folded3, { kind: "ok", value: folded3.value });
-    }
-    const startedAt = this.clock.monotonic();
-    const read2 = await foldAppended(
-      transcriptPath,
-      prior,
-      this.empty,
-      (state, entries) => entries.reduce(this.step, state)
-    );
-    this.refreshes.recorded(
-      `sid=${valueOf(sessionId2)}`,
-      "request",
-      read2,
-      elapsedMs(this.clock, startedAt)
-    );
-    if (read2.kind === "failed") return this.store(sessionId2, prior, read2);
-    if (read2.kind === "absent") {
-      return this.store(sessionId2, prior, {
-        kind: "ok",
-        value: prior?.value ?? this.empty
-      });
-    }
-    const { folded: folded2, longLines } = read2.value;
-    for (const line of longLineLog(longLines)) this.log("info", line);
-    return this.store(sessionId2, folded2, { kind: "ok", value: folded2.value });
-  }
-  // What the session's last read answered, as it stands: never read is
-  // pending, its first read the next request's.
-  answer(sessionId2) {
-    return this.sessions.get(sessionId2)?.answer ?? pendingOf("unread");
-  }
-  store(sessionId2, folded2, answer2) {
-    this.sessions.set(sessionId2, { folded: folded2, answer: answer2 });
-    return answer2;
-  }
-};
-
-// src/segments/context.ts
-var DEFAULT_CONTEXT_WINDOW = 2e5;
-function step(state, entry) {
-  const usage = entry.message?.usage;
-  if (!usage?.input_tokens || entry.isSidechain === true) return state;
-  return usage.input_tokens + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
-}
-var ContextProvider = class {
-  // [LAW:one-source-of-truth] The context fallback is a fold like metrics and
-  // activity: one number per session, kept incrementally, rather than every
-  // entry of the transcript re-parsed to find the last one.
-  fold;
-  constructor(opts) {
-    const logger = opts.logger ?? quietLogger;
-    this.fold = new TranscriptFold(
-      void 0,
-      step,
-      (opts.ledger ?? new RefreshLedger(logger)).declare({
-        name: "context",
-        scope: "session",
-        refresh: ["request"]
-      }),
-      opts.clock,
-      logger
-    );
-  }
-  thresholds = {
-    LOW: 50,
-    MEDIUM: 80
-  };
-  getContextUsageThresholds() {
-    return this.thresholds;
-  }
-  // Token-ratio percentages — the fallback ONLY. Used when Claude doesn't
-  // report used_percentage / remaining_percentage natively (transcript path,
-  // or a native window whose percentages are still null pre-first-call). No
-  // auto-compact buffer: that was a hardcoded guess at Claude's threshold and
-  // a soft second source; the native remaining_percentage is authoritative.
-  ratioPercentages(totalTokens, contextLimit) {
-    const percentage = Math.min(
-      100,
-      Math.max(0, Math.round(totalTokens / contextLimit * 100))
-    );
-    return { percentage, contextLeftPercentage: Math.max(0, 100 - percentage) };
-  }
-  /**
-   * Calculate context info from native Claude Code context_window data (preferred).
-   * Requires Claude Code 2.0.70+ with current_usage field.
-   */
-  calculateContextFromHookData(hookData2) {
-    const cw = hookData2.context_window;
-    if (!cw?.current_usage) {
-      debug(
-        "No current_usage in hook data, falling back to transcript parsing"
-      );
-      return null;
-    }
-    const currentUsage = cw.current_usage;
-    const contextLimit = cw.context_window_size;
-    const totalTokens = (currentUsage.input_tokens || 0) + (currentUsage.cache_creation_input_tokens || 0) + (currentUsage.cache_read_input_tokens || 0);
-    debug(
-      `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens} (limit: ${contextLimit})`
-    );
-    const ratio = this.ratioPercentages(totalTokens, contextLimit);
-    return {
-      totalTokens,
-      maxTokens: contextLimit,
-      percentage: cw.used_percentage != null ? Math.round(cw.used_percentage) : ratio.percentage,
-      contextLeftPercentage: cw.remaining_percentage != null ? Math.round(cw.remaining_percentage) : ratio.contextLeftPercentage
-    };
-  }
-  /**
-   * Calculate context tokens from the transcript (fallback), for older Claude
-   * Code versions that don't provide context_window.
-   *
-   * [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
-   * boundary logs it); a transcript with no usable usage entry is `absent`.
-   */
-  async calculateContextTokensFromTranscript(sessionId2, transcriptPath, contextLimit) {
-    return this.contextFrom(
-      await this.fold.read(sessionId2, transcriptPath),
-      contextLimit
-    );
-  }
-  /**
-   * Get context info using native data if available, falling back to transcript parsing.
-   */
-  async getContextInfo(hookData2) {
-    const nativeContext = this.calculateContextFromHookData(hookData2);
-    if (nativeContext) {
-      return ok(nativeContext);
-    }
-    return this.calculateContextTokensFromTranscript(
-      hookData2.session_id,
-      hookData2.transcript_path,
-      contextLimitOf(hookData2)
-    );
-  }
-  // The session's context as it stands, for a draw: the native data the
-  // request carried, else the fold as its last refresh left it.
-  contextOf(hookData2) {
-    const nativeContext = this.calculateContextFromHookData(hookData2);
-    if (nativeContext) return ok(nativeContext);
-    const answer2 = this.fold.answer(hookData2.session_id);
-    return answer2.kind === "pending" ? answer2 : this.contextFrom(answer2, contextLimitOf(hookData2));
-  }
-  // [LAW:one-source-of-truth] The one projection of the fold's answer.
-  contextFrom(read2, contextLimit) {
-    if (read2.kind === "failed") {
-      return failed(`context transcript: ${read2.reason}`, read2.failedAt);
-    }
-    const totalTokens = read2.value;
-    if (totalTokens === void 0) {
-      debug("No main chain entries with usage data found");
-      return ABSENT2;
-    }
-    debug(
-      `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`
-    );
-    return ok({
-      totalTokens,
-      maxTokens: contextLimit,
-      ...this.ratioPercentages(totalTokens, contextLimit)
-    });
-  }
-};
-function contextLimitOf(hookData2) {
-  return hookData2.context_window?.context_window_size ?? DEFAULT_CONTEXT_WINDOW;
-}
-
-// src/segments/metrics.ts
-init_globals();
-var RECENT_WINDOW = 20;
-var EMPTY2 = {
-  messageCount: 0,
-  nonPrompts: 0,
-  recent: []
-};
-var NON_PROMPTS = /* @__PURE__ */ new Set([
-  "turn",
-  "interrupt",
-  "claude-code"
-]);
-function step2(state, entry) {
-  if (entry.isSidechain) return state;
-  const grown = [...state.recent, entry];
-  return {
-    messageCount: state.messageCount + (entry.userEntry === "prompt" ? 1 : 0),
-    nonPrompts: state.nonPrompts + (NON_PROMPTS.has(entry.userEntry) ? 1 : 0),
-    recent: grown.length > RECENT_WINDOW ? grown.slice(-RECENT_WINDOW) : grown
-  };
-}
-function lastResponseTime(entries) {
-  let lastUserTime = null;
-  let best = null;
-  for (const entry of entries) {
-    const messageType = entry.type || entry.message?.role || entry.message?.type;
-    if (entry.userEntry === "prompt" || entry.userEntry === "turn") {
-      lastUserTime = entry.timestamp;
-    } else if (messageType === "assistant" && lastUserTime) {
-      const elapsed = (entry.timestamp.getTime() - lastUserTime.getTime()) / 1e3;
-      if (elapsed > 0.1 && elapsed < 300) best = elapsed;
-    }
-  }
-  return best;
-}
-var MetricsProvider = class {
-  fold;
-  constructor(opts) {
-    const logger = opts.logger ?? quietLogger;
-    this.fold = new TranscriptFold(
-      EMPTY2,
-      step2,
-      (opts.ledger ?? new RefreshLedger(logger)).declare({
-        name: "metrics",
-        scope: "session",
-        refresh: ["request"]
-      }),
-      opts.clock,
-      logger
-    );
-  }
-  // [LAW:no-silent-failure] A hook payload with no cost block is `absent`
-  // (old clients); a transcript parse error is `failed`, carried to the
-  // payload boundary — the old catch dressed it as the same all-null record
-  // as "no data".
-  async getMetricsInfo(sessionId2, hookData2) {
-    debug(`Getting metrics from hook data for session: ${sessionId2}`);
-    const cost = hookData2.cost;
-    if (!cost) return ABSENT2;
-    return metricsFrom(
-      sessionId2,
-      cost,
-      await this.fold.read(sessionId2, hookData2.transcript_path)
-    );
-  }
-  // The session's metrics as its last refresh left them, for a draw.
-  metricsOf(sessionId2, hookData2) {
-    const cost = hookData2.cost;
-    if (!cost) return ABSENT2;
-    const answer2 = this.fold.answer(sessionId2);
-    return answer2.kind === "pending" ? answer2 : metricsFrom(sessionId2, cost, answer2);
-  }
-};
-function metricsFrom(sessionId2, cost, folded2) {
-  if (folded2.kind === "failed") {
-    return failed(`metrics (${sessionId2}): ${folded2.reason}`, folded2.failedAt);
-  }
-  return ok({
-    responseTime: cost.total_api_duration_ms / 1e3,
-    lastResponseTime: lastResponseTime(folded2.value.recent),
-    sessionDuration: cost.total_duration_ms / 1e3,
-    messageCount: folded2.value.messageCount,
-    nonPrompts: folded2.value.nonPrompts,
-    linesAdded: cost.total_lines_added,
-    linesRemoved: cost.total_lines_removed
-  });
-}
 
 // src/segments/activity.ts
 init_globals();

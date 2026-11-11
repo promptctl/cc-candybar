@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "5160cd381d0909fa3c6b616bf239b4b301eb8e3a",
+      "timestamp": "2026-11-11T11:10:12.667Z",
+      "commits": [
+        {
+          "sha": "5160cd381d0909fa3c6b616bf239b4b301eb8e3a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T04:08:54-07:00",
+          "message": "refactor(facts): a session's facts carry each transcript fold alone, and the payload lays the hook over it (candybar-skeleton-wj0c.yb3) (#709)\n\n* refactor(facts): a session's facts carry each transcript fold alone, and the payload lays the hook over it (candybar-skeleton-wj0c.yb3)\n\nGather will know a session by its locator alone, so no fact may mix the\nrequest's hook into a transcript fold. Three did: usage (the hook's cost over\nthe priced fold), context (the hook's native window over the fold's tokens)\nand metrics (the hook's durations and lines over the fold's counts).\n\nThe usage store, the context provider and the metrics provider now refresh and\nanswer their folds alone, keyed by the session and read from its transcript.\nThe overlays are pure functions beside their contract types (`usageOver`,\n`contextOver`, `metricsOver`), applied where the payload is composed, which\nalready holds the hook. The document types those three facts as the folds, so\nthe compiler refuses a hook value in it. The stored usage record loses its\n`cost`/`officialCost` copies.\n\nThe context fold is now read for every session, where before it was read only\nwhen the hook carried no native window: the document is total and cannot know\nwhich hook it will be composed with.\n\nThe bar is unchanged. `check`'s fixture and the session rig carry their cost,\ndurations and window in their hooks, as Claude Code sends them, so the\npayload goldens gain the raw `cost` and `context_window` blocks and nothing\nelse.\n\n* refactor(facts): the composed usage is the cost and tokens the payload reads, the metrics fold is the base type, and the owners' tests assert their folds (candybar-skeleton-wj0c.yb3)\n\nReview (high) fixes: usageOver answers { cost, tokens } and the one-field wrapper, officialCost and the spread of the fold's other fields go; MetricsFold is declared on its own and MetricsInfo extends it; the pure context overlay no longer logs; the store and metrics tests assert the folds, and usageOver and metricsOver have in-process tests of their own.\n\n* test(facts): each hook's document is its own refresh over its own owners, and the spec names the document's fold types (candybar-skeleton-wj0c.yb3)\n\nReview (medium) fixes: the hook-split test refreshed both hooks before assembling either document, so a refresh that stored a hook value would pass; each hook now refreshes and reads over owners of its own (one shared store differs anyway by the second request's speed sample). The design spec's SessionFacts names TranscriptUsage, the context tokens and MetricsFold, so SessionUsage names only the composed value. The usage test helper takes the transcript path, not a hook.\n\n* test(metrics): the provider's fold is read by transcript path, and the spec block names the usage fact abstractly (candybar-skeleton-wj0c.yb3)\n\nReview (high, after medium) fixes: the metrics tests build no hook to read a hook-free fold, and the SessionFacts block names session's fact UsageFacts beside ContextFacts and MetricsFacts, with the code names mapped in the paragraph below it."
+        }
+      ]
+    },
+    {
       "version": "pr-710",
       "ref": "refs/pull/710/merge",
       "sha": "f3cbc4184b3d6b3a0f02fb9d5cf6c7f009c7aa42",
@@ -90,64 +105,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-10T09:36:42-07:00",
           "message": "docs(design): Proposal 3, one host owns the world and renderers answer it, with its intent stated to be falsified (candybar-gather-renderer-76bb.215)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-709",
-      "ref": "refs/pull/709/merge",
-      "sha": "328ef3b6634ae493f42db3d616becd44fce4aae5",
-      "timestamp": "2026-11-10T06:58:06.640Z",
-      "commits": [
-        {
-          "sha": "328ef3b6634ae493f42db3d616becd44fce4aae5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T06:57:10Z",
-          "message": "Merge aa7cb5406ebdb2ef9f0e141a3e6dad26228b2105 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
-        },
-        {
-          "sha": "aa7cb5406ebdb2ef9f0e141a3e6dad26228b2105",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T23:56:59-07:00",
-          "message": "test(metrics): the provider's fold is read by transcript path, and the spec block names the usage fact abstractly (candybar-skeleton-wj0c.yb3)\n\nReview (high, after medium) fixes: the metrics tests build no hook to read a hook-free fold, and the SessionFacts block names session's fact UsageFacts beside ContextFacts and MetricsFacts, with the code names mapped in the paragraph below it.\n"
-        },
-        {
-          "sha": "976c128642c08a0fb20a86015cf668a077d98f5b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T23:49:31-07:00",
-          "message": "test(facts): each hook's document is its own refresh over its own owners, and the spec names the document's fold types (candybar-skeleton-wj0c.yb3)\n\nReview (medium) fixes: the hook-split test refreshed both hooks before assembling either document, so a refresh that stored a hook value would pass; each hook now refreshes and reads over owners of its own (one shared store differs anyway by the second request's speed sample). The design spec's SessionFacts names TranscriptUsage, the context tokens and MetricsFold, so SessionUsage names only the composed value. The usage test helper takes the transcript path, not a hook.\n"
-        },
-        {
-          "sha": "e87e8aaef0965f6957ca5f78bd0952842990cc6d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T23:40:28-07:00",
-          "message": "refactor(facts): the composed usage is the cost and tokens the payload reads, the metrics fold is the base type, and the owners' tests assert their folds (candybar-skeleton-wj0c.yb3)\n\nReview (high) fixes: usageOver answers { cost, tokens } and the one-field wrapper, officialCost and the spread of the fold's other fields go; MetricsFold is declared on its own and MetricsInfo extends it; the pure context overlay no longer logs; the store and metrics tests assert the folds, and usageOver and metricsOver have in-process tests of their own.\n"
-        },
-        {
-          "sha": "d23ffde5e0afbd8e80ed8fcbfa89e727cd43a952",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T23:29:00-07:00",
-          "message": "refactor(facts): a session's facts carry each transcript fold alone, and the payload lays the hook over it (candybar-skeleton-wj0c.yb3)\n\nGather will know a session by its locator alone, so no fact may mix the\nrequest's hook into a transcript fold. Three did: usage (the hook's cost over\nthe priced fold), context (the hook's native window over the fold's tokens)\nand metrics (the hook's durations and lines over the fold's counts).\n\nThe usage store, the context provider and the metrics provider now refresh and\nanswer their folds alone, keyed by the session and read from its transcript.\nThe overlays are pure functions beside their contract types (`usageOver`,\n`contextOver`, `metricsOver`), applied where the payload is composed, which\nalready holds the hook. The document types those three facts as the folds, so\nthe compiler refuses a hook value in it. The stored usage record loses its\n`cost`/`officialCost` copies.\n\nThe context fold is now read for every session, where before it was read only\nwhen the hook carried no native window: the document is total and cannot know\nwhich hook it will be composed with.\n\nThe bar is unchanged. `check`'s fixture and the session rig carry their cost,\ndurations and window in their hooks, as Claude Code sends them, so the\npayload goldens gain the raw `cost` and `context_window` blocks and nothing\nelse.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "005be159ec58ef64c57076aeff631ad80f4b4f7f",
-      "timestamp": "2026-11-10T06:05:26.210Z",
-      "commits": [
-        {
-          "sha": "005be159ec58ef64c57076aeff631ad80f4b4f7f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-09T23:04:21-07:00",
-          "message": "test(daemon): a test closes every home it opens, so no file's periods tick inside a later file's close case (candybar-skeleton-wj0c.88o) (#708)\n\n* test(daemon): a test closes every home it opens, so no file's periods tick inside a later file's close case (candybar-skeleton-wj0c.88o)\n\nThe daemon close case's leftover timers were never its daemon's. The\npayload-owners helpers held a real host source through a home nobody\nclosed, and the git cache tests left their providers open, so their\nperiods re-armed for the life of the Jest worker. Held together, they\nre-arm together, so the close case failed only when that turn fell inside\nit. An audit of armed periods at each file's end now reads zero in every\nworker-tier file.\n\n* test(daemon): a home closes through the case's cleanups, and each test's one close path is its afterEach (candybar-skeleton-wj0c.88o)\n\ndeclaredLanes takes the cleanups array the other rig helpers take, so a\ncaller cannot open a home without handing over its close. The git cache\ncases drop the trailing closes their afterEach now repeats; the closes a\ncase asserts across, or orders before a repo's removal, stay.\n\n* test(daemon): a lane declaration that throws fails the payload helper with its stack (candybar-skeleton-wj0c.88o)\n\nThe helper dropped declareLanes' faults, so a broken owner fixture read as\nan unexplained failed cell; it closes the home and throws them instead, as\nthe daemon logs them as errors. requestPayload's header says its home lives\nfor one request."
         }
       ]
     }
