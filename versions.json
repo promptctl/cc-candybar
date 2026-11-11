@@ -4,15 +4,22 @@
     {
       "version": "pr-712",
       "ref": "refs/pull/712/merge",
-      "sha": "42fa004250cb41354b9b7f8054ab242036ff0387",
-      "timestamp": "2026-11-11T17:33:03.702Z",
+      "sha": "5ea61e0c283785940dc406df70b60fc57cc97d4c",
+      "timestamp": "2026-11-11T17:53:02.888Z",
       "commits": [
         {
-          "sha": "42fa004250cb41354b9b7f8054ab242036ff0387",
+          "sha": "5ea61e0c283785940dc406df70b60fc57cc97d4c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T10:32:00-07:00",
-          "message": "Merge c0152858f299c318f0b48d2e860032775188d226 into 36c6ac3a264fcc2876d5952e4a13648e1268f98f\n"
+          "timestamp": "2026-11-11T17:52:10Z",
+          "message": "Merge d49a0d224d140cbd0961bb25448a612ae4e96d24 into 36c6ac3a264fcc2876d5952e4a13648e1268f98f\n"
+        },
+        {
+          "sha": "d49a0d224d140cbd0961bb25448a612ae4e96d24",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T10:51:57-07:00",
+          "message": "fix(collector): a source the host has not read yet draws pending, and a request is stamped once (candybar-host-renderer-x96a.kcp)\n\nThe host learns a view's plugin sources from the output of the turn that\nopened it, so that turn's world state carries none of them. The payload\nprojected only the sources the world state carried, so the opening turn\ndrew such a source as missing (a failed read) rather than pending. The\npayload now projects every source the view's config declares, and one the\nworld state does not carry yet is not read yet. The render event counts\nthe same set.\n\nA request's stamp and the stamp of each landing now take one read of the\nowners, so the reaction a request's declaration wakes finds the read the\nrequest already stamped instead of reading and stamping again. The\nrecord's locator lives only in its declaration.\n\nThe demo subscribes its view's sources as a turn's output does, so its\nframes read the config's plugin sources. The law marker over the view's\nbinding is restored.\n"
         },
         {
           "sha": "c0152858f299c318f0b48d2e860032775188d226",

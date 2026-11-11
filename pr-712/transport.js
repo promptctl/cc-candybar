@@ -67873,15 +67873,16 @@ function composePayload(facts, inputs, draw2) {
     ...autoCompactValue !== void 0 && { autocompact: autoCompactValue },
     // The storage owner logs each read that failed: a failure here is a value,
     // drawn by the template reading it.
-    ...projectSources(Object.keys(facts.sources), (name) => {
-      const reading = unstamped(facts.sources[name]);
+    ...projectSources(draw2.sources, (name) => {
+      const reading = unstamped(sourceFactOf(facts, name));
       return reading.kind === "pending" ? pendingOf(reading.why) : reading;
     })
   };
   return payload;
 }
-function sourcesFactOf(sources) {
-  const named3 = Object.entries(sources);
+var sourceFactOf = (facts, name) => facts.sources[name] ?? pendingOf("unread");
+function sourcesFactOf(names, facts) {
+  const named3 = names.map((name) => [name, sourceFactOf(facts, name)]);
   return {
     sources: String(named3.length),
     sourcesPending: named3.flatMap(
@@ -76903,7 +76904,7 @@ function drawRender(parts, setup, drawing2) {
     today: todayOf(document.builtins.today, at)
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
-  noteFacts(facts, sourcesFactOf(document.sources));
+  noteFacts(facts, sourcesFactOf([...view.state.sources.keys()], document));
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
@@ -81816,6 +81817,13 @@ function openView(state, cwd2, facts, { source: sourceOf, changed, log }) {
     }
   };
 }
+var subscriptionsOf = ({
+  sources
+}) => [...sources].map(([source, storage]) => ({
+  kind: "plugin",
+  source,
+  storage
+}));
 var RenderCache = class {
   entries = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] The user's answers for repositories are one
@@ -82150,13 +82158,7 @@ var RenderCache = class {
       sources: Object.fromEntries(
         [...this.views].map(([sessionId2, view]) => [
           sessionId2,
-          [...view.state.sources].map(
-            ([source, storage]) => ({
-              kind: "plugin",
-              source,
-              storage
-            })
-          )
+          subscriptionsOf(view.state)
         ])
       )
     };
@@ -82690,8 +82692,8 @@ var Collector = class {
   // [LAW:single-enforcer] A request names the session's keys: they are
   // declared again and stamped in one action, and that stamp is returned to
   // go with the request. The record's reaction runs when the action ends,
-  // finds nothing moved, and hands in nothing alone. A request for a retiring
-  // session makes it live again.
+  // finds the read this stamp took, and hands in nothing alone. A request for
+  // a retiring session makes it live again.
   requested(req) {
     const locator = locatorOf(req);
     const document = runInAction(() => {
@@ -82699,24 +82701,24 @@ var Collector = class {
       if (held === void 0) {
         const opened = this.open(req.sessionId, locator);
         this.records.set(req.sessionId, opened);
-        return opened.latest.document;
+        return opened.stamped.document;
       }
-      held.locator = locator;
       held.requested = true;
-      const live = held.phase.kind === "live" ? held.phase : this.live(held, new Holds());
-      if (held.phase.kind === "live")
-        live.declared.set(this.declared(held, live.holds));
+      const { phase } = held;
+      if (phase.kind === "live")
+        phase.declared.set(this.declared({ ...held, locator }, phase.holds));
+      const live = phase.kind === "live" ? phase : this.live(held, locator);
       held.phase = live;
-      held.latest.document = this.stampOf(held, this.read(live));
-      return held.latest.document;
+      this.stamp(held, live.inputs.get());
+      return held.stamped.document;
     });
     this.armSweep();
     return document;
   }
   // [LAW:one-source-of-truth] Every renderer output's subscriptions, whole:
   // a session whose set moved is declared again, and one absent from them has
-  // no plugin sources. A retiring session keeps the set for a request that
-  // makes it live again, and holds none of it.
+  // no plugin sources. A retiring session takes its set too, and holds none
+  // of it.
   subscribed({ sources }) {
     for (const session of Object.keys(sources)) {
       if (!this.records.has(session))
@@ -82732,7 +82734,12 @@ var Collector = class {
         record2.subscriptions = next;
         const { phase } = record2;
         if (phase.kind === "live")
-          phase.declared.set(this.declared(record2, phase.holds));
+          phase.declared.set(
+            this.declared(
+              { ...record2, locator: phase.declared.get().locator },
+              phase.holds
+            )
+          );
       }
     });
   }
@@ -82760,66 +82767,76 @@ var Collector = class {
     this.records.clear();
   }
   open(session, locator) {
-    const holds2 = new Holds();
-    const keys2 = {
-      session,
-      locator,
-      subscriptions: /* @__PURE__ */ new Map()
-    };
-    const declared = this.declared(keys2, holds2);
+    const subscriptions = /* @__PURE__ */ new Map();
+    const reader = this.reader({ session, locator, subscriptions });
+    const first2 = reader.inputs.get();
     let document;
     try {
+      if (first2.kind === "failed") throw new Error(first2.reason);
       document = assembleFacts(
         void 0,
         session,
-        readingsOf(this.inputsOf(locator), declared.lanes),
-        this.deps.update(),
+        first2.readings,
+        first2.update,
         instantAt(this.deps.clock)
       );
     } catch (e) {
-      holds2.close();
+      reader.holds.close();
       throw e;
     }
-    const latest = { document };
+    const stamped = { document, from: first2 };
     return {
-      ...keys2,
-      latest,
+      session,
+      stamped,
+      subscriptions,
       requested: true,
-      phase: this.watch(
-        { session, latest },
-        holds2,
-        observable.box(declared, { deep: false })
-      )
+      phase: this.watch(session, stamped, reader)
     };
   }
-  // A retiring record read again: holds at its keys, and its stamps go on
-  // from the document it kept.
-  live(record2, holds2) {
-    const declared = this.declared(record2, holds2);
-    return this.watch(record2, holds2, observable.box(declared, { deep: false }));
+  // A retiring record read again: holds at the request's keys, and its stamps
+  // go on from the document it kept.
+  live(record2, locator) {
+    return this.watch(
+      record2.session,
+      record2.stamped,
+      this.reader({ ...record2, locator })
+    );
+  }
+  reader(keys2) {
+    const holds2 = new Holds();
+    const declared = observable.box(this.declared(keys2, holds2), {
+      deep: false
+    });
+    return {
+      holds: holds2,
+      declared,
+      inputs: computed(() => this.read(declared.get()))
+    };
   }
   // [LAW:no-ambient-temporal-coupling] The stamp of every owner landing is
   // taken in a reaction's effect, not a derivation: a stamp is the instant of
   // its turn, and a computed that read the clock and its own prior answer
   // would answer by when it ran.
-  watch(record2, holds2, declared) {
+  watch(session, stamped, reader) {
     const stop2 = reaction(
-      () => this.read({ declared }),
+      () => reader.inputs.get(),
       (moved) => runInAction(() => {
-        const next = this.stampOf(record2, moved);
-        if (next === record2.latest.document) return;
-        record2.latest.document = next;
-        void this.deps.deliver({ kind: "world-state", worldState: next });
+        if (moved === stamped.from) return;
+        if (this.stamp({ session, stamped }, moved))
+          void this.deps.deliver({
+            kind: "world-state",
+            worldState: stamped.document
+          });
       }),
       {
         // The expression cannot throw; the effect's catch is `stampOf`.
         onError: (e) => this.deps.log(
           "error",
-          `world state stamp threw sid=${JSON.stringify(record2.session)}: ${inspect(e)}`
+          `world state stamp threw sid=${JSON.stringify(session)}: ${inspect(e)}`
         )
       }
     );
-    return { kind: "live", holds: holds2, declared, stop: stop2 };
+    return { kind: "live", ...reader, stop: stop2 };
   }
   // [LAW:single-enforcer] The one taker of a session's holds: every keyed
   // entry at its locator's keys and each subscribed plugin source, taken in
@@ -82827,11 +82844,7 @@ var Collector = class {
   // is released (`Holds.declare`).
   // [LAW:no-silent-failure] A declaration that throws keeps the holds it had,
   // and its lanes answer its failure, naming the cause, which is logged here.
-  declared({
-    session,
-    locator,
-    subscriptions
-  }, holds2) {
+  declared({ session, locator, subscriptions }, holds2) {
     const sid = JSON.stringify(session);
     try {
       const {
@@ -82871,9 +82884,8 @@ var Collector = class {
       deps: this.deps.owners
     };
   }
-  read({ declared }) {
+  read({ locator, lanes }) {
     try {
-      const { locator, lanes } = declared.get();
       return {
         kind: "read",
         readings: readingsOf(this.inputsOf(locator), lanes),
@@ -82886,8 +82898,9 @@ var Collector = class {
   // [LAW:single-enforcer] The one stamp of a session's document, against the
   // one it replaces: the document itself when nothing it holds moved, and a
   // failed stamp keeps the prior readings and says why (`failedStamp`).
-  stampOf({ session, latest }, moved) {
-    const prior = latest.document;
+  // Answers whether the document moved.
+  stamp({ session, stamped }, moved) {
+    const prior = stamped.document;
     const next = moved.kind === "failed" ? failedStamp(prior, moved.reason) : this.assembled(prior, moved, instantAt(this.deps.clock));
     const failure = next === prior ? null : stampFailureOf(next);
     if (failure !== null)
@@ -82895,7 +82908,9 @@ var Collector = class {
         "error",
         `world state sid=${JSON.stringify(session)}: ${failure}`
       );
-    return next;
+    stamped.document = next;
+    stamped.from = moved;
+    return next !== prior;
   }
   assembled(prior, moved, at) {
     try {
@@ -83008,6 +83023,7 @@ function sessionSource(deps) {
       "session.draw",
       "computed",
       () => ({
+        sources: [...state.sources.keys()],
         effective: effective.read(),
         configFacts: {
           ...settingCounts(state.config, state.fileHeldSettings, pick2),
