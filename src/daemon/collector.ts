@@ -117,12 +117,16 @@ interface Reader {
 }
 
 // [LAW:types-are-the-program] A session the collector reads, or one whose
-// retire is on its way to the renderer, which holds nothing and reads nothing.
+// retire the renderer has not yet answered, which holds nothing and reads
+// nothing.
 interface Live extends Reader {
   readonly kind: "live";
   readonly stop: () => void;
 }
-type Phase = Live | { readonly kind: "retiring" };
+interface Retiring {
+  readonly kind: "retiring";
+}
+type Phase = Live | Retiring;
 
 interface SessionRecord {
   readonly session: SessionId;
@@ -238,12 +242,25 @@ export class Collector {
   }
 
   // One sweep. Public so a test can run it at an instant it chose.
+  // [LAW:no-ambient-temporal-coupling] The sweep is the one thing that sends
+  // a retire again: a retiring record is sent its retire on every sweep until
+  // one is answered, so no outcome of a delivery can leave it waiting.
   sweep(): void {
     for (const record of this.records.values()) {
-      if (record.phase.kind !== "live") continue;
-      if (record.requested) record.requested = false;
-      else if (!this.deps.watched(record.session))
-        this.retire(record, record.phase);
+      const { phase } = record;
+      switch (phase.kind) {
+        case "live":
+          if (record.requested) record.requested = false;
+          else if (!this.deps.watched(record.session))
+            this.retire(record, phase);
+          break;
+        case "retiring":
+          this.deps.log(
+            "info",
+            `session retire sent again sid=${JSON.stringify(record.session)}`,
+          );
+          this.send(record, phase);
+      }
     }
   }
 
@@ -327,7 +344,7 @@ export class Collector {
           // The read a request's stamp already took.
           if (moved === stamped.from) return;
           if (this.stamp({ session, stamped }, moved))
-            void this.deps.deliver({
+            void this.handIn({
               kind: "world-state",
               worldState: stamped.document,
             });
@@ -449,28 +466,57 @@ export class Collector {
   }
 
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
-  // once, and its record stays `retiring` until the renderer answered the
-  // retire: an output taken meanwhile may still name it. A retire whose turn
-  // threw may have left the renderer holding the session's document, so the
-  // record stays, and a request revives it with the next `seq`.
+  // once, and its record stays `retiring` until the renderer answered a
+  // retire: until then the renderer may hold the session's document, and a
+  // new record would start at seq 1, which its store refuses. A retire lets go
+  // of nothing the renderer does not hold, so the sweep sends it again until
+  // one is answered or a request revives the record.
   private retire(record: SessionRecord, live: Live): void {
     release(live);
-    record.phase = { kind: "retiring" };
+    const retiring: Retiring = { kind: "retiring" };
+    record.phase = retiring;
     this.deps.log(
       "info",
       `session retired sid=${JSON.stringify(record.session)}`,
     );
-    void this.deps
-      .deliver({ kind: "retire", session: record.session })
-      .then(({ kind }) => {
+    this.send(record, retiring);
+  }
+
+  // An answer removes the record only while it is still in the retiring
+  // period this send belongs to: one a request revived, or the daemon closed,
+  // is not this retire's to remove.
+  private send(record: SessionRecord, retiring: Retiring): void {
+    void this.handIn({ kind: "retire", session: record.session }).then(
+      (kind) => {
         if (
           kind === "answered" &&
-          record.phase.kind === "retiring" &&
+          record.phase === retiring &&
           this.records.get(record.session) === record
         )
           this.records.delete(record.session);
         if (this.records.size === 0) this.disarmSweep();
-      });
+      },
+    );
+  }
+
+  // [LAW:single-enforcer] The one hand-in of what the collector delivers
+  // alone. [LAW:no-silent-failure] A delivery that rejected, because the
+  // host's own recording of the turn threw, is logged here and settles as
+  // `rejected`, so none is left to the process's unhandledRejection handler,
+  // which would end the daemon.
+  private handIn(event: HandedIn): Promise<Delivered["kind"] | "rejected"> {
+    const session =
+      event.kind === "retire" ? event.session : event.worldState.session;
+    return this.deps.deliver(event).then(
+      ({ kind }) => kind,
+      (e: unknown) => {
+        this.deps.log(
+          "error",
+          `${event.kind} delivery rejected sid=${JSON.stringify(session)}: ${inspect(e)}`,
+        );
+        return "rejected" as const;
+      },
+    );
   }
 
   private armSweep(): void {

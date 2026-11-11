@@ -112,24 +112,30 @@ function handLanded() {
 
 const ANSWERED = { kind: "answered" } as const;
 
+// How a retire's delivery ends: its turn answered or threw, or the host's own
+// recording of it threw, which rejects the delivery.
+type RetireEnd = "answered" | "threw" | "rejected";
+
 // A collector over `owners`, on a clock the case moves, with a renderer that
 // answers each hand-in at once and records it. `watched` is which sessions an
-// open feed draws; `retired` is how the renderer's retire turns end.
+// open feed draws; `retired` is how the renderer's retire turns end, one
+// per turn in order, the last for every turn after it.
 function collectorOver(
   owners: RenderPayloadDeps,
   {
     update = () => pendingOf("unread"),
     watched = new Set<SessionId>(),
-    retired = "answered",
+    retired = ["answered"],
   }: {
     readonly update?: () => Fact<UpdateNotice>;
     readonly watched?: ReadonlySet<SessionId>;
-    readonly retired?: "answered" | "threw";
+    readonly retired?: readonly RetireEnd[];
   } = {},
 ) {
   const clock: HeldClock = heldClock(new Date(1_700_000_000_000));
   const handedIn: HandedIn[] = [];
   const logged: string[] = [];
+  let retires = 0;
   const collector = new Collector({
     owners,
     update,
@@ -137,7 +143,10 @@ function collectorOver(
     watched: (session) => watched.has(session),
     deliver: async (event) => {
       handedIn.push(event);
-      return event.kind === "retire" ? { kind: retired } : ANSWERED;
+      if (event.kind !== "retire") return ANSWERED;
+      const end = retired[Math.min(retires++, retired.length - 1)]!;
+      if (end === "rejected") throw new Error("recording the retire's turn");
+      return { kind: end };
     },
     log: (level, message) => logged.push(`${level} ${message}`),
   });
@@ -218,6 +227,31 @@ describe("an owner landing", () => {
     ]);
     land("host.name", ok("box"));
     expect(handedIn).toHaveLength(1);
+  });
+
+  test("whose hand-in's delivery rejected is said, not left to end the daemon", async () => {
+    const { owners, land } = handLanded();
+    const logged: string[] = [];
+    const collector = new Collector({
+      owners,
+      update: () => pendingOf("unread"),
+      clock: heldClock(new Date(1_700_000_000_000)),
+      watched: () => false,
+      deliver: (event) =>
+        event.kind === "world-state"
+          ? Promise.reject(new Error("recording the turn"))
+          : Promise.resolve(ANSWERED),
+      log: (level, message) => logged.push(`${level} ${message}`),
+    });
+    cleanups.push(() => collector.close());
+    collector.requested(requestAt("/a"));
+    land("host.name", ok("box"));
+    await drained();
+    expect(logged.filter((line) => line.startsWith("error"))).toEqual([
+      expect.stringContaining(
+        `world-state delivery rejected sid=${JSON.stringify(SID)}: Error: recording the turn`,
+      ),
+    ]);
   });
 
   test("after a request moved the keys, is read at the new keys only", () => {
@@ -307,7 +341,7 @@ describe("the sweep", () => {
 
   test("keeps a session whose retire turn threw, and a request revives it from the document it kept", async () => {
     const { owners } = handLanded();
-    const { collector, clock } = collectorOver(owners, { retired: "threw" });
+    const { collector, clock } = collectorOver(owners, { retired: ["threw"] });
     const first = collector.requested(requestAt("/a"));
     clock.advance(2 * SESSION_SWEEP_MS);
     await drained();
@@ -315,6 +349,46 @@ describe("the sweep", () => {
     // Not a new record at seq 1, which the renderer still holding the session
     // would refuse.
     expect(collector.requested(requestAt("/a"))).toBe(first);
+  });
+
+  test("sends a retire that threw again at the next sweep, and drops the session once one is answered", async () => {
+    const { owners } = handLanded();
+    const { collector, clock, handedIn } = collectorOver(owners, {
+      retired: ["threw", "answered"],
+    });
+    collector.requested(requestAt("/a"));
+    clock.advance(2 * SESSION_SWEEP_MS);
+    await drained();
+    expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
+    clock.advance(SESSION_SWEEP_MS);
+    expect(handedIn).toEqual([
+      { kind: "retire", session: SID },
+      { kind: "retire", session: SID },
+    ]);
+    await drained();
+    expect(collector.stats()).toEqual({ sessions: 0, retiring: 0 });
+    expect(clock.pending()).toBe(0);
+  });
+
+  test("a retire whose delivery rejected is said, sent again at the next sweep, and the session dropped once one is answered", async () => {
+    const { owners } = handLanded();
+    const { collector, clock, handedIn, logged } = collectorOver(owners, {
+      retired: ["rejected", "answered"],
+    });
+    collector.requested(requestAt("/a"));
+    clock.advance(2 * SESSION_SWEEP_MS);
+    await drained();
+    expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
+    expect(logged.filter((line) => line.startsWith("error"))).toEqual([
+      expect.stringContaining(
+        `retire delivery rejected sid=${JSON.stringify(SID)}: Error: recording the retire's turn`,
+      ),
+    ]);
+    clock.advance(SESSION_SWEEP_MS);
+    expect(handedIn).toHaveLength(2);
+    await drained();
+    expect(collector.stats()).toEqual({ sessions: 0, retiring: 0 });
+    expect(clock.pending()).toBe(0);
   });
 
   test("keeps a session an open feed draws", () => {
@@ -364,6 +438,39 @@ describe("the sweep", () => {
     return drained().then(() => {
       expect(collector.stats()).toEqual({ sessions: 1, retiring: 0 });
     });
+  });
+
+  test("a retire answered after the session was revived and retired again leaves it until the newer retire is answered", async () => {
+    const { owners } = handLanded();
+    const handIns: Array<() => void> = [];
+    const clock = heldClock(new Date(1_700_000_000_000));
+    const collector = new Collector({
+      owners,
+      update: () => pendingOf("unread"),
+      clock,
+      watched: () => false,
+      // The renderer answers each retire only when the case says.
+      deliver: (event) =>
+        event.kind === "retire"
+          ? new Promise((resolve) => handIns.push(() => resolve(ANSWERED)))
+          : Promise.resolve(ANSWERED),
+      log: () => {},
+    });
+    cleanups.push(() => collector.close());
+    collector.requested(requestAt("/a"));
+    clock.advance(2 * SESSION_SWEEP_MS);
+    collector.requested(requestAt("/a"));
+    clock.advance(2 * SESSION_SWEEP_MS);
+    expect(handIns).toHaveLength(2);
+    expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
+
+    handIns[0]!();
+    await drained();
+    expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
+    handIns[1]!();
+    await drained();
+    expect(collector.stats()).toEqual({ sessions: 0, retiring: 0 });
+    expect(clock.pending()).toBe(0);
   });
 });
 
