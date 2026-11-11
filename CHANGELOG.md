@@ -1,3 +1,9 @@
+## [1.216.0](https://github.com/promptctl/cc-candybar/compare/v1.215.0...v1.216.0) (2026-11-11)
+
+### Features
+
+* **collector:** the host's collector holds each session's world state and hands it to the renderer (candybar-host-renderer-x96a.kcp) ([#712](https://github.com/promptctl/cc-candybar/issues/712)) ([7921fb6](https://github.com/promptctl/cc-candybar/commit/7921fb6e7f1980d02e08a1d93ee805fe73b374a8))
+
 ## [1.215.0](https://github.com/promptctl/cc-candybar/compare/v1.214.0...v1.215.0) (2026-11-11)
 
 ### Features
