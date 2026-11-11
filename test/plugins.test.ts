@@ -26,7 +26,6 @@ import {
   pluginLoadLine,
   RenderCache,
   renderCacheBudget,
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
 } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -1006,7 +1005,6 @@ describe("an installed plugin", () => {
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
       },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );
@@ -1676,7 +1674,6 @@ describe("an installed plugin", () => {
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
       },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );

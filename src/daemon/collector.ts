@@ -1,0 +1,456 @@
+// [LAW:single-enforcer] The host's collector (docs/design/host-and-renderer.md
+// §6): the one reader of every session's world. It keeps one record per
+// session the host has had a request from, holds the owners' entries that
+// session reads (the built-in lanes at the keys its newest request names, and
+// each plugin source its renderer subscribes to), stamps one world state from
+// what they hold, and hands it to the renderer. A renderer declares nothing,
+// holds no lane and stamps nothing.
+//
+// [LAW:no-ambient-temporal-coupling] The renderer receives each session's
+// requests and documents in the order the collector made them: a request's
+// document is the one `requested` returns, which goes with the request, and
+// every later stamp that moved is handed in alone, from here.
+//
+// [LAW:no-ambient-temporal-coupling] The collector owns the session's
+// lifetime: a session idle across a whole sweep, with no open feed, is
+// retired, and its record goes once the renderer has answered the retire.
+
+import { inspect } from "node:util";
+import { observable, reaction, runInAction, type IObservableValue } from "mobx";
+import type { Fact } from "../facts/fact.js";
+import type { UpdateNotice, WorldState } from "../facts/world-state.js";
+import type {
+  Event,
+  Subscription,
+  Subscriptions,
+} from "../renderer/interface.js";
+import type { Timekeeper } from "../time.js";
+import { instantAt, type Instant } from "../utils/instant.js";
+import { Holds } from "../utils/holds.js";
+import type { DaemonLogger } from "../utils/logger.js";
+import { failed } from "../utils/outcome.js";
+import { sameKey, type StorageKey } from "./cache/managed-storage.js";
+import {
+  assembleFacts,
+  failedStamp,
+  stampFailureOf,
+} from "./facts-assembly.js";
+import {
+  declareLanes,
+  readingsOf,
+  settledLanes,
+  type DeclaredLanes,
+  type DeclaredSources,
+  type Readings,
+  type RenderPayloadDeps,
+  type ViewFacts,
+} from "./render-payload.js";
+import type { SessionId } from "./session-id.js";
+
+// [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
+// first session and stopped with the last: every interval it retires each
+// session no request named since the interval before and no open feed draws,
+// which releases its holds, so an owner's period stops visiting a repo, pane
+// or session file 2.5 to 5 minutes after the session's last request.
+export const SESSION_SWEEP_MS = 150_000;
+
+// What the collector hands a renderer of its own accord.
+export type HandedIn = Extract<Event, { kind: "world-state" | "retire" }>;
+
+export interface CollectorDeps {
+  // The owners every lane is read from, and the log for those whose owner
+  // does not log.
+  readonly owners: RenderPayloadDeps;
+  // The daemon's one update fact, stamped by its watch
+  // (src/daemon/update-notice.ts): every session's document carries it.
+  readonly update: () => Fact<UpdateNotice>;
+  readonly clock: Pick<Timekeeper, "now" | "every">;
+  // [LAW:one-source-of-truth] Whether an open feed draws the session: the
+  // frame feeds are the one record of who is watching.
+  readonly watched: (session: SessionId) => boolean;
+  // The host's one path to its renderer, for what the collector hands in
+  // alone; it answers once the renderer's turn did.
+  readonly deliver: (event: HandedIn) => Promise<unknown>;
+  readonly log: DaemonLogger;
+}
+
+// What a session's holds were declared for: the keys of its newest request,
+// and the lanes that declaration took, written whole by each declaration so a
+// read never joins one request's keys to another's lanes.
+interface Declared {
+  readonly locator: ViewFacts;
+  readonly lanes: DeclaredLanes;
+}
+
+// The session's latest document, which its stamps replace and its request
+// carries.
+interface Latest {
+  document: WorldState;
+}
+
+// [LAW:types-are-the-program] A session the collector reads, or one whose
+// retire is on its way to the renderer, which holds nothing and reads nothing.
+interface Live {
+  readonly kind: "live";
+  readonly holds: Holds;
+  readonly declared: IObservableValue<Declared>;
+  readonly stop: () => void;
+}
+type Phase = Live | { readonly kind: "retiring" };
+
+interface SessionRecord {
+  readonly session: SessionId;
+  readonly latest: Latest;
+  locator: ViewFacts;
+  subscriptions: DeclaredSources;
+  // Whether a request named the session since the last sweep.
+  requested: boolean;
+  phase: Phase;
+}
+
+// What a stamp reads, or what stopped it reading: a derivation that throws is
+// a stamp that did not complete, not a reaction that never ran.
+type StampInputs =
+  | {
+      readonly kind: "read";
+      readonly readings: Readings;
+      readonly update: Fact<UpdateNotice>;
+    }
+  | { readonly kind: "failed"; readonly reason: string };
+
+export interface CollectorStats {
+  readonly sessions: number;
+  readonly retiring: number;
+}
+
+// What a session's declaration keys on, of the request that named it.
+const locatorOf = (req: ViewFacts): ViewFacts => ({
+  hookData: req.hookData,
+  cwd: req.cwd,
+  hints: req.hints,
+  sessionId: req.sessionId,
+});
+
+const sourcesOf = (subscriptions: readonly Subscription[]): DeclaredSources =>
+  new Map(subscriptions.map((s) => [s.source, s.storage]));
+
+const sameSources = (a: DeclaredSources, b: DeclaredSources): boolean =>
+  a.size === b.size &&
+  [...a].every(([name, key]) => {
+    const other: StorageKey | undefined = b.get(name);
+    return other !== undefined && sameKey(key, other);
+  });
+
+// A live session's reads stop and its holds close.
+function release({ stop, holds }: Live): void {
+  stop();
+  holds.close();
+}
+
+export class Collector {
+  private readonly records = new Map<SessionId, SessionRecord>();
+  private stopSweep: (() => void) | null = null;
+
+  constructor(private readonly deps: CollectorDeps) {}
+
+  // [LAW:single-enforcer] A request names the session's keys: they are
+  // declared again and stamped in one action, and that stamp is returned to
+  // go with the request. The record's reaction runs when the action ends,
+  // finds nothing moved, and hands in nothing alone. A request for a retiring
+  // session makes it live again.
+  requested(req: ViewFacts): WorldState {
+    const locator = locatorOf(req);
+    const document = runInAction(() => {
+      const held = this.records.get(req.sessionId);
+      if (held === undefined) {
+        const opened = this.open(req.sessionId, locator);
+        this.records.set(req.sessionId, opened);
+        return opened.latest.document;
+      }
+      held.locator = locator;
+      held.requested = true;
+      const live =
+        held.phase.kind === "live" ? held.phase : this.live(held, new Holds());
+      if (held.phase.kind === "live")
+        live.declared.set(this.declared(held, live.holds));
+      held.phase = live;
+      held.latest.document = this.stampOf(held, this.read(live));
+      return held.latest.document;
+    });
+    this.armSweep();
+    return document;
+  }
+
+  // [LAW:one-source-of-truth] Every renderer output's subscriptions, whole:
+  // a session whose set moved is declared again, and one absent from them has
+  // no plugin sources. A retiring session keeps the set for a request that
+  // makes it live again, and holds none of it.
+  subscribed({ sources }: Subscriptions): void {
+    // [LAW:no-silent-failure] A renderer subscribes only for sessions the host
+    // handed it, and the host keeps a session's record until its retire is
+    // answered: a session with no record is the host's bug.
+    for (const session of Object.keys(sources) as SessionId[]) {
+      if (!this.records.has(session))
+        this.deps.log(
+          "error",
+          `subscriptions name session ${JSON.stringify(session)}, which the collector has no record of`,
+        );
+    }
+    runInAction(() => {
+      for (const record of this.records.values()) {
+        const next = sourcesOf(sources[record.session] ?? []);
+        if (sameSources(next, record.subscriptions)) continue;
+        record.subscriptions = next;
+        const { phase } = record;
+        if (phase.kind === "live")
+          phase.declared.set(this.declared(record, phase.holds));
+      }
+    });
+  }
+
+  // One sweep. Public so a test can run it at an instant it chose.
+  sweep(): void {
+    for (const record of this.records.values()) {
+      if (record.phase.kind !== "live") continue;
+      if (record.requested) record.requested = false;
+      else if (!this.deps.watched(record.session))
+        this.retire(record, record.phase);
+    }
+  }
+
+  stats(): CollectorStats {
+    const all = [...this.records.values()];
+    return {
+      sessions: all.length,
+      retiring: all.filter((r) => r.phase.kind === "retiring").length,
+    };
+  }
+
+  // Every session's holds close with the daemon.
+  close(): void {
+    this.disarmSweep();
+    for (const { phase } of this.records.values())
+      if (phase.kind === "live") release(phase);
+    this.records.clear();
+  }
+
+  private open(session: SessionId, locator: ViewFacts): SessionRecord {
+    const holds = new Holds();
+    const keys = {
+      session,
+      locator,
+      subscriptions: new Map() as DeclaredSources,
+    };
+    const declared = this.declared(keys, holds);
+    // [LAW:no-silent-failure] A session's first stamp has no document to keep:
+    // one that throws fails the request that named it, and takes nothing.
+    let document: WorldState;
+    try {
+      document = assembleFacts(
+        undefined,
+        session,
+        readingsOf(this.inputsOf(locator), declared.lanes),
+        this.deps.update(),
+        instantAt(this.deps.clock),
+      );
+    } catch (e) {
+      holds.close();
+      throw e;
+    }
+    const latest: Latest = { document };
+    return {
+      ...keys,
+      latest,
+      requested: true,
+      phase: this.watch(
+        { session, latest },
+        holds,
+        observable.box(declared, { deep: false }),
+      ),
+    };
+  }
+
+  // A retiring record read again: holds at its keys, and its stamps go on
+  // from the document it kept.
+  private live(record: SessionRecord, holds: Holds): Live {
+    const declared = this.declared(record, holds);
+    return this.watch(record, holds, observable.box(declared, { deep: false }));
+  }
+
+  // [LAW:no-ambient-temporal-coupling] The stamp of every owner landing is
+  // taken in a reaction's effect, not a derivation: a stamp is the instant of
+  // its turn, and a computed that read the clock and its own prior answer
+  // would answer by when it ran.
+  private watch(
+    record: Pick<SessionRecord, "session" | "latest">,
+    holds: Holds,
+    declared: IObservableValue<Declared>,
+  ): Live {
+    const stop = reaction(
+      () => this.read({ declared }),
+      (moved) =>
+        runInAction(() => {
+          const next = this.stampOf(record, moved);
+          if (next === record.latest.document) return;
+          record.latest.document = next;
+          void this.deps.deliver({ kind: "world-state", worldState: next });
+        }),
+      {
+        // The expression cannot throw; the effect's catch is `stampOf`.
+        onError: (e) =>
+          this.deps.log(
+            "error",
+            `world state stamp threw sid=${JSON.stringify(record.session)}: ${inspect(e)}`,
+          ),
+      },
+    );
+    return { kind: "live", holds, declared, stop };
+  }
+
+  // [LAW:single-enforcer] The one taker of a session's holds: every keyed
+  // entry at its locator's keys and each subscribed plugin source, taken in
+  // one body, so the entry a moved key names is held before the one it left
+  // is released (`Holds.declare`).
+  // [LAW:no-silent-failure] A declaration that throws keeps the holds it had,
+  // and its lanes answer its failure, naming the cause, which is logged here.
+  private declared(
+    {
+      session,
+      locator,
+      subscriptions,
+    }: Pick<SessionRecord, "session" | "locator" | "subscriptions">,
+    holds: Holds,
+  ): Declared {
+    const sid = JSON.stringify(session);
+    try {
+      const {
+        result: { lanes, faults },
+        acquired,
+        released,
+      } = holds.declare(() =>
+        declareLanes(this.deps.owners, holds, locator, subscriptions),
+      );
+      for (const fault of faults)
+        this.deps.log("error", `session declaration threw sid=${sid} ${fault}`);
+      // [LAW:verifiable-goals] A declaration that moved a hold — a request
+      // naming another key, a subscription moving — says so; one that kept
+      // what the session held writes nothing.
+      if (acquired + released > 0)
+        this.deps.log(
+          "info",
+          `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds.size}`,
+        );
+      return { locator, lanes };
+    } catch (e) {
+      this.deps.log(
+        "error",
+        `session declaration threw sid=${sid}: ${inspect(e)}`,
+      );
+      return {
+        locator,
+        lanes: settledLanes(
+          failed(`session declaration threw: ${String(e)}`, "read"),
+          [...subscriptions.keys()],
+        ),
+      };
+    }
+  }
+
+  private inputsOf(locator: ViewFacts) {
+    return {
+      hookData: locator.hookData,
+      cwd: locator.cwd,
+      hints: locator.hints,
+      deps: this.deps.owners,
+    };
+  }
+
+  private read({ declared }: Pick<Live, "declared">): StampInputs {
+    try {
+      const { locator, lanes } = declared.get();
+      return {
+        kind: "read",
+        readings: readingsOf(this.inputsOf(locator), lanes),
+        update: this.deps.update(),
+      };
+    } catch (e) {
+      return { kind: "failed", reason: `reading the owners: ${String(e)}` };
+    }
+  }
+
+  // [LAW:single-enforcer] The one stamp of a session's document, against the
+  // one it replaces: the document itself when nothing it holds moved, and a
+  // failed stamp keeps the prior readings and says why (`failedStamp`).
+  private stampOf(
+    { session, latest }: Pick<SessionRecord, "session" | "latest">,
+    moved: StampInputs,
+  ): WorldState {
+    const prior = latest.document;
+    const next =
+      moved.kind === "failed"
+        ? failedStamp(prior, moved.reason)
+        : this.assembled(prior, moved, instantAt(this.deps.clock));
+    const failure = next === prior ? null : stampFailureOf(next);
+    // [LAW:no-silent-failure] Told to the log as well as to the bar.
+    if (failure !== null)
+      this.deps.log(
+        "error",
+        `world state sid=${JSON.stringify(session)}: ${failure}`,
+      );
+    return next;
+  }
+
+  private assembled(
+    prior: WorldState,
+    moved: Extract<StampInputs, { kind: "read" }>,
+    at: Instant,
+  ): WorldState {
+    try {
+      return assembleFacts(
+        prior,
+        prior.session,
+        moved.readings,
+        moved.update,
+        at,
+      );
+    } catch (e) {
+      return failedStamp(prior, `stamping the world state: ${String(e)}`);
+    }
+  }
+
+  // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
+  // once, and its record stays `retiring` until the renderer answered the
+  // retire: an output taken meanwhile may still name it.
+  private retire(record: SessionRecord, live: Live): void {
+    release(live);
+    record.phase = { kind: "retiring" };
+    this.deps.log(
+      "info",
+      `session retired sid=${JSON.stringify(record.session)}`,
+    );
+    void this.deps
+      .deliver({ kind: "retire", session: record.session })
+      .then(() => {
+        if (
+          record.phase.kind === "retiring" &&
+          this.records.get(record.session) === record
+        )
+          this.records.delete(record.session);
+        if (this.records.size === 0) this.disarmSweep();
+      });
+  }
+
+  private armSweep(): void {
+    if (this.stopSweep !== null) return;
+    this.stopSweep = this.deps.clock.every(
+      SESSION_SWEEP_MS,
+      () => this.sweep(),
+      { unref: true },
+    );
+  }
+
+  private disarmSweep(): void {
+    this.stopSweep?.();
+    this.stopSweep = null;
+  }
+}

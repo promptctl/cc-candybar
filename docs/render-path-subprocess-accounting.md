@@ -36,7 +36,7 @@ The render-hot-path call chain (daemon side, per request):
 ```
 handleRequest (reply.ts)
   └─ renderCache.getOrCreate(...)        — cache HIT in steady state, no work
-  └─ settlePayload / payloadOf          — reads provider snapshots, no spawn
+  └─ settleWorld / payloadOf            — reads provider snapshots, no spawn
   └─ drawDsl(...)                  — pure CPU
   └─ collectDiagnostics / viewerRows     — string assembly
 ```

@@ -53,7 +53,8 @@ import { closeIdleMenus } from "./verbs";
 import type { DoctorEdge, DoctorStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
-import { declareLanes } from "./render-payload.js";
+import { Collector } from "./collector.js";
+import { WorldStates } from "../renderer/world-states.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import { EffectSessions } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds } from "./frame-feed.js";
@@ -518,6 +519,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // writes it and every session's facts document reads it, so the box exists
   // before either.
   const updateFact = newUpdateFact();
+  // The world states the host hands the main renderer, which its views read.
+  const worldStates = new WorldStates();
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock,
@@ -531,16 +534,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       storage: managedStorage,
       signer: linkSigner,
       gates,
-      declare: (holds, facts, sources) =>
-        declareLanes(payloadProviders, holds, facts, sources),
       // [LAW:single-enforcer] What every session's view draws from: its payload
-      // derived over its declaration, its picks and its histories' depths.
+      // composed over its world state, its request, its picks and its
+      // histories' depths.
       source: sessionSource({
-        // [LAW:single-enforcer] Every provider logs the refreshes it makes,
-        // through the one ledger, so a view's payload logs none of them.
-        providers: payloadProviders,
         sessionState,
-        update: () => updateFact.get(),
+        worldStates,
+        home: host.home,
         history: (sessionId) => settingsHistory.depth(sessionId),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
@@ -722,6 +722,27 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       renderCache.drawnCopy(sessionId, by, key),
   };
 
+  // [LAW:single-enforcer] The host's one reader of every session's world. What
+  // it hands in alone goes through the host's one path to the renderer, which
+  // the parts below hold; a delivery is first asked for by an owner landing
+  // after a request, so the parts exist by then.
+  const collector = new Collector({
+    owners: payloadProviders,
+    update: () => updateFact.get(),
+    clock,
+    watched: (sessionId) => frameFeeds.feedOpen(sessionId),
+    deliver: (event) =>
+      parts.renderer.deliver({ kind: "event", event, at: instant() }, [
+        [
+          "sid",
+          event.kind === "world-state"
+            ? event.worldState.session
+            : event.session,
+        ],
+      ]),
+    log,
+  });
+
   const parts: DaemonParts = {
     home: host.home,
     tmp: host.tmp,
@@ -755,6 +776,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     verbCtx,
     // [LAW:one-way-deps] exception: the main renderer, in process, over the
     // host parts its side still reaches (RendererParts, src/daemon/draw-bar.ts).
+    collector,
+    worldStates,
     renderer: rendererHost(
       "main",
       mainRenderer({
@@ -763,6 +786,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         sessionState,
         renderCache,
         payloadProviders,
+        worldStates,
         linkSigner,
         renderWarnings,
         effectSessions,
@@ -775,6 +799,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         tmuxStatusLines,
       }),
       log,
+      (subscriptions) => collector.subscribed(subscriptions),
     ),
   };
 
@@ -833,6 +858,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["binaryWatch close", () => binaryWatch.close()],
         ["limits disarm", () => limits.disarm()],
         // Before the sources and the storage its states hold.
+        ["collector close", () => collector.close()],
         ["renderCache close", () => renderCache.close()],
         ["gitService close", () => gitService.close()],
         ["usageStore close", () => usageStore.close()],

@@ -1,3 +1,5 @@
+import type { Collector } from "./collector.js";
+import type { WorldStates } from "../renderer/world-states.js";
 import type { Timekeeper } from "../time.js";
 import type { FileEventDelivery } from "./cache/file-events";
 import type { RenderCache } from "./cache/render";
@@ -8,7 +10,7 @@ import type { LaneSetups } from "./lane-setup.js";
 import type { LimitsHandle } from "./limits";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { MenuIdle } from "./menu-idle.js";
-import type { PayloadProviders } from "./payload-providers";
+import type { RenderPayloadDeps } from "./render-payload";
 import type { RenderSightings } from "./render-sightings";
 import type { RenderWarningRecords } from "./render-warnings.js";
 import type { Runs } from "./runs.js";
@@ -49,7 +51,7 @@ export interface DaemonParts {
   readonly watcherRegistry: WatcherRegistry;
   readonly refreshLedger: RefreshLedger;
   readonly fileEvents: FileEventDelivery;
-  readonly payloadProviders: PayloadProviders;
+  readonly payloadProviders: RenderPayloadDeps;
   readonly sessionState: SessionState;
   readonly effectSessions: EffectSessions<RenderedLine>;
   readonly menuIdle: MenuIdle;
@@ -68,6 +70,12 @@ export interface DaemonParts {
   readonly journalTurns: Pick<JournalTurns, "getStats">;
   // The host's one path to the main renderer (src/daemon/renderer-host.ts).
   readonly renderer: RendererHost;
+  // [LAW:single-enforcer] The host's one reader of every session's world
+  // (src/daemon/collector.ts).
+  readonly collector: Collector;
+  // The world states handed to the main renderer, which its views read: the
+  // renderer's own, here while it runs in process (RendererParts).
+  readonly worldStates: WorldStates;
   readonly verbCtx: Omit<
     VerbContext,
     "arrival" | "placeWaited" | "gatherTook" | "turnWaited" | "clientGone"

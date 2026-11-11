@@ -9,11 +9,9 @@ import os from "node:os";
 import path from "node:path";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
-import type { SessionView } from "../src/daemon/cache/render";
-import { settlePayload, type Refreshed } from "../src/daemon/render-payload";
+import type { Refreshed } from "../src/daemon/render-payload";
 import { REFRESH_LANES } from "../src/daemon/refresh-faults";
-import type { SessionSource } from "../src/daemon/session-source";
-import { AT, PROJECT, requestOf, sessionRig } from "./helpers/session-rig";
+import { sessionRig, settledRequest } from "./helpers/session-rig";
 import { until } from "./helpers/until";
 
 let dir: string;
@@ -60,21 +58,8 @@ async function bare() {
   usageStore.declareToday = naming(declared, "today", usageStore.declareToday);
   const configFile = path.join(dir, "config.json5");
   fs.writeFileSync(configFile, "{ root: { h: [] } }");
-  const request = requestOf(dir);
-  const held = rig.cache.holdSession(dir, dir, configFile, request);
-  cleanups.push(() => held[Symbol.dispose]());
-  const view: SessionView<SessionSource> = held.view;
   const refreshed: Refreshed = new Map();
-  await settlePayload(
-    {
-      hookData: request.hookData,
-      deps: { ...rig.providers, lanes: view.lanes } as never,
-      cwd: PROJECT,
-      hints: request.hints,
-    },
-    AT,
-    refreshed,
-  );
+  const view = await settledRequest(rig, dir, configFile, cleanups, refreshed);
   return { view, declared, refreshed };
 }
 
@@ -93,7 +78,7 @@ describe("totality: a layout placing no segment still gathers every built-in", (
     );
   });
 
-  test("its view declares every keyed lane once", async () => {
+  test("its session declares every keyed lane once", async () => {
     const { declared } = await bare();
     expect(declared.sort()).toEqual(
       ["git", "host.name", "host.user", "tmux", "today"].sort(),
@@ -105,7 +90,7 @@ describe("totality: a layout placing no segment still gathers every built-in", (
     expect([...refreshed.keys()].sort()).toEqual([...REFRESH_LANES].sort());
   });
 
-  test("its facts document has every built-in answered once the owners answer", async () => {
+  test("its world state has every built-in answered once the owners answer", async () => {
     const { view } = await bare();
     const kinds = () =>
       Object.fromEntries(

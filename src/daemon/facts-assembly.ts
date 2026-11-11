@@ -120,3 +120,26 @@ export function assembleFacts(
     ...parts,
   };
 }
+
+// [LAW:single-enforcer] The other way a document is minted: a stamp that threw
+// keeps the readings of `prior` and says why, with the next `seq`, so the bar's
+// ⚠ says it is drawn from older facts. A failure for the reason already held
+// is that document, so a fault that persists mints nothing per landing; the
+// next stamp that succeeds carries no stamp diagnostic, and so moves too.
+export function failedStamp(prior: WorldState, reason: string): WorldState {
+  const held = prior.diagnostics.find((d) => d.kind === "stamp");
+  if (held?.reason === reason) return prior;
+  return {
+    ...prior,
+    seq: prior.seq + 1,
+    diagnostics: [
+      ...prior.diagnostics.filter((d) => d.kind !== "stamp"),
+      { kind: "stamp", reason },
+    ],
+  };
+}
+
+// Why the document is drawn from older facts, or null when its stamp held.
+export function stampFailureOf(document: WorldState): string | null {
+  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
+}

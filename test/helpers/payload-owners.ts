@@ -9,7 +9,7 @@
 // activity, cache, autocompact) stores what its refresh's reader answered, and
 // a draw reads that back. So a test says what a lane answers, and the payload
 // reads it the way it reads the daemon's. `requestPayload` below declares
-// the lanes over the fakes as a view's declaration does.
+// the lanes over the fakes as the collector declares a session's.
 
 import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
@@ -45,9 +45,10 @@ import {
   composePayload,
   declareLanes,
   readingsOf,
-  settlePayload,
+  settleWorld,
   todayOf,
   type ConfigFileFacts,
+  type DeclaredLanes,
   type DrawInputs,
   type DrawnPayload,
   type KeyedOwners,
@@ -72,9 +73,11 @@ const lane = <T>(answer: Loose): Answer<T> => answer as Answer<T>;
 
 // One keyed source: its value per key, pending from the key's first read until
 // its reader lands. The values are observable, as every real owner's are, so a
-// view's computed over a lane is recomputed when the reader lands; the first
-// read of a key (which stores) is therefore made where a lane is declared,
-// outside any derivation.
+// derivation over a lane is run again when the reader lands. The first read of
+// a key (which stores) is made where the lane is declared, outside any
+// derivation, as a real owner's declaration takes its entry: a derivation that
+// read a key before it was stored tracks only the key's presence, and never
+// hears its landing.
 function keyed<A extends unknown[], T>(
   read: (holds: Holds, ...args: A) => Loose,
 ) {
@@ -122,25 +125,59 @@ export function fakeGit(
       holds: Holds,
       workingDir: string,
       projectDir?: string,
-    ): Lane<GitInfo> => ({
-      current: () => current(holds, workingDir, projectDir),
-    }),
+    ): Lane<GitInfo> => {
+      current(holds, workingDir, projectDir);
+      return { current: () => current(holds, workingDir, projectDir) };
+    },
   };
 }
 
-// The payload a view's source derives, over the owners and lanes the inputs
-// name: the facts document stamped from what the owners hold, and the payload
-// composed from it.
-export function payloadOf(inputs: PayloadInputs, draw: DrawInputs) {
-  const document = assembleFacts(
+// A request's inputs with the lanes a session's declaration took for it, as
+// the collector reads them (src/daemon/collector.ts).
+export interface LanedInputs extends PayloadInputs {
+  readonly lanes: () => DeclaredLanes;
+}
+
+// The world state the collector stamps from what the owners hold over the
+// inputs' lanes.
+export function documentOf(inputs: LanedInputs) {
+  return assembleFacts(
     undefined,
     sessionIdOf(inputs.hookData.session_id),
-    readingsOf(inputs),
+    readingsOf(inputs, inputs.lanes()),
     pendingOf("unread"),
     instantOf(new Date(0)),
   );
+}
+
+// The day sums and the session's own days a draw projects `today` from.
+export function todayReadingOf(inputs: LanedInputs) {
+  return readingsOf(inputs, inputs.lanes()).today;
+}
+
+// A request's refresh and wait over the inputs' lanes, as the daemon settles
+// one over its world state (settleWorld): the document is stamped again on
+// every owner landing the wait hears.
+export async function settleLanes(
+  inputs: LanedInputs,
+  at: Instant,
+  refreshed: Parameters<typeof settleWorld>[2] = new Map(),
+): Promise<void> {
+  await settleWorld(
+    inputs,
+    at,
+    refreshed,
+    () => documentOf(inputs),
+    new AbortController().signal,
+  );
+}
+
+// The payload a view's source derives, over the owners and lanes the inputs
+// name: the world state stamped from what the owners hold, and the payload
+// composed from it.
+export function payloadOf(inputs: LanedInputs, draw: DrawInputs) {
   return composePayload(
-    document,
+    documentOf(inputs),
     {
       hookData: inputs.hookData,
       hints: inputs.hints,
@@ -153,9 +190,10 @@ export function payloadOf(inputs: PayloadInputs, draw: DrawInputs) {
 export function fakeTmux(read: (holds: Holds, hint: TmuxHint) => Loose) {
   const current = keyed<[TmuxHint], string>(read);
   return {
-    declare: (holds: Holds, hint: TmuxHint): Lane<string> => ({
-      current: () => current(holds, hint),
-    }),
+    declare: (holds: Holds, hint: TmuxHint): Lane<string> => {
+      current(holds, hint);
+      return { current: () => current(holds, hint) };
+    },
   };
 }
 
@@ -322,16 +360,16 @@ export function absentOwners() {
 }
 
 // A request's payload as the daemon draws one: the lanes declared over the
-// owners at the request's facts, as the session's view declares them
-// (brandon-unfiled-3248.8ro6, 4a), the request's refresh and wait
-// (settlePayload), then the view's payload as it stands (payloadOf) with the
+// owners at the request's facts, as the collector declares a session's, the
+// request's refresh and wait (settleLanes), then the view's payload as it
+// stands (payloadOf) with the
 // draw's own projections beside it — `today` at `at`, no feeds. The failures
 // it projected are logged as the daemon's request logs them. The home lives
 // for this one request, where the daemon's view keeps it across requests.
 export async function requestPayload(
   hookData: ClaudeHookData,
   at: Instant,
-  deps: Omit<RenderPayloadDeps, "lanes">,
+  deps: RenderPayloadDeps,
   cwd: string | undefined,
   effective: EffectiveGlobals,
   hints: ClientHints,
@@ -343,13 +381,14 @@ export async function requestPayload(
     cwd,
     hints,
   });
-  const inputs: PayloadInputs = {
+  const inputs: LanedInputs = {
     hookData,
     cwd,
     hints,
-    deps: { ...deps, lanes: home.lanes } as RenderPayloadDeps,
+    deps,
+    lanes: home.lanes,
   };
-  await settlePayload(inputs, at, new Map());
+  await settleLanes(inputs, at);
   const payload = payloadOf(inputs, {
     effective,
     configFacts,
@@ -359,7 +398,7 @@ export async function requestPayload(
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,
-    today: todayOf(readingsOf(inputs).today, at),
+    today: todayOf(todayReadingOf(inputs), at),
   };
 }
 

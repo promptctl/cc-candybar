@@ -13,7 +13,9 @@ import {
 } from "../../src/daemon/cache/render";
 import { WatcherRegistry } from "../../src/daemon/cache/watchers";
 import { stateDir } from "../../src/daemon/paths";
-import { declareLanes, settlePayload } from "../../src/daemon/render-payload";
+import type { CollectorDeps } from "../../src/daemon/collector";
+import { collected } from "./collected";
+import { settleWorld, type Refreshed } from "../../src/daemon/render-payload";
 import {
   sessionSource,
   type SessionSource,
@@ -125,17 +127,22 @@ export function fixedOwners(
 
 export type SessionRig = ReturnType<typeof sessionRig>;
 
-// The daemon's composition over those owners. `source` overrides what the
-// session source reads beyond the owners (the update fact, the depths), `log`
-// is the daemon's log, and `observers` hear what the cache tells the daemon.
+// The daemon's composition over those owners: the host's collector reading
+// them into world states handed straight to the store the views read, as the
+// daemon's renderer takes them. `update` is the update fact every world state
+// carries, `source` overrides what the session source reads beyond the world
+// state (the depths), `log` is the daemon's log, and `observers` hear what the
+// cache tells the daemon.
 export function sessionRig(
   dir: string,
   cleanups: Array<() => void>,
   {
+    update = () => pendingOf("unread"),
     source = {},
     log = () => {},
     observers = {},
   }: {
+    readonly update?: CollectorDeps["update"];
     readonly source?: Partial<SessionSourceDeps>;
     readonly log?: (level: string, message: string) => void;
     readonly observers?: RenderCacheObservers;
@@ -143,6 +150,10 @@ export function sessionRig(
 ) {
   const providers = fixedOwners(log);
   const sessionState = new SessionState();
+  const served = collected(
+    { owners: providers as never, update, log },
+    cleanups,
+  );
   const watchers = new WatcherRegistry({
     clock: systemTimekeeper,
     logger: () => {},
@@ -165,12 +176,10 @@ export function sessionRig(
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
-      declare: (holds, facts, sources) =>
-        declareLanes(providers as never, holds, facts, sources),
       source: sessionSource({
-        providers: providers as never,
         sessionState,
-        update: () => pendingOf("unread"),
+        worldStates: served.worldStates,
+        home: providers.home,
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
         ...source,
@@ -178,11 +187,12 @@ export function sessionRig(
     },
     { budgetBytes: () => 1024 * 1024 * 1024, observers },
   );
+  served.serve(cache);
   cleanups.push(() => {
     cache.close();
     watchers.closeAll();
   });
-  return { cache, sessionState, providers };
+  return { cache, sessionState, providers, served };
 }
 
 // The session works in a directory that is the same on every machine; the
@@ -227,6 +237,37 @@ export function requestOf(dir: string) {
   };
 }
 
+// A request of the session over `configFile`, as the daemon makes one: the
+// request and the world state read at its keys taken as the daemon's renderer
+// takes them, the view held, and its wait settled as the daemon settles one.
+// `refreshed` records what its arrival refreshed.
+export async function settledRequest(
+  rig: SessionRig,
+  dir: string,
+  configFile: string,
+  cleanups: Array<() => void>,
+  refreshed: Refreshed = new Map(),
+): Promise<SessionView<SessionSource>> {
+  const request = requestOf(dir);
+  const held = rig.served.request(request, () =>
+    rig.cache.holdSession(dir, dir, configFile, request),
+  );
+  cleanups.push(() => held[Symbol.dispose]());
+  await settleWorld(
+    {
+      hookData: request.hookData,
+      deps: rig.providers as never,
+      cwd: PROJECT,
+      hints: request.hints,
+    },
+    AT,
+    refreshed,
+    () => rig.served.worldStates.of(request.sessionId),
+    new AbortController().signal,
+  );
+  return held.view;
+}
+
 // A session's view under `preset` (the config's own when null), its request
 // settled as the daemon settles one.
 export async function openSettled(
@@ -238,19 +279,5 @@ export async function openSettled(
   if (preset !== null) rig.sessionState.set(SESSION, "preset", preset);
   const configFile = path.join(dir, "config.json5");
   fs.writeFileSync(configFile, "{}");
-  const request = requestOf(dir);
-  const held = rig.cache.holdSession(dir, dir, configFile, request);
-  cleanups.push(() => held[Symbol.dispose]());
-  const { view } = held;
-  await settlePayload(
-    {
-      hookData: request.hookData,
-      deps: { ...rig.providers, lanes: view.lanes } as never,
-      cwd: PROJECT,
-      hints: request.hints,
-    },
-    AT,
-    new Map(),
-  );
-  return view;
+  return settledRequest(rig, dir, configFile, cleanups);
 }

@@ -111,7 +111,7 @@ describe("shortHostname", () => {
 describe("the host's sources", () => {
   // [LAW:effects-at-boundaries] A process that only imports the daemon (a CLI
   // subcommand) builds the providers and renders nothing: it reads neither.
-  test("nothing is read until a view declares it", async () => {
+  test("nothing is read until a session declares it", async () => {
     const ledger = new RefreshLedger();
     const host = new HostService({ clock: systemTimekeeper, ledger });
     const counts = () =>

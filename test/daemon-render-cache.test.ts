@@ -30,7 +30,6 @@ import {
   type Hold,
   type RenderCacheObservers,
   type SessionView,
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
   openView,
   ENTRY_BYTES,
@@ -129,7 +128,6 @@ function makeCache(
       watchers,
       log,
       source: SOURCES_NOTHING,
-      declare: DECLARES_NOTHING,
     },
     {
       // Room for four entries over one compile: the fifth evicts the oldest.
@@ -1394,17 +1392,10 @@ describe("RenderCache", () => {
   });
 });
 
-// brandon-unfiled-3248.8ro6: what a session's view holds of the daemon's shared
-// entries (a repo, a pane, a plugin's session file) keeps their owners' periods
-// running, so a hold the view's renders have not read across a whole sweep is
-// released — whether or not the view is still drawn — and the next render that
-// reads it takes it back.
-describe("RenderCache idle sweep", () => {
-  // A cache nobody closes keeps its sweep armed, and the sweep keeps the cache
-  // and every compile it serves alive for the life of the process: a jest
-  // worker that ran a few such files held a heap snapshot past V8's string
-  // limit (brandon-unfiled-3248.8ro6).
-  test("close disposes every state, releases its holds and leaves no timer", () => {
+describe("RenderCache close", () => {
+  // A cache nobody closes keeps its entries' watchers, and they keep the cache
+  // and every compile it serves alive for the life of the process.
+  test("close disposes every state and leaves no timer", () => {
     jest.useFakeTimers();
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({
@@ -1424,27 +1415,19 @@ describe("RenderCache idle sweep", () => {
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
-      let released = 0;
       {
-        using hold = cache.holdSession(
+        using _hold = cache.holdSession(
           dir,
           dir,
           undefined,
           viewFacts(dir, "s1"),
         );
-        hold.view.holds.take("repo", () => () => {
-          released++;
-        });
       }
-      // The sweep is armed, beside whatever the entry's sources arm.
-      expect(jest.getTimerCount()).toBeGreaterThan(0);
       cache.close();
-      expect(released).toBe(1);
       expect(cache.size).toBe(0);
       expect(jest.getTimerCount()).toBe(0);
       // Every way a state is built refuses: an entry, or a reload of one.
@@ -1457,156 +1440,6 @@ describe("RenderCache idle sweep", () => {
     } finally {
       cache.close();
       jest.useRealTimers();
-      watchers.closeAll();
-      cleanup();
-    }
-  });
-
-  // [LAW:single-enforcer] A view opened outside the cache (the demo, a tool)
-  // is torn down by its one dispose, which releases what its renders held.
-  test("a view's dispose releases its holds and refuses new ones", () => {
-    const { dir, cleanup } = mkConfigDir();
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
-      logger: () => {},
-    });
-    const cache = new RenderCache(
-      {
-        clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
-        env: host.env,
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
-        storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
-        gates: bareGates(),
-        sessionState: new SessionState(),
-        watchers,
-        source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
-      },
-      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
-    );
-    try {
-      const view = openView(
-        cache.getOrCreate(dir, dir, undefined).state,
-        dir,
-        viewFacts(dir, "s1"),
-        {
-          source: SOURCES_NOTHING,
-          declare: DECLARES_NOTHING,
-          changed: () => {},
-          log: () => {},
-        },
-      );
-      let released = 0;
-      view.holds.take("repo", () => () => {
-        released++;
-      });
-      view.dispose();
-      expect(released).toBe(1);
-      expect(() => view.holds.take("repo", () => () => {})).toThrow(
-        "hold taken after close: repo",
-      );
-    } finally {
-      cache.close();
-      watchers.closeAll();
-      cleanup();
-    }
-  });
-
-  test("a view holds what its declaration takes: a request naming other keys declares again at once, and a preset pick declares nothing", () => {
-    const { dir, cleanup } = mkConfigDir();
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
-      logger: () => {},
-    });
-    const sessionState = new SessionState();
-    // Each declaration takes one hold per key its request names, so what it
-    // holds says which request it read.
-    const declarations: string[] = [];
-    const released: string[] = [];
-    const take = (holds: Holds, key: string): void =>
-      holds.take(key, () => () => {
-        released.push(key);
-      });
-    const logs: string[] = [];
-    const cache = new RenderCache(
-      {
-        clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
-        env: host.env,
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
-        storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
-        gates: bareGates(),
-        sessionState,
-        watchers,
-        log: (_level, message) => logs.push(message),
-        source: SOURCES_NOTHING,
-        declare: (holds, facts, sources) => {
-          declarations.push(`${facts.cwd}`);
-          take(holds, `repo:${facts.cwd}`);
-          return DECLARES_NOTHING(holds, facts, sources);
-        },
-      },
-      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
-    );
-    const request = (cwd: string): ViewFacts => ({
-      sessionId: sessionIdOf("s1"),
-      hookData: {
-        hook_event_name: "Status",
-        session_id: "s1",
-        transcript_path: join(dir, "t.jsonl"),
-        cwd,
-        model: { id: "m", display_name: "M" },
-        workspace: { current_dir: cwd, project_dir: dir },
-      },
-      cwd,
-      hints: parseClientHints({}),
-    });
-    try {
-      const a = request("/a");
-      const view = (() => {
-        using hold = cache.holdSession(dir, dir, undefined, a);
-        return hold.view;
-      })();
-      // A view opens declared, at the request it opens with.
-      expect(declarations).toEqual(["/a"]);
-      expect(view.holds.size).toBe(1);
-      // The same request — a frame drawn by it — declares nothing again.
-      view.requested(a);
-      expect(declarations).toHaveLength(1);
-
-      // A request naming another key: the one it no longer names goes now.
-      view.requested(request("/b"));
-      expect(declarations).toEqual(["/a", "/b"]);
-      expect(released).toEqual(["repo:/a"]);
-
-      // No pick declares: another session's, this one's theme, nor this
-      // one's preset — every built-in is gathered whatever it shows.
-      sessionState.set("s2", "preset", "compact");
-      sessionState.set("s1", "theme", "nord");
-      sessionState.set("s1", "preset", "compact");
-      expect(declarations).toEqual(["/a", "/b"]);
-      expect(released).toEqual(["repo:/a"]);
-      expect(view.holds.size).toBe(1);
-      // Each declaration that moved a hold says so; the repeat of `a` and the
-      // picks wrote nothing.
-      expect(logs.filter((l) => l.startsWith("session view declared"))).toEqual(
-        [
-          'session view declared sid="s1" acquired=1 released=0 held=1',
-          'session view declared sid="s1" acquired=1 released=1 held=1',
-        ],
-      );
-
-      // Closing the view releases what it held.
-      cache.releaseIdle();
-      cache.releaseIdle();
-      expect(released).toEqual(["repo:/a", "repo:/b"]);
-    } finally {
-      cache.close();
       watchers.closeAll();
       cleanup();
     }
@@ -1638,7 +1471,6 @@ describe("RenderCache frames and pins", () => {
         watchers,
         log: (_level, line) => logs.push(line),
         source: SOURCES_NOTHING,
-        declare: DECLARES_NOTHING,
       },
       // Room for four entries over one compile, and the view of one.
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
@@ -1693,7 +1525,7 @@ describe("RenderCache frames and pins", () => {
     }
   });
 
-  test("a pinned session's entry is never evicted, and its view never closed idle, while the pin is held", () => {
+  test("a pinned session's entry is never evicted while the pin is held, and the host's retire closes its view", () => {
     const { cache, dirs, close, request } = pinCache();
     try {
       const view = request("s1", dirs[0]!);
@@ -1708,20 +1540,10 @@ describe("RenderCache frames and pins", () => {
         expect(hold?.view).toBe(view);
         expect(hold?.entry.cwd).toBe(dirs[0]);
       }
-      // No request across three sweeps: the pin keeps the view.
-      cache.releaseIdle();
-      cache.releaseIdle();
-      cache.releaseIdle();
-      expect(cache.holdView("s1")?.view).toBe(view);
-      // The feed closed: frames no longer drawing it, and a frame's hold is no
-      // request, so two sweeps close it.
+      // The feed closed, and the host retired the session.
       unpin();
       expect(cache.stats.pinned).toBe(0);
-      {
-        using _frame = cache.holdView("s1");
-      }
-      cache.releaseIdle();
-      cache.releaseIdle();
+      cache.retireSession("s1");
       expect(cache.holdView("s1")).toBeNull();
       expect(() => unpin()).toThrow("render-cache pin released twice");
     } finally {
@@ -1792,7 +1614,6 @@ describe("RenderCache frames and pins", () => {
         sessionState: new SessionState(),
         watchers,
         log: (_level, line) => logs.push(line),
-        declare: DECLARES_NOTHING,
         // The second view built over the entry, the reload's successor, fails.
         source: (view) => {
           if (++opens === 2) throw new Error("the successor broke");
@@ -1818,12 +1639,10 @@ describe("RenderCache frames and pins", () => {
           /^session view reopen failed sid="s1": Error: the successor broke/,
         ),
       );
-      // Frames find nothing, and open nothing; they find the error instead,
-      // which a pin keeps across a sweep.
+      // Frames find nothing, and open nothing; they find the error instead.
       expect(cache.holdView("s1")).toBeNull();
       expect(cache.holdView("s1")).toBeNull();
       expect(opens).toBe(2);
-      cache.releaseIdle();
       expect(String(cache.openFailure("s1")?.error)).toBe(
         "Error: the successor broke",
       );
@@ -1846,9 +1665,9 @@ describe("RenderCache frames and pins", () => {
     }
   });
 
-  // A failure no open feed shows has no frame to draw it in, so a sweep
+  // A retired session has no frame to draw its failure in, so the retire
   // forgets it.
-  test("an unpinned session's open failure is forgotten by the next sweep", () => {
+  test("a retired session's open failure is forgotten", () => {
     const watchers = new WatcherRegistry({
       clock: systemTimekeeper,
       logger: () => {},
@@ -1867,7 +1686,6 @@ describe("RenderCache frames and pins", () => {
         sessionState: new SessionState(),
         watchers,
         log: () => {},
-        declare: DECLARES_NOTHING,
         source: () => {
           throw new Error("the view broke");
         },
@@ -1879,7 +1697,7 @@ describe("RenderCache frames and pins", () => {
         cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1")),
       ).toThrow("the view broke");
       expect(cache.openFailure("s1")).not.toBeNull();
-      cache.releaseIdle();
+      cache.retireSession("s1");
       expect(cache.openFailure("s1")).toBeNull();
     } finally {
       cache.close();
@@ -1912,7 +1730,6 @@ describe("RenderCache frames and pins", () => {
         sessionState: new SessionState(),
         watchers,
         log: () => {},
-        declare: DECLARES_NOTHING,
         source: (view) => {
           if (++opens === 1) throw new Error("the view broke");
           return SOURCES_NOTHING(view);

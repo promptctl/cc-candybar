@@ -7,10 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { runInAction } from "mobx";
 import {
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
-  type Declare,
   type SessionView,
 } from "../src/daemon/cache/render";
 import type { ViewFacts } from "../src/daemon/render-payload";
@@ -51,7 +49,6 @@ function makeCache(
   opts: {
     budgetBytes?: number;
     log?: (line: string) => void;
-    declare?: Declare;
   } = {},
   launcher: Launcher = processLauncher,
 ) {
@@ -82,7 +79,6 @@ function makeCache(
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
-      declare: opts.declare ?? DECLARES_NOTHING,
       log: (_level, line) => {
         opts.log?.(line);
         lines.push(line);
@@ -221,45 +217,14 @@ test("a session's render from another directory replaces its view", async () => 
   expect(b.view.state).toBe(first.view.state);
 });
 
-test("a move to another directory declares the new view before the old releases what it held", () => {
-  configure(dir);
-  const other = path.join(dir, "sub");
-  fs.mkdirSync(other);
-  configure(other);
-  // One owner entry both views hold, as two directories of one repo do.
-  let holders = 0;
-  let dropsToZero = 0;
-  const { cache } = makeCache({
-    declare: (holds, facts, sources) => {
-      holds.take("repo", () => {
-        holders++;
-        return () => {
-          holders--;
-          if (holders === 0) dropsToZero++;
-        };
-      });
-      return DECLARES_NOTHING(holds, facts, sources);
-    },
-  });
-  cache
-    .holdSession(dir, dir, undefined, viewFacts(dir, "s-a"))
-    [Symbol.dispose]();
-  cache
-    .holdSession(other, other, undefined, viewFacts(other, "s-a"))
-    [Symbol.dispose]();
-  expect(cache.stats.views).toBe(1);
-  expect(holders).toBe(1);
-  expect(dropsToZero).toBe(0);
-});
-
 test("a reload opens each of the entry's views anew on the new state, and retires the old", async () => {
   configure(dir);
   const { cache, lines } = makeCache();
   const before = await render(cache, "s-a");
   configure(dir, 1);
   cache.reload(dir, dir, undefined, { kind: "write" });
-  // The successor is open — declared, so the next frame draws a view that
-  // holds what it reads — before any render (brandon-unfiled-3248.8ro6, 4a).
+  // The successor is open before any render, so the next frame draws a view
+  // (brandon-unfiled-3248.8ro6, 4a).
   expect(cache.stats.views).toBe(1);
   expect(cache.latestView()?.state).not.toBe(before.view.state);
   expect(lines).toContainEqual(
@@ -270,96 +235,33 @@ test("a reload opens each of the entry's views anew on the new state, and retire
   expect(after.text).toContain("who=s-a");
 });
 
-test("a view no render reads across a whole sweep closes; one read stays", async () => {
+test("a session the host retired has its view closed, and its next render opens it again", async () => {
   configure(dir);
   const { cache, lines } = makeCache();
   await render(cache, "s-a");
   await render(cache, "s-b");
-  cache.releaseIdle();
-  // Read since the sweep before: kept.
-  expect(cache.stats.views).toBe(2);
-  await render(cache, "s-b");
-  cache.releaseIdle();
+  cache.retireSession("s-a");
   expect(cache.stats.views).toBe(1);
   expect(lines).toContainEqual(
     expect.stringMatching(/^session view closed sid="s-a" reason=idle /),
   );
-  // The session's next render opens its view again.
   expect((await render(cache, "s-a")).text).toContain("who=s-a");
   expect(cache.stats.views).toBe(2);
 });
 
-test("a reload keeps whether the session's view was read: a view idle before it still closes at the next sweep", async () => {
-  configure(dir);
-  const { cache, lines } = makeCache();
-  await render(cache, "s-a");
-  // A sweep with no render since: the view is unread, and kept once more.
-  cache.releaseIdle();
-  expect(cache.stats.views).toBe(1);
-  configure(dir, 1);
-  cache.reload(dir, dir, undefined, { kind: "write" });
-  cache.releaseIdle();
-  expect(cache.stats.views).toBe(0);
-  expect(lines).toContainEqual(
-    expect.stringMatching(/^session view closed sid="s-a" reason=idle /),
-  );
-});
-
 // [LAW:no-ambient-temporal-coupling] MobX holds a reaction created inside a
-// batch until the batch ends: a frame drawn from a feed's reaction, opening a
-// view, must still draw it declared.
-test("a view opened inside a MobX batch is declared before it is handed back", () => {
+// batch until the batch ends: a kept view takes the request it is given
+// before it is handed back.
+test("a kept view draws by each request holdSession is given, inside a batch too", () => {
   configure(dir);
   const { cache } = makeCache();
-  const answer = runInAction(() => {
-    using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
-    return held.view.lanes().git.current();
-  });
-  // DECLARES_NOTHING's answer, not the view's want of one.
-  expect(answer).toEqual(ABSENT);
-});
-
-test("a kept view is declared with each request holdSession is given, inside a batch too", () => {
-  configure(dir);
-  const declaredFor: ViewFacts[] = [];
-  const { cache } = makeCache({
-    declare: (holds, facts, sources) => {
-      declaredFor.push(facts);
-      return DECLARES_NOTHING(holds, facts, sources);
-    },
-  });
   const first = viewFacts(dir, "s-a");
   cache.holdSession(dir, dir, undefined, first)[Symbol.dispose]();
   const next = viewFacts(dir, "s-a");
   runInAction(() => {
     using held = cache.holdSession(dir, dir, undefined, next);
-    // Declared before the batch ends: this request's lanes, not the last's.
-    expect(declaredFor).toEqual([first, next]);
-    // A frame's facts, the request already declared, declare nothing again.
-    cache.holdSession(dir, dir, undefined, next)[Symbol.dispose]();
-    expect(held.view).toBeDefined();
+    expect(held.view.facts()).toBe(next);
   });
-  expect(declaredFor).toHaveLength(2);
-});
-
-test("a view whose declaration throws answers that failure on its lanes", () => {
-  configure(dir);
-  const { cache, lines } = makeCache({
-    declare: () => {
-      throw new Error("declaration exploded");
-    },
-  });
-  using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
-  expect(held.view.lanes().git.current()).toEqual({
-    kind: "failed",
-    failedAt: "read",
-    reason: expect.stringContaining("declaration exploded"),
-  });
-  expect(lines).toContainEqual(
-    expect.stringMatching(
-      /^session view declaration threw sid="s-a": .*declaration exploded/,
-    ),
-  );
 });
 
 test("a view held by a render in flight is disposed only when the render returns", () => {
@@ -594,9 +496,8 @@ test("a frame on screen stays copyable across a reload's successor view, and goe
   configure(dir, 1);
   cache.reload(dir, dir, undefined, { kind: "write" });
   expect(cache.drawnCopy("s-copy", "request", "7")).toBe("the message");
-  // Unread across two sweeps, the session's view closes, and its frames.
-  cache.releaseIdle();
-  cache.releaseIdle();
+  // The host retires the session: its view closes, and its frames.
+  cache.retireSession("s-copy");
   expect(cache.stats.views).toBe(0);
   expect(cache.drawnCopy("s-copy", "request", "7")).toBeUndefined();
   // A session with no view keeps nothing it delivers.

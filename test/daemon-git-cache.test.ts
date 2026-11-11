@@ -208,8 +208,8 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 // A declaration's answer, waited for while it — or the PR inside it — is not
-// answered yet: what a request's wait reads of the lane its view's
-// declaration took (`waitsOf`, src/daemon/render-payload.ts).
+// answered yet: what a request's wait reads of the lane its session's
+// declaration took (`awaitsReading`, src/daemon/render-payload.ts).
 function gitOf(
   svc: GitDataProvider,
   holds: Holds,
@@ -1099,7 +1099,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     ]);
   });
 
-  test("a declaration into a closed home throws, for the view's declaration to report", () => {
+  test("a declaration into a closed home throws, for the session's declaration to report", () => {
     const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
     holds.close();

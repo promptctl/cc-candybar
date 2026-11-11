@@ -117,8 +117,7 @@ function resolveValued<K extends ValuedField>(
 }
 
 // [LAW:one-source-of-truth] The active preset a session's picks resolve to —
-// the first rung of the resolution below, and what a session's view declares
-// its holds by (src/daemon/cache/render.ts openView).
+// the first rung of the resolution below.
 export function presetOf(
   config: DslConfig,
   sessionPick: (key: string) => string | null,

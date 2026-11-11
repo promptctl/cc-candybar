@@ -8,8 +8,8 @@
 //
 // [LAW:single-enforcer] One faked hook event, with the hints a statusline
 // client reports from this terminal (detectClientHints), goes through the
-// functions the daemon runs for a real one — parseClientHints,
-// loadChain, openView over the daemon's session source, settlePayload,
+// functions the daemon runs for a real one — parseClientHints, loadChain,
+// a collector and openView over the daemon's session source, settleWorld,
 // drawDsl — over the providers the daemon builds (createPayloadProviders).
 // There is no demo-only payload: a field the daemon's payload gains is in the
 // demo's.
@@ -53,12 +53,13 @@ import { processWorld } from "../host.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { parseClientHints } from "../daemon/protocol.js";
 import {
-  declareLanes,
   renderOptionsOf,
   renderWidth,
-  settlePayload,
+  settleWorld,
   todayOf,
 } from "../daemon/render-payload.js";
+import { Collector } from "../daemon/collector.js";
+import { WorldStates } from "../renderer/world-states.js";
 import { sessionIdOf } from "../daemon/session-id.js";
 import { sessionSource } from "../daemon/session-source.js";
 import { SessionState } from "../daemon/session-state.js";
@@ -180,30 +181,40 @@ async function renderFrames(): Promise<void> {
     runs.close();
     throw e;
   }
-  // The demo runs no update watch: its facts document carries an update nothing
+  // The demo runs no update watch: its world state carries an update nothing
   // has sampled.
   const updateFact = newUpdateFact();
-  // The session's view of the state, as the daemon opens one per session,
-  // declared with the one request the demo's frames draw by.
-  const view = openView(
-    state,
-    cwd,
-    { sessionId, hookData, cwd, hints },
-    {
-      declare: (holds, facts, sources) =>
-        declareLanes(providers, holds, facts, sources),
-      source: sessionSource({
-        providers,
-        sessionState,
-        update: () => updateFact.get(),
-        history: () => EMPTY_HISTORY_DEPTH,
-        navigation: () => 0,
-      }),
-      // The demo draws one frame per tick of its own: no feed to wake.
-      changed: () => {},
-      log,
+  // [LAW:single-enforcer] The session's world state, read by the host's own
+  // collector over the demo's providers and handed straight to the store its
+  // view reads, as the daemon's renderer takes it.
+  const worldStates = new WorldStates();
+  const collector = new Collector({
+    owners: providers,
+    update: () => updateFact.get(),
+    clock: world.clock,
+    // The demo's one session is drawn for as long as it runs.
+    watched: () => true,
+    deliver: async (event) => {
+      if (event.kind === "world-state") worldStates.take(event.worldState);
     },
-  );
+    log,
+  });
+  const request = { sessionId, hookData, cwd, hints };
+  worldStates.take(collector.requested(request));
+  // The session's view of the state, as the daemon opens one per session,
+  // drawn by the one request the demo's frames draw by.
+  const view = openView(state, cwd, request, {
+    source: sessionSource({
+      sessionState,
+      worldStates,
+      home: providers.home,
+      history: () => EMPTY_HISTORY_DEPTH,
+      navigation: () => 0,
+    }),
+    // The demo draws one frame per tick of its own: no feed to wake.
+    changed: () => {},
+    log,
+  });
   try {
     const effective = view.source.effective();
 
@@ -220,15 +231,13 @@ async function renderFrames(): Promise<void> {
       // [LAW:effects-at-boundaries] Each frame is one status-line tick: one
       // instant, sampled here as the daemon samples it per request.
       const at = instantOf(new Date(world.clock.now()));
-      await settlePayload(
-        {
-          hookData,
-          deps: { ...providers, lanes: view.lanes },
-          cwd,
-          hints,
-        },
+      await settleWorld(
+        { hookData, deps: providers, cwd, hints },
         at,
         new Map(),
+        () => worldStates.of(sessionId),
+        // The demo's frames have no client to hang up.
+        new AbortController().signal,
       );
       const { frame: drawn } = drawDsl(
         state.config,
@@ -257,6 +266,7 @@ async function renderFrames(): Promise<void> {
     process.stdout.write("\n");
   } finally {
     view.dispose();
+    collector.close();
     state.registry.dispose();
     runs.close();
   }

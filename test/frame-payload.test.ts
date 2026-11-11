@@ -1,6 +1,6 @@
 // brandon-unfiled-3248.8ro6, step 3: sources refresh on their own triggers,
 // and a frame only reads. A statusline request refreshes what its arrival
-// triggers (`settlePayload`) and draws from what that left; the view's payload
+// triggers (`settleLanes`) and draws from what that left; the view's payload
 // (`payloadOf`), which every frame draws, reads every owner's stored value as
 // it stands — no I/O, no refresh, no instant — and a value not answered yet
 // crosses as pending, which the draw takes as its loading cell. What moves
@@ -15,10 +15,7 @@ import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { sumsOf } from "./helpers/today";
 import {
   renderWidth,
-  settlePayload,
   todayOf,
-  readingsOf,
-  type PayloadInputs,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -33,6 +30,9 @@ import type { GitRead } from "../src/segments/git";
 import {
   absentOwners,
   declaredLanes,
+  settleLanes,
+  todayReadingOf,
+  type LanedInputs,
   fakeActivity,
   fakeAutoCompact,
   fakeCacheExpiry,
@@ -119,35 +119,33 @@ function counted(pr: unknown = ABSENT) {
     autoCompact: fakeAutoCompact(count("autocompact", ok(400_000))),
     log: (level: string, msg: string) => logs.push(`${level} ${msg}`),
   };
-  // The lanes the session's view declared: every frame and the request read
-  // the same handles, as the daemon's do.
-  const deps = {
-    ...owners,
-    lanes: declaredLanes(
-      owners,
-      {
-        sessionId: sessionIdOf(HOOK.session_id),
-        hookData: HOOK,
-        cwd: undefined,
-        hints: HINTS,
-      },
-      cleanups,
-    ),
-  } as unknown as RenderPayloadDeps;
-  const inputs = (): PayloadInputs => ({
+  // The lanes the session's declaration took: every frame and the request
+  // read the same handles, as the collector's do.
+  const deps = owners as unknown as RenderPayloadDeps;
+  const lanes = declaredLanes(
+    owners,
+    {
+      sessionId: sessionIdOf(HOOK.session_id),
+      hookData: HOOK,
+      cwd: undefined,
+      hints: HINTS,
+    },
+    cleanups,
+  );
+  const inputs = (): LanedInputs => ({
     hookData: HOOK,
     deps,
     cwd: undefined,
     hints: HINTS,
+    lanes,
   });
   // A request: its refresh and wait, then the view's payload it draws.
   const request = async () => {
-    await settlePayload(inputs(), AT, new Map());
+    await settleLanes(inputs(), AT);
     return payloadOf(inputs(), DRAW);
   };
   // `today` as a draw at `at` projects it.
-  const today = (at = AT) =>
-    todayOf(readingsOf(inputs()).today, at);
+  const today = (at = AT) => todayOf(todayReadingOf(inputs()), at);
   return { reads, inputs, request, today, deps, logs };
 }
 
@@ -222,7 +220,7 @@ describe("a frame's payload", () => {
     deps.usageStore.daysOutside = () => {
       throw new Error("days bug");
     };
-    expect(readingsOf(inputs()).today).toMatchObject({
+    expect(todayReadingOf(inputs())).toMatchObject({
       kind: "failed",
     });
     expect(payloadOf(inputs(), DRAW).git).toMatchObject({ branch: "main" });
@@ -236,9 +234,7 @@ describe("a frame's payload", () => {
     await request();
     const before = reads["today"];
     deps.faults.refreshed(HOOK.session_id, "today", "scan threw");
-    expect(readingsOf(inputs()).today).toEqual(
-      failed("scan threw", "read"),
-    );
+    expect(todayReadingOf(inputs())).toEqual(failed("scan threw", "read"));
     expect(reads["today"]).toBe(before);
   });
 

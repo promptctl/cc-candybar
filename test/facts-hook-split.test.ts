@@ -124,7 +124,6 @@ function inputsOf(hookData: ClaudeHookData): PayloadInputs {
     usageStore,
     contextProvider: new ContextProvider({ clock: systemTimekeeper }),
     metricsProvider: new MetricsProvider({ clock: systemTimekeeper }),
-    lanes: () => settledLanes(ABSENT, []),
     log: () => {},
   } as unknown as RenderPayloadDeps;
   return { hookData, deps, cwd: "/tmp", hints: {} };
@@ -143,7 +142,7 @@ test("two hooks that differ only in their instantaneous fields read one document
     return assembleFacts(
       undefined,
       SID,
-      readingsOf(inputs),
+      readingsOf(inputs, settledLanes(ABSENT, [])),
       pendingOf("unread"),
       AT,
     );

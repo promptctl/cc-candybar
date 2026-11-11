@@ -74,7 +74,7 @@ const fileOf = (f: SessionFile): string =>
   path.join(f.storage.folder, fileName(f.sessionId));
 const keyString = (key: StorageKey): string =>
   JSON.stringify([key.folder, key.generation]);
-const sameKey = (a: StorageKey, b: StorageKey): boolean =>
+export const sameKey = (a: StorageKey, b: StorageKey): boolean =>
   a.folder === b.folder && a.generation === b.generation;
 
 // What the owner knows of one folder path across its generations.
@@ -236,8 +236,8 @@ export class ManagedStorage {
     };
   }
 
-  // A view's declaration of one session's file: held at (storage key,
-  // session id) until the view's next declaration takes it no more.
+  // A session's declaration of one session's file: held at (storage key,
+  // session id) until the session's next declaration takes it no more.
   declare(
     holds: Holds,
     storage: StorageKey,

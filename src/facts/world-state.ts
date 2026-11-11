@@ -35,11 +35,18 @@ export interface TmuxFacts {
 // The release check: something newer than the running code, or absent.
 export type UpdateNotice = Update;
 
-// A fault of Gather's own for one lane of the session.
-export interface FactsDiagnostic {
+// A fault of the collector's own: one lane of the session whose refresh threw,
+// or the stamp itself, which kept the readings of the document before it.
+export interface LaneDiagnostic {
+  readonly kind: "lane";
   readonly lane: RefreshLane;
   readonly reason: string;
 }
+export interface StampDiagnostic {
+  readonly kind: "stamp";
+  readonly reason: string;
+}
+export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 
 // [LAW:types-are-the-program] `session`, `context` and `metrics` are the
 // transcript's folds alone: the hook's instantaneous fields (cost, the

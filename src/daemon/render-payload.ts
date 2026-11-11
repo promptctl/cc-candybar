@@ -16,6 +16,7 @@
 // that mirror this shape; user configs MUST agree (a path that doesn't
 // resolve falls back to the variable's declared default).
 
+import { when } from "mobx";
 import type { HistoryDepth } from "./settings-history";
 import path from "node:path";
 import { inspect } from "node:util";
@@ -54,13 +55,7 @@ import {
   type Reading,
 } from "../utils/outcome.js";
 import type { CacheExpiryProvider } from "../segments/cache.js";
-import {
-  answered,
-  settledLane,
-  type Current,
-  type Lane,
-  type Waiting,
-} from "../utils/reading.js";
+import { settledLane, type Current, type Lane } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { isBundledPreset } from "./bundled-presets.js";
 import type {
@@ -106,7 +101,7 @@ import {
 } from "./refresh-faults.js";
 import type { Fact } from "../facts/fact.js";
 import type {
-  FactsDiagnostic,
+  LaneDiagnostic,
   WorldState,
   SourceValue,
 } from "../facts/world-state.js";
@@ -301,7 +296,7 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   readonly activity?: ActivityPayload | P;
   // Claude Code's auto-compact window, as its `/autocompact` last wrote it.
   readonly autocompact?: AutoCompactPayload | P;
-  // [LAW:types-are-the-program] Each plugin source the view declared, by
+  // [LAW:types-are-the-program] Each plugin source the session subscribes to, by
   // scope, plugin then source — `.plugins.<plugin>.<source>` for an installed
   // plugin, `.repo.<plugin>.<source>` for a repository's, the source
   // variable's own name — as the managed storage owner read the session's
@@ -592,8 +587,8 @@ export interface RenderPayloadDeps {
   readonly activityProvider: ActivityProvider;
   readonly tmuxService: TmuxService;
   // [LAW:single-enforcer] The one owner of every plugin's session files: a
-  // view's declaration holds each source it reads there, and a render state's
-  // build holds the folders its config declares.
+  // session's declaration holds each source its renderer subscribes to there,
+  // and a render state's build holds the folders its config declares.
   readonly managedStorage: ManagedStorage;
   // Claude Code's auto-compact window, read from the user settings file at
   // the path a render names.
@@ -609,10 +604,6 @@ export interface RenderPayloadDeps {
   readonly clock: Pick<Timekeeper, "monotonic" | "now">;
   // Each session lane whose refresh threw, until one runs clean.
   readonly faults: RefreshFaults;
-  // The lanes the view's latest declaration handed it (`declareLanes`), read
-  // at each read: a read takes nothing, so the view holds exactly what its
-  // latest declaration took.
-  readonly lanes: () => DeclaredLanes;
 }
 
 // ─── Spend and throughput projections (pure) ──────────────────────────────────
@@ -903,12 +894,11 @@ export interface Lanes {
 export interface Readings {
   readonly lanes: Lanes;
   readonly today: Current<TodayFacts>;
-  readonly faults: readonly FactsDiagnostic[];
+  readonly faults: readonly LaneDiagnostic[];
 }
 
-// What a view's declaration reads of the request its renders draw by: the
-// keys every keyed lane is read at, and the session as the checkpoint parsed
-// it.
+// What a session's declaration reads of its newest request: the keys every
+// keyed lane is read at, and the session as the checkpoint parsed it.
 export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints"> & {
   readonly sessionId: SessionId;
 };
@@ -923,8 +913,8 @@ export type KeyedOwners = Pick<
   | "managedStorage"
 >;
 
-// [LAW:types-are-the-program] What a view's declaration hands its draws: one
-// lane per keyed lane, each closed over the entry the declaration took, so
+// [LAW:types-are-the-program] What a session's declaration hands its stamps:
+// one lane per keyed lane, each closed over the entry the declaration took, so
 // the key is computed once, by the declaration, and a read takes nothing.
 export interface DeclaredLanes {
   readonly git: Lane<GitInfo>;
@@ -976,13 +966,14 @@ function gitAt({
   ];
 }
 
-// [LAW:single-enforcer] A view's declaration (brandon-unfiled-3248.8ro6, steps
-// 3 and 4), the one taker of holds: every keyed entry of the session, at the
-// keys its request names, taken in `holds` — an entry not read yet is created
-// and its first read started — and handed back as the lanes its draws read. It
-// runs when the view opens and when a request names other keys
-// (src/daemon/cache/render.ts), so a moved key starts its read before any draw
-// asks for it, and the key it left is released at once (`Holds.declare`).
+// [LAW:single-enforcer] A session's declaration (brandon-unfiled-3248.8ro6,
+// steps 3 and 4), the one taker of holds: every keyed entry of the session, at
+// the keys its request names, taken in `holds` — an entry not read yet is
+// created and its first read started — and handed back as the lanes its stamps
+// read. The host's collector runs it on every request and every move of the
+// renderer's subscriptions (src/daemon/collector.ts), so a moved key starts
+// its read before any draw asks for it, and the key it left is released at
+// once (`Holds.declare`).
 //
 // [LAW:dataflow-not-control-flow] Every lane is a lane: a session outside tmux
 // has no pane to name a session by, so its tmux lane answers `ABSENT`, and one
@@ -1033,12 +1024,16 @@ export function declareLanes(
 }
 
 // [LAW:effects-at-boundaries] No I/O, and no write: every read takes what its
-// owner stored, so the view's payload computed over it is recomputed in the
-// turn an owner stores a new value.
-export function readingsOf(inputs: PayloadInputs): Readings {
+// owner stored, so the world state stamped over it (src/daemon/collector.ts)
+// is stamped again in the turn an owner stores a new value. `lanes` are the
+// ones the session's declaration took, read at each read: a read takes
+// nothing, so the session holds exactly what its latest declaration took.
+export function readingsOf(
+  inputs: PayloadInputs,
+  lanes: DeclaredLanes,
+): Readings {
   const { hookData, deps } = inputs;
   const sessionId = hookData.session_id;
-  const lanes = deps.lanes();
   // [LAW:no-silent-failure] A read that throws is a bug in its owner: logged
   // here, by the read that met it — a frame's included, whose failures go
   // nowhere else — and that lane's failure, so it costs its own cells, never
@@ -1080,7 +1075,9 @@ export function readingsOf(inputs: PayloadInputs): Readings {
     ),
     faults: REFRESH_LANES.flatMap((lane) => {
       const fault = deps.faults.of(sessionId, lane);
-      return fault === undefined ? [] : [{ lane, reason: fault.reason }];
+      return fault === undefined
+        ? []
+        : [{ kind: "lane" as const, lane, reason: fault.reason }];
     }),
   };
 }
@@ -1102,27 +1099,49 @@ export function todayReading(
   return ok({ sums: set.value.sums, own: own.kind === "ok" ? own.value : {} });
 }
 
-// The landings a request waits on before it draws: every declared lane whose
-// key has never answered, except the two whose first answer is slow and
+// Whether a request still waits on its world state before it draws: some
+// fact whose key has never answered, among every built-in a declaration keys
+// and every plugin source, except the two whose first answer is slow and
 // external: today's day sums (a scan of every transcript under the Claude Code
 // directory) and the branch's PR (a forge's network call). A first bar that
 // waited on them would be as slow as the slowest, and a bar with every
-// built-in placed always reads both, so they draw pending and land through
-// the observables their owners store them in. A lane the daemon itself
-// superseded (a click's move) is not waited on either: it draws its loading
-// cell, and its landing reaches the next frame.
-function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
-  // [LAW:dataflow-not-control-flow] One test over every lane: why it is
-  // pending decides, never which lane it is.
+// built-in placed always reads both, so they draw pending and land in a later
+// world state. A fact the daemon itself superseded (a click's move) is not
+// waited on either: it draws its loading cell, and its landing reaches the
+// next frame.
+export function awaitsReading({ builtins, sources }: WorldState): boolean {
+  // [LAW:dataflow-not-control-flow] One test over every fact: why it is
+  // pending decides, never which fact it is.
   return [
-    lanes.git.current(),
-    lanes.tmux.current(),
-    lanes.hostName.current(),
-    lanes.hostUser.current(),
-    ...[...lanes.sources.values()].map((lane) => lane.current()),
-  ].flatMap((lane) =>
-    lane.kind === "pending" && lane.why === "unread" ? [lane.landed] : [],
-  );
+    builtins.git,
+    builtins.tmux,
+    builtins.hostName,
+    builtins.hostUser,
+    ...Object.values(sources),
+  ].some((fact) => fact.kind === "pending" && fact.why === "unread");
+}
+
+// A request's wait on its world state (rule 1 of the model): it refreshes
+// what its arrival triggers, then waits until its session's world state has
+// no fact it waits on that has never answered (`awaitsReading`), or `signal`
+// ends it. The collector stamps a refresh's landing in the action that stored
+// it and hands it in at once, so the store holds it before the refresh
+// resolves; the answer is then drawn from the same world state a frame drawn
+// after it reads.
+export async function settleWorld(
+  inputs: PayloadInputs,
+  at: Instant,
+  refreshed: Refreshed,
+  worldState: () => WorldState,
+  signal: AbortSignal,
+): Promise<void> {
+  await refreshPayload(inputs, at, refreshed);
+  try {
+    await when(() => !awaitsReading(worldState()), { signal });
+  } catch (e) {
+    // The signal's abort is the one rejection the wait expects.
+    if (!signal.aborted) throw e;
+  }
 }
 
 // [LAW:dataflow-not-control-flow] A value derived from several lanes is not
@@ -1383,7 +1402,7 @@ export function composePayload(
 }
 
 // [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
-// how many plugin sources the view declared, and those not answered yet as
+// how many plugin sources the world state carries, and those not answered yet as
 // the draw reads them, each with why (`<name>:unread` or `<name>:superseded`;
 // `-` for none), so a source that never lands is told from one nothing
 // declared, and a run's superseded source from a wait that left one out.
@@ -1470,33 +1489,6 @@ export function todayOf(
   return today.kind === "ok"
     ? { cost: today.value.cost, tokens: today.value.tokens }
     : undefined;
-}
-
-// A statusline request's wait (rule 1 of the model): it refreshes what its
-// arrival triggers, then waits for the first value of the keyed lanes its
-// view declared that have not answered yet (`waitsOf`). The answer is then drawn from the
-// view's payload, which those landings moved — the same values a frame drawn
-// after it reads.
-export async function settlePayload(
-  inputs: PayloadInputs,
-  at: Instant,
-  refreshed: Refreshed,
-): Promise<void> {
-  await refreshPayload(inputs, at, refreshed);
-  // [LAW:one-source-of-truth] The one wait for an answer: the lanes the view
-  // declares now, read again once every landing they waited on has landed —
-  // so a lane that turns unread again (a new key) is waited out too, and a
-  // superseded one never is (waitsOf).
-  await answered((): true | Waiting => {
-    const waits = waitsOf(inputs.deps.lanes());
-    return waits.length > 0
-      ? {
-          kind: "pending",
-          why: "unread",
-          landed: Promise.all(waits).then(() => {}),
-        }
-      : true;
-  });
 }
 
 // [LAW:effects-at-boundaries] Pure: the settings read and the model's context

@@ -50,13 +50,17 @@ import {
   renderOptionsOf,
   prFactOf,
   sourcesFactOf,
-  settlePayload,
+  settleWorld,
   refreshedFact,
   type Refreshed,
   todayOf,
   type PayloadInputs,
+  type RenderPayloadDeps,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
+import { runInAction } from "mobx";
+import type { WorldState } from "../facts/world-state.js";
+import type { WorldStates } from "../renderer/world-states.js";
 import { isPending } from "../utils/outcome.js";
 import {
   laneSwitches,
@@ -98,7 +102,6 @@ import { waitWithin } from "../utils/reading.js";
 import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
 import type { DaemonParts } from "./daemon-parts.js";
-import type { PayloadProviders } from "./payload-providers";
 import type { SessionState } from "./session-state";
 import type { RenderWarningRecords } from "./render-warnings.js";
 import type { EffectSessions } from "../render/effect.js";
@@ -115,16 +118,18 @@ import type { DaemonLogger } from "../utils/logger";
 // [LAW:one-way-deps] exception: what the renderer side still reaches of the
 // host, each by the methods it calls, so the reach is named by type. Each
 // later skeleton step takes its own away: the providers' refresh and the
-// view's world state and source runs (8e9, zhh), the request's wait with its
-// timer and the log of its late failure (the mailbox), the lane setups, tmux
-// status line and launcher (effects, plan step 2), the session store and the
-// config loads (plan step 3).
+// request's wait with its timer and the log of its late failure (zhh, the
+// mailbox), the registry's source runs (8e9), the lane setups, tmux status
+// line and launcher (effects, plan step 2), the session store and the config
+// loads (plan step 3). `worldStates` is the renderer's own: the world states
+// the host handed in, which its views read.
 export interface RendererParts {
   readonly clock: Pick<Timekeeper, "monotonic" | "after">;
   readonly log: DaemonLogger;
   readonly sessionState: SessionState;
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
-  readonly payloadProviders: PayloadProviders;
+  readonly payloadProviders: RenderPayloadDeps;
+  readonly worldStates: WorldStates;
   readonly linkSigner: LinkSigner;
   readonly renderWarnings: RenderWarningRecords;
   readonly effectSessions: EffectSessions<RenderedLine>;
@@ -311,7 +316,7 @@ interface RenderSetup extends Disposable {
   readonly state: DslRenderState;
   readonly view: SessionView<SessionSource>;
   readonly hintsError: string | null;
-  // What the request's refresh and wait read (settlePayload).
+  // What the request's refresh and wait read (settleWorld).
   readonly payloadInputs: PayloadInputs;
 }
 
@@ -356,10 +361,11 @@ function requestFacts(
 export function setUpRender(
   parts: RendererParts,
   arrived: CheckedRenderRequest,
+  worldState: WorldState,
   at: Instant,
   facts: RequestFacts,
 ): RenderSetup {
-  const { sessionState, renderCache } = parts;
+  const { sessionState, renderCache, worldStates } = parts;
   // [LAW:effects-at-boundaries] Read here, on arrival, because a payload does
   // no I/O and a frame draws what the request stored.
   const dir = arrived.hookData.workspace?.current_dir ?? arrived.cwd;
@@ -388,12 +394,19 @@ export function setUpRender(
   // (brandon-unfiled-3248.6rc). The setup owns the hold from here: a throw
   // before it is returned releases it, and the setup releases it on every exit
   // of the render that disposes it.
-  const hold = renderCache.holdSession(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-    req,
-  );
+  //
+  // [LAW:one-source-of-truth] The request and the world state read at its
+  // keys are taken in one action, so nothing drawn between the two pairs
+  // either with the other request's.
+  const hold = runInAction(() => {
+    worldStates.take(worldState);
+    return renderCache.holdSession(
+      origin.projectDir,
+      origin.cwd,
+      origin.target.path,
+      req,
+    );
+  });
   return setUpDraw(parts, hold, req, hintsError, at, facts);
 }
 
@@ -446,12 +459,7 @@ function setUpDraw(
     // and output = diagnostics + body, with no "did the config load" branch.
     const payloadInputs: PayloadInputs = {
       hookData: req.hookData,
-      deps: {
-        ...payloadProviders,
-        // The lanes the session's view declared: what this render reads of
-        // the daemon's shared entries.
-        lanes: view.lanes,
-      },
+      deps: payloadProviders,
       cwd: req.cwd,
       hints,
     };
@@ -944,12 +952,13 @@ export interface RequestAnswer {
 export async function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
+  worldState: WorldState,
   at: Instant,
   waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   recordRequest(parts, req);
-  return drawAnswer(parts, req, at, waitEndsAt, facts);
+  return drawAnswer(parts, req, worldState, at, waitEndsAt, facts);
 }
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its
@@ -1019,12 +1028,13 @@ export function laneClicked(
 async function drawAnswer(
   parts: RendererParts,
   req: CheckedRenderRequest,
+  worldState: WorldState,
   at: Instant,
   waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   const { clock, frameFeeds, log } = parts;
-  using setup = setUpRender(parts, req, at, facts);
+  using setup = setUpRender(parts, req, worldState, at, facts);
   arrived(
     parts,
     req,
@@ -1032,9 +1042,9 @@ async function drawAnswer(
   );
   // Rules 1 and 2 of the model: the answer shows what this request carried,
   // so it waits for the refreshes its arrival triggers, the first value of
-  // every keyed lane its view declared, and every run of its view's or its
-  // directory's sources that answers a new key — a first value, or a key its
-  // fields moved — until its client's deadline. What has not
+  // every fact of its world state it waits on, and every run of its view's or
+  // its directory's sources that answers a new key — a first value, or a key
+  // its fields moved — until its client's deadline. What has not
   // answered by then draws as pending, and lands for the next frame.
   const waitFrom = clock.monotonic();
   // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
@@ -1048,7 +1058,13 @@ async function drawAnswer(
   const ended = await waitWithin(
     (signal) =>
       Promise.all([
-        settlePayload(setup.payloadInputs, at, refreshed),
+        settleWorld(
+          setup.payloadInputs,
+          at,
+          refreshed,
+          () => parts.worldStates.of(setup.sessionId),
+          signal,
+        ),
         setup.view.registry.inFlight(signal),
       ]),
     budget,
