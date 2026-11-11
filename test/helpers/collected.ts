@@ -24,9 +24,9 @@ export interface Collected {
   // The cache the renderer's turns draw from, named once it is built: its
   // views read `worldStates`, so it is built after them.
   serve(cache: Served): void;
-  // A request's turn: its world state taken, the session's view held as
-  // `hold` holds it, and the turn's subscriptions handed back.
-  request<H>(facts: ViewFacts, hold: () => H): H;
+  // A session's `config` turn: its world state taken, the session's view
+  // opened as `hold` opens it, and the turn's subscriptions handed back.
+  config<H>(facts: ViewFacts, hold: () => H): H;
 }
 
 export function collected(
@@ -63,7 +63,7 @@ export function collected(
     serve: (c) => {
       served = c;
     },
-    request: (facts, hold) => {
+    config: (facts, hold) => {
       worldStates.take(collector.requested(facts));
       const held = hold();
       collector.subscribed(cache().subscriptions());

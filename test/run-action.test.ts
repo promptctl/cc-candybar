@@ -266,7 +266,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     lines,
     hold: (configFile, sid) => {
       const facts = viewFacts(dir, sid);
-      return served.request(facts, () =>
+      return served.config(facts, () =>
         cache.holdSession(dir, dir, configFile, facts),
       );
     },

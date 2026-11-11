@@ -1,12 +1,19 @@
 // The main renderer, in process: today's request answer behind the renderer
-// interface (src/renderer/interface.ts). A request's turn draws the bar and
-// returns it as a `present`; that present's `effect-done` records what the
-// frame showed, once the host says whether its client took it. A world state
-// the host hands in is what the session's views draw from, and a retire ends
+// interface (src/renderer/interface.ts). A `config` turn records the
+// session's context and opens its view there, so its output names what the
+// view reads before the request after it waits. A request's turn holds that
+// view at its own context, draws the bar and returns it as a `present`; that
+// present's `effect-done` records what the frame showed, once the host says
+// whether its client took it. A world state the host hands in, with a
+// `config` or alone, is what the session's views draw from, and a retire ends
 // what the renderer holds of the session. Every output says what the open
 // views need read.
 
-import { answerRequest, type RendererParts } from "../daemon/draw-bar.js";
+import {
+  answerRequest,
+  configureSession,
+  type RendererParts,
+} from "../daemon/draw-bar.js";
 import type { RequestFacts } from "../daemon/request-event.js";
 import type { Instant } from "../utils/instant.js";
 import {
@@ -42,11 +49,13 @@ export function mainRenderer(parts: RendererParts): Renderer {
     record: RequestFacts,
   ): Promise<RendererOutput> => {
     switch (event.kind) {
+      case "config":
+        configureSession(parts, event.context, event.worldState, at, record);
+        return answered([], record);
       case "request": {
         const { frame, delivered } = await answerRequest(
           parts,
           event.context,
-          event.worldState,
           at,
           event.waitEndsAt,
           record,

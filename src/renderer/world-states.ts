@@ -1,7 +1,7 @@
 // The world state of every session a renderer holds, as the host handed it in
-// (src/renderer/interface.ts): written only by a `request`, which carries the
-// document read at its own keys, and by a `world-state`, and dropped by a
-// `retire`. A view's source reads its session's document here
+// (src/renderer/interface.ts): written only by a `config`, which carries the
+// document read at its request's keys, and by a `world-state`, and dropped by
+// a `retire`. A view's source reads its session's document here
 // (src/daemon/session-source.ts), so the renderer stamps nothing.
 
 import { compareStructural, observable, runInAction } from "mobx";
@@ -33,15 +33,15 @@ export class WorldStates {
     runInAction(() => this.documents.set(document.session, document));
   }
 
-  // [LAW:no-defensive-null-guards] Every view opens from a request, which
-  // carries its document, or reopens a session that already has one, and a
-  // `retire` drops the document with the view: a session with none here is
-  // the host's bug, so the read throws, naming it.
+  // [LAW:no-defensive-null-guards] The host delivers a session's `config`,
+  // which carries its document, ahead of each of its requests, and a `retire`
+  // drops the document with the view: a session with none here is the host's
+  // bug, so the read throws, naming it.
   of(session: SessionId): WorldState {
     const document = this.documents.get(session);
     if (document === undefined)
       throw new Error(
-        `no world state for session ${JSON.stringify(session)}: the host hands one in with every request`,
+        `no world state for session ${JSON.stringify(session)}: the host hands one in with the config ahead of every request`,
       );
     return document;
   }

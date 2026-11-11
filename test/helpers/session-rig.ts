@@ -249,7 +249,7 @@ export async function settledRequest(
   refreshed: Refreshed = new Map(),
 ): Promise<SessionView<SessionSource>> {
   const request = requestOf(dir);
-  const held = rig.served.request(request, () =>
+  const held = rig.served.config(request, () =>
     rig.cache.holdSession(dir, dir, configFile, request),
   );
   cleanups.push(() => held[Symbol.dispose]());

@@ -1,16 +1,19 @@
-// A render request answered by its renderer: the host delivers the request,
-// performs the effects its turn returned, and answers the client with the one
-// frame presented for it, in the encoding the client asked for.
+// A render request answered by its renderer: the host delivers the session's
+// config and then the request, performs the effects the request's turn
+// returned, and answers the client with the one frame presented for it, in the
+// encoding the client asked for.
 
+import path from "node:path";
 import type { Effect, RequestId } from "../renderer/interface.js";
 import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
+import { checkoutLocation } from "../utils/git-root.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { RENDER_ANSWERS, renderFailed } from "./draw-bar.js";
 import type { Response } from "./protocol";
 import type { FrameSeen } from "./render-sightings";
 import type { Collector } from "./collector.js";
-import type { RendererHost } from "./renderer-host.js";
+import type { Delivered, RendererHost } from "./renderer-host.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -51,48 +54,42 @@ function failed(
   };
 }
 
+// [LAW:effects-at-boundaries] The request's context as both its turns take
+// it: the checkout its directory is in, read from the disk by the host, so
+// the renderer reads no file for it and the two turns read one location.
+function located(req: CheckedRenderRequest): CheckedRenderRequest {
+  const dir = req.hookData.workspace?.current_dir ?? req.cwd;
+  return {
+    ...req,
+    hookData: {
+      ...req.hookData,
+      ...(dir !== undefined &&
+        path.isAbsolute(dir) && { location: checkoutLocation(dir) }),
+    },
+  };
+}
+
+// [LAW:nothing-unseen] What a turn the request's answer took learned, on the
+// request's own event.
+function recorded(facts: RequestFacts, delivered: Delivered): void {
+  facts.push(
+    ...(delivered.kind === "answered"
+      ? delivered.output.record
+      : delivered.record),
+  );
+}
+
 export async function answerStatusline(
   host: RendererHost,
   collector: Pick<Collector, "requested">,
   clock: Pick<Timekeeper, "monotonic" | "now">,
-  req: CheckedRenderRequest,
+  arrived: CheckedRenderRequest,
   id: RequestId,
   at: Instant,
   waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<StatuslineAnswer> {
-  // [LAW:no-ambient-temporal-coupling] Delivered on arrival, with the world
-  // state read at its own keys: nothing waits before delivery, so the renderer
-  // takes each session's requests and documents in the order they were made.
-  const delivered = await host.deliver(
-    {
-      kind: "event",
-      at,
-      event: {
-        kind: "request",
-        id,
-        context: req,
-        worldState: collector.requested(req),
-        waitEndsAt,
-      },
-    },
-    [],
-  );
-  if (delivered.kind === "threw") {
-    // [LAW:nothing-unseen] What the turn learned before it threw, on the
-    // request's own event.
-    facts.push(...delivered.record);
-    noteFacts(facts, { renderer: host.name });
-    return failed(host, delivered.error);
-  }
-  const { effects, record } = delivered.output;
-  // The record leads: it opens with the session, which the event's readers
-  // key on (`render sid=`).
-  facts.push(...record);
-  noteFacts(facts, {
-    renderer: host.name,
-    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
-  });
+  const req = located(arrived);
   // [LAW:single-enforcer] The one `effect-done` each effect is owed, through
   // the host's one path to the renderer.
   const done = (effect: Effect, reason: string | null): void =>
@@ -112,6 +109,50 @@ export async function answerStatusline(
         ["effect", String(effect.id)],
       ],
     );
+  // [LAW:no-ambient-temporal-coupling] The host owns the order: the session's
+  // config goes first, with the world state read at the request's keys, and
+  // its output's subscriptions reach the collector as the turn answers. A set
+  // that moved is declared and its stamp handed in before the request is
+  // delivered, so the request's wait covers every source the view reads.
+  // In process the config turn answers at once, so nothing that opens or
+  // closes a view runs between it and the request; out of process, the
+  // router's mailbox is what keeps the two adjacent.
+  const configured = await host.answer({
+    kind: "event",
+    at,
+    event: {
+      kind: "config",
+      context: req,
+      worldState: collector.requested(req),
+    },
+  });
+  // [LAW:nothing-unseen] The config turn's record leads: it opens with the
+  // session, which the event's readers key on (`render sid=`), and says what
+  // the context was, whether or not a request turn runs after it.
+  recorded(facts, configured);
+  if (configured.kind === "threw") {
+    noteFacts(facts, { renderer: host.name });
+    return failed(host, configured.error, "its config turn: ");
+  }
+  // [LAW:types-are-the-program] A config turn answers no request, so every
+  // effect it returned is refused, and none is left owed its `effect-done`.
+  for (const effect of configured.output.effects)
+    done(effect, "a config turn answers no request");
+  const delivered = await host.answer({
+    kind: "event",
+    at,
+    event: { kind: "request", id, context: req, waitEndsAt },
+  });
+  recorded(facts, delivered);
+  if (delivered.kind === "threw") {
+    noteFacts(facts, { renderer: host.name });
+    return failed(host, delivered.error);
+  }
+  const { effects } = delivered.output;
+  noteFacts(facts, {
+    renderer: host.name,
+    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
+  });
   // [LAW:types-are-the-program] Every effect the turn returned, in its order,
   // is performed or refused: the first statusline frame for this request
   // answers it, and nothing else may.
