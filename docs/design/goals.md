@@ -37,7 +37,7 @@ They are related and handled one at a time.
 
 ### Draw and isolation
 
-- **R-10. Reading the world into world state is one process, and Events → Handler → Draw runs in a separate process, or several,** as Brandon reads the split. *(Inferred:* this serves G-2: drawing can be iterated, restarted and multiplied without a second reader of the world.)
+- **R-10. Reading the world into world state is one process, and Events → State machine → Draw runs in a separate process, or several,** as Brandon reads the split. *(Inferred:* this serves G-2: drawing can be iterated, restarted and multiplied without a second reader of the world.)
 - **R-11. Draw writes nothing; it only draws.** *(Inferred:* a draw that writes cannot be replayed or tested without mocks, and its frame may show something that did not happen.)
 - **R-12. There is no dev renderer and no dev mode.** Every renderer draws and acts the same way. A worktree's renderer is isolated by where it reads and writes and is pointed to by a session's values; anything it shows that main does not comes from instrumentation, never from performing a subset of actions. An allow-list of verbs is a dev-mode toggle by another name, and the primitive is an isolated renderer.
 - **R-13. No absolute path is stored in undo history;** every stored path sits under the renderer's isolated state directory. *(Inferred:* a history copied between renderers must not be able to write the user's files.)
