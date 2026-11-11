@@ -31,10 +31,6 @@ import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
 import { ManagedStorage } from "./cache/managed-storage.js";
 
-// The lanes the view's declaration handed it (`lanes`) are the view's to
-// supply; everything else is a provider.
-export type PayloadProviders = Omit<RenderPayloadDeps, "lanes">;
-
 // [LAW:single-enforcer] Every provider records its refreshes in the caller's
 // one ledger, so its stats read every source in one place.
 export function createPayloadProviders(opts: {
@@ -51,7 +47,7 @@ export function createPayloadProviders(opts: {
   readonly clock: Timekeeper;
   readonly logger: DaemonLogger;
   readonly ledger: RefreshLedger;
-}): PayloadProviders {
+}): RenderPayloadDeps {
   const { launcher, clock, logger, ledger } = opts;
   return {
     home: opts.host.home,

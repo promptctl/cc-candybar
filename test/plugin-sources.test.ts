@@ -25,8 +25,9 @@ import {
   RenderCache,
   type SessionView,
 } from "../src/daemon/cache/render";
+import type { Collector } from "../src/daemon/collector";
+import { collected } from "./helpers/collected";
 import {
-  declareLanes,
   projectSources,
   renderOptionsOf,
   sourcesFactOf,
@@ -130,6 +131,17 @@ interface Rig {
   readonly updateFact: UpdateFact;
   readonly reloads: ReloadSignal;
   readonly lines: string[];
+  readonly collector: Collector;
+  // A request's turn as the main renderer takes one: the world state the
+  // collector read at its keys taken, the session's view held, and the
+  // cache's subscriptions handed back to the collector.
+  hold(
+    configFile: string,
+    sid?: string,
+  ): ReturnType<RenderCache<SessionSource>["holdSession"]>;
+  // What the turn that opens session s1's view reads of it, before that
+  // turn's subscriptions reach the collector.
+  inTurn<T>(configFile: string, read: (view: SessionView<SessionSource>) => T): T;
 }
 
 // The daemon's own composition of a render cache (src/daemon/daemon.ts).
@@ -167,6 +179,10 @@ function rig(): Rig {
   const sessionState = new SessionState();
   const updateFact = newUpdateFact();
   const reloads = new ReloadSignal();
+  const served = collected(
+    { owners: providers, update: () => updateFact.get(), log },
+    cleanups,
+  );
   const cache = new RenderCache<SessionSource>(
     {
       clock: systemTimekeeper,
@@ -180,18 +196,17 @@ function rig(): Rig {
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
-      declare: (holds, facts, sources) =>
-        declareLanes(providers, holds, facts, sources),
       source: sessionSource({
-        providers,
         sessionState,
-        update: () => updateFact.get(),
+        worldStates: served.worldStates,
+        home: providers.home,
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),
     },
     { budgetBytes: () => 1024 * 1024 * 1024, observers: reloads.observers },
   );
+  served.serve(cache);
   cleanups.push(() => {
     cache.close();
     providers.gitProvider.close();
@@ -208,6 +223,24 @@ function rig(): Rig {
     updateFact,
     reloads,
     lines,
+    collector: served.collector,
+    hold: (configFile, sid = "s1") => {
+      const facts = viewFacts(dir, sid);
+      return served.request(facts, () =>
+        cache.holdSession(dir, dir, configFile, facts),
+      );
+    },
+    inTurn: (configFile, read) => {
+      const facts = viewFacts(dir, "s1");
+      let seen: ReturnType<typeof read> | undefined;
+      const held = served.request(facts, () => {
+        const opened = cache.holdSession(dir, dir, configFile, facts);
+        seen = read(opened.view);
+        return opened;
+      });
+      cleanups.push(() => held[Symbol.dispose]());
+      return seen!;
+    },
   };
 }
 
@@ -239,7 +272,7 @@ function viewOf(
   configFile: string,
   sid = "s1",
 ): SessionView<SessionSource> {
-  const held = r.cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
+  const held = r.hold(configFile, sid);
   cleanups.push(() => held[Symbol.dispose]());
   return held.view;
 }
@@ -253,7 +286,7 @@ async function answered(
   name = STATUS,
 ): Promise<void> {
   await until(
-    () => view.lanes().sources.get(name)?.current().kind !== "pending",
+    () => view.source.facts().sources[name]?.kind !== "pending",
     `${name}'s first read`,
   );
 }
@@ -615,7 +648,7 @@ describe("a session reads its source", () => {
     const r = rig();
     const view = viewOf(r, config(["mine", "plugins.p.gated"]));
     await answered(view);
-    expect(view.lanes().sources.get(STATUS)!.current()).toEqual(ABSENT);
+    expect(view.source.facts().sources[STATUS]).toMatchObject(ABSENT);
     const before = draw(view);
     expect(before.errors).toEqual([]);
     expect(before.text).toContain("mine");
@@ -664,7 +697,7 @@ describe("a session reads its source", () => {
     );
     const view = viewOf(r, p);
     await answered(view);
-    expect(view.lanes().sources.has(STATUS)).toBe(true);
+    expect(view.source.facts().sources).toHaveProperty([STATUS]);
     expect(r.providers.managedStorage.stats().held).toBe(1);
     const runs = (): number =>
       Number(/runs=(\d+)/.exec(draw(view).text)?.[1] ?? 0);
@@ -734,7 +767,7 @@ describe("a source's document", () => {
   });
 });
 
-describe("the view declares every source the config declares", () => {
+describe("the session subscribes to every source the config declares", () => {
   test("a pick of a preset reading no source keeps its key held", async () => {
     const r = rig();
     const file = config(
@@ -743,48 +776,66 @@ describe("the view declares every source the config declares", () => {
     );
     const view = viewOf(r, file);
     await answered(view);
-    expect([...view.lanes().sources.keys()]).toEqual([STATUS]);
+    expect(Object.keys(view.source.facts().sources)).toEqual([STATUS]);
     expect(r.providers.managedStorage.stats().held).toBe(1);
     r.sessionState.set("s1", "preset", "bare");
-    expect([...view.lanes().sources.keys()]).toEqual([STATUS]);
+    expect(Object.keys(view.source.facts().sources)).toEqual([STATUS]);
     expect(r.providers.managedStorage.stats().held).toBe(1);
     expect(draw(view).text).toContain("mine");
+  });
+
+  test("the turn that opens the view draws a source its world state does not carry yet as pending, not missing", () => {
+    const r = rig();
+    const seen = r.inTurn(config(["mine"]), (view) => ({
+      carried: Object.keys(view.source.facts().sources),
+      reading: resolvePath(view.source.payload(), STATUS),
+    }));
+    expect(seen).toEqual({ carried: [], reading: pendingOf("unread") });
   });
 
   test("a config placing no segment that reads the source still declares and holds it", async () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
-    expect([...view.lanes().sources.keys()]).toEqual([STATUS]);
+    expect(Object.keys(view.source.facts().sources)).toEqual([STATUS]);
     expect(r.providers.managedStorage.stats().held).toBe(1);
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
 
   // [LAW:nothing-unseen] The render event's fields.
   test("the render event counts the declared sources and names the pending ones", () => {
-    expect(sourcesFactOf({})).toEqual({
+    expect(sourcesFactOf([], { sources: {} })).toEqual({
       sources: "0",
       sourcesPending: "-",
     });
     const at = instantOf(new Date(0));
     expect(
-      sourcesFactOf({
-        "plugins.a.s": restamp(undefined, ok({}), at),
-        "plugins.b.s": pendingOf("unread"),
-        "plugins.c.s": restamp(undefined, ABSENT, at),
-        "plugins.d.s": pendingOf("superseded"),
-      }),
+      sourcesFactOf(
+        ["plugins.a.s", "plugins.b.s", "plugins.c.s", "plugins.d.s", "plugins.e.s"],
+        {
+          sources: {
+            "plugins.a.s": restamp(undefined, ok({}), at),
+            "plugins.b.s": pendingOf("unread"),
+            "plugins.c.s": restamp(undefined, ABSENT, at),
+            "plugins.d.s": pendingOf("superseded"),
+            // Its config stopped declaring it: no longer counted.
+            "plugins.gone.s": restamp(undefined, ok({}), at),
+          },
+        },
+      ),
     ).toEqual({
-      sources: "4",
-      sourcesPending: "plugins.b.s:unread,plugins.d.s:superseded",
+      // plugins.e.s is declared and not yet in the world state: not read yet.
+      sources: "5",
+      sourcesPending:
+        "plugins.b.s:unread,plugins.d.s:superseded,plugins.e.s:unread",
     });
   });
 });
 
-// [LAW:behavior-not-structure] The document a session's view holds
-// (src/facts/session-facts.ts), read from the view's source as the renderer
-// will: total, restamped in the turn an owner's reading moves, and one update
+// [LAW:behavior-not-structure] The world state a session's view draws
+// (src/facts/world-state.ts), read from the view's source as the renderer
+// does: total, restamped in the turn an owner's reading moves, and one update
 // for every session.
-describe("a session's facts document", () => {
+describe("a session's world state", () => {
   const BUILTINS = [
     "activity",
     "autocompact",
@@ -875,22 +926,14 @@ describe("a session's facts document", () => {
     expect(woken).toBe(0);
   });
 
-  test("stops with the view: once its state is released and the cache closed, its document hears no more", () => {
+  test("stops with the session: once its collector closed, its document hears no more", () => {
     const r = rig();
-    const hold = r.cache.holdSession(
-      dir,
-      dir,
-      config(["mine"]),
-      viewFacts(dir, "s1"),
-    );
-    const view = hold.view;
+    const view = viewOf(r, config(["mine"]));
     runInAction(() => r.updateFact.set(NEWER));
     expect(view.source.facts().update).toBe(NEWER);
     const held = view.source.facts();
 
-    // A render holding the state keeps the view alive, and its document live.
-    hold[Symbol.dispose]();
-    r.cache.close();
+    r.collector.close();
     runInAction(() =>
       r.updateFact.set(
         restamp(NEWER, ABSENT, instantOf(new Date(1_700_000_100_000))),
@@ -907,12 +950,13 @@ describe("a storage folder's watch", () => {
     viewOf(r, file, "s0");
     const opened = r.counters.watchersOpened;
     for (let i = 1; i <= 5; i++) {
-      const held = r.cache.holdSession(dir, dir, file, viewFacts(dir, `s${i}`));
+      const held = r.hold(file, `s${i}`);
       await answered(held.view);
       held[Symbol.dispose]();
     }
-    r.cache.releaseIdle();
-    r.cache.releaseIdle();
+    // Two sweeps retire every session no request named since the first.
+    r.collector.sweep();
+    r.collector.sweep();
     expect(r.counters.watchersOpened).toBe(opened);
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
@@ -942,7 +986,7 @@ describe("a storage folder's watch", () => {
   test("removing the session folder, and nothing else, reloads the config, recreates the folder, and the next write shows", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
-    const held = r.cache.holdSession(dir, dir, file, viewFacts(dir, "s1"));
+    const held = r.hold(file);
     await answered(held.view);
     held[Symbol.dispose]();
     const entry = r.cache.getOrCreate(dir, dir, file);
@@ -1028,7 +1072,7 @@ describe("an installed plugin's storage", () => {
       "config.json5",
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const held = r.cache.holdSession(dir, dir, file, viewFacts(dir, "s1"));
+    const held = r.hold(file);
     held[Symbol.dispose]();
     // The state holds the folder its config declares, read by a view or not.
     expect(r.providers.managedStorage.stats().folders).toBe(1);

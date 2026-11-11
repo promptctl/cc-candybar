@@ -375,6 +375,12 @@ export class FrameFeeds<Req> {
     return () => this.unsubscribe(feed, sub);
   }
 
+  // [LAW:one-source-of-truth] Whether an open feed draws the session: the
+  // fact its pin counts, from the feed's open to its close.
+  feedOpen(sessionId: string): boolean {
+    return this.feeds.has(sessionId);
+  }
+
   // The lanes whose subscribers follow the session's frames and draw them now.
   following(sessionId: string): ReadonlySet<Lane> {
     return new Set(

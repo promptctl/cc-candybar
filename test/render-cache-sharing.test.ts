@@ -13,7 +13,6 @@ import v8 from "node:v8";
 import vm from "node:vm";
 import {
   COMPILE_BYTES,
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
   ENTRY_BYTES,
   openView,
@@ -94,7 +93,6 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
-      declare: DECLARES_NOTHING,
       log: (_level, line) => lines.push(line),
     },
     { budgetBytes: () => budgetBytes, maxEntries },
@@ -138,7 +136,6 @@ const render = (
 ): Frame => {
   const view = openView(state, dir, viewFacts(dir, "s"), {
     source: SOURCES_NOTHING,
-    declare: DECLARES_NOTHING,
     changed: () => {},
     log: () => {},
   });

@@ -485,7 +485,7 @@ describe("KeyedSource", () => {
     expect(lines[0]).toMatchObject({ level: "warn" });
   });
 
-  test("a declaration into a closed home throws, for the view's declaration to report", () => {
+  test("a declaration into a closed home throws, for the session's declaration to report", () => {
     const f = fakeRead();
     const closing = sourceOf(f.read);
     source = closing;

@@ -279,6 +279,7 @@ export async function replyTo(
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
+        collector: parts.collector.stats(),
         effectCache: effectSessions.getStats(),
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
@@ -389,6 +390,7 @@ export async function replyTo(
     if (!checked.ok) return recorded(refusedRender(checked.problems));
     const answered = await answerStatusline(
       parts.renderer,
+      parts.collector,
       clock,
       checked.req,
       order as RequestId,

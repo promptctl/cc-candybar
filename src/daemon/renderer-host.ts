@@ -1,6 +1,7 @@
 // The host's one path to a renderer: every input it hands one passes through
 // `deliver`, which answers with the turn's output or with how the turn failed:
-// a turn's throw comes back as a value, never as a rejection.
+// a turn's throw comes back as a value, never as a rejection. Every output's
+// subscriptions are taken here, in the order the turns answered.
 
 import { inspect } from "node:util";
 import {
@@ -8,6 +9,7 @@ import {
   type Renderer,
   type RendererInput,
   type RendererOutput,
+  type Subscriptions,
   type TurnRecord,
 } from "../renderer/interface.js";
 import { eventLine } from "../utils/logfmt.js";
@@ -36,10 +38,15 @@ export function rendererHost(
   name: RendererName,
   renderer: Renderer,
   log: DaemonLogger,
+  // [LAW:single-enforcer] Where every output's subscriptions go: the
+  // collector, which diffs each whole set against the last.
+  subscribed: (subscriptions: Subscriptions) => void,
 ): RendererHost {
   const turn = async (input: RendererInput): Promise<Delivered> => {
     try {
-      return { kind: "answered", output: await renderer.answer(input) };
+      const output = await renderer.answer(input);
+      subscribed(output.subscriptions);
+      return { kind: "answered", output };
     } catch (e) {
       return e instanceof TurnThrew
         ? { kind: "threw", error: e.thrown, record: e.record }

@@ -1,7 +1,10 @@
 // The main renderer, in process: today's request answer behind the renderer
 // interface (src/renderer/interface.ts). A request's turn draws the bar and
 // returns it as a `present`; that present's `effect-done` records what the
-// frame showed, once the host says whether its client took it.
+// frame showed, once the host says whether its client took it. A world state
+// the host hands in is what the session's views draw from, and a retire ends
+// what the renderer holds of the session. Every output says what the open
+// views need read.
 
 import { answerRequest, type RendererParts } from "../daemon/draw-bar.js";
 import type { RequestFacts } from "../daemon/request-event.js";
@@ -22,6 +25,17 @@ export function mainRenderer(parts: RendererParts): Renderer {
   const deliveries = new Map<EffectId, () => void>();
   let minted = 0;
 
+  // [LAW:one-source-of-truth] What a turn's output says the renderer needs
+  // read: the open views' subscriptions as they stand when it answers.
+  const answered = (
+    effects: RendererOutput["effects"],
+    record: RequestFacts,
+  ): RendererOutput => ({
+    effects,
+    subscriptions: parts.renderCache.subscriptions(),
+    record,
+  });
+
   const turn = async (
     event: Event,
     at: Instant,
@@ -32,14 +46,15 @@ export function mainRenderer(parts: RendererParts): Renderer {
         const { frame, delivered } = await answerRequest(
           parts,
           event.context,
+          event.worldState,
           at,
           event.waitEndsAt,
           record,
         );
         const id = ++minted as EffectId;
         deliveries.set(id, delivered);
-        return {
-          effects: [
+        return answered(
+          [
             {
               kind: "present",
               id,
@@ -50,8 +65,15 @@ export function mainRenderer(parts: RendererParts): Renderer {
             },
           ],
           record,
-        };
+        );
       }
+      case "world-state":
+        parts.worldStates.take(event.worldState);
+        return answered([], record);
+      case "retire":
+        parts.renderCache.retireSession(event.session);
+        parts.worldStates.drop(event.session);
+        return answered([], record);
       case "effect-done": {
         const delivered = deliveries.get(event.of);
         // [LAW:no-silent-failure] An effect this renderer never returned, or
@@ -62,7 +84,7 @@ export function mainRenderer(parts: RendererParts): Renderer {
           );
         deliveries.delete(event.of);
         if (event.outcome.kind === "ok") delivered();
-        return { effects: [], record };
+        return answered([], record);
       }
     }
   };

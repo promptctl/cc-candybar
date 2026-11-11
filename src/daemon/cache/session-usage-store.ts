@@ -360,7 +360,7 @@ function daySumsOver(
     }
   }
   // [LAW:types-are-the-program] A record, not a Map: the day sums are a fact
-  // that crosses a process as JSON (src/facts/session-facts.ts).
+  // that crosses a process as JSON (src/facts/world-state.ts).
   return Object.fromEntries(sums);
 }
 
@@ -628,7 +628,7 @@ export class SessionUsageStore {
     ).today();
   }
 
-  // [LAW:single-enforcer] A view's declaration of `today` (declareLanes in
+  // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
   // frame that reads it. The lane answers the set's day sums once a scan has

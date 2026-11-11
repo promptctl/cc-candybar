@@ -2,6 +2,7 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
+import type { CollectorStats } from "./collector.js";
 import type { MenuIdleStats } from "./menu-idle.js";
 import type { RunStats } from "./runs.js";
 import type { TmuxStatusStats } from "./tmux-status.js";
@@ -131,6 +132,10 @@ export interface StatsSnapshot {
   // returned. `compiles` below `size` is entries sharing one; `accountedBytes`
   // is what the entries are charged against `budgetBytes`.
   renderCache: RenderCacheStats;
+  // Sessions the host's collector reads, and those whose retire is on its way
+  // to the renderer: `sessions` climbing with no requests is a session the
+  // sweep never retires.
+  collector: CollectorStats;
   effectCache: {
     sessions: number;
     effects: number;
@@ -438,6 +443,7 @@ export class RuntimeStats {
         accountedBytes: 0,
         budgetBytes: 0,
       },
+      collector: { sessions: 0, retiring: 0 },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0, pending: 0 },
       journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
@@ -481,6 +487,7 @@ export class RuntimeStats {
     sourceRuns: SourceRunsStats;
     transcriptReads: TranscriptReads;
     renderCache: StatsSnapshot["renderCache"];
+    collector: StatsSnapshot["collector"];
     effectCache: StatsSnapshot["effectCache"];
     menuIdle: StatsSnapshot["menuIdle"];
     journalTurns: StatsSnapshot["journalTurns"];
@@ -527,6 +534,7 @@ export class RuntimeStats {
       sourceRuns: extras.sourceRuns,
       transcriptReads: extras.transcriptReads,
       renderCache: extras.renderCache,
+      collector: extras.collector,
       effectCache: extras.effectCache,
       menuIdle: extras.menuIdle,
       journalTurns: extras.journalTurns,

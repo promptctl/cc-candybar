@@ -35,6 +35,7 @@ import { globalsFor } from "./helpers/selection";
 const SID = sessionIdOf("hook-split");
 const AT = instantOf(new Date(1_700_000_000_000));
 const DRAW = {
+  sources: [],
   effective: globalsFor(DEFAULT_DSL_CONFIG),
   configFacts: NO_CONFIG_FILE,
   history: EMPTY_HISTORY_DEPTH,
@@ -124,7 +125,6 @@ function inputsOf(hookData: ClaudeHookData): PayloadInputs {
     usageStore,
     contextProvider: new ContextProvider({ clock: systemTimekeeper }),
     metricsProvider: new MetricsProvider({ clock: systemTimekeeper }),
-    lanes: () => settledLanes(ABSENT, []),
     log: () => {},
   } as unknown as RenderPayloadDeps;
   return { hookData, deps, cwd: "/tmp", hints: {} };
@@ -143,7 +143,7 @@ test("two hooks that differ only in their instantaneous fields read one document
     return assembleFacts(
       undefined,
       SID,
-      readingsOf(inputs),
+      readingsOf(inputs, settledLanes(ABSENT, [])),
       pendingOf("unread"),
       AT,
     );

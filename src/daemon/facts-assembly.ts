@@ -2,10 +2,10 @@ import { compareStructural } from "mobx";
 import { restamp, type Fact } from "../facts/fact";
 import type {
   BuiltinFacts,
-  SessionFacts,
+  WorldState,
   SourceValue,
   UpdateNotice,
-} from "../facts/session-facts";
+} from "../facts/world-state";
 import type { GitInfo, GitRead, PullRequest } from "../segments/git";
 import type { Instant } from "../utils/instant";
 import { ABSENT, ok, type Reading } from "../utils/outcome";
@@ -58,12 +58,12 @@ function gitFactsOf({ pullRequest: _pullRequest, ...git }: GitInfo): GitRead {
 // [LAW:effects-at-boundaries] Pure: `at` is the instant of the turn, taken by
 // the caller, and the prior document is the caller's to hold.
 export function assembleFacts(
-  prior: SessionFacts | undefined,
+  prior: WorldState | undefined,
   session: SessionId,
   readings: Readings,
   update: Fact<UpdateNotice>,
   at: Instant,
-): SessionFacts {
+): WorldState {
   const { lanes } = readings;
   const stamp = <T>(held: Fact<T> | undefined, reading: Reading<T>): Fact<T> =>
     restamp(held, reading, at);
@@ -119,4 +119,27 @@ export function assembleFacts(
     seq: prior === undefined ? 1 : prior.seq + 1,
     ...parts,
   };
+}
+
+// [LAW:single-enforcer] The other way a document is minted: a stamp that threw
+// keeps the readings of `prior` and says why, with the next `seq`, so the bar's
+// ⚠ says it is drawn from older facts. A failure for the reason already held
+// is that document, so a fault that persists mints nothing per landing; the
+// next stamp that succeeds carries no stamp diagnostic, and so moves too.
+export function failedStamp(prior: WorldState, reason: string): WorldState {
+  const held = prior.diagnostics.find((d) => d.kind === "stamp");
+  if (held?.reason === reason) return prior;
+  return {
+    ...prior,
+    seq: prior.seq + 1,
+    diagnostics: [
+      ...prior.diagnostics.filter((d) => d.kind !== "stamp"),
+      { kind: "stamp", reason },
+    ],
+  };
+}
+
+// Why the document is drawn from older facts, or null when its stamp held.
+export function stampFailureOf(document: WorldState): string | null {
+  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
 }

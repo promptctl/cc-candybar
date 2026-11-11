@@ -11,7 +11,7 @@ import type { TranscriptUsage } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
 import type { Fact } from "./fact";
 
-// [LAW:types-are-the-program] The seam between Gather and a renderer: one
+// [LAW:types-are-the-program] The seam between the host and a renderer: one
 // total document per session. Every field exists on every document; a fact
 // not yet known is the `pending` arm, one found to be nothing is `absent`, one
 // whose read failed carries its reason and the phase it failed in. The value
@@ -35,11 +35,18 @@ export interface TmuxFacts {
 // The release check: something newer than the running code, or absent.
 export type UpdateNotice = Update;
 
-// A fault of Gather's own for one lane of the session.
-export interface FactsDiagnostic {
+// A fault of the collector's own: one lane of the session whose refresh threw,
+// or the stamp itself, which kept the readings of the document before it.
+export interface LaneDiagnostic {
+  readonly kind: "lane";
   readonly lane: RefreshLane;
   readonly reason: string;
 }
+export interface StampDiagnostic {
+  readonly kind: "stamp";
+  readonly reason: string;
+}
+export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 
 // [LAW:types-are-the-program] `session`, `context` and `metrics` are the
 // transcript's folds alone: the hook's instantaneous fields (cost, the
@@ -66,7 +73,7 @@ export interface BuiltinFacts {
   readonly hostUser: Fact<string>;
 }
 
-export interface SessionFacts {
+export interface WorldState {
   readonly v: number;
   readonly session: SessionId;
   readonly seq: number;

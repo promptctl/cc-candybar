@@ -10,7 +10,6 @@ import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
 import path from "node:path";
 import {
-  DECLARES_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
 } from "../src/daemon/cache/render";
@@ -93,7 +92,6 @@ function setUp() {
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
-      declare: DECLARES_NOTHING,
     },
     {
       budgetBytes: () => Number.MAX_SAFE_INTEGER,

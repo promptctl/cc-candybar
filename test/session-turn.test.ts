@@ -1,9 +1,8 @@
 // A session's view draws from one turn (candybar-gather-renderer-76bb.6pj.83l):
-// the facts document, the payload composed from it and the globals the draw's
-// options are built from are stamped together, so no reader joins one turn's
-// document to another's request. A turn that cannot be stamped is a value the
-// draw reads, not a line in a log, and a view that fails to open leaves
-// nothing running.
+// the world state, the payload composed from it and the globals the draw's
+// options are built from are derived together, so no reader joins one turn's
+// document to another's request. A world state that cannot be stamped is a
+// value the draw reads, not a line in a log.
 //
 // [LAW:behavior-not-structure] Each case is a view opened through the daemon's
 // own composition (test/helpers/session-rig.ts) and read the way a draw reads
@@ -19,14 +18,14 @@ import { presetNames } from "../src/config/presets";
 import { assembleFacts } from "../src/daemon/facts-assembly";
 import {
   composePayload,
-  settlePayload,
+  settleWorld,
   type Readings,
 } from "../src/daemon/render-payload";
 import { sessionIdOf } from "../src/daemon/session-id";
 import { instantOf } from "../src/utils/instant";
 import { pendingOf } from "../src/utils/outcome";
 import type { Fact } from "../src/facts/fact";
-import type { UpdateNotice } from "../src/facts/session-facts";
+import type { UpdateNotice } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -76,8 +75,7 @@ describe("one turn", () => {
   });
 
   // Every built-in is declared for every session, so what a pick shows takes
-  // no hold: the view keeps the lanes it opened with, and the repository's
-  // read stands through the pick.
+  // no hold, and the repository's read stands through the pick.
   test("a preset pick declares nothing new, and the repository's fact stands", async () => {
     const rig = sessionRig(dir, cleanups);
     let declarations = 0;
@@ -91,7 +89,6 @@ describe("one turn", () => {
       () => view.source.facts().builtins.git.kind === "ok",
       "the repository's first read",
     );
-    const lanes = view.lanes();
     const declaredAtOpen = declarations;
     // Every value the git fact takes while the pick lands, in order.
     const seen: string[] = [];
@@ -105,22 +102,19 @@ describe("one turn", () => {
     runInAction(() => rig.sessionState.set(SESSION, "preset", "git"));
     expect(view.source.effective().preset).toBe("git");
     expect(declarations).toBe(declaredAtOpen);
-    expect(view.lanes()).toBe(lanes);
     expect(seen).toEqual(["ok"]);
   });
 });
 
-describe("a turn that cannot be stamped", () => {
-  test("is a failure the draw reads, the last turn stays drawn, and the next good turn clears it", async () => {
+describe("a world state that cannot be stamped", () => {
+  test("is a failure the draw reads, the last one stays drawn, and the next good stamp clears it", async () => {
     const broken = observable.box(false);
     const logged: string[] = [];
     const changed: string[] = [];
     const rig = sessionRig(dir, cleanups, {
-      source: {
-        update: () => {
-          if (broken.get()) throw new Error("update watch exploded");
-          return pendingOf("unread");
-        },
+      update: () => {
+        if (broken.get()) throw new Error("update watch exploded");
+        return pendingOf("unread");
       },
       log: (level, message) => logged.push(`${level} ${message}`),
       observers: { onViewChanged: (sid) => changed.push(sid) },
@@ -146,18 +140,17 @@ describe("a turn that cannot be stamped", () => {
 });
 
 describe("a fault that persists", () => {
-  test("is one turn: a later move wakes nobody and logs nothing again", async () => {
+  test("is one world state: a later move under the same failure hands in nothing and logs nothing again", async () => {
     const broken = observable.box(false);
-    const depth = observable.box(0);
+    // What the stamp reads beside the failing update, so it stamps again.
+    const tick = observable.box(0);
     const logged: string[] = [];
     const changed: string[] = [];
     const rig = sessionRig(dir, cleanups, {
-      source: {
-        history: () => ({ undo: depth.get(), redo: 0, sinceEdit: 0 }),
-        update: () => {
-          if (broken.get()) throw new Error("update watch exploded");
-          return pendingOf("unread");
-        },
+      update: () => {
+        tick.get();
+        if (broken.get()) throw new Error("update watch exploded");
+        return pendingOf("unread");
       },
       log: (level, message) => logged.push(`${level} ${message}`),
       observers: { onViewChanged: (sid) => changed.push(sid) },
@@ -165,51 +158,17 @@ describe("a fault that persists", () => {
     const view = await openSettled(rig, dir, cleanups, null);
 
     runInAction(() => broken.set(true));
+    const document = view.source.facts();
     const payload = view.source.payload();
     const lines = logged.length;
     const woken = changed.length;
 
-    runInAction(() => depth.set(1));
+    runInAction(() => tick.set(1));
     expect(view.source.failure()).toContain("update watch exploded");
+    expect(view.source.facts()).toBe(document);
     expect(view.source.payload()).toBe(payload);
     expect(logged.length).toBe(lines);
     expect(changed.length).toBe(woken);
-  });
-});
-
-describe("a view that fails to open", () => {
-  test("is reported, and what it began is released: the holds its declaration took", () => {
-    const rig = sessionRig(dir, cleanups, {
-      source: {
-        update: () => {
-          throw new Error("no update fact");
-        },
-      },
-    });
-    // The repository's declaration takes a hold, as the real owner's does,
-    // and counts its release.
-    let taken = 0;
-    let released = 0;
-    const declare = rig.providers.gitProvider.declare;
-    rig.providers.gitProvider.declare = ((
-      ...args: Parameters<typeof declare>
-    ) => {
-      args[0].take("git:probe", () => {
-        taken++;
-        return () => {
-          released++;
-        };
-      });
-      return declare(...args);
-    }) as typeof declare;
-    const configFile = path.join(dir, "config.json5");
-    fs.writeFileSync(configFile, "{}");
-
-    expect(() =>
-      rig.cache.holdSession(dir, dir, configFile, requestOf(dir)),
-    ).toThrow(/no update fact/);
-    expect(taken).toBe(1);
-    expect(released).toBe(1);
   });
 });
 
@@ -219,9 +178,9 @@ describe("what wakes a view", () => {
     const depth = observable.box(0);
     const update = observable.box<Fact<UpdateNotice>>(pendingOf("unread"));
     const rig = sessionRig(dir, cleanups, {
+      update: () => update.get(),
       source: {
         history: () => ({ undo: depth.get(), redo: 0, sinceEdit: 0 }),
-        update: () => update.get(),
       },
       observers: { onViewChanged: (sid) => changed.push(sid) },
     });
@@ -258,15 +217,17 @@ describe("what wakes a view", () => {
     const settled = changed.length;
     // The same request refreshes every lane again: each owner stores an equal
     // answer in a new object.
-    await settlePayload(
+    await settleWorld(
       {
         hookData: requestOf(dir).hookData,
-        deps: { ...rig.providers, lanes: view.lanes } as never,
+        deps: rig.providers as never,
         cwd: PROJECT,
         hints: requestOf(dir).hints,
       },
       AT,
       new Map(),
+      () => rig.served.worldStates.of(sessionIdOf(SESSION)),
+      new AbortController().signal,
     );
     expect(view.source.facts()).toBe(document);
     expect(view.source.payload()).toBe(payload);
@@ -324,26 +285,29 @@ describe("the all-pending document", () => {
       cleanups.push(() => bar.dispose());
       bar.pick("preset", preset);
       bar.pick("candybar.menu", "open");
-      const { frame } = bar.render(AT, () =>
-        composePayload(
-          document,
-          {
-            hookData: requestOf(dir).hookData,
-            hints: requestOf(dir).hints,
-            home: "/home/tester",
-          },
-          {
-            effective,
-            configFacts: {
-              unsaved: 0,
-              resettable: perSetting(() => false),
-              themeDefault: { differs: false },
-              configPath: null,
+      const { frame } = bar.render(
+        AT,
+        () =>
+          composePayload(
+            document,
+            {
+              hookData: requestOf(dir).hookData,
+              hints: requestOf(dir).hints,
+              home: "/home/tester",
             },
-            history: { undo: 0, redo: 0, sinceEdit: 0 },
-            back: 0,
-          },
-        ) as never,
+            {
+              sources: [],
+              effective,
+              configFacts: {
+                unsaved: 0,
+                resettable: perSetting(() => false),
+                themeDefault: { differs: false },
+                configPath: null,
+              },
+              history: { undo: 0, redo: 0, sinceEdit: 0 },
+              back: 0,
+            },
+          ) as never,
       );
       expect(frame.rows.length).toBeGreaterThan(0);
     },

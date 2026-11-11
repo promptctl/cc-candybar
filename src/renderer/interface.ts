@@ -1,14 +1,16 @@
 // The renderer interface (docs/design/host-and-renderer.md §7): the host hands
 // a renderer inputs, and the renderer answers each with the effects it asks
-// the host to perform and the record of its turn.
+// the host to perform, what it needs read, and the record of its turn.
 //
 // [LAW:one-way-deps] The host depends on this module and the renderer
 // implements it; it imports only types, the vocabulary both sides speak: the
-// session context, the frame, the instant.
+// session context, the world state, the frame, the instant.
 // [LAW:types-are-the-program] The unions hold only the arms something produces
 // and something consumes; each later step adds its own.
 
+import type { StorageKey } from "../daemon/cache/managed-storage";
 import type { SessionId } from "../daemon/session-id";
+import type { SourceId, WorldState } from "../facts/world-state";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
@@ -43,11 +45,29 @@ export type Event =
       readonly kind: "request";
       readonly id: RequestId;
       readonly context: CheckedRenderRequest;
+      // [LAW:one-source-of-truth] The world state read at this request's own
+      // keys: a request and its world state reach the renderer as one value,
+      // so a renderer never holds a request beside a document read at another
+      // request's keys.
+      readonly worldState: WorldState;
       // The monotonic moment the request's wait ends, from its client's
-      // deadline: the renderer still waits inside this turn until the wait
-      // moves onto its world state, so its turns overlap: other inputs, other
-      // requests' included, arrive while this one waits.
+      // deadline: the renderer still waits inside this turn, over the world
+      // states the host hands in, until the mailbox moves the wait, so its
+      // turns overlap: other inputs, other requests' included, arrive while
+      // this one waits.
       readonly waitEndsAt: number;
+    }
+  | {
+      // A session's world state moved since the one the renderer holds: read
+      // at the keys of the newest request the host delivered for it.
+      readonly kind: "world-state";
+      readonly worldState: WorldState;
+    }
+  | {
+      // The host ended the session: the renderer lets go of what it holds
+      // of it.
+      readonly kind: "retire";
+      readonly session: SessionId;
     }
   | {
       readonly kind: "effect-done";
@@ -76,8 +96,24 @@ export type Effect = Present;
 // the host writes beside the input's event.
 export type TurnRecord = readonly Field[];
 
+// A source the renderer's state needs read for one session: today a plugin
+// source, at its folder's storage key, named by the variable that reads it.
+export interface Subscription {
+  readonly kind: "plugin";
+  readonly source: SourceId;
+  readonly storage: StorageKey;
+}
+
+// [LAW:one-source-of-truth] Whole, replacing the last: what every session the
+// renderer holds needs read. The host diffs it; nothing is declared by
+// message. A session absent from it needs nothing read.
+export interface Subscriptions {
+  readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
+}
+
 export interface RendererOutput {
   readonly effects: readonly Effect[];
+  readonly subscriptions: Subscriptions;
   readonly record: TurnRecord;
 }
 

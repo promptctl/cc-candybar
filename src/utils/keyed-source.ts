@@ -135,7 +135,7 @@ export class KeyedSource<I, T> {
   //
   // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
   // by that refresh — so its caller logs none. A declaration that THROWS is a
-  // bug none of those saw, reported by the view's declaration (declareLanes).
+  // bug none of those saw, reported by the session's declaration (declareLanes).
   declare(holds: Holds, input: I): Lane<T> {
     // [LAW:single-enforcer] A closed source builds no entry: one declared
     // after close (a render that was mid-wait) would be held, and its period

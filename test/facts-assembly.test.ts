@@ -4,14 +4,17 @@
 // one answer does.
 
 import { restamp, type Fact } from "../src/facts/fact";
-import type { BuiltinFacts } from "../src/facts/session-facts";
+import type { BuiltinFacts } from "../src/facts/world-state";
 import type { GitRead } from "../src/segments/git";
-import { assembleFacts, FACTS_VERSION } from "../src/daemon/facts-assembly";
+import {
+  assembleFacts,
+  failedStamp,
+  FACTS_VERSION,
+  stampFailureOf,
+} from "../src/daemon/facts-assembly";
 import type { Update } from "../src/daemon/update-notice";
 import {
   readingsOf,
-  settlePayload,
-  type PayloadInputs,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { sessionIdOf } from "../src/daemon/session-id";
@@ -32,6 +35,8 @@ import { settledLane } from "../src/utils/reading";
 import {
   absentOwners,
   declaredLanes,
+  settleLanes,
+  type LanedInputs,
   fakeActivity,
   fakeAutoCompact,
   fakeCacheExpiry,
@@ -105,25 +110,23 @@ afterEach(() => {
 
 function rig(git?: Outcome<unknown>) {
   const held = owners(git);
-  const deps = {
-    ...held,
+  const deps = held as unknown as RenderPayloadDeps;
+  const inputs: LanedInputs = {
+    hookData: HOOK,
+    deps,
+    cwd: undefined,
+    hints: HINTS,
     lanes: declaredLanes(
       held,
       { sessionId: SID, hookData: HOOK, cwd: undefined, hints: HINTS },
       cleanups,
     ),
-  } as unknown as RenderPayloadDeps;
-  const inputs: PayloadInputs = {
-    hookData: HOOK,
-    deps,
-    cwd: undefined,
-    hints: HINTS,
   };
   return { held, deps, inputs };
 }
 
 const sampled = async (r: ReturnType<typeof rig>) => {
-  await settlePayload(r.inputs, T0, new Map());
+  await settleLanes(r.inputs, T0);
   return r;
 };
 
@@ -150,12 +153,12 @@ describe("a session's facts document", () => {
     const doc = assembleFacts(
       undefined,
       SID,
-      readingsOf(r.inputs),
+      readingsOf(r.inputs, r.inputs.lanes()),
       PENDING,
       T0,
     );
     // The expected document is read from the owners, never from the readings.
-    const lanes = r.deps.lanes();
+    const lanes = r.inputs.lanes();
     const { pullRequest, ...gitRead } = (
       lanes.git.current() as unknown as { value: Record<string, unknown> }
     ).value;
@@ -188,7 +191,7 @@ describe("a session's facts document", () => {
     const doc = assembleFacts(
       undefined,
       SID,
-      readingsOf(r.inputs),
+      readingsOf(r.inputs, r.inputs.lanes()),
       PENDING,
       T0,
     );
@@ -204,7 +207,7 @@ describe("a session's facts document", () => {
       return assembleFacts(
         undefined,
         SID,
-        readingsOf(r.inputs),
+        readingsOf(r.inputs, r.inputs.lanes()),
         PENDING,
         T0,
       ).builtins.pr;
@@ -239,21 +242,17 @@ describe("a session's facts document", () => {
   describe("the declared sources", () => {
     test("every one has a key carrying its lane's reading", async () => {
       const r = await sampled(rig());
-      const lanes = r.deps.lanes();
-      const deps = {
-        ...r.deps,
-        lanes: () => ({
-          ...lanes,
-          sources: new Map([
-            ["written", settledLane(ok({ home: "/h" }))],
-            ["unwritten", settledLane(ABSENT)],
-          ]),
-        }),
-      } as RenderPayloadDeps;
+      const lanes = {
+        ...r.inputs.lanes(),
+        sources: new Map([
+          ["written", settledLane(ok({ home: "/h" }))],
+          ["unwritten", settledLane(ABSENT)],
+        ]),
+      };
       const doc = assembleFacts(
         undefined,
         SID,
-        readingsOf({ ...r.inputs, deps }),
+        readingsOf(r.inputs, lanes),
         PENDING,
         T0,
       );
@@ -270,14 +269,14 @@ describe("a session's facts document", () => {
       const first = assembleFacts(
         undefined,
         SID,
-        readingsOf(r.inputs),
+        readingsOf(r.inputs, r.inputs.lanes()),
         PENDING,
         T0,
       );
       const again = assembleFacts(
         first,
         SID,
-        readingsOf(r.inputs),
+        readingsOf(r.inputs, r.inputs.lanes()),
         PENDING,
         at(60),
       );
@@ -289,7 +288,7 @@ describe("a session's facts document", () => {
       const first = assembleFacts(
         undefined,
         SID,
-        readingsOf(r.inputs),
+        readingsOf(r.inputs, r.inputs.lanes()),
         PENDING,
         T0,
       );
@@ -297,7 +296,7 @@ describe("a session's facts document", () => {
       const second = assembleFacts(
         first,
         SID,
-        readingsOf(r.inputs),
+        readingsOf(r.inputs, r.inputs.lanes()),
         PENDING,
         at(60),
       );
@@ -313,7 +312,7 @@ describe("a session's facts document", () => {
         expect(second.builtins[key]).toBe(first.builtins[key]);
       }
       expect(second.diagnostics).toEqual([
-        { lane: "cache", reason: "refresh threw" },
+        { kind: "lane", lane: "cache", reason: "refresh threw" },
       ]);
 
       // The refresh running clean again is a change too: stamped when it came.
@@ -321,7 +320,7 @@ describe("a session's facts document", () => {
       const third = assembleFacts(
         second,
         SID,
-        readingsOf(r.inputs),
+        readingsOf(r.inputs, r.inputs.lanes()),
         PENDING,
         at(120),
       );
@@ -336,7 +335,7 @@ describe("a session's facts document", () => {
 
     test("the update is the fact it is handed, by reference", async () => {
       const r = await sampled(rig());
-      const readings = readingsOf(r.inputs);
+      const readings = readingsOf(r.inputs, r.inputs.lanes());
       const none = restamp(undefined, ABSENT, T0);
       const first = assembleFacts(undefined, SID, readings, none, T0);
       expect(first.update).toBe(none);
@@ -352,6 +351,38 @@ describe("a session's facts document", () => {
       for (const key of BUILTIN_KEYS) {
         expect(second.builtins[key]).toBe(first.builtins[key]);
       }
+    });
+  });
+
+  describe("a stamp that threw", () => {
+    test("is the prior document with the failure among its diagnostics and the next seq; the same failure again is that document", async () => {
+      const r = await sampled(rig());
+      const first = assembleFacts(
+        undefined,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        PENDING,
+        T0,
+      );
+      const failedOnce = failedStamp(first, "the read broke");
+      expect(failedOnce.seq).toBe(first.seq + 1);
+      expect(failedOnce.builtins).toBe(first.builtins);
+      expect(stampFailureOf(failedOnce)).toBe("the read broke");
+      expect(failedStamp(failedOnce, "the read broke")).toBe(failedOnce);
+      expect(stampFailureOf(failedStamp(failedOnce, "another"))).toBe(
+        "another",
+      );
+      expect(stampFailureOf(first)).toBeNull();
+      // The next clean stamp is a document without it.
+      const clean = assembleFacts(
+        failedOnce,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        PENDING,
+        at(60),
+      );
+      expect(clean.seq).toBe(failedOnce.seq + 1);
+      expect(stampFailureOf(clean)).toBeNull();
     });
   });
 });

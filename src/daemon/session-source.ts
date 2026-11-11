@@ -1,43 +1,37 @@
 // [LAW:single-enforcer] The one builder of what a session's view draws from
-// (brandon-unfiled-3248.8ro6, step 4e): its payload, composed from the facts
-// document, the hook's fields, the client's hints, the session's picks and the
-// depths of its histories — and the globals those picks resolve to. The daemon
-// and the demo both build their views' sources here, so a view is drawn from
-// one derivation wherever it is drawn.
+// (brandon-unfiled-3248.8ro6, step 4e): its payload, composed from the
+// session's world state, the hook's fields, the client's hints, the session's
+// picks and the depths of its histories — and the globals those picks resolve
+// to. The daemon and the demo both build their views' sources here, so a view
+// is drawn from one derivation wherever it is drawn.
 //
-// [LAW:one-source-of-truth] A view draws from one turn: the document, what the
-// payload is composed from beside it and the globals the draw's options are
-// built from are stamped together, in one reaction, and the payload, the
-// globals and the document are all read off that one value. A draw reads the
-// last turn that completed, whole.
+// [LAW:one-source-of-truth] The world state is the host's, stamped by its
+// collector (src/daemon/collector.ts) and handed in; a view reads its
+// session's document from the renderer's store and stamps nothing. A request
+// and the document read at its keys are taken in one action
+// (src/daemon/draw-bar.ts), so the payload, the globals and the document a
+// draw reads are of one request.
 //
-// [LAW:effects-at-boundaries] No instant is read here but the turn's own:
-// what moves with the clock (`today`, `feeds`, `drawing`) is a projection each
-// draw hands its binding (DRAW_PROJECTIONS, src/config/payload-inputs.ts), so a
-// key policy over the payload re-runs in the turn a fact it reads moves — a
-// request's arrival, a lane's landing, a click — and never inside a draw.
+// [LAW:effects-at-boundaries] No instant is read here: what moves with the
+// clock (`today`, `feeds`, `drawing`) is a projection each draw hands its
+// binding (DRAW_PROJECTIONS, src/config/payload-inputs.ts), so a key policy
+// over the payload re-runs in the turn a fact it reads moves — a request's
+// arrival, a world state's landing, a click — and never inside a draw.
 
-import { observable, reaction, runInAction } from "mobx";
 import type { EffectiveGlobals } from "../config/effective-globals.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
+import type { WorldState } from "../facts/world-state.js";
+import type { WorldStates } from "../renderer/world-states.js";
 import type { SourceOf } from "./cache/render.js";
-import type { Fact } from "../facts/fact.js";
-import type { SessionFacts, UpdateNotice } from "../facts/session-facts.js";
-import { instantAt, type Instant } from "../utils/instant.js";
-import { assembleFacts } from "./facts-assembly.js";
+import { stampFailureOf } from "./facts-assembly.js";
 import {
   composePayload,
-  readingsOf,
   type ComposeInputs,
   type DrawInputs,
-  type PayloadInputs,
-  type Readings,
-  type RenderPayloadDeps,
   type ViewPayload,
 } from "./render-payload.js";
-import type { SessionId } from "./session-id.js";
 import type { SessionStateReader } from "./session-state.js";
 import type { HistoryDepth } from "./settings-history.js";
 import { settingCounts } from "./setting-drafts.js";
@@ -49,93 +43,26 @@ import { settingCounts } from "./setting-drafts.js";
 export interface SessionSource extends ViewSource {
   readonly payload: () => ViewPayload;
   readonly effective: () => EffectiveGlobals;
-  // The session's facts document (src/facts/session-facts.ts), restamped in
-  // the turn an owner's reading moves; the view's source is its one holder.
-  readonly facts: () => SessionFacts;
-  // The client's hints the turn was composed from: what a draw takes of the
-  // client beside the payload, so it never pairs a turn with a request it was
-  // not composed from.
+  // The session's world state (src/facts/world-state.ts), as the host last
+  // handed it in.
+  readonly facts: () => WorldState;
+  // The client's hints the payload is composed from: what a draw takes of the
+  // client beside the payload, so it never pairs a payload with a request it
+  // was not composed from.
   readonly hints: () => ComposeInputs["hints"];
-  // Why the turn after the one every read above is of could not be stamped, or
-  // null when the latest turn completed: while it is set the bar is drawn from
-  // the last turn that did, and says so.
+  // Why the host's last stamp of the session failed, or null when it held:
+  // while it is set the bar is drawn from the last document that stamped,
+  // and says so.
   readonly failure: () => string | null;
 }
 
-// [LAW:types-are-the-program] One turn: the document and everything the
-// payload is composed from beside it, stamped together.
-interface Turn {
-  readonly document: SessionFacts;
-  readonly compose: ComposeInputs;
-  readonly draw: DrawInputs;
-  readonly failure: string | null;
-}
-
-// What a turn reads, or what stopped it reading: a derivation that throws is a
-// turn that did not complete, not a reaction that never ran.
-type TurnInputs =
-  | {
-      readonly kind: "read";
-      readonly readings: Readings;
-      readonly update: Fact<UpdateNotice>;
-      readonly compose: ComposeInputs;
-      readonly draw: DrawInputs;
-    }
-  | { readonly kind: "failed"; readonly reason: string };
-
-// [LAW:one-source-of-truth] A turn that fails for the reason it already failed
-// for is that turn: a fault that persists must not mint a new turn per owner
-// landing, which would recompose the payload, wake the view and log again for
-// a bar that has not changed.
-const failedWith = (prior: Turn, reason: string): Turn =>
-  prior.failure === reason ? prior : { ...prior, failure: reason };
-
-// [LAW:single-enforcer] The one stamp of a turn, against the turn it replaces.
-// The prior turn itself is returned when nothing it holds moved (the document's
-// identity is `restamp`'s verdict), so nothing holding it is touched; a turn
-// that cannot be stamped keeps the prior one and says why.
-//
-// [LAW:no-silent-failure] A failed stamp is a value the draw reads
-// (`failure`), not only a line in the daemon's log.
-function stamped(
-  prior: Turn,
-  moved: TurnInputs,
-  at: Instant,
-  session: SessionId,
-): Turn {
-  if (moved.kind === "failed") return failedWith(prior, moved.reason);
-  try {
-    const document = assembleFacts(
-      prior.document,
-      session,
-      moved.readings,
-      moved.update,
-      at,
-    );
-    return prior.failure === null &&
-      document === prior.document &&
-      moved.compose === prior.compose &&
-      moved.draw === prior.draw
-      ? prior
-      : {
-          document,
-          compose: moved.compose,
-          draw: moved.draw,
-          failure: null,
-        };
-  } catch (e) {
-    return failedWith(prior, `stamping the facts document: ${String(e)}`);
-  }
-}
-
 export interface SessionSourceDeps {
-  // The owners every lane is read from, and the log for those whose owner
-  // does not log.
-  readonly providers: Omit<RenderPayloadDeps, "lanes">;
   readonly sessionState: SessionStateReader;
-  // The daemon's one update fact, stamped by its watch
-  // (src/daemon/update-notice.ts): every session's document carries it.
-  readonly update: () => Fact<UpdateNotice>;
+  // The world states the host handed in, which every view reads its
+  // session's from.
+  readonly worldStates: Pick<WorldStates, "of">;
+  // The user's home, which the payload's `home` reads.
+  readonly home: string;
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: string) => HistoryDepth;
   // The session's back depth, measured against the gate of the config its
@@ -146,7 +73,7 @@ export interface SessionSourceDeps {
 export function sessionSource(
   deps: SessionSourceDeps,
 ): SourceOf<SessionSource> {
-  return ({ sessionId, state, store, declared, onDispose }) => {
+  return ({ sessionId, state, store, requested }) => {
     const pick = (key: string): string | null =>
       deps.sessionState.get(sessionId, key);
     // [LAW:one-source-of-truth] Every globals field resolved once per change
@@ -159,40 +86,20 @@ export function sessionSource(
         state.authoredRoots.has(preset),
       ),
     );
-    // [LAW:one-source-of-truth] What the owners are read by: the request and
-    // the lanes of ONE declaration, so a read never pairs one request's keys
-    // with another's lanes.
-    const inputs = store.derive(
-      "session.inputs",
-      "computed",
-      (): PayloadInputs => {
-        const { facts, lanes } = declared();
-        return {
-          hookData: facts.hookData,
-          cwd: facts.cwd,
-          hints: facts.hints,
-          deps: { ...deps.providers, lanes: () => lanes },
-        };
-      },
-    );
-    // [LAW:one-source-of-truth] What the session's owners hold now, read once.
-    const readings = store.derive("session.readings", "computed", () =>
-      readingsOf(inputs.read()),
-    );
-    // Derivations, so each keeps its identity until an input of it moves, and
-    // a turn that moved nothing of them is the turn before.
+    // Derivations, so each keeps its identity until an input of it moves.
     const compose = store.derive(
       "session.compose",
       "computed",
       (): ComposeInputs => {
-        const { hookData, hints } = inputs.read();
-        return { hookData, hints, home: deps.providers.home };
+        const { hookData, hints } = requested();
+        return { hookData, hints, home: deps.home };
       },
     );
     const draw = store.derive(
       "session.draw",
       "computed",
       (): DrawInputs => ({
+        sources: [...state.sources.keys()],
         effective: effective.read(),
         configFacts: {
           ...settingCounts(state.config, state.fileHeldSettings, pick),
@@ -202,82 +109,19 @@ export function sessionSource(
         back: deps.navigation(sessionId, state.config),
       }),
     );
-    // [LAW:no-ambient-temporal-coupling] The turn is stamped in a reaction's
-    // effect, not a derivation: a stamp is the turn's instant, and a computed
-    // that read the clock and its own prior answer would answer by when it ran.
-    // The first turn is stamped here, with no prior, so the box is total from
-    // its first read and every field is pending until an owner answers; a
-    // throw in it is a failed open, which the view's opening releases.
-    const clock = deps.providers.clock;
-    const turn = observable.box<Turn>(
-      {
-        document: assembleFacts(
-          undefined,
-          sessionId,
-          readings.read(),
-          deps.update(),
-          instantAt(clock),
-        ),
-        compose: compose.read(),
-        draw: draw.read(),
-        failure: null,
-      },
-      { deep: false },
+    const document = (): WorldState => deps.worldStates.of(sessionId);
+    // [LAW:dataflow-not-control-flow] The payload is derived on every read:
+    // composition is pure, so a throw reaches the draw.
+    const payload = store.derive("session.payload", "computed", () =>
+      composePayload(document(), compose.read(), draw.read()),
     );
-    onDispose(
-      reaction(
-        (): TurnInputs => {
-          try {
-            return {
-              kind: "read",
-              readings: readings.read(),
-              update: deps.update(),
-              compose: compose.read(),
-              draw: draw.read(),
-            };
-          } catch (e) {
-            return {
-              kind: "failed",
-              reason: `reading the owners: ${String(e)}`,
-            };
-          }
-        },
-        (moved) =>
-          runInAction(() => {
-            const prior = turn.get();
-            const next = stamped(prior, moved, instantAt(clock), sessionId);
-            if (next.failure !== null && next !== prior) {
-              // [LAW:no-silent-failure] Told to the log as well as to the bar.
-              deps.providers.log(
-                "error",
-                `session facts sid=${JSON.stringify(sessionId)}: ${next.failure}`,
-              );
-            }
-            turn.set(next);
-          }),
-        {
-          // The expression above cannot throw; the effect's catch is `stamped`.
-          onError: (e) =>
-            deps.providers.log(
-              "error",
-              `session turn threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
-            ),
-        },
-      ),
-    );
-    // [LAW:dataflow-not-control-flow] The payload is derived from the turn on
-    // every read: composition is pure, so a throw reaches the draw.
-    const payload = store.derive("session.payload", "computed", () => {
-      const { document, compose: composed, draw: drawn } = turn.get();
-      return composePayload(document, composed, drawn);
-    });
     return {
       payload: () => payload.read(),
-      effective: () => turn.get().draw.effective,
-      facts: () => turn.get().document,
-      hints: () => turn.get().compose.hints,
-      failure: () => turn.get().failure,
-      selections: () => turn.get().draw.effective,
+      effective: () => draw.read().effective,
+      facts: document,
+      hints: () => compose.read().hints,
+      failure: () => stampFailureOf(document()),
+      selections: () => draw.read().effective,
     };
   };
 }

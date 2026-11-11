@@ -348,11 +348,10 @@ export class SourceRegistry {
   // [LAW:single-enforcer] What this registry holds of the daemon's source
   // runs (source-runs.ts): one hold per entry however many of its sources
   // read it, declared again whenever any source's identity moves, so the
-  // entry a moved key names is held before the one it leaves is released. A
-  // view's payload holds the daemon's built-in entries through a Holds of
-  // its own (src/daemon/cache/render.ts): the two hold disjoint entries with
-  // the one lifetime, and merging them would make a view's declaration of
-  // its lanes re-declare its sources, and the reverse.
+  // entry a moved key names is held before the one it leaves is released.
+  // The session's built-in entries are held by the host's collector
+  // (src/daemon/collector.ts), which declares on requests and subscriptions,
+  // not on a source's identity moving.
   private readonly holds = new Holds();
   // Each source's identity as its policy last named it. A policy over the
   // source's own values names none until they answer.

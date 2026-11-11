@@ -36,4 +36,4 @@ Each cache entry starts with the bundled default's state. A config that fails it
 
 ## Tests
 
-The cache's idle sweep is an interval armed on the first hold. A cache a test builds must be closed, or it and every compile it serves live as long as the Jest worker.
+The collector's session sweep is an interval armed on its first session, and a render cache's entries keep their watchers. A cache or collector a test builds must be closed, or it and every compile it serves live as long as the Jest worker.

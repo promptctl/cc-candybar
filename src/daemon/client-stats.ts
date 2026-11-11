@@ -250,6 +250,10 @@ export function formatStats(s: StatsSnapshot): string {
     `  accounted     ${fmtBytes(s.renderCache.accountedBytes)} / ${fmtBytes(s.renderCache.budgetBytes)}`,
   );
   lines.push(``);
+  lines.push(`collector`);
+  lines.push(`  sessions      ${s.collector.sessions}`);
+  lines.push(`  retiring      ${s.collector.retiring}`);
+  lines.push(``);
   lines.push(`effectCache`);
   lines.push(`  sessions      ${s.effectCache.sessions}`);
   lines.push(`  effects       ${s.effectCache.effects}`);

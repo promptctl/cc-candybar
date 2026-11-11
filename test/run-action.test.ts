@@ -3,7 +3,7 @@
 // what a click does with a link (runs the program, or refuses it into the
 // session's bar), what the program sees, the bar while it runs and after, and
 // the run owner's events and counts. Every view is the daemon's own: a render
-// cache over the payload providers, declared by `declareLanes`, drawn from
+// cache over the payload providers, read by the host's collector, drawn from
 // `sessionSource`.
 
 import { linkUrls } from "./helpers/frame";
@@ -23,7 +23,8 @@ import {
   RenderCache,
   type SessionView,
 } from "../src/daemon/cache/render";
-import { declareLanes, renderOptionsOf } from "../src/daemon/render-payload";
+import { renderOptionsOf } from "../src/daemon/render-payload";
+import { collected } from "./helpers/collected";
 import {
   sessionSource,
   type SessionSource,
@@ -157,6 +158,11 @@ interface Rig {
   readonly sessionState: SessionState;
   readonly runs: Runs;
   readonly lines: string[];
+  // A request's turn, as the main renderer takes one (test/helpers/collected.ts).
+  hold(
+    configFile: string,
+    sid: string,
+  ): ReturnType<RenderCache<SessionSource>["holdSession"]>;
 }
 
 // A fake of the launch port: the program runs from the call until the test says
@@ -207,6 +213,10 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     ledger: new RefreshLedger(log),
   });
   const sessionState = new SessionState();
+  const served = collected(
+    { owners: providers, update: () => pendingOf("unread"), log },
+    cleanups,
+  );
   const cache = new RenderCache<SessionSource>(
     {
       clock: systemTimekeeper,
@@ -220,18 +230,17 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
-      declare: (holds, facts, sources) =>
-        declareLanes(providers, holds, facts, sources),
       source: sessionSource({
-        providers,
         sessionState,
-        update: () => pendingOf("unread"),
+        worldStates: served.worldStates,
+        home: providers.home,
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),
     },
     { budgetBytes: () => 1024 * 1024 * 1024 },
   );
+  served.serve(cache);
   const runs = new Runs({
     clock: systemTimekeeper,
     supersede: (key, sid) => providers.managedStorage.supersede(key, sid),
@@ -249,7 +258,19 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     providers.managedStorage.close();
     watchers.closeAll();
   });
-  return { cache, providers, sessionState, runs, lines };
+  return {
+    cache,
+    providers,
+    sessionState,
+    runs,
+    lines,
+    hold: (configFile, sid) => {
+      const facts = viewFacts(dir, sid);
+      return served.request(facts, () =>
+        cache.holdSession(dir, dir, configFile, facts),
+      );
+    },
+  };
 }
 
 function draw(view: SessionView<SessionSource>): {
@@ -278,7 +299,7 @@ function viewOf(
   configFile: string,
   sid = SID,
 ): SessionView<SessionSource> {
-  const held = r.cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
+  const held = r.hold(configFile, sid);
   cleanups.push(() => held[Symbol.dispose]());
   return held.view;
 }
@@ -288,7 +309,7 @@ async function answered(
   name: string,
 ): Promise<void> {
   await until(
-    () => view.lanes().sources.get(name)?.current().kind !== "pending",
+    () => view.source.facts().sources[name]?.kind !== "pending",
     `${name}'s first read`,
   );
 }
@@ -303,7 +324,7 @@ async function writeUntilRead(
 ): Promise<void> {
   const folder = storage(name.split(".")[1]);
   const read = (): boolean => {
-    const r = view.lanes().sources.get(name)?.current();
+    const r = view.source.facts().sources[name];
     return r?.kind === "ok" && JSON.stringify(r.value) === JSON.stringify(doc);
   };
   await untilHeard(
@@ -561,7 +582,7 @@ describe("a run link", () => {
     const view = viewOf(r, config(["plugins.p.shown", "plugins.p.go"]));
     await answered(view, DOC);
     // q's source: no segment placed or unplaced reads it, only `go`'s env.
-    expect([...view.lanes().sources.keys()]).toEqual(
+    expect(Object.keys(view.source.facts().sources)).toEqual(
       expect.arrayContaining([STATUS, DOC]),
     );
     await writeUntilRead(view, DOC, SID, { home: "/h/other" });
@@ -760,7 +781,7 @@ describe("a click on a run link", () => {
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 1 });
     // `superseded` is the state no request waits on
     // (test/render-payload-outcomes.test.ts).
-    expect(view.lanes().sources.get(STATUS)!.current()).toMatchObject({
+    expect(view.source.facts().sources[STATUS]).toMatchObject({
       kind: "pending",
       why: "superseded",
     });
@@ -800,7 +821,7 @@ describe("a click on a run link", () => {
     );
     expect(r.runs.stats()).toMatchObject({ started: 1, running: 0, failed: 0 });
     expect(lastClickError(r.sessionState, SID)).toBeNull();
-    const read = view.lanes().sources.get(STATUS)!.current();
+    const read = view.source.facts().sources[STATUS]!;
     if (read.kind !== "ok") throw new Error(JSON.stringify(read));
     expect(read.value).toEqual({
       home: "/h/new",

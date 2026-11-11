@@ -9,6 +9,7 @@ import { instantOf, type Instant } from "../utils/instant.js";
 import { RENDER_ANSWERS, renderFailed } from "./draw-bar.js";
 import type { Response } from "./protocol";
 import type { FrameSeen } from "./render-sightings";
+import type { Collector } from "./collector.js";
 import type { RendererHost } from "./renderer-host.js";
 import {
   noteFacts,
@@ -52,6 +53,7 @@ function failed(
 
 export async function answerStatusline(
   host: RendererHost,
+  collector: Pick<Collector, "requested">,
   clock: Pick<Timekeeper, "monotonic" | "now">,
   req: CheckedRenderRequest,
   id: RequestId,
@@ -59,11 +61,20 @@ export async function answerStatusline(
   waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<StatuslineAnswer> {
+  // [LAW:no-ambient-temporal-coupling] Delivered on arrival, with the world
+  // state read at its own keys: nothing waits before delivery, so the renderer
+  // takes each session's requests and documents in the order they were made.
   const delivered = await host.deliver(
     {
       kind: "event",
       at,
-      event: { kind: "request", id, context: req, waitEndsAt },
+      event: {
+        kind: "request",
+        id,
+        context: req,
+        worldState: collector.requested(req),
+        waitEndsAt,
+      },
     },
     [],
   );

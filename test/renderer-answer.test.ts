@@ -1,7 +1,9 @@
 // The main renderer answers a statusline request through `answer` alone
 // (src/renderer/interface.ts): the request's turn returns one `present` for
 // the statusline, carrying the request it answers and the frame drawn, and the
-// present's `effect-done` is what records what the frame showed.
+// present's `effect-done` is what records what the frame showed. A world state
+// the host hands in is what its session's view draws from, a retire closes the
+// view, and every output says what the open views need read.
 //
 // [LAW:behavior-not-structure] The renderer is built over the daemon's own
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
@@ -21,13 +23,27 @@ import {
   type Effect,
   type EffectId,
   type Renderer,
+  type Event,
   type RequestId,
 } from "../src/renderer/interface";
 import { mainRenderer } from "../src/renderer/main";
 import type { CheckedRenderRequest } from "../src/renderer/request-context";
 import { systemTimekeeper } from "../src/time";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { AT, PROJECT, SESSION, requestOf, sessionRig } from "./helpers/session-rig";
+import {
+  AT,
+  PROJECT,
+  SESSION,
+  requestOf,
+  sessionRig,
+  type SessionRig,
+} from "./helpers/session-rig";
+import { ok } from "../src/utils/outcome";
+import { fakeTmux } from "./helpers/payload-owners";
+import { rendererHost } from "../src/daemon/renderer-host";
+import { answerStatusline } from "../src/daemon/statusline-answer";
+import type { WorldState } from "../src/facts/world-state";
+import type { SessionId } from "../src/daemon/session-id";
 
 let dir: string;
 let cleanups: Array<() => void>;
@@ -46,6 +62,7 @@ const NO_STATS = { size: 0, hits: 0, misses: 0 };
 function renderer(): {
   readonly r: Renderer;
   readonly recorded: string[][];
+  readonly rig: SessionRig;
 } {
   const rig = sessionRig(dir, cleanups);
   const { providers } = rig;
@@ -54,6 +71,7 @@ function renderer(): {
     log: () => {},
     sessionState: rig.sessionState,
     renderCache: rig.cache as never,
+    worldStates: rig.served.worldStates,
     payloadProviders: {
       ...providers,
       gitProvider: { ...providers.gitProvider, getStats: () => NO_STATS },
@@ -79,12 +97,13 @@ function renderer(): {
     recorded.push([...copies.values()]);
     record(sessionId, by, copies);
   };
-  return { r: mainRenderer(parts), recorded };
+  return { r: mainRenderer(parts), recorded, rig };
 }
 
 // A statusline request for the rig's session, through the host's checkpoint.
 // It passes a flag the client does not know, so its bar lists one error.
-function checked(): CheckedRenderRequest {
+// `pane` is the tmux pane its client reports, if any.
+function checked(pane?: string): CheckedRenderRequest {
   const configFile = path.join(dir, "config.json5");
   fs.writeFileSync(configFile, "{}");
   const { hookData } = requestOf(dir);
@@ -96,6 +115,9 @@ function checked(): CheckedRenderRequest {
       args: ["cc-candybar", "--config", configFile, "--bogus"],
       cwd: PROJECT,
       encoding: "frame",
+      ...(pane === undefined
+        ? {}
+        : { tmux: { socket: "/tmp/tmux.sock", pane, truecolor: null } }),
     },
     { firstSightOfUnknownHookField: () => false },
     () => {},
@@ -107,17 +129,33 @@ function checked(): CheckedRenderRequest {
 
 const REQUEST = 7 as RequestId;
 
-const request = (r: Renderer) =>
-  r.answer({
+// The request as the host delivers one: with the world state its collector
+// read at the request's keys.
+const request = ({ r, rig }: { r: Renderer; rig: SessionRig }) => {
+  const context = checked();
+  return r.answer({
     kind: "event",
     at: AT,
     event: {
       kind: "request",
       id: REQUEST,
-      context: checked(),
+      context,
+      worldState: rig.served.collector.requested(context),
       waitEndsAt: systemTimekeeper.monotonic() + 5_000,
     },
   });
+};
+
+const handIn = (r: Renderer, event: Event) =>
+  r.answer({ kind: "event", at: AT, event });
+
+// The session's view as the cache holds it, released at once.
+function viewOf(rig: SessionRig) {
+  const held = rig.cache.holdView(SESSION);
+  if (held === null) return null;
+  held[Symbol.dispose]();
+  return held.view;
+}
 
 const done = (r: Renderer, of: EffectId, ok: boolean) =>
   r.answer({
@@ -137,7 +175,7 @@ const presentOf = (effects: readonly Effect[]): Effect => {
 
 describe("a statusline request", () => {
   test("is answered by one present for the statusline, carrying its request and the drawn bar", async () => {
-    const { effects, record } = await request(renderer().r);
+    const { effects, record } = await request(renderer());
     const present = presentOf(effects);
     expect(present).toMatchObject({
       kind: "present",
@@ -152,21 +190,136 @@ describe("a statusline request", () => {
   });
 
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
-    const { r, recorded } = renderer();
-    const { effects } = await request(r);
+    const { r, recorded, rig } = renderer();
+    const { effects } = await request({ r, rig });
     expect(recorded).toEqual([]);
     await done(r, presentOf(effects).id, true);
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
   });
 
   test("records nothing for a present its client never took, and hears of each present once", async () => {
-    const { r, recorded } = renderer();
-    const { id } = presentOf((await request(r)).effects);
+    const { r, recorded, rig } = renderer();
+    const { id } = presentOf((await request({ r, rig })).effects);
     await done(r, id, false);
     expect(recorded).toEqual([]);
     await expect(done(r, id, true)).rejects.toThrow(TurnThrew);
     await expect(done(r, id, true)).rejects.toThrow(
       /not a present on its way/,
     );
+  });
+});
+
+describe("the world state the host hands in", () => {
+  test("is what the session's view draws from, and an older seq is refused", async () => {
+    const t = renderer();
+    await request(t);
+    const held = t.rig.served.worldStates.of(SESSION as SessionId);
+    const next = {
+      ...held,
+      seq: held.seq + 1,
+      builtins: { ...held.builtins, hostName: { ...ok("elsewhere"), at: AT } },
+    };
+    const { effects } = await handIn(t.r, {
+      kind: "world-state",
+      worldState: next,
+    });
+    expect(effects).toEqual([]);
+    expect(viewOf(t.rig)?.source.facts()).toBe(next);
+    await expect(
+      handIn(t.r, { kind: "world-state", worldState: held }),
+    ).rejects.toThrow(/does not follow the held seq/);
+  });
+
+  test("a retire closes the session's view and drops its world state", async () => {
+    const t = renderer();
+    await request(t);
+    expect(viewOf(t.rig)).not.toBeNull();
+    const { subscriptions } = await handIn(t.r, {
+      kind: "retire",
+      session: SESSION as SessionId,
+    });
+    expect(viewOf(t.rig)).toBeNull();
+    expect(subscriptions.sources).toEqual({});
+    expect(() => t.rig.served.worldStates.of(SESSION as SessionId)).toThrow(
+      /no world state for session/,
+    );
+  });
+
+  test("every output names each open view's plugin sources at their storage keys", async () => {
+    const t = renderer();
+    const { subscriptions } = await request(t);
+    const view = viewOf(t.rig)!;
+    expect(subscriptions.sources).toEqual({
+      [SESSION]: [...view.state.sources].map(([source, storage]) => ({
+        kind: "plugin",
+        source,
+        storage,
+      })),
+    });
+  });
+});
+
+describe("two requests of one session at different keys", () => {
+  test("each reaches the renderer with the world state read at its own keys, and both answers draw the newest request's", async () => {
+    const t = renderer();
+    // The pane's tmux session, answered when the case lands it.
+    const landings = new Map<string, () => void>();
+    const tmux = fakeTmux(
+      (_holds, hint) =>
+        new Promise((resolve) =>
+          landings.set(hint.pane, () => resolve(ok(`on ${hint.pane}`))),
+        ),
+    );
+    t.rig.providers.tmuxService.declare = tmux.declare as never;
+    const requests: WorldState[] = [];
+    const host = rendererHost(
+      "main",
+      {
+        answer: (input) => {
+          if (input.event.kind === "request")
+            requests.push(input.event.worldState);
+          return t.r.answer(input);
+        },
+      },
+      () => {},
+      (subscriptions) => t.rig.served.collector.subscribed(subscriptions),
+    );
+    const ask = (pane: string, id: number) =>
+      answerStatusline(
+        host,
+        t.rig.served.collector,
+        systemTimekeeper,
+        checked(pane),
+        id as RequestId,
+        AT,
+        systemTimekeeper.monotonic() + 10_000,
+        [],
+      );
+
+    let firstAnswered = false;
+    const first = ask("%1", 1).then((a) => {
+      firstAnswered = true;
+      return a;
+    });
+    // The second arrives while the first waits on its pane.
+    const second = ask("%2", 2);
+    expect(requests.map((w) => w.builtins.tmux.kind)).toEqual([
+      "pending",
+      "pending",
+    ]);
+    // The pane the session left lands: nothing reads it, so the first still
+    // waits, now on the newest request's pane.
+    landings.get("%1")!();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(firstAnswered).toBe(false);
+    landings.get("%2")!();
+    const answered = await Promise.all([first, second]);
+    for (const { resp } of answered) expect(resp).toMatchObject({ ok: true });
+    const view = viewOf(t.rig)!;
+    expect(view.facts().hints.tmux?.pane).toBe("%2");
+    expect(view.source.facts().builtins.tmux).toMatchObject({
+      kind: "ok",
+      value: { session: "on %2" },
+    });
   });
 });

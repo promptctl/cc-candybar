@@ -1,7 +1,9 @@
 // A render request answered through its renderer (src/daemon/statusline-
 // answer.ts): the host answers the client with the one frame presented for the
 // request, a turn that presents none or throws is a failure naming the
-// renderer, and every effect the turn returned is owed one `effect-done`.
+// renderer, and every effect the turn returned is owed one `effect-done`. The
+// request reaches the renderer with the world state its collector read at the
+// request's keys, and every output's subscriptions reach the host.
 //
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
@@ -19,7 +21,9 @@ import {
   type Renderer,
   type RendererOutput,
   type RequestId,
+  type Subscriptions,
 } from "../../src/renderer/interface";
+import type { WorldState } from "../../src/facts/world-state";
 import type { CheckedRenderRequest } from "../../src/renderer/request-context";
 import { instantOf } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
@@ -33,6 +37,9 @@ const REQ = {
   sessionId: SESSION,
   encoding: "frame",
 } as unknown as CheckedRenderRequest;
+// The world state the collector reads at the request's keys.
+const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
+const NO_SUBSCRIPTIONS: Subscriptions = { sources: {} };
 const CLOCK = {
   monotonic: () => 0 as Monotonic,
   now: () => 1_700_000_000_000,
@@ -47,32 +54,52 @@ const present = (id: number, request = REQUEST): Effect => ({
   frame: FRAME,
 });
 
+// A turn's output with no subscriptions.
+const output = (
+  effects: readonly Effect[],
+  record: RendererOutput["record"] = [],
+): RendererOutput => ({ effects, subscriptions: NO_SUBSCRIPTIONS, record });
+
 // A renderer whose request turn answers `output` (or throws it), and which
-// keeps every effect-done it hears.
+// keeps every event it hears.
 function scripted(request: RendererOutput | TurnThrew): {
   readonly renderer: Renderer;
   readonly heard: Event[];
+  readonly requests: Event[];
 } {
   const heard: Event[] = [];
+  const requests: Event[] = [];
   return {
     heard,
+    requests,
     renderer: {
       answer: async ({ event }) => {
         if (event.kind === "request") {
+          requests.push(event);
           if (request instanceof TurnThrew) throw request;
           return request;
         }
         heard.push(event);
-        return { effects: [], record: [] };
+        return output([]);
       },
     },
   };
 }
 
-async function answer(renderer: Renderer, logged: string[] = []) {
+async function answer(
+  renderer: Renderer,
+  logged: string[] = [],
+  subscribed: Subscriptions[] = [],
+) {
   const facts: RequestFacts = [];
   const answered = await answerStatusline(
-    rendererHost("main", renderer, (_level, line) => logged.push(line)),
+    rendererHost(
+      "main",
+      renderer,
+      (_level, line) => logged.push(line),
+      (subscriptions) => subscribed.push(subscriptions),
+    ),
+    { requested: () => WORLD },
     CLOCK,
     REQ,
     REQUEST,
@@ -90,10 +117,7 @@ const drained = async (): Promise<void> => {
 };
 
 test("the request's present answers it, in the request's encoding, and its settle is its effect-done", async () => {
-  const { renderer, heard } = scripted({
-    effects: [present(1)],
-    record: [["drew", "2ms"]],
-  });
+  const { renderer, heard } = scripted(output([present(1)], [["drew", "2ms"]]));
   const { answered, facts } = await answer(renderer);
   expect(answered.resp).toEqual({ ok: true, frame: FRAME });
   expect(facts.get("renderer")).toBe("main");
@@ -109,16 +133,15 @@ test("the request's present answers it, in the request's encoding, and its settl
 
 test("the client's sighting is the presented frame's motion: a handoff line's, not the hidden bar's", async () => {
   const handoff = standIn({ ...FRAME, motion: "moves" }, FRAME.rows);
-  const { renderer } = scripted({
-    effects: [{ ...present(1), frame: handoff }],
-    record: [],
-  });
+  const { renderer } = scripted(
+    output([{ ...present(1), frame: handoff }], []),
+  );
   const { answered } = await answer(renderer);
   expect(answered.seen).toBe("can-move");
 });
 
 test("a present its client never took settles failed", async () => {
-  const { renderer, heard } = scripted({ effects: [present(1)], record: [] });
+  const { renderer, heard } = scripted(output([present(1)]));
   const { answered } = await answer(renderer);
   answered.settled(false);
   await drained();
@@ -128,10 +151,9 @@ test("a present its client never took settles failed", async () => {
 });
 
 test("a turn that presents no frame for the request is a failure naming the renderer", async () => {
-  const { renderer, heard } = scripted({
-    effects: [present(1, 9 as RequestId)],
-    record: [],
-  });
+  const { renderer, heard } = scripted(
+    output([present(1, 9 as RequestId)], []),
+  );
   const { answered } = await answer(renderer);
   expect(answered.resp).toMatchObject({
     ok: false,
@@ -146,10 +168,7 @@ test("a turn that presents no frame for the request is a failure naming the rend
 });
 
 test("a second frame for the request is refused, and the first answers it", async () => {
-  const { renderer, heard } = scripted({
-    effects: [present(1), present(2)],
-    record: [],
-  });
+  const { renderer, heard } = scripted(output([present(1), present(2)], []));
   const { answered } = await answer(renderer);
   expect(answered.resp).toEqual({ ok: true, frame: FRAME });
   await drained();
@@ -176,8 +195,7 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
   const logged: string[] = [];
   const renderer: Renderer = {
     answer: async ({ event }) => {
-      if (event.kind === "request")
-        return { effects: [present(1)], record: [] };
+      if (event.kind === "request") return output([present(1)]);
       throw new TurnThrew([], new Error("no such present"));
     },
   };
@@ -189,4 +207,18 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
       /^turn renderer=main input=effect-done sid=a-session effect=1 error=.*no such present/,
     ),
   ]);
+});
+
+test("the request reaches the renderer with the world state read at its keys, and its output's subscriptions reach the host", async () => {
+  const subscriptions: Subscriptions = {
+    sources: { [SESSION]: [] },
+  };
+  const { renderer, requests } = scripted({
+    ...output([present(1)]),
+    subscriptions,
+  });
+  const subscribed: Subscriptions[] = [];
+  await answer(renderer, [], subscribed);
+  expect(requests).toMatchObject([{ kind: "request", worldState: WORLD }]);
+  expect(subscribed).toEqual([subscriptions]);
 });
