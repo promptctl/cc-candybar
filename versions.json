@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-712",
-      "ref": "refs/pull/712/merge",
-      "sha": "49bb81fd80e7ab1a974027a17d02f08355a978f0",
-      "timestamp": "2026-11-11T18:23:51.275Z",
-      "commits": [
-        {
-          "sha": "49bb81fd80e7ab1a974027a17d02f08355a978f0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T18:23:00Z",
-          "message": "Merge 11e6cbff28758a56e3f56fe7da438576e2656897 into 36c6ac3a264fcc2876d5952e4a13648e1268f98f\n"
-        },
-        {
-          "sha": "11e6cbff28758a56e3f56fe7da438576e2656897",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T11:22:47-07:00",
-          "message": "fix(daemon): drop the reload's subscription take, which ran inside request turns (candybar-host-renderer-x96a.kcp)\n\nThe reload observer also fires for an entry a request opens, inside that\nrequest's turn, so taking the cache's subscriptions there could deliver a\nnested world-state turn into the request's own. A view that opens outside\nany turn is subscribed by the next turn's output, as the plan states; the\ndata-sources memory now says so for reloads and follows. Two comments that\nnamed the removed single-turn stamp are corrected.\n"
-        },
-        {
-          "sha": "b93c7374a0da2465841053235dbd2e26cc455418",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T11:07:56-07:00",
-          "message": "fix(collector): a retire whose turn threw keeps the session, and a reload subscribes its successors (candybar-host-renderer-x96a.kcp)\n\nA retire whose renderer turn threw may leave the renderer holding the\nsession's document. Dropping the record anyway made the next request open\na new record at seq 1, which the renderer's store refuses on every request\nafter. The record now goes only once the retire was answered, and a\nrequest revives it from the document it kept.\n\nA reload opens its successors outside any turn, so no output carried\ntheir subscriptions, and a source the reload added went unread until an\nunrelated turn answered. The daemon's reload observer now hands the\ncache's subscriptions to the collector, whole, as an output does, marked\nas an exception until config reaches the renderer as an event.\n\nThe demo closes its collector on every exit, and the collector reads a\nlocator's fields by spreading it instead of copying them one by one.\n"
-        },
-        {
-          "sha": "d49a0d224d140cbd0961bb25448a612ae4e96d24",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T10:51:57-07:00",
-          "message": "fix(collector): a source the host has not read yet draws pending, and a request is stamped once (candybar-host-renderer-x96a.kcp)\n\nThe host learns a view's plugin sources from the output of the turn that\nopened it, so that turn's world state carries none of them. The payload\nprojected only the sources the world state carried, so the opening turn\ndrew such a source as missing (a failed read) rather than pending. The\npayload now projects every source the view's config declares, and one the\nworld state does not carry yet is not read yet. The render event counts\nthe same set.\n\nA request's stamp and the stamp of each landing now take one read of the\nowners, so the reaction a request's declaration wakes finds the read the\nrequest already stamped instead of reading and stamping again. The\nrecord's locator lives only in its declaration.\n\nThe demo subscribes its view's sources as a turn's output does, so its\nframes read the config's plugin sources. The law marker over the view's\nbinding is restored.\n"
-        },
-        {
-          "sha": "c0152858f299c318f0b48d2e860032775188d226",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T10:31:36-07:00",
-          "message": "feat(collector): the host's collector holds each session's world state and hands it to the renderer (candybar-host-renderer-x96a.kcp)\n\nA session's lanes and the stamp of its world state move to the host. One\ncollector record per session declares the built-in lanes at the keys its\nnewest request names and each plugin source the renderer's last output\nsubscribed to, stamps one world state from what they hold, and hands every\nstamp that moved to the renderer as a `world-state` event. A request is\ndelivered on arrival with the world state read at its own keys. The\nrenderer keeps a world-state store its views read, answers `retire` by\nclosing the session's view, and says on every output which plugin sources\nits open views need read. The session's lifetime is the collector's sweep:\na session no request named across a whole sweep, with no open feed, is\nretired.\n\nThe view no longer declares, holds or stamps, and the render cache's idle\nsweep is gone; a request's wait reads the world-state store.\n"
-        },
-        {
-          "sha": "3587b68165d8afe522de68b9c50dffde62c028ab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T09:41:36-07:00",
-          "message": "refactor(facts): the facts document is WorldState, the seam between the host and a renderer (candybar-host-renderer-x96a.kcp)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "36c6ac3a264fcc2876d5952e4a13648e1268f98f",
-      "timestamp": "2026-11-11T16:32:30.096Z",
+      "sha": "7921fb6e7f1980d02e08a1d93ee805fe73b374a8",
+      "timestamp": "2026-11-11T18:31:01.936Z",
       "commits": [
         {
-          "sha": "36c6ac3a264fcc2876d5952e4a13648e1268f98f",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-11T16:31:31Z",
-          "message": "chore(release): set `package.json` to 1.215.0\n\n## [1.215.0](https://github.com/promptctl/cc-candybar/compare/v1.214.0...v1.215.0) (2026-11-11)\n\n### Features\n\n* **renderer:** a statusline request is answered through Renderer.answer, in process (candybar-host-renderer-x96a.2xo) ([#711](https://github.com/promptctl/cc-candybar/issues/711)) ([f7cadf0](https://github.com/promptctl/cc-candybar/commit/f7cadf094d071ea3947d068dd5da2850afb93530))\n"
+          "sha": "7921fb6e7f1980d02e08a1d93ee805fe73b374a8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T11:30:07-07:00",
+          "message": "feat(collector): the host's collector holds each session's world state and hands it to the renderer (candybar-host-renderer-x96a.kcp) (#712)\n\n* refactor(facts): the facts document is WorldState, the seam between the host and a renderer (candybar-host-renderer-x96a.kcp)\n\n* feat(collector): the host's collector holds each session's world state and hands it to the renderer (candybar-host-renderer-x96a.kcp)\n\nA session's lanes and the stamp of its world state move to the host. One\ncollector record per session declares the built-in lanes at the keys its\nnewest request names and each plugin source the renderer's last output\nsubscribed to, stamps one world state from what they hold, and hands every\nstamp that moved to the renderer as a `world-state` event. A request is\ndelivered on arrival with the world state read at its own keys. The\nrenderer keeps a world-state store its views read, answers `retire` by\nclosing the session's view, and says on every output which plugin sources\nits open views need read. The session's lifetime is the collector's sweep:\na session no request named across a whole sweep, with no open feed, is\nretired.\n\nThe view no longer declares, holds or stamps, and the render cache's idle\nsweep is gone; a request's wait reads the world-state store.\n\n* fix(collector): a source the host has not read yet draws pending, and a request is stamped once (candybar-host-renderer-x96a.kcp)\n\nThe host learns a view's plugin sources from the output of the turn that\nopened it, so that turn's world state carries none of them. The payload\nprojected only the sources the world state carried, so the opening turn\ndrew such a source as missing (a failed read) rather than pending. The\npayload now projects every source the view's config declares, and one the\nworld state does not carry yet is not read yet. The render event counts\nthe same set.\n\nA request's stamp and the stamp of each landing now take one read of the\nowners, so the reaction a request's declaration wakes finds the read the\nrequest already stamped instead of reading and stamping again. The\nrecord's locator lives only in its declaration.\n\nThe demo subscribes its view's sources as a turn's output does, so its\nframes read the config's plugin sources. The law marker over the view's\nbinding is restored.\n\n* fix(collector): a retire whose turn threw keeps the session, and a reload subscribes its successors (candybar-host-renderer-x96a.kcp)\n\nA retire whose renderer turn threw may leave the renderer holding the\nsession's document. Dropping the record anyway made the next request open\na new record at seq 1, which the renderer's store refuses on every request\nafter. The record now goes only once the retire was answered, and a\nrequest revives it from the document it kept.\n\nA reload opens its successors outside any turn, so no output carried\ntheir subscriptions, and a source the reload added went unread until an\nunrelated turn answered. The daemon's reload observer now hands the\ncache's subscriptions to the collector, whole, as an output does, marked\nas an exception until config reaches the renderer as an event.\n\nThe demo closes its collector on every exit, and the collector reads a\nlocator's fields by spreading it instead of copying them one by one.\n\n* fix(daemon): drop the reload's subscription take, which ran inside request turns (candybar-host-renderer-x96a.kcp)\n\nThe reload observer also fires for an entry a request opens, inside that\nrequest's turn, so taking the cache's subscriptions there could deliver a\nnested world-state turn into the request's own. A view that opens outside\nany turn is subscribed by the next turn's output, as the plan states; the\ndata-sources memory now says so for reloads and follows. Two comments that\nnamed the removed single-turn stamp are corrected."
         }
       ]
     }

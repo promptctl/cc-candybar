@@ -23870,8 +23870,8 @@ function recordOf(raw) {
     return null;
   }
   if (typeof value !== "object" || value === null) return null;
-  const { text: text4, at, answered: answered2 } = value;
-  return typeof text4 === "string" && typeof at === "number" && (answered2 === void 0 || typeof answered2 === "boolean") ? { text: text4, at, answered: answered2 === true } : null;
+  const { text: text4, at, answered } = value;
+  return typeof text4 === "string" && typeof at === "number" && (answered === void 0 || typeof answered === "boolean") ? { text: text4, at, answered: answered === true } : null;
 }
 
 // src/daemon/verbs/key-seeds.ts
@@ -35884,9 +35884,9 @@ var FrameSequence = class {
 };
 function textFrameAt(animation, t2, motion) {
   const shown = shownAt(animation, t2, motion);
-  const stamped2 = shown.value.copy();
-  stamped2.style = layerStyle(stamped2.style, stamp(holdOf(shown, t2)));
-  return stamped2;
+  const stamped = shown.value.copy();
+  stamped.style = layerStyle(stamped.style, stamp(holdOf(shown, t2)));
+  return stamped;
 }
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/renderables/flexStrip.js
@@ -51597,10 +51597,10 @@ var Holds = class {
       this.declaring = null;
     }
     let released = 0;
-    for (const [key, release3] of this.held) {
+    for (const [key, release4] of this.held) {
       if (declaring.taken.has(key)) continue;
       this.held.delete(key);
-      release3();
+      release4();
       released++;
     }
     return { result, acquired: declaring.acquired, released };
@@ -51609,7 +51609,7 @@ var Holds = class {
   close() {
     this.closed = true;
     const count = this.held.size;
-    for (const release3 of this.held.values()) release3();
+    for (const release4 of this.held.values()) release4();
     this.held.clear();
     return count;
   }
@@ -52539,18 +52539,8 @@ function renew(source, why2) {
 function answerPending(source, outcome) {
   if (source.reading.get().kind === "pending") settle(source, outcome);
 }
-function isWaiting(current) {
-  return typeof current === "object" && current !== null && current.kind === "pending";
-}
 function currentOf(source) {
   return source.reading.get();
-}
-async function answered(read2) {
-  for (; ; ) {
-    const current = read2();
-    if (!isWaiting(current)) return current;
-    await current.landed;
-  }
 }
 function waitWithin(work, ms, late, after) {
   const wait = new AbortController();
@@ -52597,7 +52587,7 @@ var KeyedSource = class {
   //
   // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
   // by that refresh — so its caller logs none. A declaration that THROWS is a
-  // bug none of those saw, reported by the view's declaration (declareLanes).
+  // bug none of those saw, reported by the session's declaration (declareLanes).
   declare(holds2, input) {
     if (this.closed)
       return settledLane(failed(`${this.spec.name} closed`, "read"));
@@ -53383,11 +53373,10 @@ var SourceRegistry = class _SourceRegistry {
   // [LAW:single-enforcer] What this registry holds of the daemon's source
   // runs (source-runs.ts): one hold per entry however many of its sources
   // read it, declared again whenever any source's identity moves, so the
-  // entry a moved key names is held before the one it leaves is released. A
-  // view's payload holds the daemon's built-in entries through a Holds of
-  // its own (src/daemon/cache/render.ts): the two hold disjoint entries with
-  // the one lifetime, and merging them would make a view's declaration of
-  // its lanes re-declare its sources, and the reverse.
+  // entry a moved key names is held before the one it leaves is released.
+  // The session's built-in entries are held by the host's collector
+  // (src/daemon/collector.ts), which declares on requests and subscriptions,
+  // not on a source's identity moving.
   holds = new Holds();
   // Each source's identity as its policy last named it. A policy over the
   // source's own values names none until they answer.
@@ -53493,8 +53482,8 @@ var SourceRegistry = class _SourceRegistry {
   // the registry lives — a render state's hold on a plugin's storage folder —
   // released by the registry's one teardown (`dispose`), with everything else
   // it holds.
-  own(release3) {
-    this.cleanups.push(release3);
+  own(release4) {
+    this.cleanups.push(release4);
   }
   // input: a derived value of its path in the bound InputSource, cast to its
   // type. [LAW:types-are-the-program] Before its source answers it holds no
@@ -57121,12 +57110,12 @@ var segmentData = {
 };
 function transcriptProblems({
   path: path42,
-  answered: answered2,
+  answered,
   read: read2
 }) {
   switch (read2.kind) {
     case "absent":
-      return answered2 ? [
+      return answered ? [
         `the transcript ${path42} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
       ] : [];
     case "failed":
@@ -67656,10 +67645,9 @@ function declareLanes(owners, holds2, facts, sources) {
   };
   return { lanes, faults };
 }
-function readingsOf(inputs) {
+function readingsOf(inputs, lanes) {
   const { hookData: hookData2, deps } = inputs;
   const sessionId2 = hookData2.session_id;
-  const lanes = deps.lanes();
   const read2 = (lane, value) => {
     const fault = deps.faults.of(sessionId2, lane);
     if (fault !== void 0) return fault;
@@ -67700,7 +67688,7 @@ function readingsOf(inputs) {
     ),
     faults: REFRESH_LANES.flatMap((lane) => {
       const fault = deps.faults.of(sessionId2, lane);
-      return fault === void 0 ? [] : [{ lane, reason: fault.reason }];
+      return fault === void 0 ? [] : [{ kind: "lane", lane, reason: fault.reason }];
     })
   };
 }
@@ -67711,16 +67699,22 @@ function todayReading(lane, usage, sessionId2) {
   if (own2.kind === "failed") return own2;
   return ok({ sums: set2.value.sums, own: own2.kind === "ok" ? own2.value : {} });
 }
-function waitsOf(lanes) {
+function awaitsReading({ builtins, sources }) {
   return [
-    lanes.git.current(),
-    lanes.tmux.current(),
-    lanes.hostName.current(),
-    lanes.hostUser.current(),
-    ...[...lanes.sources.values()].map((lane) => lane.current())
-  ].flatMap(
-    (lane) => lane.kind === "pending" && lane.why === "unread" ? [lane.landed] : []
-  );
+    builtins.git,
+    builtins.tmux,
+    builtins.hostName,
+    builtins.hostUser,
+    ...Object.values(sources)
+  ].some((fact) => fact.kind === "pending" && fact.why === "unread");
+}
+async function settleWorld(inputs, at, refreshed, worldState, signal) {
+  await refreshPayload(inputs, at, refreshed);
+  try {
+    await when(() => !awaitsReading(worldState()), { signal });
+  } catch (e) {
+    if (!signal.aborted) throw e;
+  }
 }
 function firstPending(...lanes) {
   const lane = lanes.find((l) => l.kind === "pending");
@@ -67879,15 +67873,16 @@ function composePayload(facts, inputs, draw2) {
     ...autoCompactValue !== void 0 && { autocompact: autoCompactValue },
     // The storage owner logs each read that failed: a failure here is a value,
     // drawn by the template reading it.
-    ...projectSources(Object.keys(facts.sources), (name) => {
-      const reading = unstamped(facts.sources[name]);
+    ...projectSources(draw2.sources, (name) => {
+      const reading = unstamped(sourceFactOf(facts, name));
       return reading.kind === "pending" ? pendingOf(reading.why) : reading;
     })
   };
   return payload;
 }
-function sourcesFactOf(sources) {
-  const named3 = Object.entries(sources);
+var sourceFactOf = (facts, name) => facts.sources[name] ?? pendingOf("unread");
+function sourcesFactOf(names, facts) {
+  const named3 = names.map((name) => [name, sourceFactOf(facts, name)]);
   return {
     sources: String(named3.length),
     sourcesPending: named3.flatMap(
@@ -67924,18 +67919,6 @@ function todayOf(fact, at) {
   if (fact.kind !== "ok") return void 0;
   const today = projectToday(fact.value, at);
   return today.kind === "ok" ? { cost: today.value.cost, tokens: today.value.tokens } : void 0;
-}
-async function settlePayload(inputs, at, refreshed) {
-  await refreshPayload(inputs, at, refreshed);
-  await answered(() => {
-    const waits = waitsOf(inputs.deps.lanes());
-    return waits.length > 0 ? {
-      kind: "pending",
-      why: "unread",
-      landed: Promise.all(waits).then(() => {
-      })
-    } : true;
-  });
 }
 function projectAutoCompact(outcome, contextWindow) {
   switch (outcome.kind) {
@@ -69487,14 +69470,14 @@ function readTranscriptWindow(file) {
 function transcriptReads2(edge, said) {
   if (said.kind === "failed") return said;
   const byPath = /* @__PURE__ */ new Map();
-  for (const { path: file, answered: answered2 } of said.value) {
-    byPath.set(file, answered2 || (byPath.get(file) ?? false));
+  for (const { path: file, answered } of said.value) {
+    byPath.set(file, answered || (byPath.get(file) ?? false));
   }
   return {
     kind: "ok",
-    value: [...byPath].map(([file, answered2]) => ({
+    value: [...byPath].map(([file, answered]) => ({
       path: file,
-      answered: answered2,
+      answered,
       read: edge.transcript(file)
     }))
   };
@@ -70097,6 +70080,7 @@ var RuntimeStats = class _RuntimeStats {
         accountedBytes: 0,
         budgetBytes: 0
       },
+      collector: { sessions: 0, retiring: 0 },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0, pending: 0 },
       journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
@@ -70161,6 +70145,7 @@ var RuntimeStats = class _RuntimeStats {
       sourceRuns: extras.sourceRuns,
       transcriptReads: extras.transcriptReads,
       renderCache: extras.renderCache,
+      collector: extras.collector,
       effectCache: extras.effectCache,
       menuIdle: extras.menuIdle,
       journalTurns: extras.journalTurns,
@@ -71447,21 +71432,21 @@ var repoConfig = async (value, ctx) => {
     () => decodeSegments(value)
   );
   const sid = requireSessionId(sessionId2);
-  const answered2 = answer2;
-  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered2), mac)) {
+  const answered = answer2;
+  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
     throw new BadVerbArgs(
       "the answer's signature does not match what it carries: it was not drawn by this daemon"
     );
   }
-  const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered2);
+  const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered);
   if (filed.kind === "failed") {
-    throw new Error(`${dir} was not ${answered2}: ${filed.reason}`);
+    throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
   }
   ctx.journal.wrote();
   const { superseded, absent, unchecked } = filed.value;
   ctx.log(
     "info",
-    `repo-config: ${dir} ${answered2} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`
+    `repo-config: ${dir} ${answered} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`
   );
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
@@ -76196,6 +76181,11 @@ var FrameFeeds = class {
     );
     return () => this.unsubscribe(feed2, sub2);
   }
+  // [LAW:one-source-of-truth] Whether an open feed draws the session: the
+  // fact its pin counts, from the feed's open to its close.
+  feedOpen(sessionId2) {
+    return this.feeds.has(sessionId2);
+  }
   // The lanes whose subscribers follow the session's frames and draw them now.
   following(sessionId2) {
     return new Set(
@@ -76740,8 +76730,8 @@ function requestFacts(req, at, facts) {
   });
   return hintsError;
 }
-function setUpRender(parts, arrived3, at, facts) {
-  const { sessionState, renderCache } = parts;
+function setUpRender(parts, arrived3, worldState, at, facts) {
+  const { sessionState, renderCache, worldStates } = parts;
   const dir = arrived3.hookData.workspace?.current_dir ?? arrived3.cwd;
   const req = {
     ...arrived3,
@@ -76754,12 +76744,15 @@ function setUpRender(parts, arrived3, at, facts) {
   const hintsError = requestFacts(req, at, facts);
   noteFacts(facts, { encoding: req.encoding });
   const origin = sessionRenderOrigin(req.requested, sessionState, sessionId2);
-  const hold2 = renderCache.holdSession(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-    req
-  );
+  const hold2 = runInAction(() => {
+    worldStates.take(worldState);
+    return renderCache.holdSession(
+      origin.projectDir,
+      origin.cwd,
+      origin.target.path,
+      req
+    );
+  });
   return setUpDraw(parts, hold2, req, hintsError, at, facts);
 }
 function setUpFrame(parts, sessionId2, at, facts) {
@@ -76787,12 +76780,7 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
     const { sessionId: sessionId2, hints } = req;
     const payloadInputs = {
       hookData: req.hookData,
-      deps: {
-        ...payloadProviders,
-        // The lanes the session's view declared: what this render reads of
-        // the daemon's shared entries.
-        lanes: view.lanes
-      },
+      deps: payloadProviders,
       cwd: req.cwd,
       hints
     };
@@ -76916,7 +76904,7 @@ function drawRender(parts, setup, drawing2) {
     today: todayOf(document.builtins.today, at)
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
-  noteFacts(facts, sourcesFactOf(document.sources));
+  noteFacts(facts, sourcesFactOf([...view.state.sources.keys()], document));
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
@@ -77087,9 +77075,9 @@ function recordRequest(parts, req) {
     sessionState.set(sessionId2, SESSION_RENDER_ORIGIN_KEY, origin);
   }
 }
-async function answerRequest(parts, req, at, waitEndsAt, facts) {
+async function answerRequest(parts, req, worldState, at, waitEndsAt, facts) {
   recordRequest(parts, req);
-  return drawAnswer(parts, req, at, waitEndsAt, facts);
+  return drawAnswer(parts, req, worldState, at, waitEndsAt, facts);
 }
 function arrived2(parts, req, lanes) {
   const { laneSetups, tmuxStatusLines } = parts;
@@ -77123,11 +77111,11 @@ function laneClicked(parts, sessionId2, before, after) {
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
 }
-async function drawAnswer(parts, req, at, waitEndsAt, facts) {
+async function drawAnswer(parts, req, worldState, at, waitEndsAt, facts) {
   var _stack = [];
   try {
     const { clock, frameFeeds, log } = parts;
-    const setup = __using(_stack, setUpRender(parts, req, at, facts));
+    const setup = __using(_stack, setUpRender(parts, req, worldState, at, facts));
     arrived2(
       parts,
       req,
@@ -77141,7 +77129,13 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     const refreshed = /* @__PURE__ */ new Map();
     const ended = await waitWithin(
       (signal) => Promise.all([
-        settlePayload(setup.payloadInputs, at, refreshed),
+        settleWorld(
+          setup.payloadInputs,
+          at,
+          refreshed,
+          () => parts.worldStates.of(setup.sessionId),
+          signal
+        ),
         setup.view.registry.inFlight(signal)
       ]),
       budget,
@@ -77229,12 +77223,18 @@ function failed2(host, error, doing = "") {
     settled: NOTHING_TO_SETTLE
   };
 }
-async function answerStatusline(host, clock, req, id2, at, waitEndsAt, facts) {
+async function answerStatusline(host, collector, clock, req, id2, at, waitEndsAt, facts) {
   const delivered = await host.deliver(
     {
       kind: "event",
       at,
-      event: { kind: "request", id: id2, context: req, waitEndsAt }
+      event: {
+        kind: "request",
+        id: id2,
+        context: req,
+        worldState: collector.requested(req),
+        waitEndsAt
+      }
     },
     []
   );
@@ -77788,6 +77788,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
+        collector: parts.collector.stats(),
         effectCache: effectSessions.getStats(),
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
@@ -77860,8 +77861,9 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       };
     };
     if (!checked.ok) return recorded(refusedRender(checked.problems));
-    const answered2 = await answerStatusline(
+    const answered = await answerStatusline(
       parts.renderer,
+      parts.collector,
       clock,
       checked.req,
       order2,
@@ -77885,10 +77887,10 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       })
     );
     try {
-      sighted(checked.req, answered2.seen);
-      return recorded(answered2);
+      sighted(checked.req, answered.seen);
+      return recorded(answered);
     } catch (e) {
-      answered2.settled(false);
+      answered.settled(false);
       throw e;
     }
   }
@@ -78486,7 +78488,7 @@ function updateNotice(update, act, ctx) {
     failure
   };
 }
-function updateReading(build, release3) {
+function updateReading(build, release4) {
   if (build.kind === "pending") return build;
   const b = build.value;
   switch (b.kind) {
@@ -78502,12 +78504,12 @@ function updateReading(build, release3) {
     case "unchecked":
       return failed(`build: unchecked: ${b.reason}`, "read");
     case "not-source-checkout":
-      return releaseReading(release3);
+      return releaseReading(release4);
   }
 }
-function releaseReading(release3) {
-  if (release3.kind === "pending") return release3;
-  const c = release3.value;
+function releaseReading(release4) {
+  if (release4.kind === "pending") return release4;
+  const c = release4.value;
   switch (c.kind) {
     case "stale":
       return ok({ kind: "release", newer: c.latest, running: c.installed });
@@ -78571,7 +78573,7 @@ function makeUpdateWatch(opts) {
     log
   } = opts;
   let build = pendingOf("unread");
-  let release3 = pendingOf("unread");
+  let release4 = pendingOf("unread");
   const readStart = async (pid2) => {
     const read2 = await probe2.startTime(pid2);
     if (closed) throw new DaemonClosing("apply-update");
@@ -78604,7 +78606,7 @@ function makeUpdateWatch(opts) {
     };
   }
   function publish() {
-    const reading = closed ? ABSENT2 : updateReading(build, release3);
+    const reading = closed ? ABSENT2 : updateReading(build, release4);
     const next = restamp(fact.get(), reading, instantAt(clock));
     runInAction(() => fact.set(next));
     syncGate();
@@ -78624,7 +78626,7 @@ function makeUpdateWatch(opts) {
       clock
     );
     const assessed = assessCurrency(PACKAGE_VERSION, latest);
-    release3 = ok(assessed);
+    release4 = ok(assessed);
     logRelease(describeRelease(assessed));
     publish();
   }
@@ -78694,7 +78696,7 @@ function makeUpdateWatch(opts) {
     close() {
       closed = true;
       publish();
-      armed.forEach((release4) => release4());
+      armed.forEach((release5) => release5());
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
     running: () => actTurn(async () => {
@@ -80235,7 +80237,7 @@ var SessionUsageStore = class {
       hookData2?.transcript_path
     ).today();
   }
-  // [LAW:single-enforcer] A view's declaration of `today` (declareLanes in
+  // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
   // frame that reads it. The lane answers the set's day sums once a scan has
@@ -81013,8 +81015,8 @@ var ManagedStorage = class {
       if (watched.holders === 0) this.closed(watched);
     };
   }
-  // A view's declaration of one session's file: held at (storage key,
-  // session id) until the view's next declaration takes it no more.
+  // A session's declaration of one session's file: held at (storage key,
+  // session id) until the session's next declaration takes it no more.
   declare(holds2, storage, sessionId2) {
     return this.sessions.declare(holds2, { storage, sessionId: sessionId2 });
   }
@@ -81761,69 +81763,21 @@ function fallbackState(cwd2, repo2, deps) {
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
-function openView(state, cwd2, facts, { declare, source: sourceOf, changed, log }) {
+function openView(state, cwd2, facts, { source: sourceOf, changed, log }) {
   const { sessionId: sessionId2 } = facts;
   const registry = state.registry.view();
-  const holds2 = new Holds();
   declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
-  const lanesFor = (facts2) => {
-    try {
-      const {
-        result: { lanes: taken, faults },
-        acquired,
-        released
-      } = holds2.declare(() => declare(holds2, facts2, state.sources));
-      for (const fault of faults) {
-        log(
-          "error",
-          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault}`
-        );
-      }
-      if (acquired + released > 0) {
-        log(
-          "info",
-          `session view declared sid=${JSON.stringify(sessionId2)} acquired=${acquired} released=${released} held=${holds2.size}`
-        );
-      }
-      return taken;
-    } catch (e) {
-      log(
-        "error",
-        `session view declaration threw sid=${JSON.stringify(sessionId2)}: ${String(e)}`
-      );
-      return settledLanes(
-        failed(`view declaration threw: ${String(e)}`, "read"),
-        [...state.sources.keys()]
-      );
-    }
-  };
-  const declaration = (facts2) => ({
-    facts: facts2,
-    lanes: lanesFor(facts2)
-  });
-  const declared = observable.box(declaration(facts), { deep: false });
-  const redeclare = (facts2) => {
-    if (facts2 === declared.get().facts) return;
-    const next = declaration(facts2);
-    runInAction(() => declared.set(next));
-  };
-  const sourceStops = [];
-  const release3 = () => {
-    for (const stopSource of sourceStops) stopSource();
-    holds2.close();
-    return registry.dispose();
-  };
+  const requested = observable.box(facts, { deep: false });
   let source;
   try {
     source = sourceOf({
       sessionId: sessionId2,
       state,
       store: registry.variableStore,
-      declared: () => declared.get(),
-      onDispose: (stopSource) => sourceStops.push(stopSource)
+      requested: () => requested.get()
     });
   } catch (e) {
-    release3();
+    registry.dispose();
     throw e;
   }
   bindView(state.compiled, registry.variableStore, registry, source);
@@ -81849,20 +81803,27 @@ function openView(state, cwd2, facts, { declare, source: sourceOf, changed, log 
     state,
     store: registry.variableStore,
     registry,
-    holds: holds2,
     source,
-    requested: redeclare,
-    facts: () => declared.get().facts,
-    lanes: () => declared.get().lanes,
+    // [LAW:single-enforcer] A request is taken once.
+    requested: (next) => {
+      if (next !== requested.get()) runInAction(() => requested.set(next));
+    },
+    facts: () => requested.get(),
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
     retire: stopChanged,
     dispose: () => {
       stopChanged();
-      return release3();
+      return registry.dispose();
     }
   };
 }
-var HOLD_SWEEP_MS = 15e4;
+var subscriptionsOf = ({
+  sources
+}) => [...sources].map(([source, storage]) => ({
+  kind: "plugin",
+  source,
+  storage
+}));
 var RenderCache = class {
   entries = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] The user's answers for repositories are one
@@ -81871,8 +81832,6 @@ var RenderCache = class {
   // falls back to the state directory, where the daemon's log writes on every
   // request.
   answersWatch;
-  // What clears the hold sweep while one is running.
-  stopSweep = null;
   closed = false;
   // [LAW:one-source-of-truth] The entries an every-entry reload asked for that
   // have not re-read the disk since, each with the cause of the latest batch
@@ -81898,9 +81857,9 @@ var RenderCache = class {
   // Every view the cache serves or served, until reclaimed.
   viewHolds = /* @__PURE__ */ new Map();
   // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
-  // how many pins each holds: their views are never closed idle and their
-  // entries never evicted (`fit`), for as long as the feed is open — the fact
-  // itself, not frames happening to read the view within each sweep.
+  // how many pins each holds: their entries are never evicted (`fit`), for as
+  // long as the feed is open. The collector asks the feeds themselves whether
+  // a session is watched before it retires one.
   pins = /* @__PURE__ */ new Map();
   // [LAW:no-silent-failure] Each session whose view last failed to open, by
   // the error and the request the opening was for, until a view opens for
@@ -82001,7 +81960,6 @@ var RenderCache = class {
   holdState(entry, state) {
     const hold2 = this.holdOf(state);
     hold2.holders++;
-    this.armSweep();
     let released = false;
     return {
       entry,
@@ -82016,12 +81974,12 @@ var RenderCache = class {
   }
   // [LAW:no-ambient-temporal-coupling] A render's hold on the session's view
   // of the state it draws with, for the same reason as `hold`: a move, a
-  // reload, an eviction or an idle sweep retires the view, and the cache
+  // reload, an eviction or the host's retire retires the view, and the cache
   // disposes it when this hold is released.
   //
   // [LAW:single-enforcer] `facts` is the request the render is drawn for: the
-  // view is declared with it here, opened (openView) or kept (`requested`),
-  // so no view is drawn declared for another request.
+  // view draws by it from here, opened (openView) or kept (`requested`), so
+  // no view is drawn for another request.
   holdSession(projectDir, cwd2, configFile, facts) {
     const held = this.hold(projectDir, cwd2, configFile);
     let view;
@@ -82033,15 +81991,13 @@ var RenderCache = class {
       held[Symbol.dispose]();
       throw err;
     }
-    lease.read = true;
     return this.holdViewOf(held, view, lease);
   }
   // [LAW:single-enforcer] A frame's door: the session's current view, held
   // for its synchronous draw as `holdSession` holds one, or none. It creates
   // nothing — no entry, no view, no declaration — so a frame performs no I/O
   // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
-  // (ViewOpening). A frame is no request, so it leaves the view's `read`
-  // alone: an open feed keeps its view by its pin.
+  // (ViewOpening).
   holdView(sessionId2) {
     const view = this.views.get(sessionId2);
     if (view === void 0) return null;
@@ -82127,26 +82083,23 @@ var RenderCache = class {
       return current;
     }
     this.views.delete(sessionId2);
-    const read2 = current !== void 0 && this.leaseOf(current).read;
     let view;
     try {
-      view = this.opened(entry, state, facts, read2, by);
+      view = this.opened(entry, state, facts, by);
     } finally {
       if (current !== void 0) this.retireView(current, "moved");
     }
     this.fit(entry);
     return view;
   }
-  // [LAW:single-enforcer] The one way the cache opens a view: declared with
-  // `facts` in this turn (openView) and entered — `read` whether a render
-  // read the session's view since the last sweep. Its caller charges it to
+  // [LAW:single-enforcer] The one way the cache opens a view: drawn by
+  // `facts` from this turn (openView) and entered. Its caller charges it to
   // the budget, once however many it opens.
-  opened(entry, state, facts, read2, by) {
+  opened(entry, state, facts, by) {
     const { sessionId: sessionId2 } = facts;
     let view;
     try {
       view = openView(state, entry.cwd, facts, {
-        declare: this.deps.declare,
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),
         log: this.log
@@ -82157,7 +82110,7 @@ var RenderCache = class {
     }
     this.openFailures.delete(sessionId2);
     this.views.set(sessionId2, view);
-    this.viewHolds.set(view, { entry, holders: 0, retired: null, read: read2 });
+    this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
       `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
@@ -82189,37 +82142,34 @@ var RenderCache = class {
       `session view closed sid=${JSON.stringify(view.sessionId)} reason=${lease.retired.reason} released=${view.dispose()} held=${lease.retired.held} views=${this.views.size}`
     );
   }
-  armSweep() {
-    if (this.stopSweep !== null) return;
-    this.stopSweep = this.deps.clock.every(
-      HOLD_SWEEP_MS,
-      () => this.releaseIdle(),
-      { unref: true }
-    );
+  // [LAW:single-enforcer] The host ended the session (its collector's
+  // sweep): its view closes, and the failure no feed shows goes with it.
+  retireSession(sessionId2) {
+    const view = this.views.get(sessionId2);
+    if (view !== void 0) this.retireView(view, "idle");
+    this.openFailures.delete(sessionId2);
   }
-  // One sweep. Public so a test can run it at an instant it chose.
-  releaseIdle() {
-    for (const [view, lease] of this.viewHolds) {
-      if (lease.retired !== null || this.pins.has(view.sessionId)) continue;
-      if (lease.read) lease.read = false;
-      else this.retireView(view, "idle");
-    }
-    for (const sessionId2 of this.openFailures.keys())
-      if (!this.pins.has(sessionId2)) this.openFailures.delete(sessionId2);
-    if (this.entries.size === 0 && this.stopSweep !== null) {
-      this.stopSweep();
-      this.stopSweep = null;
-    }
+  // [LAW:one-source-of-truth] What every session's open view needs read: the
+  // plugin sources its config declares, at their folders' storage keys. Read
+  // off the views each turn, so a view that opened, moved or closed is the
+  // next output's.
+  subscriptions() {
+    return {
+      sources: Object.fromEntries(
+        [...this.views].map(([sessionId2, view]) => [
+          sessionId2,
+          subscriptionsOf(view.state)
+        ])
+      )
+    };
   }
-  // The cache's teardown: the sweep stops, and every entry is dropped, so its
-  // state is disposed now or when the render holding it returns. The sweep and
-  // the entries' watchers would otherwise keep the cache, and every compile it
-  // serves, alive for as long as the process runs.
+  // The cache's teardown: every entry is dropped, so its state is disposed now
+  // or when the render holding it returns. The entries' watchers would
+  // otherwise keep the cache, and every compile it serves, alive for as long
+  // as the process runs.
   close() {
     if (this.closed) return;
     this.closed = true;
-    this.stopSweep?.();
-    this.stopSweep = null;
     this.walk?.();
     this.walk = null;
     this.answersWatch.release();
@@ -82324,13 +82274,7 @@ var RenderCache = class {
       if (view.state !== state) continue;
       if (successor !== null) {
         try {
-          this.opened(
-            successor.entry,
-            successor.state,
-            view.facts(),
-            this.leaseOf(view).read,
-            "reload"
-          );
+          this.opened(successor.entry, successor.state, view.facts(), "reload");
         } catch (e) {
           this.log(
             "error",
@@ -82638,7 +82582,7 @@ var NavigationHistory = class {
   }
 };
 
-// src/daemon/session-source.ts
+// src/daemon/collector.ts
 init_globals();
 
 // src/daemon/facts-assembly.ts
@@ -82705,31 +82649,355 @@ function assembleFacts(prior, session, readings, update, at) {
     ...parts
   };
 }
+function failedStamp(prior, reason) {
+  const held = prior.diagnostics.find((d) => d.kind === "stamp");
+  if (held?.reason === reason) return prior;
+  return {
+    ...prior,
+    seq: prior.seq + 1,
+    diagnostics: [
+      ...prior.diagnostics.filter((d) => d.kind !== "stamp"),
+      { kind: "stamp", reason }
+    ]
+  };
+}
+function stampFailureOf(document) {
+  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
+}
+
+// src/daemon/collector.ts
+var SESSION_SWEEP_MS = 15e4;
+var locatorOf = (req) => ({
+  hookData: req.hookData,
+  cwd: req.cwd,
+  hints: req.hints,
+  sessionId: req.sessionId
+});
+var sourcesOf2 = (subscriptions) => new Map(subscriptions.map((s) => [s.source, s.storage]));
+var sameSources = (a, b) => a.size === b.size && [...a].every(([name, key]) => {
+  const other = b.get(name);
+  return other !== void 0 && sameKey(key, other);
+});
+function release3({ stop: stop2, holds: holds2 }) {
+  stop2();
+  holds2.close();
+}
+var Collector = class {
+  constructor(deps) {
+    this.deps = deps;
+  }
+  deps;
+  records = /* @__PURE__ */ new Map();
+  stopSweep = null;
+  // [LAW:single-enforcer] A request names the session's keys: they are
+  // declared again and stamped in one action, and that stamp is returned to
+  // go with the request. The record's reaction runs when the action ends,
+  // finds the read this stamp took, and hands in nothing alone. A request for
+  // a retiring session makes it live again.
+  requested(req) {
+    const locator = locatorOf(req);
+    const document = runInAction(() => {
+      const held = this.records.get(req.sessionId);
+      if (held === void 0) {
+        const opened = this.open(req.sessionId, locator);
+        this.records.set(req.sessionId, opened);
+        return opened.stamped.document;
+      }
+      held.requested = true;
+      const { phase } = held;
+      if (phase.kind === "live")
+        phase.declared.set(this.declared({ ...held, locator }, phase.holds));
+      const live = phase.kind === "live" ? phase : this.live(held, locator);
+      held.phase = live;
+      this.stamp(held, live.inputs.get());
+      return held.stamped.document;
+    });
+    this.armSweep();
+    return document;
+  }
+  // [LAW:one-source-of-truth] Every renderer output's subscriptions, whole:
+  // a session whose set moved is declared again, and one absent from them has
+  // no plugin sources. A retiring session takes its set too, and holds none
+  // of it.
+  subscribed({ sources }) {
+    for (const session of Object.keys(sources)) {
+      if (!this.records.has(session))
+        this.deps.log(
+          "error",
+          `subscriptions name session ${JSON.stringify(session)}, which the collector has no record of`
+        );
+    }
+    runInAction(() => {
+      for (const record2 of this.records.values()) {
+        const next = sourcesOf2(sources[record2.session] ?? []);
+        if (sameSources(next, record2.subscriptions)) continue;
+        record2.subscriptions = next;
+        const { phase } = record2;
+        if (phase.kind === "live")
+          phase.declared.set(
+            this.declared(
+              { ...record2, locator: phase.declared.get().locator },
+              phase.holds
+            )
+          );
+      }
+    });
+  }
+  // One sweep. Public so a test can run it at an instant it chose.
+  sweep() {
+    for (const record2 of this.records.values()) {
+      if (record2.phase.kind !== "live") continue;
+      if (record2.requested) record2.requested = false;
+      else if (!this.deps.watched(record2.session))
+        this.retire(record2, record2.phase);
+    }
+  }
+  stats() {
+    const all2 = [...this.records.values()];
+    return {
+      sessions: all2.length,
+      retiring: all2.filter((r) => r.phase.kind === "retiring").length
+    };
+  }
+  // Every session's holds close with the daemon.
+  close() {
+    this.disarmSweep();
+    for (const { phase } of this.records.values())
+      if (phase.kind === "live") release3(phase);
+    this.records.clear();
+  }
+  open(session, locator) {
+    const subscriptions = /* @__PURE__ */ new Map();
+    const reader = this.reader({ session, locator, subscriptions });
+    const first2 = reader.inputs.get();
+    let document;
+    try {
+      if (first2.kind === "failed") throw new Error(first2.reason);
+      document = assembleFacts(
+        void 0,
+        session,
+        first2.readings,
+        first2.update,
+        instantAt(this.deps.clock)
+      );
+    } catch (e) {
+      reader.holds.close();
+      throw e;
+    }
+    const stamped = { document, from: first2 };
+    return {
+      session,
+      stamped,
+      subscriptions,
+      requested: true,
+      phase: this.watch(session, stamped, reader)
+    };
+  }
+  // A retiring record read again: holds at the request's keys, and its stamps
+  // go on from the document it kept.
+  live(record2, locator) {
+    return this.watch(
+      record2.session,
+      record2.stamped,
+      this.reader({ ...record2, locator })
+    );
+  }
+  reader(keys2) {
+    const holds2 = new Holds();
+    const declared = observable.box(this.declared(keys2, holds2), {
+      deep: false
+    });
+    return {
+      holds: holds2,
+      declared,
+      inputs: computed(() => this.read(declared.get()))
+    };
+  }
+  // [LAW:no-ambient-temporal-coupling] The stamp of every owner landing is
+  // taken in a reaction's effect, not a derivation: a stamp is the instant of
+  // its turn, and a computed that read the clock and its own prior answer
+  // would answer by when it ran.
+  watch(session, stamped, reader) {
+    const stop2 = reaction(
+      () => reader.inputs.get(),
+      (moved) => runInAction(() => {
+        if (moved === stamped.from) return;
+        if (this.stamp({ session, stamped }, moved))
+          void this.deps.deliver({
+            kind: "world-state",
+            worldState: stamped.document
+          });
+      }),
+      {
+        // The expression cannot throw; the effect's catch is `stamp`.
+        onError: (e) => this.deps.log(
+          "error",
+          `world state stamp threw sid=${JSON.stringify(session)}: ${inspect(e)}`
+        )
+      }
+    );
+    return { kind: "live", ...reader, stop: stop2 };
+  }
+  // [LAW:single-enforcer] The one taker of a session's holds: every keyed
+  // entry at its locator's keys and each subscribed plugin source, taken in
+  // one body, so the entry a moved key names is held before the one it left
+  // is released (`Holds.declare`).
+  // [LAW:no-silent-failure] A declaration that throws keeps the holds it had,
+  // and its lanes answer its failure, naming the cause, which is logged here.
+  declared({ session, locator, subscriptions }, holds2) {
+    const sid = JSON.stringify(session);
+    try {
+      const {
+        result: { lanes, faults },
+        acquired,
+        released
+      } = holds2.declare(
+        () => declareLanes(this.deps.owners, holds2, locator, subscriptions)
+      );
+      for (const fault of faults)
+        this.deps.log("error", `session declaration threw sid=${sid} ${fault}`);
+      if (acquired + released > 0)
+        this.deps.log(
+          "info",
+          `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
+        );
+      return { locator, lanes };
+    } catch (e) {
+      this.deps.log(
+        "error",
+        `session declaration threw sid=${sid}: ${inspect(e)}`
+      );
+      return {
+        locator,
+        lanes: settledLanes(
+          failed(`session declaration threw: ${String(e)}`, "read"),
+          [...subscriptions.keys()]
+        )
+      };
+    }
+  }
+  inputsOf(locator) {
+    return { ...locator, deps: this.deps.owners };
+  }
+  read({ locator, lanes }) {
+    try {
+      return {
+        kind: "read",
+        readings: readingsOf(this.inputsOf(locator), lanes),
+        update: this.deps.update()
+      };
+    } catch (e) {
+      return { kind: "failed", reason: `reading the owners: ${String(e)}` };
+    }
+  }
+  // [LAW:single-enforcer] The one stamp of a session's document, against the
+  // one it replaces: the document itself when nothing it holds moved, and a
+  // failed stamp keeps the prior readings and says why (`failedStamp`).
+  // Answers whether the document moved.
+  stamp({ session, stamped }, moved) {
+    const prior = stamped.document;
+    const next = moved.kind === "failed" ? failedStamp(prior, moved.reason) : this.assembled(prior, moved, instantAt(this.deps.clock));
+    const failure = next === prior ? null : stampFailureOf(next);
+    if (failure !== null)
+      this.deps.log(
+        "error",
+        `world state sid=${JSON.stringify(session)}: ${failure}`
+      );
+    stamped.document = next;
+    stamped.from = moved;
+    return next !== prior;
+  }
+  assembled(prior, moved, at) {
+    try {
+      return assembleFacts(
+        prior,
+        prior.session,
+        moved.readings,
+        moved.update,
+        at
+      );
+    } catch (e) {
+      return failedStamp(prior, `stamping the world state: ${String(e)}`);
+    }
+  }
+  // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
+  // once, and its record stays `retiring` until the renderer answered the
+  // retire: an output taken meanwhile may still name it. A retire whose turn
+  // threw may have left the renderer holding the session's document, so the
+  // record stays, and a request revives it with the next `seq`.
+  retire(record2, live) {
+    release3(live);
+    record2.phase = { kind: "retiring" };
+    this.deps.log(
+      "info",
+      `session retired sid=${JSON.stringify(record2.session)}`
+    );
+    void this.deps.deliver({ kind: "retire", session: record2.session }).then(({ kind }) => {
+      if (kind === "answered" && record2.phase.kind === "retiring" && this.records.get(record2.session) === record2)
+        this.records.delete(record2.session);
+      if (this.records.size === 0) this.disarmSweep();
+    });
+  }
+  armSweep() {
+    if (this.stopSweep !== null) return;
+    this.stopSweep = this.deps.clock.every(
+      SESSION_SWEEP_MS,
+      () => this.sweep(),
+      { unref: true }
+    );
+  }
+  disarmSweep() {
+    this.stopSweep?.();
+    this.stopSweep = null;
+  }
+};
+
+// src/renderer/world-states.ts
+init_globals();
+var WorldStates = class {
+  // [LAW:one-source-of-truth] One document per session, the newest handed in.
+  documents = observable.map(
+    void 0,
+    { deep: false }
+  );
+  // [LAW:no-ambient-temporal-coupling] The host hands each session's documents
+  // in `seq` order, from its collector alone; a document older than the one
+  // held breaks that order, and an equal `seq` that is not the held document is
+  // a second minting of one number. Both are the host's bug, said, never
+  // drawn. The held document stays itself when handed in again, so nothing
+  // reading it wakes.
+  take(document) {
+    const held = this.documents.get(document.session);
+    if (held !== void 0 && document.seq <= held.seq) {
+      if (document.seq === held.seq && compareStructural(document, held))
+        return;
+      throw new Error(
+        `world state seq ${document.seq} for session ${JSON.stringify(document.session)} does not follow the held seq ${held.seq}`
+      );
+    }
+    runInAction(() => this.documents.set(document.session, document));
+  }
+  // [LAW:no-defensive-null-guards] Every view opens from a request, which
+  // carries its document, or reopens a session that already has one, and a
+  // `retire` drops the document with the view: a session with none here is
+  // the host's bug, so the read throws, naming it.
+  of(session) {
+    const document = this.documents.get(session);
+    if (document === void 0)
+      throw new Error(
+        `no world state for session ${JSON.stringify(session)}: the host hands one in with every request`
+      );
+    return document;
+  }
+  drop(session) {
+    runInAction(() => this.documents.delete(session));
+  }
+};
 
 // src/daemon/session-source.ts
-var failedWith = (prior, reason) => prior.failure === reason ? prior : { ...prior, failure: reason };
-function stamped(prior, moved, at, session) {
-  if (moved.kind === "failed") return failedWith(prior, moved.reason);
-  try {
-    const document = assembleFacts(
-      prior.document,
-      session,
-      moved.readings,
-      moved.update,
-      at
-    );
-    return prior.failure === null && document === prior.document && moved.compose === prior.compose && moved.draw === prior.draw ? prior : {
-      document,
-      compose: moved.compose,
-      draw: moved.draw,
-      failure: null
-    };
-  } catch (e) {
-    return failedWith(prior, `stamping the facts document: ${String(e)}`);
-  }
-}
+init_globals();
 function sessionSource(deps) {
-  return ({ sessionId: sessionId2, state, store, declared, onDispose }) => {
+  return ({ sessionId: sessionId2, state, store, requested }) => {
     const pick2 = (key) => deps.sessionState.get(sessionId2, key);
     const effective = store.derive(
       "session.effective",
@@ -82740,36 +83008,19 @@ function sessionSource(deps) {
         (preset) => state.authoredRoots.has(preset)
       )
     );
-    const inputs = store.derive(
-      "session.inputs",
-      "computed",
-      () => {
-        const { facts, lanes } = declared();
-        return {
-          hookData: facts.hookData,
-          cwd: facts.cwd,
-          hints: facts.hints,
-          deps: { ...deps.providers, lanes: () => lanes }
-        };
-      }
-    );
-    const readings = store.derive(
-      "session.readings",
-      "computed",
-      () => readingsOf(inputs.read())
-    );
     const compose = store.derive(
       "session.compose",
       "computed",
       () => {
-        const { hookData: hookData2, hints } = inputs.read();
-        return { hookData: hookData2, hints, home: deps.providers.home };
+        const { hookData: hookData2, hints } = requested();
+        return { hookData: hookData2, hints, home: deps.home };
       }
     );
     const draw2 = store.derive(
       "session.draw",
       "computed",
       () => ({
+        sources: [...state.sources.keys()],
         effective: effective.read(),
         configFacts: {
           ...settingCounts(state.config, state.fileHeldSettings, pick2),
@@ -82779,71 +83030,19 @@ function sessionSource(deps) {
         back: deps.navigation(sessionId2, state.config)
       })
     );
-    const clock = deps.providers.clock;
-    const turn = observable.box(
-      {
-        document: assembleFacts(
-          void 0,
-          sessionId2,
-          readings.read(),
-          deps.update(),
-          instantAt(clock)
-        ),
-        compose: compose.read(),
-        draw: draw2.read(),
-        failure: null
-      },
-      { deep: false }
+    const document = () => deps.worldStates.of(sessionId2);
+    const payload = store.derive(
+      "session.payload",
+      "computed",
+      () => composePayload(document(), compose.read(), draw2.read())
     );
-    onDispose(
-      reaction(
-        () => {
-          try {
-            return {
-              kind: "read",
-              readings: readings.read(),
-              update: deps.update(),
-              compose: compose.read(),
-              draw: draw2.read()
-            };
-          } catch (e) {
-            return {
-              kind: "failed",
-              reason: `reading the owners: ${String(e)}`
-            };
-          }
-        },
-        (moved) => runInAction(() => {
-          const prior = turn.get();
-          const next = stamped(prior, moved, instantAt(clock), sessionId2);
-          if (next.failure !== null && next !== prior) {
-            deps.providers.log(
-              "error",
-              `session facts sid=${JSON.stringify(sessionId2)}: ${next.failure}`
-            );
-          }
-          turn.set(next);
-        }),
-        {
-          // The expression above cannot throw; the effect's catch is `stamped`.
-          onError: (e) => deps.providers.log(
-            "error",
-            `session turn threw sid=${JSON.stringify(sessionId2)}: ${String(e)}`
-          )
-        }
-      )
-    );
-    const payload = store.derive("session.payload", "computed", () => {
-      const { document, compose: composed2, draw: drawn } = turn.get();
-      return composePayload(document, composed2, drawn);
-    });
     return {
       payload: () => payload.read(),
-      effective: () => turn.get().draw.effective,
-      facts: () => turn.get().document,
-      hints: () => turn.get().compose.hints,
-      failure: () => turn.get().failure,
-      selections: () => turn.get().draw.effective
+      effective: () => draw2.read().effective,
+      facts: document,
+      hints: () => compose.read().hints,
+      failure: () => stampFailureOf(document()),
+      selections: () => draw2.read().effective
     };
   };
 }
@@ -84513,10 +84712,12 @@ var TurnThrew = class extends Error {
 };
 
 // src/daemon/renderer-host.ts
-function rendererHost(name, renderer, log) {
+function rendererHost(name, renderer, log, subscribed) {
   const turn = async (input) => {
     try {
-      return { kind: "answered", output: await renderer.answer(input) };
+      const output = await renderer.answer(input);
+      subscribed(output.subscriptions);
+      return { kind: "answered", output };
     } catch (e) {
       return e instanceof TurnThrew ? { kind: "threw", error: e.thrown, record: e.record } : { kind: "threw", error: e, record: [] };
     }
@@ -84558,20 +84759,26 @@ init_globals();
 function mainRenderer(parts) {
   const deliveries = /* @__PURE__ */ new Map();
   let minted = 0;
+  const answered = (effects, record2) => ({
+    effects,
+    subscriptions: parts.renderCache.subscriptions(),
+    record: record2
+  });
   const turn = async (event, at, record2) => {
     switch (event.kind) {
       case "request": {
         const { frame: frame2, delivered } = await answerRequest(
           parts,
           event.context,
+          event.worldState,
           at,
           event.waitEndsAt,
           record2
         );
         const id2 = ++minted;
         deliveries.set(id2, delivered);
-        return {
-          effects: [
+        return answered(
+          [
             {
               kind: "present",
               id: id2,
@@ -84581,9 +84788,16 @@ function mainRenderer(parts) {
               frame: frame2
             }
           ],
-          record: record2
-        };
+          record2
+        );
       }
+      case "world-state":
+        parts.worldStates.take(event.worldState);
+        return answered([], record2);
+      case "retire":
+        parts.renderCache.retireSession(event.session);
+        parts.worldStates.drop(event.session);
+        return answered([], record2);
       case "effect-done": {
         const delivered = deliveries.get(event.of);
         if (delivered === void 0)
@@ -84592,7 +84806,7 @@ function mainRenderer(parts) {
           );
         deliveries.delete(event.of);
         if (event.outcome.kind === "ok") delivered();
-        return { effects: [], record: record2 };
+        return answered([], record2);
       }
     }
   };
@@ -84954,6 +85168,7 @@ function createDaemon(inputs) {
   }
   const renderWarnings = new RenderWarningRecords();
   const updateFact = newUpdateFact();
+  const worldStates = new WorldStates();
   const renderCache = new RenderCache(
     {
       clock,
@@ -84967,15 +85182,13 @@ function createDaemon(inputs) {
       storage: managedStorage,
       signer: linkSigner2,
       gates,
-      declare: (holds2, facts, sources) => declareLanes(payloadProviders, holds2, facts, sources),
       // [LAW:single-enforcer] What every session's view draws from: its payload
-      // derived over its declaration, its picks and its histories' depths.
+      // composed over its world state, its request, its picks and its
+      // histories' depths.
       source: sessionSource({
-        // [LAW:single-enforcer] Every provider logs the refreshes it makes,
-        // through the one ledger, so a view's payload logs none of them.
-        providers: payloadProviders,
         sessionState,
-        update: () => updateFact.get(),
+        worldStates,
+        home: host.home,
         history: (sessionId2) => settingsHistory.depth(sessionId2),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId2, config2) => navigationHistory.depth(
@@ -85122,6 +85335,19 @@ function createDaemon(inputs) {
     },
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
+  const collector = new Collector({
+    owners: payloadProviders,
+    update: () => updateFact.get(),
+    clock,
+    watched: (sessionId2) => frameFeeds.feedOpen(sessionId2),
+    deliver: (event) => parts.renderer.deliver({ kind: "event", event, at: instant() }, [
+      [
+        "sid",
+        event.kind === "world-state" ? event.worldState.session : event.session
+      ]
+    ]),
+    log
+  });
   const parts = {
     home: host.home,
     tmp: host.tmp,
@@ -85155,6 +85381,8 @@ function createDaemon(inputs) {
     verbCtx,
     // [LAW:one-way-deps] exception: the main renderer, in process, over the
     // host parts its side still reaches (RendererParts, src/daemon/draw-bar.ts).
+    collector,
+    worldStates,
     renderer: rendererHost(
       "main",
       mainRenderer({
@@ -85163,6 +85391,7 @@ function createDaemon(inputs) {
         sessionState,
         renderCache,
         payloadProviders,
+        worldStates,
         linkSigner: linkSigner2,
         renderWarnings,
         effectSessions,
@@ -85174,7 +85403,8 @@ function createDaemon(inputs) {
         laneSetups,
         tmuxStatusLines
       }),
-      log
+      log,
+      (subscriptions) => collector.subscribed(subscriptions)
     )
   };
   return {
@@ -85229,6 +85459,7 @@ function createDaemon(inputs) {
         ["binaryWatch close", () => binaryWatch.close()],
         ["limits disarm", () => limits.disarm()],
         // Before the sources and the storage its states hold.
+        ["collector close", () => collector.close()],
         ["renderCache close", () => renderCache.close()],
         ["gitService close", () => gitService.close()],
         ["usageStore close", () => usageStore.close()],
