@@ -622,18 +622,41 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       truecolor: null,
     };
     await render(sockPath, "feed-unseen", projectDir, { tmux }, args("moving"));
-    let drawn = 0;
-    await framesOf("feed-unseen", async () => {
-      // The pane's server is asked once a second; until it answers, the pane
-      // counts as shown.
-      await sleep(1500);
-      const before = (await feedStats()).drawn;
-      await sleep(2000);
-      drawn = (await feedStats()).drawn - before;
+    const { clock } = daemon.daemon;
+    let feeds = 0;
+    let span = 0;
+    await framesOf("feed-unseen", async ({ waitFor }) => {
+      // [LAW:no-ambient-temporal-coupling] Until the pane's server answers,
+      // the pane counts as shown and its bar draws at the moving rate, so the
+      // case waits for the answer, which is held before its line is logged.
+      await loggedLines(
+        env,
+        (lines) =>
+          lines.filter((l) =>
+            l.includes(`visibility socket=${JSON.stringify(tmux.socket)} shown=-`),
+          ),
+        (found) => found.length > 0,
+        "the pane's server saying it shows no pane",
+      );
+      // [LAW:one-source-of-truth] The span is read on the daemon's clock, the
+      // one its frames are spaced on, and opens before the count it is
+      // measured from, so every draw counted starts inside it.
+      const from = clock.monotonic();
+      const before = await feedStats();
+      feeds = before.feeds;
+      await waitFor(
+        async () => (await feedStats()).drawn - before.drawn >= 3,
+        "three frames drawn once the pane is known unseen",
+        15_000,
+      );
+      span = clock.monotonic() - from;
     });
-    // One a second at the still rate; a bar someone could see draws thirty.
-    expect(drawn).toBeGreaterThanOrEqual(1);
-    expect(drawn).toBeLessThanOrEqual(4);
+    // The draws are counted over every feed, so this session's is the only one.
+    expect(feeds).toBe(1);
+    // Three draws span two still periods, each short of a full one by at most
+    // the millisecond a frame's moment is truncated to; a bar someone could
+    // see draws three in a tenth of a second.
+    expect(span).toBeGreaterThanOrEqual(FEED_PERIODS.still);
   });
 
   test("a subscribe that names no session is refused, and the stream ends on the refusal", async () => {
