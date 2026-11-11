@@ -4,15 +4,22 @@
     {
       "version": "pr-710",
       "ref": "refs/pull/710/merge",
-      "sha": "4d97cffc523d52ea9d1df77c04b469d0c2996150",
-      "timestamp": "2026-11-11T11:03:25.684Z",
+      "sha": "f3cbc4184b3d6b3a0f02fb9d5cf6c7f009c7aa42",
+      "timestamp": "2026-11-11T11:07:09.177Z",
       "commits": [
         {
-          "sha": "4d97cffc523d52ea9d1df77c04b469d0c2996150",
+          "sha": "f3cbc4184b3d6b3a0f02fb9d5cf6c7f009c7aa42",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T11:02:40Z",
-          "message": "Merge e989fc8398cbc649ecc9b554976ae2d96d297303 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+          "timestamp": "2026-11-11T11:06:24Z",
+          "message": "Merge 816f0e14f9d8d5afc639f866680e4d894a5ce483 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "816f0e14f9d8d5afc639f866680e4d894a5ce483",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T04:06:13-07:00",
+          "message": "docs(design): Proposal 3 carries the step-back's decisions: digest range ids, writes only under the profile, chains of one-step effects, and the replay test after the pure draw (candybar-gather-renderer-76bb.215)\n"
         },
         {
           "sha": "e989fc8398cbc649ecc9b554976ae2d96d297303",
