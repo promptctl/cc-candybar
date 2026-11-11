@@ -630,11 +630,14 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       // [LAW:no-ambient-temporal-coupling] Until the pane's server answers,
       // the pane counts as shown and its bar draws at the moving rate, so the
       // case waits for the answer, which is held before its line is logged.
-      const unseen = `visibility socket=${JSON.stringify(tmux.socket)} shown=-`;
+      const server = `visibility socket=${JSON.stringify(tmux.socket)} `;
+      const answers = (): string[] =>
+        logLines(env).filter((l) => l.includes(server));
       await waitFor(
-        () => logLines(env).some((l) => l.includes(unseen)),
-        "the pane's server saying it shows no pane",
-        15_000,
+        () => answers().some((l) => l.includes(`${server}shown=-`)),
+        () =>
+          `the pane's server saying it shows no pane; its lines:\n${answers().join("\n")}`,
+        10_000,
       );
       // [LAW:one-source-of-truth] The span is read on the daemon's clock, the
       // one its frames are spaced on, and opens before the count it is
@@ -645,16 +648,17 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       await waitFor(
         async () => (await feedStats()).drawn - before.drawn >= 3,
         "three frames drawn once the pane is known unseen",
-        15_000,
+        10_000,
       );
       span = elapsedMs(clock, from);
     });
     // The draws are counted over every feed, so this session's is the only one.
     expect(feeds).toBe(1);
-    // Three draws span two still periods, each short of a full one by at most
-    // the millisecond a frame's moment is truncated to; a bar someone could
-    // see draws three in a tenth of a second.
-    expect(span).toBeGreaterThanOrEqual(2 * FEED_PERIODS.still - 2);
+    // Three draws span two still periods, each short of a full one only by
+    // the few milliseconds a frame's timer and moment are rounded to, far
+    // under a moving period; a bar someone could see draws three in a tenth
+    // of a second.
+    expect(span).toBeGreaterThan(2 * FEED_PERIODS.still - FEED_PERIODS.moving);
     // The bar moved while it was drawn at the still rate, so the rate is the
     // unseen pane's and not a bar that stopped moving.
     expect(await closedSummary("feed-unseen")).toMatch(/ unseen=[1-9]/u);
