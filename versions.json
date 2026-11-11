@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f7cadf094d071ea3947d068dd5da2850afb93530",
-      "timestamp": "2026-11-11T16:23:44.113Z",
+      "sha": "36c6ac3a264fcc2876d5952e4a13648e1268f98f",
+      "timestamp": "2026-11-11T16:32:30.096Z",
       "commits": [
         {
-          "sha": "f7cadf094d071ea3947d068dd5da2850afb93530",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T09:22:42-07:00",
-          "message": "feat(renderer): a statusline request is answered through Renderer.answer, in process (candybar-host-renderer-x96a.2xo) (#711)\n\n* feat(renderer): a statusline request is answered through Renderer.answer, in process, by the present its turn returns (candybar-host-renderer-x96a.2xo)\n\n* fix(renderer): review high — overlapping turns stated, one logfmt field type, the answer's settle holds only what it records (candybar-host-renderer-x96a.2xo)\n\n- The interface no longer claims one input at a time: a request's turn waits\n  inside itself until the mailbox holds that wait, so turns overlap.\n- The host decides once whether it records a turn, and builds its line only\n  when it does.\n- One logfmt field type and one event-line writer serve the request event and\n  the turn line.\n- The settle a request's answer returns is built outside the draw, so it no\n  longer keeps the draw's setup alive until its frame settles.\n- The rate-limit vocabulary is back beside the function that produces it.\n- The doctor's can-move text names a moving bar handed off to another lane,\n  which the client's sighting now reads as the handoff line it drew.\n\n* fix(renderer): review medium — every exit after a render's answer settles its present, one failure-message spelling, true seam claims (candybar-host-renderer-x96a.2xo)\n\n- A sighting or request-event write that throws after the answer settles the\n  present failed before the throw reaches the connection, so the renderer\n  keeps no record of a reply that was never sent.\n- A turn's failure reaches the client through renderFailed's one extraction,\n  with the renderer and what it was doing in front.\n- The interface and the session context say what holds: they import only\n  types. The renderer's turn record no longer claims the renderer writes no\n  log; the host parts it reaches name the wait's log among what the mailbox\n  takes away."
+          "sha": "36c6ac3a264fcc2876d5952e4a13648e1268f98f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-11T16:31:31Z",
+          "message": "chore(release): set `package.json` to 1.215.0\n\n## [1.215.0](https://github.com/promptctl/cc-candybar/compare/v1.214.0...v1.215.0) (2026-11-11)\n\n### Features\n\n* **renderer:** a statusline request is answered through Renderer.answer, in process (candybar-host-renderer-x96a.2xo) ([#711](https://github.com/promptctl/cc-candybar/issues/711)) ([f7cadf0](https://github.com/promptctl/cc-candybar/commit/f7cadf094d071ea3947d068dd5da2850afb93530))\n"
         }
       ]
     }
