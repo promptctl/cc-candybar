@@ -360,7 +360,7 @@ function daySumsOver(
     }
   }
   // [LAW:types-are-the-program] A record, not a Map: the day sums are a fact
-  // that crosses a process as JSON (src/facts/session-facts.ts).
+  // that crosses a process as JSON (src/facts/world-state.ts).
   return Object.fromEntries(sums);
 }
 

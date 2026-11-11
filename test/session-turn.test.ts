@@ -26,7 +26,7 @@ import { sessionIdOf } from "../src/daemon/session-id";
 import { instantOf } from "../src/utils/instant";
 import { pendingOf } from "../src/utils/outcome";
 import type { Fact } from "../src/facts/fact";
-import type { UpdateNotice } from "../src/facts/session-facts";
+import type { UpdateNotice } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";

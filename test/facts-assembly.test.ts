@@ -4,7 +4,7 @@
 // one answer does.
 
 import { restamp, type Fact } from "../src/facts/fact";
-import type { BuiltinFacts } from "../src/facts/session-facts";
+import type { BuiltinFacts } from "../src/facts/world-state";
 import type { GitRead } from "../src/segments/git";
 import { assembleFacts, FACTS_VERSION } from "../src/daemon/facts-assembly";
 import type { Update } from "../src/daemon/update-notice";

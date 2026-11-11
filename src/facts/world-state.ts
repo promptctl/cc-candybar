@@ -11,7 +11,7 @@ import type { TranscriptUsage } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
 import type { Fact } from "./fact";
 
-// [LAW:types-are-the-program] The seam between Gather and a renderer: one
+// [LAW:types-are-the-program] The seam between the host and a renderer: one
 // total document per session. Every field exists on every document; a fact
 // not yet known is the `pending` arm, one found to be nothing is `absent`, one
 // whose read failed carries its reason and the phase it failed in. The value
@@ -66,7 +66,7 @@ export interface BuiltinFacts {
   readonly hostUser: Fact<string>;
 }
 
-export interface SessionFacts {
+export interface WorldState {
   readonly v: number;
   readonly session: SessionId;
   readonly seq: number;

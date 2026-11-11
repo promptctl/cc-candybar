@@ -24,7 +24,7 @@ import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
 import type { SourceOf } from "./cache/render.js";
 import type { Fact } from "../facts/fact.js";
-import type { SessionFacts, UpdateNotice } from "../facts/session-facts.js";
+import type { WorldState, UpdateNotice } from "../facts/world-state.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { assembleFacts } from "./facts-assembly.js";
 import {
@@ -49,9 +49,9 @@ import { settingCounts } from "./setting-drafts.js";
 export interface SessionSource extends ViewSource {
   readonly payload: () => ViewPayload;
   readonly effective: () => EffectiveGlobals;
-  // The session's facts document (src/facts/session-facts.ts), restamped in
+  // The session's facts document (src/facts/world-state.ts), restamped in
   // the turn an owner's reading moves; the view's source is its one holder.
-  readonly facts: () => SessionFacts;
+  readonly facts: () => WorldState;
   // The client's hints the turn was composed from: what a draw takes of the
   // client beside the payload, so it never pairs a turn with a request it was
   // not composed from.
@@ -65,7 +65,7 @@ export interface SessionSource extends ViewSource {
 // [LAW:types-are-the-program] One turn: the document and everything the
 // payload is composed from beside it, stamped together.
 interface Turn {
-  readonly document: SessionFacts;
+  readonly document: WorldState;
   readonly compose: ComposeInputs;
   readonly draw: DrawInputs;
   readonly failure: string | null;

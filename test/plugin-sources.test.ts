@@ -781,7 +781,7 @@ describe("the view declares every source the config declares", () => {
 });
 
 // [LAW:behavior-not-structure] The document a session's view holds
-// (src/facts/session-facts.ts), read from the view's source as the renderer
+// (src/facts/world-state.ts), read from the view's source as the renderer
 // will: total, restamped in the turn an owner's reading moves, and one update
 // for every session.
 describe("a session's facts document", () => {

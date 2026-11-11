@@ -147,7 +147,7 @@ interface SessionFacts {
 }
 ```
 
-In code the value types keep the names their owners already give them (`TranscriptUsage`, a plain `number` for the context tokens, `MetricsFold`, `ActivityInfo`, `SpeedObservation`, `AutoCompactWindow`, a plain `number` for the cache expiry); `session`, `context` and `metrics` are the transcript's folds alone, and the renderer lays the hook's cost, context window, durations and lines over them when it composes the payload; `today`'s day sums are a record and not a `Map` because the document crosses as JSON, and `git` is the read before the PR is composed onto it (`src/facts/session-facts.ts`).
+In code the value types keep the names their owners already give them (`TranscriptUsage`, a plain `number` for the context tokens, `MetricsFold`, `ActivityInfo`, `SpeedObservation`, `AutoCompactWindow`, a plain `number` for the cache expiry); `session`, `context` and `metrics` are the transcript's folds alone, and the renderer lays the hook's cost, context window, durations and lines over them when it composes the payload; `today`'s day sums are a record and not a `Map` because the document crosses as JSON, and `git` is the read before the PR is composed onto it (`src/facts/world-state.ts`).
 
 What stays out, because it is the renderer's: the hook's instantaneous fields (model, cost, context window, cwd as of the tick), client hints (width, depth, terminal, ssh), settings and their history depth, picks, config facts, `feeds`, `drawing`, the menu. The payload a template reads is `payloadOf(facts, hook, hints, rendererState)` and is composed in the renderer, as today. `block` and `weekly` come from the hook and never cross.
 

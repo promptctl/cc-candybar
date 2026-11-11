@@ -2,10 +2,10 @@ import { compareStructural } from "mobx";
 import { restamp, type Fact } from "../facts/fact";
 import type {
   BuiltinFacts,
-  SessionFacts,
+  WorldState,
   SourceValue,
   UpdateNotice,
-} from "../facts/session-facts";
+} from "../facts/world-state";
 import type { GitInfo, GitRead, PullRequest } from "../segments/git";
 import type { Instant } from "../utils/instant";
 import { ABSENT, ok, type Reading } from "../utils/outcome";
@@ -58,12 +58,12 @@ function gitFactsOf({ pullRequest: _pullRequest, ...git }: GitInfo): GitRead {
 // [LAW:effects-at-boundaries] Pure: `at` is the instant of the turn, taken by
 // the caller, and the prior document is the caller's to hold.
 export function assembleFacts(
-  prior: SessionFacts | undefined,
+  prior: WorldState | undefined,
   session: SessionId,
   readings: Readings,
   update: Fact<UpdateNotice>,
   at: Instant,
-): SessionFacts {
+): WorldState {
   const { lanes } = readings;
   const stamp = <T>(held: Fact<T> | undefined, reading: Reading<T>): Fact<T> =>
     restamp(held, reading, at);

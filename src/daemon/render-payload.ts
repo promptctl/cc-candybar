@@ -107,9 +107,9 @@ import {
 import type { Fact } from "../facts/fact.js";
 import type {
   FactsDiagnostic,
-  SessionFacts,
+  WorldState,
   SourceValue,
-} from "../facts/session-facts.js";
+} from "../facts/world-state.js";
 import type { SessionId } from "./session-id.js";
 import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
 import type { JsonValue } from "../var-system/types.js";
@@ -1165,7 +1165,7 @@ const unstamped = <T>(fact: Fact<T>): Reading<T> => {
 // (src/daemon/session-source.ts), and `check` composes its fixture document
 // through it.
 export function composePayload(
-  facts: SessionFacts,
+  facts: WorldState,
   inputs: ComposeInputs,
   draw: DrawInputs,
 ): ViewPayload {
