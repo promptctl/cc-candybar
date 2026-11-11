@@ -4,15 +4,22 @@
     {
       "version": "pr-710",
       "ref": "refs/pull/710/merge",
-      "sha": "d2f1cf5063e2d92116264ede6582b25bc6de49e0",
-      "timestamp": "2026-11-10T17:05:20.739Z",
+      "sha": "581718aa264fc98245b4229205ae4183db4bdc6f",
+      "timestamp": "2026-11-11T05:13:40.404Z",
       "commits": [
         {
-          "sha": "d2f1cf5063e2d92116264ede6582b25bc6de49e0",
+          "sha": "581718aa264fc98245b4229205ae4183db4bdc6f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T17:04:34Z",
-          "message": "Merge aebec607458058ca574cb9f8e9ba65486bf02d86 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+          "timestamp": "2026-11-11T05:12:40Z",
+          "message": "Merge da60afa4830c566e1e3d3ba8a10b19c79813c8b3 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "da60afa4830c566e1e3d3ba8a10b19c79813c8b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T22:12:27-07:00",
+          "message": "docs(design): Proposal 3 names its concepts by their standard terms: functional core and imperative shell, subscriptions, conditional writes, profiles, mailboxes, an effect interpreter (candybar-gather-renderer-76bb.215)\n"
         },
         {
           "sha": "aebec607458058ca574cb9f8e9ba65486bf02d86",
