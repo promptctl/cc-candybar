@@ -82829,7 +82829,7 @@ var Collector = class {
           });
       }),
       {
-        // The expression cannot throw; the effect's catch is `stampOf`.
+        // The expression cannot throw; the effect's catch is `stamp`.
         onError: (e) => this.deps.log(
           "error",
           `world state stamp threw sid=${JSON.stringify(session)}: ${inspect(e)}`
@@ -85209,7 +85209,6 @@ function createDaemon(inputs) {
           log("info", configLoadedLine(entry, cause, settled3));
           for (const sessionId2 of sessions)
             frameFeeds.wake(sessionId2, "reload");
-          collector.subscribed(renderCache.subscriptions());
         },
         // [LAW:single-enforcer] What a session's view draws from moved: its
         // feed's next frame is brought forward, whatever moved it: a request's
