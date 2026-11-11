@@ -71,10 +71,8 @@ import {
 import { SessionState } from "../daemon/session-state.js";
 import { SourceRuns } from "../var-system/source-runs.js";
 import { claudeConfigDir } from "../claude-settings.js";
-import type {
-  RateLimitsSeen,
-  TranscriptSaid,
-} from "../daemon/render-sightings.js";
+import type { TranscriptSaid } from "../daemon/render-sightings.js";
+import type { RateLimitsSeen } from "../renderer/request-context.js";
 
 const EXIT_OK = 0;
 const EXIT_FAILED = 1;

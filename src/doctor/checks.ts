@@ -29,9 +29,9 @@ import {
 import {
   SIGHTINGS_KEPT,
   type FrameSighting,
-  type RateLimitsSeen,
   type TranscriptSaid,
 } from "../daemon/render-sightings.js";
+import { type RateLimitsSeen } from "../renderer/request-context.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import type { Delivery, SightingScope } from "./sightings.js";
 import {

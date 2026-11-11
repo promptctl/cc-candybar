@@ -7,10 +7,11 @@ import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
 import {
   fileEventsWarnings,
+  type FileEventDelivery,
   type FileEventsWarning,
 } from "./cache/file-events";
-import type { LauncherWarning, PipeEvent } from "../proc/launch";
-import type { CheckedRenderRequest } from "./render-checkpoint.js";
+import type { Launcher, LauncherWarning, PipeEvent } from "../proc/launch";
+import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import { UPDATE_DISMISSED_KEY } from "./update-keys";
 import { type RenderOrigin } from "../config-hint";
 import {
@@ -25,6 +26,7 @@ import { type SessionId } from "./session-id";
 import { repoQuestions } from "./repo-configs";
 import {
   type CacheEntry,
+  type RenderCache,
   type DslRenderState,
   type SessionHold,
   type SessionView,
@@ -38,7 +40,6 @@ import {
 } from "./foundations/session-keys";
 import { answeredOf, roleOf } from "./foundations/sighting-roles";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
-import type { DrawnMotion } from "../render/drawn-motion.js";
 import {
   composeBar,
   renderFailedFrame,
@@ -72,7 +73,11 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { clickErrorAt, type ClickErrorRecord } from "./click-error.js";
+import {
+  answeredClickError,
+  clickErrorAt,
+  type ClickErrorRecord,
+} from "./click-error.js";
 import { type LaneSession } from "./lane-setup.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
@@ -93,6 +98,46 @@ import { waitWithin } from "../utils/reading.js";
 import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
 import type { DaemonParts } from "./daemon-parts.js";
+import type { PayloadProviders } from "./payload-providers";
+import type { SessionState } from "./session-state";
+import type { RenderWarningRecords } from "./render-warnings.js";
+import type { EffectSessions } from "../render/effect.js";
+import type { RenderedLine } from "../dsl/node-registry.js";
+import type { LinkSigner } from "../click/link-signer.js";
+import type { FrameFeeds } from "./frame-feed.js";
+import type { UpdateWatch } from "./update-notice";
+import type { MenuIdle } from "./menu-idle.js";
+import type { LaneSetups } from "./lane-setup.js";
+import type { TmuxStatusLines } from "./tmux-status.js";
+import type { Timekeeper } from "../time.js";
+import type { DaemonLogger } from "../utils/logger";
+
+// [LAW:one-way-deps] exception: what the renderer side still reaches of the
+// host, each by the methods it calls, so the reach is named by type. Each
+// later skeleton step takes its own away: the providers' refresh and the
+// view's world state and source runs (8e9, zhh), the lane setups, tmux status
+// line and launcher (effects, plan step 2), the session store and the config
+// loads (plan step 3).
+export interface RendererParts {
+  readonly clock: Pick<Timekeeper, "monotonic" | "after">;
+  readonly log: DaemonLogger;
+  readonly sessionState: SessionState;
+  readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
+  readonly payloadProviders: PayloadProviders;
+  readonly linkSigner: LinkSigner;
+  readonly renderWarnings: RenderWarningRecords;
+  readonly effectSessions: EffectSessions<RenderedLine>;
+  readonly frameFeeds: Pick<
+    FrameFeeds<CheckedRenderRequest>,
+    "feedsOf" | "following"
+  >;
+  readonly updateWatch: Pick<UpdateWatch, "notice" | "error">;
+  readonly fileEvents: Pick<FileEventDelivery, "delivery">;
+  readonly menuIdle: Pick<MenuIdle, "observe" | "since">;
+  readonly launcher: Pick<Launcher, "launcherWarnings" | "answeredPipeEvent">;
+  readonly laneSetups: Pick<LaneSetups, "noted">;
+  readonly tmuxStatusLines: Pick<TmuxStatusLines, "observe">;
+}
 
 // What a reply's sender records once the client holds a response carrying
 // nothing to record.
@@ -110,7 +155,7 @@ export const renderFailed = (err: unknown): Refusal => ({
 // [LAW:dataflow-not-control-flow] A render's answer in each encoding, looked up
 // by the value the checkpoint parsed. Keyed by the type, so a new encoding names
 // its answer here or fails to compile.
-const RENDER_ANSWERS: Readonly<
+export const RENDER_ANSWERS: Readonly<
   Record<RenderEncoding, (frame: Frame) => Response>
 > = {
   ansi: (frame) => ({ ok: true, output: composeBar(frame) }),
@@ -132,7 +177,7 @@ const RENDER_ANSWERS: Readonly<
 // refreshes no source — the request it is drawn from made those refreshes,
 // and an event, never a frame, opened the view it draws.
 export function renderFrame(
-  parts: DaemonParts,
+  parts: RendererParts,
   sessionId: string,
   fps: number,
   at: Instant,
@@ -193,7 +238,7 @@ export function renderFrame(
 // never a fresh file read that could race a concurrent write and disagree with
 // the tree that actually rendered.
 function sessionGlobals(
-  parts: DaemonParts,
+  parts: RendererParts,
   sessionId: string,
   state: DslRenderState,
 ): EffectiveGlobals {
@@ -308,7 +353,7 @@ function requestFacts(
 }
 
 export function setUpRender(
-  parts: DaemonParts,
+  parts: RendererParts,
   arrived: CheckedRenderRequest,
   at: Instant,
   facts: RequestFacts,
@@ -355,7 +400,7 @@ export function setUpRender(
 // it, drawn by the request the view is declared with, or null while the
 // session has no view. It opens nothing (`holdView`).
 function setUpFrame(
-  parts: DaemonParts,
+  parts: RendererParts,
   sessionId: string,
   at: Instant,
   facts: RequestFacts,
@@ -383,7 +428,7 @@ function setUpFrame(
 // The setup over a held view, which owns the hold from here: a throw before
 // it is returned releases it.
 function setUpDraw(
-  parts: DaemonParts,
+  parts: RendererParts,
   hold: SessionHold<SessionSource, CheckedRenderRequest>,
   req: CheckedRenderRequest,
   hintsError: string | null,
@@ -432,7 +477,7 @@ function setUpDraw(
 // is awaited and nothing refreshed. Returns the bar at the setup's instant. A
 // throw is the caller's to record.
 export function drawRender(
-  parts: DaemonParts,
+  parts: RendererParts,
   setup: RenderSetup,
   drawing: Drawing,
 ): {
@@ -859,7 +904,7 @@ interface DrawnBar {
 // every set() persists and fires the session's MobX atom, so an
 // unconditional per-request write would invalidate every state-driven
 // computed each render.
-function recordRequest(parts: DaemonParts, req: CheckedRenderRequest): void {
+function recordRequest(parts: RendererParts, req: CheckedRenderRequest): void {
   const { sessionState } = parts;
   const sessionId = req.sessionId;
   // [LAW:one-source-of-truth] The STAMPED hints: a click arrives with no
@@ -886,19 +931,17 @@ function recordRequest(parts: DaemonParts, req: CheckedRenderRequest): void {
 }
 
 // A render request's answer: what it said is recorded, and the bar is drawn.
-interface RequestAnswer {
-  // What this request's client is answered with: the statusline's answer to
-  // Claude Code's statusline, the bar to a client drawing it itself.
-  resp: Response;
-  motion: DrawnMotion;
-  clickShown: ClickErrorRecord | null;
-  pipeShown: PipeEvent | null;
-  // Records what the answer's copy clicks copy, once it reached its client.
-  delivered: () => void;
+export interface RequestAnswer {
+  // What this request's client is shown: the statusline's frame to Claude
+  // Code's statusline, the bar to a client drawing it itself.
+  readonly frame: Frame;
+  // What to record once that frame reached its client: the copies its copy
+  // clicks copy, and the click error and the launcher's pipe event it showed.
+  readonly delivered: () => void;
 }
 
 export async function answerRequest(
-  parts: DaemonParts,
+  parts: RendererParts,
   req: CheckedRenderRequest,
   at: Instant,
   waitEndsAt: number,
@@ -917,7 +960,7 @@ export async function answerRequest(
 // session's save turned off is never re-taken from a remembered switch. No
 // draw starts either.
 function arrived(
-  parts: DaemonParts,
+  parts: RendererParts,
   req: CheckedRenderRequest,
   lanes: LaneSwitches,
 ): void {
@@ -933,7 +976,7 @@ function arrived(
 // [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
 // request `req` reported, and the config inputs it renders from now.
 export function laneSessionOf(
-  parts: DaemonParts,
+  parts: RendererParts,
   req: CheckedRenderRequest,
 ): LaneSession {
   const { sessionState } = parts;
@@ -973,7 +1016,7 @@ export function laneClicked(
 }
 
 async function drawAnswer(
-  parts: DaemonParts,
+  parts: RendererParts,
   req: CheckedRenderRequest,
   at: Instant,
   waitEndsAt: number,
@@ -1035,23 +1078,30 @@ async function drawAnswer(
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
-  const resp = RENDER_ANSWERS[req.encoding](
-    toStatusline ? statuslineOf(sessionId, drawn, elsewhere) : drawn.body,
-  );
+  const frame = toStatusline
+    ? statuslineOf(sessionId, drawn, elsewhere)
+    : drawn.body;
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
-  // how long the turn after the wait took to make the answer — what the
-  // draw's reserve is held to (DRAW_RESERVE_MS), so an `ansi` answer's bytes
-  // are encoded before this is read.
+  // how long the turn after the wait took to make the frame: with the host's
+  // `encoded=` for its bytes, what the draw's reserve is held to
+  // (DRAW_RESERVE_MS).
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
     drew: `${elapsedMs(clock, drawFrom)}ms`,
   });
   return {
-    resp,
-    motion: drawn.body.motion,
-    clickShown,
-    pipeShown,
-    delivered,
+    frame,
+    // [LAW:single-enforcer] An answer carrying the click error or the
+    // launcher's pipe event that reaches its client is the one that
+    // delivered it (src/utils/event-hold.ts).
+    delivered: () => {
+      delivered();
+      if (clickShown !== null)
+        answeredClickError(parts.sessionState, sessionId, clickShown);
+      // Daemon-wide: one session's answer having shown the launcher's pipe
+      // event is what makes it not silent.
+      if (pipeShown !== null) parts.launcher.answeredPipeEvent(pipeShown);
+    },
   };
 }
 

@@ -3,23 +3,20 @@
 import { parseArgs } from "node:util";
 import { isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
-import { requestedConfigTarget, type RequestedOrigin } from "../config-hint";
+import { requestedConfigTarget } from "../config-hint";
 import { parseClientHints, RENDER_ENCODINGS } from "./protocol";
 import type {
-  ClientHints,
   ReaderRenderRequest,
   RefusedArg,
   RenderEncoding,
 } from "./protocol";
-import { parseSessionId, type SessionId } from "./session-id";
+import { parseSessionId } from "./session-id";
 import type { RuntimeStats } from "./stats";
 import type { DaemonLogger } from "../utils/logger";
 import { validateHookData } from "../utils/schema-validator.js";
-import { rateLimitsSeen, type RateLimitsSeen } from "./render-sightings";
-import {
-  parseClientDeadline,
-  type ClientDeadline,
-} from "./request-deadline.js";
+import { rateLimitsSeen } from "./render-sightings";
+import type { CheckedRenderRequest } from "../renderer/request-context.js";
+import { parseClientDeadline } from "./request-deadline.js";
 
 // [LAW:single-enforcer][LAW:no-silent-failure] Parse render-path args with
 // the standard util at the trust boundary. `--config <path>` is the sole
@@ -99,30 +96,6 @@ function parseRenderEncoding(
         problem: `request 'encoding' is not one of ${RENDER_ENCODINGS.join(", ")}: ${JSON.stringify(raw)}`,
       };
 }
-
-// A render request that crossed the checkpoint: its hookData carries every
-// required field with its declared type, its cwd is absolute, `hints` is its
-// client hints, parsed, and its args are parsed into `requested` — the config
-// inputs it named, its explicit path the `--config` flag over the client's
-// `CC_CANDYBAR_CONFIG` hint — and `refusedArgs`, `rateLimits` is
-// what its hookData says of the rate-limit windows, and `deadline` is when its
-// client hangs up. Raw `req.*` hint fields and `req.args` are not read past
-// the checkpoint. `encoding` is how its answer is spelled. Only
-// checkRenderRequest makes one.
-declare const CHECKED: unique symbol;
-export type CheckedRenderRequest = Omit<
-  ReaderRenderRequest,
-  "deadline" | "encoding"
-> & {
-  readonly deadline: ClientDeadline;
-  readonly encoding: RenderEncoding;
-  readonly sessionId: SessionId;
-  readonly hints: ClientHints;
-  readonly rateLimits: RateLimitsSeen;
-  readonly requested: RequestedOrigin;
-  readonly refusedArgs: readonly RefusedArg[];
-  readonly [CHECKED]: true;
-};
 
 // [LAW:parse-dont-validate] The checkpoint a render request crosses once: a
 // checked request, or the problems that refuse it.

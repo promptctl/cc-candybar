@@ -2,7 +2,7 @@ import type { Timekeeper } from "../time.js";
 import type { FileEventDelivery } from "./cache/file-events";
 import type { RenderCache } from "./cache/render";
 import type { WatcherRegistry } from "./cache/watchers";
-import type { CheckedRenderRequest } from "./render-checkpoint.js";
+import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import type { FrameFeeds } from "./frame-feed.js";
 import type { LaneSetups } from "./lane-setup.js";
 import type { LimitsHandle } from "./limits";
@@ -21,6 +21,7 @@ import type { UpdateWatch } from "./update-notice";
 import type { VerbContext } from "./verbs";
 import type { DoctorStores } from "../doctor/edge";
 import type { JournalTurns } from "./journal-turns";
+import type { RendererHost } from "./renderer-host.js";
 import type { ProbeArrivals } from "../doctor/handler-probe";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
@@ -65,6 +66,8 @@ export interface DaemonParts {
   readonly updateWatch: UpdateWatch;
   readonly limits: LimitsHandle;
   readonly journalTurns: Pick<JournalTurns, "getStats">;
+  // The host's one path to the main renderer (src/daemon/renderer-host.ts).
+  readonly renderer: RendererHost;
   readonly verbCtx: Omit<
     VerbContext,
     "arrival" | "placeWaited" | "gatherTook" | "turnWaited" | "clientGone"

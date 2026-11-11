@@ -11,7 +11,7 @@ import {
   type ConnectionDaemon,
 } from "../src/daemon/connection";
 import { systemTimekeeper } from "../src/time";
-import { NOTHING_DELIVERED } from "../src/daemon/draw-bar";
+import { NOTHING_TO_SETTLE } from "../src/daemon/statusline-answer";
 import type { Subscriber } from "../src/daemon/frame-feed";
 import {
   FRAME_HEADER_BYTES,
@@ -50,7 +50,7 @@ const replyWith = (over: Partial<Reply> = {}): HandledRequest => ({
   kind: "reply",
   resp: ANSWER,
   exitAfterFlush: null,
-  delivered: NOTHING_DELIVERED,
+  settled: NOTHING_TO_SETTLE,
   ...over,
 });
 
@@ -136,10 +136,10 @@ describe("a connection over a stream", () => {
     expect(daemon.stats.inFlight).toBe(0);
   });
 
-  test("a request is answered, the connection ends, and delivered runs once the client holds it", async () => {
-    const delivered = jest.fn();
+  test("a request is answered, the connection ends, and it is settled delivered once the client holds it", async () => {
+    const settle = jest.fn();
     const daemon = standIn({
-      handle: async () => replyWith({ delivered }),
+      handle: async () => replyWith({ settled: settle }),
     });
     const { send, received, ended } = open(daemon);
     expect(daemon.stats.inFlight).toBe(1);
@@ -149,7 +149,7 @@ describe("a connection over a stream", () => {
 
     expect(received).toEqual([ANSWER]);
     expect(ended()).toBe(true);
-    expect(delivered).toHaveBeenCalledTimes(1);
+    expect(settle.mock.calls).toEqual([[true]]);
     expect(daemon.stats.inFlight).toBe(0);
     expect(exit).not.toHaveBeenCalled();
   });
@@ -173,11 +173,11 @@ describe("a connection over a stream", () => {
     expect(request.timedOut()).toBe(true);
     expect(daemon.stats.requestsTimedOut).toBe(1);
 
-    const delivered = jest.fn();
-    request.answer(replyWith({ delivered }));
+    const settle = jest.fn();
+    request.answer(replyWith({ settled: settle }));
     await settled();
     expect(received).toHaveLength(1);
-    expect(delivered).not.toHaveBeenCalled();
+    expect(settle.mock.calls).toEqual([[false]]);
   });
 
   // The URL handler app writes its frame and hangs up without reading
@@ -233,11 +233,11 @@ describe("a connection over a stream", () => {
     await settled();
     expect(daemon.stats.inFlight).toBe(0);
 
-    const delivered = jest.fn();
-    request.answer(replyWith({ delivered }));
+    const settle = jest.fn();
+    request.answer(replyWith({ settled: settle }));
     await settled();
     expect(received).toEqual([]);
-    expect(delivered).not.toHaveBeenCalled();
+    expect(settle.mock.calls).toEqual([[false]]);
   });
 
   test("a client that hangs up leaves nothing in flight and no backstop armed", async () => {
@@ -295,12 +295,12 @@ describe("a connection over a stream", () => {
     client.destroy();
     await settled();
 
-    const delivered = jest.fn();
-    request.answer(replyWith({ exitAfterFlush: 0, delivered }));
+    const settle = jest.fn();
+    request.answer(replyWith({ exitAfterFlush: 0, settled: settle }));
     await settled();
 
     expect(exit).toHaveBeenCalledWith(0);
-    expect(delivered).not.toHaveBeenCalled();
+    expect(settle.mock.calls).toEqual([[false]]);
   });
 
   test("the exit a reply carries goes unsent with a reply the backstop beat", async () => {

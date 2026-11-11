@@ -1,0 +1,146 @@
+// A render request answered by its renderer: the host delivers the request,
+// performs the effects its turn returned, and answers the client with the one
+// frame presented for it, in the encoding the client asked for.
+
+import { inspect } from "node:util";
+import type { Effect, RequestId } from "../renderer/interface.js";
+import type { CheckedRenderRequest } from "../renderer/request-context.js";
+import { elapsedMs, type Timekeeper } from "../time.js";
+import { instantOf, type Instant } from "../utils/instant.js";
+import { RENDER_ANSWERS, renderFailed } from "./draw-bar.js";
+import type { Response } from "./protocol";
+import type { FrameSeen } from "./render-sightings";
+import type { RendererHost } from "./renderer-host.js";
+import {
+  noteFacts,
+  type RequestFacts,
+  type RequestOutcome,
+} from "./request-event.js";
+
+export interface StatuslineAnswer {
+  readonly outcome: RequestOutcome;
+  readonly resp: Response;
+  // What the client's sighting records the frame drew as.
+  readonly seen: FrameSeen;
+  // [LAW:effects-at-boundaries] Told by the connection, once, whether the
+  // client took the answer.
+  readonly settled: (delivered: boolean) => void;
+}
+
+// What the sender of a reply that owes no one anything tells it.
+export const NOTHING_TO_SETTLE = (_delivered: boolean): void => {};
+
+// [LAW:no-silent-failure] A request whose turn did not answer it is answered
+// with a failure naming the renderer, never with an empty bar.
+// `error` is what the request's event records: the thrown value itself, its
+// stack included, when the turn threw.
+function failed(
+  host: RendererHost,
+  message: string,
+  error: unknown = new Error(message),
+): StatuslineAnswer {
+  return {
+    outcome: { kind: "threw", error },
+    resp: renderFailed(new Error(`renderer ${host.name}: ${message}`)),
+    seen: "failed",
+    settled: NOTHING_TO_SETTLE,
+  };
+}
+
+export async function answerStatusline(
+  host: RendererHost,
+  clock: Pick<Timekeeper, "monotonic" | "now">,
+  req: CheckedRenderRequest,
+  id: RequestId,
+  at: Instant,
+  waitEndsAt: number,
+  facts: RequestFacts,
+): Promise<StatuslineAnswer> {
+  const delivered = await host.deliver(
+    {
+      kind: "event",
+      at,
+      event: { kind: "request", id, context: req, waitEndsAt },
+    },
+    [],
+  );
+  if (delivered.kind === "threw") {
+    // [LAW:nothing-unseen] What the turn learned before it threw, on the
+    // request's own event.
+    facts.push(...delivered.record);
+    noteFacts(facts, { renderer: host.name });
+    return failed(
+      host,
+      delivered.error instanceof Error
+        ? delivered.error.message
+        : inspect(delivered.error),
+      delivered.error,
+    );
+  }
+  const { effects, record } = delivered.output;
+  // The record leads: it opens with the session, which the event's readers
+  // key on (`render sid=`).
+  facts.push(...record);
+  noteFacts(facts, {
+    renderer: host.name,
+    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
+  });
+  // [LAW:single-enforcer] The one `effect-done` each effect is owed, through
+  // the host's one path to the renderer.
+  const done = (effect: Effect, reason: string | null): void =>
+    void host.deliver(
+      {
+        kind: "event",
+        at: instantOf(new Date(clock.now())),
+        event: {
+          kind: "effect-done",
+          of: effect.id,
+          outcome:
+            reason === null ? { kind: "ok" } : { kind: "failed", reason },
+        },
+      },
+      [
+        ["sid", req.sessionId],
+        ["effect", String(effect.id)],
+      ],
+    );
+  // [LAW:types-are-the-program] Every effect the turn returned, in its order,
+  // is performed or refused: the first statusline frame for this request
+  // answers it, and nothing else may.
+  let answer: Effect | null = null;
+  for (const effect of effects) {
+    switch (effect.kind) {
+      case "present":
+        if (effect.request !== id)
+          done(
+            effect,
+            `presents request ${effect.request}, not this turn's ${id}`,
+          );
+        else if (answer !== null)
+          done(effect, `a second statusline frame for request ${id}`);
+        else answer = effect;
+        break;
+    }
+  }
+  if (answer === null)
+    return failed(host, `presented no statusline frame for request ${id}`);
+  const presented = answer;
+  const encodeFrom = clock.monotonic();
+  let resp: Response;
+  try {
+    resp = RENDER_ANSWERS[req.encoding](presented.frame);
+  } catch (e) {
+    done(presented, `encoding its frame threw: ${String(e)}`);
+    return failed(host, `its frame could not be encoded: ${String(e)}`, e);
+  }
+  // [LAW:nothing-unseen] The bytes' share of the draw's reserve, beside the
+  // renderer's `drew=`.
+  noteFacts(facts, { encoded: `${elapsedMs(clock, encodeFrom)}ms` });
+  return {
+    outcome: { kind: "ok" },
+    resp,
+    seen: presented.frame.motion,
+    settled: (took) =>
+      done(presented, took ? null : "the client did not take the answer"),
+  };
+}

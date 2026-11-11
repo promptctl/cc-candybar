@@ -3,11 +3,11 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import { answerRequest, NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
-import {
-  checkRenderRequest,
-  type CheckedRenderRequest,
-} from "./render-checkpoint.js";
+import { renderFailed } from "./draw-bar.js";
+import { answerStatusline, NOTHING_TO_SETTLE } from "./statusline-answer.js";
+import type { RequestId } from "../renderer/interface.js";
+import { checkRenderRequest } from "./render-checkpoint.js";
+import { type CheckedRenderRequest } from "../renderer/request-context.js";
 import { PROTOCOL_VERSION, URL_FRAME_VERSIONS } from "./protocol";
 import type {
   ClickRequest,
@@ -42,7 +42,6 @@ import {
 import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
-import { answeredClickError } from "./click-error.js";
 import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
 import { instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
@@ -64,10 +63,10 @@ import {
 export interface Reply {
   readonly resp: Response;
   readonly exitAfterFlush: number | null;
-  // [LAW:effects-at-boundaries] What the reply's sender records once the
-  // client holds the response — only the connection knows when that is: a
-  // render whose answer carried a click error marks it answered.
-  readonly delivered: () => void;
+  // [LAW:effects-at-boundaries] Told by the reply's sender, once, whether the
+  // client took the response — only the connection knows: a render's answer
+  // is a present its renderer is owed an `effect-done` for.
+  readonly settled: (delivered: boolean) => void;
 }
 // A subscription is the one request answered by a stream rather than a reply:
 // the connection boundary turns its socket over to the session's feed.
@@ -78,7 +77,7 @@ export type HandledRequest =
 const stay = (resp: Response): Reply => ({
   resp,
   exitAfterFlush: null,
-  delivered: NOTHING_DELIVERED,
+  settled: NOTHING_TO_SETTLE,
 });
 const replied = (reply: Reply): HandledRequest => ({ kind: "reply", ...reply });
 
@@ -187,7 +186,7 @@ export async function handleRequest(
       // Exit is sequenced on the response flush, so the client always sees
       // the VERSION_MISMATCH diagnostic — never a dead socket.
       exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
-      delivered: NOTHING_DELIVERED,
+      settled: NOTHING_TO_SETTLE,
     };
   }
 
@@ -236,7 +235,7 @@ export async function replyTo(
     return {
       resp: { ok: true, output: "" },
       exitAfterFlush: 0,
-      delivered: NOTHING_DELIVERED,
+      settled: NOTHING_TO_SETTLE,
     };
   }
 
@@ -356,12 +355,14 @@ export async function replyTo(
     const rendered: {
       outcome: RequestOutcome;
       resp: Response;
-      delivered: () => void;
+      settled: (delivered: boolean) => void;
     } = !checked.ok
       ? refusedRender(checked.problems)
-      : await answerRequest(
-          parts,
+      : await answerStatusline(
+          parts.renderer,
+          clock,
           checked.req,
+          order as RequestId,
           at,
           // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
           // fixed at its arrival: early enough before its client hangs up to
@@ -373,35 +374,18 @@ export async function replyTo(
             }),
           facts,
         ).then(
-          ({ resp, motion, clickShown, pipeShown, delivered }) => {
-            sighted(checked.req, motion);
-            return {
-              outcome: { kind: "ok" } as const,
-              resp,
-              // [LAW:single-enforcer] An answer carrying the click error or the
-              // launcher's pipe event that reaches its client is the one that
-              // delivered it (src/utils/event-hold.ts).
-              delivered: () => {
-                delivered();
-                if (clickShown !== null)
-                  answeredClickError(
-                    sessionState,
-                    checked.req.sessionId,
-                    clickShown,
-                  );
-                // Daemon-wide: one session's answer having shown the
-                // launcher's pipe event is what makes it not silent.
-                if (pipeShown !== null)
-                  parts.launcher.answeredPipeEvent(pipeShown);
-              },
-            };
+          (answered) => {
+            sighted(checked.req, answered.seen);
+            return answered;
           },
+          // [LAW:no-silent-failure] The driver hands every turn's failure back
+          // as a value; a throw here is its own bug, answered as any throw is.
           (error: unknown) => {
             sighted(checked.req, "failed");
             return {
               outcome: { kind: "threw", error } as const,
               resp: renderFailed(error),
-              delivered: NOTHING_DELIVERED,
+              settled: NOTHING_TO_SETTLE,
             };
           },
         );
@@ -426,7 +410,7 @@ export async function replyTo(
     return {
       resp: rendered.resp,
       exitAfterFlush: null,
-      delivered: rendered.delivered,
+      settled: rendered.settled,
     };
   }
 
@@ -852,5 +836,5 @@ const refusedRender = (problems: string[]) => ({
     code: "BAD_REQUEST",
     daemonV: PROTOCOL_VERSION,
   } satisfies Response,
-  delivered: NOTHING_DELIVERED,
+  settled: NOTHING_TO_SETTLE,
 });

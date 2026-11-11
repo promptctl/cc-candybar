@@ -150,7 +150,7 @@ describe("the daemon is a value", () => {
       () => false,
     );
     if (handled.kind !== "reply") throw new Error("expected a reply");
-    handled.delivered();
+    handled.settled(true);
     if (!handled.resp.ok) throw new Error(handled.resp.error);
     return handled.resp;
   };
