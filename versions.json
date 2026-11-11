@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "316d84baeabd627bb71ba4184597372d24e77cde",
-      "timestamp": "2026-11-11T23:22:53.768Z",
+      "sha": "34aef2fa5a55d9dcf7fea8290c49861922b39bb8",
+      "timestamp": "2026-11-11T23:30:39.497Z",
       "commits": [
         {
-          "sha": "316d84baeabd627bb71ba4184597372d24e77cde",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T16:21:56-07:00",
-          "message": "fix(collector): a retire that settles drops its session's record, because the renderer lets go of the document on every outcome (candybar-host-renderer-x96a.0iu) (#716)\n\n* fix(collector): a retire that settles drops its session's record, because the renderer lets go of the document on every outcome (candybar-host-renderer-x96a.0iu)\n\nThe main renderer's retire drops the session's world state in a finally\nafter the view's teardown, so a teardown that throws no longer leaves the\ndocument held. The collector then removes a retiring record once its\nretire settles, answered or threw, and only from the retiring period that\nretire began, so a late answer to an earlier retire cannot remove a record\nthat was revived and retired again.\n\n* refactor(renderer): one retire arm keeps the retire's contract, which the interface states, and the collector reads nothing of how a retire ended (candybar-host-renderer-x96a.0iu)\n\n* fix(renderer): a retire's contract names the document it drops, and the session's open failure goes before its view's teardown can throw (candybar-host-renderer-x96a.0iu)\n\n* refactor(renderer): a retire drops the session's document first, in one action with its view's closing, so nothing it does can keep the document (candybar-host-renderer-x96a.0iu)"
+          "sha": "34aef2fa5a55d9dcf7fea8290c49861922b39bb8",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-11T23:29:33Z",
+          "message": "chore(release): set `package.json` to 1.217.1\n\n## [1.217.1](https://github.com/promptctl/cc-candybar/compare/v1.217.0...v1.217.1) (2026-11-11)\n\n### Bug Fixes\n\n* **collector:** a retire that settles drops its session's record, because the renderer lets go of the document on every outcome (candybar-host-renderer-x96a.0iu) ([#716](https://github.com/promptctl/cc-candybar/issues/716)) ([316d84b](https://github.com/promptctl/cc-candybar/commit/316d84baeabd627bb71ba4184597372d24e77cde))\n"
         }
       ]
     }
