@@ -15,7 +15,7 @@ import {
   type Reply,
   type ReplyRequest,
 } from "./reply.js";
-import type { CheckedRenderRequest } from "./render-checkpoint.js";
+import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import type { SessionStorage } from "./session-state";
 import type { HistoryStorage } from "./settings-history";
 import type {
@@ -76,6 +76,8 @@ import type { LinkSigner } from "../click/link-signer.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
+import { rendererHost } from "./renderer-host.js";
+import { mainRenderer } from "../renderer/main.js";
 import { MenuIdle } from "./menu-idle.js";
 
 // How this daemon's node runs the bundle it was loaded from.
@@ -751,6 +753,29 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     updateWatch,
     limits,
     verbCtx,
+    // [LAW:one-way-deps] exception: the main renderer, in process, over the
+    // host parts its side still reaches (RendererParts, src/daemon/draw-bar.ts).
+    renderer: rendererHost(
+      "main",
+      mainRenderer({
+        clock,
+        log,
+        sessionState,
+        renderCache,
+        payloadProviders,
+        linkSigner,
+        renderWarnings,
+        effectSessions,
+        frameFeeds,
+        updateWatch,
+        fileEvents,
+        menuIdle,
+        launcher,
+        laneSetups,
+        tmuxStatusLines,
+      }),
+      log,
+    ),
   };
 
   return {

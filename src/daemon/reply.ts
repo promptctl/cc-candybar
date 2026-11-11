@@ -3,11 +3,15 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import { answerRequest, NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
+import { renderFailed } from "./draw-bar.js";
 import {
-  checkRenderRequest,
-  type CheckedRenderRequest,
-} from "./render-checkpoint.js";
+  answerStatusline,
+  NOTHING_TO_SETTLE,
+  type StatuslineAnswer,
+} from "./statusline-answer.js";
+import type { RequestId } from "../renderer/interface.js";
+import { checkRenderRequest } from "./render-checkpoint.js";
+import { type CheckedRenderRequest } from "../renderer/request-context.js";
 import { PROTOCOL_VERSION, URL_FRAME_VERSIONS } from "./protocol";
 import type {
   ClickRequest,
@@ -42,7 +46,6 @@ import {
 import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
-import { answeredClickError } from "./click-error.js";
 import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
 import { instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
@@ -64,10 +67,10 @@ import {
 export interface Reply {
   readonly resp: Response;
   readonly exitAfterFlush: number | null;
-  // [LAW:effects-at-boundaries] What the reply's sender records once the
-  // client holds the response — only the connection knows when that is: a
-  // render whose answer carried a click error marks it answered.
-  readonly delivered: () => void;
+  // [LAW:effects-at-boundaries] Told by the reply's sender, once, whether the
+  // client took the response — only the connection knows: a render's answer
+  // is a present its renderer is owed an `effect-done` for.
+  readonly settled: (delivered: boolean) => void;
 }
 // A subscription is the one request answered by a stream rather than a reply:
 // the connection boundary turns its socket over to the session's feed.
@@ -78,7 +81,7 @@ export type HandledRequest =
 const stay = (resp: Response): Reply => ({
   resp,
   exitAfterFlush: null,
-  delivered: NOTHING_DELIVERED,
+  settled: NOTHING_TO_SETTLE,
 });
 const replied = (reply: Reply): HandledRequest => ({ kind: "reply", ...reply });
 
@@ -187,7 +190,7 @@ export async function handleRequest(
       // Exit is sequenced on the response flush, so the client always sees
       // the VERSION_MISMATCH diagnostic — never a dead socket.
       exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
-      delivered: NOTHING_DELIVERED,
+      settled: NOTHING_TO_SETTLE,
     };
   }
 
@@ -236,7 +239,7 @@ export async function replyTo(
     return {
       resp: { ok: true, output: "" },
       exitAfterFlush: 0,
-      delivered: NOTHING_DELIVERED,
+      settled: NOTHING_TO_SETTLE,
     };
   }
 
@@ -353,81 +356,71 @@ export async function replyTo(
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.sessionId, checked.req, order);
     }
-    const rendered: {
+    // The request's event, written on every exit, and its reply.
+    const recorded = (rendered: {
       outcome: RequestOutcome;
       resp: Response;
-      delivered: () => void;
-    } = !checked.ok
-      ? refusedRender(checked.problems)
-      : await answerRequest(
-          parts,
-          checked.req,
-          at,
-          // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-          // fixed at its arrival: early enough before its client hangs up to
-          // draw (src/daemon/request-deadline.ts).
-          t0 +
-            waitBudgetMs(checked.req.deadline, accepted, {
-              epochMs: started.getTime(),
-              monoMs: t0,
-            }),
-          facts,
-        ).then(
-          ({ resp, motion, clickShown, pipeShown, delivered }) => {
-            sighted(checked.req, motion);
-            return {
-              outcome: { kind: "ok" } as const,
-              resp,
-              // [LAW:single-enforcer] An answer carrying the click error or the
-              // launcher's pipe event that reaches its client is the one that
-              // delivered it (src/utils/event-hold.ts).
-              delivered: () => {
-                delivered();
-                if (clickShown !== null)
-                  answeredClickError(
-                    sessionState,
-                    checked.req.sessionId,
-                    clickShown,
-                  );
-                // Daemon-wide: one session's answer having shown the
-                // launcher's pipe event is what makes it not silent.
-                if (pipeShown !== null)
-                  parts.launcher.answeredPipeEvent(pipeShown);
-              },
-            };
-          },
-          (error: unknown) => {
-            sighted(checked.req, "failed");
-            return {
-              outcome: { kind: "threw", error } as const,
-              resp: renderFailed(error),
-              delivered: NOTHING_DELIVERED,
-            };
-          },
-        );
-    if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
-    // Whether the client was already told TIMEOUT while this render ran on,
-    // and how long the request was queued, from the connection's accept,
-    // before it began: the daemon's own delay and the client's sending of its
-    // frame both count, so a round trip longer than `took` is time spent
-    // there.
-    noteFacts(facts, {
-      timedOut: timedOut() ? "Y" : "N",
-      clientLeft: clientLeft() ? "Y" : "N",
-      queued: `${queuedMs}ms`,
-    });
-    const { level, line } = requestEvent(
-      "render",
-      facts,
-      rendered.outcome,
-      elapsedMs(clock, t0),
-    );
-    parts.log(level, line);
-    return {
-      resp: rendered.resp,
-      exitAfterFlush: null,
-      delivered: rendered.delivered,
+      settled: (delivered: boolean) => void;
+    }): Reply => {
+      if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
+      // Whether the client was already told TIMEOUT while this render ran on,
+      // and how long the request was queued, from the connection's accept,
+      // before it began: the daemon's own delay and the client's sending of its
+      // frame both count, so a round trip longer than `took` is time spent
+      // there.
+      noteFacts(facts, {
+        timedOut: timedOut() ? "Y" : "N",
+        clientLeft: clientLeft() ? "Y" : "N",
+        queued: `${queuedMs}ms`,
+      });
+      const { level, line } = requestEvent(
+        "render",
+        facts,
+        rendered.outcome,
+        elapsedMs(clock, t0),
+      );
+      parts.log(level, line);
+      return {
+        resp: rendered.resp,
+        exitAfterFlush: null,
+        settled: rendered.settled,
+      };
     };
+    if (!checked.ok) return recorded(refusedRender(checked.problems));
+    const answered = await answerStatusline(
+      parts.renderer,
+      clock,
+      checked.req,
+      order as RequestId,
+      at,
+      // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
+      // fixed at its arrival: early enough before its client hangs up to
+      // draw (src/daemon/request-deadline.ts).
+      t0 +
+        waitBudgetMs(checked.req.deadline, accepted, {
+          epochMs: started.getTime(),
+          monoMs: t0,
+        }),
+      facts,
+    ).catch(
+      // [LAW:no-silent-failure] The driver hands every turn's failure back
+      // as a value; a throw here is its own bug, answered as any throw is.
+      (error: unknown): StatuslineAnswer => ({
+        outcome: { kind: "threw", error },
+        resp: renderFailed(error),
+        seen: "failed",
+        settled: NOTHING_TO_SETTLE,
+      }),
+    );
+    // [LAW:single-enforcer] The answer's present is owed its one effect-done
+    // on every exit: a reply that never reaches the connection settles here.
+    try {
+      sighted(checked.req, answered.seen);
+      return recorded(answered);
+    } catch (e) {
+      answered.settled(false);
+      throw e;
+    }
   }
 
   if (req.kind === "click") {
@@ -852,5 +845,5 @@ const refusedRender = (problems: string[]) => ({
     code: "BAD_REQUEST",
     daemonV: PROTOCOL_VERSION,
   } satisfies Response,
-  delivered: NOTHING_DELIVERED,
+  settled: NOTHING_TO_SETTLE,
 });

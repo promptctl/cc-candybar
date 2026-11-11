@@ -4,6 +4,8 @@
 
 Claude Code spawns the client on every statusline tick. The client connects to the daemon's unix socket, sends the hook JSON and prints the answer. The daemon is the only renderer. The client has no render path of its own, on purpose: a second renderer is a second source of truth, and it drifts. [LAW:one-source-of-truth]
 
+A request is answered by the frame its renderer presents, and the renderer keeps what that frame showed (its copies, the click error it carried) until the host says whether the client took it. So the connection settles every reply on every exit, including a reply superseded by the backstop's and a write that threw: an exit that forgets leaks one record per request, and nothing shows it.
+
 The shipped client is native (Rust) and handles only the render hot path. It hands every other subcommand to the Node entry. On a daemon miss it spawns a detached daemon and prints an empty line, so the next refresh finds the daemon running.
 
 A one-shot Node subcommand folds its outcome into a plan (what goes to each stream, the exit code) and ends through one delivery that waits for both streams' write callbacks before exiting. A piped stdout flushes asynchronously on macOS, so an exit right after the write drops everything past the first 64 KiB the pipe buffered, and the loss is invisible on Linux, where pipes are synchronous. [LAW:single-enforcer]

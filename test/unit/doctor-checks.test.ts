@@ -358,8 +358,7 @@ describe("config probe", () => {
       }),
     ).toEqual({
       ok: false,
-      reason:
-        "/gone.json5 ($CC_CANDYBAR_CONFIG): /gone.json5 does not exist",
+      reason: "/gone.json5 ($CC_CANDYBAR_CONFIG): /gone.json5 does not exist",
       more: [],
     });
   });
@@ -468,7 +467,8 @@ describe("config probe", () => {
 // whether Claude Code redraws it every second is what its settings files say.
 describe("effectRefresh probe", () => {
   const MOVES = drew("moves");
-  const MOVING = "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)";
+  const MOVING =
+    "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)";
   const ELSEWHERE =
     'the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": 1 beside its command there';
   const ok = (value: readonly SettingsSource[]) =>
@@ -791,7 +791,7 @@ describe("effectRefresh probe", () => {
   test("a bar that can start moving with no interval → failed WITH the fix", () => {
     expect(effectRefresh(drew("can-move"), interval())).toEqual({
       ok: false,
-      reason: `the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events${FROM}`,
+      reason: `the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events${FROM}`,
       fix: FIX,
     });
   });

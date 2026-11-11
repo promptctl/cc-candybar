@@ -1354,7 +1354,7 @@ const barsSeen = (bars: readonly FrameSighting[]): BarsSeen => {
     return {
       kind: "moving",
       wearing:
-        "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)",
+        "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)",
     };
   }
   if (drawn.includes("still")) return { kind: "still" };

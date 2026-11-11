@@ -8,7 +8,8 @@
 import type { Duplex } from "node:stream";
 import { inspect } from "node:util";
 import type { Daemon } from "./daemon.js";
-import { NOTHING_DELIVERED, renderFailed } from "./draw-bar.js";
+import { renderFailed } from "./draw-bar.js";
+import { NOTHING_TO_SETTLE } from "./statusline-answer.js";
 import { LANE_FRAMES } from "./lane-frames";
 import {
   PROTOCOL_VERSION,
@@ -60,7 +61,9 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   const respond = (
     resp: Response,
     exitAfterFlush: number | null,
-    delivered: () => void,
+    // [LAW:single-enforcer] Told once, on every exit, whether the client took
+    // this response: what a reply owes is settled even when it is never sent.
+    settled: (delivered: boolean) => void,
   ): void => {
     if (responded) {
       // First responder owns the flush. An exit is sequenced on its own
@@ -75,6 +78,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
           "exit-after-flush dropped: an earlier responder settled this socket",
         );
       }
+      settled(false);
       return;
     }
     responded = true;
@@ -87,13 +91,14 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       // A peer that already left fails the flush (it ended its side), so a
       // clean one is the client holding the response.
       sock.end(encodeFrame(resp), (err?: Error | null) => {
-        if (err == null) delivered();
+        settled(err == null);
         settle?.();
       });
     } catch (e) {
       // [LAW:no-silent-failure] The response is lost (socket already torn
       // down), but the exit wish must not be.
       daemon.log("warn", `response write failed: ${(e as Error).message}`);
+      settled(false);
       settle?.();
     }
   };
@@ -127,7 +132,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         daemonV: PROTOCOL_VERSION,
       },
       null,
-      NOTHING_DELIVERED,
+      NOTHING_TO_SETTLE,
     );
   });
 
@@ -153,14 +158,16 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
           // A url frame's answer goes to no one: its writer closed, and a
           // write to that socket is only an error event. The click's event
           // (src/daemon/reply.ts) is where its outcome is seen.
-          if (!waits) return;
-          if (r.kind === "reply")
-            respond(r.resp, r.exitAfterFlush, r.delivered);
+          if (!waits) {
+            if (r.kind === "reply") r.settled(false);
+            return;
+          }
+          if (r.kind === "reply") respond(r.resp, r.exitAfterFlush, r.settled);
           else stream(r.sessionId, r.lane);
         })
         .catch((err: unknown) => {
           daemon.log("error", `handler threw: ${inspect(err)}`);
-          if (waits) respond(renderFailed(err), null, NOTHING_DELIVERED);
+          if (waits) respond(renderFailed(err), null, NOTHING_TO_SETTLE);
         })
         .finally(() => {
           if (waits) return;
@@ -178,7 +185,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
           daemonV: PROTOCOL_VERSION,
         },
         null,
-        NOTHING_DELIVERED,
+        NOTHING_TO_SETTLE,
       );
     },
   );
