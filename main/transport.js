@@ -51677,6 +51677,7 @@ var import_node_path4 = __toESM(require_path_browserify(), 1);
 init_globals();
 var BARE = /^[^\s"=\\]+$/;
 var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
+var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 
 // src/utils/atomic-write.ts
 init_globals();
@@ -56887,7 +56888,7 @@ var barsSeen = (bars) => {
   if (drawn.includes("can-move")) {
     return {
       kind: "moving",
-      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)"
+      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)"
     };
   }
   if (drawn.includes("still")) return { kind: "still" };
@@ -57012,7 +57013,7 @@ var nerdFont = {
   probe: ({ nerdFont: facts, marks }) => {
     if (facts.kind === "none") return { ok: true };
     const sighting = glyphSighting(facts);
-    const failed2 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
+    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
       ok: false,
       reason,
       more: [`the mark book could not be read: ${marks.reason}`]
@@ -57024,7 +57025,7 @@ var nerdFont = {
       case "drawn":
         return { ok: true };
       case "boxes":
-        return failed2(
+        return failed3(
           `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
         );
       case null:
@@ -57032,41 +57033,41 @@ var nerdFont = {
     }
     switch (terminal.kind) {
       case "unreported":
-        return failed2(
+        return failed3(
           "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
         );
       case "unasked":
-        return failed2(
+        return failed3(
           `tmux could not be asked which terminal is attached: ${terminal.reason}`
         );
       case "unknown":
       case "unnamed":
       case "unread":
-        return failed2(`the doctor cannot read ${called}'s font`);
+        return failed3(`the doctor cannot read ${called}'s font`);
       case "bundling": {
         const since = TERMINALS[terminal.name].glyphs.since;
         if (since === null) return { ok: true };
         const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
         if (shipped === true) return { ok: true };
         const label2 = terminalLabel(terminal.name);
-        return failed2(
+        return failed3(
           shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
         );
       }
       case "configured": {
         if (terminal.font.kind === "failed") {
-          return failed2(
+          return failed3(
             `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
           );
         }
         const { font, from, lacks } = terminal.font.value;
         if (lacks === null) {
-          return failed2(
+          return failed3(
             `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
           );
         }
         if (lacks.length === 0) return { ok: true };
-        return failed2(
+        return failed3(
           `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
         );
       }
@@ -71639,15 +71640,15 @@ async function journaled(sid, ctx, turn, handler) {
   const journal = ctx.history.begin();
   const navigation = ctx.navigation.begin(journal.sessionState);
   const commit3 = turn.holds(() => {
-    const failed2 = [];
+    const failed3 = [];
     for (const step4 of [navigation, journal]) {
       try {
         step4.commit();
       } catch (e) {
-        failed2.push(e);
+        failed3.push(e);
       }
     }
-    throwAll(failed2);
+    throwAll(failed3);
   });
   const failures = [];
   const closing = (store) => closingView(
@@ -76602,7 +76603,7 @@ function requestEvent(kind, facts, outcome, tookMs) {
   ];
   return {
     level: LEVEL[outcome.kind],
-    line: `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`
+    line: eventLine(kind, fields2)
   };
 }
 
@@ -76662,11 +76663,11 @@ function renderFrame(parts, sessionId2, fps, at) {
       outcome,
       elapsedMs(clock, started2)
     );
-    const failed2 = renderFailed(error);
+    const failed3 = renderFailed(error);
     return {
-      bar: renderFailedFrame(failed2.error),
-      resp: failed2,
-      statusline: failed2,
+      bar: renderFailedFrame(failed3.error),
+      resp: failed3,
+      statusline: failed3,
       evaluated: 0,
       cellBreaks: 0,
       delivered: NOTHING_DELIVERED,
@@ -76765,8 +76766,8 @@ function setUpFrame(parts, sessionId2, at, facts) {
   const { renderCache } = parts;
   const hold2 = renderCache.holdView(sessionId2);
   if (hold2 === null) {
-    const failed2 = renderCache.openFailure(sessionId2);
-    if (failed2 !== null) throw failed2.error;
+    const failed3 = renderCache.openFailure(sessionId2);
+    if (failed3 !== null) throw failed3.error;
     return null;
   }
   const req = hold2.view.facts();
@@ -77166,25 +77167,34 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     const sessionId2 = req.sessionId;
     const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
     const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
-    const resp = RENDER_ANSWERS[req.encoding](
-      toStatusline ? statuslineOf(sessionId2, drawn, elsewhere) : drawn.body
-    );
+    const frame2 = toStatusline ? statuslineOf(sessionId2, drawn, elsewhere) : drawn.body;
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-",
       drew: `${elapsedMs(clock, drawFrom)}ms`
     });
     return {
-      resp,
-      motion: drawn.body.motion,
-      clickShown,
-      pipeShown,
-      delivered
+      frame: frame2,
+      delivered: answerDelivered(
+        parts,
+        sessionId2,
+        delivered,
+        clickShown,
+        pipeShown
+      )
     };
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
     __callDispose(_stack, _error, _hasError);
   }
+}
+function answerDelivered(parts, sessionId2, copied, clickShown, pipeShown) {
+  return () => {
+    copied();
+    if (clickShown !== null)
+      answeredClickError(parts.sessionState, sessionId2, clickShown);
+    if (pipeShown !== null) parts.launcher.answeredPipeEvent(pipeShown);
+  };
 }
 function statuslineOf(sessionId2, drawn, elsewhere) {
   const [first2, ...rest2] = elsewhere;
@@ -77202,6 +77212,95 @@ function statuslineOf(sessionId2, drawn, elsewhere) {
 // src/daemon/reply.ts
 init_globals();
 init_process();
+
+// src/daemon/statusline-answer.ts
+init_globals();
+var NOTHING_TO_SETTLE = (_delivered) => {
+};
+function failed2(host, error, doing = "") {
+  const refusal = renderFailed(error);
+  return {
+    outcome: { kind: "threw", error },
+    resp: {
+      ...refusal,
+      error: `renderer ${host.name}: ${doing}${refusal.error}`
+    },
+    seen: "failed",
+    settled: NOTHING_TO_SETTLE
+  };
+}
+async function answerStatusline(host, clock, req, id2, at, waitEndsAt, facts) {
+  const delivered = await host.deliver(
+    {
+      kind: "event",
+      at,
+      event: { kind: "request", id: id2, context: req, waitEndsAt }
+    },
+    []
+  );
+  if (delivered.kind === "threw") {
+    facts.push(...delivered.record);
+    noteFacts(facts, { renderer: host.name });
+    return failed2(host, delivered.error);
+  }
+  const { effects, record: record2 } = delivered.output;
+  facts.push(...record2);
+  noteFacts(facts, {
+    renderer: host.name,
+    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
+  });
+  const done2 = (effect, reason) => void host.deliver(
+    {
+      kind: "event",
+      at: instantOf(new Date(clock.now())),
+      event: {
+        kind: "effect-done",
+        of: effect.id,
+        outcome: reason === null ? { kind: "ok" } : { kind: "failed", reason }
+      }
+    },
+    [
+      ["sid", req.sessionId],
+      ["effect", String(effect.id)]
+    ]
+  );
+  let answer2 = null;
+  for (const effect of effects) {
+    switch (effect.kind) {
+      case "present":
+        if (effect.request !== id2)
+          done2(
+            effect,
+            `presents request ${effect.request}, not this turn's ${id2}`
+          );
+        else if (answer2 !== null)
+          done2(effect, `a second statusline frame for request ${id2}`);
+        else answer2 = effect;
+        break;
+    }
+  }
+  if (answer2 === null)
+    return failed2(
+      host,
+      new Error(`presented no statusline frame for request ${id2}`)
+    );
+  const presented = answer2;
+  const encodeFrom = clock.monotonic();
+  let resp;
+  try {
+    resp = RENDER_ANSWERS[req.encoding](presented.frame);
+  } catch (e) {
+    done2(presented, `encoding its frame threw: ${renderFailed(e).error}`);
+    return failed2(host, e, "its frame could not be encoded: ");
+  }
+  noteFacts(facts, { encoded: `${elapsedMs(clock, encodeFrom)}ms` });
+  return {
+    outcome: { kind: "ok" },
+    resp,
+    seen: presented.frame.motion,
+    settled: (took) => done2(presented, took ? null : "the client did not take the answer")
+  };
+}
 
 // src/daemon/render-checkpoint.ts
 init_globals();
@@ -77558,7 +77657,7 @@ function isDebugWhat(v) {
 var stay = (resp) => ({
   resp,
   exitAfterFlush: null,
-  delivered: NOTHING_DELIVERED
+  settled: NOTHING_TO_SETTLE
 });
 var replied = (reply) => ({ kind: "reply", ...reply });
 var REPLY_KINDS = {
@@ -77623,7 +77722,7 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
       // Exit is sequenced on the response flush, so the client always sees
       // the VERSION_MISMATCH diagnostic — never a dead socket.
       exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
-      delivered: NOTHING_DELIVERED
+      settled: NOTHING_TO_SETTLE
     };
   }
   if (req.kind === "subscribe") return subscription(req);
@@ -77658,7 +77757,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     return {
       resp: { ok: true, output: "" },
       exitAfterFlush: 0,
-      delivered: NOTHING_DELIVERED
+      settled: NOTHING_TO_SETTLE
     };
   }
   if (req.kind === "pane-session") {
@@ -77740,9 +77839,32 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
-    const rendered = !checked.ok ? refusedRender(checked.problems) : await answerRequest(
-      parts,
+    const recorded = (rendered) => {
+      if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
+      noteFacts(facts, {
+        timedOut: timedOut() ? "Y" : "N",
+        clientLeft: clientLeft() ? "Y" : "N",
+        queued: `${queuedMs}ms`
+      });
+      const { level, line } = requestEvent(
+        "render",
+        facts,
+        rendered.outcome,
+        elapsedMs(clock, t0)
+      );
+      parts.log(level, line);
+      return {
+        resp: rendered.resp,
+        exitAfterFlush: null,
+        settled: rendered.settled
+      };
+    };
+    if (!checked.ok) return recorded(refusedRender(checked.problems));
+    const answered2 = await answerStatusline(
+      parts.renderer,
+      clock,
       checked.req,
+      order2,
       at,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to
@@ -77752,55 +77874,23 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         monoMs: t0
       }),
       facts
-    ).then(
-      ({ resp, motion, clickShown, pipeShown, delivered }) => {
-        sighted(checked.req, motion);
-        return {
-          outcome: { kind: "ok" },
-          resp,
-          // [LAW:single-enforcer] An answer carrying the click error or the
-          // launcher's pipe event that reaches its client is the one that
-          // delivered it (src/utils/event-hold.ts).
-          delivered: () => {
-            delivered();
-            if (clickShown !== null)
-              answeredClickError(
-                sessionState,
-                checked.req.sessionId,
-                clickShown
-              );
-            if (pipeShown !== null)
-              parts.launcher.answeredPipeEvent(pipeShown);
-          }
-        };
-      },
-      (error) => {
-        sighted(checked.req, "failed");
-        return {
-          outcome: { kind: "threw", error },
-          resp: renderFailed(error),
-          delivered: NOTHING_DELIVERED
-        };
-      }
+    ).catch(
+      // [LAW:no-silent-failure] The driver hands every turn's failure back
+      // as a value; a throw here is its own bug, answered as any throw is.
+      (error) => ({
+        outcome: { kind: "threw", error },
+        resp: renderFailed(error),
+        seen: "failed",
+        settled: NOTHING_TO_SETTLE
+      })
     );
-    if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
-    noteFacts(facts, {
-      timedOut: timedOut() ? "Y" : "N",
-      clientLeft: clientLeft() ? "Y" : "N",
-      queued: `${queuedMs}ms`
-    });
-    const { level, line } = requestEvent(
-      "render",
-      facts,
-      rendered.outcome,
-      elapsedMs(clock, t0)
-    );
-    parts.log(level, line);
-    return {
-      resp: rendered.resp,
-      exitAfterFlush: null,
-      delivered: rendered.delivered
-    };
+    try {
+      sighted(checked.req, answered2.seen);
+      return recorded(answered2);
+    } catch (e) {
+      answered2.settled(false);
+      throw e;
+    }
   }
   if (req.kind === "click") {
     return stay(
@@ -78085,7 +78175,7 @@ var refusedRender = (problems) => ({
     code: "BAD_REQUEST",
     daemonV: PROTOCOL_VERSION
   },
-  delivered: NOTHING_DELIVERED
+  settled: NOTHING_TO_SETTLE
 });
 
 // src/daemon/update-act.ts
@@ -84207,7 +84297,7 @@ var LaneSetups = class {
   // Resolves once the setup has finished, however it ended.
   async sync(session, lane, on2, by) {
     const where = `by=${by} (session=${session.sessionId})`;
-    const failed2 = (error) => {
+    const failed3 = (error) => {
       const text4 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
       this.deps.log("warn", `${text4} ${where}`);
       holdClickError(this.deps.state, session.sessionId, text4, this.deps.now());
@@ -84220,7 +84310,7 @@ var LaneSetups = class {
         this.deps.edge
       );
     } catch (error) {
-      failed2(error);
+      failed3(error);
       return;
     }
     this.deps.log(
@@ -84230,7 +84320,7 @@ var LaneSetups = class {
     if (outcome.kind === "underway") {
       await outcome.finished.then(
         (finished) => this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
-        failed2
+        failed3
       );
     }
   }
@@ -84405,6 +84495,118 @@ var JournalTurns = class {
     return true;
   }
 };
+
+// src/daemon/renderer-host.ts
+init_globals();
+
+// src/renderer/interface.ts
+init_globals();
+var TurnThrew = class extends Error {
+  constructor(record2, thrown2) {
+    super(thrown2 instanceof Error ? thrown2.message : String(thrown2));
+    this.record = record2;
+    this.thrown = thrown2;
+    this.name = "TurnThrew";
+  }
+  record;
+  thrown;
+};
+
+// src/daemon/renderer-host.ts
+function rendererHost(name, renderer, log) {
+  const turn = async (input) => {
+    try {
+      return { kind: "answered", output: await renderer.answer(input) };
+    } catch (e) {
+      return e instanceof TurnThrew ? { kind: "threw", error: e.thrown, record: e.record } : { kind: "threw", error: e, record: [] };
+    }
+  };
+  const record2 = (input, about, delivered) => {
+    const head = [
+      ["renderer", name],
+      ["input", input.event.kind],
+      ...about
+    ];
+    switch (delivered.kind) {
+      case "answered":
+        if (delivered.output.record.length > 0)
+          log("info", eventLine("turn", [...head, ...delivered.output.record]));
+        return;
+      case "threw":
+        log(
+          "error",
+          eventLine("turn", [
+            ...head,
+            ...delivered.record,
+            ["error", inspect(delivered.error)]
+          ])
+        );
+    }
+  };
+  return {
+    name,
+    deliver: async (input, about) => {
+      const delivered = await turn(input);
+      if (input.event.kind !== "request") record2(input, about, delivered);
+      return delivered;
+    }
+  };
+}
+
+// src/renderer/main.ts
+init_globals();
+function mainRenderer(parts) {
+  const deliveries = /* @__PURE__ */ new Map();
+  let minted = 0;
+  const turn = async (event, at, record2) => {
+    switch (event.kind) {
+      case "request": {
+        const { frame: frame2, delivered } = await answerRequest(
+          parts,
+          event.context,
+          at,
+          event.waitEndsAt,
+          record2
+        );
+        const id2 = ++minted;
+        deliveries.set(id2, delivered);
+        return {
+          effects: [
+            {
+              kind: "present",
+              id: id2,
+              session: event.context.sessionId,
+              surface: "statusline",
+              request: event.id,
+              frame: frame2
+            }
+          ],
+          record: record2
+        };
+      }
+      case "effect-done": {
+        const delivered = deliveries.get(event.of);
+        if (delivered === void 0)
+          throw new Error(
+            `effect-done for effect ${event.of}, which is not a present on its way`
+          );
+        deliveries.delete(event.of);
+        if (event.outcome.kind === "ok") delivered();
+        return { effects: [], record: record2 };
+      }
+    }
+  };
+  return {
+    answer: async ({ event, at }) => {
+      const record2 = [];
+      try {
+        return await turn(event, at, record2);
+      } catch (thrown2) {
+        throw new TurnThrew(record2, thrown2);
+      }
+    }
+  };
+}
 
 // src/daemon/menu-idle.ts
 init_globals();
@@ -84950,7 +85152,30 @@ function createDaemon(inputs) {
     renderCache,
     updateWatch,
     limits,
-    verbCtx
+    verbCtx,
+    // [LAW:one-way-deps] exception: the main renderer, in process, over the
+    // host parts its side still reaches (RendererParts, src/daemon/draw-bar.ts).
+    renderer: rendererHost(
+      "main",
+      mainRenderer({
+        clock,
+        log,
+        sessionState,
+        renderCache,
+        payloadProviders,
+        linkSigner: linkSigner2,
+        renderWarnings,
+        effectSessions,
+        frameFeeds,
+        updateWatch,
+        fileEvents,
+        menuIdle,
+        launcher,
+        laneSetups,
+        tmuxStatusLines
+      }),
+      log
+    )
   };
   return {
     stats,
@@ -86385,8 +86610,8 @@ function hookData() {
   };
 }
 async function daemon2(request2) {
-  const { resp, delivered } = await pageDaemon.reply(request2, () => false, pageDaemon.clock.monotonic(), () => false);
-  delivered();
+  const { resp, settled: settled3 } = await pageDaemon.reply(request2, () => false, pageDaemon.clock.monotonic(), () => false);
+  settled3(true);
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return resp;
 }
