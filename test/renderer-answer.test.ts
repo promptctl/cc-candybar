@@ -191,6 +191,27 @@ describe("a statusline request", () => {
     expect(new Map(record).has("drew")).toBe(true);
   });
 
+  test("whose view closed after its config turn opens it again at its own context and is answered", async () => {
+    const t = renderer();
+    const context = checked();
+    await configure(t, context);
+    // An eviction between the two turns.
+    t.rig.cache.retireSession(SESSION);
+    expect(viewOf(t.rig)).toBeNull();
+    const { effects } = await t.r.answer({
+      kind: "event",
+      at: AT,
+      event: {
+        kind: "request",
+        id: REQUEST,
+        context,
+        waitEndsAt: systemTimekeeper.monotonic() + 5_000,
+      },
+    });
+    expect(presentOf(effects)).toMatchObject({ request: REQUEST });
+    expect(viewOf(t.rig)?.facts()).toBe(context);
+  });
+
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
     const { r, recorded, rig } = renderer();
     const { effects } = await request({ r, rig });
@@ -330,7 +351,7 @@ describe("the session's config, ahead of its request", () => {
     });
     await expect(answering).rejects.toBeInstanceOf(TurnThrew);
     await expect(answering).rejects.toThrow(
-      new RegExp(`no view for session "${SESSION}"`),
+      new RegExp(`no world state for session "${SESSION}"`),
     );
   });
 

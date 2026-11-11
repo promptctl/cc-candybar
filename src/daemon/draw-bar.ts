@@ -356,22 +356,37 @@ function requestFacts(
   return hintsError;
 }
 
-// [LAW:single-enforcer] A `config` turn, the one way a session's view is
-// opened at a context: what the context says is recorded, its world state
-// taken, and its view opened or refreshed at the config inputs it names and
-// let go, so the turn's output names what the view reads. The request after
-// it holds the view as it finds it (`setUpRender`). The record goes first, so
-// a durable click on a session whose opening threw still resolves the chain
-// that opening was for.
-//
-// [LAW:one-source-of-truth] The world state and the view's context are taken
-// in one action, so nothing drawn between the two pairs either with another
-// context's.
-export function openSession(
+// [LAW:single-enforcer] A `config` turn: what its context says is recorded,
+// and the session's view opened at it and let go, so the turn's output names
+// what the view reads before the request after it waits. The record goes
+// first, so a durable click on a session whose opening threw still resolves
+// the chain that opening was for.
+export function configureSession(
   parts: RendererParts,
   req: CheckedRenderRequest,
   worldState: WorldState,
 ): void {
+  runInAction(() => {
+    recordRequest(parts, req);
+    openSession(parts, req, worldState)[Symbol.dispose]();
+  });
+}
+
+// [LAW:single-enforcer] The one way a session's view is held at a context:
+// its world state taken and its view opened, or kept and refreshed, at the
+// config inputs the context names. A `config` turn opens it ahead of the
+// request, and the request holds it again at its own context, so it draws by
+// the context it carries and needs nothing to outlive the turn before it: a
+// view closed between the two opens again.
+//
+// [LAW:one-source-of-truth] The world state and the hold are taken in one
+// action, so nothing drawn between the two pairs either with another
+// context's.
+function openSession(
+  parts: RendererParts,
+  req: CheckedRenderRequest,
+  worldState: WorldState,
+): SessionHold<SessionSource, CheckedRenderRequest> {
   const { sessionState, renderCache, worldStates } = parts;
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
@@ -383,8 +398,7 @@ export function openSession(
     sessionState,
     req.sessionId,
   );
-  runInAction(() => {
-    recordRequest(parts, req);
+  return runInAction(() => {
     worldStates.take(worldState);
     return renderCache.holdSession(
       origin.projectDir,
@@ -392,7 +406,7 @@ export function openSession(
       origin.target.path,
       req,
     );
-  })[Symbol.dispose]();
+  });
 }
 
 export function setUpRender(
@@ -410,19 +424,9 @@ export function setUpRender(
   // cache disposes them when this hold is released — never under the render
   // (brandon-unfiled-3248.6rc). The setup owns the hold from here: a throw
   // before it is returned releases it, and the setup releases it on every exit
-  // of the render that disposes it.
-  //
-  // [LAW:single-enforcer] A request opens nothing: it holds the view its
-  // session's `config` turn opened, drawn by the newest context a config turn
-  // named, from the world state the renderer holds for the session.
-  const hold = parts.renderCache.holdView(req.sessionId);
-  // [LAW:no-silent-failure] A request with no view (no config ahead of it,
-  // or its view closed between the two turns by an eviction) is said, never
-  // reopened at a context this turn does not own.
-  if (hold === null)
-    throw new Error(
-      `no view for session ${JSON.stringify(req.sessionId)}: the host delivers its config, which opens one, ahead of every request`,
-    );
+  // of the render that disposes it. The world state is the one the renderer
+  // holds for the session, taken from its `config` or handed in since.
+  const hold = openSession(parts, req, parts.worldStates.of(req.sessionId));
   return setUpDraw(parts, hold, req, hintsError, at, facts);
 }
 

@@ -198,7 +198,7 @@ test("a config turn's effects are refused, each owed its effect-done, and the re
   );
   const { answered, facts } = await answer(renderer);
   expect(answered.resp).toEqual({ ok: true, frame: FRAME });
-  expect(facts.get("effects")).toBe("present:statusline,present:statusline");
+  expect(facts.get("effects")).toBe("present:statusline");
   await drained();
   expect(heard).toMatchObject([
     {

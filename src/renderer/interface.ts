@@ -57,8 +57,7 @@ export type Event =
     }
   | {
       // A request of a session whose `config` came before it: the turn draws
-      // the view that config opened, from the world state the renderer holds
-      // for the session.
+      // from the world state the renderer holds for the session.
       readonly kind: "request";
       readonly id: RequestId;
       readonly context: CheckedRenderRequest;

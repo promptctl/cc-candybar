@@ -153,10 +153,7 @@ export async function answerStatusline(
   const { effects } = delivered.output;
   noteFacts(facts, {
     renderer: host.name,
-    effects:
-      [...configured.output.effects, ...effects]
-        .map((e) => `${e.kind}:${e.surface}`)
-        .join(",") || "-",
+    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
   });
   // [LAW:types-are-the-program] Every effect the turn returned, in its order,
   // is performed or refused: the first statusline frame for this request
