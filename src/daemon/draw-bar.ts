@@ -387,6 +387,22 @@ export function configureSession(
   });
 }
 
+// [LAW:single-enforcer] A `retire` turn: the session's view closes, and its
+// world state goes after it whatever the closing did, so the turn keeps the
+// retire's contract (src/renderer/interface.ts) however it ends.
+export function retireSession(
+  parts: Pick<RendererParts, "worldStates"> & {
+    readonly renderCache: Pick<RendererParts["renderCache"], "retireSession">;
+  },
+  session: SessionId,
+): void {
+  try {
+    parts.renderCache.retireSession(session);
+  } finally {
+    parts.worldStates.drop(session);
+  }
+}
+
 // [LAW:single-enforcer] The one way a session's view is held at a context:
 // opened, or kept and refreshed, at the config inputs the context names. A
 // `config` turn opens it ahead of the request, and the request holds it again

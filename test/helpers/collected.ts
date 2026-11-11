@@ -6,6 +6,7 @@
 // collector.
 
 import { Collector, type CollectorDeps } from "../../src/daemon/collector";
+import { retireSession } from "../../src/daemon/draw-bar";
 import type { RenderCache } from "../../src/daemon/cache/render";
 import type { ViewFacts } from "../../src/daemon/render-payload";
 import { WorldStates } from "../../src/renderer/world-states";
@@ -50,11 +51,7 @@ export function collected(
         worldStates.take(event.worldState);
         return { kind: "answered" };
       }
-      try {
-        cache().retireSession(event.session);
-      } finally {
-        worldStates.drop(event.session);
-      }
+      retireSession({ renderCache: cache(), worldStates }, event.session);
       collector.subscribed(cache().subscriptions());
       return { kind: "answered" };
     },

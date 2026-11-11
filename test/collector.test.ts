@@ -33,7 +33,6 @@ import {
 import type { StorageKey } from "../src/daemon/cache/managed-storage";
 import type { Fact } from "../src/facts/fact";
 import type { UpdateNotice, WorldState } from "../src/facts/world-state";
-import type { Delivered } from "../src/daemon/renderer-host";
 import type { Subscriptions } from "../src/renderer/interface";
 import {
   GitService,
@@ -115,7 +114,7 @@ const ANSWERED = { kind: "answered" } as const;
 
 // A collector over `owners`, on a clock the case moves, with a renderer that
 // records each hand-in and answers it at once. `watched` is which sessions an
-// open feed draws; `retired` is the renderer's answer to each retire.
+// open feed draws; `retired` is when each retire settles.
 function collectorOver(
   owners: RenderPayloadDeps,
   {
@@ -125,7 +124,7 @@ function collectorOver(
   }: {
     readonly update?: () => Fact<UpdateNotice>;
     readonly watched?: ReadonlySet<SessionId>;
-    readonly retired?: () => Promise<Pick<Delivered, "kind">>;
+    readonly retired?: () => Promise<unknown>;
   } = {},
 ) {
   const clock: HeldClock = heldClock(new Date(1_700_000_000_000));
@@ -164,7 +163,7 @@ function heldRetires() {
   const answers: Array<() => void> = [];
   return {
     retired: () =>
-      new Promise<Pick<Delivered, "kind">>((resolve) =>
+      new Promise<unknown>((resolve) =>
         answers.push(() => resolve(ANSWERED)),
       ),
     answer: (i: number) => answers[i]!(),
@@ -302,10 +301,10 @@ describe("the renderer's subscriptions", () => {
 });
 
 describe("the sweep", () => {
-  test("retires a session no request named across a whole sweep, releasing what it held, and drops it once the retire is answered", async () => {
+  test("retires a session no request named across a whole sweep, releasing what it held, and drops it once the retire settles, so the next request starts a new record", async () => {
     const { owners, held } = handLanded();
     const { collector, clock, handedIn } = collectorOver(owners);
-    collector.requested(requestAt("/a"));
+    const first = collector.requested(requestAt("/a"));
     clock.advance(SESSION_SWEEP_MS);
     expect(handedIn).toEqual([]);
     expect(held.size).toBeGreaterThan(0);
@@ -316,22 +315,8 @@ describe("the sweep", () => {
     expect(collector.stats()).toEqual({ sessions: 0, retiring: 0 });
     // The last session gone, the sweep stops.
     expect(clock.pending()).toBe(0);
-  });
-
-  test("drops a session whose retire turn threw once that retire settles, and the next request starts a new record", async () => {
-    const { owners } = handLanded();
-    const { collector, clock } = collectorOver(owners, {
-      retired: async () => ({ kind: "threw" }),
-    });
-    const first = collector.requested(requestAt("/a"));
-    clock.advance(2 * SESSION_SWEEP_MS);
-    await drained();
-    expect(collector.stats()).toEqual({ sessions: 0, retiring: 0 });
-    expect(clock.pending()).toBe(0);
     // The renderer let go of the session's document, so seq 1 is taken.
-    const next = collector.requested(requestAt("/a"));
-    expect(next.seq).toBe(first.seq);
-    expect(collector.stats()).toEqual({ sessions: 1, retiring: 0 });
+    expect(collector.requested(requestAt("/a")).seq).toBe(first.seq);
   });
 
   test("keeps a session an open feed draws", () => {

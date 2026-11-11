@@ -1748,6 +1748,10 @@ export class RenderCache<
     // A session left with no view is closed, and its frames with it; a
     // successor opened first keeps what is on screen copyable.
     if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
+    // [LAW:no-ambient-temporal-coupling] The view stops observing its
+    // document before anything here can throw: a retire drops the document
+    // whatever this did (src/daemon/draw-bar.ts), and a view still observing
+    // it would say a change threw.
     view.retire();
     const lease = this.leaseOf(view);
     lease.retired = { reason, held: lease.holders };

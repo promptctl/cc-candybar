@@ -76,7 +76,8 @@ export type Event =
     }
   | {
       // The host ended the session: the renderer lets go of what it holds
-      // of it.
+      // of it however the turn ends, answered or threw, so the host's next
+      // record for the session starts again at seq 1.
       readonly kind: "retire";
       readonly session: SessionId;
     }
