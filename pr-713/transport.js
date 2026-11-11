@@ -76729,6 +76729,12 @@ function requestFacts(req, at, facts) {
   });
   return hintsError;
 }
+function configureSession(parts, req, worldState) {
+  runInAction(() => {
+    recordRequest(parts, req);
+    openSession(parts, req, worldState)[Symbol.dispose]();
+  });
+}
 function openSession(parts, req, worldState) {
   const { sessionState, renderCache, worldStates } = parts;
   const origin = sessionRenderOrigin(
@@ -76736,8 +76742,7 @@ function openSession(parts, req, worldState) {
     sessionState,
     req.sessionId
   );
-  runInAction(() => {
-    recordRequest(parts, req);
+  return runInAction(() => {
     worldStates.take(worldState);
     return renderCache.holdSession(
       origin.projectDir,
@@ -76745,16 +76750,12 @@ function openSession(parts, req, worldState) {
       origin.target.path,
       req
     );
-  })[Symbol.dispose]();
+  });
 }
 function setUpRender(parts, req, at, facts) {
   const hintsError = requestFacts(req, at, facts);
   noteFacts(facts, { encoding: req.encoding });
-  const hold2 = parts.renderCache.holdView(req.sessionId);
-  if (hold2 === null)
-    throw new Error(
-      `no view for session ${JSON.stringify(req.sessionId)}: the host delivers its config, which opens one, ahead of every request`
-    );
+  const hold2 = openSession(parts, req, parts.worldStates.of(req.sessionId));
   return setUpDraw(parts, hold2, req, hintsError, at, facts);
 }
 function setUpFrame(parts, sessionId2, at, facts) {
@@ -77285,7 +77286,7 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
   const { effects } = delivered.output;
   noteFacts(facts, {
     renderer: host.name,
-    effects: [...configured.output.effects, ...effects].map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
+    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
   });
   let answer2 = null;
   for (const effect of effects) {
@@ -84793,7 +84794,7 @@ function mainRenderer(parts) {
   const turn = async (event, at, record2) => {
     switch (event.kind) {
       case "config":
-        openSession(parts, event.context, event.worldState);
+        configureSession(parts, event.context, event.worldState);
         return answered([], record2);
       case "request": {
         const { frame: frame2, delivered } = await answerRequest(
