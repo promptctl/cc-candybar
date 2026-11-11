@@ -4,15 +4,22 @@
     {
       "version": "pr-716",
       "ref": "refs/pull/716/merge",
-      "sha": "06933eb2dc243aa27f9ee0dda992bca35cf532fe",
-      "timestamp": "2026-11-11T23:09:18.104Z",
+      "sha": "297b4b7c8964245de5aff9038b673dc2a226fce4",
+      "timestamp": "2026-11-11T23:13:59.832Z",
       "commits": [
         {
-          "sha": "06933eb2dc243aa27f9ee0dda992bca35cf532fe",
+          "sha": "297b4b7c8964245de5aff9038b673dc2a226fce4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T23:08:28Z",
-          "message": "Merge 8e5fad0ef1a46a898ceb03da236e92a90471f199 into 0d2f702fcd2a13b829816aa567324d73fed35d6c\n"
+          "timestamp": "2026-11-11T23:13:00Z",
+          "message": "Merge c4571d00eec1df539ebb0ddd1dc133e159de8acf into 0d2f702fcd2a13b829816aa567324d73fed35d6c\n"
+        },
+        {
+          "sha": "c4571d00eec1df539ebb0ddd1dc133e159de8acf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T16:12:49-07:00",
+          "message": "refactor(renderer): a retire drops the session's document first, in one action with its view's closing, so nothing it does can keep the document (candybar-host-renderer-x96a.0iu)\n"
         },
         {
           "sha": "8e5fad0ef1a46a898ceb03da236e92a90471f199",

@@ -76737,11 +76737,10 @@ function configureSession(parts, req, worldState, at, facts) {
   });
 }
 function retireSession(parts, session) {
-  try {
-    parts.renderCache.retireSession(session);
-  } finally {
+  runInAction(() => {
     parts.worldStates.drop(session);
-  }
+    parts.renderCache.retireSession(session);
+  });
 }
 function holdSessionAt(parts, req) {
   const origin = sessionRenderOrigin(
