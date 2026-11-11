@@ -4,15 +4,22 @@
     {
       "version": "pr-710",
       "ref": "refs/pull/710/merge",
-      "sha": "01a6b74183c9218f3489b06f9e25442dbc22141d",
-      "timestamp": "2026-11-11T10:55:00.741Z",
+      "sha": "9fc95d8019d1da6622ad80363d6453dc3d8e966c",
+      "timestamp": "2026-11-11T10:57:04.928Z",
       "commits": [
         {
-          "sha": "01a6b74183c9218f3489b06f9e25442dbc22141d",
+          "sha": "9fc95d8019d1da6622ad80363d6453dc3d8e966c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T10:54:14Z",
-          "message": "Merge 9c00ba42b365b997c598a164e87789f6b800d738 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+          "timestamp": "2026-11-11T10:56:12Z",
+          "message": "Merge 2417163482c299b11ec7f24e62d3709733e920d0 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "2417163482c299b11ec7f24e62d3709733e920d0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T03:55:59-07:00",
+          "message": "docs(design): goals.md says world state and handler, the names Proposal 3 uses (candybar-gather-renderer-76bb.215)\n"
         },
         {
           "sha": "9c00ba42b365b997c598a164e87789f6b800d738",
