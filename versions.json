@@ -2,6 +2,105 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-710",
+      "ref": "refs/pull/710/merge",
+      "sha": "d120a41c77a2fa5ce05ede13582c763b65c106ef",
+      "timestamp": "2026-11-11T11:20:45.890Z",
+      "commits": [
+        {
+          "sha": "d120a41c77a2fa5ce05ede13582c763b65c106ef",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T11:19:48Z",
+          "message": "Merge b64af10594fa5be1f8b990660ef7bb0059809316 into 5160cd381d0909fa3c6b616bf239b4b301eb8e3a\n"
+        },
+        {
+          "sha": "b64af10594fa5be1f8b990660ef7bb0059809316",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T04:19:29-07:00",
+          "message": "docs(design): Proposal 3 can be built in order: range clicks have their own arm, write targets are named so an explicit config stays writable, step 3 builds the profile, and the request's wait lives in the mailbox (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "605e5c7f2b940852c4cc2e67ce5b98094d0ba15f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T04:06:13-07:00",
+          "message": "docs(design): Proposal 3 carries the step-back's decisions: digest range ids, writes only under the profile, chains of one-step effects, and the replay test after the pure draw (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "48b63088e456a1e1c9278e6e74235f71f3a870b5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T04:02:27-07:00",
+          "message": "docs(design): Proposal 3 names the renderer's one writer its state machine, since the URL handler already holds handler (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "5300e2227f25a9073af248302b2a1ba789d7382a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T03:55:59-07:00",
+          "message": "docs(design): goals.md says world state and handler, the names Proposal 3 uses (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "41a9b360254510e412f6b8e0be4ef285d679c8e6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T03:54:03-07:00",
+          "message": "docs(design): Proposal 3 says world state for what the collector reads and handler for the renderer's one writer (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "22b718388a8e52a3d487ff1e0acc465bc1c25a82",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T23:01:51-07:00",
+          "message": "docs(design): Proposal 3 says collector and session context, and range ids belong to the tmux status row (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "4b55b82c80f4d4f66ed5c61f776cb2d3a77aba2b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T22:12:27-07:00",
+          "message": "docs(design): Proposal 3 names its concepts by their standard terms: functional core and imperative shell, subscriptions, conditional writes, profiles, mailboxes, an effect interpreter (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "1ca084509f1986af1e560244de5785e1accbce20",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T10:04:20-07:00",
+          "message": "docs(design): Proposal 3 answers its third review: a session's environment stays in the host and out of every recording (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "c666c9286d6c3714f16e5f149664eb379bceb507",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T10:02:09-07:00",
+          "message": "docs(design): Proposal 3 answers its second review: only a chain's own layer is writable, layers carry what their role can have, sessions run in their own environment (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "f63482c13d928038841c8c7363d23a11b680b820",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T09:57:12-07:00",
+          "message": "docs(design): Proposal 3 answers its first review: a total start, discovery as a value, Gather judges reads, every effect today has a home (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "79eb65a24bf4eaa369350e5913a1da637fe40612",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T09:42:44-07:00",
+          "message": "docs(design): goals record Brandon's intent with reasons, not his words, and the spec cites them by ID (candybar-gather-renderer-76bb.215)\n"
+        },
+        {
+          "sha": "3ee6bf9481af5b1692420de1ed5376096a9442c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-10T09:36:42-07:00",
+          "message": "docs(design): Proposal 3, one host owns the world and renderers answer it, with its intent stated to be falsified (candybar-gather-renderer-76bb.215)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "5160cd381d0909fa3c6b616bf239b4b301eb8e3a",
@@ -13,98 +112,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T04:08:54-07:00",
           "message": "refactor(facts): a session's facts carry each transcript fold alone, and the payload lays the hook over it (candybar-skeleton-wj0c.yb3) (#709)\n\n* refactor(facts): a session's facts carry each transcript fold alone, and the payload lays the hook over it (candybar-skeleton-wj0c.yb3)\n\nGather will know a session by its locator alone, so no fact may mix the\nrequest's hook into a transcript fold. Three did: usage (the hook's cost over\nthe priced fold), context (the hook's native window over the fold's tokens)\nand metrics (the hook's durations and lines over the fold's counts).\n\nThe usage store, the context provider and the metrics provider now refresh and\nanswer their folds alone, keyed by the session and read from its transcript.\nThe overlays are pure functions beside their contract types (`usageOver`,\n`contextOver`, `metricsOver`), applied where the payload is composed, which\nalready holds the hook. The document types those three facts as the folds, so\nthe compiler refuses a hook value in it. The stored usage record loses its\n`cost`/`officialCost` copies.\n\nThe context fold is now read for every session, where before it was read only\nwhen the hook carried no native window: the document is total and cannot know\nwhich hook it will be composed with.\n\nThe bar is unchanged. `check`'s fixture and the session rig carry their cost,\ndurations and window in their hooks, as Claude Code sends them, so the\npayload goldens gain the raw `cost` and `context_window` blocks and nothing\nelse.\n\n* refactor(facts): the composed usage is the cost and tokens the payload reads, the metrics fold is the base type, and the owners' tests assert their folds (candybar-skeleton-wj0c.yb3)\n\nReview (high) fixes: usageOver answers { cost, tokens } and the one-field wrapper, officialCost and the spread of the fold's other fields go; MetricsFold is declared on its own and MetricsInfo extends it; the pure context overlay no longer logs; the store and metrics tests assert the folds, and usageOver and metricsOver have in-process tests of their own.\n\n* test(facts): each hook's document is its own refresh over its own owners, and the spec names the document's fold types (candybar-skeleton-wj0c.yb3)\n\nReview (medium) fixes: the hook-split test refreshed both hooks before assembling either document, so a refresh that stored a hook value would pass; each hook now refreshes and reads over owners of its own (one shared store differs anyway by the second request's speed sample). The design spec's SessionFacts names TranscriptUsage, the context tokens and MetricsFold, so SessionUsage names only the composed value. The usage test helper takes the transcript path, not a hook.\n\n* test(metrics): the provider's fold is read by transcript path, and the spec block names the usage fact abstractly (candybar-skeleton-wj0c.yb3)\n\nReview (high, after medium) fixes: the metrics tests build no hook to read a hook-free fold, and the SessionFacts block names session's fact UsageFacts beside ContextFacts and MetricsFacts, with the code names mapped in the paragraph below it."
-        }
-      ]
-    },
-    {
-      "version": "pr-710",
-      "ref": "refs/pull/710/merge",
-      "sha": "f3cbc4184b3d6b3a0f02fb9d5cf6c7f009c7aa42",
-      "timestamp": "2026-11-11T11:07:09.177Z",
-      "commits": [
-        {
-          "sha": "f3cbc4184b3d6b3a0f02fb9d5cf6c7f009c7aa42",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T11:06:24Z",
-          "message": "Merge 816f0e14f9d8d5afc639f866680e4d894a5ce483 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
-        },
-        {
-          "sha": "816f0e14f9d8d5afc639f866680e4d894a5ce483",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T04:06:13-07:00",
-          "message": "docs(design): Proposal 3 carries the step-back's decisions: digest range ids, writes only under the profile, chains of one-step effects, and the replay test after the pure draw (candybar-gather-renderer-76bb.215)\n"
-        },
-        {
-          "sha": "e989fc8398cbc649ecc9b554976ae2d96d297303",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T04:02:27-07:00",
-          "message": "docs(design): Proposal 3 names the renderer's one writer its state machine, since the URL handler already holds handler (candybar-gather-renderer-76bb.215)\n"
-        },
-        {
-          "sha": "2417163482c299b11ec7f24e62d3709733e920d0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T03:55:59-07:00",
-          "message": "docs(design): goals.md says world state and handler, the names Proposal 3 uses (candybar-gather-renderer-76bb.215)\n"
-        },
-        {
-          "sha": "9c00ba42b365b997c598a164e87789f6b800d738",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T03:54:03-07:00",
-          "message": "docs(design): Proposal 3 says world state for what the collector reads and handler for the renderer's one writer (candybar-gather-renderer-76bb.215)\n"
-        },
-        {
-          "sha": "32b1de6bdbe129d7816117bfac42a74db629de6a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T23:01:51-07:00",
-          "message": "docs(design): Proposal 3 says collector and session context, and range ids belong to the tmux status row (candybar-gather-renderer-76bb.215)\n"
-        },
-        {
-          "sha": "da60afa4830c566e1e3d3ba8a10b19c79813c8b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T22:12:27-07:00",
-          "message": "docs(design): Proposal 3 names its concepts by their standard terms: functional core and imperative shell, subscriptions, conditional writes, profiles, mailboxes, an effect interpreter (candybar-gather-renderer-76bb.215)\n"
-        },
-        {
-          "sha": "aebec607458058ca574cb9f8e9ba65486bf02d86",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T10:04:20-07:00",
-          "message": "docs(design): Proposal 3 answers its third review: a session's environment stays in the host and out of every recording (candybar-gather-renderer-76bb.215)\n"
-        },
-        {
-          "sha": "bdf7bcc37c8e1a12b90521ab790eaed19f60ccb2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T10:02:09-07:00",
-          "message": "docs(design): Proposal 3 answers its second review: only a chain's own layer is writable, layers carry what their role can have, sessions run in their own environment (candybar-gather-renderer-76bb.215)\n"
-        },
-        {
-          "sha": "b1dedf2ba8e642cdcb014d08d8c42820a30c34b7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T09:57:12-07:00",
-          "message": "docs(design): Proposal 3 answers its first review: a total start, discovery as a value, Gather judges reads, every effect today has a home (candybar-gather-renderer-76bb.215)\n"
-        },
-        {
-          "sha": "743d022036f543aa5ef05da57d103d207b4e2bcb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T09:42:44-07:00",
-          "message": "docs(design): goals record Brandon's intent with reasons, not his words, and the spec cites them by ID (candybar-gather-renderer-76bb.215)\n"
-        },
-        {
-          "sha": "8d70e4f241955c0a5da4c150d3a65f9bfb394992",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-10T09:36:42-07:00",
-          "message": "docs(design): Proposal 3, one host owns the world and renderers answer it, with its intent stated to be falsified (candybar-gather-renderer-76bb.215)\n"
         }
       ]
     }
