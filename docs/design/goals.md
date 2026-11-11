@@ -1,111 +1,62 @@
 # Goals
 
-Brandon's words, verbatim. The design documents answer to this file. Change it only when he restates a goal.
+What Brandon set for this work: each entry states the intent and its reason in plain technical language, so a reader can tell when it applies. A reason marked *(inferred)* is the design's reading of why, not a reason Brandon gave; he can strike it. The design documents answer to this file and cite entries by ID. Change an entry only when Brandon restates the goal it records.
 
 ## The two goals
 
-> I'll state the problems/goals as I see them.  There are two:
-> - browser render target for the bar.  this would be a fully supported renderer for any users w/ the prerequisites, which will be an Apple Silicon Mac, tmux, claude code.  Same stuff we require today.
-> - dev mode renderer.  we might run the live daemon off the main checkout, but we do a lot of dev on worktrees and we need to be able to run a sessions renderer off a worktree.  At the same time, I believe we reserve something like 1gb of memory for each daemon right now and doing this naively would be a lot of duplicate disk io and other resource usage (potentially)
->
-> Those are the two goals, which are related but separate.
+They are related and handled one at a time.
+
+- **G-1. The browser is a fully supported surface for the bar,** for any user with today's prerequisites: an Apple Silicon Mac, tmux and Claude Code. Every modern browser renders truecolor.
+- **G-2. A session's bar can run off a worktree.** The live bar may run off the main checkout, but most development happens on worktrees, and the bar is what is being developed. Each daemon may reserve about a gigabyte, so a naive second daemon would duplicate disk reads, processes and memory. The work may split the daemon into a part that reads the world into world state and a part that draws, so the drawing can be iterated alone.
 
 ## The constraints
 
-> - build from primitives that are generally useful.  we want to build the functionality out of primitives that themselves have applicability for multiple use cases.  I dont' care if the use case has no consumers and will not have consumers for 10 years.  it's potential consumers we are looking at, because it's hard to be a consumer of something that doens't exist yet.  no consumers is expected and not in itself any reason not to build something.  iphone had very few users when they decided to bet the company on it
-> - data flow not control flow.  we don't have conditional code paths to maintain.  we have different code paths, but they're decided based on data rather than inline checking of conditions
-> - generally compliant with /laws:code
+- **C-1. Build from generally useful primitives.** A primitive is judged by its potential consumers, not its current ones: nothing can consume what does not exist, so having no consumer yet is expected and is no reason not to build it.
+- **C-2. Variability is decided by data, not by inline checks.** Different paths exist, but a value selects between them; no conditional path is kept beside another to maintain.
+- **C-3. The design generally conforms to the laws of code.** They are what has made the project work so far; how today's code happens to work is not the measure of how it must.
 
-## Later rulings
+## Rulings
 
-On how the goals are built:
+### Building and order
 
-> First of all, what exists isn't how it needs to work.  We aren't going to be decoding anything from any rendered ANSI.  That's not acceptable.  I hope this sets the tone going forward, as does the rest of this message.  We build based on the laws, because it's the ONLY thing that has gotten us this far.
+- **R-1. Nothing is decoded from rendered ANSI.** *(Inferred:* state flows forward into a frame, and recovering it from one inverts the pipeline.)
+- **R-2. Conclusions are drawn from the supported API, not from Brandon's own config.** File and shell sources are the main way users get something into their bar, so they are the baseline a design is judged against.
+- **R-3. No renderer but the ANSI one is built until the wire format is right,** because the other surfaces should then follow with little work of their own.
+- **R-4. Features that don't serve the goals may be removed,** and reimplemented later in a form the laws allow. Removing the worst offenders is worth more than keeping them working.
 
-On the payload:
+### The payload
 
-> metrics, activity, and session: these become part of the payload.  Full stop.  Now I don't know exactly what this means but hopefully you can explain to me what the payload is, and how these currently travel outsdie of it.  To me this is immaterial to whether we do build a session stream.  There might be more than the payload, but I feel the payload should contain the data.
+- **R-5. Metrics, activity and session are part of the payload, and the payload carries the data a template reads.** Something beyond the payload may also exist. *(Inferred:* a value that reaches a template any other way is a second path to keep in step.)
 
-On what conclusions rest on:
+### Clicks and effects
 
-> 'My config' is not a baseline by which to draw conclusions.  the supported API is where we draw conclusions.  file and shell are the primary expansion points for users who want to get something into their bar.
+- **R-6. Clicks are isolated, and the URL handler may change substantially to make them so.** A design that leaves the handler untouched is suspect of hiding a real problem.
+- **R-7. Handling a click is pure.** A click, a timer and a future webhook are each just a way something happens; which one it was does not matter. Handling one, including setting state or config, produces an event or a description of an effect for something downstream to perform. It never flips a switch directly, because that couples behaviour to timing.
+- **R-8. One owner holds the world's inputs and side effects.** Data flows one way, so a renderer never sends a message upstream, and a renderer is not the owner of side-effecting click handlers.
+- **R-9. A click carries an address that decides where it goes,** a renderer's name for example. Claude Code's request is answered by the renderer that session's client is talking to. *(Inferred:* an address in the click needs no routing table that could disagree with the frame or be lost on restart.)
 
-On the order of work:
+### Draw and isolation
 
-> Let's get the basics correct.  We won't build anything but an ansi renderer until we have the wire format correct.  And when we do, the other stuff will drop out naturally.
+- **R-10. Reading the world into world state is one process, and Events → State machine → Draw runs in a separate process, or several,** as Brandon reads the split. *(Inferred:* this serves G-2: drawing can be iterated, restarted and multiplied without a second reader of the world.)
+- **R-11. Draw writes nothing; it only draws.** *(Inferred:* a draw that writes cannot be replayed or tested without mocks, and its frame may show something that did not happen.)
+- **R-12. There is no dev renderer and no dev mode.** Every renderer draws and acts the same way. A worktree's renderer is isolated by where it reads and writes and is pointed to by a session's values; anything it shows that main does not comes from instrumentation, never from performing a subset of actions. An allow-list of verbs is a dev-mode toggle by another name, and the primitive is an isolated renderer.
+- **R-13. No absolute path is stored in undo history;** every stored path sits under the renderer's isolated state directory. *(Inferred:* a history copied between renderers must not be able to write the user's files.)
+- **R-14. No surface is secondary.** The statusline, the tmux row and the browser are peers. *(Inferred:* a surface ranked below another gets a branch that treats it differently.)
 
-On clicks:
+### Links
 
-> About clicks: clicks must be isolated in some way.  I expect this will involve potentially significant changes to the url handler.  If I don't see this I will be suspicious that we're sweeping real concerns under the rug.  Again, not acceptable.  Let's build something excellent, ok?  I'm excited! :D
+- **R-15. Links are minted, never written by hand.** A config gets a link from a template function in the renderer, because no user will plausibly write one; the doctor builds its links with the same minter. A link to test the install is not worth having.
 
-On scope of the dev work:
+### Sessions
 
-> the dev daemon work encompasses:
-> - potentially splitting the daemon into 2 parts, one to gather facts, one to draw
-> - allows us to iterate on the drawing
+- **R-16. Moving a session to another renderer may restart Claude Code.** Avoiding the restart was never a requirement.
 
-On a richer browser, from his question:
+### How designs are made
 
-> Would this allow us to eventually have richer renderers for surfaces that support it?  speciifcally the browser?
+- **R-17. Decisions draw on how mature systems solved the same problem,** Apple's among them, *(Inferred:* their shape has been tested where ours has not.)
+- **R-18. A spec states its intent so it can be reviewed and falsified later.** *(Inferred:* that is what each part is for, where its need came from, and the observation that would show the design fails it.)
 
-On what may go:
+## Noted for later
 
-> We can remove features that aren't aligned with our goals as well.
-
-On handling the two goals:
-
-> Let's think about the two separate design goals here and handle them one at a time.
-
-On what clicks are:
-
-> As mentioned, we can cut functionality that we need to.  Then we can reimplement it later in a more laws aligned way.  I think that makes sense to ensure clicks are pure.  a Click could write an event to a queue or something that gets picked up downstream somewhere.  the implementation isn't important, the fact that we can drop the worst offenders is
-
-> set-state and set-config should be pure.  they shouldn't be flipping switches either.  they should be dropping an event or some other approved/laws compliant way to trigger a downstream effect.  it sounds like some of this violates no-ambient-temporal-coupling
-
-> clicks are one way things happen, timers are another.  webhooks might be another one some day.  shouldn't matter.
-
-On paths:
-
-> absolute file paths come out of the undo history, full stop.  every path is prefixed by an isolated state dir.
-
-On there being no dev renderer:
-
-> there IS no such thing as a 'dev draw'.  We draw.  that's it.  we can isolate paths, we can point things at the other renderer/daemon, but it's just a daemona and it's just drawing.  if we have a dev mode, it's because it's instrumented, not because it intrinisically performs a subset of actions compared to any other renderer
-
-On what the primitive is:
-
-> Limiting the list of allowed verbs is the wrong perspective at its core.  That's a dev mode toggle.  And that's not what I'm looking for, I'm looking for an isolated daemon.  That's what the primitive is and that's where we are going.
-
-On Draw:
-
-> Draw should not be writing anything.  it should be Drawing.
-
-On the shape:
-
-> To me it sounds like Gather is a single process, And Events->Apply->Draw is a separate process (or multiple)
-
-> Clicks contain an address, it could be a subscriber name, that controls routing.
-
-> There is no 'side surface'.
-
-> "Claude Code's request gets one answer, so which renderer's frame goes back?" The one that answers claude code's client
-
-On links:
-
-> 'Config-authored' the template fn should mint. it lives in the renderer.  maybe a new template fn.  it's incredible unlikely any user will ever try to write one of these by hand
-
-> 'Doctor probe' doctor must change to use the link minter
-
-> 'Install test URL' does not seem very useful
-
-On restarting:
-
-> Not restarting claude code was never a hard requirement
-
-On browsers:
-
-> Note: all modern browsers are truecolor depth
-
-On a floating window, for the record:
-
-> For the record i love that idea and if it could be attached to the iterm2 window it would be perfect.  i will def use it for something at some point
+- **N-1. A floating window attached to the iTerm2 window** is a surface Brandon wants to use eventually. Nothing here depends on it.
+- **N-2. A richer surface than the ANSI bar,** the browser first, is a direction Brandon asked about. The design should not close it off.

@@ -4,7 +4,8 @@ The Frame is built. The rest is design. Each area says where it stands.
 
 | Read | For |
 |---|---|
-| [goals.md](goals.md) | Brandon's goals, constraints and rulings, verbatim. Everything answers to this |
+| [goals.md](goals.md) | Brandon's goals, constraints and rulings, as intent with reasons. Everything answers to this |
+| [host-and-renderer.md](host-and-renderer.md) | Proposal 3, a draft under review: one host owns the world and calls renderers that answer it. Its intent table is what a review checks it against |
 | [architecture.md](architecture.md) | Gather, renderers, and how they fit |
 | [contracts.md](contracts.md) | Every shape that crosses between parts |
 
@@ -32,7 +33,7 @@ Each has the same sections: Owns, Why, Design, To probe, Done when, plus Evidenc
 
 **Rely heavily on subagents.** `src/daemon/` is large, and a session that reads this code directly runs out of context. Delegate reading, surveys and implementation, and keep the main session for decisions.
 
-A subagent sees only its prompt, so put every requirement in it, quoted from [goals.md](goals.md) where the wording matters, with its area doc and an acceptance check. Read what it produced, not its summary. `Explore` agents can't write files, so have them return findings as their final message.
+A subagent sees only its prompt, so put every requirement in it as the intent and its reason from [goals.md](goals.md), never a quote, with its area doc and an acceptance check. Read what it produced, not its summary. `Explore` agents can't write files, so have them return findings as their final message.
 
 Load `laws:code` first. The laws govern this work.
 
