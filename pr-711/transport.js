@@ -77217,10 +77217,14 @@ init_process();
 init_globals();
 var NOTHING_TO_SETTLE = (_delivered) => {
 };
-function failed2(host, message, error = new Error(message)) {
+function failed2(host, error, doing = "") {
+  const refusal = renderFailed(error);
   return {
     outcome: { kind: "threw", error },
-    resp: renderFailed(new Error(`renderer ${host.name}: ${message}`)),
+    resp: {
+      ...refusal,
+      error: `renderer ${host.name}: ${doing}${refusal.error}`
+    },
     seen: "failed",
     settled: NOTHING_TO_SETTLE
   };
@@ -77237,11 +77241,7 @@ async function answerStatusline(host, clock, req, id2, at, waitEndsAt, facts) {
   if (delivered.kind === "threw") {
     facts.push(...delivered.record);
     noteFacts(facts, { renderer: host.name });
-    return failed2(
-      host,
-      delivered.error instanceof Error ? delivered.error.message : inspect(delivered.error),
-      delivered.error
-    );
+    return failed2(host, delivered.error);
   }
   const { effects, record: record2 } = delivered.output;
   facts.push(...record2);
@@ -77280,15 +77280,18 @@ async function answerStatusline(host, clock, req, id2, at, waitEndsAt, facts) {
     }
   }
   if (answer2 === null)
-    return failed2(host, `presented no statusline frame for request ${id2}`);
+    return failed2(
+      host,
+      new Error(`presented no statusline frame for request ${id2}`)
+    );
   const presented = answer2;
   const encodeFrom = clock.monotonic();
   let resp;
   try {
     resp = RENDER_ANSWERS[req.encoding](presented.frame);
   } catch (e) {
-    done2(presented, `encoding its frame threw: ${String(e)}`);
-    return failed2(host, `its frame could not be encoded: ${String(e)}`, e);
+    done2(presented, `encoding its frame threw: ${renderFailed(e).error}`);
+    return failed2(host, e, "its frame could not be encoded: ");
   }
   noteFacts(facts, { encoded: `${elapsedMs(clock, encodeFrom)}ms` });
   return {
@@ -77836,7 +77839,28 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
-    const rendered = !checked.ok ? refusedRender(checked.problems) : await answerStatusline(
+    const recorded = (rendered) => {
+      if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
+      noteFacts(facts, {
+        timedOut: timedOut() ? "Y" : "N",
+        clientLeft: clientLeft() ? "Y" : "N",
+        queued: `${queuedMs}ms`
+      });
+      const { level, line } = requestEvent(
+        "render",
+        facts,
+        rendered.outcome,
+        elapsedMs(clock, t0)
+      );
+      parts.log(level, line);
+      return {
+        resp: rendered.resp,
+        exitAfterFlush: null,
+        settled: rendered.settled
+      };
+    };
+    if (!checked.ok) return recorded(refusedRender(checked.problems));
+    const answered2 = await answerStatusline(
       parts.renderer,
       clock,
       checked.req,
@@ -77850,40 +77874,23 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         monoMs: t0
       }),
       facts
-    ).then(
-      (answered2) => {
-        sighted(checked.req, answered2.seen);
-        return answered2;
-      },
+    ).catch(
       // [LAW:no-silent-failure] The driver hands every turn's failure back
       // as a value; a throw here is its own bug, answered as any throw is.
-      (error) => {
-        sighted(checked.req, "failed");
-        return {
-          outcome: { kind: "threw", error },
-          resp: renderFailed(error),
-          settled: NOTHING_TO_SETTLE
-        };
-      }
+      (error) => ({
+        outcome: { kind: "threw", error },
+        resp: renderFailed(error),
+        seen: "failed",
+        settled: NOTHING_TO_SETTLE
+      })
     );
-    if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
-    noteFacts(facts, {
-      timedOut: timedOut() ? "Y" : "N",
-      clientLeft: clientLeft() ? "Y" : "N",
-      queued: `${queuedMs}ms`
-    });
-    const { level, line } = requestEvent(
-      "render",
-      facts,
-      rendered.outcome,
-      elapsedMs(clock, t0)
-    );
-    parts.log(level, line);
-    return {
-      resp: rendered.resp,
-      exitAfterFlush: null,
-      settled: rendered.settled
-    };
+    try {
+      sighted(checked.req, answered2.seen);
+      return recorded(answered2);
+    } catch (e) {
+      answered2.settled(false);
+      throw e;
+    }
   }
   if (req.kind === "click") {
     return stay(

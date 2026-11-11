@@ -4,15 +4,22 @@
     {
       "version": "pr-711",
       "ref": "refs/pull/711/merge",
-      "sha": "712c0d79642ba7e10cadb52383caf2d0277f4fc4",
-      "timestamp": "2026-11-11T16:08:34.364Z",
+      "sha": "f7bfc59b78acd970695aeb6a7991f404096a4e7d",
+      "timestamp": "2026-11-11T16:17:19.876Z",
       "commits": [
         {
-          "sha": "712c0d79642ba7e10cadb52383caf2d0277f4fc4",
+          "sha": "f7bfc59b78acd970695aeb6a7991f404096a4e7d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T16:07:42Z",
-          "message": "Merge 6cdd3e7b0e3133a1131ff735714396afcac4acb7 into 063f5d7eba46bdf34965fbd84da03760986aab69\n"
+          "timestamp": "2026-11-11T16:16:22Z",
+          "message": "Merge b39965c4e572111ecccd8ca08427b7abf7757ede into 063f5d7eba46bdf34965fbd84da03760986aab69\n"
+        },
+        {
+          "sha": "b39965c4e572111ecccd8ca08427b7abf7757ede",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T09:16:11-07:00",
+          "message": "fix(renderer): review medium — every exit after a render's answer settles its present, one failure-message spelling, true seam claims (candybar-host-renderer-x96a.2xo)\n\n- A sighting or request-event write that throws after the answer settles the\n  present failed before the throw reaches the connection, so the renderer\n  keeps no record of a reply that was never sent.\n- A turn's failure reaches the client through renderFailed's one extraction,\n  with the renderer and what it was doing in front.\n- The interface and the session context say what holds: they import only\n  types. The renderer's turn record no longer claims the renderer writes no\n  log; the host parts it reaches name the wait's log among what the mailbox\n  takes away.\n"
         },
         {
           "sha": "6cdd3e7b0e3133a1131ff735714396afcac4acb7",
