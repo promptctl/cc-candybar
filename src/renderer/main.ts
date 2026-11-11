@@ -50,7 +50,7 @@ export function mainRenderer(parts: RendererParts): Renderer {
   ): Promise<RendererOutput> => {
     switch (event.kind) {
       case "config":
-        configureSession(parts, event.context, event.worldState);
+        configureSession(parts, event.context, event.worldState, at, record);
         return answered([], record);
       case "request": {
         const { frame, delivered } = await answerRequest(

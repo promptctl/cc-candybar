@@ -114,8 +114,9 @@ export async function answerStatusline(
   // its output's subscriptions reach the collector as the turn answers. A set
   // that moved is declared and its stamp handed in before the request is
   // delivered, so the request's wait covers every source the view reads.
-  // Nothing waits before delivery, so the renderer takes each session's
-  // requests and documents in the order they were made.
+  // In process the config turn answers at once, so nothing that opens or
+  // closes a view runs between it and the request; out of process, the
+  // router's mailbox is what keeps the two adjacent.
   const configured = await host.answer({
     kind: "event",
     at,
@@ -125,11 +126,11 @@ export async function answerStatusline(
       worldState: collector.requested(req),
     },
   });
+  // [LAW:nothing-unseen] The config turn's record leads: it opens with the
+  // session, which the event's readers key on (`render sid=`), and says what
+  // the context was, whether or not a request turn runs after it.
+  recorded(facts, configured);
   if (configured.kind === "threw") {
-    // [LAW:nothing-unseen] No request turn ran to open the event with the
-    // session, so the host names it.
-    noteFacts(facts, { sid: req.sessionId });
-    recorded(facts, configured);
     noteFacts(facts, { renderer: host.name });
     return failed(host, configured.error, "its config turn: ");
   }
@@ -142,10 +143,7 @@ export async function answerStatusline(
     at,
     event: { kind: "request", id, context: req, waitEndsAt },
   });
-  // The request turn's record leads: it opens with the session, which the
-  // event's readers key on (`render sid=`).
   recorded(facts, delivered);
-  recorded(facts, configured);
   if (delivered.kind === "threw") {
     noteFacts(facts, { renderer: host.name });
     return failed(host, delivered.error);

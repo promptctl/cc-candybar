@@ -186,9 +186,15 @@ describe("a statusline request", () => {
       request: REQUEST,
     });
     expect(present.frame.rows.length).toBeGreaterThan(0);
-    // The turn's record is the render event's renderer half.
-    expect(new Map(record).get("sid")).toBe(SESSION);
+    // The turn's record is the draw's half of the render event.
     expect(new Map(record).has("drew")).toBe(true);
+  });
+
+  test("has its context's facts on its config turn's record, which opens with the session", async () => {
+    const { record } = await configure(renderer(), checked());
+    expect(record[0]).toEqual(["sid", SESSION]);
+    expect(new Map(record).get("badArgs")).toMatch(/--bogus/);
+    expect(new Map(record).get("encoding")).toBe("frame");
   });
 
   test("whose view closed after its config turn opens it again at its own context and is answered", async () => {
@@ -303,14 +309,15 @@ describe("the session's config, ahead of its request", () => {
 
   test("one that throws answers its request with a failure naming the renderer, and the request is not delivered", async () => {
     const t = renderer();
+    t.rig.cache.holdSession = (() => {
+      throw new Error("the opening broke");
+    }) as never;
     const kinds: string[] = [];
     const host = rendererHost(
       "main",
       {
         answer: (input) => {
           kinds.push(input.event.kind);
-          if (input.event.kind === "config")
-            return Promise.reject(new TurnThrew([], new Error("no view")));
           return t.r.answer(input);
         },
       },
@@ -331,10 +338,14 @@ describe("the session's config, ahead of its request", () => {
     expect(kinds).toEqual(["config"]);
     expect(answered.resp).toMatchObject({
       ok: false,
-      error: expect.stringMatching(/^renderer main: its config turn: no view/),
+      error: expect.stringMatching(
+        /^renderer main: its config turn: the opening broke/,
+      ),
     });
-    // The render event still opens with the session.
+    // The render event still opens with the session, and says what the
+    // context the opening was for carried.
     expect(facts[0]).toEqual(["sid", SESSION]);
+    expect(new Map(facts).get("badArgs")).toMatch(/--bogus/);
   });
 
   test("a request with no config before it is refused, naming the session", async () => {

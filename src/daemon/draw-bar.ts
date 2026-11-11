@@ -318,33 +318,24 @@ interface RenderSetup extends Disposable {
   readonly payloadInputs: PayloadInputs;
 }
 
-// What a render notes of the request it draws by, and the error message for
-// the hints that request refused.
-function requestFacts(
+// What a render notes of the context it draws by.
+function contextFacts(
   req: CheckedRenderRequest,
   at: Instant,
   facts: RequestFacts,
-): string | null {
+): void {
   noteFacts(facts, {
     sid: req.sessionId,
     at: at.toFixed(3),
   });
-  // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
-  // observed and the daemon cannot. Raw `req.*` hint fields are not read
-  // past this line; `hints` is the stamped type the render path consumes.
-  //
-  // [LAW:single-enforcer] Every hint is captured client-side because the
-  // daemon is detached and shared: its env answers for whichever shell
-  // spawned it. We do NOT read the daemon's env or stderr for width, and we do
-  // NOT consult SSH_* for remoteness — both would describe a different
-  // session than the one being rendered.
-  const hints = req.hints;
-  const refused = refusedHints(req, hints);
-  const hintsError = refusedHintsError(refused);
+  const { hints } = req;
   noteFacts(facts, {
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
-    refused: refused.map((r) => r.hint).join(",") || "-",
+    refused:
+      refusedHints(req, hints)
+        .map((r) => r.hint)
+        .join(",") || "-",
     badArgs: req.refusedArgs.map((r) => `${r.arg}:${r.why}`).join(",") || "-",
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
@@ -353,41 +344,58 @@ function requestFacts(
     // doctor's segment-data check reads (RenderSightings).
     rateLimits: req.rateLimits,
   });
-  return hintsError;
 }
 
-// [LAW:single-enforcer] A `config` turn: what its context says is recorded,
-// and the session's view opened at it and let go, so the turn's output names
-// what the view reads before the request after it waits. The record goes
-// first, so a durable click on a session whose opening threw still resolves
-// the chain that opening was for.
+// The error message for the hints the context refused.
+//
+// [LAW:parse-dont-validate] The ONE checkpoint for everything the client
+// observed and the daemon cannot. Raw `req.*` hint fields are not read past
+// this line; `hints` is the stamped type the render path consumes.
+//
+// [LAW:single-enforcer] Every hint is captured client-side because the daemon
+// is detached and shared: its env answers for whichever shell spawned it. We
+// do NOT read the daemon's env or stderr for width, and we do NOT consult
+// SSH_* for remoteness — both would describe a different session than the one
+// being rendered.
+const hintsErrorOf = (req: CheckedRenderRequest): string | null =>
+  refusedHintsError(refusedHints(req, req.hints));
+
+// [LAW:single-enforcer] A `config` turn: the facts of the context it carries
+// noted, what the context says recorded, its world state taken, and the
+// session's view opened at it and let go, so the turn's output names what the
+// view reads before the request after it waits. The record goes first, so a
+// durable click on a session whose opening threw still resolves the chain
+// that opening was for, and the facts before it, so the request's event says
+// what a failed opening was for.
+//
+// [LAW:one-source-of-truth] The world state and the view's context are taken
+// in one action, so nothing drawn between the two pairs either with another
+// context's.
 export function configureSession(
   parts: RendererParts,
   req: CheckedRenderRequest,
   worldState: WorldState,
+  at: Instant,
+  facts: RequestFacts,
 ): void {
+  contextFacts(req, at, facts);
+  noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
     recordRequest(parts, req);
-    openSession(parts, req, worldState)[Symbol.dispose]();
+    parts.worldStates.take(worldState);
+    holdSessionAt(parts, req)[Symbol.dispose]();
   });
 }
 
 // [LAW:single-enforcer] The one way a session's view is held at a context:
-// its world state taken and its view opened, or kept and refreshed, at the
-// config inputs the context names. A `config` turn opens it ahead of the
-// request, and the request holds it again at its own context, so it draws by
-// the context it carries and needs nothing to outlive the turn before it: a
-// view closed between the two opens again.
-//
-// [LAW:one-source-of-truth] The world state and the hold are taken in one
-// action, so nothing drawn between the two pairs either with another
-// context's.
-function openSession(
+// opened, or kept and refreshed, at the config inputs the context names. A
+// `config` turn opens it ahead of the request, and the request holds it again
+// at its own context, so it draws by the context it carries and needs nothing
+// to outlive the turn before it: a view closed between the two opens again.
+function holdSessionAt(
   parts: RendererParts,
   req: CheckedRenderRequest,
-  worldState: WorldState,
 ): SessionHold<SessionSource, CheckedRenderRequest> {
-  const { sessionState, renderCache, worldStates } = parts;
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
   // over the `--config` flag over the client's `CC_CANDYBAR_CONFIG` hint
@@ -395,18 +403,15 @@ function openSession(
   // never consulted (brandon-config-5g8).
   const origin = sessionRenderOrigin(
     req.requested,
-    sessionState,
+    parts.sessionState,
     req.sessionId,
   );
-  return runInAction(() => {
-    worldStates.take(worldState);
-    return renderCache.holdSession(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path,
-      req,
-    );
-  });
+  return parts.renderCache.holdSession(
+    origin.projectDir,
+    origin.cwd,
+    origin.target.path,
+    req,
+  );
 }
 
 export function setUpRender(
@@ -415,8 +420,6 @@ export function setUpRender(
   at: Instant,
   facts: RequestFacts,
 ): RenderSetup {
-  const hintsError = requestFacts(req, at, facts);
-  noteFacts(facts, { encoding: req.encoding });
   // [LAW:no-ambient-temporal-coupling] Held, not fetched: `state`, and the
   // session's `view` of it, are what this render resolves its payload from and
   // draws with after the payload await below. An eviction, a reload, or the
@@ -424,9 +427,10 @@ export function setUpRender(
   // cache disposes them when this hold is released — never under the render
   // (brandon-unfiled-3248.6rc). The setup owns the hold from here: a throw
   // before it is returned releases it, and the setup releases it on every exit
-  // of the render that disposes it. The world state is the one the renderer
-  // holds for the session, taken from its `config` or handed in since.
-  const hold = openSession(parts, req, parts.worldStates.of(req.sessionId));
+  // of the render that disposes it. Its facts and its world state came with
+  // its `config`.
+  const hintsError = hintsErrorOf(req);
+  const hold = holdSessionAt(parts, req);
   return setUpDraw(parts, hold, req, hintsError, at, facts);
 }
 
@@ -451,7 +455,8 @@ function setUpFrame(
   const req = hold.view.facts();
   let hintsError: string | null;
   try {
-    hintsError = requestFacts(req, at, facts);
+    contextFacts(req, at, facts);
+    hintsError = hintsErrorOf(req);
   } catch (e) {
     hold[Symbol.dispose]();
     throw e;
