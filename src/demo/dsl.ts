@@ -197,79 +197,84 @@ async function renderFrames(): Promise<void> {
     watched: () => true,
     deliver: async (event) => {
       if (event.kind === "world-state") worldStates.take(event.worldState);
+      return { kind: "answered" };
     },
     log,
   });
   const request = { sessionId, hookData, cwd, hints };
-  worldStates.take(collector.requested(request));
-  // The session's view of the state, as the daemon opens one per session,
-  // drawn by the one request the demo's frames draw by.
-  const view = openView(state, cwd, request, {
-    source: sessionSource({
-      sessionState,
-      worldStates,
-      home: providers.home,
-      history: () => EMPTY_HISTORY_DEPTH,
-      navigation: () => 0,
-    }),
-    // The demo draws one frame per tick of its own: no feed to wake.
-    changed: () => {},
-    log,
-  });
-  // [LAW:one-source-of-truth] The view's subscriptions reach the collector as
-  // a turn's output takes them to the daemon's.
-  collector.subscribed({ sources: { [sessionId]: subscriptionsOf(state) } });
+  // What the collector holds goes with the demo, whatever stops it.
   try {
-    const effective = view.source.effective();
+    worldStates.take(collector.requested(request));
+    // The session's view of the state, as the daemon opens one per session,
+    // drawn by the one request the demo's frames draw by.
+    const view = openView(state, cwd, request, {
+      source: sessionSource({
+        sessionState,
+        worldStates,
+        home: providers.home,
+        history: () => EMPTY_HISTORY_DEPTH,
+        navigation: () => 0,
+      }),
+      // The demo draws one frame per tick of its own: no feed to wake.
+      changed: () => {},
+      log,
+    });
+    // [LAW:one-source-of-truth] The view's subscriptions reach the collector as
+    // a turn's output takes them to the daemon's.
+    collector.subscribed({ sources: { [sessionId]: subscriptionsOf(state) } });
+    try {
+      const effective = view.source.effective();
 
-    process.stdout.write(
-      `\n  DSL demo — ${configPath}\n` +
-        `  one faked status-line request, rendered by the daemon's own functions\n` +
-        `  ${FRAMES} renders, one per status-line tick — watch the clock move:\n\n`,
-    );
-
-    // The session's effect memory, held across the frames as the daemon holds
-    // it across a session's requests, so a `globals.effect` moves frame to frame.
-    const effects = new SessionEffects<RenderedLine>(sessionId);
-    for (let frame = 0; frame < FRAMES; frame++) {
-      // [LAW:effects-at-boundaries] Each frame is one status-line tick: one
-      // instant, sampled here as the daemon samples it per request.
-      const at = instantOf(new Date(world.clock.now()));
-      await settleWorld(
-        { hookData, deps: providers, cwd, hints },
-        at,
-        new Map(),
-        () => worldStates.of(sessionId),
-        // The demo's frames have no client to hang up.
-        new AbortController().signal,
-      );
-      const { frame: drawn } = drawDsl(
-        state.config,
-        state.compiled,
-        view.store,
-        view.registry,
-        {
-          drawing: { by: "request" },
-          feeds: UNFOLLOWED_FEEDS,
-          today: todayOf(view.source.facts().builtins.today, at),
-        },
-        at,
-        renderOptionsOf(effective, width),
-        { onRenderWarning: ({ message }) => warn(message) },
-        { ...effective, effects },
-      );
       process.stdout.write(
-        ansiOf(drawn)
-          .split("\n")
-          .map((row) => `  ${row}\n`)
-          .join(""),
+        `\n  DSL demo — ${configPath}\n` +
+          `  one faked status-line request, rendered by the daemon's own functions\n` +
+          `  ${FRAMES} renders, one per status-line tick — watch the clock move:\n\n`,
       );
-      if (frame < FRAMES - 1) await sleep(world.clock, FRAME_INTERVAL_MS);
-    }
 
-    process.stdout.write("\n");
+      // The session's effect memory, held across the frames as the daemon holds
+      // it across a session's requests, so a `globals.effect` moves frame to frame.
+      const effects = new SessionEffects<RenderedLine>(sessionId);
+      for (let frame = 0; frame < FRAMES; frame++) {
+        // [LAW:effects-at-boundaries] Each frame is one status-line tick: one
+        // instant, sampled here as the daemon samples it per request.
+        const at = instantOf(new Date(world.clock.now()));
+        await settleWorld(
+          { hookData, deps: providers, cwd, hints },
+          at,
+          new Map(),
+          () => worldStates.of(sessionId),
+          // The demo's frames have no client to hang up.
+          new AbortController().signal,
+        );
+        const { frame: drawn } = drawDsl(
+          state.config,
+          state.compiled,
+          view.store,
+          view.registry,
+          {
+            drawing: { by: "request" },
+            feeds: UNFOLLOWED_FEEDS,
+            today: todayOf(view.source.facts().builtins.today, at),
+          },
+          at,
+          renderOptionsOf(effective, width),
+          { onRenderWarning: ({ message }) => warn(message) },
+          { ...effective, effects },
+        );
+        process.stdout.write(
+          ansiOf(drawn)
+            .split("\n")
+            .map((row) => `  ${row}\n`)
+            .join(""),
+        );
+        if (frame < FRAMES - 1) await sleep(world.clock, FRAME_INTERVAL_MS);
+      }
+
+      process.stdout.write("\n");
+    } finally {
+      view.dispose();
+    }
   } finally {
-    view.dispose();
     collector.close();
     state.registry.dispose();
     runs.close();

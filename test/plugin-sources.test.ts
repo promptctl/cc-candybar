@@ -204,7 +204,17 @@ function rig(): Rig {
         navigation: () => 0,
       }),
     },
-    { budgetBytes: () => 1024 * 1024 * 1024, observers: reloads.observers },
+    {
+      budgetBytes: () => 1024 * 1024 * 1024,
+      observers: {
+        ...reloads.observers,
+        // As the daemon's: a reload's successors are subscribed, whole.
+        onReload: (...reloaded) => {
+          served.collector.subscribed(cache.subscriptions());
+          reloads.observers.onReload?.(...reloaded);
+        },
+      },
+    },
   );
   served.serve(cache);
   cleanups.push(() => {
@@ -959,6 +969,24 @@ describe("a storage folder's watch", () => {
     r.collector.sweep();
     expect(r.counters.watchersOpened).toBe(opened);
     expect(r.providers.managedStorage.stats().folders).toBe(1);
+  });
+
+  test("a reload that adds a source to an open view holds it with no request after", async () => {
+    const r = rig();
+    plugin();
+    const bare = `{ segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`;
+    const file = write("config.json5", bare);
+    viewOf(r, file);
+    expect(r.providers.managedStorage.stats().held).toBe(0);
+    const entry = r.cache.getOrCreate(dir, dir, file);
+    await r.reloads.after(entry, () =>
+      fs.writeFileSync(
+        file,
+        bare.replace("{ segments", `{ plugins: ["./p/plugin.json5"], segments`),
+      ),
+    );
+    expect([...entry.state.sources.keys()]).toEqual([STATUS]);
+    expect(r.providers.managedStorage.stats().held).toBe(1);
   });
 
   test("a reload keeps it open", async () => {

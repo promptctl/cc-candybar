@@ -52,6 +52,7 @@ import {
   type RenderPayloadDeps,
   type ViewFacts,
 } from "./render-payload.js";
+import type { Delivered } from "./renderer-host.js";
 import type { SessionId } from "./session-id.js";
 
 // [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
@@ -76,8 +77,8 @@ export interface CollectorDeps {
   // frame feeds are the one record of who is watching.
   readonly watched: (session: SessionId) => boolean;
   // The host's one path to its renderer, for what the collector hands in
-  // alone; it answers once the renderer's turn did.
-  readonly deliver: (event: HandedIn) => Promise<unknown>;
+  // alone; it answers once the renderer's turn did, with how it ended.
+  readonly deliver: (event: HandedIn) => Promise<Pick<Delivered, "kind">>;
   readonly log: DaemonLogger;
 }
 
@@ -389,12 +390,7 @@ export class Collector {
   }
 
   private inputsOf(locator: ViewFacts) {
-    return {
-      hookData: locator.hookData,
-      cwd: locator.cwd,
-      hints: locator.hints,
-      deps: this.deps.owners,
-    };
+    return { ...locator, deps: this.deps.owners };
   }
 
   private read({ locator, lanes }: Declared): StampInputs {
@@ -454,7 +450,9 @@ export class Collector {
 
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
   // once, and its record stays `retiring` until the renderer answered the
-  // retire: an output taken meanwhile may still name it.
+  // retire: an output taken meanwhile may still name it. A retire whose turn
+  // threw may have left the renderer holding the session's document, so the
+  // record stays, and a request revives it with the next `seq`.
   private retire(record: SessionRecord, live: Live): void {
     release(live);
     record.phase = { kind: "retiring" };
@@ -464,8 +462,9 @@ export class Collector {
     );
     void this.deps
       .deliver({ kind: "retire", session: record.session })
-      .then(() => {
+      .then(({ kind }) => {
         if (
+          kind === "answered" &&
           record.phase.kind === "retiring" &&
           this.records.get(record.session) === record
         )

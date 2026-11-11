@@ -564,6 +564,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           // even one that failed and kept the old config: its indicator says so.
           for (const sessionId of sessions)
             frameFeeds.wake(sessionId, "reload");
+          // [LAW:single-enforcer] exception: a reload opens its successors
+          // outside any turn, so no output carries their subscriptions, and a
+          // source it adds would go unread until some later turn answered.
+          // They are taken here, whole, as an output's are; this goes when
+          // config reaches the renderer as an event and a reload is a turn.
+          collector.subscribed(renderCache.subscriptions());
         },
         // [LAW:single-enforcer] What a session's view draws from moved: its
         // feed's next frame is brought forward, whatever moved it: a request's

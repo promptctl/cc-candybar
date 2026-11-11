@@ -110,17 +110,21 @@ function handLanded() {
   return { owners, held, land };
 }
 
+const ANSWERED = { kind: "answered" } as const;
+
 // A collector over `owners`, on a clock the case moves, with a renderer that
 // answers each hand-in at once and records it. `watched` is which sessions an
-// open feed draws.
+// open feed draws; `retired` is how the renderer's retire turns end.
 function collectorOver(
   owners: RenderPayloadDeps,
   {
     update = () => pendingOf("unread"),
     watched = new Set<SessionId>(),
+    retired = "answered",
   }: {
     readonly update?: () => Fact<UpdateNotice>;
     readonly watched?: ReadonlySet<SessionId>;
+    readonly retired?: "answered" | "threw";
   } = {},
 ) {
   const clock: HeldClock = heldClock(new Date(1_700_000_000_000));
@@ -133,6 +137,7 @@ function collectorOver(
     watched: (session) => watched.has(session),
     deliver: async (event) => {
       handedIn.push(event);
+      return event.kind === "retire" ? { kind: retired } : ANSWERED;
     },
     log: (level, message) => logged.push(`${level} ${message}`),
   });
@@ -300,6 +305,18 @@ describe("the sweep", () => {
     expect(clock.pending()).toBe(0);
   });
 
+  test("keeps a session whose retire turn threw, and a request revives it from the document it kept", async () => {
+    const { owners } = handLanded();
+    const { collector, clock } = collectorOver(owners, { retired: "threw" });
+    const first = collector.requested(requestAt("/a"));
+    clock.advance(2 * SESSION_SWEEP_MS);
+    await drained();
+    expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
+    // Not a new record at seq 1, which the renderer still holding the session
+    // would refuse.
+    expect(collector.requested(requestAt("/a"))).toBe(first);
+  });
+
   test("keeps a session an open feed draws", () => {
     const { owners } = handLanded();
     const { collector, clock, handedIn } = collectorOver(owners, {
@@ -324,8 +341,8 @@ describe("the sweep", () => {
       // The renderer answers the retire only when the case says.
       deliver: (event) =>
         event.kind === "retire"
-          ? new Promise<void>((resolve) => handIns.push(resolve))
-          : Promise.resolve(),
+          ? new Promise((resolve) => handIns.push(() => resolve(ANSWERED)))
+          : Promise.resolve(ANSWERED),
       log: (level, message) => logged.push(`${level} ${message}`),
     });
     cleanups.push(() => collector.close());

@@ -48,11 +48,12 @@ export function collected(
     deliver: async (event) => {
       if (event.kind === "world-state") {
         worldStates.take(event.worldState);
-        return;
+        return { kind: "answered" };
       }
       cache().retireSession(event.session);
       worldStates.drop(event.session);
       collector.subscribed(cache().subscriptions());
+      return { kind: "answered" };
     },
   });
   cleanups.push(() => collector.close());
