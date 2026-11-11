@@ -4,15 +4,22 @@
     {
       "version": "pr-714",
       "ref": "refs/pull/714/merge",
-      "sha": "37d13f09f8bdf12905b976715e1a5ee2d18c5607",
-      "timestamp": "2026-11-11T22:03:55.088Z",
+      "sha": "268755eed4e3de34865c31212d79c9e702973087",
+      "timestamp": "2026-11-11T22:09:29.095Z",
       "commits": [
         {
-          "sha": "37d13f09f8bdf12905b976715e1a5ee2d18c5607",
+          "sha": "268755eed4e3de34865c31212d79c9e702973087",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T15:02:57-07:00",
-          "message": "Merge f3229d65e4c62b9dcadd7b84c62107172d623f7f into d9e26fa44171c75529a59436c3d34d697497d642\n"
+          "timestamp": "2026-11-11T22:08:42Z",
+          "message": "Merge 025f1df3bd68415f60e4623a4c722498ea9d725e into d9e26fa44171c75529a59436c3d34d697497d642\n"
+        },
+        {
+          "sha": "025f1df3bd68415f60e4623a4c722498ea9d725e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T15:08:29-07:00",
+          "message": "test(frame-feed): the unseen-pane case pins its bar moving, waits through the stream's own wait, and bounds three draws by two still periods (candybar-host-renderer-x96a.5qt)\n\nReview pass (high): the visibility wait runs through waitFor, so the\nstream's end is part of it and it gets the draw wait's budget; the span\nuses elapsedMs; the bound is the two still periods the comment argues\nfor; and the closing summary's unseen count shows the bar was moving.\nForcing every pane shown fails it (104 ms against 1998).\n"
         },
         {
           "sha": "f3229d65e4c62b9dcadd7b84c62107172d623f7f",
