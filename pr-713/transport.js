@@ -76707,18 +76707,16 @@ function lanesAt(parts, origin, sessionId2) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function requestFacts(req, at, facts) {
+function contextFacts(req, at, facts) {
   noteFacts(facts, {
     sid: req.sessionId,
     at: at.toFixed(3)
   });
-  const hints = req.hints;
-  const refused = refusedHints(req, hints);
-  const hintsError = refusedHintsError(refused);
+  const { hints } = req;
   noteFacts(facts, {
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
-    refused: refused.map((r) => r.hint).join(",") || "-",
+    refused: refusedHints(req, hints).map((r) => r.hint).join(",") || "-",
     badArgs: req.refusedArgs.map((r) => `${r.arg}:${r.why}`).join(",") || "-",
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
@@ -76727,35 +76725,33 @@ function requestFacts(req, at, facts) {
     // doctor's segment-data check reads (RenderSightings).
     rateLimits: req.rateLimits
   });
-  return hintsError;
 }
-function configureSession(parts, req, worldState) {
+var hintsErrorOf = (req) => refusedHintsError(refusedHints(req, req.hints));
+function configureSession(parts, req, worldState, at, facts) {
+  contextFacts(req, at, facts);
+  noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
     recordRequest(parts, req);
-    openSession(parts, req, worldState)[Symbol.dispose]();
+    parts.worldStates.take(worldState);
+    holdSessionAt(parts, req)[Symbol.dispose]();
   });
 }
-function openSession(parts, req, worldState) {
-  const { sessionState, renderCache, worldStates } = parts;
+function holdSessionAt(parts, req) {
   const origin = sessionRenderOrigin(
     req.requested,
-    sessionState,
+    parts.sessionState,
     req.sessionId
   );
-  return runInAction(() => {
-    worldStates.take(worldState);
-    return renderCache.holdSession(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path,
-      req
-    );
-  });
+  return parts.renderCache.holdSession(
+    origin.projectDir,
+    origin.cwd,
+    origin.target.path,
+    req
+  );
 }
 function setUpRender(parts, req, at, facts) {
-  const hintsError = requestFacts(req, at, facts);
-  noteFacts(facts, { encoding: req.encoding });
-  const hold2 = openSession(parts, req, parts.worldStates.of(req.sessionId));
+  const hintsError = hintsErrorOf(req);
+  const hold2 = holdSessionAt(parts, req);
   return setUpDraw(parts, hold2, req, hintsError, at, facts);
 }
 function setUpFrame(parts, sessionId2, at, facts) {
@@ -76769,7 +76765,8 @@ function setUpFrame(parts, sessionId2, at, facts) {
   const req = hold2.view.facts();
   let hintsError;
   try {
-    hintsError = requestFacts(req, at, facts);
+    contextFacts(req, at, facts);
+    hintsError = hintsErrorOf(req);
   } catch (e) {
     hold2[Symbol.dispose]();
     throw e;
@@ -77264,9 +77261,8 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
       worldState: collector.requested(req)
     }
   });
+  recorded(facts, configured);
   if (configured.kind === "threw") {
-    noteFacts(facts, { sid: req.sessionId });
-    recorded(facts, configured);
     noteFacts(facts, { renderer: host.name });
     return failed2(host, configured.error, "its config turn: ");
   }
@@ -77278,7 +77274,6 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
     event: { kind: "request", id: id2, context: req, waitEndsAt }
   });
   recorded(facts, delivered);
-  recorded(facts, configured);
   if (delivered.kind === "threw") {
     noteFacts(facts, { renderer: host.name });
     return failed2(host, delivered.error);
@@ -84794,7 +84789,7 @@ function mainRenderer(parts) {
   const turn = async (event, at, record2) => {
     switch (event.kind) {
       case "config":
-        configureSession(parts, event.context, event.worldState);
+        configureSession(parts, event.context, event.worldState, at, record2);
         return answered([], record2);
       case "request": {
         const { frame: frame2, delivered } = await answerRequest(

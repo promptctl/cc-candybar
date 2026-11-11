@@ -4,15 +4,22 @@
     {
       "version": "pr-713",
       "ref": "refs/pull/713/merge",
-      "sha": "06e9e32cc98ee9266bdd470e871af5162d5198b0",
-      "timestamp": "2026-11-11T21:28:53.248Z",
+      "sha": "72ede5c616aec2bd7bcb5fbf9ebbc7ef4abf541c",
+      "timestamp": "2026-11-11T21:43:19.830Z",
       "commits": [
         {
-          "sha": "06e9e32cc98ee9266bdd470e871af5162d5198b0",
+          "sha": "72ede5c616aec2bd7bcb5fbf9ebbc7ef4abf541c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T21:27:53Z",
-          "message": "Merge 859cb77b6e8ffe97f9e33b873fbd153f78ec7f25 into 3d7e53b9f1808833f18ed94678a165f47253a764\n"
+          "timestamp": "2026-11-11T21:42:34Z",
+          "message": "Merge 2c7571f4289170ced059e22eaf3290d82e02ff68 into 3d7e53b9f1808833f18ed94678a165f47253a764\n"
+        },
+        {
+          "sha": "2c7571f4289170ced059e22eaf3290d82e02ff68",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T14:42:23-07:00",
+          "message": "fix(router): the config turn notes its context's facts and takes its world state, so a failed opening still says what it was for (candybar-host-renderer-x96a.5zx)\n\nA config turn that threw left the render event with only the session:\nthe hints, the client, the refused args and the encoding were noted by\nthe request turn, which never ran. The config turn now notes the facts\nof the context it carries and its record leads the event, and it alone\ntakes the world state that came with it. The request turn holds the\nview at its own context and computes only the hints error its draw\nshows.\n"
         },
         {
           "sha": "859cb77b6e8ffe97f9e33b873fbd153f78ec7f25",
