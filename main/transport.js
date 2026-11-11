@@ -55774,7 +55774,7 @@ function claudeManagedSettingsDir(platform3) {
 var projectLocalSettingsFile = (projectDir) => import_node_path8.default.join(projectDir, ".claude", "settings.local.json");
 function readSettingsChain(at) {
   const dropIns = import_node_path8.default.join(at.managedDir, "managed-settings.d");
-  const located = [
+  const located2 = [
     ...visibleJsonFiles(dropIns).reverse().map((name) => ({
       scope: "managed",
       path: import_node_path8.default.join(dropIns, name)
@@ -55793,7 +55793,7 @@ function readSettingsChain(at) {
     },
     { scope: "user", path: at.userFile }
   ];
-  const read2 = located.flatMap((l) => {
+  const read2 = located2.flatMap((l) => {
     const file = readSettingsFile(l.path);
     if (file === null) return [];
     const settings = parseSettings(l.path, file.text);
@@ -64670,7 +64670,7 @@ var import_node_path16 = __toESM(require_path_browserify(), 1);
 // src/daemon/session-state.ts
 init_globals();
 function recordingView(store, records, onChange) {
-  const recorded = (sessionId2, keys2, write) => {
+  const recorded2 = (sessionId2, keys2, write) => {
     const before = keys2.filter(records).map((key) => ({ key, before: store.get(sessionId2, key) }));
     write();
     for (const { key, before: b } of before) {
@@ -64680,13 +64680,13 @@ function recordingView(store, records, onChange) {
   return {
     get: (sessionId2, key) => store.get(sessionId2, key),
     revision: (sessionId2) => store.revision(sessionId2),
-    set: (sessionId2, key, value) => recorded(sessionId2, [key], () => store.set(sessionId2, key, value)),
-    setBatch: (sessionId2, pairs2) => recorded(
+    set: (sessionId2, key, value) => recorded2(sessionId2, [key], () => store.set(sessionId2, key, value)),
+    setBatch: (sessionId2, pairs2) => recorded2(
       sessionId2,
       pairs2.map((p2) => p2.key),
       () => store.setBatch(sessionId2, pairs2)
     ),
-    clear: (sessionId2, key) => recorded(sessionId2, [key], () => store.clear(sessionId2, key))
+    clear: (sessionId2, key) => recorded2(sessionId2, [key], () => store.clear(sessionId2, key))
   };
 }
 var EPHEMERAL_SESSION_STORAGE = {
@@ -65622,10 +65622,10 @@ var repoConfigs = (dir) => {
   };
 };
 function recordAnswer(store, dir, answer2) {
-  let recorded = { superseded: [], absent: [], unchecked: [] };
+  let recorded2 = { superseded: [], absent: [], unchecked: [] };
   const filed = store.update((book) => {
     const others = Object.keys(book).filter((d) => d !== dir).map((d) => ({ d, found: presence(d) }));
-    recorded = {
+    recorded2 = {
       superseded: others.filter(
         ({ d, found: found2 }) => found2 === "present" && answerDir({ dir: d, link: worktreeLink(d) }) === dir
       ).map(({ d }) => d),
@@ -65634,9 +65634,9 @@ function recordAnswer(store, dir, answer2) {
         ({ found: found2 }) => typeof found2 === "object" ? [found2] : []
       )
     };
-    return withAnswer(book, dir, answer2, recorded.superseded);
+    return withAnswer(book, dir, answer2, recorded2.superseded);
   });
-  return filed.kind === "failed" ? filed : ok(recorded);
+  return filed.kind === "failed" ? filed : ok(recorded2);
 }
 function repoAnswerFields(sessionId2, dir, answer2) {
   return {
@@ -71932,7 +71932,6 @@ var Runs = class {
 
 // src/daemon/draw-bar.ts
 init_globals();
-var import_node_path32 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/update-keys.ts
 init_globals();
@@ -76708,18 +76707,16 @@ function lanesAt(parts, origin, sessionId2) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function requestFacts(req, at, facts) {
+function contextFacts(req, at, facts) {
   noteFacts(facts, {
     sid: req.sessionId,
     at: at.toFixed(3)
   });
-  const hints = req.hints;
-  const refused = refusedHints(req, hints);
-  const hintsError = refusedHintsError(refused);
+  const { hints } = req;
   noteFacts(facts, {
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
-    refused: refused.map((r) => r.hint).join(",") || "-",
+    refused: refusedHints(req, hints).map((r) => r.hint).join(",") || "-",
     badArgs: req.refusedArgs.map((r) => `${r.arg}:${r.why}`).join(",") || "-",
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
@@ -76728,31 +76725,33 @@ function requestFacts(req, at, facts) {
     // doctor's segment-data check reads (RenderSightings).
     rateLimits: req.rateLimits
   });
-  return hintsError;
 }
-function setUpRender(parts, arrived3, worldState, at, facts) {
-  const { sessionState, renderCache, worldStates } = parts;
-  const dir = arrived3.hookData.workspace?.current_dir ?? arrived3.cwd;
-  const req = {
-    ...arrived3,
-    hookData: {
-      ...arrived3.hookData,
-      ...dir !== void 0 && import_node_path32.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
-    }
-  };
-  const sessionId2 = req.sessionId;
-  const hintsError = requestFacts(req, at, facts);
+var hintsErrorOf = (req) => refusedHintsError(refusedHints(req, req.hints));
+function configureSession(parts, req, worldState, at, facts) {
+  contextFacts(req, at, facts);
   noteFacts(facts, { encoding: req.encoding });
-  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId2);
-  const hold2 = runInAction(() => {
-    worldStates.take(worldState);
-    return renderCache.holdSession(
-      origin.projectDir,
-      origin.cwd,
-      origin.target.path,
-      req
-    );
+  runInAction(() => {
+    recordRequest(parts, req);
+    parts.worldStates.take(worldState);
+    holdSessionAt(parts, req)[Symbol.dispose]();
   });
+}
+function holdSessionAt(parts, req) {
+  const origin = sessionRenderOrigin(
+    req.requested,
+    parts.sessionState,
+    req.sessionId
+  );
+  return parts.renderCache.holdSession(
+    origin.projectDir,
+    origin.cwd,
+    origin.target.path,
+    req
+  );
+}
+function setUpRender(parts, req, at, facts) {
+  const hintsError = hintsErrorOf(req);
+  const hold2 = holdSessionAt(parts, req);
   return setUpDraw(parts, hold2, req, hintsError, at, facts);
 }
 function setUpFrame(parts, sessionId2, at, facts) {
@@ -76766,7 +76765,8 @@ function setUpFrame(parts, sessionId2, at, facts) {
   const req = hold2.view.facts();
   let hintsError;
   try {
-    hintsError = requestFacts(req, at, facts);
+    contextFacts(req, at, facts);
+    hintsError = hintsErrorOf(req);
   } catch (e) {
     hold2[Symbol.dispose]();
     throw e;
@@ -76952,7 +76952,7 @@ function drawRender(parts, setup, drawing2) {
   noteFacts(facts, {
     menuIdle: menusSince === void 0 ? "-" : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`
   });
-  const recorded = renderWarnings.drawn(
+  const recorded2 = renderWarnings.drawn(
     sessionId2,
     drawing2.by,
     scope,
@@ -77043,7 +77043,7 @@ function drawRender(parts, setup, drawing2) {
     // What the indicator counted, and whether this frame's warnings moved
     // its renderer's record (`new`) or matched it (`kept`).
     diag: String(diagnostics.length),
-    warnRecord: recorded ? "new" : "kept",
+    warnRecord: recorded2 ? "new" : "kept",
     // The message the viewer showed in the body's place, `-` while closed.
     viewer: viewing === null ? "-" : `${viewing.index}/${diagnostics.length}p${viewing.page + 1}`
   });
@@ -77065,8 +77065,8 @@ function drawRender(parts, setup, drawing2) {
 function recordRequest(parts, req) {
   const { sessionState } = parts;
   const sessionId2 = req.sessionId;
-  const { client: _client, ...recorded } = req.hints;
-  const hintRecord = JSON.stringify(recorded);
+  const { client: _client, ...recorded2 } = req.hints;
+  const hintRecord = JSON.stringify(recorded2);
   if (sessionState.get(sessionId2, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
     sessionState.set(sessionId2, SESSION_CLIENT_HINTS_KEY, hintRecord);
   }
@@ -77074,10 +77074,6 @@ function recordRequest(parts, req) {
   if (sessionState.get(sessionId2, SESSION_RENDER_ORIGIN_KEY) !== origin) {
     sessionState.set(sessionId2, SESSION_RENDER_ORIGIN_KEY, origin);
   }
-}
-async function answerRequest(parts, req, worldState, at, waitEndsAt, facts) {
-  recordRequest(parts, req);
-  return drawAnswer(parts, req, worldState, at, waitEndsAt, facts);
 }
 function arrived2(parts, req, lanes) {
   const { laneSetups, tmuxStatusLines } = parts;
@@ -77111,11 +77107,11 @@ function laneClicked(parts, sessionId2, before, after) {
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
 }
-async function drawAnswer(parts, req, worldState, at, waitEndsAt, facts) {
+async function answerRequest(parts, req, at, waitEndsAt, facts) {
   var _stack = [];
   try {
     const { clock, frameFeeds, log } = parts;
-    const setup = __using(_stack, setUpRender(parts, req, worldState, at, facts));
+    const setup = __using(_stack, setUpRender(parts, req, at, facts));
     arrived2(
       parts,
       req,
@@ -77209,6 +77205,7 @@ init_process();
 
 // src/daemon/statusline-answer.ts
 init_globals();
+var import_node_path32 = __toESM(require_path_browserify(), 1);
 var NOTHING_TO_SETTLE = (_delivered) => {
 };
 function failed2(host, error, doing = "") {
@@ -77223,32 +77220,23 @@ function failed2(host, error, doing = "") {
     settled: NOTHING_TO_SETTLE
   };
 }
-async function answerStatusline(host, collector, clock, req, id2, at, waitEndsAt, facts) {
-  const delivered = await host.deliver(
-    {
-      kind: "event",
-      at,
-      event: {
-        kind: "request",
-        id: id2,
-        context: req,
-        worldState: collector.requested(req),
-        waitEndsAt
-      }
-    },
-    []
+function located(req) {
+  const dir = req.hookData.workspace?.current_dir ?? req.cwd;
+  return {
+    ...req,
+    hookData: {
+      ...req.hookData,
+      ...dir !== void 0 && import_node_path32.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
+    }
+  };
+}
+function recorded(facts, delivered) {
+  facts.push(
+    ...delivered.kind === "answered" ? delivered.output.record : delivered.record
   );
-  if (delivered.kind === "threw") {
-    facts.push(...delivered.record);
-    noteFacts(facts, { renderer: host.name });
-    return failed2(host, delivered.error);
-  }
-  const { effects, record: record2 } = delivered.output;
-  facts.push(...record2);
-  noteFacts(facts, {
-    renderer: host.name,
-    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
-  });
+}
+async function answerStatusline(host, collector, clock, arrived3, id2, at, waitEndsAt, facts) {
+  const req = located(arrived3);
   const done2 = (effect, reason) => void host.deliver(
     {
       kind: "event",
@@ -77264,6 +77252,37 @@ async function answerStatusline(host, collector, clock, req, id2, at, waitEndsAt
       ["effect", String(effect.id)]
     ]
   );
+  const configured = await host.answer({
+    kind: "event",
+    at,
+    event: {
+      kind: "config",
+      context: req,
+      worldState: collector.requested(req)
+    }
+  });
+  recorded(facts, configured);
+  if (configured.kind === "threw") {
+    noteFacts(facts, { renderer: host.name });
+    return failed2(host, configured.error, "its config turn: ");
+  }
+  for (const effect of configured.output.effects)
+    done2(effect, "a config turn answers no request");
+  const delivered = await host.answer({
+    kind: "event",
+    at,
+    event: { kind: "request", id: id2, context: req, waitEndsAt }
+  });
+  recorded(facts, delivered);
+  if (delivered.kind === "threw") {
+    noteFacts(facts, { renderer: host.name });
+    return failed2(host, delivered.error);
+  }
+  const { effects } = delivered.output;
+  noteFacts(facts, {
+    renderer: host.name,
+    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
+  });
   let answer2 = null;
   for (const effect of effects) {
     switch (effect.kind) {
@@ -77840,7 +77859,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.sessionId, checked.req, order2);
     }
-    const recorded = (rendered) => {
+    const recorded2 = (rendered) => {
       if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
       noteFacts(facts, {
         timedOut: timedOut() ? "Y" : "N",
@@ -77860,7 +77879,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         settled: rendered.settled
       };
     };
-    if (!checked.ok) return recorded(refusedRender(checked.problems));
+    if (!checked.ok) return recorded2(refusedRender(checked.problems));
     const answered = await answerStatusline(
       parts.renderer,
       parts.collector,
@@ -77888,7 +77907,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     );
     try {
       sighted(checked.req, answered.seen);
-      return recorded(answered);
+      return recorded2(answered);
     } catch (e) {
       answered.settled(false);
       throw e;
@@ -82691,7 +82710,7 @@ var Collector = class {
   stopSweep = null;
   // [LAW:single-enforcer] A request names the session's keys: they are
   // declared again and stamped in one action, and that stamp is returned to
-  // go with the request. The record's reaction runs when the action ends,
+  // go with the session's `config`. The record's reaction runs when the action ends,
   // finds the read this stamp took, and hands in nothing alone. A request for
   // a retiring session makes it live again.
   requested(req) {
@@ -82977,15 +82996,15 @@ var WorldStates = class {
     }
     runInAction(() => this.documents.set(document.session, document));
   }
-  // [LAW:no-defensive-null-guards] Every view opens from a request, which
-  // carries its document, or reopens a session that already has one, and a
-  // `retire` drops the document with the view: a session with none here is
-  // the host's bug, so the read throws, naming it.
+  // [LAW:no-defensive-null-guards] The host delivers a session's `config`,
+  // which carries its document, ahead of each of its requests, and a `retire`
+  // drops the document with the view: a session with none here is the host's
+  // bug, so the read throws, naming it.
   of(session) {
     const document = this.documents.get(session);
     if (document === void 0)
       throw new Error(
-        `no world state for session ${JSON.stringify(session)}: the host hands one in with every request`
+        `no world state for session ${JSON.stringify(session)}: the host hands one in with the config ahead of every request`
       );
     return document;
   }
@@ -84746,9 +84765,12 @@ function rendererHost(name, renderer, log, subscribed) {
   };
   return {
     name,
+    answer: turn,
+    // [LAW:nothing-unseen] An input no event of its own records is recorded
+    // here.
     deliver: async (input, about) => {
       const delivered = await turn(input);
-      if (input.event.kind !== "request") record2(input, about, delivered);
+      record2(input, about, delivered);
       return delivered;
     }
   };
@@ -84766,11 +84788,13 @@ function mainRenderer(parts) {
   });
   const turn = async (event, at, record2) => {
     switch (event.kind) {
+      case "config":
+        configureSession(parts, event.context, event.worldState, at, record2);
+        return answered([], record2);
       case "request": {
         const { frame: frame2, delivered } = await answerRequest(
           parts,
           event.context,
-          event.worldState,
           at,
           event.waitEndsAt,
           record2
