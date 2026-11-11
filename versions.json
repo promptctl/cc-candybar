@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-713",
+      "ref": "refs/pull/713/merge",
+      "sha": "8eab105205eb9140edf7b0d02a126950363c7ce7",
+      "timestamp": "2026-11-11T21:05:34.921Z",
+      "commits": [
+        {
+          "sha": "8eab105205eb9140edf7b0d02a126950363c7ce7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T14:04:23-07:00",
+          "message": "Merge e7f2d2c4ee1a66f4d3bc0cf416ad3e2d35a18ae4 into 3d7e53b9f1808833f18ed94678a165f47253a764\n"
+        },
+        {
+          "sha": "e7f2d2c4ee1a66f4d3bc0cf416ad3e2d35a18ae4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T14:03:49-07:00",
+          "message": "feat(router): a session's config turn reaches the renderer ahead of its request, so the request waits on every source its view reads (candybar-host-renderer-x96a.5zx)\n\nThe host delivers a config event before each request. Its turn opens the\nsession's view, and its output's subscriptions are declared before the\nrequest is delivered, so a plugin source's first read is waited for\ninstead of drawn pending. The config event is the one carrier of a\nsession's context with its world state; the request carries none. The\nhost reads the checkout's location once, for both turns.\n"
+        },
+        {
+          "sha": "fc852d453919934d50d81a00f787de128879f092",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T12:38:26-07:00",
+          "message": "docs(design): a run's identity carries the sharing, with named environment variables and a session's config ahead of its request (candybar-host-renderer-x96a.8e9)\n"
+        },
+        {
+          "sha": "1d543630a8ba527d289db76c20e336bcf72fefde",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T11:50:27-07:00",
+          "message": "docs(design): per-directory sharing of shell and file sources once the host runs them (candybar-host-renderer-x96a.8e9)\n\nThe options for keeping a directory's sources shared after 8e9 moves runs to\nthe host, what each buys and costs, and where the ticket stands.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3d7e53b9f1808833f18ed94678a165f47253a764",
