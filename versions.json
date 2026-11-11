@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-716",
-      "ref": "refs/pull/716/merge",
-      "sha": "297b4b7c8964245de5aff9038b673dc2a226fce4",
-      "timestamp": "2026-11-11T23:13:59.832Z",
-      "commits": [
-        {
-          "sha": "297b4b7c8964245de5aff9038b673dc2a226fce4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T23:13:00Z",
-          "message": "Merge c4571d00eec1df539ebb0ddd1dc133e159de8acf into 0d2f702fcd2a13b829816aa567324d73fed35d6c\n"
-        },
-        {
-          "sha": "c4571d00eec1df539ebb0ddd1dc133e159de8acf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T16:12:49-07:00",
-          "message": "refactor(renderer): a retire drops the session's document first, in one action with its view's closing, so nothing it does can keep the document (candybar-host-renderer-x96a.0iu)\n"
-        },
-        {
-          "sha": "8e5fad0ef1a46a898ceb03da236e92a90471f199",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T16:08:17-07:00",
-          "message": "fix(renderer): a retire's contract names the document it drops, and the session's open failure goes before its view's teardown can throw (candybar-host-renderer-x96a.0iu)\n"
-        },
-        {
-          "sha": "92eb015720b1d6425352f4435d44a6c87d0a555e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T16:05:05-07:00",
-          "message": "refactor(renderer): one retire arm keeps the retire's contract, which the interface states, and the collector reads nothing of how a retire ended (candybar-host-renderer-x96a.0iu)\n"
-        },
-        {
-          "sha": "73dc096503ff70e2efb0a00949fb829d3aef448c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T15:58:15-07:00",
-          "message": "fix(collector): a retire that settles drops its session's record, because the renderer lets go of the document on every outcome (candybar-host-renderer-x96a.0iu)\n\nThe main renderer's retire drops the session's world state in a finally\nafter the view's teardown, so a teardown that throws no longer leaves the\ndocument held. The collector then removes a retiring record once its\nretire settles, answered or threw, and only from the retiring period that\nretire began, so a late answer to an earlier retire cannot remove a record\nthat was revived and retired again.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "0d2f702fcd2a13b829816aa567324d73fed35d6c",
-      "timestamp": "2026-11-11T22:31:09.928Z",
+      "sha": "316d84baeabd627bb71ba4184597372d24e77cde",
+      "timestamp": "2026-11-11T23:22:53.768Z",
       "commits": [
         {
-          "sha": "0d2f702fcd2a13b829816aa567324d73fed35d6c",
+          "sha": "316d84baeabd627bb71ba4184597372d24e77cde",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T15:30:11-07:00",
-          "message": "test(frame-feed): the unseen-pane case waits for its server's answer and spans its draws on the daemon's clock (candybar-host-renderer-x96a.5qt) (#714)\n\n* test(frame-feed): the unseen-pane case waits for its server's answer and spans its draws on the daemon's clock (candybar-host-renderer-x96a.5qt)\n\nThe case slept 1.5 s betting the stub tmux server had answered, then\ncounted draws in a 2 s real window. Until the answer lands the pane\ncounts as shown and draws at the moving rate, so a slow spawn under the\nfull worker tier overran the count. It now waits for the daemon's\nvisibility line, then measures three draws on the daemon's monotonic\nclock and asserts they span at least a still period: load only lengthens\nthat span. Forcing every pane shown fails it (106 ms).\n\n* test(frame-feed): the unseen-pane case pins its bar moving, waits through the stream's own wait, and bounds three draws by two still periods (candybar-host-renderer-x96a.5qt)\n\nReview pass (high): the visibility wait runs through waitFor, so the\nstream's end is part of it and it gets the draw wait's budget; the span\nuses elapsedMs; the bound is the two still periods the comment argues\nfor; and the closing summary's unseen count shows the bar was moving.\nForcing every pane shown fails it (104 ms against 1998).\n\n* test(frame-feed): the unseen-pane case fits its waits inside the case's timeout, names the server's lines when it fails, and bounds its slack by the moving period (candybar-host-renderer-x96a.5qt)\n\nReview pass (medium): both waits take 10 s, so a stall fails by name\nbefore jest's 30 s; the visibility wait's failure lists that server's\nlines; and the span's slack is a moving period rather than a copied\ntimer resolution, so it cannot drift from the feed's constants."
+          "timestamp": "2026-11-11T16:21:56-07:00",
+          "message": "fix(collector): a retire that settles drops its session's record, because the renderer lets go of the document on every outcome (candybar-host-renderer-x96a.0iu) (#716)\n\n* fix(collector): a retire that settles drops its session's record, because the renderer lets go of the document on every outcome (candybar-host-renderer-x96a.0iu)\n\nThe main renderer's retire drops the session's world state in a finally\nafter the view's teardown, so a teardown that throws no longer leaves the\ndocument held. The collector then removes a retiring record once its\nretire settles, answered or threw, and only from the retiring period that\nretire began, so a late answer to an earlier retire cannot remove a record\nthat was revived and retired again.\n\n* refactor(renderer): one retire arm keeps the retire's contract, which the interface states, and the collector reads nothing of how a retire ended (candybar-host-renderer-x96a.0iu)\n\n* fix(renderer): a retire's contract names the document it drops, and the session's open failure goes before its view's teardown can throw (candybar-host-renderer-x96a.0iu)\n\n* refactor(renderer): a retire drops the session's document first, in one action with its view's closing, so nothing it does can keep the document (candybar-host-renderer-x96a.0iu)"
         }
       ]
     }

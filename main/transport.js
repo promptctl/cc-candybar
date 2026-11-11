@@ -76736,6 +76736,12 @@ function configureSession(parts, req, worldState, at, facts) {
     holdSessionAt(parts, req)[Symbol.dispose]();
   });
 }
+function retireSession(parts, session) {
+  runInAction(() => {
+    parts.worldStates.drop(session);
+    parts.renderCache.retireSession(session);
+  });
+}
 function holdSessionAt(parts, req) {
   const origin = sessionRenderOrigin(
     req.requested,
@@ -82164,9 +82170,9 @@ var RenderCache = class {
   // [LAW:single-enforcer] The host ended the session (its collector's
   // sweep): its view closes, and the failure no feed shows goes with it.
   retireSession(sessionId2) {
+    this.openFailures.delete(sessionId2);
     const view = this.views.get(sessionId2);
     if (view !== void 0) this.retireView(view, "idle");
-    this.openFailures.delete(sessionId2);
   }
   // [LAW:one-source-of-truth] What every session's open view needs read: the
   // plugin sources its config declares, at their folders' storage keys. Read
@@ -82940,19 +82946,22 @@ var Collector = class {
     }
   }
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
-  // once, and its record stays `retiring` until the renderer answered the
-  // retire: an output taken meanwhile may still name it. A retire whose turn
-  // threw may have left the renderer holding the session's document, so the
-  // record stays, and a request revives it with the next `seq`.
+  // once, and its record stays `retiring` until the retire settles: an output
+  // taken meanwhile may still name it. A settled retire, answered or threw,
+  // leaves the renderer holding none of the session's document
+  // (src/renderer/interface.ts), so the record goes either way. It goes only
+  // from the retiring period this retire began: a record a request revived,
+  // or one retired again since, is not this retire's to remove.
   retire(record2, live) {
     release3(live);
-    record2.phase = { kind: "retiring" };
+    const retiring = { kind: "retiring" };
+    record2.phase = retiring;
     this.deps.log(
       "info",
       `session retired sid=${JSON.stringify(record2.session)}`
     );
-    void this.deps.deliver({ kind: "retire", session: record2.session }).then(({ kind }) => {
-      if (kind === "answered" && record2.phase.kind === "retiring" && this.records.get(record2.session) === record2)
+    void this.deps.deliver({ kind: "retire", session: record2.session }).then(() => {
+      if (record2.phase === retiring && this.records.get(record2.session) === record2)
         this.records.delete(record2.session);
       if (this.records.size === 0) this.disarmSweep();
     });
@@ -84819,8 +84828,7 @@ function mainRenderer(parts) {
         parts.worldStates.take(event.worldState);
         return answered([], record2);
       case "retire":
-        parts.renderCache.retireSession(event.session);
-        parts.worldStates.drop(event.session);
+        retireSession(parts, event.session);
         return answered([], record2);
       case "effect-done": {
         const delivered = deliveries.get(event.of);
