@@ -1,3 +1,9 @@
+## [1.217.0](https://github.com/promptctl/cc-candybar/compare/v1.216.0...v1.217.0) (2026-11-11)
+
+### Features
+
+* **router:** a session's config turn reaches the renderer ahead of its request (candybar-host-renderer-x96a.5zx) ([#713](https://github.com/promptctl/cc-candybar/issues/713)) ([ca7442a](https://github.com/promptctl/cc-candybar/commit/ca7442ac46ab073fa49c3b461033d4e856a9cdea))
+
 ## [1.216.0](https://github.com/promptctl/cc-candybar/compare/v1.215.0...v1.216.0) (2026-11-11)
 
 ### Features
