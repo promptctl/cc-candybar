@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-714",
+      "ref": "refs/pull/714/merge",
+      "sha": "37d13f09f8bdf12905b976715e1a5ee2d18c5607",
+      "timestamp": "2026-11-11T22:03:55.088Z",
+      "commits": [
+        {
+          "sha": "37d13f09f8bdf12905b976715e1a5ee2d18c5607",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T15:02:57-07:00",
+          "message": "Merge f3229d65e4c62b9dcadd7b84c62107172d623f7f into d9e26fa44171c75529a59436c3d34d697497d642\n"
+        },
+        {
+          "sha": "f3229d65e4c62b9dcadd7b84c62107172d623f7f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T15:02:43-07:00",
+          "message": "test(frame-feed): the unseen-pane case waits for its server's answer and spans its draws on the daemon's clock (candybar-host-renderer-x96a.5qt)\n\nThe case slept 1.5 s betting the stub tmux server had answered, then\ncounted draws in a 2 s real window. Until the answer lands the pane\ncounts as shown and draws at the moving rate, so a slow spawn under the\nfull worker tier overran the count. It now waits for the daemon's\nvisibility line, then measures three draws on the daemon's monotonic\nclock and asserts they span at least a still period: load only lengthens\nthat span. Forcing every pane shown fails it (106 ms).\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "d9e26fa44171c75529a59436c3d34d697497d642",
