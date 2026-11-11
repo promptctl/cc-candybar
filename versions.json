@@ -4,15 +4,22 @@
     {
       "version": "pr-716",
       "ref": "refs/pull/716/merge",
-      "sha": "58933dd09046018a71589a5e065cc3116c42b4ab",
-      "timestamp": "2026-11-11T23:06:16.818Z",
+      "sha": "06933eb2dc243aa27f9ee0dda992bca35cf532fe",
+      "timestamp": "2026-11-11T23:09:18.104Z",
       "commits": [
         {
-          "sha": "58933dd09046018a71589a5e065cc3116c42b4ab",
+          "sha": "06933eb2dc243aa27f9ee0dda992bca35cf532fe",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T23:05:17Z",
-          "message": "Merge 92eb015720b1d6425352f4435d44a6c87d0a555e into 0d2f702fcd2a13b829816aa567324d73fed35d6c\n"
+          "timestamp": "2026-11-11T23:08:28Z",
+          "message": "Merge 8e5fad0ef1a46a898ceb03da236e92a90471f199 into 0d2f702fcd2a13b829816aa567324d73fed35d6c\n"
+        },
+        {
+          "sha": "8e5fad0ef1a46a898ceb03da236e92a90471f199",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T16:08:17-07:00",
+          "message": "fix(renderer): a retire's contract names the document it drops, and the session's open failure goes before its view's teardown can throw (candybar-host-renderer-x96a.0iu)\n"
         },
         {
           "sha": "92eb015720b1d6425352f4435d44a6c87d0a555e",

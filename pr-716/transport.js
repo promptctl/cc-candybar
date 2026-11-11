@@ -82171,9 +82171,9 @@ var RenderCache = class {
   // [LAW:single-enforcer] The host ended the session (its collector's
   // sweep): its view closes, and the failure no feed shows goes with it.
   retireSession(sessionId2) {
+    this.openFailures.delete(sessionId2);
     const view = this.views.get(sessionId2);
     if (view !== void 0) this.retireView(view, "idle");
-    this.openFailures.delete(sessionId2);
   }
   // [LAW:one-source-of-truth] What every session's open view needs read: the
   // plugin sources its config declares, at their folders' storage keys. Read
@@ -82949,10 +82949,10 @@ var Collector = class {
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
   // once, and its record stays `retiring` until the retire settles: an output
   // taken meanwhile may still name it. A settled retire, answered or threw,
-  // leaves the renderer holding nothing of the session
-  // (src/renderer/interface.ts), so the record goes either way. It goes only from the retiring period this
-  // retire began: a record a request revived, or one retired again since, is
-  // not this retire's to remove.
+  // leaves the renderer holding none of the session's document
+  // (src/renderer/interface.ts), so the record goes either way. It goes only
+  // from the retiring period this retire began: a record a request revived,
+  // or one retired again since, is not this retire's to remove.
   retire(record2, live) {
     release3(live);
     const retiring = { kind: "retiring" };
