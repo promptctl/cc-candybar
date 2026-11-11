@@ -4,15 +4,22 @@
     {
       "version": "pr-710",
       "ref": "refs/pull/710/merge",
-      "sha": "9fc95d8019d1da6622ad80363d6453dc3d8e966c",
-      "timestamp": "2026-11-11T10:57:04.928Z",
+      "sha": "4d97cffc523d52ea9d1df77c04b469d0c2996150",
+      "timestamp": "2026-11-11T11:03:25.684Z",
       "commits": [
         {
-          "sha": "9fc95d8019d1da6622ad80363d6453dc3d8e966c",
+          "sha": "4d97cffc523d52ea9d1df77c04b469d0c2996150",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T10:56:12Z",
-          "message": "Merge 2417163482c299b11ec7f24e62d3709733e920d0 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+          "timestamp": "2026-11-11T11:02:40Z",
+          "message": "Merge e989fc8398cbc649ecc9b554976ae2d96d297303 into 005be159ec58ef64c57076aeff631ad80f4b4f7f\n"
+        },
+        {
+          "sha": "e989fc8398cbc649ecc9b554976ae2d96d297303",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T04:02:27-07:00",
+          "message": "docs(design): Proposal 3 names the renderer's one writer its state machine, since the URL handler already holds handler (candybar-gather-renderer-76bb.215)\n"
         },
         {
           "sha": "2417163482c299b11ec7f24e62d3709733e920d0",
