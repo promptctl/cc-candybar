@@ -1,6 +1,7 @@
 // The session context a render request carries once it crossed the host's
-// checkpoint: the vocabulary both sides of the renderer interface read, so it
-// lives below both (src/renderer/interface.ts).
+// checkpoint: the vocabulary both sides of the renderer interface read
+// (src/renderer/interface.ts). It imports only types, so neither side runs the
+// other's code through it.
 
 import type { RequestedOrigin } from "../config-hint";
 import type {

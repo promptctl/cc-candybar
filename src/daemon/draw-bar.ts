@@ -115,9 +115,10 @@ import type { DaemonLogger } from "../utils/logger";
 // [LAW:one-way-deps] exception: what the renderer side still reaches of the
 // host, each by the methods it calls, so the reach is named by type. Each
 // later skeleton step takes its own away: the providers' refresh and the
-// view's world state and source runs (8e9, zhh), the lane setups, tmux status
-// line and launcher (effects, plan step 2), the session store and the config
-// loads (plan step 3).
+// view's world state and source runs (8e9, zhh), the request's wait with its
+// timer and the log of its late failure (the mailbox), the lane setups, tmux
+// status line and launcher (effects, plan step 2), the session store and the
+// config loads (plan step 3).
 export interface RendererParts {
   readonly clock: Pick<Timekeeper, "monotonic" | "after">;
   readonly log: DaemonLogger;

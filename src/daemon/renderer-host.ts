@@ -1,6 +1,6 @@
 // The host's one path to a renderer: every input it hands one passes through
-// `deliver`, which answers with the turn's output or with how the turn failed,
-// and never rejects.
+// `deliver`, which answers with the turn's output or with how the turn failed:
+// a turn's throw comes back as a value, never as a rejection.
 
 import { inspect } from "node:util";
 import {

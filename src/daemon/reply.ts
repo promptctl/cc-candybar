@@ -4,7 +4,11 @@ import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
 import { renderFailed } from "./draw-bar.js";
-import { answerStatusline, NOTHING_TO_SETTLE } from "./statusline-answer.js";
+import {
+  answerStatusline,
+  NOTHING_TO_SETTLE,
+  type StatuslineAnswer,
+} from "./statusline-answer.js";
 import type { RequestId } from "../renderer/interface.js";
 import { checkRenderRequest } from "./render-checkpoint.js";
 import { type CheckedRenderRequest } from "../renderer/request-context.js";
@@ -352,66 +356,71 @@ export async function replyTo(
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.sessionId, checked.req, order);
     }
-    const rendered: {
+    // The request's event, written on every exit, and its reply.
+    const recorded = (rendered: {
       outcome: RequestOutcome;
       resp: Response;
       settled: (delivered: boolean) => void;
-    } = !checked.ok
-      ? refusedRender(checked.problems)
-      : await answerStatusline(
-          parts.renderer,
-          clock,
-          checked.req,
-          order as RequestId,
-          at,
-          // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-          // fixed at its arrival: early enough before its client hangs up to
-          // draw (src/daemon/request-deadline.ts).
-          t0 +
-            waitBudgetMs(checked.req.deadline, accepted, {
-              epochMs: started.getTime(),
-              monoMs: t0,
-            }),
-          facts,
-        ).then(
-          (answered) => {
-            sighted(checked.req, answered.seen);
-            return answered;
-          },
-          // [LAW:no-silent-failure] The driver hands every turn's failure back
-          // as a value; a throw here is its own bug, answered as any throw is.
-          (error: unknown) => {
-            sighted(checked.req, "failed");
-            return {
-              outcome: { kind: "threw", error } as const,
-              resp: renderFailed(error),
-              settled: NOTHING_TO_SETTLE,
-            };
-          },
-        );
-    if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
-    // Whether the client was already told TIMEOUT while this render ran on,
-    // and how long the request was queued, from the connection's accept,
-    // before it began: the daemon's own delay and the client's sending of its
-    // frame both count, so a round trip longer than `took` is time spent
-    // there.
-    noteFacts(facts, {
-      timedOut: timedOut() ? "Y" : "N",
-      clientLeft: clientLeft() ? "Y" : "N",
-      queued: `${queuedMs}ms`,
-    });
-    const { level, line } = requestEvent(
-      "render",
-      facts,
-      rendered.outcome,
-      elapsedMs(clock, t0),
-    );
-    parts.log(level, line);
-    return {
-      resp: rendered.resp,
-      exitAfterFlush: null,
-      settled: rendered.settled,
+    }): Reply => {
+      if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
+      // Whether the client was already told TIMEOUT while this render ran on,
+      // and how long the request was queued, from the connection's accept,
+      // before it began: the daemon's own delay and the client's sending of its
+      // frame both count, so a round trip longer than `took` is time spent
+      // there.
+      noteFacts(facts, {
+        timedOut: timedOut() ? "Y" : "N",
+        clientLeft: clientLeft() ? "Y" : "N",
+        queued: `${queuedMs}ms`,
+      });
+      const { level, line } = requestEvent(
+        "render",
+        facts,
+        rendered.outcome,
+        elapsedMs(clock, t0),
+      );
+      parts.log(level, line);
+      return {
+        resp: rendered.resp,
+        exitAfterFlush: null,
+        settled: rendered.settled,
+      };
     };
+    if (!checked.ok) return recorded(refusedRender(checked.problems));
+    const answered = await answerStatusline(
+      parts.renderer,
+      clock,
+      checked.req,
+      order as RequestId,
+      at,
+      // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
+      // fixed at its arrival: early enough before its client hangs up to
+      // draw (src/daemon/request-deadline.ts).
+      t0 +
+        waitBudgetMs(checked.req.deadline, accepted, {
+          epochMs: started.getTime(),
+          monoMs: t0,
+        }),
+      facts,
+    ).catch(
+      // [LAW:no-silent-failure] The driver hands every turn's failure back
+      // as a value; a throw here is its own bug, answered as any throw is.
+      (error: unknown): StatuslineAnswer => ({
+        outcome: { kind: "threw", error },
+        resp: renderFailed(error),
+        seen: "failed",
+        settled: NOTHING_TO_SETTLE,
+      }),
+    );
+    // [LAW:single-enforcer] The answer's present is owed its one effect-done
+    // on every exit: a reply that never reaches the connection settles here.
+    try {
+      sighted(checked.req, answered.seen);
+      return recorded(answered);
+    } catch (e) {
+      answered.settled(false);
+      throw e;
+    }
   }
 
   if (req.kind === "click") {

@@ -2,7 +2,6 @@
 // performs the effects its turn returned, and answers the client with the one
 // frame presented for it, in the encoding the client asked for.
 
-import { inspect } from "node:util";
 import type { Effect, RequestId } from "../renderer/interface.js";
 import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
@@ -31,17 +30,21 @@ export interface StatuslineAnswer {
 export const NOTHING_TO_SETTLE = (_delivered: boolean): void => {};
 
 // [LAW:no-silent-failure] A request whose turn did not answer it is answered
-// with a failure naming the renderer, never with an empty bar.
-// `error` is what the request's event records: the thrown value itself, its
-// stack included, when the turn threw.
+// with a failure naming the renderer, never with an empty bar. `error` is what
+// the request's event records: the thrown value itself, its stack included,
+// when the turn threw; the client reads it after the renderer and `doing`.
 function failed(
   host: RendererHost,
-  message: string,
-  error: unknown = new Error(message),
+  error: unknown,
+  doing = "",
 ): StatuslineAnswer {
+  const refusal = renderFailed(error);
   return {
     outcome: { kind: "threw", error },
-    resp: renderFailed(new Error(`renderer ${host.name}: ${message}`)),
+    resp: {
+      ...refusal,
+      error: `renderer ${host.name}: ${doing}${refusal.error}`,
+    },
     seen: "failed",
     settled: NOTHING_TO_SETTLE,
   };
@@ -69,13 +72,7 @@ export async function answerStatusline(
     // request's own event.
     facts.push(...delivered.record);
     noteFacts(facts, { renderer: host.name });
-    return failed(
-      host,
-      delivered.error instanceof Error
-        ? delivered.error.message
-        : inspect(delivered.error),
-      delivered.error,
-    );
+    return failed(host, delivered.error);
   }
   const { effects, record } = delivered.output;
   // The record leads: it opens with the session, which the event's readers
@@ -123,15 +120,18 @@ export async function answerStatusline(
     }
   }
   if (answer === null)
-    return failed(host, `presented no statusline frame for request ${id}`);
+    return failed(
+      host,
+      new Error(`presented no statusline frame for request ${id}`),
+    );
   const presented = answer;
   const encodeFrom = clock.monotonic();
   let resp: Response;
   try {
     resp = RENDER_ANSWERS[req.encoding](presented.frame);
   } catch (e) {
-    done(presented, `encoding its frame threw: ${String(e)}`);
-    return failed(host, `its frame could not be encoded: ${String(e)}`, e);
+    done(presented, `encoding its frame threw: ${renderFailed(e).error}`);
+    return failed(host, e, "its frame could not be encoded: ");
   }
   // [LAW:nothing-unseen] The bytes' share of the draw's reserve, beside the
   // renderer's `drew=`.

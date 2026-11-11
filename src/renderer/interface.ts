@@ -3,8 +3,8 @@
 // the host to perform and the record of its turn.
 //
 // [LAW:one-way-deps] The host depends on this module and the renderer
-// implements it; it imports only what lies below both: the session context,
-// the frame, the instant.
+// implements it; it imports only types, the vocabulary both sides speak: the
+// session context, the frame, the instant.
 // [LAW:types-are-the-program] The unions hold only the arms something produces
 // and something consumes; each later step adds its own.
 
@@ -72,8 +72,8 @@ export interface Present {
 
 export type Effect = Present;
 
-// [LAW:nothing-unseen] What a turn learned, in the order it learned it: the
-// renderer writes no log, so the host writes these beside the input's event.
+// [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
+// the host writes beside the input's event.
 export type TurnRecord = readonly Field[];
 
 export interface RendererOutput {
