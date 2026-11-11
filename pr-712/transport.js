@@ -82877,12 +82877,7 @@ var Collector = class {
     }
   }
   inputsOf(locator) {
-    return {
-      hookData: locator.hookData,
-      cwd: locator.cwd,
-      hints: locator.hints,
-      deps: this.deps.owners
-    };
+    return { ...locator, deps: this.deps.owners };
   }
   read({ locator, lanes }) {
     try {
@@ -82927,7 +82922,9 @@ var Collector = class {
   }
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
   // once, and its record stays `retiring` until the renderer answered the
-  // retire: an output taken meanwhile may still name it.
+  // retire: an output taken meanwhile may still name it. A retire whose turn
+  // threw may have left the renderer holding the session's document, so the
+  // record stays, and a request revives it with the next `seq`.
   retire(record2, live) {
     release3(live);
     record2.phase = { kind: "retiring" };
@@ -82935,8 +82932,8 @@ var Collector = class {
       "info",
       `session retired sid=${JSON.stringify(record2.session)}`
     );
-    void this.deps.deliver({ kind: "retire", session: record2.session }).then(() => {
-      if (record2.phase.kind === "retiring" && this.records.get(record2.session) === record2)
+    void this.deps.deliver({ kind: "retire", session: record2.session }).then(({ kind }) => {
+      if (kind === "answered" && record2.phase.kind === "retiring" && this.records.get(record2.session) === record2)
         this.records.delete(record2.session);
       if (this.records.size === 0) this.disarmSweep();
     });
@@ -85212,6 +85209,7 @@ function createDaemon(inputs) {
           log("info", configLoadedLine(entry, cause, settled3));
           for (const sessionId2 of sessions)
             frameFeeds.wake(sessionId2, "reload");
+          collector.subscribed(renderCache.subscriptions());
         },
         // [LAW:single-enforcer] What a session's view draws from moved: its
         // feed's next frame is brought forward, whatever moved it: a request's

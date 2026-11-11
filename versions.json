@@ -4,15 +4,22 @@
     {
       "version": "pr-712",
       "ref": "refs/pull/712/merge",
-      "sha": "5ea61e0c283785940dc406df70b60fc57cc97d4c",
-      "timestamp": "2026-11-11T17:53:02.888Z",
+      "sha": "f9a08fb01eff9b54a30a0d4370686274821159b5",
+      "timestamp": "2026-11-11T18:09:04.619Z",
       "commits": [
         {
-          "sha": "5ea61e0c283785940dc406df70b60fc57cc97d4c",
+          "sha": "f9a08fb01eff9b54a30a0d4370686274821159b5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T17:52:10Z",
-          "message": "Merge d49a0d224d140cbd0961bb25448a612ae4e96d24 into 36c6ac3a264fcc2876d5952e4a13648e1268f98f\n"
+          "timestamp": "2026-11-11T18:08:08Z",
+          "message": "Merge b93c7374a0da2465841053235dbd2e26cc455418 into 36c6ac3a264fcc2876d5952e4a13648e1268f98f\n"
+        },
+        {
+          "sha": "b93c7374a0da2465841053235dbd2e26cc455418",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T11:07:56-07:00",
+          "message": "fix(collector): a retire whose turn threw keeps the session, and a reload subscribes its successors (candybar-host-renderer-x96a.kcp)\n\nA retire whose renderer turn threw may leave the renderer holding the\nsession's document. Dropping the record anyway made the next request open\na new record at seq 1, which the renderer's store refuses on every request\nafter. The record now goes only once the retire was answered, and a\nrequest revives it from the document it kept.\n\nA reload opens its successors outside any turn, so no output carried\ntheir subscriptions, and a source the reload added went unread until an\nunrelated turn answered. The daemon's reload observer now hands the\ncache's subscriptions to the collector, whole, as an output does, marked\nas an exception until config reaches the renderer as an event.\n\nThe demo closes its collector on every exit, and the collector reads a\nlocator's fields by spreading it instead of copying them one by one.\n"
         },
         {
           "sha": "d49a0d224d140cbd0961bb25448a612ae4e96d24",
