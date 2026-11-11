@@ -1,3 +1,9 @@
+## [1.215.0](https://github.com/promptctl/cc-candybar/compare/v1.214.0...v1.215.0) (2026-11-11)
+
+### Features
+
+* **renderer:** a statusline request is answered through Renderer.answer, in process (candybar-host-renderer-x96a.2xo) ([#711](https://github.com/promptctl/cc-candybar/issues/711)) ([f7cadf0](https://github.com/promptctl/cc-candybar/commit/f7cadf094d071ea3947d068dd5da2850afb93530))
+
 ## [1.214.0](https://github.com/promptctl/cc-candybar/compare/v1.213.2...v1.214.0) (2026-11-10)
 
 ### Features
