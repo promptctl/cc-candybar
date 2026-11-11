@@ -60,6 +60,16 @@ import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import type { WorldStates } from "../src/renderer/world-states";
+import { mainRenderer } from "../src/renderer/main";
+import { rendererParts } from "./helpers/renderer-parts";
+import { rendererHost } from "../src/daemon/renderer-host";
+import { answerStatusline } from "../src/daemon/statusline-answer";
+import { checkRenderRequest } from "../src/daemon/render-checkpoint";
+import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import type { Frame } from "../src/render/frame";
+import type { RequestId } from "../src/renderer/interface";
+import type { RequestFacts } from "../src/daemon/request-event";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -132,6 +142,7 @@ interface Rig {
   readonly reloads: ReloadSignal;
   readonly lines: string[];
   readonly collector: Collector;
+  readonly worldStates: WorldStates;
   // A request's turn as the main renderer takes one: the world state the
   // collector read at its keys taken, the session's view held, and the
   // cache's subscriptions handed back to the collector.
@@ -224,6 +235,7 @@ function rig(): Rig {
     reloads,
     lines,
     collector: served.collector,
+    worldStates: served.worldStates,
     hold: (configFile, sid = "s1") => {
       const facts = viewFacts(dir, sid);
       return served.request(facts, () =>
@@ -764,6 +776,94 @@ describe("a source's document", () => {
       failedAt: "read",
       reason: `variable "${STATUS}": the view's payload has no "${STATUS}": its declaration did not take the source the config declares`,
     });
+  });
+});
+
+// Session s1's statusline requests over `configFile`, answered as the daemon
+// answers one (src/daemon/statusline-answer.ts): the session's config, then
+// the request, through the main renderer over the rig's cache. Each answer is
+// the frame its request's present carried, with the request's render event.
+function statusline(r: Rig, configFile: string) {
+  const presented: Frame[] = [];
+  const renderer = mainRenderer(
+    rendererParts({
+      cache: r.cache,
+      sessionState: r.sessionState,
+      worldStates: r.worldStates,
+      providers: r.providers,
+    }),
+  );
+  const host = rendererHost(
+    "main",
+    {
+      answer: async (input) => {
+        const output = await renderer.answer(input);
+        for (const effect of output.effects) presented.push(effect.frame);
+        return output;
+      },
+    },
+    () => {},
+    (subscriptions) => r.collector.subscribed(subscriptions),
+  );
+  let id = 0;
+  return async (): Promise<{ text: string; facts: RequestFacts }> => {
+    const { hookData } = viewFacts(dir, "s1");
+    const checked = checkRenderRequest(
+      {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        hookData,
+        args: ["cc-candybar", "--config", configFile],
+        cwd: dir,
+        encoding: "frame",
+      },
+      { firstSightOfUnknownHookField: () => false },
+      () => {},
+      dir,
+    );
+    if (!checked.ok) throw new Error(checked.problems.join("; "));
+    const facts: RequestFacts = [];
+    const answered = await answerStatusline(
+      host,
+      r.collector,
+      systemTimekeeper,
+      checked.req,
+      ++id as RequestId,
+      instantOf(new Date()),
+      systemTimekeeper.monotonic() + 5_000,
+      facts,
+    );
+    answered.settled(true);
+    expect(answered.outcome).toEqual({ kind: "ok" });
+    return { text: textOf(presented.at(-1)!), facts };
+  };
+}
+
+describe("a session's first bar", () => {
+  // The session's config reaches the renderer ahead of its request, so the
+  // view's sources are subscribed before the request waits.
+  test("draws a source its session file already holds, not its pending cells", async () => {
+    const r = rig();
+    const ask = statusline(r, config(["plugins.p.gated"]));
+    programWrites(storageOf(), "s1", { home: "here" });
+    expect((await ask()).text).toContain("home=here");
+  });
+
+  test("draws it again on the first request after the session was retired", async () => {
+    const r = rig();
+    const ask = statusline(r, config(["plugins.p.gated"]));
+    programWrites(storageOf(), "s1", { home: "here" });
+    await ask();
+    // Two sweeps with no request between them retire the session, which
+    // closes its view.
+    r.collector.sweep();
+    r.collector.sweep();
+    await until(
+      () => r.collector.stats().sessions === 0,
+      "the session's retire answered",
+    );
+    expect(r.cache.holdView("s1")).toBeNull();
+    expect((await ask()).text).toContain("home=here");
   });
 });
 

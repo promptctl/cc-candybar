@@ -1,8 +1,6 @@
 // One render of a session, a request's or a frame's, and what it records.
 
-import path from "node:path";
 import { elapsedMs } from "../time.js";
-import { checkoutLocation } from "../utils/git-root.js";
 import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
 import {
@@ -358,47 +356,32 @@ function requestFacts(
   return hintsError;
 }
 
-export function setUpRender(
+// [LAW:single-enforcer] The one way a session's view is opened at a context:
+// its world state taken and its view held at the config inputs the context
+// names, the view opened or refreshed there. A `config` turn opens it and lets
+// go, so its output names what the view reads; the request after it holds the
+// same view again, or opens it again if another turn closed it meanwhile.
+//
+// [LAW:one-source-of-truth] The world state and the hold are taken in one
+// action, so nothing drawn between the two pairs either with another
+// request's.
+export function openSession(
   parts: RendererParts,
-  arrived: CheckedRenderRequest,
+  req: CheckedRenderRequest,
   worldState: WorldState,
-  at: Instant,
-  facts: RequestFacts,
-): RenderSetup {
+): SessionHold<SessionSource, CheckedRenderRequest> {
   const { sessionState, renderCache, worldStates } = parts;
-  // [LAW:effects-at-boundaries] Read here, on arrival, because a payload does
-  // no I/O and a frame draws what the request stored.
-  const dir = arrived.hookData.workspace?.current_dir ?? arrived.cwd;
-  const req: CheckedRenderRequest = {
-    ...arrived,
-    hookData: {
-      ...arrived.hookData,
-      ...(dir !== undefined &&
-        path.isAbsolute(dir) && { location: checkoutLocation(dir) }),
-    },
-  };
-  const sessionId = req.sessionId;
-  const hintsError = requestFacts(req, at, facts);
-  noteFacts(facts, { encoding: req.encoding });
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
   // over the `--config` flag over the client's `CC_CANDYBAR_CONFIG` hint
   // (checkRenderRequest). All three are client facts; the daemon's own env is
   // never consulted (brandon-config-5g8).
-  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
-  // [LAW:no-ambient-temporal-coupling] Held, not fetched: `state`, and the
-  // session's `view` of it, are what this render resolves its payload from and
-  // draws with after the payload await below. An eviction, a reload, or the
-  // session's own render from another entry meanwhile retires them, and the
-  // cache disposes them when this hold is released — never under the render
-  // (brandon-unfiled-3248.6rc). The setup owns the hold from here: a throw
-  // before it is returned releases it, and the setup releases it on every exit
-  // of the render that disposes it.
-  //
-  // [LAW:one-source-of-truth] The request and the world state read at its
-  // keys are taken in one action, so nothing drawn between the two pairs
-  // either with the other request's.
-  const hold = runInAction(() => {
+  const origin = sessionRenderOrigin(
+    req.requested,
+    sessionState,
+    req.sessionId,
+  );
+  return runInAction(() => {
     worldStates.take(worldState);
     return renderCache.holdSession(
       origin.projectDir,
@@ -407,6 +390,26 @@ export function setUpRender(
       req,
     );
   });
+}
+
+export function setUpRender(
+  parts: RendererParts,
+  req: CheckedRenderRequest,
+  at: Instant,
+  facts: RequestFacts,
+): RenderSetup {
+  const hintsError = requestFacts(req, at, facts);
+  noteFacts(facts, { encoding: req.encoding });
+  // [LAW:no-ambient-temporal-coupling] Held, not fetched: `state`, and the
+  // session's `view` of it, are what this render resolves its payload from and
+  // draws with after the payload await below. An eviction, a reload, or the
+  // session's own render from another entry meanwhile retires them, and the
+  // cache disposes them when this hold is released — never under the render
+  // (brandon-unfiled-3248.6rc). The setup owns the hold from here: a throw
+  // before it is returned releases it, and the setup releases it on every exit
+  // of the render that disposes it. The world state is the one the renderer
+  // holds for the session, taken from its `config` or handed in since.
+  const hold = openSession(parts, req, parts.worldStates.of(req.sessionId));
   return setUpDraw(parts, hold, req, hintsError, at, facts);
 }
 
@@ -952,13 +955,12 @@ export interface RequestAnswer {
 export async function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
-  worldState: WorldState,
   at: Instant,
   waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   recordRequest(parts, req);
-  return drawAnswer(parts, req, worldState, at, waitEndsAt, facts);
+  return drawAnswer(parts, req, at, waitEndsAt, facts);
 }
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its
@@ -1028,13 +1030,12 @@ export function laneClicked(
 async function drawAnswer(
   parts: RendererParts,
   req: CheckedRenderRequest,
-  worldState: WorldState,
   at: Instant,
   waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   const { clock, frameFeeds, log } = parts;
-  using setup = setUpRender(parts, req, worldState, at, facts);
+  using setup = setUpRender(parts, req, at, facts);
   arrived(
     parts,
     req,

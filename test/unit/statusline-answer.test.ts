@@ -2,8 +2,9 @@
 // answer.ts): the host answers the client with the one frame presented for the
 // request, a turn that presents none or throws is a failure naming the
 // renderer, and every effect the turn returned is owed one `effect-done`. The
-// request reaches the renderer with the world state its collector read at the
-// request's keys, and every output's subscriptions reach the host.
+// session's config reaches the renderer ahead of the request, with the world
+// state its collector read at the request's keys, and every output's
+// subscriptions reach the host.
 //
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
@@ -32,10 +33,12 @@ const SESSION = sessionIdOf("a-session");
 const REQUEST = 3 as RequestId;
 const AT = instantOf(new Date(1_700_000_000_000));
 const FRAME = renderFailedFrame("the bar");
-// What the host reads of a checked request: its session and its encoding.
+// What the host reads of a checked request: its session, its encoding, and a
+// hook naming no directory, so no checkout is read for it.
 const REQ = {
   sessionId: SESSION,
   encoding: "frame",
+  hookData: {},
 } as unknown as CheckedRenderRequest;
 // The world state the collector reads at the request's keys.
 const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
@@ -60,27 +63,38 @@ const output = (
   record: RendererOutput["record"] = [],
 ): RendererOutput => ({ effects, subscriptions: NO_SUBSCRIPTIONS, record });
 
-// A renderer whose request turn answers `output` (or throws it), and which
-// keeps every event it hears.
-function scripted(request: RendererOutput | TurnThrew): {
+// A renderer whose request turn answers `output` (or throws it), whose config
+// turn answers `configured`, and which keeps every event it hears.
+function scripted(
+  request: RendererOutput | TurnThrew,
+  configured: RendererOutput = output([]),
+): {
   readonly renderer: Renderer;
   readonly heard: Event[];
+  readonly configs: Event[];
   readonly requests: Event[];
 } {
   const heard: Event[] = [];
+  const configs: Event[] = [];
   const requests: Event[] = [];
   return {
     heard,
+    configs,
     requests,
     renderer: {
       answer: async ({ event }) => {
-        if (event.kind === "request") {
-          requests.push(event);
-          if (request instanceof TurnThrew) throw request;
-          return request;
+        switch (event.kind) {
+          case "config":
+            configs.push(event);
+            return configured;
+          case "request":
+            requests.push(event);
+            if (request instanceof TurnThrew) throw request;
+            return request;
+          default:
+            heard.push(event);
+            return output([]);
         }
-        heard.push(event);
-        return output([]);
       },
     },
   };
@@ -195,6 +209,7 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
   const logged: string[] = [];
   const renderer: Renderer = {
     answer: async ({ event }) => {
+      if (event.kind === "config") return output([]);
       if (event.kind === "request") return output([present(1)]);
       throw new TurnThrew([], new Error("no such present"));
     },
@@ -209,16 +224,31 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
   ]);
 });
 
-test("the request reaches the renderer with the world state read at its keys, and its output's subscriptions reach the host", async () => {
-  const subscriptions: Subscriptions = {
-    sources: { [SESSION]: [] },
-  };
-  const { renderer, requests } = scripted({
-    ...output([present(1)]),
-    subscriptions,
-  });
+test("the session's config reaches the renderer first, with the world state read at the request's keys, and its subscriptions reach the host before the request does", async () => {
+  const opened: Subscriptions = { sources: { [SESSION]: [] } };
+  const drawn: Subscriptions = { sources: {} };
   const subscribed: Subscriptions[] = [];
-  await answer(renderer, [], subscribed);
-  expect(requests).toMatchObject([{ kind: "request", worldState: WORLD }]);
-  expect(subscribed).toEqual([subscriptions]);
+  const { renderer, configs, requests } = scripted(
+    { ...output([present(1)]), subscriptions: drawn },
+    { ...output([]), subscriptions: opened },
+  );
+  await answer(
+    {
+      answer: (input) => {
+        // What the host had subscribed when this input reached the renderer.
+        if (input.event.kind === "request")
+          expect(subscribed).toEqual([opened]);
+        return renderer.answer(input);
+      },
+    },
+    [],
+    subscribed,
+  );
+  expect(configs).toEqual([
+    { kind: "config", context: REQ, worldState: WORLD },
+  ]);
+  expect(requests).toEqual([
+    { kind: "request", id: REQUEST, context: REQ, waitEndsAt: 0 },
+  ]);
+  expect(subscribed).toEqual([opened, drawn]);
 });

@@ -42,14 +42,25 @@ export interface RendererInput {
 
 export type Event =
   | {
+      // What the session's config is made of, as its newest request names
+      // it, delivered ahead of that request: its turn opens the session's
+      // view, so the output names what the view reads before the request
+      // waits on it. Until config discovery is the host's, it carries the
+      // request's context, from which the renderer finds the config itself.
+      readonly kind: "config";
+      readonly context: CheckedRenderRequest;
+      // [LAW:one-source-of-truth] The world state read at this context's own
+      // keys: a session's context and its world state reach the renderer as
+      // one value, so a renderer never holds a context beside a document read
+      // at another request's keys.
+      readonly worldState: WorldState;
+    }
+  | {
+      // A request of a session whose `config` came before it: the turn draws
+      // from the world state the renderer holds for the session.
       readonly kind: "request";
       readonly id: RequestId;
       readonly context: CheckedRenderRequest;
-      // [LAW:one-source-of-truth] The world state read at this request's own
-      // keys: a request and its world state reach the renderer as one value,
-      // so a renderer never holds a request beside a document read at another
-      // request's keys.
-      readonly worldState: WorldState;
       // The monotonic moment the request's wait ends, from its client's
       // deadline: the renderer still waits inside this turn, over the world
       // states the host hands in, until the mailbox moves the wait, so its
@@ -59,7 +70,7 @@ export type Event =
     }
   | {
       // A session's world state moved since the one the renderer holds: read
-      // at the keys of the newest request the host delivered for it.
+      // at the keys of the newest `config` the host delivered for it.
       readonly kind: "world-state";
       readonly worldState: WorldState;
     }

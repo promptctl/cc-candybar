@@ -1,16 +1,19 @@
-// A render request answered by its renderer: the host delivers the request,
-// performs the effects its turn returned, and answers the client with the one
-// frame presented for it, in the encoding the client asked for.
+// A render request answered by its renderer: the host delivers the session's
+// config and then the request, performs the effects the request's turn
+// returned, and answers the client with the one frame presented for it, in the
+// encoding the client asked for.
 
+import path from "node:path";
 import type { Effect, RequestId } from "../renderer/interface.js";
 import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
+import { checkoutLocation } from "../utils/git-root.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { RENDER_ANSWERS, renderFailed } from "./draw-bar.js";
 import type { Response } from "./protocol";
 import type { FrameSeen } from "./render-sightings";
 import type { Collector } from "./collector.js";
-import type { RendererHost } from "./renderer-host.js";
+import type { Delivered, RendererHost } from "./renderer-host.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -51,44 +54,80 @@ function failed(
   };
 }
 
+// [LAW:effects-at-boundaries] The request's context as both its turns take
+// it: the checkout its directory is in, read from the disk by the host, so
+// the renderer reads no file for it and the two turns read one location.
+function located(req: CheckedRenderRequest): CheckedRenderRequest {
+  const dir = req.hookData.workspace?.current_dir ?? req.cwd;
+  return {
+    ...req,
+    hookData: {
+      ...req.hookData,
+      ...(dir !== undefined &&
+        path.isAbsolute(dir) && { location: checkoutLocation(dir) }),
+    },
+  };
+}
+
+// [LAW:nothing-unseen] What a turn the request's answer took learned, on the
+// request's own event.
+function recorded(facts: RequestFacts, delivered: Delivered): void {
+  facts.push(
+    ...(delivered.kind === "answered"
+      ? delivered.output.record
+      : delivered.record),
+  );
+}
+
 export async function answerStatusline(
   host: RendererHost,
   collector: Pick<Collector, "requested">,
   clock: Pick<Timekeeper, "monotonic" | "now">,
-  req: CheckedRenderRequest,
+  arrived: CheckedRenderRequest,
   id: RequestId,
   at: Instant,
   waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<StatuslineAnswer> {
-  // [LAW:no-ambient-temporal-coupling] Delivered on arrival, with the world
-  // state read at its own keys: nothing waits before delivery, so the renderer
-  // takes each session's requests and documents in the order they were made.
-  const delivered = await host.deliver(
-    {
-      kind: "event",
-      at,
-      event: {
-        kind: "request",
-        id,
-        context: req,
-        worldState: collector.requested(req),
-        waitEndsAt,
-      },
+  const req = located(arrived);
+  // [LAW:no-ambient-temporal-coupling] The host owns the order: the session's
+  // config goes first, with the world state read at the request's keys, and
+  // its output's subscriptions reach the collector as the turn answers. A set
+  // that moved is declared and its stamp handed in before the request is
+  // delivered, so the request's wait covers every source the view reads.
+  // Nothing waits before delivery, so the renderer takes each session's
+  // requests and documents in the order they were made.
+  const configured = await host.answer({
+    kind: "event",
+    at,
+    event: {
+      kind: "config",
+      context: req,
+      worldState: collector.requested(req),
     },
-    [],
-  );
+  });
+  if (configured.kind === "threw") {
+    // [LAW:nothing-unseen] No request turn ran to open the event with the
+    // session, so the host names it.
+    noteFacts(facts, { sid: req.sessionId });
+    recorded(facts, configured);
+    noteFacts(facts, { renderer: host.name });
+    return failed(host, configured.error, "opening the session: ");
+  }
+  const delivered = await host.answer({
+    kind: "event",
+    at,
+    event: { kind: "request", id, context: req, waitEndsAt },
+  });
+  // The request turn's record leads: it opens with the session, which the
+  // event's readers key on (`render sid=`).
+  recorded(facts, delivered);
+  recorded(facts, configured);
   if (delivered.kind === "threw") {
-    // [LAW:nothing-unseen] What the turn learned before it threw, on the
-    // request's own event.
-    facts.push(...delivered.record);
     noteFacts(facts, { renderer: host.name });
     return failed(host, delivered.error);
   }
-  const { effects, record } = delivered.output;
-  // The record leads: it opens with the session, which the event's readers
-  // key on (`render sid=`).
-  facts.push(...record);
+  const { effects } = delivered.output;
   noteFacts(facts, {
     renderer: host.name,
     effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",

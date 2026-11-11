@@ -7,9 +7,9 @@
 // holds no lane and stamps nothing.
 //
 // [LAW:no-ambient-temporal-coupling] The renderer receives each session's
-// requests and documents in the order the collector made them: a request's
-// document is the one `requested` returns, which goes with the request, and
-// every later stamp that moved is handed in alone, from here.
+// documents in the order the collector made them: a request's document is the
+// one `requested` returns, which goes with the session's `config` ahead of the
+// request, and every later stamp that moved is handed in alone, from here.
 //
 // [LAW:no-ambient-temporal-coupling] The collector owns the session's
 // lifetime: a session idle across a whole sweep, with no open feed, is
@@ -98,7 +98,7 @@ interface DeclaredFor {
   readonly subscriptions: DeclaredSources;
 }
 
-// The session's latest document, which its stamps replace and its request
+// The session's latest document, which its stamps replace and its `config`
 // carries, and the read it was stamped from.
 interface Stamped {
   document: WorldState;
@@ -180,7 +180,7 @@ export class Collector {
 
   // [LAW:single-enforcer] A request names the session's keys: they are
   // declared again and stamped in one action, and that stamp is returned to
-  // go with the request. The record's reaction runs when the action ends,
+  // go with the session's `config`. The record's reaction runs when the action ends,
   // finds the read this stamp took, and hands in nothing alone. A request for
   // a retiring session makes it live again.
   requested(req: ViewFacts): WorldState {

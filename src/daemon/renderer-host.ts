@@ -1,7 +1,9 @@
-// The host's one path to a renderer: every input it hands one passes through
-// `deliver`, which answers with the turn's output or with how the turn failed:
-// a turn's throw comes back as a value, never as a rejection. Every output's
-// subscriptions are taken here, in the order the turns answered.
+// The host's one path to a renderer: every input it hands one is one turn,
+// which answers with the turn's output or with how the turn failed: a turn's
+// throw comes back as a value, never as a rejection. Every output's
+// subscriptions are taken here, in the order the turns answered. A caller
+// whose own event records the turn takes it by `answer`; every other input is
+// taken by `deliver`, which writes the turn's own line.
 
 import { inspect } from "node:util";
 import {
@@ -29,8 +31,11 @@ export type Delivered =
 
 export interface RendererHost {
   readonly name: RendererName;
-  // `about` is what the host knows of the input, for the line a turn it does
-  // not otherwise record writes.
+  // One turn, recorded by the caller: a request's answer writes both its
+  // turns on the request's render event.
+  answer(input: RendererInput): Promise<Delivered>;
+  // One turn, recorded on its own line. `about` is what the host knows of the
+  // input, for that line.
   deliver(input: RendererInput, about: TurnRecord): Promise<Delivered>;
 }
 
@@ -83,11 +88,12 @@ export function rendererHost(
   };
   return {
     name,
+    answer: turn,
+    // [LAW:nothing-unseen] An input no event of its own records is recorded
+    // here.
     deliver: async (input, about) => {
       const delivered = await turn(input);
-      // [LAW:nothing-unseen] A request's turn is recorded on its render
-      // event, by the request's answer; every other input's turn, here.
-      if (input.event.kind !== "request") record(input, about, delivered);
+      record(input, about, delivered);
       return delivered;
     },
   };

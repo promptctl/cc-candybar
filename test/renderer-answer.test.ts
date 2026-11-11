@@ -12,12 +12,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import type { RendererParts } from "../src/daemon/draw-bar";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
-import { RenderWarningRecords } from "../src/daemon/render-warnings";
-import { EffectSessions } from "../src/render/effect";
 import {
   TurnThrew,
   type Effect,
@@ -27,9 +23,9 @@ import {
   type RequestId,
 } from "../src/renderer/interface";
 import { mainRenderer } from "../src/renderer/main";
+import { rendererParts } from "./helpers/renderer-parts";
 import type { CheckedRenderRequest } from "../src/renderer/request-context";
 import { systemTimekeeper } from "../src/time";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   AT,
   PROJECT,
@@ -66,30 +62,16 @@ function renderer(): {
 } {
   const rig = sessionRig(dir, cleanups);
   const { providers } = rig;
-  const parts: RendererParts = {
-    clock: systemTimekeeper,
-    log: () => {},
+  const parts = rendererParts({
+    cache: rig.cache,
     sessionState: rig.sessionState,
-    renderCache: rig.cache as never,
     worldStates: rig.served.worldStates,
-    payloadProviders: {
+    providers: {
       ...providers,
       gitProvider: { ...providers.gitProvider, getStats: () => NO_STATS },
       usageStore: { ...providers.usageStore, getStats: () => NO_STATS },
-    } as never,
-    linkSigner: TEST_SIGNER,
-    renderWarnings: new RenderWarningRecords(),
-    effectSessions: new EffectSessions(),
-    frameFeeds: { feedsOf: () => UNFOLLOWED_FEEDS, following: () => new Set() },
-    updateWatch: { notice: () => ({ offer: [], failure: [] }), error: () => null },
-    fileEvents: {
-      delivery: () => ({ kind: "delivering", unreported: [], missedSince: null }),
     },
-    menuIdle: { observe: () => {}, since: () => undefined },
-    launcher: { launcherWarnings: () => [], answeredPipeEvent: () => {} },
-    laneSetups: { noted: () => {} },
-    tmuxStatusLines: { observe: () => {} },
-  };
+  });
   // The cache's record of a delivered frame, heard on its way in.
   const recorded: string[][] = [];
   const record = rig.cache.delivered.bind(rig.cache);
@@ -129,18 +111,37 @@ function checked(pane?: string): CheckedRenderRequest {
 
 const REQUEST = 7 as RequestId;
 
-// The request as the host delivers one: with the world state its collector
-// read at the request's keys.
-const request = ({ r, rig }: { r: Renderer; rig: SessionRig }) => {
+// The session's config as the host delivers one ahead of a request: with the
+// world state its collector read at the request's keys, and its output's
+// subscriptions handed back to the collector.
+const configure = async (
+  { r, rig }: { r: Renderer; rig: SessionRig },
+  context: CheckedRenderRequest,
+) => {
+  const output = await r.answer({
+    kind: "event",
+    at: AT,
+    event: {
+      kind: "config",
+      context,
+      worldState: rig.served.collector.requested(context),
+    },
+  });
+  rig.served.collector.subscribed(output.subscriptions);
+  return output;
+};
+
+// The request as the host delivers one: after the session's config.
+const request = async (t: { r: Renderer; rig: SessionRig }) => {
   const context = checked();
-  return r.answer({
+  await configure(t, context);
+  return t.r.answer({
     kind: "event",
     at: AT,
     event: {
       kind: "request",
       id: REQUEST,
       context,
-      worldState: rig.served.collector.requested(context),
       waitEndsAt: systemTimekeeper.monotonic() + 5_000,
     },
   });
@@ -259,6 +260,80 @@ describe("the world state the host hands in", () => {
   });
 });
 
+describe("the session's config, ahead of its request", () => {
+  test("opens the session's view and names what it reads, with no effect", async () => {
+    const t = renderer();
+    const { effects, subscriptions } = await configure(t, checked());
+    expect(effects).toEqual([]);
+    const view = viewOf(t.rig)!;
+    expect(subscriptions.sources).toEqual({
+      [SESSION]: [...view.state.sources].map(([source, storage]) => ({
+        kind: "plugin",
+        source,
+        storage,
+      })),
+    });
+    expect(presentOf((await request(t)).effects)).toMatchObject({
+      kind: "present",
+      request: REQUEST,
+    });
+  });
+
+  test("one that throws answers its request with a failure naming the renderer, and the request is not delivered", async () => {
+    const t = renderer();
+    const kinds: string[] = [];
+    const host = rendererHost(
+      "main",
+      {
+        answer: (input) => {
+          kinds.push(input.event.kind);
+          if (input.event.kind === "config")
+            return Promise.reject(new TurnThrew([], new Error("no view")));
+          return t.r.answer(input);
+        },
+      },
+      () => {},
+      (subscriptions) => t.rig.served.collector.subscribed(subscriptions),
+    );
+    const facts: Array<readonly [string, string]> = [];
+    const answered = await answerStatusline(
+      host,
+      t.rig.served.collector,
+      systemTimekeeper,
+      checked(),
+      REQUEST,
+      AT,
+      systemTimekeeper.monotonic() + 5_000,
+      facts as never,
+    );
+    expect(kinds).toEqual(["config"]);
+    expect(answered.resp).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^renderer main: opening the session: no view/),
+    });
+    // The render event still opens with the session.
+    expect(facts[0]).toEqual(["sid", SESSION]);
+  });
+
+  test("a request with no config before it is refused, naming the session", async () => {
+    const t = renderer();
+    const answering = t.r.answer({
+      kind: "event",
+      at: AT,
+      event: {
+        kind: "request",
+        id: REQUEST,
+        context: checked(),
+        waitEndsAt: systemTimekeeper.monotonic() + 5_000,
+      },
+    });
+    await expect(answering).rejects.toBeInstanceOf(TurnThrew);
+    await expect(answering).rejects.toThrow(
+      new RegExp(`no world state for session "${SESSION}"`),
+    );
+  });
+});
+
 describe("two requests of one session at different keys", () => {
   test("each reaches the renderer with the world state read at its own keys, and both answers draw the newest request's", async () => {
     const t = renderer();
@@ -276,7 +351,7 @@ describe("two requests of one session at different keys", () => {
       "main",
       {
         answer: (input) => {
-          if (input.event.kind === "request")
+          if (input.event.kind === "config")
             requests.push(input.event.worldState);
           return t.r.answer(input);
         },
