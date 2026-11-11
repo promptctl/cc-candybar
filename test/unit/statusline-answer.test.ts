@@ -191,6 +191,24 @@ test("a second frame for the request is refused, and the first answers it", asyn
   ]);
 });
 
+test("a config turn's effects are refused, each owed its effect-done, and the request's present still answers it", async () => {
+  const { renderer, heard } = scripted(
+    output([present(1)]),
+    output([present(2)]),
+  );
+  const { answered, facts } = await answer(renderer);
+  expect(answered.resp).toEqual({ ok: true, frame: FRAME });
+  expect(facts.get("effects")).toBe("present:statusline,present:statusline");
+  await drained();
+  expect(heard).toMatchObject([
+    {
+      kind: "effect-done",
+      of: 2,
+      outcome: { kind: "failed", reason: "a config turn answers no request" },
+    },
+  ]);
+});
+
 test("a turn that throws is a failure naming the renderer, with what it learned on the request's event", async () => {
   const { renderer } = scripted(
     new TurnThrew([["lanes", "-"]], new Error("the draw broke")),

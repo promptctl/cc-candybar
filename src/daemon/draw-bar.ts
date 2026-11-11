@@ -356,20 +356,22 @@ function requestFacts(
   return hintsError;
 }
 
-// [LAW:single-enforcer] The one way a session's view is opened at a context:
-// its world state taken and its view held at the config inputs the context
-// names, the view opened or refreshed there. A `config` turn opens it and lets
-// go, so its output names what the view reads; the request after it holds the
-// same view again, or opens it again if another turn closed it meanwhile.
+// [LAW:single-enforcer] A `config` turn, the one way a session's view is
+// opened at a context: what the context says is recorded, its world state
+// taken, and its view opened or refreshed at the config inputs it names and
+// let go, so the turn's output names what the view reads. The request after
+// it holds the view as it finds it (`setUpRender`). The record goes first, so
+// a durable click on a session whose opening threw still resolves the chain
+// that opening was for.
 //
-// [LAW:one-source-of-truth] The world state and the hold are taken in one
-// action, so nothing drawn between the two pairs either with another
-// request's.
+// [LAW:one-source-of-truth] The world state and the view's context are taken
+// in one action, so nothing drawn between the two pairs either with another
+// context's.
 export function openSession(
   parts: RendererParts,
   req: CheckedRenderRequest,
   worldState: WorldState,
-): SessionHold<SessionSource, CheckedRenderRequest> {
+): void {
   const { sessionState, renderCache, worldStates } = parts;
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
@@ -381,7 +383,8 @@ export function openSession(
     sessionState,
     req.sessionId,
   );
-  return runInAction(() => {
+  runInAction(() => {
+    recordRequest(parts, req);
     worldStates.take(worldState);
     return renderCache.holdSession(
       origin.projectDir,
@@ -389,7 +392,7 @@ export function openSession(
       origin.target.path,
       req,
     );
-  });
+  })[Symbol.dispose]();
 }
 
 export function setUpRender(
@@ -407,9 +410,19 @@ export function setUpRender(
   // cache disposes them when this hold is released — never under the render
   // (brandon-unfiled-3248.6rc). The setup owns the hold from here: a throw
   // before it is returned releases it, and the setup releases it on every exit
-  // of the render that disposes it. The world state is the one the renderer
-  // holds for the session, taken from its `config` or handed in since.
-  const hold = openSession(parts, req, parts.worldStates.of(req.sessionId));
+  // of the render that disposes it.
+  //
+  // [LAW:single-enforcer] A request opens nothing: it holds the view its
+  // session's `config` turn opened, drawn by the newest context a config turn
+  // named, from the world state the renderer holds for the session.
+  const hold = parts.renderCache.holdView(req.sessionId);
+  // [LAW:no-silent-failure] A request with no view (no config ahead of it,
+  // or its view closed between the two turns by an eviction) is said, never
+  // reopened at a context this turn does not own.
+  if (hold === null)
+    throw new Error(
+      `no view for session ${JSON.stringify(req.sessionId)}: the host delivers its config, which opens one, ahead of every request`,
+    );
   return setUpDraw(parts, hold, req, hintsError, at, facts);
 }
 
@@ -910,12 +923,12 @@ interface DrawnBar {
   readonly geometry: DiagnosticGeometry;
 }
 
-// [LAW:effects-at-boundaries] What a render request said, recorded where the
-// request arrives — never by a frame, which only draws, and which would wake
-// its own feed by writing the session's state. Compared before writing:
-// every set() persists and fires the session's MobX atom, so an
-// unconditional per-request write would invalidate every state-driven
-// computed each render.
+// [LAW:effects-at-boundaries] What a render request said, recorded where its
+// context arrives, its session's `config` turn — never by a frame, which only
+// draws, and which would wake its own feed by writing the session's state.
+// Compared before writing: every set() persists and fires the session's MobX
+// atom, so an unconditional per-request write would invalidate every
+// state-driven computed each render.
 function recordRequest(parts: RendererParts, req: CheckedRenderRequest): void {
   const { sessionState } = parts;
   const sessionId = req.sessionId;
@@ -942,7 +955,7 @@ function recordRequest(parts: RendererParts, req: CheckedRenderRequest): void {
   }
 }
 
-// A render request's answer: what it said is recorded, and the bar is drawn.
+// A render request's answer: the bar drawn for its client.
 export interface RequestAnswer {
   // What this request's client is shown: the statusline's frame to Claude
   // Code's statusline, the bar to a client drawing it itself.
@@ -950,17 +963,6 @@ export interface RequestAnswer {
   // What to record once that frame reached its client: the copies its copy
   // clicks copy, and the click error and the launcher's pipe event it showed.
   readonly delivered: () => void;
-}
-
-export async function answerRequest(
-  parts: RendererParts,
-  req: CheckedRenderRequest,
-  at: Instant,
-  waitEndsAt: number,
-  facts: RequestFacts,
-): Promise<RequestAnswer> {
-  recordRequest(parts, req);
-  return drawAnswer(parts, req, at, waitEndsAt, facts);
 }
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its
@@ -1027,7 +1029,7 @@ export function laneClicked(
     tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
 }
 
-async function drawAnswer(
+export async function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
   at: Instant,

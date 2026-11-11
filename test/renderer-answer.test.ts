@@ -40,6 +40,7 @@ import { rendererHost } from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { WorldState } from "../src/facts/world-state";
 import type { SessionId } from "../src/daemon/session-id";
+import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
 let dir: string;
 let cleanups: Array<() => void>;
@@ -309,7 +310,7 @@ describe("the session's config, ahead of its request", () => {
     expect(kinds).toEqual(["config"]);
     expect(answered.resp).toMatchObject({
       ok: false,
-      error: expect.stringMatching(/^renderer main: opening the session: no view/),
+      error: expect.stringMatching(/^renderer main: its config turn: no view/),
     });
     // The render event still opens with the session.
     expect(facts[0]).toEqual(["sid", SESSION]);
@@ -329,8 +330,19 @@ describe("the session's config, ahead of its request", () => {
     });
     await expect(answering).rejects.toBeInstanceOf(TurnThrew);
     await expect(answering).rejects.toThrow(
-      new RegExp(`no world state for session "${SESSION}"`),
+      new RegExp(`no view for session "${SESSION}"`),
     );
+  });
+
+  test("one whose opening throws has still recorded the config inputs it named, so a durable click resolves the chain it was for", async () => {
+    const t = renderer();
+    t.rig.cache.holdSession = (() => {
+      throw new Error("the opening broke");
+    }) as never;
+    await expect(configure(t, checked())).rejects.toThrow(/the opening broke/);
+    expect(
+      t.rig.sessionState.get(SESSION, SESSION_RENDER_ORIGIN_KEY),
+    ).toContain(path.join(dir, "config.json5"));
   });
 });
 

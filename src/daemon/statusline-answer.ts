@@ -90,6 +90,25 @@ export async function answerStatusline(
   facts: RequestFacts,
 ): Promise<StatuslineAnswer> {
   const req = located(arrived);
+  // [LAW:single-enforcer] The one `effect-done` each effect is owed, through
+  // the host's one path to the renderer.
+  const done = (effect: Effect, reason: string | null): void =>
+    void host.deliver(
+      {
+        kind: "event",
+        at: instantOf(new Date(clock.now())),
+        event: {
+          kind: "effect-done",
+          of: effect.id,
+          outcome:
+            reason === null ? { kind: "ok" } : { kind: "failed", reason },
+        },
+      },
+      [
+        ["sid", req.sessionId],
+        ["effect", String(effect.id)],
+      ],
+    );
   // [LAW:no-ambient-temporal-coupling] The host owns the order: the session's
   // config goes first, with the world state read at the request's keys, and
   // its output's subscriptions reach the collector as the turn answers. A set
@@ -112,8 +131,12 @@ export async function answerStatusline(
     noteFacts(facts, { sid: req.sessionId });
     recorded(facts, configured);
     noteFacts(facts, { renderer: host.name });
-    return failed(host, configured.error, "opening the session: ");
+    return failed(host, configured.error, "its config turn: ");
   }
+  // [LAW:types-are-the-program] A config turn answers no request, so every
+  // effect it returned is refused, and none is left owed its `effect-done`.
+  for (const effect of configured.output.effects)
+    done(effect, "a config turn answers no request");
   const delivered = await host.answer({
     kind: "event",
     at,
@@ -130,27 +153,11 @@ export async function answerStatusline(
   const { effects } = delivered.output;
   noteFacts(facts, {
     renderer: host.name,
-    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
+    effects:
+      [...configured.output.effects, ...effects]
+        .map((e) => `${e.kind}:${e.surface}`)
+        .join(",") || "-",
   });
-  // [LAW:single-enforcer] The one `effect-done` each effect is owed, through
-  // the host's one path to the renderer.
-  const done = (effect: Effect, reason: string | null): void =>
-    void host.deliver(
-      {
-        kind: "event",
-        at: instantOf(new Date(clock.now())),
-        event: {
-          kind: "effect-done",
-          of: effect.id,
-          outcome:
-            reason === null ? { kind: "ok" } : { kind: "failed", reason },
-        },
-      },
-      [
-        ["sid", req.sessionId],
-        ["effect", String(effect.id)],
-      ],
-    );
   // [LAW:types-are-the-program] Every effect the turn returned, in its order,
   // is performed or refused: the first statusline frame for this request
   // answers it, and nothing else may.

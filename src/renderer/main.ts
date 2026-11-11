@@ -1,12 +1,12 @@
 // The main renderer, in process: today's request answer behind the renderer
-// interface (src/renderer/interface.ts). A `config` turn opens the session's
-// view at its context, so its output names what the view reads before the
-// request after it waits. A request's turn draws the bar and returns it as a
-// `present`; that present's `effect-done` records what the frame showed, once
-// the host says whether its client took it. A world state the host hands in,
-// with a `config` or alone, is what the session's views draw from, and a
-// retire ends what the renderer holds of the session. Every output says what
-// the open views need read.
+// interface (src/renderer/interface.ts). A `config` turn records the
+// session's context and opens its view there, so its output names what the
+// view reads before the request after it waits. A request's turn draws the
+// bar from that view and returns it as a `present`; that present's
+// `effect-done` records what the frame showed, once the host says whether its
+// client took it. A world state the host hands in, with a `config` or alone,
+// is what the session's views draw from, and a retire ends what the renderer
+// holds of the session. Every output says what the open views need read.
 
 import {
   answerRequest,
@@ -48,12 +48,9 @@ export function mainRenderer(parts: RendererParts): Renderer {
     record: RequestFacts,
   ): Promise<RendererOutput> => {
     switch (event.kind) {
-      case "config": {
-        // Opened and let go: the view stays open for the request, and the
-        // output names what it reads.
-        openSession(parts, event.context, event.worldState)[Symbol.dispose]();
+      case "config":
+        openSession(parts, event.context, event.worldState);
         return answered([], record);
-      }
       case "request": {
         const { frame, delivered } = await answerRequest(
           parts,

@@ -238,14 +238,14 @@ function rig(): Rig {
     worldStates: served.worldStates,
     hold: (configFile, sid = "s1") => {
       const facts = viewFacts(dir, sid);
-      return served.request(facts, () =>
+      return served.config(facts, () =>
         cache.holdSession(dir, dir, configFile, facts),
       );
     },
     inTurn: (configFile, read) => {
       const facts = viewFacts(dir, "s1");
       let seen: ReturnType<typeof read> | undefined;
-      const held = served.request(facts, () => {
+      const held = served.config(facts, () => {
         const opened = cache.holdSession(dir, dir, configFile, facts);
         seen = read(opened.view);
         return opened;
