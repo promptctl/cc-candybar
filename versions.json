@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "ca7442ac46ab073fa49c3b461033d4e856a9cdea",
-      "timestamp": "2026-11-11T21:53:45.744Z",
+      "sha": "d9e26fa44171c75529a59436c3d34d697497d642",
+      "timestamp": "2026-11-11T22:01:36.671Z",
       "commits": [
         {
-          "sha": "ca7442ac46ab073fa49c3b461033d4e856a9cdea",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T14:52:51-07:00",
-          "message": "feat(router): a session's config turn reaches the renderer ahead of its request (candybar-host-renderer-x96a.5zx) (#713)\n\n* docs(design): per-directory sharing of shell and file sources once the host runs them (candybar-host-renderer-x96a.8e9)\n\nThe options for keeping a directory's sources shared after 8e9 moves runs to\nthe host, what each buys and costs, and where the ticket stands.\n\n* docs(design): a run's identity carries the sharing, with named environment variables and a session's config ahead of its request (candybar-host-renderer-x96a.8e9)\n\n* feat(router): a session's config turn reaches the renderer ahead of its request, so the request waits on every source its view reads (candybar-host-renderer-x96a.5zx)\n\nThe host delivers a config event before each request. Its turn opens the\nsession's view, and its output's subscriptions are declared before the\nrequest is delivered, so a plugin source's first read is waited for\ninstead of drawn pending. The config event is the one carrier of a\nsession's context with its world state; the request carries none. The\nhost reads the checkout's location once, for both turns.\n\n* fix(router): a request holds the view its config turn opened, and the config turn records the context it carries (candybar-host-renderer-x96a.5zx)\n\nThe request turn opened the session's view a second time at its own\ncontext, so a request delivered after a later config moved the view back\nto the older context. It now holds the view the config turn opened and\nopens nothing. The config turn records the request's hints and config\ninputs before it opens, so a session whose opening throws still names\nthe chain a durable click resolves. Every effect a config turn returns\nis refused, so none is left owed its effect-done, and its failure is\nnamed by the turn, not by a guessed cause.\n\n* fix(router): a request holds its session's view at its own context, so it needs nothing to outlive the config turn before it (candybar-host-renderer-x96a.5zx)\n\nThe request turn held whatever view it found, so a view closed between\nthe config turn and the request turn (an eviction) failed the request,\nand a request delivered after a later config drew that config's context\nbeside its own hints. It now holds the view at the context it carries,\nas the config turn opened it: a view still open is kept, and one closed\nsince opens again. The request event's effects are the request turn's\nalone; a config turn's are refused on their own effect-done.\n\n* fix(router): the config turn notes its context's facts and takes its world state, so a failed opening still says what it was for (candybar-host-renderer-x96a.5zx)\n\nA config turn that threw left the render event with only the session:\nthe hints, the client, the refused args and the encoding were noted by\nthe request turn, which never ran. The config turn now notes the facts\nof the context it carries and its record leads the event, and it alone\ntakes the world state that came with it. The request turn holds the\nview at its own context and computes only the hints error its draw\nshows."
+          "sha": "d9e26fa44171c75529a59436c3d34d697497d642",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-11T22:00:45Z",
+          "message": "chore(release): set `package.json` to 1.217.0\n\n## [1.217.0](https://github.com/promptctl/cc-candybar/compare/v1.216.0...v1.217.0) (2026-11-11)\n\n### Features\n\n* **router:** a session's config turn reaches the renderer ahead of its request (candybar-host-renderer-x96a.5zx) ([#713](https://github.com/promptctl/cc-candybar/issues/713)) ([ca7442a](https://github.com/promptctl/cc-candybar/commit/ca7442ac46ab073fa49c3b461033d4e856a9cdea))\n"
         }
       ]
     }
