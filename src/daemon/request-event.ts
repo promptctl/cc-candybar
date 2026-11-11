@@ -1,7 +1,7 @@
 import { inspect } from "node:util";
 
 import type { LogLevel } from "../utils/logger";
-import { valueOf } from "../utils/logfmt.js";
+import { eventLine, type Field } from "../utils/logfmt.js";
 
 // The requests that each write one event: a statusline render and a click.
 export type RequestKind = "render" | "click";
@@ -22,7 +22,7 @@ export type RequestOutcome =
 // What a request has learned so far, in the order it learned it. A request
 // that stops early carries only the facts it reached, so a field absent from
 // the event means "not reached", never "none" (which each field spells `-`).
-export type RequestFacts = Array<readonly [key: string, value: string]>;
+export type RequestFacts = Field[];
 
 export function noteFacts(
   facts: RequestFacts,
@@ -75,6 +75,6 @@ export function requestEvent(
   ];
   return {
     level: LEVEL[outcome.kind],
-    line: `${kind}${fields.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`,
+    line: eventLine(kind, fields),
   };
 }

@@ -1091,17 +1091,37 @@ async function drawAnswer(
   });
   return {
     frame,
-    // [LAW:single-enforcer] An answer carrying the click error or the
-    // launcher's pipe event that reaches its client is the one that
-    // delivered it (src/utils/event-hold.ts).
-    delivered: () => {
-      delivered();
-      if (clickShown !== null)
-        answeredClickError(parts.sessionState, sessionId, clickShown);
-      // Daemon-wide: one session's answer having shown the launcher's pipe
-      // event is what makes it not silent.
-      if (pipeShown !== null) parts.launcher.answeredPipeEvent(pipeShown);
-    },
+    delivered: answerDelivered(
+      parts,
+      sessionId,
+      delivered,
+      clickShown,
+      pipeShown,
+    ),
+  };
+}
+
+// What an answer records once it reached its client. Built here, apart from
+// the draw, because a closure keeps alive every variable its function's other
+// closures capture: one made inside the draw would hold the draw's setup until
+// its frame settles.
+// [LAW:single-enforcer] An answer carrying the click error or the launcher's
+// pipe event that reaches its client is the one that delivered it
+// (src/utils/event-hold.ts).
+function answerDelivered(
+  parts: RendererParts,
+  sessionId: SessionId,
+  copied: () => void,
+  clickShown: ClickErrorRecord | null,
+  pipeShown: PipeEvent | null,
+): () => void {
+  return () => {
+    copied();
+    if (clickShown !== null)
+      answeredClickError(parts.sessionState, sessionId, clickShown);
+    // Daemon-wide: one session's answer having shown the launcher's pipe
+    // event is what makes it not silent.
+    if (pipeShown !== null) parts.launcher.answeredPipeEvent(pipeShown);
   };
 }
 

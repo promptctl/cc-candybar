@@ -10,7 +10,7 @@ import {
   type RendererOutput,
   type TurnRecord,
 } from "../renderer/interface.js";
-import { valueOf } from "../utils/logfmt.js";
+import { eventLine } from "../utils/logfmt.js";
 import type { DaemonLogger } from "../utils/logger";
 
 // The only renderer there is yet: the main one, in process.
@@ -32,40 +32,56 @@ export interface RendererHost {
   deliver(input: RendererInput, about: TurnRecord): Promise<Delivered>;
 }
 
-const line = (fields: TurnRecord): string =>
-  `turn${fields.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
-
 export function rendererHost(
   name: RendererName,
   renderer: Renderer,
   log: DaemonLogger,
 ): RendererHost {
+  const turn = async (input: RendererInput): Promise<Delivered> => {
+    try {
+      return { kind: "answered", output: await renderer.answer(input) };
+    } catch (e) {
+      return e instanceof TurnThrew
+        ? { kind: "threw", error: e.thrown, record: e.record }
+        : { kind: "threw", error: e, record: [] };
+    }
+  };
+  // A turn's line, when it learned something or failed.
+  const record = (
+    input: RendererInput,
+    about: TurnRecord,
+    delivered: Delivered,
+  ): void => {
+    const head: TurnRecord = [
+      ["renderer", name],
+      ["input", input.event.kind],
+      ...about,
+    ];
+    switch (delivered.kind) {
+      case "answered":
+        if (delivered.output.record.length > 0)
+          log("info", eventLine("turn", [...head, ...delivered.output.record]));
+        return;
+      case "threw":
+        // [LAW:no-silent-failure] No turn's failure is left unhandled.
+        log(
+          "error",
+          eventLine("turn", [
+            ...head,
+            ...delivered.record,
+            ["error", inspect(delivered.error)],
+          ]),
+        );
+    }
+  };
   return {
     name,
     deliver: async (input, about) => {
-      const { kind } = input.event;
+      const delivered = await turn(input);
       // [LAW:nothing-unseen] A request's turn is recorded on its render
-      // event, by the request's answer; every other input's turn is recorded
-      // here when it learned something or failed.
-      const head: TurnRecord = [["renderer", name], ["input", kind], ...about];
-      try {
-        const output = await renderer.answer(input);
-        if (kind !== "request" && output.record.length > 0)
-          log("info", line([...head, ...output.record]));
-        return { kind: "answered", output };
-      } catch (e) {
-        const threw =
-          e instanceof TurnThrew
-            ? { error: e.thrown, record: e.record }
-            : { error: e, record: [] };
-        // [LAW:no-silent-failure] No turn's failure is left unhandled.
-        if (kind !== "request")
-          log(
-            "error",
-            line([...head, ...threw.record, ["error", inspect(threw.error)]]),
-          );
-        return { kind: "threw", ...threw };
-      }
+      // event, by the request's answer; every other input's turn, here.
+      if (input.event.kind !== "request") record(input, about, delivered);
+      return delivered;
     },
   };
 }

@@ -1,6 +1,6 @@
 // The renderer interface (docs/design/host-and-renderer.md §7): the host hands
-// a renderer one input at a time, and the renderer answers each with the
-// effects it asks the host to perform and the record of its turn.
+// a renderer inputs, and the renderer answers each with the effects it asks
+// the host to perform and the record of its turn.
 //
 // [LAW:one-way-deps] The host depends on this module and the renderer
 // implements it; it imports only what lies below both: the session context,
@@ -11,6 +11,7 @@
 import type { SessionId } from "../daemon/session-id";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
+import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest } from "./request-context";
 
 // Which request a statusline frame answers: the host's count of the requests
@@ -44,7 +45,8 @@ export type Event =
       readonly context: CheckedRenderRequest;
       // The monotonic moment the request's wait ends, from its client's
       // deadline: the renderer still waits inside this turn until the wait
-      // moves onto its world state.
+      // moves onto its world state, so its turns overlap: other inputs, other
+      // requests' included, arrive while this one waits.
       readonly waitEndsAt: number;
     }
   | {
@@ -72,7 +74,7 @@ export type Effect = Present;
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it: the
 // renderer writes no log, so the host writes these beside the input's event.
-export type TurnRecord = ReadonlyArray<readonly [key: string, value: string]>;
+export type TurnRecord = readonly Field[];
 
 export interface RendererOutput {
   readonly effects: readonly Effect[];

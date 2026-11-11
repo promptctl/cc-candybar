@@ -45,8 +45,11 @@ import {
 } from "../segments/git.js";
 import { gitRootOf } from "../utils/git-root.js";
 import { dataNeeds, type DataNeeds } from "./data-needs.js";
-import type { RoledSaid, TranscriptSaid } from "../daemon/render-sightings.js";
-import type { RateLimitsSeen } from "../renderer/request-context.js";
+import type {
+  RateLimitsSeen,
+  RoledSaid,
+  TranscriptSaid,
+} from "../daemon/render-sightings.js";
 import { ok, type Outcome } from "../utils/outcome.js";
 import { jsonLine } from "../utils/claude.js";
 import { readTailSync } from "../utils/transcript-fs.js";

@@ -6,7 +6,7 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
-import { renderFailedFrame } from "../../src/render/frame";
+import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { answerStatusline } from "../../src/daemon/statusline-answer";
@@ -105,6 +105,16 @@ test("the request's present answers it, in the request's encoding, and its settl
   expect(heard).toEqual([
     { kind: "effect-done", of: 1, outcome: { kind: "ok" } },
   ]);
+});
+
+test("the client's sighting is the presented frame's motion: a handoff line's, not the hidden bar's", async () => {
+  const handoff = standIn({ ...FRAME, motion: "moves" }, FRAME.rows);
+  const { renderer } = scripted({
+    effects: [{ ...present(1), frame: handoff }],
+    record: [],
+  });
+  const { answered } = await answer(renderer);
+  expect(answered.seen).toBe("can-move");
 });
 
 test("a present its client never took settles failed", async () => {

@@ -5,6 +5,14 @@ const BARE = /^[^\s"=\\]+$/;
 export const valueOf = (value: string): string =>
   BARE.test(value) ? value : JSON.stringify(value);
 
+// One field of an event line, as it is written.
+export type Field = readonly [key: string, value: string];
+
+// [LAW:one-source-of-truth] The one writer of an event line: its kind, then
+// each field in order.
+export const eventLine = (kind: string, fields: readonly Field[]): string =>
+  `${kind}${fields.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
+
 // A line's tokens, left to right: a field, a quoted value standing alone, or
 // a bare word. A quoted value is consumed whole, so ` key=` inside one is
 // text, never a field.
