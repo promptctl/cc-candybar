@@ -296,6 +296,7 @@ describe("the all-pending document", () => {
               home: "/home/tester",
             },
             {
+              sources: [],
               effective,
               configFacts: {
                 unsaved: 0,

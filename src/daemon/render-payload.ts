@@ -757,13 +757,14 @@ export interface PayloadInputs {
   readonly hints: ClientHints;
 }
 
-// What a view's payload reads of its session besides the sources: every
-// globals field a menu/stepper can persist, resolved ONCE per change of the
+// What a view's payload reads of its view besides the world state and the
+// request: the plugin sources its config declares, every globals field a menu/stepper can persist, resolved ONCE per change of the
 // session's picks (src/daemon/session-source.ts) and read by BOTH the draw AND
 // these payload fields — so a trigger label can never disagree with what was
 // drawn — the save cell's counts (src/daemon/setting-drafts.ts) with the
 // config file they count against, and the depths of the session's histories.
 export interface DrawInputs {
+  readonly sources: readonly string[];
   readonly effective: EffectiveGlobals;
   readonly configFacts: ConfigFileFacts;
   readonly history: HistoryDepth;
@@ -1393,26 +1394,37 @@ export function composePayload(
     ...(autoCompactValue !== undefined && { autocompact: autoCompactValue }),
     // The storage owner logs each read that failed: a failure here is a value,
     // drawn by the template reading it.
-    ...projectSources(Object.keys(facts.sources), (name) => {
-      const reading = unstamped(facts.sources[name]!);
+    ...projectSources(draw.sources, (name) => {
+      const reading = unstamped(sourceFactOf(facts, name));
       return reading.kind === "pending" ? pendingOf(reading.why) : reading;
     }),
   };
   return payload;
 }
 
+// [LAW:dataflow-not-control-flow] A source the view's config declares, as its
+// world state carries it. The host learns a view's sources from the output of
+// the turn that opened it, so the world state that turn drew from carries none
+// of them yet, and each is not read yet: pending, never missing, so a segment
+// over it waits rather than drawing its default.
+export const sourceFactOf = (
+  facts: Pick<WorldState, "sources">,
+  name: string,
+): Fact<SourceValue> => facts.sources[name] ?? pendingOf("unread");
+
 // [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
-// how many plugin sources the world state carries, and those not answered yet as
-// the draw reads them, each with why (`<name>:unread` or `<name>:superseded`;
+// how many plugin sources the view's config declares, and those not answered
+// yet as the draw reads them, each with why (`<name>:unread` or `<name>:superseded`;
 // `-` for none), so a source that never lands is told from one nothing
 // declared, and a run's superseded source from a wait that left one out.
 export function sourcesFactOf(
-  sources: Readonly<Record<string, Fact<SourceValue>>>,
+  names: readonly string[],
+  facts: Pick<WorldState, "sources">,
 ): {
   readonly sources: string;
   readonly sourcesPending: string;
 } {
-  const named = Object.entries(sources);
+  const named = names.map((name) => [name, sourceFactOf(facts, name)] as const);
   return {
     sources: String(named.length),
     sourcesPending:

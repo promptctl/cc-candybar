@@ -351,6 +351,8 @@ export function checkPayload(
       home: CHECK_HOME,
     },
     {
+      // Every source the config declares, as the fixture document carries.
+      sources: Object.keys(document.sources),
       effective,
       configFacts: {
         // One change made since edit mode opened, one unsaved setting and every

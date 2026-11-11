@@ -99,6 +99,7 @@ export function sessionSource(
       "session.draw",
       "computed",
       (): DrawInputs => ({
+        sources: [...state.sources.keys()],
         effective: effective.read(),
         configFacts: {
           ...settingCounts(state.config, state.fileHeldSettings, pick),

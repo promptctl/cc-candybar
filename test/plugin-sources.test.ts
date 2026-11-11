@@ -139,6 +139,9 @@ interface Rig {
     configFile: string,
     sid?: string,
   ): ReturnType<RenderCache<SessionSource>["holdSession"]>;
+  // What the turn that opens session s1's view reads of it, before that
+  // turn's subscriptions reach the collector.
+  inTurn<T>(configFile: string, read: (view: SessionView<SessionSource>) => T): T;
 }
 
 // The daemon's own composition of a render cache (src/daemon/daemon.ts).
@@ -226,6 +229,17 @@ function rig(): Rig {
       return served.request(facts, () =>
         cache.holdSession(dir, dir, configFile, facts),
       );
+    },
+    inTurn: (configFile, read) => {
+      const facts = viewFacts(dir, "s1");
+      let seen: ReturnType<typeof read> | undefined;
+      const held = served.request(facts, () => {
+        const opened = cache.holdSession(dir, dir, configFile, facts);
+        seen = read(opened.view);
+        return opened;
+      });
+      cleanups.push(() => held[Symbol.dispose]());
+      return seen!;
     },
   };
 }
@@ -770,6 +784,15 @@ describe("the session subscribes to every source the config declares", () => {
     expect(draw(view).text).toContain("mine");
   });
 
+  test("the turn that opens the view draws a source its world state does not carry yet as pending, not missing", () => {
+    const r = rig();
+    const seen = r.inTurn(config(["mine"]), (view) => ({
+      carried: Object.keys(view.source.facts().sources),
+      reading: resolvePath(view.source.payload(), STATUS),
+    }));
+    expect(seen).toEqual({ carried: [], reading: pendingOf("unread") });
+  });
+
   test("a config placing no segment that reads the source still declares and holds it", async () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
@@ -780,21 +803,30 @@ describe("the session subscribes to every source the config declares", () => {
 
   // [LAW:nothing-unseen] The render event's fields.
   test("the render event counts the declared sources and names the pending ones", () => {
-    expect(sourcesFactOf({})).toEqual({
+    expect(sourcesFactOf([], { sources: {} })).toEqual({
       sources: "0",
       sourcesPending: "-",
     });
     const at = instantOf(new Date(0));
     expect(
-      sourcesFactOf({
-        "plugins.a.s": restamp(undefined, ok({}), at),
-        "plugins.b.s": pendingOf("unread"),
-        "plugins.c.s": restamp(undefined, ABSENT, at),
-        "plugins.d.s": pendingOf("superseded"),
-      }),
+      sourcesFactOf(
+        ["plugins.a.s", "plugins.b.s", "plugins.c.s", "plugins.d.s", "plugins.e.s"],
+        {
+          sources: {
+            "plugins.a.s": restamp(undefined, ok({}), at),
+            "plugins.b.s": pendingOf("unread"),
+            "plugins.c.s": restamp(undefined, ABSENT, at),
+            "plugins.d.s": pendingOf("superseded"),
+            // Its config stopped declaring it: no longer counted.
+            "plugins.gone.s": restamp(undefined, ok({}), at),
+          },
+        },
+      ),
     ).toEqual({
-      sources: "4",
-      sourcesPending: "plugins.b.s:unread,plugins.d.s:superseded",
+      // plugins.e.s is declared and not yet in the world state: not read yet.
+      sources: "5",
+      sourcesPending:
+        "plugins.b.s:unread,plugins.d.s:superseded,plugins.e.s:unread",
     });
   });
 });

@@ -663,7 +663,7 @@ export function drawRender(
     today: todayOf(document.builtins.today, at),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
-  noteFacts(facts, sourcesFactOf(document.sources));
+  noteFacts(facts, sourcesFactOf([...view.state.sources.keys()], document));
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),

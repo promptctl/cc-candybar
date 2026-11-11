@@ -42,6 +42,7 @@ import { homeLayer, refuseDrops } from "../config/dsl-loader.js";
 import {
   loadChain,
   openView,
+  subscriptionsOf,
   UNOWNED_STORAGE,
   type DslRenderState,
 } from "../daemon/cache/render.js";
@@ -215,6 +216,9 @@ async function renderFrames(): Promise<void> {
     changed: () => {},
     log,
   });
+  // [LAW:one-source-of-truth] The view's subscriptions reach the collector as
+  // a turn's output takes them to the daemon's.
+  collector.subscribed({ sources: { [sessionId]: subscriptionsOf(state) } });
   try {
     const effective = view.source.effective();
 

@@ -35,6 +35,7 @@ import { globalsFor } from "./helpers/selection";
 const SID = sessionIdOf("hook-split");
 const AT = instantOf(new Date(1_700_000_000_000));
 const DRAW = {
+  sources: [],
   effective: globalsFor(DEFAULT_DSL_CONFIG),
   configFacts: NO_CONFIG_FILE,
   history: EMPTY_HISTORY_DEPTH,

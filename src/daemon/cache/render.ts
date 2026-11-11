@@ -1289,6 +1289,8 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     registry.dispose();
     throw e;
   }
+  // [LAW:single-enforcer] The view's inputs and slots read its source from
+  // here on (src/dsl/parts.ts): no draw writes one.
   bindView(state.compiled, registry.variableStore, registry, source);
   // [LAW:single-enforcer] The view's one say that what it draws from moved:
   // its payload (a fold of its session's world state, its request, its picks
@@ -1335,6 +1337,17 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     },
   };
 }
+
+// What a view of a state needs read: each plugin source its config declares,
+// at its folder's storage key.
+export const subscriptionsOf = ({
+  sources,
+}: Pick<DslRenderState, "sources">): Subscription[] =>
+  [...sources].map(([source, storage]) => ({
+    kind: "plugin",
+    source,
+    storage,
+  }));
 
 export class RenderCache<
   S extends ViewSource = ViewSource,
@@ -1768,13 +1781,7 @@ export class RenderCache<
       sources: Object.fromEntries(
         [...this.views].map(([sessionId, view]) => [
           sessionId,
-          [...view.state.sources].map(
-            ([source, storage]): Subscription => ({
-              kind: "plugin",
-              source,
-              storage,
-            }),
-          ),
+          subscriptionsOf(view.state),
         ]),
       ),
     };

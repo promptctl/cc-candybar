@@ -174,8 +174,11 @@ export async function settleLanes(
 
 // The payload a view's source derives, over the owners and lanes the inputs
 // name: the world state stamped from what the owners hold, and the payload
-// composed from it.
-export function payloadOf(inputs: LanedInputs, draw: DrawInputs) {
+// composed from it, over the sources its lanes declare.
+export function payloadOf(
+  inputs: LanedInputs,
+  draw: Omit<DrawInputs, "sources">,
+) {
   return composePayload(
     documentOf(inputs),
     {
@@ -183,7 +186,7 @@ export function payloadOf(inputs: LanedInputs, draw: DrawInputs) {
       hints: inputs.hints,
       home: inputs.deps.home,
     },
-    draw,
+    { ...draw, sources: [...inputs.lanes().sources.keys()] },
   );
 }
 
