@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-712",
+      "ref": "refs/pull/712/merge",
+      "sha": "42fa004250cb41354b9b7f8054ab242036ff0387",
+      "timestamp": "2026-11-11T17:33:03.702Z",
+      "commits": [
+        {
+          "sha": "42fa004250cb41354b9b7f8054ab242036ff0387",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T10:32:00-07:00",
+          "message": "Merge c0152858f299c318f0b48d2e860032775188d226 into 36c6ac3a264fcc2876d5952e4a13648e1268f98f\n"
+        },
+        {
+          "sha": "c0152858f299c318f0b48d2e860032775188d226",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T10:31:36-07:00",
+          "message": "feat(collector): the host's collector holds each session's world state and hands it to the renderer (candybar-host-renderer-x96a.kcp)\n\nA session's lanes and the stamp of its world state move to the host. One\ncollector record per session declares the built-in lanes at the keys its\nnewest request names and each plugin source the renderer's last output\nsubscribed to, stamps one world state from what they hold, and hands every\nstamp that moved to the renderer as a `world-state` event. A request is\ndelivered on arrival with the world state read at its own keys. The\nrenderer keeps a world-state store its views read, answers `retire` by\nclosing the session's view, and says on every output which plugin sources\nits open views need read. The session's lifetime is the collector's sweep:\na session no request named across a whole sweep, with no open feed, is\nretired.\n\nThe view no longer declares, holds or stamps, and the render cache's idle\nsweep is gone; a request's wait reads the world-state store.\n"
+        },
+        {
+          "sha": "3587b68165d8afe522de68b9c50dffde62c028ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T09:41:36-07:00",
+          "message": "refactor(facts): the facts document is WorldState, the seam between the host and a renderer (candybar-host-renderer-x96a.kcp)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "36c6ac3a264fcc2876d5952e4a13648e1268f98f",
