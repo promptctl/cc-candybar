@@ -4,7 +4,7 @@
 
 ## 1. Summary
 
-One process, the **host**, is the bar's boundary with the world: every input enters through it and every effect leaves through it. It reads the world into facts, receives client requests, clicks and timers, and performs effects. It calls **renderers**: any number of identical pieces of code that are each handed facts and events and answer each one with frames to present, effects to perform and the sources their state needs read. A renderer never touches the world, never reads a clock it was not handed, never starts a conversation, and never controls the host's lifetime. The split is functional core, imperative shell: the host is the shell, and each renderer is a functional core. Every renderer runs in its own process, which the host starts: the main renderer from the host's bundle, a worktree's from the worktree's. The hard parts are keeping the host one job with internal parts rather than a god process, and keeping the round trip to a renderer inside the statusline's latency budget.
+One process, the **host**, is the bar's boundary with the world: every input enters through it and every effect leaves through it. It reads the world into each session's world state, receives client requests, clicks and timers, and performs effects. It calls **renderers**: any number of identical pieces of code that are each handed world state and events and answer each one with frames to present, effects to perform and the sources their state needs read. A renderer never touches the world, never reads a clock it was not handed, never starts a conversation, and never controls the host's lifetime. The split is functional core, imperative shell: the host is the shell, and each renderer is a functional core. Every renderer runs in its own process, which the host starts: the main renderer from the host's bundle, a worktree's from the worktree's. The hard parts are keeping the host one job with internal parts rather than a god process, and keeping the round trip to a renderer inside the statusline's latency budget.
 
 This is the shape real systems with the same problem use. §4 says which, and what each one teaches.
 
@@ -16,7 +16,7 @@ Each entry is what the design must achieve, with where the need was stated and t
 |---|---|---|---|---|
 | I-1 | A session's bar can be drawn by a worktree's code while the main bar keeps running on the main checkout's. | Most development happens on worktrees, and the bar is the thing being developed. | goals.md G-2 | A worktree renderer needs the main renderer stopped, or a main bar draws a worktree's code. |
 | I-2 | Running a worktree renderer adds no second reader of the world. | A daemon may reserve about a gigabyte, and a naive second daemon duplicates disk reads and processes. | goals.md G-2, R-10 | With a worktree renderer running, a session's transcript, repository or sources are read twice. |
-| I-3 | The browser is a full surface for any user with the existing prerequisites. | It is the first of the two goals and the reason surfaces are a seam. | goals.md G-1, R-14 | Adding the browser surface needs a change to the facts or to what a renderer decides, beyond drawing a frame for one more surface and the host's adapter for it. |
+| I-3 | The browser is a full surface for any user with the existing prerequisites. | It is the first of the two goals and the reason surfaces are a seam. | goals.md G-1, R-14 | Adding the browser surface needs a change to world state or to what a renderer decides, beyond drawing a frame for one more surface and the host's adapter for it. |
 | I-4 | The world has exactly one owner. Everything that enters the system or leaves it passes through the host. | One owner is the only place an effect and the observation of its result can be ordered, validated and recorded. | goals.md R-8 | Any part of the bar other than the host reads a file, a socket, a clock or tmux, or writes, launches or signals anything. The Claude Code client and the URL handler's forwarder are not exceptions: each only relays what it was handed to the host. |
 | I-5 | Data goes one way around one loop. A renderer only answers the call it was given and never initiates a message. | A renderer that reaches upstream makes a second loop with no owner, and every new need becomes another upward message. | goals.md R-8 | A renderer sends anything that is not the answer to an input. |
 | I-6 | Clicks are pure. A click, a timer and a future webhook are each an event; handling one is a state change plus effect descriptions. | Clicks that flip switches couple behaviour to timing; the source of a change must not matter. | goals.md R-7 | A verb's handler performs an effect itself, or a timer or click reaches state by a path other than an event. |
@@ -61,13 +61,13 @@ From general knowledge of each system; the details are not checked against curre
                        ▼
  Claude Code client ─┐ ┌───────────────────── host ─────────────────────┐
  URL handler ────────┼▶│ Endpoint ─▶ Router ─▶ per-renderer mailbox      │
- tmux, files, ───────┘ │ Collector (facts) ──────────────▲    │          │
+ tmux, files, ───────┘ │ Collector (world state) ────────▲    │          │
  timers                │ Interpreter ◀── effects ────────┼────┘          │
                        │ Supervisor ── starts, ends ─────┘               │
                        └──────────────┬──────────────▲───────────────────┘
                                       │ input        │ output
                                       ▼              │ (frames to present,
-                              renderer: Events ─▶ Apply ─▶ Draw
+                              renderer: Events ─▶ Handler ─▶ Draw
                               (each in its own process: main from the host's
                                bundle, a worktree's from its own)
 ```
@@ -87,8 +87,8 @@ The host is one job, the bar's boundary with the world, done by parts that each 
 - **Inputs and outputs:** a request names its renderer by the `renderer` field of its session context; a click by the `to/<name>` in its link. Out: one input at a time to each renderer, in arrival order per renderer.
 
 **Collector** (host, production for what exists)
-- **Responsibility:** reads the world into one total facts document per session, as Proposal 1 §12 specifies.
-- **Inputs and outputs:** the locators of the sessions the host has seen, the union of every renderer's subscriptions, each judged as it arrives (§7), file and tmux events, its own periods. Out: a `facts` event for each renderer that holds the session, newest-wins per session.
+- **Responsibility:** reads the world into one complete world state per session, as Proposal 1 §12 specifies.
+- **Inputs and outputs:** the locators of the sessions the host has seen, the union of every renderer's subscriptions, each judged as it arrives (§7), file and tmux events, its own periods. Out: a `world-state` event for each renderer that holds the session, newest-wins per session.
 
 **Config discovery** (host, production for what exists)
 - **Responsibility:** finds what a session's config is made of and hands it in as a `ConfigSnapshot`.
@@ -109,10 +109,10 @@ The host is one job, the bar's boundary with the world, done by parts that each 
 **Recorder** (host, prototype)
 - **Responsibility:** writes a renderer's input stream to a file when asked, and writes every record a renderer returns to the log.
 
-**Renderer** (prototype for the interface, production for Apply and Draw as they exist)
+**Renderer** (prototype for the interface, production for the handler and Draw as they exist)
 - **Responsibility:** answers each input with what to present, what to do and what to read.
 - **Inputs and outputs:** §7.
-- **Inside:** Events → Apply → Draw. Apply is the one writer of the renderer's state; Draw is a pure function of facts, state, config and the instant it was handed.
+- **Inside:** Events → Handler → Draw. The handler is the one writer of the renderer's state; Draw is a pure function of world state, renderer state, config and the instant it was handed.
 
 ## 7. Interfaces
 
@@ -130,7 +130,7 @@ type RendererInput =
   | { kind: "start"; start: Start; at: Instant }
   | { kind: "event"; event: Event; at: Instant };
 
-// [LAW:one-source-of-truth] Complete, like a facts document: a renderer that
+// [LAW:one-source-of-truth] Complete, like a world state: a renderer that
 // (re)starts holds everything it would hold had it never stopped, except the
 // unsaved state its own process kept.
 interface Start {
@@ -143,7 +143,7 @@ interface Start {
 
 interface SessionSnapshot {
   readonly session: SessionId;
-  readonly facts: SessionFacts;
+  readonly worldState: WorldState;
   readonly config: ConfigSnapshot;
   readonly surfaces: readonly Surface[];   // the ones with viewers
 }
@@ -151,7 +151,7 @@ interface SessionSnapshot {
 type Event =
   | { kind: "request"; id: RequestId; session: SessionId; hook: ClaudeHookData; context: RendererContext }   // the session context a renderer reads; the environment stays in the host
   | { kind: "click"; click: VerifiedClick; arrival: ClickArrival }
-  | { kind: "facts"; facts: SessionFacts }
+  | { kind: "world-state"; worldState: WorldState }
   | { kind: "config"; session: SessionId; config: ConfigSnapshot }
   | { kind: "effect-done"; of: EffectId; outcome: Outcome<EffectResult> }
   | { kind: "due"; due: Scheduled }
@@ -215,12 +215,12 @@ interface Plugin {
 }
 ```
 
-- **Every input gets exactly one output, in order.** The host sends the next input to a renderer only after the last one's output arrived. That serialization is Apply's turn, owned by the renderer's mailbox in the host. [LAW:no-ambient-temporal-coupling]
+- **Every input gets exactly one output, in order.** The host sends the next input to a renderer only after the last one's output arrived. That serialization is the handler's turn, owned by the renderer's mailbox in the host. [LAW:no-ambient-temporal-coupling]
 - **A request is answered by its `present` effect.** The statusline arm of `present` carries the request it answers, and only that arm does. A request whose output holds no such effect is answered with a failure naming the renderer, never with an empty bar. One mechanism delivers every frame to every surface. [LAW:one-type-per-behavior]
 - **Time is handed in.** Every input carries `at`. A renderer asks to be woken with a `schedule` effect and is woken by a `due` event carrying the token it chose. Animation is a renderer scheduling its next frame.
-- **The state a draw used to write is Apply's.** Frame memory (on the tmux status row, the range ids its frame minted) and animation clocks are renderer state keyed by session and surface. The draw returns a frame and its memory as values; Apply stores them. A frame drawn for a session reflects every event whose turn completed before the draw began, and no part of one whose turn has not. [LAW:effects-at-boundaries]
-- **Subscriptions replace `follow`, `declare` and `key`.** The host knows every session's locator from the requests it receives. A source's key is evaluated by the renderer over its own store, as today, and its digest travels in `subscriptions`; two renderers subscribed to one digest share one run, and a new key is a new run served stale-while-revalidate: the old reading stands until the new one lands. That is still a loop from facts to keys to reads to facts, but it is the one loop and the host owns it, the way the Elm runtime owns subscriptions.
-- **The collector is the one checkpoint for reads.** A subscription asks the host to read a path or run a shell command, so the collector judges every declaration when it arrives: absolute paths, regex captures and the shell sources' minimum TTL with the loader's own specs, and repository trust by the layer or plugin a declaration came from. A refused declaration is a failed fact for that source, with the reason. The renderer's loader parses declarations and does not judge them. [LAW:single-enforcer]
+- **The state a draw used to write is the handler's.** Frame memory (on the tmux status row, the range ids its frame minted) and animation clocks are renderer state keyed by session and surface. The draw returns a frame and its memory as values; the handler stores them. A frame drawn for a session reflects every event whose turn completed before the draw began, and no part of one whose turn has not. [LAW:effects-at-boundaries]
+- **Subscriptions replace `follow`, `declare` and `key`.** The host knows every session's locator from the requests it receives. A source's key is evaluated by the renderer over its own store, as today, and its digest travels in `subscriptions`; two renderers subscribed to one digest share one run, and a new key is a new run served stale-while-revalidate: the old reading stands until the new one lands. That is still a loop from world state to keys to reads to world state, but it is the one loop and the host owns it, the way the Elm runtime owns subscriptions.
+- **The collector is the one checkpoint for reads.** A subscription asks the host to read a path or run a shell command, so the collector judges every declaration when it arrives: absolute paths, regex captures and the shell sources' minimum TTL with the loader's own specs, and repository trust by the layer or plugin a declaration came from. A refused declaration is a failed reading for that source, with the reason. The renderer's loader parses declarations and does not judge them. [LAW:single-enforcer]
 - **A session's commands run in that session's environment.** The client sends the environment Claude Code gave it as part of the session context. The collector runs a session's `shell` sources with it, the `env` source reads it, and a `run` lays its program's `env` over it. The host keeps it with the session's locator, and no renderer input carries it: a renderer runs nothing, and an environment holds keys and tokens that a recording must never capture. A `shell` source's identity includes a digest of its environment, because its output depends on it, so sessions rarely share a shell run. The host's own environment is never a session's.
 - **Repository trust guards against repository content, not against renderers.** The collector judges a declaration by the origin the renderer reports, which a repository's files cannot forge. A renderer is code the user installed or built.
 - **Config arrives as discovery's result.** The host resolves a session's layers, real directories, plugin folders, repository trust and checkout, reads their texts, creates plugin storage folders, and hands the result in, again whenever a watched file changes. The renderer parses, merges, validates and compiles it and opens no file. A path appears only as display text for messages; a renderer names a file by the layer it was handed. [LAW:effects-at-boundaries]
@@ -281,7 +281,7 @@ type Precondition = { kind: "text"; text: string } | { kind: "absent" };
 - **The host** listens at the socket installed clients already dial, `/tmp/cc-candybar-<uid>/socket`. launchd starts it on the first connect and restarts it when it exits (A-4). No client and no renderer starts the host, so no dependant chooses which code owns the world.
 - **The host's bundle is a value the install sets.** The LaunchAgent names the bundle it runs, and installing from a bundle repoints it; the host exits when its bundle changes, as today's daemon does. Host code is tried from a worktree by installing it there, which moves every bar on the machine, as any change to the daemon does today. G-2 asks for the drawing to be iterated per session, and renderers give that.
 - **The host's environment is recorded, not inherited.** launchd starts a process with a minimal `PATH`, so the install records the paths of the tools the host itself runs (`node`, `tmux`, `git`, `gh`) into the LaunchAgent. Everything a session runs uses that session's environment, which its client sends (§7).
-- **What needs an install.** A new built-in fact, a change to how a source is read, a new effect or a new surface adapter is host code, tried by installing it.
+- **What needs an install.** A new built-in field of world state, a change to how a source is read, a new effect or a new surface adapter is host code, tried by installing it.
 - **A renderer** is named by the `renderer` field of the client's session context: its name from `CC_CANDYBAR_NAME`, absent meaning `main`, and its bundle, the client's own. A session is moved to another renderer by starting Claude Code with other values (goals.md R-16). Only a Claude Code client's request binds a name to a bundle; no click, timer or later input names code.
 - **Every renderer runs in its own process,** `main` included. The supervisor starts one from the bound bundle on that name's first input, `main` from the host's own bundle, and restarts it after a crash or a bundle change on the next input. A name bound to one bundle refuses a second bundle loudly until the first is retired. The in-process transport is the one `cc-candybar check`, the demo and tests use, since they draw through the same renderer with no host process.
 - **A profile is a function of the name alone.** `main` is today's XDG layout; any other name is `<state root>/renderers/<name>/` with `state/`, `config/` and `cache/` beneath it. Isolation is one value. [LAW:one-source-of-truth]
@@ -295,20 +295,20 @@ type Precondition = { kind: "text"; text: string } | { kind: "absent" };
 | A renderer crashed or its bundle changed | The next input restarts it from a complete start; that session's bar carries a `⚠` naming the restart for the usual hold | The supervisor, through the start's `cause` |
 | A renderer's bundle is gone | The request is answered with a failure naming the renderer and the missing bundle, which the client prints | The supervisor |
 | An effect refused or failed | The bar's `⚠` carries the reason, held as a click's error is held today | The interpreter, through `effect-done` |
-| A subscription refused | That source's cell draws its fallback; the `⚠` carries the reason | The collector, through the source's failed fact |
+| A subscription refused | That source's cell draws its fallback; the `⚠` carries the reason | The collector, through the source's failed reading |
 | A click the host refuses: unknown renderer, gone bundle, bad signature | A macOS notification naming the reason | The router, through the forwarder |
 | A click on a stale frame | A held `⚠`: the link belongs to an older frame | The renderer that owns the frame |
-| A source failed | That source's cell draws its fallback; the `⚠` carries the collector's diagnostic | The collector, through `facts.diagnostics` |
+| A source failed | That source's cell draws its fallback; the `⚠` carries the collector's diagnostic | The collector, through `worldState.diagnostics` |
 | The host is down | The client's existing connect failure; launchd restarts the host | The client and launchd |
 | A request's turn presented no statusline frame | A failure naming the renderer | The router |
 
-Nothing falls back to another renderer or another data source, and nothing draws a value where a fact is missing. [LAW:no-silent-failure]
+Nothing falls back to another renderer or another data source, and nothing draws a value where a reading is missing. [LAW:no-silent-failure]
 
 ## 10. Observability
 
 One wide event per unit of work, under one correlation id:
 
-- **The host,** per input delivered: renderer, session, input kind, mailbox wait, the renderer's `took`, the effects returned and each outcome, and the facts `seq` the renderer last held. Per facts push and per source run, as Proposal 1 §21. Per renderer start and end, with its bundle.
+- **The host,** per input delivered: renderer, session, input kind, mailbox wait, the renderer's `took`, the effects returned and each outcome, and the world state's `seq` the renderer last held. Per world-state push and per source run, as Proposal 1 §21. Per renderer start and end, with its bundle.
 - **A renderer** writes nothing. Its turn record (the event kind, the state revision it left, what it drew and what it settled for) is part of its output, and the host writes it beside the input's event.
 
 A renderer's panel is the same whether it is main or a worktree's. Watching one is the whole of "dev mode". [LAW:nothing-unseen]
@@ -341,7 +341,7 @@ Each step leaves a working bar, and every step is inside one process, over the i
 | ADR-1 | One host owns every input and every effect. | Proposal 1: Gather reads, the renderer performs effects. | Proposal 1 reads the world on one side and writes it on the other, so no one orders an effect against the observation of its result, and the loop closes only through messages up to Gather. | Costly | Every effect path and the wire. |
 | ADR-2 | A renderer only answers; subscriptions are part of its answer. | Proposal 1's `follow`, `declare` and `key` messages. | Upward messages are a second loop, `key` is a data cycle, and the design invited a new upward message for each new need. | Moderate | One wire. |
 | ADR-3 | launchd owns the host's lifetime, and the install sets its bundle. | The client spawns the host from its own bundle; renderers spawn Gather (Proposal 1). If A-4 fails: the client starts the host from the bundle the install recorded, never the one beside it. | A process spawned by its dependants runs whichever bundle got there first, so a worktree's could serve the main bar; and a renderer that starts or keeps alive the host it depends on puts lifetime upstream. | Cheap | One install step and one spawn path. |
-| ADR-4 | Every renderer, main included, runs in its own process. | The main renderer inside the host's process, which pays no hop. | goals.md R-10 puts Events → Apply → Draw in a process of its own; a renderer crash cannot take the world boundary down with it, as in Chrome; and main runs the same path as every worktree renderer, so that path is exercised on every tick. The cost is a hop per input (A-1). | Cheap | A transport value; the in-process transport is already the one `check`, the demo and tests use. |
+| ADR-4 | Every renderer, main included, runs in its own process. | The main renderer inside the host's process, which pays no hop. | goals.md R-10 puts the handler and Draw in a process of their own; a renderer crash cannot take the world boundary down with it, as in Chrome; and main runs the same path as every worktree renderer, so that path is exercised on every tick. The cost is a hop per input (A-1). | Cheap | A transport value; the in-process transport is already the one `check`, the demo and tests use. |
 | ADR-5 | Effects are typed operations, and writes are conditional. | Proposal 1's `tmux { args }`, `launch { spec }` and unconditional `write-config-text`. | A raw command admits every command; an unconditional write overwrites what undo must refuse to. | Moderate | Every effect site. |
 | ADR-6 | A profile is derived from the name alone. | Proposal 1's name plus root from two variables. | Two values that must agree are two clocks. | Cheap | The path functions. |
 | ADR-7 | The forwarder dials only the host. | Proposal 1: the forwarder computes a renderer's socket from the name. | The host verifies and routes, so isolation lives where the keys are (goals.md R-6, §8). The forwarder gains one change, showing the host's refusal, and none when naming changes. | Cheap | The forwarder. |
@@ -350,13 +350,13 @@ Each step leaves a working bar, and every step is inside one process, over the i
 
 | Law | How it holds | Where it bends |
 |---|---|---|
-| decomposition | The host's purpose is one sentence, the bar's boundary with the world, and each of its parts has one: accept, route, read facts, discover config, carry out effects, run a surface, supervise, record. A renderer's is "answer each input". | The host holds everything world-facing and is the part most likely to become a god process. Its parts must stay apart, and a part that learns a verb's meaning or a renderer's state has broken the boundary. Its parts meet only through interfaces, so one can move to its own process, as Chrome's services did. |
+| decomposition | The host's purpose is one sentence, the bar's boundary with the world, and each of its parts has one: accept, route, read world state, discover config, carry out effects, run a surface, supervise, record. A renderer's is "answer each input". | The host holds everything world-facing and is the part most likely to become a god process. Its parts must stay apart, and a part that learns a verb's meaning or a renderer's state has broken the boundary. Its parts meet only through interfaces, so one can move to its own process, as Chrome's services did. |
 | effects-at-boundaries | The renderer is pure in the full sense: no I/O, no clock, no log. The host is the only edge. | — |
 | one-way-deps | Host → renderer, launchd → host. Nothing points up. | — |
 | no-ambient-temporal-coupling | The host owns every order: per-renderer input, effects within a turn, a run before its refresh, a schedule before its `due`. | — |
 | single-enforcer | The collector judges every read a renderer subscribes to, the interpreter every effect, the host every link; repository trust has one keeper. | — |
 | types-are-the-program | Effects are typed operations; writes are conditional; inputs and outputs are closed unions. | The wire loses types, so each side parses what it receives. That is one parser per direction at the one boundary, not a duplicate check. |
-| one-source-of-truth | Facts live in the collector, renderer state in its renderer, durable state in the profile's files, written only by effects. | `subscriptions` make a loop from facts to keys to reads. It is the one loop and has one owner; it is not a second source. |
+| one-source-of-truth | World state lives in the collector, renderer state in its renderer, durable state in the profile's files, written only by effects. | `subscriptions` make a loop from world state to keys to reads. It is the one loop and has one owner; it is not a second source. |
 | dataflow-not-control-flow | Main and a worktree renderer differ by name and bundle, values the supervisor is handed, never a branch. | — |
 | nothing-unseen | Every input, turn and effect lands on one event; the renderer's record is data. | — |
 | no-silent-failure | Stale clicks, restarts, refused effects and missing bundles are all loud. | — |
@@ -364,7 +364,7 @@ Each step leaves a working bar, and every step is inside one process, over the i
 
 ## 15. What stands from Proposal 1
 
-**Stands:** §1, total facts with pending as a value, with its seam test widened in §11; §4's split of the hook into instantaneous fields and a locator, except that the host keeps the locator itself; §6's home, here the profile, refined by ADR-6, with `load-config` removed and the `env` source kept on the session's environment (§7); §8, recording as a primitive, which now records renderer inputs; §12, `SessionFacts`; §16's ordering invariant and its move of frame memory and animation clocks into Apply's state, both now in §7; §17's derived paths and `HomePath`, here `ProfilePath`, under ADR-6, without the per-name socket, which ADR-7 removes; §18's link grammar, constant tmux binding and range ids; §19's source digest, shared runs and the key change served stale-while-revalidate, now carried by subscriptions.
+**Stands:** §1, total facts, here world state, with pending as a value, with its seam test widened in §11; §4's split of the hook into instantaneous fields and a locator, except that the host keeps the locator itself; §6's home, here the profile, refined by ADR-6, with `load-config` removed and the `env` source kept on the session's environment (§7); §8, recording as a primitive, which now records renderer inputs; §12, `SessionFacts`, here `WorldState`; §16's ordering invariant and its move of frame memory and animation clocks into Apply's state, here the handler's, both now in §7; §17's derived paths and `HomePath`, here `ProfilePath`, under ADR-6, without the per-name socket, which ADR-7 removes; §18's link grammar, constant tmux binding and range ids; §19's source digest, shared runs and the key change served stale-while-revalidate, now carried by subscriptions.
 
 **Replaced:** §2 (Gather, here the collector, does only facts), §3 (Gather addressed by version), §5's performer, here the interpreter, §7 (how a session reaches a renderer), §9's table, §10 (order of work), §11 (its questions, answered by this draft or open in §17 here), §13 (the facts wire, deleted), §14 (the facts source, now the renderer transport), §15 (Gather's process, now the host's), §16's effects, §19's `follow` and Gather's consistency guard (now the collector's judgement of each subscription, §7), §20, §21 and §22.
 
@@ -374,9 +374,9 @@ Each step leaves a working bar, and every step is inside one process, over the i
 
 The open tickets this changes, under `candybar-skeleton-wj0c`:
 
-- **`yb3`** (in review) and **`zhh`** stand unchanged. A hook-free facts document and the collector triggering its own reads are both part of this shape.
+- **`yb3`** (in review) and **`zhh`** stand unchanged. A hook-free world state and the collector triggering its own reads are both part of this shape.
 - **`r00`** (the Facts interface) becomes step 1: the renderer interface in process.
-- **`0bg`** (Apply) becomes step 2. Apply stays the renderer's one writer; the effect interpreter moves to the host.
+- **`0bg`** (Apply) becomes step 2. The handler stays the renderer's one writer; the effect interpreter moves to the host.
 - **`xos`** (Draw pure) stands.
 - **`52g`** (Deliver) becomes the `present` effect.
 - **`v6k`** (Click) becomes step 8 plus the click event.
