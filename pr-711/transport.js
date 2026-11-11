@@ -21479,7 +21479,7 @@ var require_dist = __commonJS({
       var parseState;
       var stack;
       var pos;
-      var line2;
+      var line;
       var column;
       var token;
       var key;
@@ -21489,7 +21489,7 @@ var require_dist = __commonJS({
         parseState = "start";
         stack = [];
         pos = 0;
-        line2 = 1;
+        line = 1;
         column = 0;
         token = void 0;
         key = void 0;
@@ -21565,7 +21565,7 @@ var require_dist = __commonJS({
       function read2() {
         var c2 = peek();
         if (c2 === "\n") {
-          line2++;
+          line++;
           column = 0;
         } else if (c2) {
           column += c2.length;
@@ -22037,7 +22037,7 @@ var require_dist = __commonJS({
         return {
           type: type3,
           value,
-          line: line2,
+          line,
           column
         };
       }
@@ -22272,16 +22272,16 @@ var require_dist = __commonJS({
       }
       function invalidChar(c2) {
         if (c2 === void 0) {
-          return syntaxError("JSON5: invalid end of input at " + line2 + ":" + column);
+          return syntaxError("JSON5: invalid end of input at " + line + ":" + column);
         }
-        return syntaxError("JSON5: invalid character '" + formatChar(c2) + "' at " + line2 + ":" + column);
+        return syntaxError("JSON5: invalid character '" + formatChar(c2) + "' at " + line + ":" + column);
       }
       function invalidEOF() {
-        return syntaxError("JSON5: invalid end of input at " + line2 + ":" + column);
+        return syntaxError("JSON5: invalid end of input at " + line + ":" + column);
       }
       function invalidIdentifier() {
         column -= 5;
-        return syntaxError("JSON5: invalid identifier character at " + line2 + ":" + column);
+        return syntaxError("JSON5: invalid identifier character at " + line + ":" + column);
       }
       function separatorChar(c2) {
         console.warn("JSON5: '" + formatChar(c2) + "' in strings is not valid ECMAScript; consider escaping");
@@ -22312,7 +22312,7 @@ var require_dist = __commonJS({
       }
       function syntaxError(message) {
         var err = new SyntaxError(message);
-        err.lineNumber = line2;
+        err.lineNumber = line;
         err.columnNumber = column;
         return err;
       }
@@ -22721,7 +22721,7 @@ var SAYS = {
   [VERB_DOCTOR_RUN]: () => ["run doctor"],
   [VERB_DOCTOR_FIX]: ([, check]) => [`fix ${check}`],
   [VERB_DOCTOR_MARK]: ([, check, mark]) => [`mark ${check} ${mark}`],
-  [VERB_SLASH]: ([, line2]) => [`type ${line2}`],
+  [VERB_SLASH]: ([, line]) => [`type ${line}`],
   [VERB_RUN]: ([, action2]) => [`run ${action2}`],
   [VERB_REPO_CONFIG]: ([, dir, answer2]) => [`mark config in ${dir} ${answer2}`],
   [VERB_COPY_DIAGNOSTIC]: () => ["copy diagnostic"]
@@ -23003,13 +23003,13 @@ function whyFailed(r) {
   }
 }
 var SAID_LINE_CHARS = 200;
-var clipped = (line2) => {
+var clipped = (line) => {
   const kept = [];
-  for (const ch of line2) {
+  for (const ch of line) {
     if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
     kept.push(ch);
   }
-  return line2;
+  return line;
 };
 function saidBy(r, text4) {
   if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
@@ -23076,10 +23076,10 @@ function setFault(state, next) {
   state.fault = next;
   state.scope.observeWarnings({ kind: "lifeline", fault: next });
 }
-function lose(state, line2, reason) {
-  if (state.lifeline?.process !== line2) return;
+function lose(state, line, reason) {
+  if (state.lifeline?.process !== line) return;
   state.lifeline = null;
-  line2.ref();
+  line.ref();
   setFault(state, reason);
 }
 var PIPE_EVENT_HOLD_S = 60;
@@ -23123,9 +23123,9 @@ function spawnLifeline(state) {
   const { stats, clock } = state.scope;
   stats?.onStart("lifeline");
   const t0 = clock.monotonic();
-  let line2;
+  let line;
   try {
-    line2 = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
+    line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
@@ -23135,26 +23135,26 @@ function spawnLifeline(state) {
     return null;
   }
   stats?.onEnd("lifeline", elapsedMs(clock, t0));
-  const pipe = line2.stdin;
+  const pipe = line.stdin;
   if (pipe === null || pipe === void 0) {
-    line2.once(
+    line.once(
       "error",
       (err) => setFault(state, `did not start: ${err.message}`)
     );
     return null;
   }
-  line2.once("spawn", () => {
-    if (state.lifeline?.process === line2) setFault(state, null);
+  line.once("spawn", () => {
+    if (state.lifeline?.process === line) setFault(state, null);
   });
-  line2.once("error", (err) => lose(state, line2, `failed: ${err.message}`));
-  line2.once("exit", (code, sig) => lose(state, line2, `exited ${sig ?? code}`));
-  pipe.on("error", (err) => lose(state, line2, `pipe failed: ${err.message}`));
-  void track(state, new Promise((closed) => line2.once("close", closed)));
-  line2.unref();
+  line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
+  line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
+  pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
+  void track(state, new Promise((closed) => line.once("close", closed)));
+  line.unref();
   pipe.unref();
   for (const group of state.liveGroups) pipe.write(`+ ${group}
 `);
-  return { process: line2, pipe };
+  return { process: line, pipe };
 }
 function guard(state, group) {
   state.liveGroups.add(group);
@@ -23168,10 +23168,10 @@ function unguard(state, group) {
 `);
 }
 function endLifeline(state) {
-  const line2 = state.lifeline;
+  const line = state.lifeline;
   state.lifeline = null;
-  line2?.process.ref();
-  line2?.pipe.end();
+  line?.process.ref();
+  line?.pipe.end();
 }
 var MAX_CAPTURED_BYTES = 16 * 1024 * 1024;
 var OUTPUT_LIMIT_ERROR = `output exceeded ${MAX_CAPTURED_BYTES} bytes`;
@@ -23646,12 +23646,12 @@ function launcherWithState(owner, clock, spawner) {
       return { unreaped: [...state.unreaped.values()] };
     },
     __lifelineForTest: () => {
-      const line2 = state.lifeline;
+      const line = state.lifeline;
       return {
-        pid: line2?.process.pid,
+        pid: line?.process.pid,
         cut: () => {
-          line2?.pipe.end();
-          if (line2) lose(state, line2.process, "cut by a test");
+          line?.pipe.end();
+          if (line) lose(state, line.process, "cut by a test");
         }
       };
     }
@@ -32039,10 +32039,10 @@ var Segment = class _Segment {
    * the owner's row that `lines[0]` is, for output that arrives in pieces.
    */
   static anchorLines(lines2, owner, firstRow = 0) {
-    return lines2.map((line2, i) => {
+    return lines2.map((line, i) => {
       const row2 = firstRow + i;
       let col = 0;
-      return line2.map((segment) => {
+      return line.map((segment) => {
         if (segment.isControl)
           return segment;
         const style = segment.style ?? Style.null();
@@ -32165,18 +32165,18 @@ var Segment = class _Segment {
   /**
    * Adjusts a line of segments to exactly `width` cells.
    */
-  static adjustLineLength(line2, width, style, pad = true) {
-    const currentWidth = _Segment.getLineLength(line2);
+  static adjustLineLength(line, width, style, pad = true) {
+    const currentWidth = _Segment.getLineLength(line);
     if (currentWidth === width)
-      return line2;
+      return line;
     if (currentWidth < width) {
       if (!pad)
-        return line2;
-      return [...line2, new _Segment(" ".repeat(width - currentWidth), style)];
+        return line;
+      return [...line, new _Segment(" ".repeat(width - currentWidth), style)];
     }
     const result = [];
     let remaining = width;
-    for (const segment of line2) {
+    for (const segment of line) {
       if (segment.isControl) {
         result.push(segment);
         continue;
@@ -32259,14 +32259,14 @@ var Segment = class _Segment {
    * short rows padded with spaces, long ones cut.
    */
   static splitAndCropLines(segments, width) {
-    return _Segment.splitLines(segments).map((line2) => _Segment.adjustLineLength(line2, width));
+    return _Segment.splitLines(segments).map((line) => _Segment.adjustLineLength(line, width));
   }
   /**
    * Returns total cell width of a line. Ignores control segments.
    */
-  static getLineLength(line2) {
+  static getLineLength(line) {
     let width = 0;
-    for (const segment of line2) {
+    for (const segment of line) {
       if (!segment.isControl) {
         width += segment.cellLength;
       }
@@ -32280,8 +32280,8 @@ var Segment = class _Segment {
     if (lines2.length === 0)
       return [0, 0];
     let maxWidth = 0;
-    for (const line2 of lines2) {
-      const w = _Segment.getLineLength(line2);
+    for (const line of lines2) {
+      const w = _Segment.getLineLength(line);
       if (w > maxWidth)
         maxWidth = w;
     }
@@ -32408,7 +32408,7 @@ var Segment = class _Segment {
    * Pads below to fill height.
    */
   static alignTop(lines2, width, height, style) {
-    const result = lines2.map((line2) => _Segment.adjustLineLength(line2, width, style));
+    const result = lines2.map((line) => _Segment.adjustLineLength(line, width, style));
     const blankLine = [new _Segment(" ".repeat(width), style)];
     while (result.length < height) {
       result.push([...blankLine]);
@@ -32419,7 +32419,7 @@ var Segment = class _Segment {
    * Pads above to fill height. Content at bottom.
    */
   static alignBottom(lines2, width, height, style) {
-    const adjusted = lines2.map((line2) => _Segment.adjustLineLength(line2, width, style));
+    const adjusted = lines2.map((line) => _Segment.adjustLineLength(line, width, style));
     const blankLine = [new _Segment(" ".repeat(width), style)];
     const padCount = Math.max(0, height - adjusted.length);
     const result = [];
@@ -32433,7 +32433,7 @@ var Segment = class _Segment {
    * Pads above and below. Content in middle.
    */
   static alignMiddle(lines2, width, height, style) {
-    const adjusted = lines2.map((line2) => _Segment.adjustLineLength(line2, width, style));
+    const adjusted = lines2.map((line) => _Segment.adjustLineLength(line, width, style));
     const blankLine = [new _Segment(" ".repeat(width), style)];
     const padAbove = Math.max(0, Math.floor((height - adjusted.length) / 2));
     const result = [];
@@ -32450,7 +32450,7 @@ var Segment = class _Segment {
    * Forces lines to exactly width x height.
    */
   static setShape(lines2, width, height, style) {
-    const result = lines2.map((line2) => _Segment.adjustLineLength(line2, width, style));
+    const result = lines2.map((line) => _Segment.adjustLineLength(line, width, style));
     const blankLine = [new _Segment(" ".repeat(width), style)];
     while (result.length < height) {
       result.push([...blankLine]);
@@ -33099,11 +33099,11 @@ function stripControlChars(text4) {
   return text4.replace(/[\x00-\x08\x0B-\x1F\x7F-\x9F\u202A-\u202E\u2066-\u206F]/g, "");
 }
 var TRAILING_WHITESPACE_RE = pattern(/\s+$/);
-function plainOf(line2) {
-  return line2.map((segment) => segment.text).join("");
+function plainOf(line) {
+  return line.map((segment) => segment.text).join("");
 }
-function hangingWhitespace(line2) {
-  return cellLen(TRAILING_WHITESPACE_RE.exec(plainOf(line2))?.[0] ?? "");
+function hangingWhitespace(line) {
+  return cellLen(TRAILING_WHITESPACE_RE.exec(plainOf(line))?.[0] ?? "");
 }
 function sanitizeStyleLink(style) {
   const link = style.link;
@@ -33703,11 +33703,11 @@ var RichText = class _RichText {
     const justify = overflow === "ignore" ? void 0 : this._format.get().justify ?? options.justify;
     const ellipsis = drawable(options, "\u2026", ".");
     for (let index = 0; index < logicalLines.length; index += 1) {
-      const line2 = logicalLines[index];
+      const line = logicalLines[index];
       const free = spanFree[index];
       const terminateLine = index < logicalLines.length - 1;
-      const cuts = divideLine(plainOf(line2), wrapAt, { fold: overflow === "fold" });
-      const wrapped = Segment.divide(line2, cuts);
+      const cuts = divideLine(plainOf(line), wrapAt, { fold: overflow === "fold" });
+      const wrapped = Segment.divide(line, cuts);
       const placed2 = this._justifyLines(wrapped.map((piece, at) => ({
         segments: [...this._fitLine(piece, edge, overflow, ellipsis)],
         free: (cell3) => free(at === 0 ? cell3 : cuts[at - 1] + cell3)
@@ -33726,7 +33726,7 @@ var RichText = class _RichText {
   // --- Measurable ---
   measure(options) {
     const lines2 = expandTabs(this._text.get(), this._tabSize).text.split("\n");
-    const maxLineWidth = lines2.reduce((widest, line2) => Math.max(widest, cellLen(line2)), 0);
+    const maxLineWidth = lines2.reduce((widest, line) => Math.max(widest, cellLen(line)), 0);
     const widths = lines2.flatMap(wordWidths);
     const maxWordWidth = widths.length > 0 ? widths.reduce((widest, w) => Math.max(widest, w), 0) : maxLineWidth;
     const ceiling = cellCount(options.maxWidth);
@@ -33800,7 +33800,7 @@ var RichText = class _RichText {
    */
   _justifyLines(lines2, maxWidth, base, justify) {
     if (justify !== "full") {
-      return lines2.map((line2) => [...this._justifyLine(line2, maxWidth, base, justify)]);
+      return lines2.map((line) => [...this._justifyLine(line, maxWidth, base, justify)]);
     }
     return lines2.map(({ segments }, index) => index === lines2.length - 1 ? segments : this._fillLine(segments, maxWidth, base));
   }
@@ -33821,22 +33821,22 @@ var RichText = class _RichText {
    * The padding is drawn in the text's base style, as the reference pads
    * inside the `Text` it justifies: a title "on red" fills its row in red.
    */
-  *_justifyLine({ segments: line2, free }, maxWidth, base, justify) {
+  *_justifyLine({ segments: line, free }, maxWidth, base, justify) {
     const padStyle = base.isNull ? void 0 : base;
     switch (justify) {
       case "center":
       case "right": {
-        const body = Segment.adjustLineLength(line2, Segment.getLineLength(line2) - hangingWhitespace(line2), void 0, false);
+        const body = Segment.adjustLineLength(line, Segment.getLineLength(line) - hangingWhitespace(line), void 0, false);
         const gap = Math.max(maxWidth - Segment.getLineLength(body), 0);
         const leftPad = justify === "center" ? Math.floor(gap / 2) : gap;
         yield* padded(body, free, leftPad, gap - leftPad, padStyle);
         break;
       }
       case "left":
-        yield* padded(line2, free, 0, Math.max(maxWidth - Segment.getLineLength(line2), 0), padStyle);
+        yield* padded(line, free, 0, Math.max(maxWidth - Segment.getLineLength(line), 0), padStyle);
         break;
       default:
-        yield* line2;
+        yield* line;
         break;
     }
   }
@@ -33860,8 +33860,8 @@ var RichText = class _RichText {
    * pinned in `text-justify.golden.txt`, by the `uneven` and `sentence`
    * blocks respectively.
    */
-  _fillLine(line2, maxWidth, base) {
-    const plain = plainOf(line2);
+  _fillLine(line, maxWidth, base) {
+    const plain = plainOf(line);
     const words2 = plain.split(" ");
     if (plain.endsWith(" "))
       words2.pop();
@@ -33881,7 +33881,7 @@ var RichText = class _RichText {
       if (index < gaps)
         cuts.push(edge);
     }
-    const pieces = Segment.divide(line2, cuts);
+    const pieces = Segment.divide(line, cuts);
     const edgeStyle = (word, at) => word.filter((segment) => segment.hasText).at(at)?.style ?? base;
     const result = [];
     for (let index = 0; index < words2.length; index += 1) {
@@ -33906,19 +33906,19 @@ var RichText = class _RichText {
    * first thing a long cell meets. `"fold"` has nothing left to fold here and
    * cuts as `"crop"` does, as the reference's `truncate` does.
    */
-  *_fitLine(line2, maxWidth, overflow, ellipsis) {
-    const lineWidth2 = Segment.getLineLength(line2);
-    const contentWidth = lineWidth2 - hangingWhitespace(line2);
+  *_fitLine(line, maxWidth, overflow, ellipsis) {
+    const lineWidth2 = Segment.getLineLength(line);
+    const contentWidth = lineWidth2 - hangingWhitespace(line);
     if (contentWidth <= maxWidth) {
-      yield* Segment.adjustLineLength(line2, Math.min(lineWidth2, maxWidth), void 0, false);
+      yield* Segment.adjustLineLength(line, Math.min(lineWidth2, maxWidth), void 0, false);
       return;
     }
     if (overflow === "ellipsis" && maxWidth > 0) {
-      yield* Segment.adjustLineLength(line2, maxWidth - 1, void 0, false);
+      yield* Segment.adjustLineLength(line, maxWidth - 1, void 0, false);
       yield new Segment(ellipsis);
       return;
     }
-    yield* Segment.adjustLineLength(line2, maxWidth, void 0, false);
+    yield* Segment.adjustLineLength(line, maxWidth, void 0, false);
   }
 };
 function spanFreeLines(segments, covered) {
@@ -33947,25 +33947,25 @@ function spanFreeLines(segments, covered) {
 function* padded(drawn, free, left, right, style) {
   if (left + right === 0)
     return yield* drawn;
-  const line2 = drawn.filter((segment) => segment.text !== "");
+  const line = drawn.filter((segment) => segment.text !== "");
   const pad = (cells) => " ".repeat(cells);
-  const width = Segment.getLineLength(line2);
+  const width = Segment.getLineLength(line);
   if (width === 0)
     return yield new Segment(pad(left + right), style);
-  const last2 = line2.length - 1;
-  const head = left > 0 && line2[0].cellLength > 0 && free(0);
-  const tail = right > 0 && line2[last2].cellLength > 0 && free(width - 1);
+  const last2 = line.length - 1;
+  const head = left > 0 && line[0].cellLength > 0 && free(0);
+  const tail = right > 0 && line[last2].cellLength > 0 && free(width - 1);
   const from = head ? 1 : 0;
   const to = tail ? last2 : last2 + 1;
   if (from > to) {
-    yield new Segment(pad(left) + line2[0].text + pad(right), style);
+    yield new Segment(pad(left) + line[0].text + pad(right), style);
     return;
   }
   if (left > 0)
-    yield new Segment(pad(left) + (head ? line2[0].text : ""), style);
-  yield* line2.slice(from, to);
+    yield new Segment(pad(left) + (head ? line[0].text : ""), style);
+  yield* line.slice(from, to);
   if (right > 0)
-    yield new Segment((tail ? line2[last2].text : "") + pad(right), style);
+    yield new Segment((tail ? line[last2].text : "") + pad(right), style);
 }
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/core/strip.js
@@ -35939,51 +35939,51 @@ var FlexStrip = class {
     const endCap = (i) => joiner ? renderToBlock(drawJoin(joiner, items[i], null, { index: i + 1 }), options) : EMPTY_BLOCK;
     const midJoin = (i, j) => joiner ? renderToBlock(drawJoin(joiner, items[i], items[j], { index: j }), options) : EMPTY_BLOCK;
     const lines2 = [];
-    let line2 = null;
+    let line = null;
     const gapBlock = gap > 0 ? { segments: [new Segment(" ".repeat(gap))], width: gap } : EMPTY_BLOCK;
     for (let i = 0; i < items.length; i++) {
       const item = itemBlocks[i];
-      if (line2 === null) {
+      if (line === null) {
         const sc = startCap(i);
         const ec = endCap(i);
         const blocks = sc.width > 0 ? [sc, item] : [item];
         const itemBlockIndices = [blocks.length - 1];
-        line2 = { blocks, width: sc.width + item.width, lastIndex: i, itemBlockIndices };
-        line2.endCap = ec;
+        line = { blocks, width: sc.width + item.width, lastIndex: i, itemBlockIndices };
+        line.endCap = ec;
         continue;
       }
-      const prev = line2.lastIndex;
+      const prev = line.lastIndex;
       const mid = midJoin(prev, i);
       const newEndCap = endCap(i);
       const addCost = (gap > 0 ? gap : 0) + mid.width + (gap > 0 ? gap : 0) + item.width;
-      const closedWidthIfAdded = line2.width + addCost + newEndCap.width;
+      const closedWidthIfAdded = line.width + addCost + newEndCap.width;
       if (closedWidthIfAdded <= maxWidth) {
         if (gap > 0)
-          line2.blocks.push(gapBlock);
+          line.blocks.push(gapBlock);
         if (mid.width > 0)
-          line2.blocks.push(mid);
+          line.blocks.push(mid);
         if (gap > 0)
-          line2.blocks.push(gapBlock);
-        line2.blocks.push(item);
-        line2.itemBlockIndices.push(line2.blocks.length - 1);
-        line2.width += addCost;
-        line2.lastIndex = i;
-        line2.endCap = newEndCap;
+          line.blocks.push(gapBlock);
+        line.blocks.push(item);
+        line.itemBlockIndices.push(line.blocks.length - 1);
+        line.width += addCost;
+        line.lastIndex = i;
+        line.endCap = newEndCap;
       } else {
-        const closing = line2.endCap;
+        const closing = line.endCap;
         if (closing.width > 0)
-          line2.blocks.push(closing);
-        line2.width += closing.width;
-        lines2.push(line2);
+          line.blocks.push(closing);
+        line.width += closing.width;
+        lines2.push(line);
         const sc = startCap(i);
         const ec = endCap(i);
         const blocks = sc.width > 0 ? [sc, item] : [item];
         const itemBlockIndices = [blocks.length - 1];
-        line2 = { blocks, width: sc.width + item.width, lastIndex: i, itemBlockIndices };
-        line2.endCap = ec;
+        line = { blocks, width: sc.width + item.width, lastIndex: i, itemBlockIndices };
+        line.endCap = ec;
       }
     }
-    const finalLine = line2;
+    const finalLine = line;
     {
       const closing = finalLine.endCap;
       if (closing.width > 0)
@@ -36380,14 +36380,14 @@ var DISTRIBUTION_NAME = new Map(
   DISTRIBUTION_NAMES.map((name) => [DISTRIBUTIONS[name], name])
 );
 function turnsHeld(palette, decor, dealt, drawnAt) {
-  const line2 = [...dealt];
+  const line = [...dealt];
   const drawn = (at) => {
-    const entry = line2[at];
+    const entry = line[at];
     return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
   };
   const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
   const apart = (at, off) => {
-    const { hue } = line2[at];
+    const { hue } = line[at];
     const taken = [drawn(at - 1), drawn(at + 1), ...off].filter(
       (colour) => colour !== void 0
     );
@@ -36398,17 +36398,17 @@ function turnsHeld(palette, decor, dealt, drawnAt) {
   const moves = (at) => [[pressed], []].flatMap(
     (off) => [at, at - 1].map((place) => ({ place, off }))
   );
-  for (let at = 1; at < line2.length; at++) {
-    if (line2[at - 1].hue === line2[at].hue || drawn(at - 1) !== drawn(at))
+  for (let at = 1; at < line.length; at++) {
+    if (line[at - 1].hue === line[at].hue || drawn(at - 1) !== drawn(at))
       continue;
     for (const { place, off } of moves(at)) {
       const entry = apart(place, off);
       if (entry === void 0) continue;
-      line2[place] = entry;
+      line[place] = entry;
       break;
     }
   }
-  return line2;
+  return line;
 }
 var KEYSTONE_AT = {
   "bar-start": (row2, cell3) => (row2?.index ?? 0) === 0 && (cell3?.index ?? 0) === 0,
@@ -37106,11 +37106,11 @@ function movableTextOf(text4, node) {
   const literals = literalSpans(node);
   const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
   let lineStart = node.span.start;
-  return textOf(text4, node).split("\n").map((line2, i) => {
+  return textOf(text4, node).split("\n").map((line, i) => {
     const at = lineStart;
-    lineStart += line2.length + 1;
-    const own2 = i > 0 && !inLiteral(at - 1) && line2.startsWith(indent2);
-    return (own2 ? line2.slice(indent2.length) : line2).replace(/\r$/, "");
+    lineStart += line.length + 1;
+    const own2 = i > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
+    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
   }).join("\n");
 }
 function literalSpans(node) {
@@ -37204,9 +37204,9 @@ function trailerAfter(text4, end) {
   return { commaEnd, line: { at: next - m[1].length, next } };
 }
 function removeMember(text4, span) {
-  const { commaEnd, line: line2 } = trailerAfter(text4, span.end);
-  if (startsLine(text4, span.start) && line2 !== null) {
-    return splice(text4, lineStartOf(text4, span.start), line2.next, "");
+  const { commaEnd, line } = trailerAfter(text4, span.end);
+  if (startsLine(text4, span.start) && line !== null) {
+    return splice(text4, lineStartOf(text4, span.start), line.next, "");
   }
   if (commaEnd !== -1) {
     let end = commaEnd;
@@ -37225,8 +37225,8 @@ function insertLineAfter(text4, span, trailer, memberText, indent2) {
   const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
   const at = trailer.line.at + (hasComma ? 0 : 1);
   const eol = eolOf(text4);
-  const line2 = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
-  return splice(withComma, at, at, line2);
+  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
+  return splice(withComma, at, at, line);
 }
 function appendMember(text4, container, memberText, dialect) {
   const members = container.kind === "object" ? container.entries : container.elements;
@@ -37242,8 +37242,8 @@ function appendMember(text4, container, memberText, dialect) {
       `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
     );
   }
-  const { commaEnd, line: line2 } = trailerAfter(text4, last2.span.end);
-  if (startsLine(text4, last2.span.start) && line2 !== null) {
+  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
+  if (startsLine(text4, last2.span.start) && line !== null) {
     const indent2 = text4.slice(
       lineStartOf(text4, last2.span.start),
       last2.span.start
@@ -37251,7 +37251,7 @@ function appendMember(text4, container, memberText, dialect) {
     return insertLineAfter(
       text4,
       last2.span,
-      { commaEnd, line: line2 },
+      { commaEnd, line },
       memberText,
       indent2
     );
@@ -37384,10 +37384,10 @@ function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
   if (hit === null) return null;
   const { text: src, ref } = hit;
   const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
-  const { commaEnd, line: line2 } = trailerAfter(src, ref.span.end);
-  if (startsLine(src, ref.span.start) && line2 !== null) {
+  const { commaEnd, line } = trailerAfter(src, ref.span.end);
+  if (startsLine(src, ref.span.start) && line !== null) {
     const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
-    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line: line2 }, newText, indent2) : splice(
+    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
       src,
       ref.span.start,
       ref.span.start,
@@ -37499,11 +37499,11 @@ function findKeyOccurrence(source, from, key) {
   return m ? m.index : -1;
 }
 function lineFromOffset(source, offset) {
-  let line2 = 1;
+  let line = 1;
   for (let i = 0; i < offset && i < source.length; i++) {
-    if (source.charCodeAt(i) === 10) line2++;
+    if (source.charCodeAt(i) === 10) line++;
   }
-  return line2;
+  return line;
 }
 function editabilityNotice(filePath2, source) {
   try {
@@ -44996,7 +44996,7 @@ function hasSuffix(suffix, s) {
 }
 function indent(n, s) {
   const pad = " ".repeat(Math.max(0, n));
-  return s.split("\n").map((line2) => pad + line2).join("\n");
+  return s.split("\n").map((line) => pad + line).join("\n");
 }
 function initials(s) {
   const enc = new TextEncoder();
@@ -45135,17 +45135,17 @@ function wrapWithSeparator(width, sep2, s) {
   if (width <= 0) return s;
   const out = [];
   for (const para of s.split("\n")) {
-    let line2 = "";
+    let line = "";
     for (const word of para.split(/\s+/)) {
       if (word.length === 0) continue;
-      if (line2.length === 0) line2 = word;
-      else if (line2.length + 1 + word.length <= width) line2 += ` ${word}`;
+      if (line.length === 0) line = word;
+      else if (line.length + 1 + word.length <= width) line += ` ${word}`;
       else {
-        out.push(line2);
-        line2 = word;
+        out.push(line);
+        line = word;
       }
     }
-    if (line2.length > 0) out.push(line2);
+    if (line.length > 0) out.push(line);
   }
   return out.join(sep2);
 }
@@ -51677,6 +51677,7 @@ var import_node_path4 = __toESM(require_path_browserify(), 1);
 init_globals();
 var BARE = /^[^\s"=\\]+$/;
 var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
+var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 
 // src/utils/atomic-write.ts
 init_globals();
@@ -54510,9 +54511,9 @@ function declareHelp(name, lines2, within4, out) {
     // (`within` empty) is always visible, and declares no `when` at all.
     ...gateOf(within4)
   };
-  const children2 = lines2.map((line2, i) => {
+  const children2 = lines2.map((line, i) => {
     const lineName = `${name}.${i}`;
-    out.segments[lineName] = { template: line2 };
+    out.segments[lineName] = { template: line };
     return { kind: "segment", name: lineName };
   });
   return disclosureNode(
@@ -54658,7 +54659,7 @@ ${settingsByPlace().flatMap(({ path: path42, names }) => [
 
 Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
 ${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
-${LANE_HELP[lane].map((line2) => `    ${line2}`).join("\n")}`).join("\n")}
+${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
 
 Subcommands:
   install                  One-shot setup: stages the runtime (native render
@@ -55299,7 +55300,7 @@ function runOf({ text: text4, style }, depth) {
 function runLines(segments, depth) {
   const written2 = segments.filter((s) => !s.isControl && s.text.length > 0);
   return Segment.splitLines(written2).map(
-    (line2) => line2.map((segment) => runOf(segment, depth))
+    (line) => line.map((segment) => runOf(segment, depth))
   );
 }
 function segmentOf({ text: text4, fg, bg, attrs = [], link }) {
@@ -56426,10 +56427,10 @@ function statusLineOf(sources) {
   if (!isJsonObject(top.line)) {
     return { kind: "not-an-object", value: top.line, from: top.from };
   }
-  for (const { from, line: line2 } of lines2) {
-    if (from.scope !== top.from.scope || !isJsonObject(line2)) break;
-    if ("refreshInterval" in line2) {
-      return { kind: "present", refreshInterval: line2.refreshInterval, from };
+  for (const { from, line } of lines2) {
+    if (from.scope !== top.from.scope || !isJsonObject(line)) break;
+    if ("refreshInterval" in line) {
+      return { kind: "present", refreshInterval: line.refreshInterval, from };
     }
   }
   return { kind: "present", refreshInterval: void 0, from: top.from };
@@ -56578,7 +56579,7 @@ function configProblems(config2) {
   switch (config2.kind) {
     case "failed": {
       const problems = [
-        ...config2.error.split("\n").map((line2) => line2.trim()).filter((line2) => line2 !== ""),
+        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
         ...config2.warnings
       ];
       return problems.length === 0 ? ["the config failed to load"] : problems;
@@ -56887,7 +56888,7 @@ var barsSeen = (bars) => {
   if (drawn.includes("can-move")) {
     return {
       kind: "moving",
-      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)"
+      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)"
     };
   }
   if (drawn.includes("still")) return { kind: "still" };
@@ -57262,15 +57263,15 @@ function frameFields(frames, { origin, elsewhere }) {
   return `frames=${FRAMES_SEEN.map(count).join("/")} chains=${valueOf(lines2)}`;
 }
 function statusLineValue(sources) {
-  const line2 = statusLineOf(sources);
-  switch (line2.kind) {
+  const line = statusLineOf(sources);
+  switch (line.kind) {
     case "unread":
       return "failed";
     case "absent":
     case "not-an-object":
-      return line2.kind;
+      return line.kind;
     case "present":
-      return `${line2.from.scope}:${line2.refreshInterval === void 0 ? "-" : JSON.stringify(line2.refreshInterval)}`;
+      return `${line.from.scope}:${line.refreshInterval === void 0 ? "-" : JSON.stringify(line.refreshInterval)}`;
   }
 }
 function truecolorEnvFields(sources) {
@@ -57388,7 +57389,7 @@ function slashLine(raw) {
 var COMMANDS = ["/compact", "/model"];
 var CLEAR = "/clear";
 function commandTray(prefix) {
-  const commandAction = (line2) => `${prefix}${line2.slice(1)}`;
+  const commandAction = (line) => `${prefix}${line.slice(1)}`;
   const typeClear = `${prefix}clear.slash`;
   const clear = confirmStep(
     `${prefix}clear`,
@@ -57397,14 +57398,14 @@ function commandTray(prefix) {
   );
   return {
     template: COMMANDS.map(
-      (line2) => `{{ action "${commandAction(line2)}" "${line2}" }} `
+      (line) => `{{ action "${commandAction(line)}" "${line}" }} `
     ).join("") + clear.template,
     when: `{{ ${IN_TMUX} }}`,
     actions: {
       ...Object.fromEntries(
-        COMMANDS.map((line2) => [
-          commandAction(line2),
-          { slash: slashLine(line2) }
+        COMMANDS.map((line) => [
+          commandAction(line),
+          { slash: slashLine(line) }
         ])
       ),
       ...clear.actions,
@@ -60495,13 +60496,13 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
       });
     }
     for (const [node, path42] of fragmentNodePaths(root, layoutKey)) {
-      const line2 = findKeyLine(ctx.source, path42.split("."));
+      const line = findKeyLine(ctx.source, path42.split("."));
       if (node.when !== void 0) {
         checkTemplateRefs(ctx, `${path42}.when`, node.when, templateScope, {
-          line: line2
+          line
         });
-        checkWhenParses(ctx, `${path42}.when`, node.when, line2);
-        checkActionRefs(ctx, cfg, `${path42}.when`, node.when, line2);
+        checkWhenParses(ctx, `${path42}.when`, node.when, line);
+        checkActionRefs(ctx, cfg, `${path42}.when`, node.when, line);
       }
       if (node.kind !== "segment") continue;
       if (isSettingsAnchor(node.name)) {
@@ -60509,7 +60510,7 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
           ctx.issues.push({
             path: path42,
             message: `${layoutKey} gives the global settings menu anchor "${SETTINGS_ANCHOR}" an id or settings \u2014 the anchor only marks where the menu goes, so place it as the bare name "${SETTINGS_ANCHOR}"`,
-            line: line2
+            line
           });
         }
         continue;
@@ -60520,10 +60521,10 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
         ctx.unplaced.push({
           path: path42,
           message: unplacedMessage(layoutKey, node.name, cfg.segments, placed2),
-          line: line2
+          line
         });
       }
-      checkPlacementSettings(ctx, cfg, node, path42, line2);
+      checkPlacementSettings(ctx, cfg, node, path42, line);
     }
   };
   if (authored.root !== void 0) checkLayoutTree(authored.root, "root");
@@ -60568,12 +60569,12 @@ var TREE_OP_ARMS = [
 ];
 function checkPresetRootTarget(ctx, cfg, name, discriminator, key, presetName, a) {
   const at = `actions.${name}.${discriminator}`;
-  const line2 = findKeyLine(ctx.source, ["actions", name, discriminator]);
+  const line = findKeyLine(ctx.source, ["actions", name, discriminator]);
   if (!presetNames(cfg.presets).includes(presetName)) {
     ctx.issues.push({
       path: at,
       message: `actions.${name}: "${key}" names preset "${presetName}" which is not declared (have: ${presetNames(cfg.presets).join(", ")})`,
-      line: line2
+      line
     });
     return;
   }
@@ -60585,7 +60586,7 @@ function checkPresetRootTarget(ctx, cfg, name, discriminator, key, presetName, a
     ctx.issues.push({
       path: at,
       message: `actions.${name}: "${key}" is a "presets.<name>.root" target and can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom" (not "to"/"from"/"cycle"/bounded \u2014 those have no meaning as a tree op)`,
-      line: line2
+      line
     });
     return;
   }
@@ -60594,7 +60595,7 @@ function checkPresetRootTarget(ctx, cfg, name, discriminator, key, presetName, a
     ctx.issues.push({
       path: at,
       message: `actions.${name}: ${role} "${segName}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})${renamedHint(segName)}`,
-      line: line2
+      line
     });
   };
   const placed2 = new Set(placementIds(presetRoot(cfg, presetName).node));
@@ -60605,7 +60606,7 @@ function checkPresetRootTarget(ctx, cfg, name, discriminator, key, presetName, a
     ctx.issues.push({
       path: at,
       message: `actions.${name}: ${role} "${id2}" names no placement${renamedHint(id2)}`,
-      line: line2
+      line
     });
   };
   if ("removeSegment" in a) checkRetired("removeSegment", a.removeSegment);
@@ -60686,7 +60687,7 @@ function own(settings, name) {
 function rangeSettingNames(settings, except) {
   return Object.entries(settings).filter(([n, decl]) => n !== except && rangeOf(decl) !== void 0).map(([n]) => n);
 }
-function checkPlacementSettings(ctx, cfg, node, layoutKey, line2) {
+function checkPlacementSettings(ctx, cfg, node, layoutKey, line) {
   const seg2 = Object.prototype.hasOwnProperty.call(cfg.segments, node.name) ? cfg.segments[node.name] : void 0;
   if (seg2 === void 0) return;
   const declared = settingsOf(seg2);
@@ -60698,7 +60699,7 @@ function checkPlacementSettings(ctx, cfg, node, layoutKey, line2) {
       ctx.issues.push({
         path: layoutKey,
         message: `${where} ${problem}`,
-        line: line2
+        line
       });
     }
   }
@@ -60713,7 +60714,7 @@ function checkPlacementSettings(ctx, cfg, node, layoutKey, line2) {
   );
   if (!members || relationsReported(declared)) return;
   for (const { message } of settingOrderProblems(declared, resolved)) {
-    ctx.issues.push({ path: layoutKey, message: `${where}: ${message}`, line: line2 });
+    ctx.issues.push({ path: layoutKey, message: `${where}: ${message}`, line });
   }
 }
 function checkVarRefs(ctx, declPath, v, scope, segCtx) {
@@ -60744,14 +60745,14 @@ function checkDependsOn(ctx, declPath, v, scope, segCtx) {
 var INSTANT_POLICY = 'it reads the instant a frame is drawn at, which changes every frame, and a cache policy re-runs its source when a stored value changes \u2014 re-run it on a period instead: cache: { ttl: "<duration>" }';
 function checkPolicyInstant(ctx, declPath, v, cfg) {
   if (!hasCacheField(v)) return;
-  const line2 = (field) => findKeyLine(ctx.source, [...declPath.split("."), "cache", field]);
+  const line = (field) => findKeyLine(ctx.source, [...declPath.split("."), "cache", field]);
   if ("key" in v.cache) {
     const why2 = instantReadOf(v.cache.key, cfg);
     if (why2 !== null) {
       ctx.issues.push({
         path: `${declPath}.cache.key`,
         message: `cache.key ${why2}: ${INSTANT_POLICY}`,
-        line: line2("key")
+        line: line("key")
       });
     }
   }
@@ -60763,7 +60764,7 @@ function checkPolicyInstant(ctx, declPath, v, cfg) {
       ctx.issues.push({
         path: `${declPath}.cache.depends_on[${i}]`,
         message: `cache.depends_on names "${target}", which ${why2}: ${INSTANT_POLICY}`,
-        line: line2("depends_on")
+        line: line("depends_on")
       });
     });
   }
@@ -60810,18 +60811,18 @@ function checkRuleSlotReads(ctx, cfg) {
     });
   }
 }
-function checkWhenParses(ctx, path42, when2, line2) {
+function checkWhenParses(ctx, path42, when2, line) {
   try {
     SYNTAX_ENGINE.parse(when2);
   } catch (e) {
     ctx.issues.push({
       path: path42,
       message: `Template parse error in ${path42}: ${e.message}`,
-      line: line2
+      line
     });
   }
 }
-function checkActionRefs(ctx, cfg, path42, template, line2, helpers = cfg.helpers, segment) {
+function checkActionRefs(ctx, cfg, path42, template, line, helpers = cfg.helpers, segment) {
   const field = path42.slice(path42.lastIndexOf(".") + 1);
   for (const { name: aref, site, via } of templateActionRefs(
     template,
@@ -60841,7 +60842,7 @@ function checkActionRefs(ctx, cfg, path42, template, line2, helpers = cfg.helper
     ctx.issues.push({
       path: path42,
       message: `${field} references unknown action "${aref}"${inOptions}`,
-      line: line2
+      line
     });
   }
 }
@@ -65439,7 +65440,7 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   return minted;
 }
 function plainMessage({ about, text: message, copy: copy3 }, severity) {
-  const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line2) => diagnosticSpan(line2, null)).filter((span) => span.text !== "").map((span) => [span]);
+  const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
   return first2 === void 0 ? [] : [{ severity, about, message, copy: copy3, lines: [first2, ...rest2] }];
 }
 function copyKeys(list2) {
@@ -65593,9 +65594,9 @@ function channelRows(message, opts, trailing) {
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
   const styled = (link) => link === null ? base : base.withLink(link);
   const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
-  return message.lines.flatMap((line2, i) => {
+  return message.lines.flatMap((line, i) => {
     const prefix = cell(i === 0 ? message.severity.glyph : ISSUE_INDENT, base);
-    const cells = line2.flatMap(
+    const cells = line.flatMap(
       (span) => span.text.split(" ").flatMap((w) => chopCells(w, fold)).map((w) => cell(w, styled(span.link)))
     );
     const after = i === 0 ? trailing : [];
@@ -65675,13 +65676,13 @@ function repoQuestions(gate2, sessionId2, signer) {
         ])
       )
     );
-    const line2 = [diagnosticSpan(message, null), ...answers];
+    const line = [diagnosticSpan(message, null), ...answers];
     return {
       severity: APPROVAL_SEVERITY,
       about: `repo-question\0${dir}`,
       message,
       copy: message,
-      lines: [line2]
+      lines: [line]
     };
   });
 }
@@ -65903,8 +65904,8 @@ var import_node_path25 = __toESM(require_path_browserify(), 1);
 init_globals();
 function processTable(ps2) {
   const procs = /* @__PURE__ */ new Map();
-  for (const line2 of ps2.split("\n")) {
-    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line2);
+  for (const line of ps2.split("\n")) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
     if (m === null) continue;
     const pid2 = Number(m[1]);
     procs.set(pid2, { pid: pid2, ppid: Number(m[2]), command: m[3].trim() });
@@ -66071,8 +66072,8 @@ function remotesOf(result) {
 }
 function parseRemotes(stdout2) {
   const urlsByName = /* @__PURE__ */ new Map();
-  for (const line2 of stdout2.split("\n")) {
-    const match = line2.match(/^remote\.(.+)\.url\s+(\S.*)$/);
+  for (const line of stdout2.split("\n")) {
+    const match = line.match(/^remote\.(.+)\.url\s+(\S.*)$/);
     if (!match) continue;
     const urls = urlsByName.get(match[1]) ?? [];
     urls.push(match[2].trim());
@@ -66145,10 +66146,10 @@ function parseStatusV2(stdout2) {
   let unstaged = 0;
   let untracked2 = 0;
   let conflicts = 0;
-  for (const line2 of stdout2.split("\n")) {
-    if (!line2) continue;
-    if (line2.startsWith("# ")) {
-      const rest2 = line2.slice(2);
+  for (const line of stdout2.split("\n")) {
+    if (!line) continue;
+    if (line.startsWith("# ")) {
+      const rest2 = line.slice(2);
       if (rest2.startsWith("branch.oid ")) {
         const v = rest2.slice("branch.oid ".length).trim();
         oid = v === "(initial)" ? ABSENT2 : ok(v);
@@ -66168,9 +66169,9 @@ function parseStatusV2(stdout2) {
       }
       continue;
     }
-    const kind = line2[0];
+    const kind = line[0];
     if (kind === "1" || kind === "2") {
-      const xy = line2.slice(2, 4);
+      const xy = line.slice(2, 4);
       if (xy[0] !== ".") staged++;
       if (xy[1] !== ".") unstaged++;
     } else if (kind === "u") {
@@ -66947,13 +66948,13 @@ async function findAgentTranscripts(sessionId2, projectPath, verified) {
         continue;
       }
       longLines = longLinesWith(longLines, filePath2, read2.value);
-      const line2 = jsonLine(
+      const line = jsonLine(
         decodeLines(
           read2.value,
           (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
         )
       );
-      if (line2.kind === "object" && line2.value.sessionId === sessionId2) {
+      if (line.kind === "object" && line.value.sessionId === sessionId2) {
         paths2.push(filePath2);
       }
     }
@@ -67008,8 +67009,8 @@ function makeEntry(parsed2) {
     }
   };
 }
-function jsonLine(line2) {
-  const trimmed = line2.trim();
+function jsonLine(line) {
+  const trimmed = line.trim();
   if (!trimmed) return { kind: "blank" };
   try {
     const value = JSON.parse(trimmed);
@@ -67018,8 +67019,8 @@ function jsonLine(line2) {
     return { kind: "unparsed", reason: String(parseError) };
   }
 }
-function entryOf3(line2) {
-  const read2 = jsonLine(line2);
+function entryOf3(line) {
+  const read2 = jsonLine(line);
   if (read2.kind === "unparsed") {
     debug(`Failed to parse JSONL line: ${read2.reason}`);
     return null;
@@ -67034,8 +67035,8 @@ function entryOf3(line2) {
 }
 function parseJsonlLines(text4) {
   const entries = [];
-  for (const line2 of text4.split("\n")) {
-    const entry = entryOf3(line2);
+  for (const line of text4.split("\n")) {
+    const entry = entryOf3(line);
     if (entry) entries.push(entry);
   }
   return entries;
@@ -67171,7 +67172,7 @@ var TranscriptFold = class {
       });
     }
     const { folded: folded2, longLines } = read2.value;
-    for (const line2 of longLineLog(longLines)) this.log("info", line2);
+    for (const line of longLineLog(longLines)) this.log("info", line);
     return this.store(sessionId2, folded2, { kind: "ok", value: folded2.value });
   }
   // What the session's last read answered, as it stands: never read is
@@ -68141,11 +68142,11 @@ function getLineColFromPtr(string, ptr) {
   let lines2 = string.slice(0, ptr).split(/\r?\n/);
   return [lines2.length, lines2.pop().length + 1];
 }
-function makeCodeBlock(string, line2, column) {
+function makeCodeBlock(string, line, column) {
   let lines2 = string.split(/\r?\n/);
   let codeblock = "";
-  let numberLen = (Math.log10(line2 + 1) | 0) + 1;
-  for (let i = line2 - 1; i <= line2 + 1; i++) {
+  let numberLen = (Math.log10(line + 1) | 0) + 1;
+  for (let i = line - 1; i <= line + 1; i++) {
     let l = lines2[i - 1];
     if (!l)
       continue;
@@ -68153,7 +68154,7 @@ function makeCodeBlock(string, line2, column) {
     codeblock += ":  ";
     codeblock += l;
     codeblock += "\n";
-    if (i === line2) {
+    if (i === line) {
       codeblock += " ".repeat(numberLen + column + 2);
       codeblock += "^\n";
     }
@@ -68165,12 +68166,12 @@ var TomlError = class _TomlError extends Error {
   column;
   codeblock;
   constructor(message, options) {
-    const [line2, column] = getLineColFromPtr(options.toml, options.ptr);
-    const codeblock = makeCodeBlock(options.toml, line2, column);
+    const [line, column] = getLineColFromPtr(options.toml, options.ptr);
+    const codeblock = makeCodeBlock(options.toml, line, column);
     super(`Invalid TOML document: ${message}
 
 ${codeblock}`, options);
-    this.line = line2;
+    this.line = line;
     this.column = column;
     this.codeblock = codeblock;
   }
@@ -69047,11 +69048,11 @@ async function itermFont(launcher, version, env2, glyphs) {
 }
 function fcMatchCoverage(output, glyphs) {
   const lines2 = output.split("\n").filter((l) => l !== "");
-  const fonts = lines2.map((line2) => {
-    const tab = line2.indexOf("	");
+  const fonts = lines2.map((line) => {
+    const tab = line.indexOf("	");
     return tab <= 0 ? null : {
-      family: line2.slice(0, tab),
-      ranges: line2.slice(tab + 1).split(/\s+/).filter((r) => r !== "").map((range) => {
+      family: line.slice(0, tab),
+      ranges: line.slice(tab + 1).split(/\s+/).filter((r) => r !== "").map((range) => {
         const [lo, hi = lo] = range.split("-").map((h) => parseInt(h, 16));
         return [lo, hi];
       })
@@ -69340,9 +69341,9 @@ function oneAskPerClick(edge) {
 }
 var TMUX_CLIENT_FORMAT = "#{client_termfeatures}	#{client_termtype}	#{client_termname}	#{client_pid}	#{client_utf8}";
 function parseTmuxClient(stdout2) {
-  const line2 = stdout2.replace(/\n$/, "");
-  if (line2 === "				") return { kind: "ok", value: null };
-  const fields2 = line2.split("	");
+  const line = stdout2.replace(/\n$/, "");
+  if (line === "				") return { kind: "ok", value: null };
+  const fields2 = line.split("	");
   const [features, termtype, termname, pid2, utf83] = fields2;
   if (fields2.length !== 5 || !/^[1-9]\d*$/.test(pid2) || !/^[01]$/.test(utf83)) {
     return {
@@ -69391,9 +69392,9 @@ async function remoteLogin(launcher, pid2) {
 var DAEMON_ENTRY = /^(.*)\/(?:dist\/index\.mjs|src\/index\.ts|bin\/cc-candybar)$/;
 function daemonProcesses(table, ownsEntry2) {
   const found2 = [];
-  for (const line2 of table.split("\n")) {
+  for (const line of table.split("\n")) {
     const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\w{3} \w{3}\s+\d+ [\d:]{8} \d{4})\s+.* (\/.*) daemon$/.exec(
-      line2
+      line
     );
     if (m === null || !ownsEntry2(m[5])) continue;
     found2.push({
@@ -69471,8 +69472,8 @@ function transcriptWindow(bytes, whole) {
   const to = text4.lastIndexOf("\n") + 1;
   let lines2 = 0;
   let unparsed = 0;
-  for (const line2 of text4.slice(from, to).split("\n")) {
-    const read2 = jsonLine(line2);
+  for (const line of text4.slice(from, to).split("\n")) {
+    const read2 = jsonLine(line);
     if (read2.kind === "blank") continue;
     lines2++;
     if (read2.kind === "unparsed") unparsed++;
@@ -70388,7 +70389,7 @@ function draftShown(snapshot) {
 }
 var TURN_RUNNING = /^\S+\s+\S[^…]*…\s+\((\d+[hms]\s*)+/u;
 function turnRunning(snapshot) {
-  return snapshot.screen.some((line2) => TURN_RUNNING.test(line2));
+  return snapshot.screen.some((line) => TURN_RUNNING.test(line));
 }
 var REFUSALS = {
   "in-mode": "the Claude Code pane is in tmux copy mode \u2014 leave it (q) and click again",
@@ -70412,7 +70413,7 @@ function tmuxPaneOf(tmux3) {
   }
   return { kind: "pane", hint: tmux3 };
 }
-async function typeSlash(edge, hint, line2) {
+async function typeSlash(edge, hint, line) {
   const pane = tmuxPaneOf(hint);
   if (pane.kind === "refused") return pane;
   const tmux3 = pane.hint;
@@ -70420,7 +70421,7 @@ async function typeSlash(edge, hint, line2) {
   if (state.kind !== "ready") {
     return { kind: "refused", reason: REFUSALS[state.kind] };
   }
-  const typed = await edge.type(tmux3, line2);
+  const typed = await edge.type(tmux3, line);
   return typed.kind === "typed" ? { kind: "typed", pane: tmux3.pane } : typed;
 }
 var THEN = ";";
@@ -70469,13 +70470,13 @@ function pasteLineArgs(pane, buffer, before) {
     "Enter"
   ];
 }
-async function type2(launcher, hint, line2) {
+async function type2(launcher, hint, line) {
   const run3 = await tmux(
     launcher,
     hint,
     "claude-input.type",
     pasteLineArgs(hint.pane, BUFFER, ["C-s"]),
-    line2
+    line
   );
   return run3.kind === "ok" ? { kind: "typed" } : {
     kind: "refused",
@@ -70485,7 +70486,7 @@ async function type2(launcher, hint, line2) {
 function productionClaudeInputEdge(launcher) {
   return {
     read: (hint) => read(launcher, hint),
-    type: (hint, line2) => type2(launcher, hint, line2)
+    type: (hint, line) => type2(launcher, hint, line)
   };
 }
 
@@ -71354,26 +71355,26 @@ var doctorMark = {
   }
 };
 var slash = async (value, ctx) => {
-  const [sessionId2 = "", line2 = ""] = decodeWire(() => decodeSegments(value));
+  const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const declared = Object.values(
     ctx.configFor(sessionOrigin(ctx, sid)).actions
   ).filter((a) => "slash" in a);
-  const action2 = declared.find((a) => a.slash === line2);
+  const action2 = declared.find((a) => a.slash === line);
   if (action2 === void 0) {
     throw new BadVerbArgs(
-      `${JSON.stringify(line2)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`
+      `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`
     );
   }
   const result = await ctx.typing(sessionHints(ctx, sid).tmux, action2.slash);
   if (result.kind === "refused") {
     ctx.log(
       "warn",
-      `slash: ${line2} refused \u2014 ${result.reason} (session=${sid})`
+      `slash: ${line} refused \u2014 ${result.reason} (session=${sid})`
     );
-    throw new BadVerbArgs(`${line2} was not typed: ${result.reason}`);
+    throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
   }
-  ctx.log("info", `slash: typed ${line2} into ${result.pane} (session=${sid})`);
+  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
 };
 function runOf2([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
   const sid = requireSessionId(sessionId2);
@@ -71653,7 +71654,7 @@ async function journaled(sid, ctx, turn, handler) {
   const closing = (store) => closingView(
     store,
     (sid2) => nestOf(ctx, sid2),
-    (line2) => ctx.log("info", line2)
+    (line) => ctx.log("info", line)
   );
   const journaling = {
     ...ctx,
@@ -71663,7 +71664,7 @@ async function journaled(sid, ctx, turn, handler) {
   };
   const launches = {
     launch: (opts, what) => turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
-    typing: (hint, line2) => turn.landed(typeSlash(ctx.claudeInput, hint, line2)),
+    typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
     applyUpdate: () => turn.landed(ctx.applyUpdate())
   };
   try {
@@ -72478,12 +72479,12 @@ function applySegmentLayout(cells, options) {
 }
 
 // src/render/fill.ts
-function wrapOffsets(plain, line2, indent2) {
-  const held = "x".repeat(Math.min(indent2, line2)).replace(/x$/, " ");
+function wrapOffsets(plain, line, indent2) {
+  const held = "x".repeat(Math.min(indent2, line)).replace(/x$/, " ");
   const wrapping = held + plain;
   const offsets = [];
   let at = 0;
-  wrappedLines(wrapping, line2).forEach((wrapped) => {
+  wrappedLines(wrapping, line).forEach((wrapped) => {
     const content = wrapped.trimEnd();
     const start = wrapping.indexOf(content, at);
     if (content !== "" && start > held.length)
@@ -72501,31 +72502,31 @@ function takenOnLine(before, options) {
   const last2 = cellLen(plainOf2(lines2[lines2.length - 1]));
   return Math.max(0, last2 - stripChromeCols(options) + stripSeamCols(options));
 }
-function fits(cell3, line2, options) {
-  if (cell3.cellLength <= line2) return true;
+function fits(cell3, line, options) {
+  if (cell3.cellLength <= line) return true;
   const { lines: lines2 } = drawStripCells([cell3], { ...options, width: Infinity });
   return cellLen(plainOf2(lines2.flat())) <= options.width;
 }
-function dividedToLine(item, line2, before, options) {
-  if (fits(item.owner, line2, options)) return [item];
+function dividedToLine(item, line, before, options) {
+  if (fits(item.owner, line, options)) return [item];
   const text4 = item.owner.copy().expandTabs();
   const indent2 = takenOnLine(before, options);
-  return text4.divide(wrapOffsets(text4.plain, line2, indent2)).map((piece, i) => ({
+  return text4.divide(wrapOffsets(text4.plain, line, indent2)).map((piece, i) => ({
     ...item,
-    owner: piece.truncate(line2, { marker: "" }).padLeft(i > 0 ? options.padding : 0)
+    owner: piece.truncate(line, { marker: "" }).padLeft(i > 0 ? options.padding : 0)
   })).filter(
     ({ owner }, _, { length }) => length === 1 || owner.plain.trim() !== ""
   );
 }
 function fitRow(row2, options) {
-  const line2 = Math.max(
+  const line = Math.max(
     WIDEST_GLYPH_COLS,
     lineWidth(options) - stripChromeCols(options) - options.padding
   );
   return filled(row2, options).reduce(
     (fitted, item) => [
       ...fitted,
-      ...dividedToLine(item, line2, fitted, options)
+      ...dividedToLine(item, line, fitted, options)
     ],
     []
   );
@@ -73898,7 +73899,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
             { glyph: CAROUSEL_NEXT, option: options[at(1)] }
           ];
         };
-        const [line2] = renderPicker(
+        const [line] = renderPicker(
           applyName,
           apply,
           { key: page2.key, stateVar: page2.stateVar },
@@ -73915,7 +73916,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           closeOn(active2.palette, active2.bg, drawnAt),
           count === 0 ? [] : steps2()
         );
-        return line2;
+        return line;
       },
       argTypes: ["string", "string"],
       arity: { kind: "exact" },
@@ -74424,11 +74425,11 @@ function splitCellsIntoLines(cells) {
 // src/dsl/node-registry.ts
 function rowIdentities(lines2) {
   const counts = /* @__PURE__ */ new Map();
-  return lines2.map((line2) => {
-    const kind = `${line2.place}.${line2.band}`;
+  return lines2.map((line) => {
+    const kind = `${line.place}.${line.band}`;
     const nth = counts.get(kind) ?? 0;
     counts.set(kind, nth + 1);
-    return { line: line2, row: `${kind}#${nth}` };
+    return { line, row: `${kind}#${nth}` };
   });
 }
 var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
@@ -74439,17 +74440,17 @@ function returnedBy(id2, lines2) {
   const own2 = [];
   const deeper = [];
   let ground;
-  for (const line2 of lines2) {
-    (line2.band === "own" ? own2 : deeper).push(line2);
-    ground ??= line2.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
+  for (const line of lines2) {
+    (line.band === "own" ? own2 : deeper).push(line);
+    ground ??= line.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
   }
   return {
     drawing: ground === void 0 ? null : { own: own2, opened: deeper.length > 0, ground },
     deeper
   };
 }
-function heldLine(line2) {
-  return { ...line2, cells: line2.cells.map(heldCell) };
+function heldLine(line) {
+  return { ...line, cells: line.cells.map(heldCell) };
 }
 function composeBlocks(direction, blocks) {
   const above = blocks.flatMap((b) => b.filter((l) => l.place === "above"));
@@ -74492,7 +74493,7 @@ function layoutRows(node, shown) {
       )
     );
   };
-  return lines2(node, []).map((line2) => [...line2.cells]);
+  return lines2(node, []).map((line) => [...line.cells]);
 }
 function childStep(node, index) {
   return node.steps[index];
@@ -74563,13 +74564,13 @@ var containerType = {
   }
 };
 var BODY_PLACE = {
-  drop: (line2) => line2.place,
+  drop: (line) => line.place,
   above: () => "above"
 };
 var OPEN_LEAD = {
   drop: (inline, close) => ({ lead: close(), stays: inline }),
   above: (inline) => ({
-    lead: inline.slice(0, 1).flatMap((line2) => line2.cells),
+    lead: inline.slice(0, 1).flatMap((line) => line.cells),
     stays: inline.slice(1)
   })
 };
@@ -74665,9 +74666,9 @@ function drawSegment(node, ctx) {
     if (drawn === null) return [];
     const { styles, inline: inlineLines, drops: dropLines } = drawn;
     const opens = node.opens;
-    const bodyLines = opens === void 0 ? [] : ctx.renderBody(opens.body, bodyOpen ? gate2 : HIDDEN, styles.disclosure).map((line2) => ({
-      ...line2,
-      place: BODY_PLACE[opens.placement](line2)
+    const bodyLines = opens === void 0 ? [] : ctx.renderBody(opens.body, bodyOpen ? gate2 : HIDDEN, styles.disclosure).map((line) => ({
+      ...line,
+      place: BODY_PLACE[opens.placement](line)
     }));
     const leadCell = (text4, style, padding) => applySegmentLayout(fragmentsToCells([text4], style), {
       ...layoutOf(style),
@@ -74686,18 +74687,18 @@ function drawSegment(node, ctx) {
         0
       )
     );
-    const leadOf = (line2, i) => line2.band !== "own" ? [] : i === firstOwn ? openLead : holdLead;
-    const ledBody = bodyLines.map((line2, i) => ({
-      cells: [...leadOf(line2, i), ...line2.cells],
+    const leadOf = (line, i) => line.band !== "own" ? [] : i === firstOwn ? openLead : holdLead;
+    const ledBody = bodyLines.map((line, i) => ({
+      cells: [...leadOf(line, i), ...line.cells],
       band: "deeper",
-      place: line2.place
+      place: line.place
     }));
     const laidLines = [...stays, ...dropLines];
     if (ctx.perSegmentSink !== void 0) {
       ctx.perSegmentSink.set(
         node.id,
         [
-          ...laidLines.flatMap((line2) => line2.cells),
+          ...laidLines.flatMap((line) => line.cells),
           ...bodyLines.flatMap(leadOf)
         ].flatMap(cellParts)
       );
@@ -74731,8 +74732,8 @@ function drawnRows2(segment, layoutOf) {
   const layout = layoutOf(baseStyle);
   const inline = splitCellsIntoLines(
     fragmentsToCells(fragments, baseStyle)
-  ).map((line2, i) => ({
-    cells: applySegmentLayout(line2, {
+  ).map((line, i) => ({
+    cells: applySegmentLayout(line, {
       ...layout,
       lead: i === 0 ? fragmentsToCells(lead, baseStyle) : [],
       trail: i === 0 ? fragmentsToCells(trail, baseStyle) : []
@@ -74766,7 +74767,7 @@ function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
     style
   );
   const rows = last2 === void 0 || last2.drawing.own.length === 0 ? [["auto"]] : last2.drawing.own.map(
-    (line2) => line2.cells.map((cell3) => cell3.text.cellLength)
+    (line) => line.cells.map((cell3) => cell3.text.cellLength)
   );
   return {
     styles,
@@ -76065,12 +76066,12 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         `Preset "${preset}" has no compiled layout \u2014 registerDslConfig compiles one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
       );
     }
-    const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line: line2, row: row2 }) => {
-      const items = fitRow(line2.cells, drawOpts);
-      const kind = line2.band === "deeper" ? "menu" : "bar";
+    const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line, row: row2 }) => {
+      const items = fitRow(line.cells, drawOpts);
+      const kind = line.band === "deeper" ? "menu" : "bar";
       return {
         kind,
-        cellBreaks: items.length - line2.cells.length,
+        cellBreaks: items.length - line.cells.length,
         ...drawStripCells(
           items.map((item) => item.owner),
           drawOpts,
@@ -76602,7 +76603,7 @@ function requestEvent(kind, facts, outcome, tookMs) {
   ];
   return {
     level: LEVEL[outcome.kind],
-    line: `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`
+    line: eventLine(kind, fields2)
   };
 }
 
@@ -76656,7 +76657,7 @@ function renderFrame(parts, sessionId2, fps, at) {
     }
   } catch (error) {
     const outcome = { kind: "threw", error };
-    const { level, line: line2 } = requestEvent(
+    const { level, line } = requestEvent(
       "render",
       facts,
       outcome,
@@ -76670,7 +76671,7 @@ function renderFrame(parts, sessionId2, fps, at) {
       evaluated: 0,
       cellBreaks: 0,
       delivered: NOTHING_DELIVERED,
-      failure: { level, line: `frame ${line2}` }
+      failure: { level, line: `frame ${line}` }
     };
   }
 }
@@ -77173,21 +77174,27 @@ async function drawAnswer(parts, req, at, waitEndsAt, facts) {
     });
     return {
       frame: frame2,
-      // [LAW:single-enforcer] An answer carrying the click error or the
-      // launcher's pipe event that reaches its client is the one that
-      // delivered it (src/utils/event-hold.ts).
-      delivered: () => {
-        delivered();
-        if (clickShown !== null)
-          answeredClickError(parts.sessionState, sessionId2, clickShown);
-        if (pipeShown !== null) parts.launcher.answeredPipeEvent(pipeShown);
-      }
+      delivered: answerDelivered(
+        parts,
+        sessionId2,
+        delivered,
+        clickShown,
+        pipeShown
+      )
     };
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
     __callDispose(_stack, _error, _hasError);
   }
+}
+function answerDelivered(parts, sessionId2, copied, clickShown, pipeShown) {
+  return () => {
+    copied();
+    if (clickShown !== null)
+      answeredClickError(parts.sessionState, sessionId2, clickShown);
+    if (pipeShown !== null) parts.launcher.answeredPipeEvent(pipeShown);
+  };
 }
 function statuslineOf(sessionId2, drawn, elsewhere) {
   const [first2, ...rest2] = elsewhere;
@@ -77865,13 +77872,13 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       clientLeft: clientLeft() ? "Y" : "N",
       queued: `${queuedMs}ms`
     });
-    const { level, line: line2 } = requestEvent(
+    const { level, line } = requestEvent(
       "render",
       facts,
       rendered.outcome,
       elapsedMs(clock, t0)
     );
-    parts.log(level, line2);
+    parts.log(level, line);
     return {
       resp: rendered.resp,
       exitAfterFlush: null,
@@ -77994,13 +78001,13 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
   });
-  const { level, line: line2 } = requestEvent(
+  const { level, line } = requestEvent(
     "click",
     facts,
     outcome,
     elapsedMs(clock, t0)
   );
-  parts.log(level, line2);
+  parts.log(level, line);
   return clickReply(outcome);
 }
 async function clickOutcome(parts, req, facts, gone) {
@@ -80407,7 +80414,7 @@ var SessionUsageStore = class {
       (0, import_node_path37.dirname)(transcriptPath),
       prior === void 0 ? void 0 : new Set(prior.files.keys())
     );
-    for (const line2 of longLineLog(agents.longLines)) this.log("info", line2);
+    for (const line of longLineLog(agents.longLines)) this.log("info", line);
     const newFiles = /* @__PURE__ */ new Map();
     let mainStamp = "";
     for (const filePath2 of [transcriptPath, ...agents.paths]) {
@@ -80424,7 +80431,7 @@ var SessionUsageStore = class {
         continue;
       }
       const { folded: folded2, longLines } = read2.value;
-      for (const line2 of longLineLog(longLines)) this.log("info", line2);
+      for (const line of longLineLog(longLines)) this.log("info", line);
       newFiles.set(filePath2, folded2);
       if (filePath2 === transcriptPath) mainStamp = folded2.cursor.stamp;
     }
@@ -80813,10 +80820,10 @@ var CACHE_TTL_MS = 60 * 60 * 1e3;
 var TAIL_CHUNK = 64 * 1024;
 var TAIL_MAX = 1 * 1024 * 1024;
 var CACHE_HIT_RE = /"(?:cache_read_input_tokens|cache_creation_input_tokens)":[1-9]/;
-function cacheActivityTs(line2) {
+function cacheActivityTs(line) {
   let parsed2;
   try {
-    parsed2 = JSON.parse(line2);
+    parsed2 = JSON.parse(line);
   } catch {
     return null;
   }
@@ -80895,9 +80902,9 @@ function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
   const lines2 = text4.split("\n");
   const start = bufStartsAtFileBeginning ? 0 : 1;
   for (let i = lines2.length - 1; i >= start; i--) {
-    const line2 = lines2[i];
-    if (!line2 || !CACHE_HIT_RE.test(line2)) continue;
-    const ts = cacheActivityTs(line2);
+    const line = lines2[i];
+    if (!line || !CACHE_HIT_RE.test(line)) continue;
+    const ts = cacheActivityTs(line);
     if (ts != null) return ts;
   }
   return null;
@@ -82840,16 +82847,16 @@ var LIST_PANES_FORMAT = "#{pane_id} #{session_id} #{session_attached} #{window_a
 var LIST_CLIENTS_FORMAT = "#{session_id} #{client_control_mode} #{pane_id}";
 function controlledSessions(listClients) {
   const controlled = /* @__PURE__ */ new Set();
-  for (const line2 of listClients.split("\n")) {
-    const [session, control2] = line2.trim().split(" ");
+  for (const line of listClients.split("\n")) {
+    const [session, control2] = line.trim().split(" ");
     if (session !== void 0 && control2 === "1") controlled.add(session);
   }
   return controlled;
 }
 function shownPanes(listPanes, controlled) {
   const shown = /* @__PURE__ */ new Set();
-  for (const line2 of listPanes.split("\n")) {
-    const [pane, session, attached, current, zoomed, active2] = line2.trim().split(" ");
+  for (const line of listPanes.split("\n")) {
+    const [pane, session, attached, current, zoomed, active2] = line.trim().split(" ");
     if (pane === void 0 || pane === "" || session === void 0) continue;
     if (Number(attached) > 0 && (current === "1" || controlled.has(session)) && (zoomed !== "1" || active2 === "1"))
       shown.add(pane);
@@ -82858,14 +82865,14 @@ function shownPanes(listPanes, controlled) {
 }
 function statusLinesOf(listPanes, listClients) {
   const sessionOf = /* @__PURE__ */ new Map();
-  for (const line2 of listPanes.split("\n")) {
-    const [pane, session] = line2.trim().split(" ");
+  for (const line of listPanes.split("\n")) {
+    const [pane, session] = line.trim().split(" ");
     if (pane !== void 0 && pane !== "" && session !== void 0)
       sessionOf.set(pane, session);
   }
   const shownBy = /* @__PURE__ */ new Map();
-  for (const line2 of listClients.split("\n")) {
-    const [session, control2, pane] = line2.trim().split(" ");
+  for (const line of listClients.split("\n")) {
+    const [session, control2, pane] = line.trim().split(" ");
     if (session !== void 0 && control2 === "0" && pane !== void 0)
       shownBy.set(session, pane);
   }
@@ -83154,7 +83161,7 @@ var ownQueries = (session) => [
 ];
 function ownOf(answers) {
   const [listing = "", status = "", ...formats] = answers;
-  const names = listing.split("\n").map((line2) => line2.split(" ")[0] ?? "");
+  const names = listing.split("\n").map((line) => line.split(" ")[0] ?? "");
   const own2 = {};
   for (const i of INDICES)
     if (names.includes(formatOption(i))) own2[i] = formats[i] ?? "";
@@ -83543,8 +83550,8 @@ var TmuxStatusLines = class {
       `#{session_id}	#{${PRIOR_OPTION}}	#{${WROTE_OPTION}}`
     ]);
     if (run3.kind === "ok") {
-      for (const line2 of run3.stdout.split("\n")) {
-        const [session, prior, wrote = ""] = line2.split("	");
+      for (const line of run3.stdout.split("\n")) {
+        const [session, prior, wrote = ""] = line.split("	");
         if (session === void 0 || prior === void 0 || prior === "")
           continue;
         const found2 = leftBehind(prior, wrote, this.deps.owner);
@@ -84133,8 +84140,8 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
       `Claude Code in ${tmux3.pane} did not exit within ${EXIT_PATIENCE_MS / 1e3} s of SIGTERM, so it was not restarted under the attach launcher`
     );
   }
-  const stranded = (why2, line3) => new Error(
-    `Claude Code in ${tmux3.pane} exited, but ${why2}, so it was not started again \u2014 start it with \`${line3}\``
+  const stranded = (why2, line2) => new Error(
+    `Claude Code in ${tmux3.pane} exited, but ${why2}, so it was not started again \u2014 start it with \`${line2}\``
   );
   const start = sessionStartOf(session, edge.presence(session.transcript));
   const chosen = start.kind === "unchecked" ? { kind: "resume", sessionId: session.sessionId } : start;
@@ -84147,27 +84154,27 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
       lineIn(startPlace(null, claude.cwd), chosen)
     );
   }
-  const line2 = lineIn(startPlace(startDir, claude.cwd), chosen);
+  const line = lineIn(startPlace(startDir, claude.cwd), chosen);
   if (start.kind === "unchecked") {
     throw stranded(
       `whether session ${session.sessionId} has a conversation could not be seen (${start.error})`,
-      line2
+      line
     );
   }
   try {
-    await edge.typeShellLine(tmux3, line2);
+    await edge.typeShellLine(tmux3, line);
   } catch (e) {
     throw stranded(
       `the line could not be typed into its pane (${e.message})`,
-      line2
+      line
     );
   }
   if (!await edge.followed(session.sessionId, "statusline", ATTACH_PATIENCE_MS)) {
     throw new Error(
-      `Claude Code in ${tmux3.pane} did not come back attached within ${ATTACH_PATIENCE_MS / 1e3} s of \`${line2}\` \u2014 the pane says why`
+      `Claude Code in ${tmux3.pane} did not come back attached within ${ATTACH_PATIENCE_MS / 1e3} s of \`${line}\` \u2014 the pane says why`
     );
   }
-  return `restarted Claude Code in ${tmux3.pane} under the attach launcher with \`${line2}\`, ${STARTED[start.kind](session.sessionId)}, and its statusline follows lane B`;
+  return `restarted Claude Code in ${tmux3.pane} under the attach launcher with \`${line}\`, ${STARTED[start.kind](session.sessionId)}, and its statusline follows lane B`;
 }
 function conversationLost(session, transcript2) {
   if (typeof transcript2 === "object") {
@@ -84499,27 +84506,42 @@ var TurnThrew = class extends Error {
 };
 
 // src/daemon/renderer-host.ts
-var line = (fields2) => `turn${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 function rendererHost(name, renderer, log) {
+  const turn = async (input) => {
+    try {
+      return { kind: "answered", output: await renderer.answer(input) };
+    } catch (e) {
+      return e instanceof TurnThrew ? { kind: "threw", error: e.thrown, record: e.record } : { kind: "threw", error: e, record: [] };
+    }
+  };
+  const record2 = (input, about, delivered) => {
+    const head = [
+      ["renderer", name],
+      ["input", input.event.kind],
+      ...about
+    ];
+    switch (delivered.kind) {
+      case "answered":
+        if (delivered.output.record.length > 0)
+          log("info", eventLine("turn", [...head, ...delivered.output.record]));
+        return;
+      case "threw":
+        log(
+          "error",
+          eventLine("turn", [
+            ...head,
+            ...delivered.record,
+            ["error", inspect(delivered.error)]
+          ])
+        );
+    }
+  };
   return {
     name,
     deliver: async (input, about) => {
-      const { kind } = input.event;
-      const head = [["renderer", name], ["input", kind], ...about];
-      try {
-        const output = await renderer.answer(input);
-        if (kind !== "request" && output.record.length > 0)
-          log("info", line([...head, ...output.record]));
-        return { kind: "answered", output };
-      } catch (e) {
-        const threw2 = e instanceof TurnThrew ? { error: e.thrown, record: e.record } : { error: e, record: [] };
-        if (kind !== "request")
-          log(
-            "error",
-            line([...head, ...threw2.record, ["error", inspect(threw2.error)]])
-          );
-        return { kind: "threw", ...threw2 };
-      }
+      const delivered = await turn(input);
+      if (input.event.kind !== "request") record2(input, about, delivered);
+      return delivered;
     }
   };
 }
@@ -85307,7 +85329,7 @@ var DaemonLog = class {
   disposed = false;
   // One line, to the log: the daemon's `DaemonLogger`.
   log = (level, msg) => {
-    const line2 = logLine(level, msg, this.clock.now());
+    const line = logLine(level, msg, this.clock.now());
     if (this.exitListener === null && !this.disposed) {
       this.exitListener = () => {
         this.exiting = true;
@@ -85315,8 +85337,8 @@ var DaemonLog = class {
       };
       process_default.on("exit", this.exitListener);
     }
-    this.waiting.push(line2);
-    this.waitingBytes += import_buffer.Buffer.byteLength(line2);
+    this.waiting.push(line);
+    this.waitingBytes += import_buffer.Buffer.byteLength(line);
     if (this.waitingBytes > MAX_WAITING_BYTES) {
       let cut = 0;
       while (this.waitingBytes > MAX_WAITING_BYTES / 2 && cut < this.waiting.length - 1) {
@@ -85807,8 +85829,8 @@ function refusalOf2(stdout2) {
 var PANE_STARTS_FORMAT = "#{pane_id} #{pane_start_command}";
 var BAR_PANE_START = /(?:^|\s)bar-pane\s+["'\\]*(%\d+)["']*\s*$/;
 function barPanesOf(listPanes, pane) {
-  return listPanes.split("\n").flatMap((line2) => {
-    const [id2, ...start] = line2.trim().split(" ");
+  return listPanes.split("\n").flatMap((line) => {
+    const [id2, ...start] = line.trim().split(" ");
     return BAR_PANE_START.exec(start.join(" "))?.[1] === pane ? [id2] : [];
   });
 }
@@ -86047,11 +86069,11 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
     },
     // Typed as a slash command is, but with no ctrl+s first: in a shell that
     // stops the terminal's output.
-    typeShellLine: async (hint, line2) => void await tmux2(
+    typeShellLine: async (hint, line) => void await tmux2(
       launcher,
       hint,
       pasteLineArgs(hint.pane, SHELL_BUFFER, []),
-      line2
+      line
     )
   };
 }
@@ -86417,8 +86439,8 @@ var ok2 = (stdout2) => ({ code: 0, stdout: stdout2 });
 programs.set("awk", () => RESIDENT);
 programs.set("ps", () => ok2(""));
 programs.set("git", (args) => {
-  const line2 = args.join(" ");
-  if (line2.startsWith("status --porcelain=v2 --branch")) {
+  const line = args.join(" ");
+  if (line.startsWith("status --porcelain=v2 --branch")) {
     const rows = [
       `# branch.oid ${repo.head}`,
       `# branch.head ${repo.branch}`,
@@ -86429,13 +86451,13 @@ programs.set("git", (args) => {
     ];
     return ok2(rows.join("\n") + "\n");
   }
-  if (line2.startsWith("log -1 --format=%ct")) return ok2(`${repo.headTime}
+  if (line.startsWith("log -1 --format=%ct")) return ok2(`${repo.headTime}
 `);
-  if (line2.startsWith("describe --tags --abbrev=0")) return ok2("v0.4.2\n");
-  if (line2.startsWith("config --local --get-regexp")) return ok2(`remote.origin.url ${REMOTE}
+  if (line.startsWith("describe --tags --abbrev=0")) return ok2("v0.4.2\n");
+  if (line.startsWith("config --local --get-regexp")) return ok2(`remote.origin.url ${REMOTE}
 `);
-  console.warn(`simulated git: no answer for \`git ${line2}\``);
-  return { code: 128, stdout: "", stderr: `fatal: the demo's git does not answer \`${line2}\`
+  console.warn(`simulated git: no answer for \`git ${line}\``);
+  return { code: 128, stdout: "", stderr: `fatal: the demo's git does not answer \`${line}\`
 ` };
 });
 function forgetWrites() {

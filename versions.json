@@ -4,15 +4,22 @@
     {
       "version": "pr-711",
       "ref": "refs/pull/711/merge",
-      "sha": "7a8071cfb0089cb2be59185d234840a04080cf2e",
-      "timestamp": "2026-11-11T15:56:57.332Z",
+      "sha": "712c0d79642ba7e10cadb52383caf2d0277f4fc4",
+      "timestamp": "2026-11-11T16:08:34.364Z",
       "commits": [
         {
-          "sha": "7a8071cfb0089cb2be59185d234840a04080cf2e",
+          "sha": "712c0d79642ba7e10cadb52383caf2d0277f4fc4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T08:55:57-07:00",
-          "message": "Merge 5d776864fa4fc8551e6db33577c007d1198eb150 into 063f5d7eba46bdf34965fbd84da03760986aab69\n"
+          "timestamp": "2026-11-11T16:07:42Z",
+          "message": "Merge 6cdd3e7b0e3133a1131ff735714396afcac4acb7 into 063f5d7eba46bdf34965fbd84da03760986aab69\n"
+        },
+        {
+          "sha": "6cdd3e7b0e3133a1131ff735714396afcac4acb7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T09:07:29-07:00",
+          "message": "fix(renderer): review high — overlapping turns stated, one logfmt field type, the answer's settle holds only what it records (candybar-host-renderer-x96a.2xo)\n\n- The interface no longer claims one input at a time: a request's turn waits\n  inside itself until the mailbox holds that wait, so turns overlap.\n- The host decides once whether it records a turn, and builds its line only\n  when it does.\n- One logfmt field type and one event-line writer serve the request event and\n  the turn line.\n- The settle a request's answer returns is built outside the draw, so it no\n  longer keeps the draw's setup alive until its frame settles.\n- The rate-limit vocabulary is back beside the function that produces it.\n- The doctor's can-move text names a moving bar handed off to another lane,\n  which the client's sighting now reads as the handoff line it drew.\n"
         },
         {
           "sha": "5d776864fa4fc8551e6db33577c007d1198eb150",
