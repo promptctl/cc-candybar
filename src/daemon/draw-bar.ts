@@ -526,11 +526,11 @@ export function drawRender(
   // readers, so a label can never disagree with the bar. The precedence
   // the resolver applies, and why each rung sits where it does, lives
   // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
-  // [LAW:one-source-of-truth] One turn of the view's source: the payload, the
-  // globals and the document are all of the same stamped turn, and what the
-  // draw takes of the client from it (its tmux pane, its width) is read off
-  // the payload, so a draw never mixes a turn with a request it was not
-  // composed from.
+  // [LAW:one-source-of-truth] The payload, the globals and the document are
+  // derived from the request and the world state the renderer took in one
+  // action, and what the draw takes of the client (its tmux pane, its width)
+  // is read off the payload, so a draw never mixes a document with a request
+  // it was not composed from.
   const payload = view.source.payload();
   const effective = view.source.effective();
   const failure = view.source.failure();

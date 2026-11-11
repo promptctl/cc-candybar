@@ -333,7 +333,7 @@ export class Collector {
             });
         }),
       {
-        // The expression cannot throw; the effect's catch is `stampOf`.
+        // The expression cannot throw; the effect's catch is `stamp`.
         onError: (e) =>
           this.deps.log(
             "error",
