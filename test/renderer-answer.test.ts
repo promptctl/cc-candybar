@@ -285,6 +285,11 @@ describe("the world state the host hands in", () => {
     const t = renderer();
     await request(t);
     const held = t.rig.served.worldStates.of(SESSION as SessionId);
+    // A newer document held, so `held` is taken again only by a new record.
+    await handIn(t.r, {
+      kind: "world-state",
+      worldState: { ...held, seq: held.seq + 1 },
+    });
     const retireSession = t.rig.cache.retireSession.bind(t.rig.cache);
     t.rig.cache.retireSession = (session) => {
       retireSession(session);
@@ -296,7 +301,7 @@ describe("the world state the host hands in", () => {
     expect(() => t.rig.served.worldStates.of(SESSION as SessionId)).toThrow(
       /no world state for session/,
     );
-    // A new record starts again at the seq the dropped document had.
+    // A new record starts again below the seq the dropped document had.
     await handIn(t.r, { kind: "world-state", worldState: held });
     expect(t.rig.served.worldStates.of(SESSION as SessionId)).toBe(held);
   });

@@ -1771,9 +1771,9 @@ export class RenderCache<
   // [LAW:single-enforcer] The host ended the session (its collector's
   // sweep): its view closes, and the failure no feed shows goes with it.
   retireSession(sessionId: string): void {
+    this.openFailures.delete(sessionId);
     const view = this.views.get(sessionId);
     if (view !== undefined) this.retireView(view, "idle");
-    this.openFailures.delete(sessionId);
   }
 
   // [LAW:one-source-of-truth] What every session's open view needs read: the

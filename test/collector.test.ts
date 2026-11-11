@@ -301,9 +301,11 @@ describe("the renderer's subscriptions", () => {
 });
 
 describe("the sweep", () => {
-  test("retires a session no request named across a whole sweep, releasing what it held, and drops it once the retire settles, so the next request starts a new record", async () => {
+  test("retires a session no request named across a whole sweep, releasing what it held, and drops it once the retire settles, even as threw, so the next request starts a new record", async () => {
     const { owners, held } = handLanded();
-    const { collector, clock, handedIn } = collectorOver(owners);
+    const { collector, clock, handedIn } = collectorOver(owners, {
+      retired: async () => ({ kind: "threw" }),
+    });
     const first = collector.requested(requestAt("/a"));
     clock.advance(SESSION_SWEEP_MS);
     expect(handedIn).toEqual([]);

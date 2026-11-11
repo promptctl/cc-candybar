@@ -454,10 +454,10 @@ export class Collector {
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
   // once, and its record stays `retiring` until the retire settles: an output
   // taken meanwhile may still name it. A settled retire, answered or threw,
-  // leaves the renderer holding nothing of the session
-  // (src/renderer/interface.ts), so the record goes either way. It goes only from the retiring period this
-  // retire began: a record a request revived, or one retired again since, is
-  // not this retire's to remove.
+  // leaves the renderer holding none of the session's document
+  // (src/renderer/interface.ts), so the record goes either way. It goes only
+  // from the retiring period this retire began: a record a request revived,
+  // or one retired again since, is not this retire's to remove.
   private retire(record: SessionRecord, live: Live): void {
     release(live);
     const retiring: Retiring = { kind: "retiring" };
