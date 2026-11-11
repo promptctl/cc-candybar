@@ -69,9 +69,13 @@ import type {
   SpeedObservation,
 } from "./cache/session-usage-store.js";
 import { projectToday, type TodayFacts } from "./cache/today-facts.js";
-import type { ContextInfo, ContextProvider } from "../segments/context.js";
-import type { MetricsInfo, MetricsProvider } from "../segments/metrics.js";
-import type { UsageInfo } from "../segments/session.js";
+import { contextOver, type ContextProvider } from "../segments/context.js";
+import {
+  metricsOver,
+  type MetricsFold,
+  type MetricsProvider,
+} from "../segments/metrics.js";
+import { usageOver, type TranscriptUsage } from "../segments/session.js";
 import type {
   ActivityInfo,
   ActivityProvider,
@@ -847,11 +851,13 @@ export async function refreshPayload(
     deps.faults.refreshed(sessionId, name, threw);
   };
   await Promise.all([
-    lane("session", () => session.usage(hookData)),
+    lane("session", () => session.usage()),
     lane("today", () => session.today()),
-    lane("context", () => deps.contextProvider.getContextInfo(hookData)),
+    lane("context", () =>
+      deps.contextProvider.refresh(sessionId, hookData.transcript_path),
+    ),
     lane("metrics", () =>
-      deps.metricsProvider.getMetricsInfo(sessionId, hookData),
+      deps.metricsProvider.refresh(sessionId, hookData.transcript_path),
     ),
     lane("activity", () =>
       deps.activityProvider.getActivityInfo(sessionId, hookData),
@@ -877,9 +883,9 @@ export async function refreshPayload(
 // (`todayOf`).
 export interface Lanes {
   readonly git: Current<GitInfo>;
-  readonly usage: Reading<UsageInfo>;
-  readonly context: Reading<ContextInfo>;
-  readonly metrics: Reading<MetricsInfo>;
+  readonly usage: Reading<TranscriptUsage>;
+  readonly context: Reading<number>;
+  readonly metrics: Reading<MetricsFold>;
   readonly activity: Reading<ActivityInfo>;
   readonly tmuxSession: Current<string>;
   readonly hostName: Current<string>;
@@ -1049,11 +1055,9 @@ export function readingsOf(inputs: PayloadInputs): Readings {
   };
   const laneReadings: Lanes = {
     git: lanes.git.current(),
-    usage: read("session", () => deps.usageStore.usageOf(sessionId, hookData)),
-    context: read("context", () => deps.contextProvider.contextOf(hookData)),
-    metrics: read("metrics", () =>
-      deps.metricsProvider.metricsOf(sessionId, hookData),
-    ),
+    usage: read("session", () => deps.usageStore.usageOf(sessionId)),
+    context: read("context", () => deps.contextProvider.tokensOf(sessionId)),
+    metrics: read("metrics", () => deps.metricsProvider.foldOf(sessionId)),
     activity: read("activity", () =>
       deps.activityProvider.activityOf(sessionId),
     ),
@@ -1169,10 +1173,13 @@ export function composePayload(
   const { effective, configFacts } = draw;
   const { configPath, ...settingCounts } = configFacts;
   const built = facts.builtins;
+  // [LAW:one-source-of-truth] The hook's instantaneous fields are laid over
+  // the document's transcript folds here, where the hook is: the document is
+  // gathered from the session's locator and carries none of them.
   const lanes = {
-    usage: unstamped(built.session),
-    context: unstamped(built.context),
-    metrics: unstamped(built.metrics),
+    usage: usageOver(unstamped(built.session), hookData),
+    context: contextOver(unstamped(built.context), hookData),
+    metrics: metricsOver(unstamped(built.metrics), hookData),
     activity: unstamped(built.activity),
     cache: unstamped(built.cache),
     speed: unstamped(built.speed),
@@ -1244,10 +1251,7 @@ export function composePayload(
   // either. Its two lanes' failures are theirs to report, below.
   const burn: BurnPayload | Pending | undefined =
     firstPending(lanes.usage, lanes.metrics) ??
-    burnOf(
-      valueOf(lanes.usage)?.session.cost,
-      valueOf(lanes.metrics)?.sessionDuration,
-    );
+    burnOf(valueOf(lanes.usage)?.cost, valueOf(lanes.metrics)?.sessionDuration);
   // [LAW:dataflow-not-control-flow] The instantaneous rates and the burn-rate
   // history fold independently from one observation — either can be present
   // without the other (a fresh burst has rates but a one-sample history; an
@@ -1260,7 +1264,7 @@ export function composePayload(
   // null sub-fields become absent keys here; an input's fallback chain
   // fills in the declared DSL default and records a last_error per field.
   const sessionPayload = over(lanes.usage, (usage) =>
-    pickNonNull({ cost: usage.session.cost, tokens: usage.session.tokens }),
+    pickNonNull({ cost: usage.cost, tokens: usage.tokens }),
   );
   const metricsPayload = over(lanes.metrics, (metrics) =>
     pickNonNull({

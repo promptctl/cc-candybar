@@ -22,19 +22,25 @@ import {
   type Reading,
 } from "../utils/outcome";
 
-// [LAW:types-are-the-program] An `ok` MetricsInfo carries real values — "no
-// cost data at all" is the `absent` outcome arm, not a bag of nulls. The one
-// remaining null is lastResponseTime, where the domain genuinely has no
-// answer (no qualifying user→assistant pair in the recent window).
-export interface MetricsInfo {
-  responseTime: number;
+// [LAW:types-are-the-program] What the transcript says of the session's
+// turns, and nothing of the hook: the session's facts carry this, so it can be
+// gathered from the transcript alone. The one null is lastResponseTime, where
+// the domain genuinely has no answer (no qualifying user→assistant pair in the
+// recent window).
+export interface MetricsFold {
   lastResponseTime: number | null;
-  sessionDuration: number;
   messageCount: number;
   // User entries that are neither a prompt nor a tool result — a fact for the
   // render event, so a count of prompts that stops moving can be told from a
   // session with none.
   nonPrompts: number;
+}
+
+// [LAW:types-are-the-program] An `ok` MetricsInfo carries real values — "no
+// cost data at all" is the `absent` outcome arm, not a bag of nulls.
+export interface MetricsInfo extends MetricsFold {
+  responseTime: number;
+  sessionDuration: number;
   linesAdded: number;
   linesRemoved: number;
 }
@@ -46,9 +52,8 @@ const RECENT_WINDOW = 20;
 
 // [LAW:types-are-the-program] The immutable fold state: the running prompt
 // count, the running count of the other user entries, and the recent-entry
-// ring. Canonical; MetricsInfo's
-// transcript-derived fields derive from it, the hookData-derived fields
-// (durations, lines) are always fresh.
+// ring. Canonical; MetricsFold derives from it, and the hook's fields
+// (durations, lines) are laid over it where the hook is (`metricsOver`).
 interface MetricsState {
   readonly messageCount: number;
   readonly nonPrompts: number;
@@ -125,52 +130,56 @@ export class MetricsProvider {
     );
   }
 
-  // [LAW:no-silent-failure] A hook payload with no cost block is `absent`
-  // (old clients); a transcript parse error is `failed`, carried to the
-  // payload boundary — the old catch dressed it as the same all-null record
-  // as "no data".
-  async getMetricsInfo(
+  // The session's metrics fold, read from its transcript.
+  // [LAW:no-silent-failure] A transcript parse error is `failed`, carried to
+  // the payload boundary.
+  async refresh(
     sessionId: string,
-    hookData: ClaudeHookData,
-  ): Promise<Outcome<MetricsInfo>> {
-    debug(`Getting metrics from hook data for session: ${sessionId}`);
-    const cost = hookData.cost;
-    if (!cost) return ABSENT;
-    return metricsFrom(
-      sessionId,
-      cost,
-      await this.fold.read(sessionId, hookData.transcript_path),
-    );
+    transcriptPath: string,
+  ): Promise<Outcome<MetricsFold>> {
+    debug(`Getting metrics from the transcript for session: ${sessionId}`);
+    return foldFrom(sessionId, await this.fold.read(sessionId, transcriptPath));
   }
 
-  // The session's metrics as its last refresh left them, for a draw.
-  metricsOf(sessionId: string, hookData: ClaudeHookData): Reading<MetricsInfo> {
-    const cost = hookData.cost;
-    if (!cost) return ABSENT;
+  // The session's metrics fold as its last refresh left it, for a draw.
+  foldOf(sessionId: string): Reading<MetricsFold> {
     const answer = this.fold.answer(sessionId);
-    return answer.kind === "pending"
-      ? answer
-      : metricsFrom(sessionId, cost, answer);
+    return answer.kind === "pending" ? answer : foldFrom(sessionId, answer);
   }
 }
 
 // [LAW:one-source-of-truth] The one projection of a fold's answer, whether a
-// refresh just made it or a draw reads it as it stands. The hookData fields
-// are the request's own, always fresh.
-function metricsFrom(
+// refresh just made it or a draw reads it as it stands.
+function foldFrom(
   sessionId: string,
-  cost: NonNullable<ClaudeHookData["cost"]>,
   folded: FoldOutcome<MetricsState>,
-): Outcome<MetricsInfo> {
+): Outcome<MetricsFold> {
   if (folded.kind === "failed") {
     return failed(`metrics (${sessionId}): ${folded.reason}`, folded.failedAt);
   }
   return ok({
-    responseTime: cost.total_api_duration_ms / 1000,
     lastResponseTime: lastResponseTime(folded.value.recent),
-    sessionDuration: cost.total_duration_ms / 1000,
     messageCount: folded.value.messageCount,
     nonPrompts: folded.value.nonPrompts,
+  });
+}
+
+// [LAW:one-source-of-truth] The session's metrics as the renderer composes
+// them: the hook's durations and lines, which are the request's own and
+// always fresh, over the transcript's fold.
+// [LAW:no-silent-failure] A hook payload with no cost block is `absent` (old
+// clients), whatever the fold says.
+export function metricsOver(
+  fold: Reading<MetricsFold>,
+  hookData: ClaudeHookData,
+): Reading<MetricsInfo> {
+  const cost = hookData.cost;
+  if (!cost) return ABSENT;
+  if (fold.kind !== "ok") return fold;
+  return ok({
+    ...fold.value,
+    responseTime: cost.total_api_duration_ms / 1000,
+    sessionDuration: cost.total_duration_ms / 1000,
     linesAdded: cost.total_lines_added,
     linesRemoved: cost.total_lines_removed,
   });

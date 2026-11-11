@@ -1,13 +1,16 @@
-// Contract tests for ContextProvider's window-size sourcing. The window size
-// is authoritatively Claude Code's `context_window.context_window_size` — never
-// guessed from the model name. These lock that in, including the 1M-context
-// variants where a hardcoded 200k would report wildly wrong "left" percentages.
+// Contract tests for the session's context: the window size is authoritatively
+// Claude Code's `context_window.context_window_size` — never guessed from the
+// model name — and the transcript's fold is only the fallback the renderer
+// lays the hook over (`contextOver`). These lock that in, including the
+// 1M-context variants where a hardcoded 200k would report wildly wrong "left"
+// percentages.
 
 import { appendFileSync, mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ContextProvider } from "../src/segments/context";
+import { ContextProvider, contextOver } from "../src/segments/context";
+import { failed, ok, pendingOf } from "../src/utils/outcome";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { systemTimekeeper } from "../src/time";
 
@@ -23,8 +26,7 @@ function baseHook(overrides: Partial<ClaudeHookData> = {}): ClaudeHookData {
   } as ClaudeHookData;
 }
 
-describe("ContextProvider window-size sourcing", () => {
-  const provider = new ContextProvider({ clock: systemTimekeeper });
+describe("the context window's sourcing", () => {
 
   it("uses context_window_size from the hook data (1M model), not a 200k guess", async () => {
     const hook = baseHook({
@@ -42,7 +44,7 @@ describe("ContextProvider window-size sourcing", () => {
         },
       },
     });
-    const outcome = await provider.getContextInfo(hook);
+    const outcome = contextOver(pendingOf("unread"), hook);
     expect(outcome.kind).toBe("ok");
     if (outcome.kind !== "ok") return;
     // 168,912 of a 1M window is ~17% used → ~83% left. A 200k limit would have
@@ -70,7 +72,7 @@ describe("ContextProvider window-size sourcing", () => {
         },
       },
     });
-    const outcome = await provider.getContextInfo(hook);
+    const outcome = contextOver(pendingOf("unread"), hook);
     expect(outcome.kind).toBe("ok");
     if (outcome.kind !== "ok") return;
     expect(outcome.value.percentage).toBe(42);
@@ -93,7 +95,7 @@ describe("ContextProvider window-size sourcing", () => {
         },
       },
     });
-    const outcome = await provider.getContextInfo(hook);
+    const outcome = contextOver(pendingOf("unread"), hook);
     expect(outcome.kind).toBe("ok");
     if (outcome.kind !== "ok") return;
     // 200k / 1M = 20% used → 80% left, with NO 33k buffer skew.
@@ -101,20 +103,10 @@ describe("ContextProvider window-size sourcing", () => {
     expect(outcome.value.contextLeftPercentage).toBe(80);
   });
 
-  it("falls back to context_window_size even when current_usage is null", async () => {
-    // current_usage null ⇒ native path returns null ⇒ transcript fallback,
-    // which must still source the size from the hook data, not the floor.
-    const dir = mkdtempSync(join(tmpdir(), "cc-ctx-"));
-    const transcript = join(dir, "t.jsonl");
-    writeFileSync(
-      transcript,
-      JSON.stringify({
-        timestamp: "2026-05-31T00:00:00.000Z",
-        message: { usage: { input_tokens: 168_912 } },
-      }) + "\n",
-    );
+  it("falls back to context_window_size even when current_usage is null", () => {
+    // current_usage null ⇒ no native answer ⇒ the transcript's tokens, whose
+    // window size must still come from the hook data, not the floor.
     const hook = baseHook({
-      transcript_path: transcript,
       context_window: {
         total_input_tokens: 0,
         total_output_tokens: 0,
@@ -124,11 +116,37 @@ describe("ContextProvider window-size sourcing", () => {
         current_usage: null,
       },
     });
-    const outcome = await provider.getContextInfo(hook);
+    const outcome = contextOver(ok(168_912), hook);
     expect(outcome.kind).toBe("ok");
     if (outcome.kind !== "ok") return;
     expect(outcome.value.maxTokens).toBe(1_000_000);
-    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("answers the native window whatever the transcript's fold says", () => {
+    const hook = baseHook({
+      context_window: {
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        context_window_size: 1_000_000,
+        used_percentage: 10,
+        remaining_percentage: 90,
+        current_usage: {
+          input_tokens: 100_000,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    });
+    const native = contextOver(ok(5), hook);
+    expect(contextOver(pendingOf("unread"), hook)).toEqual(native);
+    expect(contextOver(failed("unreadable", "read"), hook)).toEqual(native);
+  });
+
+  it("is the fold's own answer while it has no tokens and the hook no window", () => {
+    expect(contextOver(pendingOf("unread"), baseHook())).toEqual(
+      pendingOf("unread"),
+    );
   });
 });
 
@@ -147,8 +165,6 @@ describe("ContextProvider transcript fallback", () => {
       },
       ...extra,
     }) + "\n";
-  const noWindow = (transcript: string, session = "fb") =>
-    baseHook({ session_id: session, transcript_path: transcript });
   let dir: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "cc-ctx-fb-"));
@@ -158,8 +174,10 @@ describe("ContextProvider transcript fallback", () => {
   it("reads the newest main-chain usage entry, skipping sidechains", async () => {
     const t = join(dir, "t.jsonl");
     writeFileSync(t, entry(1000) + entry(2000) + entry(9999, { isSidechain: true }));
-    const outcome = await new ContextProvider({ clock: systemTimekeeper }).getContextInfo(noWindow(t));
-    expect(outcome).toEqual({
+    const tokens = await new ContextProvider({ clock: systemTimekeeper }).refresh("fb", t);
+    expect(tokens).toEqual(ok(2015));
+    // With no window from the hook, the ratio is against the 200k floor.
+    expect(contextOver(tokens, baseHook())).toEqual({
       kind: "ok",
       value: {
         totalTokens: 2015,
@@ -173,7 +191,7 @@ describe("ContextProvider transcript fallback", () => {
   it("is absent for a transcript with no usage-bearing entry", async () => {
     const t = join(dir, "t.jsonl");
     writeFileSync(t, JSON.stringify({ timestamp: "2026-05-31T00:00:00.000Z", type: "user" }) + "\n");
-    const outcome = await new ContextProvider({ clock: systemTimekeeper }).getContextInfo(noWindow(t));
+    const outcome = await new ContextProvider({ clock: systemTimekeeper }).refresh("fb", t);
     expect(outcome.kind).toBe("absent");
   });
 
@@ -181,17 +199,17 @@ describe("ContextProvider transcript fallback", () => {
     const t = join(dir, "t.jsonl");
     writeFileSync(t, entry(1000));
     const provider = new ContextProvider({ clock: systemTimekeeper });
-    const first = await provider.getContextInfo(noWindow(t));
-    expect(first.kind === "ok" && first.value.totalTokens).toBe(1015);
+    expect(await provider.refresh("fb", t)).toEqual(ok(1015));
 
     appendFileSync(t, entry(50_000));
     utimesSync(t, Date.now() / 1000 + 5, Date.now() / 1000 + 5);
-    const second = await provider.getContextInfo(noWindow(t));
-    expect(second.kind === "ok" && second.value.totalTokens).toBe(50_015);
+    expect(await provider.refresh("fb", t)).toEqual(ok(50_015));
+    // A draw reads what the last refresh left.
+    expect(provider.tokensOf("fb")).toEqual(ok(50_015));
   });
 
   it("is failed when the transcript cannot be read", async () => {
-    const outcome = await new ContextProvider({ clock: systemTimekeeper }).getContextInfo(noWindow(dir));
+    const outcome = await new ContextProvider({ clock: systemTimekeeper }).refresh("fb", dir);
     expect(outcome.kind).toBe("failed");
   });
 });

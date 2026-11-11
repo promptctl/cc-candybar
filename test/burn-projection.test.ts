@@ -99,19 +99,13 @@ function depsWith(
     ...absentOwners(),
     gitProvider: fakeGit(async () => ABSENT),
     usageStore: fakeUsage({
-      usage: async () => ok({ session: { cost: 6, tokens: 1000 } }),
+      usage: async () =>
+        ok({ calculatedCost: null, tokens: 1000, tokenBreakdown: null }),
       today: () => ABSENT,
     }),
     contextProvider: fakeContext(async () => ABSENT),
     metricsProvider: fakeMetrics(async () =>
-      ok({
-        responseTime: 0,
-        lastResponseTime: null,
-        sessionDuration: 1800,
-        messageCount: 0,
-        linesAdded: 0,
-        linesRemoved: 0,
-      }),
+      ok({ lastResponseTime: null, messageCount: 0, nonPrompts: 0 }),
     ),
     tmuxService: fakeTmux(async () => ABSENT),
     log: () => {},
@@ -130,6 +124,14 @@ function hookWithWindows() {
     cwd: "/tmp",
     model: { id: "claude-opus-4-7", display_name: "Opus" },
     workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+    // $6 over half an hour: the burn rate is $12/hr.
+    cost: {
+      total_cost_usd: 6,
+      total_duration_ms: 1_800_000,
+      total_api_duration_ms: 0,
+      total_lines_added: 0,
+      total_lines_removed: 0,
+    },
     rate_limits: {
       five_hour: { used_percentage: 20, resets_at: NOW_SEC + 4 * 3600 },
       seven_day: { used_percentage: 14, resets_at: NOW_SEC + 6 * 86400 },
