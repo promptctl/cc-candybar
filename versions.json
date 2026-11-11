@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-715",
+      "ref": "refs/pull/715/merge",
+      "sha": "583d301136e440ebcc91432ed88710cf9e955a6b",
+      "timestamp": "2026-11-11T22:40:50.578Z",
+      "commits": [
+        {
+          "sha": "583d301136e440ebcc91432ed88710cf9e955a6b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T15:39:44-07:00",
+          "message": "Merge 85647a63f23b84d0288491ecb8cf9faa01485c16 into 0d2f702fcd2a13b829816aa567324d73fed35d6c\n"
+        },
+        {
+          "sha": "85647a63f23b84d0288491ecb8cf9faa01485c16",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T15:39:32-07:00",
+          "message": "fix(collector): the sweep sends a retiring session its retire again until one is answered, and every hand-in settles (candybar-host-renderer-x96a.0iu)\n\nA retire whose turn threw left the record retiring with nothing to send\nit again, so it stayed counted and the sweep never disarmed. The sweep\nnow sends every retiring record its retire again. An answer removes the\nrecord only while it is still in the retiring period that send belongs\nto, so an answer that arrives late cannot remove a record that was\nrevived or retired again. The record stays until then, because the\nrenderer may still hold the session's document, and a new record at\nseq 1 would be refused.\n\nEvery hand-in goes through one path that logs a rejected delivery,\nmeaning the host's own recording of the turn threw, at error with the\nsession. Before this, a rejection reached the process's\nunhandledRejection handler, which shuts the daemon down. That fixes the\nworld-state hand-in as well as the retire.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0d2f702fcd2a13b829816aa567324d73fed35d6c",
