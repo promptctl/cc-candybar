@@ -4,15 +4,22 @@
     {
       "version": "pr-714",
       "ref": "refs/pull/714/merge",
-      "sha": "268755eed4e3de34865c31212d79c9e702973087",
-      "timestamp": "2026-11-11T22:09:29.095Z",
+      "sha": "cf023be2432c3e0062e880a39388b4dafcd549c3",
+      "timestamp": "2026-11-11T22:13:49.363Z",
       "commits": [
         {
-          "sha": "268755eed4e3de34865c31212d79c9e702973087",
+          "sha": "cf023be2432c3e0062e880a39388b4dafcd549c3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:08:42Z",
-          "message": "Merge 025f1df3bd68415f60e4623a4c722498ea9d725e into d9e26fa44171c75529a59436c3d34d697497d642\n"
+          "timestamp": "2026-11-11T22:12:54Z",
+          "message": "Merge bef6fca5e26c9fee6277af3c1f14b24d1e17692e into d9e26fa44171c75529a59436c3d34d697497d642\n"
+        },
+        {
+          "sha": "bef6fca5e26c9fee6277af3c1f14b24d1e17692e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T15:12:42-07:00",
+          "message": "test(frame-feed): the unseen-pane case fits its waits inside the case's timeout, names the server's lines when it fails, and bounds its slack by the moving period (candybar-host-renderer-x96a.5qt)\n\nReview pass (medium): both waits take 10 s, so a stall fails by name\nbefore jest's 30 s; the visibility wait's failure lists that server's\nlines; and the span's slack is a moving period rather than a copied\ntimer resolution, so it cannot drift from the feed's constants.\n"
         },
         {
           "sha": "025f1df3bd68415f60e4623a4c722498ea9d725e",
