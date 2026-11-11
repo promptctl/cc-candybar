@@ -7,7 +7,7 @@ What Brandon set for this work: each entry states the intent and its reason in p
 They are related and handled one at a time.
 
 - **G-1. The browser is a fully supported surface for the bar,** for any user with today's prerequisites: an Apple Silicon Mac, tmux and Claude Code. Every modern browser renders truecolor.
-- **G-2. A session's bar can run off a worktree.** The live bar may run off the main checkout, but most development happens on worktrees, and the bar is what is being developed. Each daemon may reserve about a gigabyte, so a naive second daemon would duplicate disk reads, processes and memory. The work may split the daemon into a part that gathers facts and a part that draws, so the drawing can be iterated alone.
+- **G-2. A session's bar can run off a worktree.** The live bar may run off the main checkout, but most development happens on worktrees, and the bar is what is being developed. Each daemon may reserve about a gigabyte, so a naive second daemon would duplicate disk reads, processes and memory. The work may split the daemon into a part that reads the world into world state and a part that draws, so the drawing can be iterated alone.
 
 ## The constraints
 
@@ -37,7 +37,7 @@ They are related and handled one at a time.
 
 ### Draw and isolation
 
-- **R-10. Gathering facts is one process, and Events → Apply → Draw runs in a separate process, or several,** as Brandon reads the split. *(Inferred:* this serves G-2: drawing can be iterated, restarted and multiplied without a second reader of the world.)
+- **R-10. Reading the world into world state is one process, and Events → Handler → Draw runs in a separate process, or several,** as Brandon reads the split. *(Inferred:* this serves G-2: drawing can be iterated, restarted and multiplied without a second reader of the world.)
 - **R-11. Draw writes nothing; it only draws.** *(Inferred:* a draw that writes cannot be replayed or tested without mocks, and its frame may show something that did not happen.)
 - **R-12. There is no dev renderer and no dev mode.** Every renderer draws and acts the same way. A worktree's renderer is isolated by where it reads and writes and is pointed to by a session's values; anything it shows that main does not comes from instrumentation, never from performing a subset of actions. An allow-list of verbs is a dev-mode toggle by another name, and the primitive is an isolated renderer.
 - **R-13. No absolute path is stored in undo history;** every stored path sits under the renderer's isolated state directory. *(Inferred:* a history copied between renderers must not be able to write the user's files.)
