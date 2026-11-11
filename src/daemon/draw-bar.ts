@@ -387,20 +387,21 @@ export function configureSession(
   });
 }
 
-// [LAW:single-enforcer] A `retire` turn: the session's view closes, and its
-// world state goes after it whatever the closing did, so the turn keeps the
-// retire's contract (src/renderer/interface.ts) however it ends.
+// [LAW:single-enforcer] A `retire` turn: the session's world state goes, and
+// its view closes. The document goes first, before anything can throw, so the
+// turn keeps the retire's contract (src/renderer/interface.ts) however it
+// ends; one action holds both, so the view's change reaction, stopped by the
+// closing, never runs over the document gone.
 export function retireSession(
   parts: Pick<RendererParts, "worldStates"> & {
     readonly renderCache: Pick<RendererParts["renderCache"], "retireSession">;
   },
   session: SessionId,
 ): void {
-  try {
-    parts.renderCache.retireSession(session);
-  } finally {
+  runInAction(() => {
     parts.worldStates.drop(session);
-  }
+    parts.renderCache.retireSession(session);
+  });
 }
 
 // [LAW:single-enforcer] The one way a session's view is held at a context:

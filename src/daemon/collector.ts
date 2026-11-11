@@ -122,10 +122,7 @@ interface Live extends Reader {
   readonly kind: "live";
   readonly stop: () => void;
 }
-interface Retiring {
-  readonly kind: "retiring";
-}
-type Phase = Live | Retiring;
+type Phase = Live | { readonly kind: "retiring" };
 
 interface SessionRecord {
   readonly session: SessionId;
@@ -460,7 +457,7 @@ export class Collector {
   // or one retired again since, is not this retire's to remove.
   private retire(record: SessionRecord, live: Live): void {
     release(live);
-    const retiring: Retiring = { kind: "retiring" };
+    const retiring = { kind: "retiring" } as const;
     record.phase = retiring;
     this.deps.log(
       "info",
