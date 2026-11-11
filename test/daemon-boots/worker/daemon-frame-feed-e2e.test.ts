@@ -50,6 +50,7 @@ import { barOf } from "../../helpers/drawn-frame";
 import { untilHeard } from "../../helpers/reload-signal";
 import { writeAtomic } from "../../../src/utils/atomic-write";
 import { until, type Condition } from "../../helpers/until";
+import { elapsedMs } from "../../../src/time";
 import {
   loggedLines,
   logLines,
@@ -629,14 +630,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       // [LAW:no-ambient-temporal-coupling] Until the pane's server answers,
       // the pane counts as shown and its bar draws at the moving rate, so the
       // case waits for the answer, which is held before its line is logged.
-      await loggedLines(
-        env,
-        (lines) =>
-          lines.filter((l) =>
-            l.includes(`visibility socket=${JSON.stringify(tmux.socket)} shown=-`),
-          ),
-        (found) => found.length > 0,
+      const unseen = `visibility socket=${JSON.stringify(tmux.socket)} shown=-`;
+      await waitFor(
+        () => logLines(env).some((l) => l.includes(unseen)),
         "the pane's server saying it shows no pane",
+        15_000,
       );
       // [LAW:one-source-of-truth] The span is read on the daemon's clock, the
       // one its frames are spaced on, and opens before the count it is
@@ -649,14 +647,17 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         "three frames drawn once the pane is known unseen",
         15_000,
       );
-      span = clock.monotonic() - from;
+      span = elapsedMs(clock, from);
     });
     // The draws are counted over every feed, so this session's is the only one.
     expect(feeds).toBe(1);
     // Three draws span two still periods, each short of a full one by at most
     // the millisecond a frame's moment is truncated to; a bar someone could
     // see draws three in a tenth of a second.
-    expect(span).toBeGreaterThanOrEqual(FEED_PERIODS.still);
+    expect(span).toBeGreaterThanOrEqual(2 * FEED_PERIODS.still - 2);
+    // The bar moved while it was drawn at the still rate, so the rate is the
+    // unseen pane's and not a bar that stopped moving.
+    expect(await closedSummary("feed-unseen")).toMatch(/ unseen=[1-9]/u);
   });
 
   test("a subscribe that names no session is refused, and the stream ends on the refusal", async () => {
