@@ -4,15 +4,22 @@
     {
       "version": "pr-716",
       "ref": "refs/pull/716/merge",
-      "sha": "355128d9512f71108b1255cb10887e630d746b3c",
-      "timestamp": "2026-11-11T22:59:34.788Z",
+      "sha": "58933dd09046018a71589a5e065cc3116c42b4ab",
+      "timestamp": "2026-11-11T23:06:16.818Z",
       "commits": [
         {
-          "sha": "355128d9512f71108b1255cb10887e630d746b3c",
+          "sha": "58933dd09046018a71589a5e065cc3116c42b4ab",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T15:58:36-07:00",
-          "message": "Merge 73dc096503ff70e2efb0a00949fb829d3aef448c into 0d2f702fcd2a13b829816aa567324d73fed35d6c\n"
+          "timestamp": "2026-11-11T23:05:17Z",
+          "message": "Merge 92eb015720b1d6425352f4435d44a6c87d0a555e into 0d2f702fcd2a13b829816aa567324d73fed35d6c\n"
+        },
+        {
+          "sha": "92eb015720b1d6425352f4435d44a6c87d0a555e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T16:05:05-07:00",
+          "message": "refactor(renderer): one retire arm keeps the retire's contract, which the interface states, and the collector reads nothing of how a retire ended (candybar-host-renderer-x96a.0iu)\n"
         },
         {
           "sha": "73dc096503ff70e2efb0a00949fb829d3aef448c",

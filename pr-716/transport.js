@@ -76736,6 +76736,13 @@ function configureSession(parts, req, worldState, at, facts) {
     holdSessionAt(parts, req)[Symbol.dispose]();
   });
 }
+function retireSession(parts, session) {
+  try {
+    parts.renderCache.retireSession(session);
+  } finally {
+    parts.worldStates.drop(session);
+  }
+}
 function holdSessionAt(parts, req) {
   const origin = sessionRenderOrigin(
     req.requested,
@@ -82942,8 +82949,8 @@ var Collector = class {
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
   // once, and its record stays `retiring` until the retire settles: an output
   // taken meanwhile may still name it. A settled retire, answered or threw,
-  // leaves the renderer holding nothing of the session (src/renderer/main.ts),
-  // so the record goes either way. It goes only from the retiring period this
+  // leaves the renderer holding nothing of the session
+  // (src/renderer/interface.ts), so the record goes either way. It goes only from the retiring period this
   // retire began: a record a request revived, or one retired again since, is
   // not this retire's to remove.
   retire(record2, live) {
@@ -84822,11 +84829,7 @@ function mainRenderer(parts) {
         parts.worldStates.take(event.worldState);
         return answered([], record2);
       case "retire":
-        try {
-          parts.renderCache.retireSession(event.session);
-        } finally {
-          parts.worldStates.drop(event.session);
-        }
+        retireSession(parts, event.session);
         return answered([], record2);
       case "effect-done": {
         const delivered = deliveries.get(event.of);
