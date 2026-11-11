@@ -4,32 +4,32 @@
     {
       "version": "pr-714",
       "ref": "refs/pull/714/merge",
-      "sha": "cf023be2432c3e0062e880a39388b4dafcd549c3",
-      "timestamp": "2026-11-11T22:13:49.363Z",
+      "sha": "1b149fd9e1a4df15f58a00d52ee1371e8f9e22a9",
+      "timestamp": "2026-11-11T22:23:04.332Z",
       "commits": [
         {
-          "sha": "cf023be2432c3e0062e880a39388b4dafcd549c3",
+          "sha": "1b149fd9e1a4df15f58a00d52ee1371e8f9e22a9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:12:54Z",
-          "message": "Merge bef6fca5e26c9fee6277af3c1f14b24d1e17692e into d9e26fa44171c75529a59436c3d34d697497d642\n"
+          "timestamp": "2026-11-11T22:21:58Z",
+          "message": "Merge 6b2729d2de440d9314cdf4450a858dadff7f6d15 into d9e26fa44171c75529a59436c3d34d697497d642\n"
         },
         {
-          "sha": "bef6fca5e26c9fee6277af3c1f14b24d1e17692e",
+          "sha": "6b2729d2de440d9314cdf4450a858dadff7f6d15",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T15:12:42-07:00",
           "message": "test(frame-feed): the unseen-pane case fits its waits inside the case's timeout, names the server's lines when it fails, and bounds its slack by the moving period (candybar-host-renderer-x96a.5qt)\n\nReview pass (medium): both waits take 10 s, so a stall fails by name\nbefore jest's 30 s; the visibility wait's failure lists that server's\nlines; and the span's slack is a moving period rather than a copied\ntimer resolution, so it cannot drift from the feed's constants.\n"
         },
         {
-          "sha": "025f1df3bd68415f60e4623a4c722498ea9d725e",
+          "sha": "89534f68bd72c11800135cd469153152dacceaca",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T15:08:29-07:00",
           "message": "test(frame-feed): the unseen-pane case pins its bar moving, waits through the stream's own wait, and bounds three draws by two still periods (candybar-host-renderer-x96a.5qt)\n\nReview pass (high): the visibility wait runs through waitFor, so the\nstream's end is part of it and it gets the draw wait's budget; the span\nuses elapsedMs; the bound is the two still periods the comment argues\nfor; and the closing summary's unseen count shows the bar was moving.\nForcing every pane shown fails it (104 ms against 1998).\n"
         },
         {
-          "sha": "f3229d65e4c62b9dcadd7b84c62107172d623f7f",
+          "sha": "0727bcdb7625d07213f5b0b7306943d7515144f4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T15:02:43-07:00",
