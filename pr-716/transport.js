@@ -82763,25 +82763,12 @@ var Collector = class {
     });
   }
   // One sweep. Public so a test can run it at an instant it chose.
-  // [LAW:no-ambient-temporal-coupling] The sweep is the one thing that sends
-  // a retire again: a retiring record is sent its retire on every sweep until
-  // one is answered, so no outcome of a delivery can leave it waiting.
   sweep() {
     for (const record2 of this.records.values()) {
-      const { phase } = record2;
-      switch (phase.kind) {
-        case "live":
-          if (record2.requested) record2.requested = false;
-          else if (!this.deps.watched(record2.session))
-            this.retire(record2, phase);
-          break;
-        case "retiring":
-          this.deps.log(
-            "info",
-            `session retire sent again sid=${JSON.stringify(record2.session)}`
-          );
-          this.send(record2, phase);
-      }
+      if (record2.phase.kind !== "live") continue;
+      if (record2.requested) record2.requested = false;
+      else if (!this.deps.watched(record2.session))
+        this.retire(record2, record2.phase);
     }
   }
   stats() {
@@ -82855,7 +82842,7 @@ var Collector = class {
       (moved) => runInAction(() => {
         if (moved === stamped.from) return;
         if (this.stamp({ session, stamped }, moved))
-          void this.handIn({
+          void this.deps.deliver({
             kind: "world-state",
             worldState: stamped.document
           });
@@ -82953,11 +82940,12 @@ var Collector = class {
     }
   }
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
-  // once, and its record stays `retiring` until the renderer answered a
-  // retire: until then the renderer may hold the session's document, and a
-  // new record would start at seq 1, which its store refuses. A retire lets go
-  // of nothing the renderer does not hold, so the sweep sends it again until
-  // one is answered or a request revives the record.
+  // once, and its record stays `retiring` until the retire settles: an output
+  // taken meanwhile may still name it. A settled retire, answered or threw,
+  // leaves the renderer holding nothing of the session (src/renderer/main.ts),
+  // so the record goes either way. It goes only from the retiring period this
+  // retire began: a record a request revived, or one retired again since, is
+  // not this retire's to remove.
   retire(record2, live) {
     release3(live);
     const retiring = { kind: "retiring" };
@@ -82966,37 +82954,11 @@ var Collector = class {
       "info",
       `session retired sid=${JSON.stringify(record2.session)}`
     );
-    this.send(record2, retiring);
-  }
-  // An answer removes the record only while it is still in the retiring
-  // period this send belongs to: one a request revived, or the daemon closed,
-  // is not this retire's to remove.
-  send(record2, retiring) {
-    void this.handIn({ kind: "retire", session: record2.session }).then(
-      (kind) => {
-        if (kind === "answered" && record2.phase === retiring && this.records.get(record2.session) === record2)
-          this.records.delete(record2.session);
-        if (this.records.size === 0) this.disarmSweep();
-      }
-    );
-  }
-  // [LAW:single-enforcer] The one hand-in of what the collector delivers
-  // alone. [LAW:no-silent-failure] A delivery that rejected, because the
-  // host's own recording of the turn threw, is logged here and settles as
-  // `rejected`, so none is left to the process's unhandledRejection handler,
-  // which would end the daemon.
-  handIn(event) {
-    const session = event.kind === "retire" ? event.session : event.worldState.session;
-    return this.deps.deliver(event).then(
-      ({ kind }) => kind,
-      (e) => {
-        this.deps.log(
-          "error",
-          `${event.kind} delivery rejected sid=${JSON.stringify(session)}: ${inspect(e)}`
-        );
-        return "rejected";
-      }
-    );
+    void this.deps.deliver({ kind: "retire", session: record2.session }).then(() => {
+      if (record2.phase === retiring && this.records.get(record2.session) === record2)
+        this.records.delete(record2.session);
+      if (this.records.size === 0) this.disarmSweep();
+    });
   }
   armSweep() {
     if (this.stopSweep !== null) return;
@@ -84860,8 +84822,11 @@ function mainRenderer(parts) {
         parts.worldStates.take(event.worldState);
         return answered([], record2);
       case "retire":
-        parts.renderCache.retireSession(event.session);
-        parts.worldStates.drop(event.session);
+        try {
+          parts.renderCache.retireSession(event.session);
+        } finally {
+          parts.worldStates.drop(event.session);
+        }
         return answered([], record2);
       case "effect-done": {
         const delivered = deliveries.get(event.of);
