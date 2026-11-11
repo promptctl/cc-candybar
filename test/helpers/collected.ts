@@ -50,8 +50,11 @@ export function collected(
         worldStates.take(event.worldState);
         return { kind: "answered" };
       }
-      cache().retireSession(event.session);
-      worldStates.drop(event.session);
+      try {
+        cache().retireSession(event.session);
+      } finally {
+        worldStates.drop(event.session);
+      }
       collector.subscribed(cache().subscriptions());
       return { kind: "answered" };
     },

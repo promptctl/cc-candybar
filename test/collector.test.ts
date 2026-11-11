@@ -33,6 +33,7 @@ import {
 import type { StorageKey } from "../src/daemon/cache/managed-storage";
 import type { Fact } from "../src/facts/fact";
 import type { UpdateNotice, WorldState } from "../src/facts/world-state";
+import type { Delivered } from "../src/daemon/renderer-host";
 import type { Subscriptions } from "../src/renderer/interface";
 import {
   GitService,
@@ -113,18 +114,18 @@ function handLanded() {
 const ANSWERED = { kind: "answered" } as const;
 
 // A collector over `owners`, on a clock the case moves, with a renderer that
-// answers each hand-in at once and records it. `watched` is which sessions an
-// open feed draws; `retired` is how the renderer's retire turns end.
+// records each hand-in and answers it at once. `watched` is which sessions an
+// open feed draws; `retired` is the renderer's answer to each retire.
 function collectorOver(
   owners: RenderPayloadDeps,
   {
     update = () => pendingOf("unread"),
     watched = new Set<SessionId>(),
-    retired = "answered",
+    retired = async () => ANSWERED,
   }: {
     readonly update?: () => Fact<UpdateNotice>;
     readonly watched?: ReadonlySet<SessionId>;
-    readonly retired?: "answered" | "threw";
+    readonly retired?: () => Promise<Pick<Delivered, "kind">>;
   } = {},
 ) {
   const clock: HeldClock = heldClock(new Date(1_700_000_000_000));
@@ -137,7 +138,7 @@ function collectorOver(
     watched: (session) => watched.has(session),
     deliver: async (event) => {
       handedIn.push(event);
-      return event.kind === "retire" ? { kind: retired } : ANSWERED;
+      return event.kind === "retire" ? retired() : ANSWERED;
     },
     log: (level, message) => logged.push(`${level} ${message}`),
   });
@@ -157,6 +158,18 @@ const subscribing = (
     })),
   },
 });
+
+// Retires the renderer answers only when the case says, in the order sent.
+function heldRetires() {
+  const answers: Array<() => void> = [];
+  return {
+    retired: () =>
+      new Promise<Pick<Delivered, "kind">>((resolve) =>
+        answers.push(() => resolve(ANSWERED)),
+      ),
+    answer: (i: number) => answers[i]!(),
+  };
+}
 
 const drained = async (): Promise<void> => {
   for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -305,16 +318,20 @@ describe("the sweep", () => {
     expect(clock.pending()).toBe(0);
   });
 
-  test("keeps a session whose retire turn threw, and a request revives it from the document it kept", async () => {
+  test("drops a session whose retire turn threw once that retire settles, and the next request starts a new record", async () => {
     const { owners } = handLanded();
-    const { collector, clock } = collectorOver(owners, { retired: "threw" });
+    const { collector, clock } = collectorOver(owners, {
+      retired: async () => ({ kind: "threw" }),
+    });
     const first = collector.requested(requestAt("/a"));
     clock.advance(2 * SESSION_SWEEP_MS);
     await drained();
-    expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
-    // Not a new record at seq 1, which the renderer still holding the session
-    // would refuse.
-    expect(collector.requested(requestAt("/a"))).toBe(first);
+    expect(collector.stats()).toEqual({ sessions: 0, retiring: 0 });
+    expect(clock.pending()).toBe(0);
+    // The renderer let go of the session's document, so seq 1 is taken.
+    const next = collector.requested(requestAt("/a"));
+    expect(next.seq).toBe(first.seq);
+    expect(collector.stats()).toEqual({ sessions: 1, retiring: 0 });
   });
 
   test("keeps a session an open feed draws", () => {
@@ -328,24 +345,10 @@ describe("the sweep", () => {
     expect(collector.stats()).toEqual({ sessions: 1, retiring: 0 });
   });
 
-  test("a retiring session takes outputs naming it without holding, and a request makes it live again from the document it kept", () => {
+  test("a retiring session takes outputs naming it without holding, and a request makes it live again, which the late answer leaves alone", async () => {
     const { owners, held } = handLanded();
-    const handIns: Array<() => void> = [];
-    const clock = heldClock(new Date(1_700_000_000_000));
-    const logged: string[] = [];
-    const collector = new Collector({
-      owners,
-      update: () => pendingOf("unread"),
-      clock,
-      watched: () => false,
-      // The renderer answers the retire only when the case says.
-      deliver: (event) =>
-        event.kind === "retire"
-          ? new Promise((resolve) => handIns.push(() => resolve(ANSWERED)))
-          : Promise.resolve(ANSWERED),
-      log: (level, message) => logged.push(`${level} ${message}`),
-    });
-    cleanups.push(() => collector.close());
+    const { retired, answer } = heldRetires();
+    const { collector, clock, logged } = collectorOver(owners, { retired });
     const first = collector.requested(requestAt("/a"));
     clock.advance(2 * SESSION_SWEEP_MS);
     expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
@@ -355,15 +358,31 @@ describe("the sweep", () => {
     expect(logged.filter((line) => line.startsWith("error"))).toEqual([]);
 
     const revived = collector.requested(requestAt("/a"));
-    // Its seq goes on from the kept document, so the renderer's store takes it.
     expect(revived.seq).toBe(first.seq + 1);
     expect(revived.sources).toHaveProperty("/plugin");
     expect(held.has("source:/plugin")).toBe(true);
-    // The retire answered late leaves the revived session alone.
-    for (const answer of handIns) answer();
-    return drained().then(() => {
-      expect(collector.stats()).toEqual({ sessions: 1, retiring: 0 });
-    });
+    answer(0);
+    await drained();
+    expect(collector.stats()).toEqual({ sessions: 1, retiring: 0 });
+  });
+
+  test("a session retired again keeps its record until the later retire settles, however late the earlier one is answered", async () => {
+    const { owners } = handLanded();
+    const { retired, answer } = heldRetires();
+    const { collector, clock } = collectorOver(owners, { retired });
+    collector.requested(requestAt("/a"));
+    clock.advance(2 * SESSION_SWEEP_MS);
+    collector.requested(requestAt("/a"));
+    clock.advance(2 * SESSION_SWEEP_MS);
+    expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
+
+    answer(0);
+    await drained();
+    expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
+    answer(1);
+    await drained();
+    expect(collector.stats()).toEqual({ sessions: 0, retiring: 0 });
+    expect(clock.pending()).toBe(0);
   });
 });
 

@@ -54,14 +54,19 @@ afterEach(() => {
 
 const NO_STATS = { size: 0, hits: 0, misses: 0 };
 
-// The renderer over the rig's render cache and owners, and the copies each
-// delivered frame recorded in that cache, in the order they were recorded.
+// The renderer over the rig's render cache and owners, the copies each
+// delivered frame recorded in that cache, in the order they were recorded,
+// and every line the daemon's log was handed.
 function renderer(): {
   readonly r: Renderer;
   readonly recorded: string[][];
+  readonly logged: string[];
   readonly rig: SessionRig;
 } {
-  const rig = sessionRig(dir, cleanups);
+  const logged: string[] = [];
+  const rig = sessionRig(dir, cleanups, {
+    log: (level, message) => logged.push(`${level} ${message}`),
+  });
   const { providers } = rig;
   const parts = rendererParts({
     cache: rig.cache,
@@ -80,7 +85,7 @@ function renderer(): {
     recorded.push([...copies.values()]);
     record(sessionId, by, copies);
   };
-  return { r: mainRenderer(parts), recorded, rig };
+  return { r: mainRenderer(parts), recorded, logged, rig };
 }
 
 // A statusline request for the rig's session, through the host's checkpoint.
@@ -259,7 +264,7 @@ describe("the world state the host hands in", () => {
     ).rejects.toThrow(/does not follow the held seq/);
   });
 
-  test("a retire closes the session's view and drops its world state", async () => {
+  test("a retire closes the session's view and drops its world state, and logs no error", async () => {
     const t = renderer();
     await request(t);
     expect(viewOf(t.rig)).not.toBeNull();
@@ -272,6 +277,28 @@ describe("the world state the host hands in", () => {
     expect(() => t.rig.served.worldStates.of(SESSION as SessionId)).toThrow(
       /no world state for session/,
     );
+    // The view stopped observing the document before it went.
+    expect(t.logged.filter((line) => line.startsWith("error"))).toEqual([]);
+  });
+
+  test("a retire whose session teardown throws still drops its world state, so the host's next record for the session is taken", async () => {
+    const t = renderer();
+    await request(t);
+    const held = t.rig.served.worldStates.of(SESSION as SessionId);
+    const retireSession = t.rig.cache.retireSession.bind(t.rig.cache);
+    t.rig.cache.retireSession = (session) => {
+      retireSession(session);
+      throw new Error("the view's teardown threw");
+    };
+    await expect(
+      handIn(t.r, { kind: "retire", session: SESSION as SessionId }),
+    ).rejects.toThrow(TurnThrew);
+    expect(() => t.rig.served.worldStates.of(SESSION as SessionId)).toThrow(
+      /no world state for session/,
+    );
+    // A new record starts again at the seq the dropped document had.
+    await handIn(t.r, { kind: "world-state", worldState: held });
+    expect(t.rig.served.worldStates.of(SESSION as SessionId)).toBe(held);
   });
 
   test("every output names each open view's plugin sources at their storage keys", async () => {

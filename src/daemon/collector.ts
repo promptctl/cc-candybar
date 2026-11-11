@@ -13,7 +13,7 @@
 //
 // [LAW:no-ambient-temporal-coupling] The collector owns the session's
 // lifetime: a session idle across a whole sweep, with no open feed, is
-// retired, and its record goes once the renderer has answered the retire.
+// retired, and its record goes once the retire settles.
 
 import { inspect } from "node:util";
 import {
@@ -122,7 +122,10 @@ interface Live extends Reader {
   readonly kind: "live";
   readonly stop: () => void;
 }
-type Phase = Live | { readonly kind: "retiring" };
+interface Retiring {
+  readonly kind: "retiring";
+}
+type Phase = Live | Retiring;
 
 interface SessionRecord {
   readonly session: SessionId;
@@ -211,8 +214,8 @@ export class Collector {
   // of it.
   subscribed({ sources }: Subscriptions): void {
     // [LAW:no-silent-failure] A renderer subscribes only for sessions the host
-    // handed it, and the host keeps a session's record until its retire is
-    // answered: a session with no record is the host's bug.
+    // handed it, and the host keeps a session's record until its retire
+    // settles: a session with no record is the host's bug.
     for (const session of Object.keys(sources) as SessionId[]) {
       if (!this.records.has(session))
         this.deps.log(
@@ -449,23 +452,25 @@ export class Collector {
   }
 
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
-  // once, and its record stays `retiring` until the renderer answered the
-  // retire: an output taken meanwhile may still name it. A retire whose turn
-  // threw may have left the renderer holding the session's document, so the
-  // record stays, and a request revives it with the next `seq`.
+  // once, and its record stays `retiring` until the retire settles: an output
+  // taken meanwhile may still name it. A settled retire, answered or threw,
+  // leaves the renderer holding nothing of the session (src/renderer/main.ts),
+  // so the record goes either way. It goes only from the retiring period this
+  // retire began: a record a request revived, or one retired again since, is
+  // not this retire's to remove.
   private retire(record: SessionRecord, live: Live): void {
     release(live);
-    record.phase = { kind: "retiring" };
+    const retiring: Retiring = { kind: "retiring" };
+    record.phase = retiring;
     this.deps.log(
       "info",
       `session retired sid=${JSON.stringify(record.session)}`,
     );
     void this.deps
       .deliver({ kind: "retire", session: record.session })
-      .then(({ kind }) => {
+      .then(() => {
         if (
-          kind === "answered" &&
-          record.phase.kind === "retiring" &&
+          record.phase === retiring &&
           this.records.get(record.session) === record
         )
           this.records.delete(record.session);

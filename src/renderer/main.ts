@@ -80,8 +80,16 @@ export function mainRenderer(parts: RendererParts): Renderer {
         parts.worldStates.take(event.worldState);
         return answered([], record);
       case "retire":
-        parts.renderCache.retireSession(event.session);
-        parts.worldStates.drop(event.session);
+        // [LAW:no-ambient-temporal-coupling] The view stops observing the
+        // document before anything in its teardown can throw, and the
+        // document goes after it whatever the teardown did: a retire that
+        // settles leaves the renderer holding nothing of the session, so the
+        // host's next record for it starts again at seq 1.
+        try {
+          parts.renderCache.retireSession(event.session);
+        } finally {
+          parts.worldStates.drop(event.session);
+        }
         return answered([], record);
       case "effect-done": {
         const delivered = deliveries.get(event.of);
