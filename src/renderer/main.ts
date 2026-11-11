@@ -12,6 +12,7 @@
 import {
   answerRequest,
   configureSession,
+  retireSession,
   type RendererParts,
 } from "../daemon/draw-bar.js";
 import type { RequestFacts } from "../daemon/request-event.js";
@@ -80,8 +81,7 @@ export function mainRenderer(parts: RendererParts): Renderer {
         parts.worldStates.take(event.worldState);
         return answered([], record);
       case "retire":
-        parts.renderCache.retireSession(event.session);
-        parts.worldStates.drop(event.session);
+        retireSession(parts, event.session);
         return answered([], record);
       case "effect-done": {
         const delivered = deliveries.get(event.of);

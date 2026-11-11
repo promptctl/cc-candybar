@@ -13,7 +13,7 @@
 //
 // [LAW:no-ambient-temporal-coupling] The collector owns the session's
 // lifetime: a session idle across a whole sweep, with no open feed, is
-// retired, and its record goes once the renderer has answered the retire.
+// retired, and its record goes once the retire settles.
 
 import { inspect } from "node:util";
 import {
@@ -52,7 +52,6 @@ import {
   type RenderPayloadDeps,
   type ViewFacts,
 } from "./render-payload.js";
-import type { Delivered } from "./renderer-host.js";
 import type { SessionId } from "./session-id.js";
 
 // [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
@@ -77,8 +76,9 @@ export interface CollectorDeps {
   // frame feeds are the one record of who is watching.
   readonly watched: (session: SessionId) => boolean;
   // The host's one path to its renderer, for what the collector hands in
-  // alone; it answers once the renderer's turn did, with how it ended.
-  readonly deliver: (event: HandedIn) => Promise<Pick<Delivered, "kind">>;
+  // alone; it settles once the renderer's turn did, and the collector reads
+  // nothing of how it ended.
+  readonly deliver: (event: HandedIn) => Promise<unknown>;
   readonly log: DaemonLogger;
 }
 
@@ -211,8 +211,8 @@ export class Collector {
   // of it.
   subscribed({ sources }: Subscriptions): void {
     // [LAW:no-silent-failure] A renderer subscribes only for sessions the host
-    // handed it, and the host keeps a session's record until its retire is
-    // answered: a session with no record is the host's bug.
+    // handed it, and the host keeps a session's record until its retire
+    // settles: a session with no record is the host's bug.
     for (const session of Object.keys(sources) as SessionId[]) {
       if (!this.records.has(session))
         this.deps.log(
@@ -449,23 +449,25 @@ export class Collector {
   }
 
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
-  // once, and its record stays `retiring` until the renderer answered the
-  // retire: an output taken meanwhile may still name it. A retire whose turn
-  // threw may have left the renderer holding the session's document, so the
-  // record stays, and a request revives it with the next `seq`.
+  // once, and its record stays `retiring` until the retire settles: an output
+  // taken meanwhile may still name it. A settled retire, answered or threw,
+  // leaves the renderer holding none of the session's document
+  // (src/renderer/interface.ts), so the record goes either way. It goes only
+  // from the retiring period this retire began: a record a request revived,
+  // or one retired again since, is not this retire's to remove.
   private retire(record: SessionRecord, live: Live): void {
     release(live);
-    record.phase = { kind: "retiring" };
+    const retiring = { kind: "retiring" } as const;
+    record.phase = retiring;
     this.deps.log(
       "info",
       `session retired sid=${JSON.stringify(record.session)}`,
     );
     void this.deps
       .deliver({ kind: "retire", session: record.session })
-      .then(({ kind }) => {
+      .then(() => {
         if (
-          kind === "answered" &&
-          record.phase.kind === "retiring" &&
+          record.phase === retiring &&
           this.records.get(record.session) === record
         )
           this.records.delete(record.session);
