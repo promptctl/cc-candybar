@@ -1,3 +1,9 @@
+## [1.217.1](https://github.com/promptctl/cc-candybar/compare/v1.217.0...v1.217.1) (2026-11-11)
+
+### Bug Fixes
+
+* **collector:** a retire that settles drops its session's record, because the renderer lets go of the document on every outcome (candybar-host-renderer-x96a.0iu) ([#716](https://github.com/promptctl/cc-candybar/issues/716)) ([316d84b](https://github.com/promptctl/cc-candybar/commit/316d84baeabd627bb71ba4184597372d24e77cde))
+
 ## [1.217.0](https://github.com/promptctl/cc-candybar/compare/v1.216.0...v1.217.0) (2026-11-11)
 
 ### Features
