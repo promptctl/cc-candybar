@@ -4,15 +4,22 @@
     {
       "version": "pr-713",
       "ref": "refs/pull/713/merge",
-      "sha": "8eab105205eb9140edf7b0d02a126950363c7ce7",
-      "timestamp": "2026-11-11T21:05:34.921Z",
+      "sha": "85047e6d78869998c7ffe7f785049b6f1cfb132a",
+      "timestamp": "2026-11-11T21:21:04.669Z",
       "commits": [
         {
-          "sha": "8eab105205eb9140edf7b0d02a126950363c7ce7",
+          "sha": "85047e6d78869998c7ffe7f785049b6f1cfb132a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T14:04:23-07:00",
-          "message": "Merge e7f2d2c4ee1a66f4d3bc0cf416ad3e2d35a18ae4 into 3d7e53b9f1808833f18ed94678a165f47253a764\n"
+          "timestamp": "2026-11-11T21:19:53Z",
+          "message": "Merge 5518ffc4831996d1f06a87b9a928583ebb2774b8 into 3d7e53b9f1808833f18ed94678a165f47253a764\n"
+        },
+        {
+          "sha": "5518ffc4831996d1f06a87b9a928583ebb2774b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T14:19:41-07:00",
+          "message": "fix(router): a request holds the view its config turn opened, and the config turn records the context it carries (candybar-host-renderer-x96a.5zx)\n\nThe request turn opened the session's view a second time at its own\ncontext, so a request delivered after a later config moved the view back\nto the older context. It now holds the view the config turn opened and\nopens nothing. The config turn records the request's hints and config\ninputs before it opens, so a session whose opening throws still names\nthe chain a durable click resolves. Every effect a config turn returns\nis refused, so none is left owed its effect-done, and its failure is\nnamed by the turn, not by a guessed cause.\n"
         },
         {
           "sha": "e7f2d2c4ee1a66f4d3bc0cf416ad3e2d35a18ae4",

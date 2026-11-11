@@ -76736,7 +76736,8 @@ function openSession(parts, req, worldState) {
     sessionState,
     req.sessionId
   );
-  return runInAction(() => {
+  runInAction(() => {
+    recordRequest(parts, req);
     worldStates.take(worldState);
     return renderCache.holdSession(
       origin.projectDir,
@@ -76744,12 +76745,16 @@ function openSession(parts, req, worldState) {
       origin.target.path,
       req
     );
-  });
+  })[Symbol.dispose]();
 }
 function setUpRender(parts, req, at, facts) {
   const hintsError = requestFacts(req, at, facts);
   noteFacts(facts, { encoding: req.encoding });
-  const hold2 = openSession(parts, req, parts.worldStates.of(req.sessionId));
+  const hold2 = parts.renderCache.holdView(req.sessionId);
+  if (hold2 === null)
+    throw new Error(
+      `no view for session ${JSON.stringify(req.sessionId)}: the host delivers its config, which opens one, ahead of every request`
+    );
   return setUpDraw(parts, hold2, req, hintsError, at, facts);
 }
 function setUpFrame(parts, sessionId2, at, facts) {
@@ -77072,10 +77077,6 @@ function recordRequest(parts, req) {
     sessionState.set(sessionId2, SESSION_RENDER_ORIGIN_KEY, origin);
   }
 }
-async function answerRequest(parts, req, at, waitEndsAt, facts) {
-  recordRequest(parts, req);
-  return drawAnswer(parts, req, at, waitEndsAt, facts);
-}
 function arrived2(parts, req, lanes) {
   const { laneSetups, tmuxStatusLines } = parts;
   laneSetups.noted(laneSessionOf(parts, req), lanes);
@@ -77108,7 +77109,7 @@ function laneClicked(parts, sessionId2, before, after) {
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
 }
-async function drawAnswer(parts, req, at, waitEndsAt, facts) {
+async function answerRequest(parts, req, at, waitEndsAt, facts) {
   var _stack = [];
   try {
     const { clock, frameFeeds, log } = parts;
@@ -77238,37 +77239,6 @@ function recorded(facts, delivered) {
 }
 async function answerStatusline(host, collector, clock, arrived3, id2, at, waitEndsAt, facts) {
   const req = located(arrived3);
-  const configured = await host.answer({
-    kind: "event",
-    at,
-    event: {
-      kind: "config",
-      context: req,
-      worldState: collector.requested(req)
-    }
-  });
-  if (configured.kind === "threw") {
-    noteFacts(facts, { sid: req.sessionId });
-    recorded(facts, configured);
-    noteFacts(facts, { renderer: host.name });
-    return failed2(host, configured.error, "opening the session: ");
-  }
-  const delivered = await host.answer({
-    kind: "event",
-    at,
-    event: { kind: "request", id: id2, context: req, waitEndsAt }
-  });
-  recorded(facts, delivered);
-  recorded(facts, configured);
-  if (delivered.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed2(host, delivered.error);
-  }
-  const { effects } = delivered.output;
-  noteFacts(facts, {
-    renderer: host.name,
-    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
-  });
   const done2 = (effect, reason) => void host.deliver(
     {
       kind: "event",
@@ -77284,6 +77254,39 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
       ["effect", String(effect.id)]
     ]
   );
+  const configured = await host.answer({
+    kind: "event",
+    at,
+    event: {
+      kind: "config",
+      context: req,
+      worldState: collector.requested(req)
+    }
+  });
+  if (configured.kind === "threw") {
+    noteFacts(facts, { sid: req.sessionId });
+    recorded(facts, configured);
+    noteFacts(facts, { renderer: host.name });
+    return failed2(host, configured.error, "its config turn: ");
+  }
+  for (const effect of configured.output.effects)
+    done2(effect, "a config turn answers no request");
+  const delivered = await host.answer({
+    kind: "event",
+    at,
+    event: { kind: "request", id: id2, context: req, waitEndsAt }
+  });
+  recorded(facts, delivered);
+  recorded(facts, configured);
+  if (delivered.kind === "threw") {
+    noteFacts(facts, { renderer: host.name });
+    return failed2(host, delivered.error);
+  }
+  const { effects } = delivered.output;
+  noteFacts(facts, {
+    renderer: host.name,
+    effects: [...configured.output.effects, ...effects].map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
+  });
   let answer2 = null;
   for (const effect of effects) {
     switch (effect.kind) {
@@ -84789,10 +84792,9 @@ function mainRenderer(parts) {
   });
   const turn = async (event, at, record2) => {
     switch (event.kind) {
-      case "config": {
-        openSession(parts, event.context, event.worldState)[Symbol.dispose]();
+      case "config":
+        openSession(parts, event.context, event.worldState);
         return answered([], record2);
-      }
       case "request": {
         const { frame: frame2, delivered } = await answerRequest(
           parts,
