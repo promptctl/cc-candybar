@@ -1,24 +1,28 @@
-// [LAW:one-source-of-truth] What a synthesis pass depends on rather than owns.
-// The settings menu and edit chrome mint segments, actions and variables into
-// every config (brandon-settings-menu-d6f), and their output does not re-enter
-// cross-ref, so a read they mint that nothing declares would render a ⚠ in
-// every bar. What they read is payload inputs, which every merged config
-// carries by construction, and their own names, so whether they resolve does
-// not depend on the config: the proof is a test over loaded configs, and a
-// load pays nothing for it. The reads are derived from the config, never a
-// hand-kept list, so a read a later control adds is checked with no second
-// place to update.
+// [LAW:no-silent-failure] exception: a load does not re-prove the reads the
+// settings menu, edit chrome and placement menus mint, though their output
+// does not re-enter cross-ref and an unresolved one renders a ⚠ in every bar.
+// They read payload inputs, `.effective` projections and names the passes
+// declare themselves; only which of those names exist follows the config
+// (presets, placements, a segment's settings, `{{ menu }}` calls). So a test
+// over authored configs names any unresolved read, and a load pays nothing.
+// The reads are derived from the config, never a hand-kept list, so a read a
+// later control adds is checked with no second place to update.
 
-import { actionTemplates } from "./action.js";
-import { walkNodes, type DslConfig } from "./dsl-types.js";
-import { presetNames, presetRoot } from "./presets.js";
-import { templateReads, refResolves, templateScopeOf } from "./loader/refs.js";
+import { actionTemplates } from "../../src/config/action.js";
+import { walkNodes, type DslConfig } from "../../src/config/dsl-types.js";
+import { presetNames, presetRoot } from "../../src/config/presets.js";
+import {
+  templateReads,
+  refResolves,
+  templateScopeOf,
+} from "../../src/config/loader/refs.js";
 import {
   CONFIG_KEY_TO_EFFECTIVE_VAR,
   SESSION_KEY_TO_EFFECTIVE_VAR,
-} from "./setting-projections.js";
+} from "../../src/config/setting-projections.js";
 
-// Every variable the synthesis minted into `config` READS. Three kinds of read: the dotted refs of
+// Every variable the synthesis minted into `config` reads, plus the author's
+// node `when`s: the preset trees are walked whole. Three kinds of read: the dotted refs of
 // every template (segment fields, node `when`s and the lead/trail drawn in a
 // segment node's cell, template variables, copy/open actions); and the
 // `.effective` projection a
@@ -31,7 +35,9 @@ function mintedReads(config: DslConfig, before: DslConfig): Set<string> {
     had: Readonly<Record<string, T>>,
   ): T[] =>
     Object.entries(all)
-      .filter(([name]) => !(name in had))
+      // By identity, so a pass's declaration that replaces one of the same
+      // name is checked too.
+      .filter(([name, decl]) => had[name] !== decl)
       .map(([, decl]) => decl);
   const reads = new Set<string>();
   const add = (
@@ -81,8 +87,8 @@ function mintedReads(config: DslConfig, before: DslConfig): Set<string> {
 
 // Every read the synthesis minted into `config`, over `before` (the merged,
 // cross-referenced config it was synthesized from), that `config` does not
-// resolve. The trees are walked whole: the author's nodes in them were
-// resolved by cross-ref against the same scope, so they cost nothing to read.
+// resolve. Author nodes in the trees were resolved by cross-ref against the
+// same scope, so reading them again costs nothing.
 export function unresolvedReads(
   config: DslConfig,
   before: DslConfig,

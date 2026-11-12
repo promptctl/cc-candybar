@@ -47,12 +47,14 @@ export function validateConfig(
   return config;
 }
 
-export function parseAndValidate(
+// The whole pipeline's result, placements and drops included, for a test that
+// reads past the validated config.
+export function parseAndPlace(
   filePath: string,
   source: string,
   allowedPalettes?: ReadonlySet<string>,
   dflt: DslConfig = EMPTY_DEFAULT,
-): ValidatedConfig {
+): ReturnType<typeof validateRenderable> {
   // The same delta-accepting set loadConfig derives from the default it
   // merges over, so a test's cascade is production's.
   const raw = parseDslConfig(
@@ -61,9 +63,26 @@ export function parseAndValidate(
     allowedPalettes,
     inheritableSegmentNames(dflt),
   );
-  return validateConfig(
+  return validateRenderable(
     { config: mergeWithDefault(raw, dflt), raw, source },
+    new Map(),
     filePath,
     allowedPalettes,
   );
+}
+
+export function parseAndValidate(
+  filePath: string,
+  source: string,
+  allowedPalettes?: ReadonlySet<string>,
+  dflt: DslConfig = EMPTY_DEFAULT,
+): ValidatedConfig {
+  const { config, dropped } = parseAndPlace(
+    filePath,
+    source,
+    allowedPalettes,
+    dflt,
+  );
+  if (dropped.length > 0) throw dropped[0];
+  return config;
 }
