@@ -39153,12 +39153,12 @@ function slotAt(path42) {
 function mergeWithDefault(raw, dflt) {
   return {
     globals: { ...dflt.globals, ...raw.globals ?? {} },
-    // [LAW:single-enforcer] The daemon's payload inputs lie beneath every
-    // base, so no caller can build a base that lacks them.
+    // [LAW:single-enforcer] The daemon's payload inputs have the last word
+    // over every base and every layer, so no config reads another value.
     variables: {
-      ...PAYLOAD_INPUTS,
       ...dflt.variables,
-      ...raw.variables ?? {}
+      ...raw.variables ?? {},
+      ...PAYLOAD_INPUTS
     },
     segments: overlayByName(
       dflt.segments,
@@ -40309,49 +40309,37 @@ function pluginScopeCollisions(ctx, out, inherited) {
   for (const [segment, decl] of Object.entries(out.segments ?? {})) {
     for (const v of Object.keys(decl.vars ?? {})) {
       const name = `${segment}.${v}`;
+      const at = {
+        path: `segments.${segment}.vars.${v}`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
+      };
+      if (isPayloadInput(name)) {
+        ctx.issues.push({
+          ...at,
+          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} \u2014 rename the var or the segment`
+        });
+        continue;
+      }
       const scope = scopeOf(name);
       if (scope === void 0 || inherited.has(segment)) continue;
       ctx.issues.push({
-        path: `segments.${segment}.vars.${v}`,
-        line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
+        ...at,
         message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`
       });
     }
   }
 }
-function withoutPayloadDeclarations(filePath2, source, raw) {
-  const notices = [];
-  const drop2 = (name, keyPath) => {
-    if (!Object.hasOwn(PAYLOAD_INPUTS, name)) return false;
-    notices.push(
-      `${filePath2}:${findKeyLine(source, keyPath)}: "${name}" is supplied by the daemon's payload to every config, so this declaration is ignored \u2014 remove it`
-    );
-    return true;
-  };
-  const keep2 = (record2, dropped) => Object.fromEntries(Object.entries(record2).filter(([k]) => !dropped(k)));
-  return {
-    raw: {
-      ...raw,
-      ...raw.variables && {
-        variables: keep2(raw.variables, (n) => drop2(n, ["variables", n]))
-      },
-      ...raw.segments && {
-        segments: Object.fromEntries(
-          Object.entries(raw.segments).map(([segment, decl]) => [
-            segment,
-            decl.vars === void 0 ? decl : {
-              ...decl,
-              vars: keep2(
-                decl.vars,
-                (v) => drop2(`${segment}.${v}`, ["segments", segment, "vars", v])
-              )
-            }
-          ])
-        )
-      }
-    },
-    notices
-  };
+var PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
+function payloadDeclarationNotices(filePath2, source, raw) {
+  const lineOf = keyLocator(source);
+  return Object.keys(raw.variables ?? {}).filter(isPayloadInput).map((name) => {
+    const line = lineOf(["variables", name]);
+    const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
+    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
+  });
+}
+function isPayloadInput(name) {
+  return Object.hasOwn(PAYLOAD_INPUTS, name);
 }
 
 // src/config/loader/layout.ts
@@ -59198,7 +59186,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under3) {
     json2.plugins === void 0 ? [] : validatePluginRefs({ ...ctx, issues: [] }, json2.plugins) ?? [],
     isPlainObject(json2.segments) ? Object.keys(json2.segments) : []
   );
-  const validated = validateTopLevel(
+  const raw = validateTopLevel(
     ctx,
     json2,
     inherited,
@@ -59208,12 +59196,14 @@ function parseDslFile(filePath2, source, allowedPalettes, under3) {
   if (issues.length > 0) {
     throw new ConfigError(filePath2, issues, warnings);
   }
-  const { raw, notices } = withoutPayloadDeclarations(
-    filePath2,
-    source,
-    validated
-  );
-  return { raw, warnings: [...warnings, ...notices], layer };
+  return {
+    raw,
+    warnings: [
+      ...warnings,
+      ...payloadDeclarationNotices(filePath2, source, raw)
+    ],
+    layer
+  };
 }
 var NO_INHERITED_SEGMENTS = /* @__PURE__ */ new Set();
 function parseJson5OrThrow(filePath2, source) {

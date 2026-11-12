@@ -4,15 +4,22 @@
     {
       "version": "pr-722",
       "ref": "refs/pull/722/merge",
-      "sha": "69eedb283a85bf1cec521c30d0bc85c6b2b83740",
-      "timestamp": "2026-11-12T04:34:17.709Z",
+      "sha": "11741792aa9337e0f287f8bd2251f1d162b7f253",
+      "timestamp": "2026-11-12T04:42:51.288Z",
       "commits": [
         {
-          "sha": "69eedb283a85bf1cec521c30d0bc85c6b2b83740",
+          "sha": "11741792aa9337e0f287f8bd2251f1d162b7f253",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T04:33:22Z",
-          "message": "Merge 135a444132ee74b8c18a17d94415e2b40983f524 into e3e73c6b78a8776b63461d4fcab107abbec5184f\n"
+          "timestamp": "2026-11-12T04:41:58Z",
+          "message": "Merge d43f784932803eb4d206505ab956ca1ceea9a729 into e3e73c6b78a8776b63461d4fcab107abbec5184f\n"
+        },
+        {
+          "sha": "d43f784932803eb4d206505ab956ca1ceea9a729",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T21:41:46-07:00",
+          "message": "fix(config): the merge gives the payload inputs the last word, so a file's own declaration is only a warning (candybar-host-renderer-x96a.5e0)\n\nLaying them last enforces precedence for every layer, programmatic ones\nincluded, in the one place layers meet. The loader no longer rebuilds the\nparsed file; it only names the redundant lines. A segment var under a payload\nname stays refused: it stores beside the payload's input, where the merge has\nno say.\n"
         },
         {
           "sha": "135a444132ee74b8c18a17d94415e2b40983f524",
