@@ -824,7 +824,7 @@ export function realize(
   display: string,
   boundValue: string | undefined,
   store: VariableStore,
-  sessionId: string,
+  sessionId: SessionId,
   signer: LinkSigner,
 ): { effects: readonly Effect[]; active: boolean } {
   switch (c.kind) {

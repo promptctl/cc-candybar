@@ -32,23 +32,37 @@ const CONFIG = `{
 
 describe("a view's session", () => {
   test("a redeclared session.id does not move which session's state a state variable reads", () => {
-    const rig = buildRig({ source: CONFIG, palettes: new Set(["textual-dark"]), sessionId: OWN });
+    const rig = buildRig({
+      source: CONFIG,
+      palettes: new Set(["textual-dark"]),
+      sessionId: OWN,
+    });
     rig.sessionState.set(OTHER, "pick", "other's");
     rig.sessionState.set(OWN, "pick", "own");
     expect(textOf(rig.draw().frame)).toContain("pick=own");
   });
 
   test("a write to the view's own session moves its next draw", () => {
-    const rig = buildRig({ source: CONFIG, palettes: new Set(["textual-dark"]), sessionId: OWN });
+    const rig = buildRig({
+      source: CONFIG,
+      palettes: new Set(["textual-dark"]),
+      sessionId: OWN,
+    });
     expect(textOf(rig.draw().frame)).toContain("pick=(unset)");
     rig.sessionState.set(OWN, "pick", "own");
     expect(textOf(rig.draw().frame)).toContain("pick=own");
   });
 
   test("a redeclared session.id does not move which session a click names", () => {
-    const rig = buildRig({ source: CONFIG, palettes: new Set(["textual-dark"]), sessionId: OWN });
-    const urls = linkUrls(rig.draw().frame).filter((u) => u.includes("pick"));
-    expect(urls).not.toHaveLength(0);
-    for (const url of urls) expect(effectsOf(url)[0]?.args[0]).toBe(OWN);
+    const rig = buildRig({
+      source: CONFIG,
+      palettes: new Set(["textual-dark"]),
+      sessionId: OWN,
+    });
+    const writes = linkUrls(rig.draw().frame)
+      .map((u) => effectsOf(u)[0])
+      .filter((e) => e?.args[1] === "pick");
+    expect(writes).not.toHaveLength(0);
+    for (const write of writes) expect(write?.args[0]).toBe(OWN);
   });
 });

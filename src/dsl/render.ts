@@ -77,7 +77,6 @@ import {
   compileActions,
   actionFuncs,
   bindRender,
-  clickSession,
   renderBinding,
   type ActionRuntime,
 } from "../render/action.js";
@@ -1555,10 +1554,7 @@ export function drawDsl(
       // [LAW:one-source-of-truth] The row ✕ names the session every other
       // affordance's URL does.
       closeDisclosure: (key) =>
-        disclosureCloseFragment(
-          clickSession(compiled.menuRuntime.action, "row ✕"),
-          key,
-        ),
+        disclosureCloseFragment(registry.session(), key),
       placed: (id, lines) => record.placed(id, motion.placed(id, lines)),
       lastDrawn: (id) => last?.placements.get(id),
       waited: (variable) => waited.add(variable),
