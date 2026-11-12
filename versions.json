@@ -4,39 +4,39 @@
     {
       "version": "pr-722",
       "ref": "refs/pull/722/merge",
-      "sha": "19da0a7e6ba6feb9e216f7cef0244e996e751c88",
-      "timestamp": "2026-11-12T04:52:23.305Z",
+      "sha": "cb3fa0b8e16ca4614f00eea4cbade94e60d5405b",
+      "timestamp": "2026-11-12T05:10:52.084Z",
       "commits": [
         {
-          "sha": "19da0a7e6ba6feb9e216f7cef0244e996e751c88",
+          "sha": "cb3fa0b8e16ca4614f00eea4cbade94e60d5405b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T04:51:16Z",
-          "message": "Merge 808b712bf51c8615b0d6d4c16b5a149f61c40a0d into e3e73c6b78a8776b63461d4fcab107abbec5184f\n"
+          "timestamp": "2026-11-12T05:09:46Z",
+          "message": "Merge 9846a25ad96b66fc1155de842a90a752a1012601 into e3e73c6b78a8776b63461d4fcab107abbec5184f\n"
         },
         {
-          "sha": "808b712bf51c8615b0d6d4c16b5a149f61c40a0d",
+          "sha": "9846a25ad96b66fc1155de842a90a752a1012601",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T21:51:04-07:00",
           "message": "fix(config): a refused file carries its payload-declaration warnings, and the comments name the merge's last word (candybar-host-renderer-x96a.5e0)\n"
         },
         {
-          "sha": "d43f784932803eb4d206505ab956ca1ceea9a729",
+          "sha": "d54e90bee931136103779032c5f0e30eed34a665",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T21:41:46-07:00",
           "message": "fix(config): the merge gives the payload inputs the last word, so a file's own declaration is only a warning (candybar-host-renderer-x96a.5e0)\n\nLaying them last enforces precedence for every layer, programmatic ones\nincluded, in the one place layers meet. The loader no longer rebuilds the\nparsed file; it only names the redundant lines. A segment var under a payload\nname stays refused: it stores beside the payload's input, where the merge has\nno say.\n"
         },
         {
-          "sha": "135a444132ee74b8c18a17d94415e2b40983f524",
+          "sha": "85438f0f30f306a5e951e19d40dff394f4e74c5e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T21:33:10-07:00",
           "message": "fix(config): a file's own payload-input declaration is dropped with a warning, and the merge lays the payload floor beneath every base (candybar-host-renderer-x96a.5e0)\n\nRefusing the file cost an upgrading user every other line of a config the\ndocs once told them to write. The floor now lives in the merge, so no base a\ncaller builds can lack it.\n"
         },
         {
-          "sha": "2f732c9a6e299ddd5060132f2c810bb9efc97d3b",
+          "sha": "e3436ad5bdab768cddad641cfdbcc2e7c515327b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T21:19:46-07:00",
