@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-723",
+      "ref": "refs/pull/723/merge",
+      "sha": "a879c2daf86e5d64b7b6716d90c9e9cb267edf45",
+      "timestamp": "2026-11-12T05:27:36.138Z",
+      "commits": [
+        {
+          "sha": "a879c2daf86e5d64b7b6716d90c9e9cb267edf45",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T05:26:49Z",
+          "message": "Merge c7b3d78572fc578c9436361f9e5e5d6ba79540b9 into 5e6bce6dfd01f43eca1c1503452bc4699f03ff91\n"
+        },
+        {
+          "sha": "c7b3d78572fc578c9436361f9e5e5d6ba79540b9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:26:39-07:00",
+          "message": "test(config): the chrome-reads check lives in test helpers, runs over authored configs, and checks a replaced declaration by identity (candybar-host-renderer-x96a.dbg)\n"
+        },
+        {
+          "sha": "1b20943467f6fae486dbb97e9c503ad814eccfd9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:20:04-07:00",
+          "message": "perf(config): a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "5e6bce6dfd01f43eca1c1503452bc4699f03ff91",
@@ -13,28 +42,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-12T05:22:35Z",
           "message": "chore(release): set `package.json` to 1.218.2\n\n## [1.218.2](https://github.com/promptctl/cc-candybar/compare/v1.218.1...v1.218.2) (2026-11-12)\n\n### Bug Fixes\n\n* **config:** a payload input is the daemon's, so no config can redeclare the session, file or setting the bar's own acts read (candybar-host-renderer-x96a.5e0) ([#722](https://github.com/promptctl/cc-candybar/issues/722)) ([0414cd9](https://github.com/promptctl/cc-candybar/commit/0414cd9074150ff566b34b41a0172ea94b7ec30c))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-723",
-      "ref": "refs/pull/723/merge",
-      "sha": "074f26b9cd8d8a4fed3a030ce1608ba8ea19f8c5",
-      "timestamp": "2026-11-12T05:21:01.481Z",
-      "commits": [
-        {
-          "sha": "074f26b9cd8d8a4fed3a030ce1608ba8ea19f8c5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:20:15-07:00",
-          "message": "Merge 1b20943467f6fae486dbb97e9c503ad814eccfd9 into 0414cd9074150ff566b34b41a0172ea94b7ec30c\n"
-        },
-        {
-          "sha": "1b20943467f6fae486dbb97e9c503ad814eccfd9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:20:04-07:00",
-          "message": "perf(config): a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg)\n"
         }
       ]
     }
