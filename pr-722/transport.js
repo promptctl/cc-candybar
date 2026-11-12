@@ -38956,10 +38956,210 @@ var import_json53 = __toESM(require_dist(), 1);
 
 // src/config/loader/merge.ts
 init_globals();
+
+// src/config/payload-inputs.ts
+init_globals();
+function effectiveInput(field, effectiveVar) {
+  const row2 = GLOBAL_FIELDS[field];
+  const kind = wireKindOf(field);
+  const floor2 = row2.kind === "session" || row2.kind === "config" ? row2.floor : "";
+  return kind === "string" ? { kind: "input", path: effectiveVar, default: "" } : { kind: "input", path: effectiveVar, type: kind, default: floor2 };
+}
+var EFFECTIVE_INPUTS = Object.fromEntries(
+  [...CONFIG_KEY_TO_EFFECTIVE_VAR].map(([field, effectiveVar]) => [
+    effectiveVar,
+    effectiveInput(field, effectiveVar)
+  ])
+);
+var LANE_FEED_TYPES = {
+  subscribers: "number",
+  fps: "number",
+  shown: "boolean"
+};
+var LANE_FEED_FIELDS = Object.keys(LANE_FEED_TYPES);
+var TERM_COLS_FLOOR = 80;
+var PAYLOAD_INPUTS = {
+  project_dir: {
+    kind: "input",
+    path: "workspace.project_dir",
+    default: ""
+  },
+  "session.id": { kind: "input", path: "session_id", default: "" },
+  // Transcript path (a top-level hookData field, spread onto the payload
+  // root by projectPayload). Read by the quick-action tray's
+  // openTranscript action — pass-through, no projection.
+  transcript_path: {
+    kind: "input",
+    path: "transcript_path",
+    default: ""
+  },
+  // The session's resume command and the config file it renders from
+  // (RenderPayload.resumeCommand / .configPath), read by the quick-action
+  // tray's `⎘ resume` and `↗ config`; "" is "none", which hides the glyph.
+  resume_command: { kind: "input", path: "resumeCommand", default: "" },
+  config_path: { kind: "input", path: "configPath", default: "" },
+  // [LAW:one-source-of-truth] The value every setting and config-only global
+  // renders with, whichever rung produced it — the theme, style and effect as
+  // the view settles them, every other one as the daemon resolved it. A
+  // trigger's label and a picker's current-selection mark read it back, so
+  // the label and the bar trace to one resolution. The daemon always provides
+  // each; the default is the unreachable-absence floor.
+  ...EFFECTIVE_INPUTS,
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
+  // file author the active preset's root, resolved alongside preset.effective
+  // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
+  // customized" segment gates on this directly; a hand-authored config can
+  // read it too for its own reset affordance.
+  "preset.customized": {
+    kind: "input",
+    path: "preset.customized",
+    type: "boolean",
+    default: false
+  },
+  // Does the bundled default declare the active preset (RenderPayload
+  // .preset.bundled) — false for a preset the user authored, which the
+  // settings menu offers to delete.
+  "preset.bundled": {
+    kind: "input",
+    path: "preset.bundled",
+    type: "boolean",
+    default: true
+  },
+  // Each lane's feed of this session's frames (RenderPayload.feeds), one input
+  // per field of LANE_FEED_TYPES.
+  ...Object.fromEntries(
+    LANE_NAMES.flatMap(
+      (lane) => LANE_FEED_FIELDS.map((field) => [
+        laneFeedVar(lane, field),
+        {
+          kind: "input",
+          path: laneFeedVar(lane, field),
+          type: LANE_FEED_TYPES[field],
+          default: UNFOLLOWED[field]
+        }
+      ])
+    )
+  ),
+  // Who this render is drawn for (Drawing): the daemon sets it beside the
+  // payload, and a caller rendering without one draws as a request does.
+  [drawingVar("by")]: {
+    kind: "input",
+    path: drawingVar("by"),
+    default: ANSWERING.by
+  },
+  [drawingVar("fps")]: {
+    kind: "input",
+    path: drawingVar("fps"),
+    type: "number",
+    default: 0
+  },
+  // The settings door's indicator (src/render/diagnostics.ts,
+  // DiagnosticsProjection): its label, "" while there is nothing to show, the
+  // colours of the worst level the draw's diagnostics hold, and the key of
+  // the message its click opens.
+  ...Object.fromEntries(
+    ["label", "fg", "bg", "open"].map((field) => [
+      `diagnostics.${field}`,
+      { kind: "input", path: `diagnostics.${field}`, default: "" }
+    ])
+  ),
+  // [LAW:one-source-of-truth] The usable terminal width for THIS render —
+  // the exact post-reserve cell count FlexStrip wraps to. The bound payload
+  // carries it, the same width a draw's `opts.width` holds: the value a row
+  // fits to (RenderBinding.width) and the strip wraps to, so a template reading
+  // it and the wrap algebra can never disagree. Never cached: a resize is just
+  // a new value on the same path, re-read every render. The default only
+  // applies to compile-only callers that render without a bound width.
+  "term.cols": {
+    kind: "input",
+    path: "term.cols",
+    type: "number",
+    default: TERM_COLS_FLOOR
+  },
+  // The tmux pane this session's Claude Code runs in, as its client reported
+  // it; "" outside tmux (and for a client too old to say). It is the pane a
+  // `slash` click types into, so IN_TMUX below is the gate for one.
+  "tmux.pane": { kind: "input", path: "tmux.pane", default: "" },
+  // Claude Code's auto-compact window as its `/autocompact` last wrote it
+  // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
+  // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
+  // to the model's context window; `lower`/`higher` are the windows − and +
+  // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
+  // settings file the daemon could not read, and the only field set when it
+  // is.
+  "autocompact.window": {
+    kind: "input",
+    path: "autocompact.window",
+    type: "number",
+    default: -1
+  },
+  ...Object.fromEntries(
+    ["applied", "lower", "higher"].map((field) => [
+      `autocompact.${field}`,
+      {
+        kind: "input",
+        path: `autocompact.${field}`,
+        type: "number",
+        default: 0
+      }
+    ])
+  ),
+  "autocompact.error": {
+    kind: "input",
+    path: "autocompact.error",
+    default: ""
+  },
+  // Where the session is, as the daemon read it from the checkout on the
+  // request, so these answer before the git lane does. `noRepo` is a read that found none.
+  "location.main": { kind: "input", path: "location.main", default: "" },
+  "location.worktree": {
+    kind: "input",
+    path: "location.worktree",
+    default: ""
+  },
+  "location.subpath": { kind: "input", path: "location.subpath", default: "" },
+  "location.noRepo": {
+    kind: "input",
+    path: "location.noRepo",
+    type: "boolean",
+    default: false
+  },
+  // The repo's browsable web page, transposed from its remote by the daemon.
+  // "" is the genuine "no remote a browser can open" (local-only repo, bare
+  // path remote) — the quick-action tray's link reads that value, not a flag.
+  "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" }
+};
+var DRAW_PROJECTIONS = {
+  today: "the day the draw is at",
+  feeds: "the frames a lane was sent up to the draw's instant",
+  drawing: "who the draw is for",
+  diagnostics: "the errors and warnings the draw owes its reader"
+};
+function drawProjectionAt(path42) {
+  const root = path42.split(".", 1)[0];
+  return Object.hasOwn(DRAW_PROJECTIONS, root) ? root : void 0;
+}
+var SLOT_PATHS = Object.fromEntries(
+  EXPRESSION_SLOTS.map((slot) => [
+    slot,
+    CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)
+  ])
+);
+function slotAt(path42) {
+  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path42);
+}
+
+// src/config/loader/merge.ts
 function mergeWithDefault(raw, dflt) {
   return {
     globals: { ...dflt.globals, ...raw.globals ?? {} },
-    variables: { ...dflt.variables, ...raw.variables ?? {} },
+    // [LAW:single-enforcer] The daemon's payload inputs lie beneath every
+    // base, so no caller can build a base that lacks them.
+    variables: {
+      ...PAYLOAD_INPUTS,
+      ...dflt.variables,
+      ...raw.variables ?? {}
+    },
     segments: overlayByName(
       dflt.segments,
       segmentDeltas(dflt.segments, raw.segments ?? {})
@@ -40069,198 +40269,6 @@ function otherScopeHint(name, declared) {
   return other === void 0 ? "" : ` ("${other}" is declared: a repository's own plugins are named under repo., installed ones under plugins., and a name in one is never looked up in the other)`;
 }
 
-// src/config/payload-inputs.ts
-init_globals();
-function effectiveInput(field, effectiveVar) {
-  const row2 = GLOBAL_FIELDS[field];
-  const kind = wireKindOf(field);
-  const floor2 = row2.kind === "session" || row2.kind === "config" ? row2.floor : "";
-  return kind === "string" ? { kind: "input", path: effectiveVar, default: "" } : { kind: "input", path: effectiveVar, type: kind, default: floor2 };
-}
-var EFFECTIVE_INPUTS = Object.fromEntries(
-  [...CONFIG_KEY_TO_EFFECTIVE_VAR].map(([field, effectiveVar]) => [
-    effectiveVar,
-    effectiveInput(field, effectiveVar)
-  ])
-);
-var LANE_FEED_TYPES = {
-  subscribers: "number",
-  fps: "number",
-  shown: "boolean"
-};
-var LANE_FEED_FIELDS = Object.keys(LANE_FEED_TYPES);
-var TERM_COLS_FLOOR = 80;
-var PAYLOAD_INPUTS = {
-  project_dir: {
-    kind: "input",
-    path: "workspace.project_dir",
-    default: ""
-  },
-  "session.id": { kind: "input", path: "session_id", default: "" },
-  // Transcript path (a top-level hookData field, spread onto the payload
-  // root by projectPayload). Read by the quick-action tray's
-  // openTranscript action — pass-through, no projection.
-  transcript_path: {
-    kind: "input",
-    path: "transcript_path",
-    default: ""
-  },
-  // The session's resume command and the config file it renders from
-  // (RenderPayload.resumeCommand / .configPath), read by the quick-action
-  // tray's `⎘ resume` and `↗ config`; "" is "none", which hides the glyph.
-  resume_command: { kind: "input", path: "resumeCommand", default: "" },
-  config_path: { kind: "input", path: "configPath", default: "" },
-  // [LAW:one-source-of-truth] The value every setting and config-only global
-  // renders with, whichever rung produced it — the theme, style and effect as
-  // the view settles them, every other one as the daemon resolved it. A
-  // trigger's label and a picker's current-selection mark read it back, so
-  // the label and the bar trace to one resolution. The daemon always provides
-  // each; the default is the unreachable-absence floor.
-  ...EFFECTIVE_INPUTS,
-  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
-  // file author the active preset's root, resolved alongside preset.effective
-  // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
-  // customized" segment gates on this directly; a hand-authored config can
-  // read it too for its own reset affordance.
-  "preset.customized": {
-    kind: "input",
-    path: "preset.customized",
-    type: "boolean",
-    default: false
-  },
-  // Does the bundled default declare the active preset (RenderPayload
-  // .preset.bundled) — false for a preset the user authored, which the
-  // settings menu offers to delete.
-  "preset.bundled": {
-    kind: "input",
-    path: "preset.bundled",
-    type: "boolean",
-    default: true
-  },
-  // Each lane's feed of this session's frames (RenderPayload.feeds), one input
-  // per field of LANE_FEED_TYPES.
-  ...Object.fromEntries(
-    LANE_NAMES.flatMap(
-      (lane) => LANE_FEED_FIELDS.map((field) => [
-        laneFeedVar(lane, field),
-        {
-          kind: "input",
-          path: laneFeedVar(lane, field),
-          type: LANE_FEED_TYPES[field],
-          default: UNFOLLOWED[field]
-        }
-      ])
-    )
-  ),
-  // Who this render is drawn for (Drawing): the daemon sets it beside the
-  // payload, and a caller rendering without one draws as a request does.
-  [drawingVar("by")]: {
-    kind: "input",
-    path: drawingVar("by"),
-    default: ANSWERING.by
-  },
-  [drawingVar("fps")]: {
-    kind: "input",
-    path: drawingVar("fps"),
-    type: "number",
-    default: 0
-  },
-  // The settings door's indicator (src/render/diagnostics.ts,
-  // DiagnosticsProjection): its label, "" while there is nothing to show, the
-  // colours of the worst level the draw's diagnostics hold, and the key of
-  // the message its click opens.
-  ...Object.fromEntries(
-    ["label", "fg", "bg", "open"].map((field) => [
-      `diagnostics.${field}`,
-      { kind: "input", path: `diagnostics.${field}`, default: "" }
-    ])
-  ),
-  // [LAW:one-source-of-truth] The usable terminal width for THIS render —
-  // the exact post-reserve cell count FlexStrip wraps to. The bound payload
-  // carries it, the same width a draw's `opts.width` holds: the value a row
-  // fits to (RenderBinding.width) and the strip wraps to, so a template reading
-  // it and the wrap algebra can never disagree. Never cached: a resize is just
-  // a new value on the same path, re-read every render. The default only
-  // applies to compile-only callers that render without a bound width.
-  "term.cols": {
-    kind: "input",
-    path: "term.cols",
-    type: "number",
-    default: TERM_COLS_FLOOR
-  },
-  // The tmux pane this session's Claude Code runs in, as its client reported
-  // it; "" outside tmux (and for a client too old to say). It is the pane a
-  // `slash` click types into, so IN_TMUX below is the gate for one.
-  "tmux.pane": { kind: "input", path: "tmux.pane", default: "" },
-  // Claude Code's auto-compact window as its `/autocompact` last wrote it
-  // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
-  // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
-  // to the model's context window; `lower`/`higher` are the windows − and +
-  // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
-  // settings file the daemon could not read, and the only field set when it
-  // is.
-  "autocompact.window": {
-    kind: "input",
-    path: "autocompact.window",
-    type: "number",
-    default: -1
-  },
-  ...Object.fromEntries(
-    ["applied", "lower", "higher"].map((field) => [
-      `autocompact.${field}`,
-      {
-        kind: "input",
-        path: `autocompact.${field}`,
-        type: "number",
-        default: 0
-      }
-    ])
-  ),
-  "autocompact.error": {
-    kind: "input",
-    path: "autocompact.error",
-    default: ""
-  },
-  // Where the session is, as the daemon read it from the checkout on the
-  // request, so these answer before the git lane does. `noRepo` is a read that found none.
-  "location.main": { kind: "input", path: "location.main", default: "" },
-  "location.worktree": {
-    kind: "input",
-    path: "location.worktree",
-    default: ""
-  },
-  "location.subpath": { kind: "input", path: "location.subpath", default: "" },
-  "location.noRepo": {
-    kind: "input",
-    path: "location.noRepo",
-    type: "boolean",
-    default: false
-  },
-  // The repo's browsable web page, transposed from its remote by the daemon.
-  // "" is the genuine "no remote a browser can open" (local-only repo, bare
-  // path remote) — the quick-action tray's link reads that value, not a flag.
-  "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" }
-};
-var DRAW_PROJECTIONS = {
-  today: "the day the draw is at",
-  feeds: "the frames a lane was sent up to the draw's instant",
-  drawing: "who the draw is for",
-  diagnostics: "the errors and warnings the draw owes its reader"
-};
-function drawProjectionAt(path42) {
-  const root = path42.split(".", 1)[0];
-  return Object.hasOwn(DRAW_PROJECTIONS, root) ? root : void 0;
-}
-var SLOT_PATHS = Object.fromEntries(
-  EXPRESSION_SLOTS.map((slot) => [
-    slot,
-    CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)
-  ])
-);
-function slotAt(path42) {
-  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path42);
-}
-
 // src/config/loader/reserved-namespace.ts
 function reservedNamespaceOf(name) {
   const collapsed = ident(name);
@@ -40288,14 +40296,6 @@ function pluginScopeCollisions(ctx, out, inherited) {
   ]) {
     for (const name of Object.keys(out[section] ?? {})) {
       const scope = scopeOf(name);
-      if (section === "variables" && isPayloadInput(name)) {
-        ctx.issues.push({
-          path: `${section}.${name}`,
-          message: `"${name}" is ${PAYLOAD_OWNED} \u2014 remove this declaration`,
-          line: findKeyLine(ctx.source, [section, name])
-        });
-        continue;
-      }
       if (scope === void 0) continue;
       if (section !== "variables" && name === scope) continue;
       if (section === "segments" && inherited.has(name)) continue;
@@ -40309,29 +40309,49 @@ function pluginScopeCollisions(ctx, out, inherited) {
   for (const [segment, decl] of Object.entries(out.segments ?? {})) {
     for (const v of Object.keys(decl.vars ?? {})) {
       const name = `${segment}.${v}`;
-      const at = {
-        path: `segments.${segment}.vars.${v}`,
-        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
-      };
-      if (isPayloadInput(name)) {
-        ctx.issues.push({
-          ...at,
-          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} \u2014 rename the var or the segment`
-        });
-        continue;
-      }
       const scope = scopeOf(name);
       if (scope === void 0 || inherited.has(segment)) continue;
       ctx.issues.push({
-        ...at,
+        path: `segments.${segment}.vars.${v}`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
         message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`
       });
     }
   }
 }
-var PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
-function isPayloadInput(name) {
-  return Object.hasOwn(PAYLOAD_INPUTS, name);
+function withoutPayloadDeclarations(filePath2, source, raw) {
+  const notices = [];
+  const drop2 = (name, keyPath) => {
+    if (!Object.hasOwn(PAYLOAD_INPUTS, name)) return false;
+    notices.push(
+      `${filePath2}:${findKeyLine(source, keyPath)}: "${name}" is supplied by the daemon's payload to every config, so this declaration is ignored \u2014 remove it`
+    );
+    return true;
+  };
+  const keep2 = (record2, dropped) => Object.fromEntries(Object.entries(record2).filter(([k]) => !dropped(k)));
+  return {
+    raw: {
+      ...raw,
+      ...raw.variables && {
+        variables: keep2(raw.variables, (n) => drop2(n, ["variables", n]))
+      },
+      ...raw.segments && {
+        segments: Object.fromEntries(
+          Object.entries(raw.segments).map(([segment, decl]) => [
+            segment,
+            decl.vars === void 0 ? decl : {
+              ...decl,
+              vars: keep2(
+                decl.vars,
+                (v) => drop2(`${segment}.${v}`, ["segments", segment, "vars", v])
+              )
+            }
+          ])
+        )
+      }
+    },
+    notices
+  };
 }
 
 // src/config/loader/layout.ts
@@ -59178,7 +59198,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under3) {
     json2.plugins === void 0 ? [] : validatePluginRefs({ ...ctx, issues: [] }, json2.plugins) ?? [],
     isPlainObject(json2.segments) ? Object.keys(json2.segments) : []
   );
-  const raw = validateTopLevel(
+  const validated = validateTopLevel(
     ctx,
     json2,
     inherited,
@@ -59188,7 +59208,12 @@ function parseDslFile(filePath2, source, allowedPalettes, under3) {
   if (issues.length > 0) {
     throw new ConfigError(filePath2, issues, warnings);
   }
-  return { raw, warnings, layer };
+  const { raw, notices } = withoutPayloadDeclarations(
+    filePath2,
+    source,
+    validated
+  );
+  return { raw, warnings: [...warnings, ...notices], layer };
 }
 var NO_INHERITED_SEGMENTS = /* @__PURE__ */ new Set();
 function parseJson5OrThrow(filePath2, source) {
@@ -60657,7 +60682,7 @@ var AUTHORED_PALETTE_NAMES = new Set(
     )
   ].filter((name) => name !== void 0)
 );
-var PARSED_DEFAULT = mergeWithDefault(
+var DEFAULT_DSL_CONFIG = mergeWithDefault(
   parseDslConfig(
     "<default>",
     JSON.stringify(RAW_DEFAULT_DSL_CONFIG),
@@ -60665,10 +60690,6 @@ var PARSED_DEFAULT = mergeWithDefault(
   ),
   RAW_DEFAULT_DSL_CONFIG
 );
-var DEFAULT_DSL_CONFIG = {
-  ...PARSED_DEFAULT,
-  variables: { ...PAYLOAD_INPUTS, ...PARSED_DEFAULT.variables }
-};
 
 // src/daemon/bundled-presets.ts
 var BUNDLED_PRESETS = presetNames(

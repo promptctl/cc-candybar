@@ -4,15 +4,22 @@
     {
       "version": "pr-722",
       "ref": "refs/pull/722/merge",
-      "sha": "545ff2ad48012f50fabb34007118ad9cc62b5697",
-      "timestamp": "2026-11-12T04:20:53.758Z",
+      "sha": "69eedb283a85bf1cec521c30d0bc85c6b2b83740",
+      "timestamp": "2026-11-12T04:34:17.709Z",
       "commits": [
         {
-          "sha": "545ff2ad48012f50fabb34007118ad9cc62b5697",
+          "sha": "69eedb283a85bf1cec521c30d0bc85c6b2b83740",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T21:19:58-07:00",
-          "message": "Merge 2f732c9a6e299ddd5060132f2c810bb9efc97d3b into e3e73c6b78a8776b63461d4fcab107abbec5184f\n"
+          "timestamp": "2026-11-12T04:33:22Z",
+          "message": "Merge 135a444132ee74b8c18a17d94415e2b40983f524 into e3e73c6b78a8776b63461d4fcab107abbec5184f\n"
+        },
+        {
+          "sha": "135a444132ee74b8c18a17d94415e2b40983f524",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T21:33:10-07:00",
+          "message": "fix(config): a file's own payload-input declaration is dropped with a warning, and the merge lays the payload floor beneath every base (candybar-host-renderer-x96a.5e0)\n\nRefusing the file cost an upgrading user every other line of a config the\ndocs once told them to write. The floor now lives in the merge, so no base a\ncaller builds can lack it.\n"
         },
         {
           "sha": "2f732c9a6e299ddd5060132f2c810bb9efc97d3b",
