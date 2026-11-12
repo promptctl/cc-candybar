@@ -87,7 +87,6 @@ import {
   type SettingName,
   type SettingProjection,
 } from "./setting-projections.js";
-import { checkSynthesisReads } from "./synthesis-inputs.js";
 import {
   PLACE,
   SUBMENUS,
@@ -1141,14 +1140,11 @@ export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
   const artifacts = settingsArtifacts(config.globals.menuGlyph ?? DOOR_GLYPH);
   ensureEditToggle(artifacts);
   const presets: Record<string, PresetDecl> = { ...config.presets };
-  const roots: LayoutNode[] = [];
   for (const name of presetNames(config.presets)) {
     const { node } = presetRoot(config, name);
     const root = expandAnchor(withAnchor(node));
-    roots.push(root);
     presets[name] = { ...presetByName(config.presets, name), root };
   }
-  checkSynthesisReads(artifacts, roots, config);
   return {
     ...config,
     variables: { ...config.variables, ...artifacts.variables },
