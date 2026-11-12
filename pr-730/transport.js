@@ -66487,7 +66487,6 @@ function awaitsReading({ builtins, sources, runs }, named3) {
     builtins.hostName,
     builtins.hostUser,
     ...Object.values(sources),
-    ...Object.values(runs).map((run3) => run3.reading),
     ...[...named3].map((run3) => (runs[run3.digest] ?? UNREAD_RUN).reading)
   ].some(awaitedReading);
 }
