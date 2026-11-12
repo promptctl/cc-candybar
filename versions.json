@@ -4,15 +4,22 @@
     {
       "version": "pr-724",
       "ref": "refs/pull/724/merge",
-      "sha": "d70b20b2c6e6654bd6f5e62f9d96709a443fc759",
-      "timestamp": "2026-11-12T06:00:52.364Z",
+      "sha": "a8277e4fbf68b70363592151d5d185d4e0d1803f",
+      "timestamp": "2026-11-12T06:05:22.480Z",
       "commits": [
         {
-          "sha": "d70b20b2c6e6654bd6f5e62f9d96709a443fc759",
+          "sha": "a8277e4fbf68b70363592151d5d185d4e0d1803f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T05:59:58Z",
-          "message": "Merge 8e9433b9e1adf58d7604b103fca4fbb03aa422ea into a454d2f2ed6d81675e56ae6c45bef77b1db7007f\n"
+          "timestamp": "2026-11-12T06:04:27Z",
+          "message": "Merge e4bdd7e108c4e2c755ce99bc121932efb2604b34 into a454d2f2ed6d81675e56ae6c45bef77b1db7007f\n"
+        },
+        {
+          "sha": "e4bdd7e108c4e2c755ce99bc121932efb2604b34",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:04:15-07:00",
+          "message": "test(config): the chain cases show the chrome minted for the plugin's settings and the inserted cell, so an empty unresolved list is over real reads (candybar-host-renderer-x96a.01x)\n"
         },
         {
           "sha": "8e9433b9e1adf58d7604b103fca4fbb03aa422ea",
