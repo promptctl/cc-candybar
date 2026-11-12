@@ -13,6 +13,7 @@ import {
   mergeWithDefault,
   validateRenderable,
   type AuthoredConfig,
+  type Renderable,
 } from "../../src/config/dsl-loader";
 import type { DslConfig, ValidatedConfig } from "../../src/config/dsl-types";
 
@@ -47,6 +48,24 @@ export function validateConfig(
   return config;
 }
 
+// The config `loadConfig` would hand validation: parsed with the same
+// delta-accepting set loadConfig derives from the default it merges over, so a
+// test's cascade is production's.
+function authoredOf(
+  filePath: string,
+  source: string,
+  allowedPalettes: ReadonlySet<string> | undefined,
+  dflt: DslConfig,
+): AuthoredConfig {
+  const raw = parseDslConfig(
+    filePath,
+    source,
+    allowedPalettes,
+    inheritableSegmentNames(dflt),
+  );
+  return { config: mergeWithDefault(raw, dflt), raw, source };
+}
+
 // The whole pipeline's result, placements and drops included, for a test that
 // reads past the validated config.
 export function parseAndPlace(
@@ -54,15 +73,9 @@ export function parseAndPlace(
   source: string,
   allowedPalettes?: ReadonlySet<string>,
   dflt: DslConfig = EMPTY_DEFAULT,
-): ReturnType<typeof validateRenderable> {
-  const raw = parseDslConfig(
-    filePath,
-    source,
-    allowedPalettes,
-    inheritableSegmentNames(dflt),
-  );
+): Renderable {
   return validateRenderable(
-    { config: mergeWithDefault(raw, dflt), raw, source },
+    authoredOf(filePath, source, allowedPalettes, dflt),
     new Map(),
     filePath,
     allowedPalettes,
@@ -75,16 +88,8 @@ export function parseAndValidate(
   allowedPalettes?: ReadonlySet<string>,
   dflt: DslConfig = EMPTY_DEFAULT,
 ): ValidatedConfig {
-  // The same delta-accepting set loadConfig derives from the default it
-  // merges over, so a test's cascade is production's.
-  const raw = parseDslConfig(
-    filePath,
-    source,
-    allowedPalettes,
-    inheritableSegmentNames(dflt),
-  );
   return validateConfig(
-    { config: mergeWithDefault(raw, dflt), raw, source },
+    authoredOf(filePath, source, allowedPalettes, dflt),
     filePath,
     allowedPalettes,
   );

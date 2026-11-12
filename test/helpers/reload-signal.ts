@@ -50,10 +50,7 @@ export class ReloadSignal {
   // mutation leaves the same state, so a reload that began after any of them
   // observed it. The condition is the reload's own promise, so the wait ends
   // on the event, not on a poll tick.
-  async after(
-    entry: ReloadedEntry,
-    mutate: () => void | Promise<void>,
-  ): Promise<void> {
+  async after(entry: ReloadedEntry, mutate: () => void | Promise<void>): Promise<void> {
     const reloaded = this.next(entry).then(() => true);
     await untilHeard(mutate, () => reloaded, `a reload of ${entry.projectDir}`);
   }

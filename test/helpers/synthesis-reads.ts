@@ -86,8 +86,9 @@ function synthesisReads(config: DslConfig, before: DslConfig): Set<string> {
 
 // Every read the synthesis minted into `config`, over `before` (the merged,
 // cross-referenced config it was synthesized from), that `config` does not
-// resolve. Author nodes in the trees were resolved by cross-ref against the
-// same scope, so reading them again costs nothing.
+// resolve. Author nodes in the trees resolved in cross-ref against the merged
+// config, and the synthesized config's scope only adds to it, so they read
+// clean here.
 export function unresolvedReads(
   config: DslConfig,
   before: DslConfig,

@@ -14,6 +14,7 @@ import { EMPTY_DEFAULT, parseAndPlace } from "../helpers/parse-and-validate";
 import { unresolvedReads } from "../helpers/synthesis-reads";
 
 const AUTHORED = `{
+  actions: { applyTheme: { set: "theme", from: "themes" } },
   segments: {
     modelTag: {
       template: '{{ if .settings.icon }}◆ {{ end }}{{ if eq .settings.length "short" }}{{ trunc .settings.chars .model.display_name }}{{ else }}{{ .model.display_name }}{{ end }}',
@@ -23,8 +24,9 @@ const AUTHORED = `{
         chars: { label: "Characters", domain: { min: 1, max: 12 }, default: 4 },
       },
     },
+    themePick: { template: '{{ menu "applyTheme" "▸" "▾" }}' },
   },
-  root: { h: ["modelTag", { seg: "modelTag", id: "shortTag", settings: { length: "short", icon: true } }] },
+  root: { h: ["themePick", "modelTag", { seg: "modelTag", id: "shortTag", settings: { length: "short", icon: true } }] },
   presets: {
     compact: { globals: { padding: 0 }, root: { v: [{ seg: "modelTag", id: "tagOnly", settings: { chars: 2 } }] } },
     roomy: { globals: { padding: 2 } },
@@ -70,6 +72,18 @@ describe("unresolvedReads", () => {
     const broken: DslConfig = {
       ...config,
       segments: { ...config.segments, minted: { template: "{{ .ghost }}" } },
+    };
+    expect(unresolvedReads(broken, placed)).toEqual(["ghost"]);
+  });
+
+  test("a minted variable's unresolved read is named", () => {
+    const { config, placed } = parseAndPlace("<t>", "{}");
+    const broken: DslConfig = {
+      ...config,
+      variables: {
+        ...config.variables,
+        minted: { kind: "template", template: "{{ .ghost }}" },
+      },
     };
     expect(unresolvedReads(broken, placed)).toEqual(["ghost"]);
   });

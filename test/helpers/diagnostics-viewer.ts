@@ -77,9 +77,7 @@ export async function readDiagnostics(
   args: string[] = [],
 ): Promise<ViewerPage[]> {
   if (viewerLink(bar, "✕") !== undefined)
-    throw new Error(
-      `readDiagnostics: the viewer is already open on ${textOf(bar)}`,
-    );
+    throw new Error(`readDiagnostics: the viewer is already open on ${textOf(bar)}`);
   const open = viewerLink(bar, "open");
   if (open === undefined) return [];
   const draw = (): Promise<Frame> =>

@@ -168,9 +168,7 @@ export async function spawnDaemonWithEnv(
   if (readiness.phase !== "serving") {
     killTree();
     release();
-    throw new Error(
-      readinessFailure(readiness, sockPath, env, await stderrTail),
-    );
+    throw new Error(readinessFailure(readiness, sockPath, env, await stderrTail));
   }
 
   return {

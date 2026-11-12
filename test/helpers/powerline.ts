@@ -7,8 +7,7 @@ import { JOINERS, type SeamCell } from "@promptctl/rich-js";
 const one = (cells: readonly SeamCell[]): string => {
   const cell = cells[0];
   const glyph = cell !== undefined && "glyph" in cell ? cell.glyph : undefined;
-  if (typeof glyph !== "string")
-    throw new Error("powerline: expected one plain glyph");
+  if (typeof glyph !== "string") throw new Error("powerline: expected one plain glyph");
   return glyph;
 };
 const { seam } = JOINERS.powerline.seam.glyph;

@@ -62,19 +62,12 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
   const session = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
-  const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
-    cwd: "/home/tester/code/project",
-  });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/home/tester/code/project" });
   return {
     pick: (key, value) => session.set(SID, key, value),
     unpick: (key) => session.clear(SID, key),
     render: (at, shown = (payload) => payload) => {
-      const effective = resolveEffectiveGlobals(
-        config,
-        (key) => session.get(SID, key),
-        () => false,
-      );
+      const effective = resolveEffectiveGlobals(config, (key) => session.get(SID, key), () => false);
       const payload = {
         ...shown(checkPayload(config, effective, null, at)),
         resettable: perSetting(() => false),
@@ -85,24 +78,14 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
       };
       const warnings: RenderWarning[] = [];
       const segments = new Map<string, readonly RichText[]>();
-      const { frame } = drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        payload,
-        at,
-        renderOptionsOf(effective, cols),
-        {
-          perSegmentSink: segments,
-          // [LAW:no-silent-failure] A ⚠ cell would be read as the bar it replaced.
-          onSegmentError: (name, message) => {
-            throw new Error(`${name}: ${message}`);
-          },
-          onRenderWarning: (warning) => warnings.push(warning),
+      const { frame } = drawPayload(config, compiled, store, registry, payload, at, renderOptionsOf(effective, cols), {
+        perSegmentSink: segments,
+        // [LAW:no-silent-failure] A ⚠ cell would be read as the bar it replaced.
+        onSegmentError: (name, message) => {
+          throw new Error(`${name}: ${message}`);
         },
-        effective,
-      );
+        onRenderWarning: (warning) => warnings.push(warning),
+      }, effective);
       return { frame, warnings, segments };
     },
     dispose: () => registry.dispose(),

@@ -23,9 +23,8 @@ export const pagesOf = async (
   cwd: string,
 ): Promise<ViewerPage[]> =>
   readDiagnostics(sock, sessionId, cwd, await render(sock, sessionId, cwd));
-export const noticeOf = (
-  pages: readonly ViewerPage[],
-): ViewerPage | undefined => pages.find((p) => p.text.startsWith("⬆"));
+export const noticeOf = (pages: readonly ViewerPage[]): ViewerPage | undefined =>
+  pages.find((p) => p.text.startsWith("⬆"));
 export const hasNotice = (pages: readonly ViewerPage[]): boolean =>
   noticeOf(pages) !== undefined;
 // A failed act is a warning of its own beside the notice.

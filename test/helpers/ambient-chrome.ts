@@ -150,8 +150,7 @@ function keysWrittenBy(url: string): string[] {
 // a picker's toggle as one of its fixture's own regions.
 function isSettingsMenuKey(key: string): boolean {
   return (
-    key.startsWith(SETTINGS_NS) ||
-    key.startsWith(`${MENU_NS}${ident(SETTINGS_NS)}`)
+    key.startsWith(SETTINGS_NS) || key.startsWith(`${MENU_NS}${ident(SETTINGS_NS)}`)
   );
 }
 

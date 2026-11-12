@@ -20,8 +20,7 @@ import type { RenderSelection } from "../../src/dsl/render";
 export const globalsFor = (
   config: DslConfig,
   sessionPick: (key: string) => string | null = () => null,
-): EffectiveGlobals =>
-  resolveEffectiveGlobals(config, sessionPick, () => false);
+): EffectiveGlobals => resolveEffectiveGlobals(config, sessionPick, () => false);
 
 export const selectionFor = (
   config: DslConfig,
