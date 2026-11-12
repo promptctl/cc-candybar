@@ -23837,7 +23837,7 @@ init_globals();
 
 // src/daemon/verbs/index.ts
 init_globals();
-var import_node_path30 = __toESM(require_path_browserify(), 1);
+var import_node_path28 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/click-error.ts
 init_globals();
@@ -45761,7 +45761,7 @@ function editModeArtifacts() {
 
 // src/config/edit-chrome.ts
 init_globals();
-var import_node_path10 = __toESM(require_path_browserify(), 1);
+var import_node_path5 = __toESM(require_path_browserify(), 1);
 
 // src/config/synthesis-inputs.ts
 init_globals();
@@ -46110,9 +46110,1552 @@ function isDocumentDecl(v) {
 
 // src/config/payload-inputs.ts
 init_globals();
+function effectiveInput(field, effectiveVar) {
+  const row2 = GLOBAL_FIELDS[field];
+  const kind = wireKindOf(field);
+  const floor2 = row2.kind === "session" || row2.kind === "config" ? row2.floor : "";
+  return kind === "string" ? { kind: "input", path: effectiveVar, default: "" } : { kind: "input", path: effectiveVar, type: kind, default: floor2 };
+}
+var EFFECTIVE_INPUTS = Object.fromEntries(
+  [...CONFIG_KEY_TO_EFFECTIVE_VAR].map(([field, effectiveVar]) => [
+    effectiveVar,
+    effectiveInput(field, effectiveVar)
+  ])
+);
+var LANE_FEED_TYPES = {
+  subscribers: "number",
+  fps: "number",
+  shown: "boolean"
+};
+var LANE_FEED_FIELDS = Object.keys(LANE_FEED_TYPES);
+var TERM_COLS_FLOOR = 80;
+var PAYLOAD_INPUTS = {
+  project_dir: {
+    kind: "input",
+    path: "workspace.project_dir",
+    default: ""
+  },
+  "session.id": { kind: "input", path: "session_id", default: "" },
+  // Transcript path (a top-level hookData field, spread onto the payload
+  // root by projectPayload). Read by the quick-action tray's
+  // openTranscript action — pass-through, no projection.
+  transcript_path: {
+    kind: "input",
+    path: "transcript_path",
+    default: ""
+  },
+  // The session's resume command and the config file it renders from
+  // (RenderPayload.resumeCommand / .configPath), read by the quick-action
+  // tray's `⎘ resume` and `↗ config`; "" is "none", which hides the glyph.
+  resume_command: { kind: "input", path: "resumeCommand", default: "" },
+  config_path: { kind: "input", path: "configPath", default: "" },
+  // [LAW:one-source-of-truth] The value every setting and config-only global
+  // renders with, whichever rung produced it — the theme, style and effect as
+  // the view settles them, every other one as the daemon resolved it. A
+  // trigger's label and a picker's current-selection mark read it back, so
+  // the label and the bar trace to one resolution. The daemon always provides
+  // each; the default is the unreachable-absence floor.
+  ...EFFECTIVE_INPUTS,
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
+  // file author the active preset's root, resolved alongside preset.effective
+  // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
+  // customized" segment gates on this directly; a hand-authored config can
+  // read it too for its own reset affordance.
+  "preset.customized": {
+    kind: "input",
+    path: "preset.customized",
+    type: "boolean",
+    default: false
+  },
+  // Does the bundled default declare the active preset (RenderPayload
+  // .preset.bundled) — false for a preset the user authored, which the
+  // settings menu offers to delete.
+  "preset.bundled": {
+    kind: "input",
+    path: "preset.bundled",
+    type: "boolean",
+    default: true
+  },
+  // Each lane's feed of this session's frames (RenderPayload.feeds), one input
+  // per field of LANE_FEED_TYPES.
+  ...Object.fromEntries(
+    LANE_NAMES.flatMap(
+      (lane) => LANE_FEED_FIELDS.map((field) => [
+        laneFeedVar(lane, field),
+        {
+          kind: "input",
+          path: laneFeedVar(lane, field),
+          type: LANE_FEED_TYPES[field],
+          default: UNFOLLOWED[field]
+        }
+      ])
+    )
+  ),
+  // Who this render is drawn for (Drawing): the daemon sets it beside the
+  // payload, and a caller rendering without one draws as a request does.
+  [drawingVar("by")]: {
+    kind: "input",
+    path: drawingVar("by"),
+    default: ANSWERING.by
+  },
+  [drawingVar("fps")]: {
+    kind: "input",
+    path: drawingVar("fps"),
+    type: "number",
+    default: 0
+  },
+  // The settings door's indicator (src/render/diagnostics.ts,
+  // DiagnosticsProjection): its label, "" while there is nothing to show, the
+  // colours of the worst level the draw's diagnostics hold, and the key of
+  // the message its click opens.
+  ...Object.fromEntries(
+    ["label", "fg", "bg", "open"].map((field) => [
+      `diagnostics.${field}`,
+      { kind: "input", path: `diagnostics.${field}`, default: "" }
+    ])
+  ),
+  // [LAW:one-source-of-truth] The usable terminal width for THIS render —
+  // the exact post-reserve cell count FlexStrip wraps to. The bound payload
+  // carries it, the same width a draw's `opts.width` holds: the value a row
+  // fits to (RenderBinding.width) and the strip wraps to, so a template reading
+  // it and the wrap algebra can never disagree. Never cached: a resize is just
+  // a new value on the same path, re-read every render. The default only
+  // applies to compile-only callers that render without a bound width.
+  "term.cols": {
+    kind: "input",
+    path: "term.cols",
+    type: "number",
+    default: TERM_COLS_FLOOR
+  },
+  // The tmux pane this session's Claude Code runs in, as its client reported
+  // it; "" outside tmux (and for a client too old to say). It is the pane a
+  // `slash` click types into, so IN_TMUX below is the gate for one.
+  "tmux.pane": { kind: "input", path: "tmux.pane", default: "" },
+  // Claude Code's auto-compact window as its `/autocompact` last wrote it
+  // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
+  // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
+  // to the model's context window; `lower`/`higher` are the windows − and +
+  // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
+  // settings file the daemon could not read, and the only field set when it
+  // is.
+  "autocompact.window": {
+    kind: "input",
+    path: "autocompact.window",
+    type: "number",
+    default: -1
+  },
+  ...Object.fromEntries(
+    ["applied", "lower", "higher"].map((field) => [
+      `autocompact.${field}`,
+      {
+        kind: "input",
+        path: `autocompact.${field}`,
+        type: "number",
+        default: 0
+      }
+    ])
+  ),
+  "autocompact.error": {
+    kind: "input",
+    path: "autocompact.error",
+    default: ""
+  },
+  // Where the session is, as the daemon read it from the checkout on the
+  // request, so these answer before the git lane does. `noRepo` is a read that found none.
+  "location.main": { kind: "input", path: "location.main", default: "" },
+  "location.worktree": {
+    kind: "input",
+    path: "location.worktree",
+    default: ""
+  },
+  "location.subpath": { kind: "input", path: "location.subpath", default: "" },
+  "location.noRepo": {
+    kind: "input",
+    path: "location.noRepo",
+    type: "boolean",
+    default: false
+  },
+  // The repo's browsable web page, transposed from its remote by the daemon.
+  // "" is the genuine "no remote a browser can open" (local-only repo, bare
+  // path remote) — the quick-action tray's link reads that value, not a flag.
+  "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" }
+};
+var DRAW_PROJECTIONS = {
+  today: "the day the draw is at",
+  feeds: "the frames a lane was sent up to the draw's instant",
+  drawing: "who the draw is for",
+  diagnostics: "the errors and warnings the draw owes its reader"
+};
+function drawProjectionAt(path42) {
+  const root = path42.split(".", 1)[0];
+  return Object.hasOwn(DRAW_PROJECTIONS, root) ? root : void 0;
+}
+var SLOT_PATHS = Object.fromEntries(
+  EXPRESSION_SLOTS.map((slot) => [
+    slot,
+    CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)
+  ])
+);
+function slotAt(path42) {
+  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path42);
+}
 
-// src/var-system/sources.ts
+// src/config/synthesis-inputs.ts
+function synthesisReads(artifacts, trees, helpers) {
+  const reads = /* @__PURE__ */ new Set();
+  const add2 = (template, scope = helpers) => {
+    for (const ref of templateReads(template ?? "", scope).keys())
+      reads.add(ref);
+  };
+  for (const seg2 of Object.values(artifacts.segments)) {
+    const segScope = seg2.partials === void 0 ? helpers : { ...helpers, ...seg2.partials };
+    add2(seg2.template, segScope);
+    add2(seg2.bg, segScope);
+    add2(seg2.fg, segScope);
+    add2(seg2.when, segScope);
+    for (const body of Object.values(seg2.partials ?? {})) add2(body, segScope);
+  }
+  for (const tree of trees) {
+    for (const node of walkNodes(tree)) {
+      add2(node.when);
+      if (node.kind === "segment") {
+        add2(node.lead);
+        add2(node.trail);
+      }
+    }
+  }
+  for (const v of Object.values(artifacts.variables)) {
+    if (v.kind === "template") add2(v.template);
+  }
+  for (const a of Object.values(artifacts.actions)) {
+    for (const [, source] of actionTemplates(a)) add2(source);
+    const setBack = "set" in a ? SESSION_KEY_TO_EFFECTIVE_VAR.get(a.set) : void 0;
+    const persistBack = "persist" in a ? CONFIG_KEY_TO_EFFECTIVE_VAR.get(a.persist) : void 0;
+    if (setBack !== void 0) reads.add(setBack);
+    if (persistBack !== void 0) reads.add(persistBack);
+  }
+  return reads;
+}
+function synthesisInputs(artifacts, trees, config2) {
+  const own2 = templateScopeOf({
+    ...config2,
+    variables: { ...config2.variables, ...artifacts.variables },
+    segments: { ...config2.segments, ...artifacts.segments }
+  });
+  const ensured = {};
+  for (const ref of synthesisReads(artifacts, trees, config2.helpers)) {
+    if (refResolves(ref, own2)) continue;
+    const decl = PAYLOAD_INPUTS[ref];
+    if (decl === void 0) {
+      throw new Error(
+        `synthesized chrome reads ".${ref}", which it does not declare and PAYLOAD_INPUTS does not supply`
+      );
+    }
+    ensured[ref] = decl;
+  }
+  return ensured;
+}
+
+// src/config/option-domain.ts
 init_globals();
+
+// src/themes/palette-resolvers.ts
+init_globals();
+var baseCache = /* @__PURE__ */ new Map();
+function paletteForThemeName(name) {
+  const palette = basePaletteFor(name);
+  if (palette === null) {
+    throw new Error(
+      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
+    );
+  }
+  return palette;
+}
+function placementPalette(theme24, bar) {
+  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
+}
+function basePaletteFor(name) {
+  const hit = baseCache.get(name);
+  if (hit !== void 0) return hit;
+  const palette = getThemePalette(name);
+  if (palette === null) return null;
+  baseCache.set(name, palette);
+  return palette;
+}
+function transposedPalette(base, key) {
+  return TRANSPOSED(
+    base,
+    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
+    () => transposePalette(base, key)
+  );
+}
+var TRANSPOSED = memoPerPalette();
+function namedTheme(name) {
+  const value = basePaletteFor(name);
+  return value === null ? null : { kind: "decided", name, value };
+}
+function decideThemeName(name, where, onUnresolvable) {
+  const named3 = namedTheme(name);
+  if (named3 !== null) return named3;
+  onUnresolvable(
+    ruleFloorMessage(
+      where,
+      "palette",
+      `"${name}" names no installed theme${retiredThemeNote(name)}`
+    )
+  );
+  return themeFloor();
+}
+function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
+  return resolveSelection(
+    stagedPalette,
+    sessionTheme,
+    globalsPalette,
+    themeFloor(),
+    namedTheme
+  );
+}
+function themeFloor() {
+  return {
+    kind: "decided",
+    name: THEME_FLOOR,
+    value: paletteForThemeName(THEME_FLOOR)
+  };
+}
+
+// src/config/option-domain.ts
+var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
+function registerBuiltinDomain(name, resolve, facets = {}) {
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
+}
+registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
+  paletteOf: (option) => paletteForThemeName(option)
+});
+var PLACEMENT_THEMES = "placementThemes";
+registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
+  paletteOf: (option, render3) => placementPalette(option, render3.palette)
+});
+for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library, labelOf });
+}
+function perConfigDomainsFor(config2) {
+  return /* @__PURE__ */ new Map([
+    [
+      "styles",
+      {
+        members: Object.keys(config2.styles),
+        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
+        // construction of an adapted palette is transposedPalette — the same
+        // call drawDsl makes for the style actually in force. One
+        // transposition of the BASE, never a second over an already-styled
+        // palette (see OptionPalette).
+        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
+        // so a member always names a declared style.
+        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config2.styles[option])
+      }
+    ],
+    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
+    // whether or not a config declares it, and presetNames is where that is
+    // stated (once, for the gate and the render alike).
+    ["presets", { members: presetNames(config2.presets) }]
+  ]);
+}
+function knownOptionDomainNames(perConfigDomains) {
+  return [
+    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
+  ];
+}
+function resolveOptionDomain(from, perConfigDomains) {
+  if (typeof from !== "string") return { members: from };
+  const local = perConfigDomains.get(from);
+  if (local) return local;
+  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
+  if (entry) {
+    return {
+      members: entry.resolve(),
+      paletteOf: entry.paletteOf,
+      library: entry.library,
+      labelOf: entry.labelOf
+    };
+  }
+  throw new Error(unknownOptionDomain(from, perConfigDomains));
+}
+var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
+  ["looks", "styles"],
+  ["progressions", "variations"]
+]);
+function unknownOptionDomain(from, perConfigDomains) {
+  const renamed = RENAMED_OPTION_DOMAINS.get(from);
+  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
+  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
+}
+
+// src/config/setting-control.ts
+init_globals();
+var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
+function controlDomainAdmits(domain, value, perConfigDomains) {
+  if (domain === "bool") return parseSessionBoolean(value) !== null;
+  if (!("min" in domain)) {
+    return resolveOptionDomain(
+      optionsOf(domain),
+      perConfigDomains
+    ).members.includes(value);
+  }
+  return parseSessionInt(value, domain) !== null;
+}
+var LISTED_MEMBERS = 8;
+var SAMPLED_MEMBERS = 3;
+function describeControlDomain(domain, perConfigDomains) {
+  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
+  if (!("min" in domain)) {
+    const from = optionsOf(domain);
+    const { members } = resolveOptionDomain(from, perConfigDomains);
+    const quoted = members.map((m) => JSON.stringify(m));
+    if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
+    const named3 = typeof from === "string" ? ` "${from}"` : "";
+    return `one of the ${members.length}${named3} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+  }
+  return `an integer from ${domain.min} to ${domain.max}`;
+}
+function controlDeclOf(decl) {
+  return { label: decl.label, domain: controlDomainOf(decl.domain) };
+}
+function controlDomainOf(domain) {
+  if (domain === "theme") return { themes: PLACEMENT_THEMES };
+  if (domain === "bool") return domain;
+  return "min" in domain ? domain : { from: domain };
+}
+function settingControl(decl, key, readVar2, name, listKey) {
+  const label2 = escapeTemplateLiteral(decl.label);
+  const { domain } = decl;
+  if (domain === "bool") {
+    return {
+      kind: "inline",
+      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
+      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
+      variables: {}
+    };
+  }
+  if ("from" in domain) {
+    return optionPicker(key, name, listKey, domain.from, (n) => ({
+      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
+      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
+    }));
+  }
+  if ("themes" in domain) {
+    return optionPicker(key, name, listKey, domain.themes, (n) => ({
+      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
+      rows: [
+        `{{ swatches "${n.apply}" "${n.page}" }}`,
+        `{{ themePreview "${n.apply}" }}`
+      ]
+    }));
+  }
+  const step4 = (by) => ({
+    set: key,
+    min: domain.min,
+    max: domain.max,
+    by
+  });
+  return {
+    kind: "inline",
+    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
+    actions: {
+      [`${name}.down`]: step4(-domain.step),
+      [`${name}.up`]: step4(domain.step)
+    },
+    variables: {}
+  };
+}
+function optionPicker(key, name, listKey, from, face) {
+  const ref = { variable: listKey, key: listKey, member: name };
+  const toggle = menuActionName(listKey, name);
+  const open2 = `${name}.open`;
+  const page2 = menuPageKey(listKey);
+  const currentPage = `${page2}.current`;
+  const { template, rows } = face({ apply: name, open: open2, page: page2 });
+  return {
+    kind: "picker",
+    template,
+    actions: {
+      [name]: { set: key, from },
+      [toggle]: disclosureCycleAction(listKey, name),
+      [page2]: { set: page2, int: true },
+      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
+      [open2]: { do: [toggle, currentPage] }
+    },
+    variables: {
+      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
+      [page2]: { kind: "state", key: page2, default: "0" }
+    },
+    list: { ref, rows }
+  };
+}
+
+// src/config/help.ts
+init_globals();
+var HELP_GLYPH_CLOSED = "(?)";
+function declareHelp(name, lines2, within4, out) {
+  const self2 = {
+    variable: name,
+    key: name,
+    member: DISCLOSURE_OPEN
+  };
+  out.variables[name] = {
+    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
+    ...within4.length > 0 && { within: within4 }
+  };
+  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
+  out.segments[name] = {
+    template: disclosureTrigger(
+      name,
+      HELP_GLYPH_CLOSED,
+      DISCLOSURE_GLYPH_CLOSE
+    ),
+    // The trigger is visible wherever its host surface is. An unnested `(?)`
+    // (`within` empty) is always visible, and declares no `when` at all.
+    ...gateOf(within4)
+  };
+  const children2 = lines2.map((line, i) => {
+    const lineName = `${name}.${i}`;
+    out.segments[lineName] = { template: line };
+    return { kind: "segment", name: lineName };
+  });
+  return disclosureNode(
+    name,
+    self2,
+    { kind: "container", direction: "horizontal", children: children2 },
+    "drop"
+  );
+}
+function gateOf(within4) {
+  const [first2, ...rest2] = within4;
+  return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
+}
+
+// src/template-engine/colors.ts
+init_globals();
+var NO_FILL = "none";
+function groundOf(palette) {
+  return resolveColorRef(palette, "background");
+}
+var ColorSpecError = class extends Error {
+  constructor(spec, role, detail) {
+    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
+    this.name = "ColorSpecError";
+  }
+};
+function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
+  const { palette, tint, text: text4 } = active2;
+  const bgSpec = evalToPlainText(bgTemplate, scope);
+  const filled2 = bgSpec !== NO_FILL;
+  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
+  active2.bg = bgColor;
+  const fgSpec = evalToPlainText(fgTemplate, scope);
+  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
+  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
+  return new Style({
+    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
+    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
+  });
+}
+function evalToPlainText(template, scope) {
+  if (template === void 0) return void 0;
+  return template.evaluate(scope).map((f) => f.plain).join("");
+}
+function resolveRef(palette, ref, role) {
+  try {
+    return resolveColorRef(palette, ref);
+  } catch (e) {
+    if (e instanceof ColorRefError)
+      throw new ColorSpecError(ref, role, e.message);
+    throw e;
+  }
+}
+
+// src/help-text.ts
+init_globals();
+
+// src/config/edit-glyphs.ts
+init_globals();
+var REMOVE_GLYPH = "\u2716";
+var ADD_GLYPH = "\u271A";
+var CONFIGURE_GLYPH = "\u{1F527}";
+
+// src/cli-flags.ts
+init_globals();
+var NODE_FLAGS = {
+  help: ["-h", "--help"],
+  version: ["-V", "--version"]
+};
+
+// src/help-text.ts
+var LANE_PLACES = [
+  ...new Set(
+    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
+  )
+].join(" or ");
+var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
+var EDIT_MODE_HELP = [
+  `${ADD_GLYPH} inserts`,
+  `${REMOVE_GLYPH} removes`,
+  `${CONFIGURE_GLYPH} configures`,
+  "\u21BA resets layout"
+];
+var LANE_HELP = {
+  band: [
+    "animates the bar in the band above the prompt, through a Claude Code mod",
+    "on: installs the candybar-band mod from this checkout and types /reload-plugins"
+  ],
+  statusline: [
+    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
+    "on: exits this Claude Code and starts it again under that launcher, on this session",
+    "or start one yourself: cc-candybar --help prints the line to type"
+  ],
+  pane: [
+    "animates the bar in a tmux pane under this session's",
+    "on: opens that pane \xB7 off: closes it"
+  ],
+  tmuxStatus: [
+    "draws the bar in the tmux status line, while this session's pane is the one it shows",
+    "tmux: the daemon draws it there \xB7 claude: puts the status line back as it was"
+  ]
+};
+var HELP_TEXT = `
+cc-candybar - Beautiful powerline statusline for Claude Code
+
+Usage: cc-candybar [options]
+
+Standalone Commands:
+  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
+  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
+
+Debugging:
+  CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
+
+Configuration:
+  Layout and segment options are defined in .cc-candybar.json5 (place in your
+  project dir, cwd, or ~/.config/cc-candybar/config.json5). Use CC_CANDYBAR_CONFIG
+  to point at a specific file. To see the effective merged config:
+    cc-candybar config
+
+  Every bar carries a settings menu, whatever your config says \u2014 no config
+  needed, and writing your own \`root\` cannot delete it. Click
+  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
+  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
+  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
+  your config file. Under it are its
+  tabs, ${TABS.map((t2) => t2.label).join(", ")};
+  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
+  A change applies to this session at once.
+  Where each setting is in the menu: the globals field that sets it in a
+  config file, then the control's label.
+${settingsByPlace().flatMap(({ path: path42, names }) => [
+  `    ${path42}`,
+  ...names.map(
+    (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
+  )
+]).join("\n")}
+  The \u{1F9F0} tools tab holds \u{1FA7A} doctor: click it to check your setup, and click a
+  failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
+
+  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
+  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
+
+Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
+${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
+${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
+
+Subcommands:
+  install                  One-shot setup: stages the runtime (native render
+                           binary + dist bundle) at a stable path, creates the
+                           URL handler app + cc-candybar:// scheme (macOS), and
+                           writes the staged entry as the statusLine command in
+                           ~/.claude/settings.json. Re-run to update.
+  install-url-handler      Just stage the runtime and create + register the URL
+                           handler app (macOS only).
+  url-handle URL           Internal \u2014 the tmux status line's click binding
+                           runs it. Sends a cc-candybar:// link to the daemon
+                           as a click. A link clicked in a terminal goes
+                           through the URL handler app instead.
+  plugin install SOURCE    Install a repository's plugins into
+                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
+                           local path, a GitHub slug (owner/repo) or a git URL,
+                           and its plugins are the folders under
+                           .cc-candybar/plugins/. A definition the bar would
+                           drop installs nothing. Re-run to update.
+  daemon-stats [--json]    Query the running daemon for runtime stats:
+                           uptime, RSS, cache hit rates, watcher count,
+                           request totals. Does not spawn a daemon.
+  frames --lane LANE [--config PATH]
+                           One session's bar as the daemon pushes it \u2014 up to
+                           30 frames a second while it moves, at once on a
+                           click \u2014 one JSON message per stdout line. Reads
+                           Claude Code's statusline JSON from stdin (one object
+                           a line) and sends it as the session's data
+                           (--config rides with it). LANE is one of
+                           ${LANE_NAMES.join(", ")}:
+                           the experimental lane this stream serves,
+                           which streams only while its toggle in the settings
+                           menu's ${LANE_PLACES} is on.
+  bar-pane PANE            Draw the bar of the Claude Code session in tmux
+                           pane PANE (e.g. %3) in this pane, as the daemon
+                           pushes it, while this pane is shown. The bar is
+                           drawn at PANE's width, so split PANE with -v for a
+                           pane under it that fits. Experimental:
+                           runs while ${LANES.pane.label} is on in the settings
+                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
+
+Config tooling:
+  doctor [file]            Check your setup the way the bar's \u{1FA7A} doctor does \u2014
+                           one line per check. Exit 0 all ok, 1 any failed,
+                           2 usage error / unreadable settings. Run it from a
+                           Claude Code shell (or inside the same tmux pane) so
+                           it sees Claude Code's own environment. [file] is
+                           the config to check, when the statusline command
+                           names one with --config.
+  check [--render] [file]  Validate a config on the full render pipeline (parse
+                           \u2192 merge \u2192 validate \u2192 register \u2192 render, under
+                           every preset) with no daemon. With no path, checks
+                           the same file the daemon would load from here. Exit
+                           0 clean (warnings on stderr), 1 invalid, 2
+                           unreadable. --render also prints the bar a fresh
+                           session opens on, so you can read a config without
+                           installing it. "lint" is an alias.
+  schema                   Print the JSON Schema for the config file shape
+                           (.cc-candybar.json5). Point an editor's $schema at it
+                           for autocomplete + structural validation.
+  vars [--json]            Declared variables: source kind, value, last error.
+  segments [--json]        Segment templates and their last rendered output.
+  config [--json]          The effective merged config. (All three query the
+                           running daemon; none spawn one.)
+
+`;
+
+// src/config/settings-menu.ts
+init_globals();
+
+// src/config/quiet-text.ts
+init_globals();
+var QUIET_PCT = 60;
+var QUIET_MIN_CONTRAST = 3;
+var QUIET_TEXT = `readableOn (mix (color "foreground") (bgOf) ${QUIET_PCT}) (bgOf) ${QUIET_MIN_CONTRAST}`;
+
+// src/doctor/checks.ts
+init_globals();
+
+// src/tmux-hint.ts
+init_globals();
+var TMUX_ENV = {
+  // `socket,server-pid,session-id` — the socket is the part before the first
+  // comma, and it is what `tmux -S <socket>` needs to reach THIS server.
+  socket: "TMUX",
+  pane: "TMUX_PANE",
+  // Claude Code's own switch: when this is truthy in ITS environment, it stops
+  // re-encoding the statusline at 256 colours inside tmux (verified against the
+  // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
+  truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
+};
+var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
+
+// src/config-hint.ts
+init_globals();
+
+// src/utils/user-path.ts
+init_globals();
+var import_node_path2 = __toESM(require_path_browserify(), 1);
+function expandHome(p2, home) {
+  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
+}
+function resolveUserPath(base, p2, home) {
+  return import_node_path2.default.resolve(base, expandHome(p2, home));
+}
+function explicitConfigPath(base, p2, home) {
+  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
+}
+
+// src/config-hint.ts
+var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
+function requestedConfigTarget(argument, environment) {
+  if (argument !== void 0) return { source: "argument", path: argument };
+  if (environment !== void 0) {
+    return { source: "environment", path: environment };
+  }
+  return { source: "search" };
+}
+function chainName(paths2, none2 = "bundled default (no config file loaded)") {
+  return paths2.join(" < ") || none2;
+}
+
+// src/render/strip.ts
+init_globals();
+
+// src/render/rich-theme.ts
+init_globals();
+var RENDER_THEME = new Theme({
+  // A joiner draws `plain`'s separator and `metro`'s rail on the terminal's own
+  // ground, which the detached daemon cannot see; rich-js's `bright_black` is a
+  // slot some terminal themes paint as that ground. The terminal's own text on
+  // its own ground is the one pair known to read there.
+  "strip.separator": "default",
+  "strip.rail": "default"
+});
+function resolvedStyle(style) {
+  return RENDER_THEME.resolve(style);
+}
+
+// src/render/effect.ts
+init_globals();
+var STILL3 = { kind: "still" };
+var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
+var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
+function isMoving(part) {
+  return part.name !== EFFECT_FLOOR;
+}
+function together(parts) {
+  return (drawn) => Animation.map(
+    Animation.all(
+      parts.map(
+        ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
+      )
+    ),
+    (frames) => (colors, cell3) => frames.reduce((moved, part) => part(moved, cell3), colors)
+  );
+}
+var ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
+function fromGround(effect, ground) {
+  const terminal = new TerminalTheme(
+    ground,
+    ASSUMED_TERMINAL.foregroundColor,
+    ASSUMED_TERMINAL.ansiColors,
+    ASSUMED_TERMINAL.palette
+  );
+  return (drawn) => effect({ ...drawn, theme: terminal });
+}
+function paintedOn(effect, owners) {
+  return (row2) => confined(() => effect(row2), ...owners)(row2);
+}
+function noiseOffset(text4) {
+  let hash2 = 2166136261;
+  for (let i = 0; i < text4.length; i++) {
+    hash2 ^= text4.charCodeAt(i);
+    hash2 = Math.imul(hash2, 16777619) >>> 0;
+  }
+  return hash2 / 4294967296;
+}
+var NOISE_DEPTH = 4096;
+function closingFlash(fill, text4, begins) {
+  const lit = (look, { terminal }) => ({
+    ...look,
+    bg: terminal.bg ? look.bg : fill,
+    fg: terminal.fg ? look.fg : terminal.bg ? fill : text4
+  });
+  const dark = (colors) => colors;
+  const holds2 = CLOSING_FLASH.reduceRight(
+    (after, { lit: on2, seconds }) => Animation.sequence(Animation.constant(on2 ? lit : dark), seconds, after),
+    Animation.constant(dark)
+  );
+  const idle = Animation.sequence(Animation.constant(dark), begins, holds2);
+  return () => idle;
+}
+var SessionEffects = class {
+  constructor(key) {
+    this.key = key;
+  }
+  key;
+  // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
+  // changed to its current value: the effect's own t = 0 is a recorded fact,
+  // never inferred from when renders happened to arrive.
+  inForce = null;
+  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
+  // its last drawn frame left it — where the clock stood and the speed it ran
+  // at from there: the anchor every later reading is measured from, so a
+  // change of speed changes the clock's slope from the frame it lands in and
+  // never its reading, so no loop jumps phase. The host clock itself before
+  // the session's first frame.
+  anchor = Timeline.play(0);
+  // The same fact for each placement wearing its own effect, by placement id,
+  // kept for the placements the latest render drew: one that stopped being
+  // drawn starts its effect again at t = 0 when it is drawn again, as the
+  // effect comes into force for it again.
+  placements = /* @__PURE__ */ new Map();
+  // The effects made for the rows the latest render drew, by row and scope (the
+  // bar's, or one placement's), with the name each was made for. Each render
+  // starts an empty map and keeps only what it draws, so a row that stopped
+  // being drawn (a menu closed) takes its effects and their settled shares with
+  // it.
+  made = /* @__PURE__ */ new Map();
+  // The transitions in flight at the last frame drawn, by placement — what a
+  // placement's appearing and leaving go on from when the next frame is drawn
+  // from the same source as the view's record of it (`FrameRecord`) — or
+  // null: no frame drawn, or the last drawn with transitions off, which
+  // nothing compares against.
+  passages = null;
+  // [LAW:nothing-unseen] What the latest render wore, for the render's event.
+  frame = {
+    effect: EFFECT_FLOOR,
+    t: 0,
+    speed: 1,
+    made: 0,
+    reused: 0,
+    own: [],
+    basis: "off",
+    revision: 0,
+    fades: [],
+    leaves: []
+  };
+  // The latest render's effects: the bar's, at what t, how many of its rows'
+  // effects were made fresh rather than reused — one made every frame pays
+  // rich-js's share settling every frame — and each placement's own.
+  lastFrame() {
+    return this.frame;
+  }
+  // The effects this session holds: the ones its latest render drew, and the
+  // transitions still in flight.
+  get heldCount() {
+    const passing = this.passages?.size ?? 0;
+    return [...this.made.values()].reduce((n, row2) => n + row2.size, passing);
+  }
+  /**
+   * The session's animation clock read at the wall instant `at`, running at
+   * `speed` from it on (`Timeline.withRate`: no jump at `at`). The time since
+   * the last drawn frame passed at the speed in force then; before the first
+   * frame the timeline is the host clock itself, so a session that has only
+   * ever run at 1x reads the wall instant at every frame. Reads only: the frame
+   * that draws keeps it as the anchor (`drawn`).
+   */
+  clockAt(at, speed2) {
+    return { wall: at, timeline: Timeline.withRate(this.anchor, at, speed2) };
+  }
+  /**
+   * The motion of each row of a render drawn at `clock` whose bar wears `name`,
+   * given the row's strip items. Records an effect coming into force — the
+   * bar's, or a placement's — when it differs from the last render's, so every
+   * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
+   * from off the row, wheel at the theme's own hues. Records every placement
+   * the render draws, fades in each one the last frame did not, and dissolves
+   * out each one the last frame drew and this one does not. All of it is kept
+   * once the frame is `drawn`.
+   */
+  motion(name, clock, given2, flash = null) {
+    const at = animationAt(clock);
+    const onSession = (t2) => Timeline.seek(clock.timeline, clock.wall, t2);
+    const inForce = this.inForce?.name === name ? this.inForce : { name, since: at };
+    const bar = {
+      scope: BAR_SCOPE,
+      name,
+      t: at - inForce.since
+    };
+    const knownPlacements = this.placements;
+    const placements = /* @__PURE__ */ new Map();
+    const known = this.made;
+    const made = /* @__PURE__ */ new Map();
+    const own2 = [];
+    const { last: last2 } = given2;
+    const inFlight = this.passages;
+    const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
+    const before = basis === "compared" ? (id2) => {
+      const record2 = last2.placements.get(id2);
+      return record2?.kind === "drew" ? {
+        drawing: record2.drawing,
+        passage: inFlight.get(id2) ?? null
+      } : void 0;
+    } : null;
+    const reachedIds = /* @__PURE__ */ new Set();
+    const passages = /* @__PURE__ */ new Map();
+    const fading = [];
+    const leaving = [];
+    const frame2 = {
+      effect: name,
+      t: bar.t,
+      speed: clock.timeline.rate,
+      made: 0,
+      reused: 0,
+      own: own2,
+      basis,
+      revision: given2.source.revision,
+      fades: fading,
+      leaves: leaving
+    };
+    const begin = (transition2, id2, { ground }) => {
+      const begun = EFFECT_CATALOGUE.transitions[transition2]({
+        z: noiseOffset(`${this.key}@${id2}`) * NOISE_DEPTH
+      });
+      return {
+        name: transition2,
+        since: at,
+        done: (t2) => begun.done(t2),
+        effect: fromGround(begun.effect, ground)
+      };
+    };
+    const over2 = ({ since, done: done2 }) => done2(at - since);
+    const shown = (id2, drawing2, last3) => ({
+      drawing: drawing2,
+      passage: before === null ? null : last3 === void 0 || last3.passage?.name === "dissolve" ? begin("fade", id2, drawing2) : last3.passage !== null && !over2(last3.passage) ? last3.passage : null
+    });
+    const gone = (id2, last3) => {
+      if (last3 === void 0 || last3.drawing.opened || last3.drawing.own.length === 0)
+        return void 0;
+      if (last3.passage?.name === "dissolve")
+        return over2(last3.passage) ? void 0 : last3;
+      const held = { ...last3.drawing, own: last3.drawing.own.map(given2.hold) };
+      return { drawing: held, passage: begin("dissolve", id2, held) };
+    };
+    const reached = (id2, lines2) => {
+      if (reachedIds.has(id2))
+        throw new Error(`placement "${id2}" was reached twice in one frame`);
+      reachedIds.add(id2);
+      const last3 = before?.(id2);
+      const { drawing: drawing2, deeper } = given2.returned(id2, lines2);
+      const now2 = drawing2 === null ? gone(id2, last3) : shown(id2, drawing2, last3);
+      if (now2 === void 0) return lines2;
+      if (now2.passage !== null) {
+        passages.set(id2, now2.passage);
+        (now2.passage.name === "fade" ? fading : leaving).push({
+          placement: id2,
+          t: at - now2.passage.since
+        });
+      }
+      return drawing2 === null ? [...now2.drawing.own, ...deeper] : lines2;
+    };
+    const ownPart = (placement, name2) => {
+      const last3 = placements.get(placement) ?? knownPlacements.get(placement);
+      const since = last3?.name === name2 ? last3 : { name: name2, since: at };
+      const t2 = at - since.since;
+      if (!placements.has(placement)) {
+        placements.set(placement, since);
+        own2.push({ placement, effect: name2, t: t2 });
+      }
+      return { scope: placement, name: name2, t: t2 };
+    };
+    const effectOf = (rowKey, part) => {
+      const row3 = made.get(rowKey) ?? /* @__PURE__ */ new Map();
+      made.set(rowKey, row3);
+      const current = row3.get(part.scope);
+      if (current !== void 0) return current.effect;
+      const last3 = known.get(rowKey)?.get(part.scope);
+      const reuse = last3?.name === part.name;
+      const z = noiseOffset(
+        part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`
+      );
+      const effect = reuse ? last3.effect : EFFECT_CATALOGUE.loops[part.name]({ z: z * NOISE_DEPTH });
+      frame2[reuse ? "reused" : "made"]++;
+      row3.set(part.scope, { name: part.name, effect });
+      return effect;
+    };
+    const byScope = (items) => {
+      const parts = /* @__PURE__ */ new Map();
+      for (const { owner, placement } of items) {
+        const part = placement.effect === FOLLOW_BAR ? bar : ownPart(placement.id, placement.effect);
+        const seen = parts.get(part.scope);
+        if (seen === void 0)
+          parts.set(part.scope, { ...part, owners: [owner] });
+        else seen.owners.push(owner);
+      }
+      return [...parts.values()];
+    };
+    const passagesOf = (items) => {
+      const byPlacement = /* @__PURE__ */ new Map();
+      for (const { owner, placement } of items) {
+        const mine = byPlacement.get(placement.id);
+        if (mine === void 0) byPlacement.set(placement.id, [owner]);
+        else mine.push(owner);
+      }
+      return [...byPlacement].flatMap(([id2, owners]) => {
+        const passage = passages.get(id2) ?? null;
+        return passage === null ? [] : [
+          {
+            timeline: onSession(at - passage.since),
+            effect: confined(passage.effect, ...owners)
+          }
+        ];
+      });
+    };
+    const flashPart = flash === null ? [] : [
+      {
+        timeline: Timeline.play(flash.idleSince),
+        effect: closingFlash(
+          flash.fill,
+          flash.text,
+          flashBegins(flash.timeoutS)
+        )
+      }
+    ];
+    const flashing = (kind) => kind === "menu" ? flashPart : [];
+    const row2 = (rowName, kind, items) => {
+      const parts = items.some(
+        (i) => i.placement.effect !== FOLLOW_BAR
+      ) ? byScope(items) : [{ ...bar, owners: void 0 }];
+      const moving = parts.filter(isMoving);
+      const passing = passagesOf(items);
+      const flashed = flashing(kind);
+      if (moving.length === 0 && passing.length === 0 && flashed.length === 0)
+        return STILL3;
+      const rowKey = `${this.key}#${rowName}`;
+      return {
+        kind: "moving",
+        time: clock.wall,
+        wrap: (strip) => new Effected(
+          strip,
+          together([
+            ...moving.map((part) => {
+              const effect = effectOf(rowKey, part);
+              return {
+                timeline: onSession(part.t),
+                effect: part.owners === void 0 ? effect : paintedOn(effect, part.owners)
+              };
+            }),
+            ...passing,
+            // Last, so a lit hold is the flash's over whatever a fade
+            // veils: the menu is about to close.
+            ...flashed
+          ]),
+          { key: rowKey, theme: ASSUMED_TERMINAL }
+        )
+      };
+    };
+    return {
+      // [LAW:dataflow-not-control-flow] With transitions off nothing is
+      // compared or kept, so every placement draws exactly what it returned.
+      placed: basis === "off" ? (_id, lines2) => lines2 : reached,
+      row: row2,
+      drawn: () => {
+        this.anchor = clock.timeline;
+        this.inForce = inForce;
+        this.placements = placements;
+        this.made = made;
+        this.passages = basis === "off" ? null : passages;
+        this.frame = frame2;
+      }
+    };
+  }
+};
+var MAX_SESSIONS = 256;
+var EffectSessions = class {
+  constructor(maxSessions = MAX_SESSIONS) {
+    this.maxSessions = maxSessions;
+  }
+  maxSessions;
+  sessions = /* @__PURE__ */ new Map();
+  of(sessionId2) {
+    const known = this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
+    this.sessions.delete(sessionId2);
+    this.sessions.set(sessionId2, known);
+    for (const oldest of this.sessions.keys()) {
+      if (this.sessions.size <= this.maxSessions) break;
+      this.sessions.delete(oldest);
+    }
+    return known;
+  }
+  // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
+  // effect made for a row keeps rich-js's settled shares, so their count is the
+  // size that grows.
+  getStats() {
+    let effects = 0;
+    for (const session of this.sessions.values()) effects += session.heldCount;
+    return { sessions: this.sessions.size, effects };
+  }
+};
+
+// src/render/frame.ts
+init_globals();
+
+// src/render/diagnostic-style.ts
+init_globals();
+var DIAGNOSTIC_ERROR_COLORS = {
+  fg: "#ffffff",
+  bg: "#c82828"
+};
+var DIAGNOSTIC_WARNING_COLORS = {
+  fg: "#000000",
+  bg: "#dca028"
+};
+var DIAGNOSTIC_INFO_COLORS = {
+  fg: "#ffffff",
+  bg: "#2f6db5"
+};
+function sgrOf(layer, hex3) {
+  const channels = [1, 3, 5].map(
+    (at) => Number.parseInt(hex3.slice(at, at + 2), 16)
+  );
+  return `\x1B[${layer};2;${channels.join(";")}m`;
+}
+var DIAGNOSTIC_ERROR_FG = sgrOf(38, DIAGNOSTIC_ERROR_COLORS.fg);
+var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
+
+// src/render/diagnostic-text.ts
+init_globals();
+var ELLIPSIS = "\u2026";
+var NEUTRALIZED_RANGES = [
+  [0, 31],
+  [127, 159],
+  [8234, 8238],
+  [8294, 8303]
+];
+function isControlChar(code) {
+  return NEUTRALIZED_RANGES.some(([lo, hi]) => code >= lo && code <= hi);
+}
+function sanitizeText(text4) {
+  let sanitized = "";
+  for (const ch of text4) {
+    sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
+  }
+  return sanitized.replace(/\s+/g, " ").trim();
+}
+function sanitizeAndTruncate(text4, maxLen) {
+  const sanitized = sanitizeText(text4);
+  let out = "";
+  let count = 0;
+  for (const ch of sanitized) {
+    if (count === maxLen) {
+      return out.replace(/.$/u, ELLIPSIS);
+    }
+    out += ch;
+    count++;
+  }
+  return out;
+}
+
+// src/render/error-glyph.ts
+init_globals();
+var OPEN = `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}`;
+var PREFIX = "\u26A0 cc-candybar: ";
+var MAX_MESSAGE_LEN = 60;
+function permanentGlyphText(outcome) {
+  return `${PREFIX}${describe2(outcome)}`;
+}
+function describe2(outcome) {
+  switch (outcome.cause) {
+    case "version_mismatch": {
+      const daemon3 = outcome.daemonV === 0 ? "unknown" : `v${outcome.daemonV}`;
+      return `protocol mismatch (client v${outcome.clientV} \u2260 daemon ${daemon3})`;
+    }
+    case "bad_request":
+      return `daemon rejected request: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+    case "render_failed":
+      return `render failed: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+    case "switched_off":
+      return `switched off: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+    case "malformed_response":
+      return `malformed daemon response: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+  }
+}
+
+// src/render/frame.ts
+function parseFrame(wire) {
+  return { ...wire, nextChange: wire.nextChange ?? Infinity };
+}
+function standIn(frame2, rows) {
+  return {
+    depth: frame2.depth,
+    rows,
+    nextChange: Infinity,
+    motion: frame2.motion === "still" ? "still" : "can-move",
+    pending: []
+  };
+}
+function diagnosticFrame(text4, colors) {
+  return {
+    depth: "truecolor",
+    rows: [
+      { kind: "diagnostic", runs: [{ text: sanitizeText(text4), ...colors }] }
+    ],
+    nextChange: Infinity,
+    motion: "still",
+    pending: []
+  };
+}
+function renderFailedFrame(message) {
+  return diagnosticFrame(
+    permanentGlyphText({ kind: "permanent", cause: "render_failed", message }),
+    DIAGNOSTIC_ERROR_COLORS
+  );
+}
+function laneEncoded(encode2, frame2) {
+  try {
+    return encode2(frame2);
+  } catch (error) {
+    const why2 = error instanceof Error ? error.message : String(error);
+    return encode2(
+      diagnosticFrame(`\u26A0 cc-candybar ${why2}`, DIAGNOSTIC_ERROR_COLORS)
+    );
+  }
+}
+function drawnColor(spec) {
+  if (spec.type === ColorDepth.TRUECOLOR) return spec.value.hex;
+  return spec.number === void 0 ? spec.name : `color(${spec.number})`;
+}
+var ATTRIBUTES = Object.keys(new Style().attributes);
+function lookOf(style, depth) {
+  const { color, bgcolor } = style.drawnColors(depth);
+  const attrs = ATTRIBUTES.filter((name) => style[name] === true);
+  return {
+    ...color !== void 0 && { fg: drawnColor(color) },
+    ...bgcolor !== void 0 && { bg: drawnColor(bgcolor) },
+    ...attrs.length > 0 && { attrs }
+  };
+}
+function runOf({ text: text4, style }, depth) {
+  return {
+    text: text4,
+    ...style !== void 0 && depth !== null && lookOf(style, depth),
+    ...style?.link !== void 0 && { link: style.link }
+  };
+}
+function runLines(segments, depth) {
+  const written2 = segments.filter((s) => !s.isControl && s.text.length > 0);
+  return Segment.splitLines(written2).map(
+    (line) => line.map((segment) => runOf(segment, depth))
+  );
+}
+function segmentOf({ text: text4, fg, bg, attrs = [], link }) {
+  return new Segment(
+    text4,
+    new Style({
+      color: fg,
+      bgcolor: bg,
+      link,
+      ...Object.fromEntries(attrs.map((name) => [name, true]))
+    })
+  );
+}
+function encodeAnsi(lines2, depth) {
+  const destination = resolveDestination(depth);
+  return lines2.map((runs) => segmentsToString(runs.map(segmentOf), destination)).join("\n");
+}
+function ansiOf(frame2) {
+  return encodeAnsi(
+    frame2.rows.map((row2) => row2.runs),
+    frame2.depth
+  );
+}
+function composeBar(frame2) {
+  return ansiOf(frame2) + "\n";
+}
+var sameLook = (a, b) => a.fg === b.fg && a.bg === b.bg && a.link === b.link && a.attrs?.join() === b.attrs?.join();
+function mergedRuns({ runs }) {
+  const merged = [];
+  for (const run3 of runs) {
+    const last2 = merged.at(-1);
+    if (last2 !== void 0 && sameLook(last2, run3))
+      merged[merged.length - 1] = { ...last2, text: last2.text + run3.text };
+    else merged.push(run3);
+  }
+  return merged;
+}
+function plainOf2(runs) {
+  return runs.map((run3) => run3.text).join("");
+}
+
+// src/render/strip.ts
+var UNBOUNDED_DRAW_WIDTH = 80;
+var ROW_HOST = {};
+function draw(renderable, options) {
+  const destination = resolveDestination(options.colorSystem);
+  const { time } = options;
+  let told = Infinity;
+  const segments = [
+    ...render(renderable, {
+      maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
+      isTerminal: false,
+      asciiOnly: false,
+      theme: RENDER_THEME,
+      colorSystem: destination.colorSystem,
+      ...time === void 0 ? {} : { frame: { time, host: ROW_HOST } },
+      // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
+      // as no style at all; a name the theme lacks is a broken config, so it
+      // throws here exactly as the cell splitter throws on it.
+      onStyleError: (error) => {
+        throw error;
+      },
+      onHold: ({ nextChange }) => {
+        told = Math.min(told, nextChange);
+      }
+    })
+  ];
+  return {
+    lines: runLines(segments, destination.colorSystem),
+    nextChange: Math.min(Segment.nextChange(segments), told)
+  };
+}
+var DEFAULT_TERMINAL_WIDTH = 120;
+var separatorJoiners = /* @__PURE__ */ new Map();
+function plainWith(separator) {
+  const known = separatorJoiners.get(separator);
+  if (known !== void 0) return known;
+  const withGlyph = (form) => {
+    const seam2 = form.seam.map(
+      (cell3) => "cap" in cell3 ? cell3 : { ...cell3, glyph: separator }
+    );
+    return { seam: seam2 };
+  };
+  const { seam, caps } = JOINERS2.plain;
+  const joiner = new CellJoiner(
+    {
+      glyph: withGlyph(seam.glyph),
+      ascii: seam.ascii
+    },
+    caps
+  );
+  separatorJoiners.set(separator, joiner);
+  return joiner;
+}
+function pickJoiner(endcaps, separator) {
+  return endcaps === "plain" && separator !== void 0 ? plainWith(separator) : JOINERS2[endcaps];
+}
+var geometryMemo = /* @__PURE__ */ new Map();
+function stripGeometry(options) {
+  const key = JSON.stringify([options.endcaps, options.separator ?? null]);
+  const known = geometryMemo.get(key);
+  if (known !== void 0) return known;
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const cell3 = (bgcolor) => new RichText("x", {
+    end: "",
+    overflow: "ignore",
+    style: new Style({ bgcolor })
+  });
+  const width = (cells) => {
+    const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
+    return new RichText(plainOf2(lines2.flat())).cellLength;
+  };
+  const one = width([cell3("#101010")]);
+  const geometry = {
+    chrome: one - 1,
+    seam: width([cell3("#101010"), cell3("#202020")]) - one - 1
+  };
+  geometryMemo.set(key, geometry);
+  return geometry;
+}
+function stripChromeCols(options) {
+  return stripGeometry(options).chrome;
+}
+function stripSeamCols(options) {
+  return stripGeometry(options).seam;
+}
+var PRIVATE_USE = /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
+function privateGlyphsIn(text4) {
+  return [...new Set(text4.match(PRIVATE_USE) ?? [])].join("");
+}
+function stripPrivateGlyphs(options) {
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const cell3 = (bgcolor) => new RichText("x", { end: "", style: new Style({ bgcolor }) });
+  const cells = [cell3("#101010"), cell3("#202020")];
+  const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
+  return privateGlyphsIn(plainOf2(lines2.flat()));
+}
+var WIDEST_GLYPH_COLS = 2;
+function lineWidth(options) {
+  return options.wrap ? options.width : Infinity;
+}
+function wrappedLines(plain, width) {
+  const wrapping = new RichText(plain, { overflow: "fold", end: "" });
+  return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf2);
+}
+function drawStripCells(cells, options, motion = STILL3) {
+  if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const flex = Number.isFinite(lineWidth(options));
+  const drawn = {
+    colorSystem: options.colorCompatibility,
+    ...flex ? { width: options.width } : {}
+  };
+  const strip = flex ? new FlexStrip([...cells], { joiner }) : new Strip([...cells], joiner);
+  const row2 = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
+  if (row2.lines.length === 0) {
+    throw new Error("drawStripCells: rich-js strip drew no line");
+  }
+  return row2;
+}
+function renderStripCells(cells, options) {
+  return encodeAnsi(
+    drawStripCells(cells, options).lines,
+    options.colorCompatibility
+  );
+}
+
+// src/claude-settings.ts
+init_globals();
+var import_node_path3 = __toESM(require_path_browserify(), 1);
+
+// src/utils/outcome.ts
+init_globals();
+function ok(value) {
+  return { kind: "ok", value };
+}
+var ABSENT2 = { kind: "absent" };
+function failed(reason, failedAt) {
+  return { kind: "failed", reason, failedAt };
+}
+function orElse(outcome, fallback) {
+  return outcome?.kind === "ok" ? outcome.value : fallback;
+}
+var PENDINGS = {
+  unread: Object.freeze({ kind: "pending", why: "unread" }),
+  superseded: Object.freeze({ kind: "pending", why: "superseded" })
+};
+function pendingOf(why2) {
+  return PENDINGS[why2];
+}
+function isPending(value) {
+  return typeof value === "object" && value !== null && value.kind === "pending";
+}
+
+// src/utils/transcript-fs.ts
+init_globals();
+
+// site/shims/fs-promises.ts
+init_globals();
+var import_memfs2 = __toESM(require_lib8(), 1);
+var p = import_memfs2.fs.promises;
+var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
+
+// src/utils/limiter.ts
+init_globals();
+var Limiter = class {
+  slots;
+  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
+  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
+  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
+  // would be O(n²) on the render hot path). A dequeued node is immediately
+  // unreferenced, so a continuously-saturated queue retains only the waiters
+  // currently parked — no consumed-prefix accumulates, unlike a head-index
+  // array that only reclaims on full drain.
+  head = null;
+  tail = null;
+  constructor(max2) {
+    this.slots = max2;
+  }
+  async run(task) {
+    await this.acquire();
+    try {
+      return await task();
+    } finally {
+      this.release();
+    }
+  }
+  async acquire() {
+    if (this.slots > 0) {
+      this.slots--;
+      return;
+    }
+    await new Promise((wake) => {
+      const node = { wake, next: null };
+      if (this.tail) this.tail.next = node;
+      else this.head = node;
+      this.tail = node;
+    });
+  }
+  release() {
+    const node = this.head;
+    if (!node) {
+      this.slots++;
+      return;
+    }
+    this.head = node.next;
+    if (!this.head) this.tail = null;
+    node.wake();
+  }
+};
 
 // src/utils/logger.ts
 init_globals();
@@ -46132,6 +47675,3945 @@ function changeLogger(log) {
   };
 }
 var quietLogger = (_level, message) => debug(message);
+
+// src/utils/transcript-fs.ts
+function statStamp(filePath2) {
+  if (!filePath2) return "";
+  try {
+    return stampOf(statSync(filePath2));
+  } catch {
+    return "";
+  }
+}
+function stampOf(st) {
+  return `${st.mtimeMs}:${st.size}`;
+}
+var TRANSCRIPT_FS_CONCURRENCY = 8;
+var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
+function gated(fn) {
+  return ((...args) => gate.run(() => fn(...args)));
+}
+var readdir2 = gated(readdir);
+var stat2 = gated(stat);
+var FOLD_WINDOW_BYTES = 512 * 1024;
+var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
+function transcriptReads() {
+  return { ...totals };
+}
+var windows = [];
+function giveBack(window2) {
+  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
+}
+async function readAppended(path42, prior, until2) {
+  return gate.run(async () => {
+    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
+    const read2 = await readWholeLines(path42, prior, until2, window2);
+    if (read2.kind !== "ok") {
+      giveBack(window2);
+      return read2;
+    }
+    let lent = window2;
+    return ok({
+      ...read2.value,
+      [Symbol.dispose]: () => {
+        if (lent !== void 0) giveBack(lent);
+        lent = void 0;
+      }
+    });
+  });
+}
+function decodeLines(read2, decode) {
+  var _stack = [];
+  try {
+    const lent = __using(_stack, read2);
+    return decode(lent.lines);
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
+}
+async function readWholeLines(path42, prior, until2, window2) {
+  let fh = null;
+  try {
+    fh = await open(path42, "r");
+    const st = await fh.stat();
+    const { size, ino } = st;
+    const stamp2 = stampOf(st);
+    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
+    const start = reset || prior === void 0 ? 0 : prior.offset;
+    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
+    let bytesRead = 0;
+    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
+    bytesRead += first2.length;
+    let lastNl = first2.lastIndexOf(10);
+    let reached = start + first2.length;
+    let shortRead = first2.length < Math.min(window2.length, end - start);
+    while (lastNl < 0 && reached < end && !shortRead) {
+      const next = await readInto(
+        fh,
+        window2.subarray(0, end - reached),
+        reached
+      );
+      bytesRead += next.length;
+      const nl = next.indexOf(10);
+      if (nl >= 0) lastNl = reached - start + nl;
+      shortRead = next.length < Math.min(window2.length, end - reached);
+      reached += next.length;
+    }
+    const bytes = lastNl + 1;
+    const longLine = bytes > window2.length ? bytes : 0;
+    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
+    bytesRead += longLine > 0 ? wholeLines.length : 0;
+    const complete = wholeLines.length === bytes;
+    totals.reads++;
+    totals.bytes += bytesRead;
+    totals.longLines += longLine > 0 ? 1 : 0;
+    totals.largestLine = Math.max(totals.largestLine, longLine);
+    return ok({
+      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
+      start,
+      // A long line was found by its newline alone, so lines after it may
+      // still be unread; otherwise the read saw everything up to its end.
+      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
+      size,
+      stamp: stamp2,
+      ino,
+      reset,
+      longLine
+    });
+  } catch (e) {
+    if (e.code === "ENOENT") return ABSENT2;
+    return failed(
+      `readAppended ${path42}: ${e instanceof Error ? e.message : String(e)}`,
+      "read"
+    );
+  } finally {
+    await fh?.close().catch((e) => {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    });
+  }
+}
+async function readInto(fh, buf, position) {
+  let off = 0;
+  while (off < buf.length) {
+    const { bytesRead } = await fh.read(
+      buf,
+      off,
+      buf.length - off,
+      position + off
+    );
+    if (bytesRead === 0) break;
+    off += bytesRead;
+  }
+  return buf.subarray(0, off);
+}
+async function readTail(path42, maxBytes) {
+  return gate.run(async () => {
+    let fh = null;
+    try {
+      fh = await open(path42, "r");
+      const { size } = await fh.stat();
+      const start = Math.max(0, size - maxBytes);
+      return ok({
+        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
+        fromStart: start === 0
+      });
+    } catch (e) {
+      if (e.code === "ENOENT") return ABSENT2;
+      return failed(
+        `readTail ${path42}: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
+      );
+    } finally {
+      await fh?.close().catch((e) => {
+        debug(
+          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+        );
+      });
+    }
+  });
+}
+function readTailSync(path42, maxBytes) {
+  let fd;
+  try {
+    fd = openSync(path42, constants.O_RDONLY | constants.O_NONBLOCK);
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT2;
+    return failed(e instanceof Error ? e.message : String(e), "read");
+  }
+  try {
+    const stat3 = fstatSync(fd, { bigint: true });
+    if (!stat3.isFile()) return failed("not a regular file", "read");
+    const size = Number(stat3.size);
+    const start = Math.max(0, size - maxBytes);
+    const buf = import_buffer.Buffer.alloc(size - start);
+    let off = 0;
+    while (off < buf.length) {
+      const n = readSync(fd, buf, off, buf.length - off, start + off);
+      if (n === 0) break;
+      off += n;
+    }
+    return ok({
+      buf: buf.subarray(0, off),
+      fromStart: start === 0,
+      file: `${stat3.dev}:${stat3.ino}`
+    });
+  } catch (e) {
+    return failed(e instanceof Error ? e.message : String(e), "read");
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (e) {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+  }
+}
+
+// src/claude-settings.ts
+var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+function claudeConfigDir(detected, home) {
+  return detected ?? import_node_path3.default.join(home, ".claude");
+}
+function claudeSettingsPath(configDir) {
+  return import_node_path3.default.join(configDir, "settings.json");
+}
+function readSettingsFile(settingsPath) {
+  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
+  switch (read2.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
+    case "ok":
+      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
+  }
+}
+var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
+function readClaudeSettingsText(settingsPath) {
+  return readSettingsFile(settingsPath)?.text ?? "";
+}
+function readClaudeSettingsOutcome(settingsPath) {
+  const reason = (e) => e instanceof Error ? e.message : String(e);
+  let text4;
+  try {
+    text4 = readClaudeSettingsText(settingsPath);
+  } catch (e) {
+    return failed(reason(e), "read");
+  }
+  try {
+    return ok(parseSettings(settingsPath, text4));
+  } catch (e) {
+    return failed(reason(e), "parse");
+  }
+}
+function parseSettings(settingsPath, text4) {
+  let parsed2;
+  try {
+    if (/^\s*$/.test(text4)) return {};
+    parsed2 = JSON_DIALECT.parse(text4);
+  } catch (e) {
+    throw cannotRead(settingsPath, e);
+  }
+  if (!isJsonObject(parsed2)) {
+    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
+  }
+  return parsed2;
+}
+function claudeManagedSettingsDir(platform3) {
+  switch (platform3) {
+    case "darwin":
+      return "/Library/Application Support/ClaudeCode";
+    case "win32":
+      return "C:\\Program Files\\ClaudeCode";
+    default:
+      return "/etc/claude-code";
+  }
+}
+var projectLocalSettingsFile = (projectDir) => import_node_path3.default.join(projectDir, ".claude", "settings.local.json");
+function readSettingsChain(at) {
+  const dropIns = import_node_path3.default.join(at.managedDir, "managed-settings.d");
+  const located2 = [
+    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
+      scope: "managed",
+      path: import_node_path3.default.join(dropIns, name)
+    })),
+    {
+      scope: "managed",
+      path: import_node_path3.default.join(at.managedDir, "managed-settings.json")
+    },
+    {
+      scope: "project-local",
+      path: projectLocalSettingsFile(at.projectDir)
+    },
+    {
+      scope: "project",
+      path: import_node_path3.default.join(at.projectDir, ".claude", "settings.json")
+    },
+    { scope: "user", path: at.userFile }
+  ];
+  const read2 = located2.flatMap((l) => {
+    const file = readSettingsFile(l.path);
+    if (file === null) return [];
+    const settings = parseSettings(l.path, file.text);
+    const { env: env2 = {} } = settings;
+    if (!isJsonObject(env2)) {
+      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
+    }
+    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
+  });
+  const user = read2.find((r) => r.source.scope === "user");
+  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
+}
+function visibleJsonFiles(dir) {
+  try {
+    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
+  } catch (e) {
+    if (e.code === "ENOENT") return [];
+    throw cannotRead(dir, e);
+  }
+}
+var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var messageOf = (e) => e instanceof Error ? e.message : String(e);
+
+// src/daemon/render-sightings.ts
+init_globals();
+
+// src/render/drawn-motion.ts
+init_globals();
+var DRAWN_MOTIONS = ["moves", "can-move", "still"];
+
+// src/daemon/foundations/sighting-roles.ts
+init_globals();
+function answeredOf(hookData2) {
+  const usage = hookData2.context_window?.current_usage;
+  return usage === null ? "no" : usage === void 0 ? "unknown" : "yes";
+}
+var roleOf = (client) => client?.kind === "frames" ? "frames" : "statusline";
+
+// src/daemon/render-sightings.ts
+var SIGHTINGS_KEPT = 64;
+function rateLimitsSeen(hookData2) {
+  const windows2 = hookData2.rate_limits;
+  if (windows2?.five_hour != null || windows2?.seven_day != null) {
+    return "carried";
+  }
+  return answeredOf(hookData2) === "no" ? "unanswered" : "missing";
+}
+function transcriptSaid(hookData2) {
+  return {
+    path: hookData2.transcript_path,
+    answered: answeredOf(hookData2) === "yes"
+  };
+}
+var FRAMES_SEEN = [...DRAWN_MOTIONS, "failed", "drawing"];
+var RenderSightings = class {
+  seen = /* @__PURE__ */ new Map();
+  // `order`: the request's arrival order. Renders settle out of order — the
+  // day's first seed, a PR lookup — so a request that settles after a newer
+  // one of the same session and role is not its latest, and is dropped; its
+  // own settling replaces its arrival.
+  see(sessionId2, said, at, order2) {
+    const role = roleOf(said.client);
+    const key = JSON.stringify([sessionId2, role]);
+    const known = this.seen.get(key);
+    if (known !== void 0 && known.order > order2) return;
+    this.seen.delete(key);
+    this.seen.set(key, { sessionId: sessionId2, said: { ...said, role }, at, order: order2 });
+    if (this.seen.size > SIGHTINGS_KEPT) {
+      this.seen.delete(this.seen.keys().next().value);
+    }
+  }
+  list(now2) {
+    return [...this.seen.values()].map(({ sessionId: sessionId2, said, at }) => ({
+      ...said,
+      sessionId: sessionId2,
+      ago: now2 - at
+    }));
+  }
+  // The latest render in each role that drew one session's bar — none when
+  // this process has served it no render (a daemon restarted under a bar
+  // already on screen).
+  ofSession(sessionId2, now2) {
+    return this.list(now2).filter((s) => s.sessionId === sessionId2);
+  }
+};
+
+// src/daemon/limits.ts
+init_globals();
+var import_node_path4 = __toESM(require_path_browserify(), 1);
+
+// site/shims/unavailable.ts
+init_globals();
+var refuse2 = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
+};
+var connect = refuse2("net.connect");
+var createServer = refuse2("net.createServer");
+var createConnection = refuse2("net.createConnection");
+var get2 = refuse2("https.get");
+var request = refuse2("https.request");
+var createInterface = refuse2("readline.createInterface");
+var createRequire = refuse2("module.createRequire");
+var json = refuse2("stream/consumers.json");
+var text3 = refuse2("stream/consumers.text");
+var writeHeapSnapshot = refuse2("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
+
+// src/daemon/memory-report.ts
+init_globals();
+var PROBE_TIMEOUT_MS = 5e3;
+async function memoryReport(probes) {
+  const refusals = [];
+  for (const probe2 of probes) {
+    const outcome = await probe2.read();
+    if (outcome.kind === "text") {
+      return `# memory report from: ${probe2.name}
+${outcome.text}`;
+    }
+    refusals.push(`# ${probe2.name}: unavailable \u2014 ${outcome.reason}`);
+  }
+  return [
+    "# memory report: no probe answered",
+    ...refusals.length > 0 ? refusals : ["# no probe is known for this platform"]
+  ].join("\n");
+}
+var FOOTPRINT = "/usr/bin/footprint";
+var VMMAP = "/usr/bin/vmmap";
+function platformProbes(launcher, platform3, pid2) {
+  if (platform3 === "darwin") {
+    return [
+      // The whole-process category table: V8's mappings, the MALLOC_* regions
+      // with their reclaimable share, and page tables, each with a size.
+      commandProbe(launcher, FOOTPRINT, ["-p", String(pid2)]),
+      // Same mappings, coarser, but present on hosts where `footprint` is not.
+      commandProbe(launcher, VMMAP, ["--summary", String(pid2)])
+    ];
+  }
+  if (platform3 === "linux") {
+    return [
+      // One line per accounting class for the whole address space — Linux's
+      // answer to `footprint`, and free (no subprocess).
+      fileProbe("/proc/self/smaps_rollup"),
+      // Always present, coarser: VmRSS and friends, so Linux never falls all
+      // the way through to "no probe answered".
+      fileProbe("/proc/self/status")
+    ];
+  }
+  return [];
+}
+function chargeProbe(launcher, platform3, pid2) {
+  return platform3 === "darwin" ? footprintCharge(
+    pid2,
+    (args) => launcher.launch({
+      bin: FOOTPRINT,
+      args,
+      timeoutMs: PROBE_TIMEOUT_MS,
+      category: "limits.charge"
+    })
+  ) : async (rss) => ({ kind: "charged", measure: "rss", bytes: rss });
+}
+function footprintCharge(pid2, run3) {
+  return async (rss) => {
+    const result = await run3([
+      "-p",
+      String(pid2),
+      "--noCategories",
+      "-f",
+      "bytes"
+    ]);
+    if (!result.ok) {
+      return {
+        kind: "stand-in",
+        bytes: rss,
+        unread: `footprint ${failureText(result)}`
+      };
+    }
+    const bytes = physFootprintOf(result.stdout);
+    return bytes === null ? {
+      kind: "stand-in",
+      bytes: rss,
+      unread: "footprint printed no phys_footprint line"
+    } : { kind: "charged", measure: "phys_footprint", bytes };
+  };
+}
+function physFootprintOf(text4) {
+  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
+  return m === null ? null : Number(m[1]);
+}
+function commandProbe(launcher, bin, args) {
+  return {
+    name: `${bin} ${args.join(" ")}`,
+    read: async () => {
+      const result = await launcher.launch({
+        bin,
+        args: [...args],
+        timeoutMs: PROBE_TIMEOUT_MS,
+        category: "limits.memory-report"
+      });
+      if (!result.ok) {
+        return {
+          kind: "unavailable",
+          reason: failureText(result)
+        };
+      }
+      return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
+    }
+  };
+}
+function fileProbe(path42) {
+  return {
+    name: path42,
+    read: async () => {
+      try {
+        const text4 = fs_default.readFileSync(path42, "utf8");
+        return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
+      } catch (e) {
+        return { kind: "unavailable", reason: e.message };
+      }
+    }
+  };
+}
+
+// src/daemon/limits.ts
+var RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
+var DEFAULT_RSS_LIMIT_MB = 1024;
+function memoryLimitMb(env2) {
+  const raw = env2[RSS_LIMIT_ENV];
+  if (raw === void 0) return DEFAULT_RSS_LIMIT_MB;
+  const mb2 = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(mb2) || mb2 <= 0) {
+    throw new Error(
+      `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`
+    );
+  }
+  return mb2;
+}
+var BYTES_PER_MB = 1024 * 1024;
+var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
+function memoryLimitBytes(env2) {
+  return memoryLimitMb(env2) * BYTES_PER_MB;
+}
+var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
+var HEAP_SNAPSHOT_KEEP = 3;
+var BREACH_ARTIFACTS = {
+  memoryReport: { prefix: "memory-", suffix: ".txt" },
+  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
+};
+function laterIdentity(a, b) {
+  return a > b;
+}
+function readCharge(probed, previous) {
+  if (probed.kind === "charged") return probed;
+  const gap = previous.kind === "unmeasured" ? 0 : previous.charge.kind === "charged" ? previous.rss - previous.charge.bytes : previous.charge.gap;
+  return { ...probed, bytes: probed.bytes - gap, gap };
+}
+var NEAR_LIMIT = 0.75;
+function approachingLimit(bytes, limit) {
+  return bytes > limit * NEAR_LIMIT;
+}
+function artifactFile(dir, kind, identity2) {
+  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+  return import_node_path4.default.join(dir, `${prefix}${identity2}${suffix}`);
+}
+function breachArtifactOf(base) {
+  for (const kind of Object.keys(BREACH_ARTIFACTS)) {
+    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+    if (base.startsWith(prefix) && base.endsWith(suffix)) return kind;
+  }
+  return null;
+}
+function makeLimits(deps) {
+  const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
+  const keep2 = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
+  let triggered = false;
+  let latest = { kind: "unmeasured" };
+  let inFlight = null;
+  let disarmed = false;
+  let clearTimer;
+  function check() {
+    inFlight ??= measure3().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  }
+  async function measure3() {
+    if (triggered) return true;
+    const { rss, heapTotal } = deps.memoryBytes();
+    const charge = readCharge(await deps.memoryCharge(rss), latest);
+    const reading = { kind: "measured", charge, rss, heapTotal };
+    latest = reading;
+    deps.log("info", `memory ${readingFields(reading, limit)}`);
+    if (disarmed || charge.bytes <= limit) return false;
+    triggered = true;
+    deps.log(
+      "warn",
+      `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
+    );
+    const stamp2 = new Date(deps.clock.now()).toISOString().replace(/[:.]/g, "-");
+    const identity2 = `${stamp2}-${deps.pid}`;
+    await attempt(deps.log, "memory report", async () => {
+      const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
+      const report2 = await deps.captureMemoryReport();
+      if (disarmed) return;
+      deps.writeMemoryReport(file, report2);
+      deps.log("info", `memory report written: ${file}`);
+    });
+    if (disarmed) {
+      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
+      return false;
+    }
+    await attempt(deps.log, "heap snapshot", () => {
+      deps.writeLogNow();
+      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
+      deps.log(
+        "info",
+        `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
+      );
+    });
+    await attempt(deps.log, "artifact rotation", async () => {
+      for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
+        keep2
+      )) {
+        for (const file of Object.values(artifacts)) {
+          await attempt(
+            deps.log,
+            `evicting ${file}`,
+            () => deps.removeFile(file)
+          );
+        }
+      }
+    });
+    deps.shutdown(0);
+    return true;
+  }
+  function describeNextRestart() {
+    return latest.kind === "measured" && approachingLimit(latest.charge.bytes, limit) ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)` : null;
+  }
+  function serving() {
+    let postMortems;
+    try {
+      postMortems = { kind: "ok", value: postMortemsOf(deps.listArtifacts()) };
+    } catch (e) {
+      postMortems = { kind: "failed", reason: e.message };
+    }
+    return { pid: deps.pid, memory: latest, limit, postMortems };
+  }
+  function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
+    const tick = async () => {
+      try {
+        if (await check()) return;
+      } catch (e) {
+        deps.log("warn", `memory check failed: ${e.message}`);
+      }
+      if (disarmed) return;
+      clearTimer = deps.clock.after(intervalMs, () => void tick(), {
+        unref: true
+      });
+    };
+    void tick();
+  }
+  function disarm() {
+    disarmed = true;
+    clearTimer?.();
+  }
+  return { check, describeNextRestart, serving, arm: arm2, disarm };
+}
+function chargeWords(charge) {
+  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
+}
+function measureOf(charge) {
+  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
+}
+function readingFields({ charge, rss, heapTotal }, limit) {
+  const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
+  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}`;
+}
+async function attempt(log, what, body) {
+  try {
+    await body();
+  } catch (e) {
+    log("warn", `${what} failed: ${e.message}`);
+  }
+}
+function postMortemsOf(files) {
+  const byIdentity = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    const base = import_node_path4.default.basename(file);
+    const kind = breachArtifactOf(base);
+    if (kind === null) continue;
+    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+    const identity2 = base.slice(prefix.length, base.length - suffix.length);
+    byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
+  }
+  const kinds = Object.keys(BREACH_ARTIFACTS);
+  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found2]) => ({
+    identity: identity2,
+    artifacts: Object.fromEntries(
+      kinds.flatMap((k) => found2[k] === void 0 ? [] : [[k, found2[k]]])
+    )
+  }));
+}
+function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
+  const dir = owner.snapshotDir;
+  return {
+    clock: owner.clock,
+    pid: process_default.pid,
+    snapshotDir: dir,
+    log: owner.log,
+    memoryBytes: () => {
+      const mem = process_default.memoryUsage();
+      return { rss: mem.rss, heapTotal: mem.heapTotal };
+    },
+    memoryCharge: chargeProbe(owner.launcher, process_default.platform, process_default.pid),
+    captureMemoryReport: () => memoryReport(
+      platformProbes(owner.launcher, process_default.platform, process_default.pid)
+    ),
+    // 0600 like the heap snapshot v8 writes beside it: the pair shares an
+    // identity, so it shares a permission — a post-mortem pair where one half is
+    // world-readable and the other is not invites exactly the "is this
+    // sensitive?" question at the worst moment to be asking it.
+    writeMemoryReport: (file, text4) => fs_default.writeFileSync(file, text4, { mode: 384 }),
+    writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
+    writeLogNow: owner.writeLogNow,
+    // [LAW:no-silent-failure] A directory not yet made holds no breaches;
+    // one that cannot be read is said so — never read as "none".
+    listArtifacts: () => {
+      let names;
+      try {
+        names = fs_default.readdirSync(dir);
+      } catch (e) {
+        if (e.code === "ENOENT") return [];
+        throw e;
+      }
+      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path4.default.join(dir, f));
+    },
+    removeFile: (file) => fs_default.unlinkSync(file),
+    shutdown,
+    startedAtMs,
+    ...overrides
+  };
+}
+
+// src/doctor/terminal.ts
+init_globals();
+var TERMINALS = {
+  kitty: {
+    label: "kitty",
+    xtversion: "kitty",
+    program: null,
+    programVersion: true,
+    term: "xterm-kitty",
+    links: { since: "0.19.0" },
+    glyphs: { kind: "bundled", since: "0.36.0" }
+  },
+  wezterm: {
+    label: "WezTerm",
+    xtversion: "WezTerm",
+    program: "WezTerm",
+    programVersion: true,
+    term: "wezterm",
+    links: { since: null },
+    glyphs: { kind: "bundled", since: "20230712" }
+  },
+  ghostty: {
+    label: "Ghostty",
+    xtversion: "ghostty",
+    program: "ghostty",
+    programVersion: true,
+    term: "xterm-ghostty",
+    links: { since: null },
+    glyphs: { kind: "bundled", since: null }
+  },
+  iterm2: {
+    label: "iTerm2",
+    xtversion: "iTerm2",
+    program: "iTerm.app",
+    programVersion: true,
+    term: null,
+    links: { since: "3.1" },
+    glyphs: { kind: "configured" }
+  },
+  alacritty: {
+    label: "Alacritty",
+    xtversion: "alacritty",
+    program: null,
+    programVersion: true,
+    term: "alacritty",
+    links: { since: "0.11.0" },
+    glyphs: { kind: "configured" }
+  },
+  "apple-terminal": {
+    label: "Terminal",
+    xtversion: null,
+    program: "Apple_Terminal",
+    programVersion: true,
+    term: null,
+    links: null,
+    glyphs: { kind: "unread" }
+  },
+  vscode: {
+    label: "VS Code",
+    xtversion: null,
+    program: "vscode",
+    programVersion: false,
+    term: null,
+    links: { since: "1.72" },
+    glyphs: { kind: "unread" }
+  }
+};
+var row = (name) => TERMINALS[name];
+function isBundling(name) {
+  return row(name).glyphs.kind === "bundled";
+}
+function isConfigured(name) {
+  return row(name).glyphs.kind === "configured";
+}
+var terminalLabel = (name) => row(name).label;
+var ITERM_POWERLINE = [
+  { since: "3.5.0", from: 57504, to: 57507 },
+  { since: "3.5.0", from: 57520, to: 57554 },
+  { since: "3.5.0", from: 57556, to: 57556 },
+  { since: "3.5.6", from: 57558, to: 57559 }
+];
+function itermDrawsItself(version, glyph) {
+  const point = glyph.codePointAt(0);
+  return ITERM_POWERLINE.some(
+    ({ since, from, to }) => from <= point && point <= to && version !== null && releasedSince(version, since) === true
+  );
+}
+var NAMES = Object.keys(TERMINALS);
+function release2(version) {
+  const lead = /^\d+(?:\.\d+)*/.exec(version);
+  return lead === null ? null : lead[0].split(".").map(Number);
+}
+function releasedSince(version, since) {
+  const have = release2(version);
+  const need2 = release2(since);
+  if (have === null) return null;
+  for (let i = 0; i < Math.max(have.length, need2.length); i++) {
+    const a = have[i] ?? 0;
+    const b = need2[i] ?? 0;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
+function fromXtversion(termtype) {
+  for (const name of NAMES) {
+    const prefix = row(name).xtversion;
+    if (prefix !== null && termtype.toLowerCase().startsWith(prefix.toLowerCase())) {
+      const rest2 = termtype.slice(prefix.length).replace(/^[\s(]+/, "");
+      const version = /^[^\s)]+/.exec(rest2)?.[0] ?? null;
+      return { name, version };
+    }
+  }
+  return null;
+}
+function fromTerm(term) {
+  const name = NAMES.find((n) => row(n).term === term);
+  return name === void 0 ? null : { name, version: null };
+}
+function identifyInTmux(client) {
+  const terminal = fromXtversion(client.termtype) ?? fromTerm(client.termname);
+  if (terminal !== null) return { kind: "known", terminal };
+  const called = /^[^\s(]*/.exec(client.termtype)[0];
+  return called === "" ? { kind: "unnamed", term: client.termname } : { kind: "unknown", called };
+}
+function identifyFromEnv(env2) {
+  const program = env2.TERM_PROGRAM;
+  const byProgram = NAMES.find((n) => row(n).program === program);
+  const terminal = byProgram === void 0 ? fromTerm(env2.TERM) : {
+    name: byProgram,
+    version: row(byProgram).programVersion ? env2.TERM_PROGRAM_VERSION ?? null : null
+  };
+  if (terminal !== null) return { kind: "known", terminal };
+  return program === void 0 || program === "tmux" ? { kind: "unnamed", term: env2.TERM ?? "" } : { kind: "unknown", called: program };
+}
+function sightingOf(identified) {
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return identified.term || null;
+  }
+}
+function identifiedAs(identified) {
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return identified.term || "this terminal";
+  }
+}
+function linkSupport({ name, version }) {
+  const links2 = row(name).links;
+  if (links2 === null) return { kind: "none" };
+  if (links2.since === null) return { kind: "draws" };
+  if (version === null) return { kind: "unsaid", since: links2.since };
+  const drawn = releasedSince(version, links2.since);
+  return drawn === null ? { kind: "unsaid", since: links2.since } : drawn ? { kind: "draws" } : { kind: "older", since: links2.since, version };
+}
+var LINK_TERMINALS = NAMES.filter((n) => row(n).links !== null).map(terminalLabel).join(", ");
+
+// src/doctor/checks.ts
+function statusLineOf(sources) {
+  if (sources.kind === "failed") {
+    return { kind: "unread", reason: sources.reason };
+  }
+  const lines2 = sources.value.flatMap(
+    ({ scope, path: path42, settings }) => "statusLine" in settings ? [{ from: { scope, path: path42 }, line: settings.statusLine }] : []
+  );
+  const top = lines2[0];
+  if (top === void 0) {
+    return { kind: "absent", read: sources.value.map((s) => s.path) };
+  }
+  if (!isJsonObject(top.line)) {
+    return { kind: "not-an-object", value: top.line, from: top.from };
+  }
+  for (const { from, line } of lines2) {
+    if (from.scope !== top.from.scope || !isJsonObject(line)) break;
+    if ("refreshInterval" in line) {
+      return { kind: "present", refreshInterval: line.refreshInterval, from };
+    }
+  }
+  return { kind: "present", refreshInterval: void 0, from: top.from };
+}
+function envVarOf(sources, name) {
+  if (sources.kind === "failed") return sources;
+  const top = sources.value.find((s) => Object.hasOwn(s.env, name));
+  return {
+    kind: "ok",
+    value: top === void 0 ? { kind: "unset" } : {
+      kind: "set",
+      value: top.env[name],
+      from: { scope: top.scope, path: top.path }
+    }
+  };
+}
+var UNWRITTEN_SCOPES = [
+  "managed",
+  "project"
+];
+var doctorWrites = (from) => !UNWRITTEN_SCOPES.includes(from.scope);
+var ENV_FIX_FILE = {
+  managed: () => null,
+  "project-local": (path42) => ({ scope: "project-local", path: path42 }),
+  project: (_, at) => ({
+    scope: "project-local",
+    path: projectLocalSettingsFile(at.projectDir)
+  }),
+  user: (path42) => ({ scope: "user", path: path42 })
+};
+var GLYPH_MARKS = ["drawn", "boxes"];
+var TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
+var whoseWidth = (of) => of.kind === "session" ? `session ${of.sessionId}'s statusline client` : "this command's terminal";
+function describeFix(fix) {
+  switch (fix.kind) {
+    case "claude-settings":
+      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)} scope=${fix.file.scope}`;
+    case "post-mortems-read":
+      return `${fix.kind} through=${fix.through}`;
+  }
+}
+function problemsVerdict(problems) {
+  const [reason, ...more] = problems;
+  return reason === void 0 ? { ok: true } : { ok: false, reason, more };
+}
+var TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
+function ofTmuxClient(tmux3, decide) {
+  switch (tmux3.kind) {
+    case "unreported":
+      return {
+        ok: false,
+        reason: "the client reported no tmux facts \u2014 re-run `cc-candybar install` to stage a current client"
+      };
+    case "outside":
+      return { ok: true };
+    case "inside":
+      if (tmux3.client.kind === "failed") {
+        return {
+          ok: false,
+          reason: `tmux could not be asked: ${tmux3.client.reason}`
+        };
+      }
+      return tmux3.client.value === null ? { ok: true } : decide(tmux3.client.value, tmux3.hint);
+  }
+}
+var tmuxTruecolor = {
+  name: "tmuxTruecolor",
+  label: "tmux truecolor",
+  takesMark: false,
+  probe: ({ tmux: tmux3, claudeSettings: { origin } }) => ofTmuxClient(tmux3, (client, hint) => {
+    if (!client.features.includes("RGB")) return { ok: true };
+    if (hint.truecolor !== null) return { ok: true };
+    const staged = envVarOf(origin.sources, TMUX_TRUECOLOR_VAR);
+    if (staged.kind === "failed") return { ok: false, reason: staged.reason };
+    const told = staged.value;
+    if (told.kind === "set" && typeof told.value === "string" && told.value !== "") {
+      return {
+        ok: false,
+        reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} \u2014 restart Claude Code to apply`
+      };
+    }
+    const reason = "Claude Code renders the bar in 256 colours inside tmux";
+    const fixInto = (file2) => ({
+      ok: false,
+      reason,
+      fix: {
+        kind: "claude-settings",
+        file: file2,
+        path: ["env", TMUX_TRUECOLOR_VAR],
+        value: "1"
+      }
+    });
+    if (told.kind === "unset") {
+      return fixInto({ scope: "user", path: origin.at.userFile });
+    }
+    const file = ENV_FIX_FILE[told.from.scope](told.from.path, origin.at);
+    return file === null ? {
+      ok: false,
+      reason: `${reason} \u2014 the value that counts is in managed settings, ${told.from.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`
+    } : fixInto(file);
+  })
+};
+var utf82 = {
+  name: "utf8",
+  label: "UTF-8",
+  takesMark: false,
+  probe: ({ tmux: tmux3 }) => ofTmuxClient(
+    tmux3,
+    (client) => client.utf8 ? { ok: true } : {
+      ok: false,
+      reason: "tmux draws this terminal without UTF-8, so every glyph on the bar arrives as `_` \u2014 attach with `tmux -u`, or set a UTF-8 LC_ALL/LC_CTYPE/LANG in the shell that runs tmux"
+    }
+  )
+};
+var termWidth = {
+  name: "termWidth",
+  label: "terminal width",
+  takesMark: false,
+  probe: ({ width }) => width.kind === "failed" ? { ok: false, reason: width.reason } : width.value.columns !== null ? {
+    ok: true,
+    note: `${width.value.columns} columns, as ${whoseWidth(width.value.of)} measured`
+  } : {
+    ok: false,
+    reason: `${whoseWidth(width.value.of)} measured no width (no COLUMNS, and no terminal to ask \u2014 or the daemon refused the width sent, which the bar's diagnostics name), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`
+  }
+};
+var UNUSED = {
+  variable: "is never read",
+  action: "is never clicked",
+  helper: "is never called",
+  segment: "is in no preset"
+};
+var NAMED_BY = {
+  argument: "command argument",
+  environment: `$${CONFIG_ENV}`,
+  pick: "load-config pick",
+  unknown: "source unknown"
+};
+function judgedConfig({ target, layers }) {
+  if (target.source !== "search") {
+    return `${target.path} (${NAMED_BY[target.source]})`;
+  }
+  return layers.length === 0 ? chainName(layers) : `${chainName(layers)} (searched)`;
+}
+function configProblems(config2) {
+  switch (config2.kind) {
+    case "failed": {
+      const problems = [
+        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
+        ...config2.warnings
+      ];
+      return problems.length === 0 ? ["the config failed to load"] : problems;
+    }
+    case "loaded":
+      return [
+        ...config2.warnings,
+        ...config2.unused.map(
+          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
+        )
+      ];
+  }
+}
+var config = {
+  name: "config",
+  label: "config",
+  takesMark: false,
+  probe: ({ config: config2 }) => {
+    const judged = judgedConfig(config2);
+    const verdict = problemsVerdict(configProblems(config2));
+    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
+  }
+};
+var REINSTALL = "re-run `cc-candybar install`";
+function handlerAppProblems(opener) {
+  if (opener.kind === "failed") {
+    return [
+      `Launch Services could not be asked which app opens cc-candybar:// \u2014 ${opener.reason}`
+    ];
+  }
+  if (opener.value === null) {
+    return [`no app is registered for cc-candybar:// \u2014 ${REINSTALL}`];
+  }
+  const { app, forwarder } = opener.value;
+  return forwarder ? [] : [
+    `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
+  ];
+}
+var urlHandler = {
+  name: "urlHandler",
+  label: "URL handler",
+  takesMark: false,
+  probe: ({ urlHandler: urlHandler2 }) => {
+    switch (urlHandler2.kind) {
+      case "unsupported":
+        return { ok: true };
+      case "unprobed":
+        return { ok: false, reason: urlHandler2.reason };
+      case "arrived":
+        if (urlHandler2.delivery.kind === "forwarder") return { ok: true };
+        return {
+          ok: false,
+          // What is known: a click request brought it, which is what the
+          // retired applet runs — and a hand-run `cc-candybar url-handle`,
+          // or the browser page. Which app Launch Services opens the scheme
+          // with is the opener's row to say (handlerAppProblems).
+          reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
+        };
+      case "lost":
+        return problemsVerdict([
+          ...handlerAppProblems(urlHandler2.opener),
+          urlHandler2.unopened === null ? "a cc-candybar:// link was opened and did not arrive at the daemon" : `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
+        ]);
+    }
+  }
+};
+var RECENT_CLIENT_S = 300;
+function clientStanding({ bundle, checkout }, client) {
+  return {
+    bundle: client.bundle.kind === "failed" ? { kind: "unresolved", reason: client.bundle.reason } : client.bundle.value === bundle ? { kind: "same" } : { kind: "other", path: client.bundle.value },
+    source: client.client !== "native" || checkout === null ? { kind: "uncompared" } : checkout.rustSource.kind === "failed" ? {
+      kind: "unreadable",
+      root: checkout.root,
+      reason: checkout.rustSource.reason
+    } : client.source === null ? { kind: "unstamped" } : client.source === checkout.rustSource.value ? { kind: "same" } : { kind: "other", root: checkout.root }
+  };
+}
+function remedy(daemon3, client) {
+  if (client === "frames")
+    return `run \`node ${daemon3.bundle} frames --lane <${LANE_NAMES.join("|")}>\``;
+  return daemon3.checkout === null ? REINSTALL : `run \`just install-rust\` and point the statusLine command at ${daemon3.checkout.root}/bin/cc-candybar-native`;
+}
+function installProblems(daemon3, nativeShipped, client) {
+  const { checkout } = daemon3;
+  if (client.kind === "unreported") {
+    return [
+      `the bar is drawn by a statusline client too old to say what it is \u2014 ${remedy(daemon3, "native")}`
+    ];
+  }
+  const { bundle, source } = clientStanding(daemon3, client);
+  switch (bundle.kind) {
+    case "unresolved":
+      return [
+        `the statusline client's bundle cannot be resolved: ${bundle.reason}`
+      ];
+    case "other":
+      return [
+        `the statusline client runs ${bundle.path}, not the daemon's ${daemon3.bundle} \u2014 ${remedy(daemon3, client.client)}`
+      ];
+    case "same":
+      break;
+  }
+  if (client.client === "node" && (nativeShipped || checkout !== null)) {
+    return [
+      `the bar is drawn by the Node fallback, which starts node on every render \u2014 ${remedy(daemon3, "native")}`
+    ];
+  }
+  switch (source.kind) {
+    case "uncompared":
+    case "same":
+      return [];
+    case "unreadable":
+      return [`${source.root}/rust-client could not be read: ${source.reason}`];
+    case "unstamped":
+      return [
+        "the native client carries no source stamp, so which source it was built from is unknown \u2014 run `just install-rust`"
+      ];
+    case "other":
+      return [
+        `the native client was built from other source than ${source.root}/rust-client holds \u2014 run \`just install-rust\``
+      ];
+  }
+}
+var noRenderOf = (sighted) => {
+  const lost = `restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions`;
+  return sighted.kind === "clicked" ? `this daemon holds no render of this bar (it ${lost})` : `this daemon holds no render of session ${sighted.sessionId}'s bar (its statusLine does not run cc-candybar \u2014 a \`claude -p\` session draws none \u2014 or the daemon ${lost}; unset CLAUDE_CODE_SESSION_ID to judge every bar drawn recently)`;
+};
+var install = {
+  name: "install",
+  label: "install",
+  takesMark: false,
+  probe: ({ install: install2, sighted }) => {
+    if (install2.kind === "failed") {
+      return {
+        ok: false,
+        reason: `the daemon could not be asked which clients draw the bar: ${install2.reason}`
+      };
+    }
+    const { daemon: daemon3, nativeShipped, clients } = install2.value;
+    if (clients.length === 0) {
+      return {
+        ok: false,
+        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which client draws it is unknown \u2014 run the doctor again once the bar has redrawn` : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes \u2014 run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`
+      };
+    }
+    return problemsVerdict([
+      ...new Set(
+        clients.flatMap((c) => installProblems(daemon3, nativeShipped, c))
+      )
+    ]);
+  }
+};
+function unreadPostMortems({ postMortems }, read2) {
+  return postMortems.kind === "ok" && read2.kind === "ok" ? postMortems.value.filter(
+    (m) => read2.value.through === null || laterIdentity(m.identity, read2.value.through)
+  ) : [];
+}
+function otherDaemons(serving, processes) {
+  return serving.kind === "failed" ? processes : processes.filter((p2) => p2.pid !== serving.value.pid);
+}
+var daemon = {
+  name: "daemon",
+  label: "daemon",
+  takesMark: false,
+  probe: ({ daemon: { serving, processes, read: read2 } }) => {
+    const unreadable = processes.kind === "failed" ? [`the process table could not be read: ${processes.reason}`] : [];
+    const others = processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
+    if (serving.kind === "failed") {
+      const running = others.length > 0 ? ` \u2014 daemon ${others.map((p2) => p2.pid).join(", ")} running` : "";
+      return problemsVerdict([`${serving.reason}${running}`, ...unreadable]);
+    }
+    const { pid: pid2, memory, limit, postMortems } = serving.value;
+    const unread2 = unreadPostMortems(serving.value, read2);
+    const verdict = problemsVerdict([
+      ...unread2.map(
+        (m) => `the daemon ran out of memory and restarted (${m.identity}) \u2014 post-mortem: ${Object.values(m.artifacts).join(", ")}`
+      ),
+      ...postMortems.kind === "failed" ? [
+        `the daemon's post-mortems could not be listed: ${postMortems.reason}`
+      ] : [],
+      // Which were read decides nothing only while none are listed.
+      ...read2.kind === "failed" && !(postMortems.kind === "ok" && postMortems.value.length === 0) ? [`which post-mortems were read could not be read: ${read2.reason}`] : [],
+      ...unreadable,
+      ...others.map(
+        (p2) => `daemon ${p2.pid} (started ${p2.started}, rss ${mb(p2.rss)} MB${p2.ppid === 1 ? "" : `, child of ${p2.ppid}`}) runs beside the one serving the bar (${pid2}) \u2014 \`kill ${p2.pid}\``
+      ),
+      // [LAW:no-silent-failure] RSS standing in for the platform's charge is
+      // the limit judging an estimate — or, with no gap yet read, what macOS
+      // has already reclaimed, the very misjudgment the charge exists to end —
+      // so it is a finding, near the limit or not.
+      ...memory.kind === "measured" && memory.charge.kind === "stand-in" ? [
+        `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${memory.charge.gap !== 0 ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate` : "RSS, which counts pages macOS has reclaimed"}`
+      ] : [],
+      ...memory.kind === "measured" && approachingLimit(memory.charge.bytes, limit) ? [
+        `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit \u2014 at the limit it records a post-mortem and restarts`
+      ] : []
+    ]);
+    if (verdict.ok && memory.kind === "unmeasured") {
+      return { ok: true, note: "the daemon has not measured its memory yet" };
+    }
+    const newest = unread2[0];
+    return verdict.ok || newest === void 0 ? verdict : {
+      ...verdict,
+      fix: { kind: "post-mortems-read", through: newest.identity }
+    };
+  }
+};
+var CLICK_TO_SEE = "click \u{1FA7A} doctor in the bar's settings menu: if it runs, links work";
+function drawsLinks(identified, clicked) {
+  const id2 = sightingOf(identified);
+  if (clicked.kind === "ok" && id2 !== null && clicked.value.includes(id2)) {
+    return { kind: "draws" };
+  }
+  return identified.kind === "known" ? linkSupport(identified.terminal) : { kind: "unknown" };
+}
+function linkProblems({ identified, tmuxClient }, clicked) {
+  const called = identifiedAs(identified);
+  const support = drawsLinks(identified, clicked);
+  const prove = sightingOf(identified) === null ? CLICK_TO_SEE : `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
+  const terminal = (() => {
+    switch (support.kind) {
+      case "draws":
+        return [];
+      case "none":
+        return [
+          `${called} draws no links (OSC 8), so nothing on the bar can be clicked \u2014 run Claude Code in a terminal that draws them: ${LINK_TERMINALS}`
+        ];
+      case "older":
+        return [
+          `${called} ${support.version} draws no links (OSC 8 came in ${support.since}) \u2014 update ${called}`
+        ];
+      case "unsaid":
+        return [
+          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is \u2014 ${prove}`
+        ];
+      case "unknown":
+        return [
+          `the doctor does not know whether ${called} draws links (OSC 8) \u2014 ${prove}`
+        ];
+    }
+  })();
+  const remembered = clicked.kind === "failed" && support.kind !== "draws" ? [
+    `the terminals a doctor click came back from could not be read: ${clicked.reason}`
+  ] : [];
+  const tmux3 = support.kind === "none" || tmuxClient === null || tmuxClient.features.includes("hyperlinks") ? [] : [
+    `tmux does not pass links through to ${called} \u2014 add \`set -as terminal-features ",${tmuxClient.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`
+  ];
+  return [...terminal, ...remembered, ...tmux3];
+}
+var links = {
+  name: "links",
+  label: "links",
+  takesMark: false,
+  probe: ({ sighted, terminal, clicked }) => {
+    if (sighted.kind === "clicked" && sighted.via === "link")
+      return { ok: true };
+    switch (terminal.kind) {
+      case "unreported":
+        return {
+          ok: false,
+          reason: "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
+        };
+      case "unasked":
+        return {
+          ok: false,
+          reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`
+        };
+      case "seen":
+        return problemsVerdict(linkProblems(terminal, clicked));
+    }
+  }
+};
+var EFFECT_REFRESH_INTERVAL = 1;
+var refreshedFrames = (frames) => frames.filter((f) => f.role === "statusline");
+var effectRefresh = {
+  name: "effectRefresh",
+  label: "effect refresh",
+  takesMark: false,
+  probe: ({ frames, claudeSettings: { origin, elsewhere }, sighted }) => {
+    const verdicts = [origin, ...elsewhere].flatMap(
+      ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? []
+    );
+    const [first2] = verdicts;
+    if (first2 === void 0) {
+      if (frames.kind === "failed") return { ok: false, reason: frames.reason };
+      return unknownMotion(
+        sighted.kind !== "recent" ? noRenderOf(sighted) : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`
+      );
+    }
+    const [lead, ...others] = verdicts.flatMap((v) => v.ok ? [] : [v]);
+    if (lead === void 0) return first2;
+    const more = [...new Set(others.map((f) => f.reason))].filter(
+      (r) => r !== lead.reason
+    );
+    return more.length === 0 ? lead : { ...lead, more };
+  }
+};
+var barsSeen = (bars) => {
+  const drawn = refreshedFrames(bars).map((f) => f.frame);
+  if (drawn.includes("moves")) {
+    return {
+      kind: "moving",
+      wearing: "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"
+    };
+  }
+  if (drawn.includes("can-move")) {
+    return {
+      kind: "moving",
+      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)"
+    };
+  }
+  if (drawn.includes("still")) return { kind: "still" };
+  if (drawn.includes("drawing")) {
+    return {
+      kind: "unknown",
+      unseen: "the bar's latest render has not finished"
+    };
+  }
+  if (drawn.length > 0) {
+    return { kind: "unknown", unseen: "the bar's recent renders failed" };
+  }
+  if (bars.length > 0) {
+    return {
+      kind: "unknown",
+      unseen: "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
+    };
+  }
+  return { kind: "none" };
+};
+var unknownMotion = (unseen) => ({
+  ok: false,
+  reason: `${unseen}, so whether it moves is unknown \u2014 run the doctor again once the bar has redrawn`
+});
+function chainVerdict(sources, seen) {
+  const statusLine = statusLineOf(sources);
+  if (statusLine.kind === "present" && statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL) {
+    return {
+      ok: true,
+      note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`
+    };
+  }
+  switch (seen.kind) {
+    case "none":
+      return null;
+    case "still":
+      return { ok: true };
+    case "unknown":
+      return unknownMotion(seen.unseen);
+    case "moving":
+      break;
+  }
+  const { wearing } = seen;
+  switch (statusLine.kind) {
+    case "unread":
+      return {
+        ok: false,
+        reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`
+      };
+    case "absent":
+      return {
+        ok: false,
+        reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) \u2014 the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`
+      };
+    case "not-an-object":
+      return {
+        ok: false,
+        // `cc-candybar install` writes the user file only, so only there
+        // does re-running it replace the line.
+        reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object \u2014 ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`
+      };
+    case "present": {
+      const { from, refreshInterval: interval } = statusLine;
+      const why2 = interval === void 0 ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events" : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL ? `its statusLine redraws it only every ${interval} s` : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
+      return doctorWrites(from) ? {
+        ok: false,
+        reason: `${wearing}, but ${why2} (statusLine from ${from.path})`,
+        fix: {
+          kind: "claude-settings",
+          file: from,
+          path: ["statusLine", "refreshInterval"],
+          value: EFFECT_REFRESH_INTERVAL
+        }
+      } : {
+        ok: false,
+        reason: `${wearing}, but ${why2} \u2014 its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`
+      };
+    }
+  }
+}
+var codePoints = (glyphs) => [...glyphs].map((g) => `U+${g.codePointAt(0).toString(16).toUpperCase()}`).join(" ");
+function terminalCalled(terminal) {
+  switch (terminal.kind) {
+    case "unreported":
+    case "unasked":
+      return "this terminal";
+    case "unknown":
+    case "unnamed":
+      return identifiedAs(terminal);
+    case "bundling":
+    case "unread":
+    case "configured":
+      return [terminalLabel(terminal.name), terminal.version].filter((part) => part !== null).join(" ");
+  }
+}
+function sightedIn(terminal) {
+  switch (terminal.kind) {
+    case "unreported":
+    case "unasked":
+      return null;
+    case "unknown":
+    case "unnamed":
+      return sightingOf(terminal);
+    case "bundling":
+    case "unread":
+      return terminalLabel(terminal.name);
+    case "configured": {
+      const label2 = terminalLabel(terminal.name);
+      return terminal.font.kind === "ok" ? `${label2} with ${terminal.font.value.font} (${terminal.font.value.from})` : `${label2}, its font unread: ${terminal.font.reason}`;
+    }
+  }
+}
+function glyphSighting(facts) {
+  const where = sightedIn(facts.terminal);
+  return where === null ? void 0 : { glyphs: facts.glyphs, id: `${where}|${codePoints(facts.glyphs)}` };
+}
+var NERD_FONT_CHECK = "nerdFont";
+var nerdFont = {
+  name: NERD_FONT_CHECK,
+  label: "Nerd Font",
+  takesMark: true,
+  probe: ({ nerdFont: facts, marks }) => {
+    if (facts.kind === "none") return { ok: true };
+    const sighting = glyphSighting(facts);
+    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
+      ok: false,
+      reason,
+      more: [`the mark book could not be read: ${marks.reason}`]
+    } : { ok: false, reason, ...sighting !== void 0 && { sighting } };
+    const terminal = facts.terminal;
+    const called = terminalCalled(terminal);
+    const mark = sighting === void 0 || marks.kind === "failed" ? null : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? null;
+    switch (mark) {
+      case "drawn":
+        return { ok: true };
+      case "boxes":
+        return failed3(
+          `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
+        );
+      case null:
+        break;
+    }
+    switch (terminal.kind) {
+      case "unreported":
+        return failed3(
+          "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
+        );
+      case "unasked":
+        return failed3(
+          `tmux could not be asked which terminal is attached: ${terminal.reason}`
+        );
+      case "unknown":
+      case "unnamed":
+      case "unread":
+        return failed3(`the doctor cannot read ${called}'s font`);
+      case "bundling": {
+        const since = TERMINALS[terminal.name].glyphs.since;
+        if (since === null) return { ok: true };
+        const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
+        if (shipped === true) return { ok: true };
+        const label2 = terminalLabel(terminal.name);
+        return failed3(
+          shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
+        );
+      }
+      case "configured": {
+        if (terminal.font.kind === "failed") {
+          return failed3(
+            `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
+          );
+        }
+        const { font, from, lacks } = terminal.font.value;
+        if (lacks === null) {
+          return failed3(
+            `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
+          );
+        }
+        if (lacks.length === 0) return { ok: true };
+        return failed3(
+          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
+        );
+      }
+    }
+  }
+};
+function named(segments) {
+  return segments.join(", ");
+}
+function optOut(segments) {
+  return `or set missingData: "ignore" on ${named(segments)}`;
+}
+function pullRequestProblems(need2) {
+  if (need2.kind === "unneeded") return [];
+  const { segments, fact } = need2;
+  if (fact.kind === "failed") {
+    return [
+      `${named(segments)}: whether the forge CLI is ready could not be asked: ${fact.reason}`
+    ];
+  }
+  if (fact.value === null) return [];
+  const { cli, host, status } = fact.value;
+  if (status === "ready") return [];
+  return status === "missing" ? [
+    `${named(segments)}: ${cli} is not installed, so no pull request is ever shown \u2014 install it, ${optOut(segments)}`
+  ] : [
+    `${named(segments)}: ${cli} is not logged in to ${host} (${status.loggedOut}) \u2014 run \`${cli} auth login --hostname ${host}\`, ${optOut(segments)}`
+  ];
+}
+function rateLimitProblems(need2, sighted) {
+  if (need2.kind === "unneeded") return [];
+  const { segments, fact } = need2;
+  if (fact.kind === "failed") return [`${named(segments)}: ${fact.reason}`];
+  if (fact.value.length === 0) {
+    return [
+      sighted.kind !== "recent" ? `${named(segments)}: ${noRenderOf(sighted)}, so whether Claude Code sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn` : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn`
+    ];
+  }
+  return fact.value.includes("missing") && !fact.value.includes("carried") ? [
+    `${named(segments)}: Claude Code sent no rate_limits \u2014 it sends them only to Claude.ai subscription sessions; on any other account, set missingData: "ignore" on ${named(segments)}`
+  ] : [];
+}
+var segmentData = {
+  name: "segmentData",
+  label: "segment data",
+  takesMark: false,
+  probe: ({ data, sighted }) => problemsVerdict([
+    ...pullRequestProblems(data.pullRequests),
+    ...rateLimitProblems(data.rateLimits, sighted)
+  ])
+};
+function transcriptProblems({
+  path: path42,
+  answered,
+  read: read2
+}) {
+  switch (read2.kind) {
+    case "absent":
+      return answered ? [
+        `the transcript ${path42} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
+      ] : [];
+    case "failed":
+      return [`the transcript ${path42} cannot be read: ${read2.reason}`];
+    case "ok": {
+      const { lines: lines2, unparsed, whole } = read2.value;
+      return unparsed === 0 ? [] : [
+        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path42} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
+      ];
+    }
+  }
+}
+var sessionData = {
+  name: "sessionData",
+  label: "session data",
+  takesMark: false,
+  probe: ({ transcripts, sighted }) => {
+    if (transcripts.kind === "failed") {
+      return { ok: false, reason: transcripts.reason };
+    }
+    if (transcripts.value.length === 0) {
+      return {
+        ok: false,
+        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which transcript it reads is unknown \u2014 run the doctor again once the bar has redrawn` : `no session has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so no transcript was named \u2014 run the doctor again once the bar has redrawn`
+      };
+    }
+    return problemsVerdict(transcripts.value.flatMap(transcriptProblems));
+  }
+};
+var CHECKS = [
+  config,
+  install,
+  daemon,
+  urlHandler,
+  links,
+  tmuxTruecolor,
+  utf82,
+  termWidth,
+  effectRefresh,
+  nerdFont,
+  segmentData,
+  sessionData
+];
+var MARKED_CHECKS = CHECKS.filter(
+  (c) => c.takesMark
+);
+function runDoctor(facts) {
+  return CHECKS.map((check) => ({ check, verdict: check.probe(facts) }));
+}
+function checkByName(name) {
+  return CHECKS.find((c) => c.name === name);
+}
+
+// src/doctor/report.ts
+init_globals();
+
+// src/utils/logfmt.ts
+init_globals();
+var BARE = /^[^\s"=\\]+$/;
+var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
+var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
+
+// src/doctor/report.ts
+var DOCTOR_NS = `${SETTINGS_NS}doctor.`;
+var VERDICT_OK = "ok";
+var VERDICT_FAILED = "failed";
+var VERDICT_UNRUN = "";
+function doctorReportKeys(checkName) {
+  const base = `${DOCTOR_NS}${checkName}.`;
+  return {
+    verdict: `${base}verdict`,
+    reason: `${base}reason`,
+    fixable: `${base}fixable`,
+    sighting: `${base}sighting`
+  };
+}
+function configFields({ target }) {
+  return `configTarget=${target.source}`;
+}
+function linkFields(terminal, clicked) {
+  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
+  const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
+  const from = clicked.kind === "failed" ? "unread" : sighting === null ? "-" : clicked.value.includes(sighting) ? "yes" : "no";
+  return `tmuxLinks=${client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"} clicked=${from}`;
+}
+function terminalFeatureFields(terminal, width) {
+  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
+  const cols = width.kind === "failed" ? "failed widthOf=-" : `${width.value.columns ?? "-"} widthOf=${width.value.of.kind}`;
+  return `cols=${cols} clientUtf8=${client === null ? "-" : client.utf8 ? "yes" : "no"}`;
+}
+function installFields(install2) {
+  if (install2.kind === "failed") return "clients=unasked";
+  const { daemon: daemon3, clients } = install2.value;
+  const described = clients.map((c) => {
+    if (c.kind === "unreported") return "unreported/-/-";
+    const { bundle, source } = clientStanding(daemon3, c);
+    return `${c.client}/${bundle.kind}/${source.kind === "uncompared" ? "-" : source.kind}`;
+  });
+  return `clients=${described.join(",") || "-"}`;
+}
+var signedMb = (bytes) => `${bytes >= 0 ? "+" : ""}${mb(bytes)}`;
+function daemonFields({
+  serving,
+  processes,
+  read: read2
+}) {
+  const running = processes.kind === "failed" ? "daemons=unread others=-" : `daemons=${processes.value.length} others=${otherDaemons(serving, processes.value).map((p2) => p2.pid).join(",") || "-"}`;
+  if (serving.kind === "failed") {
+    return `${running} memory=unasked postMortems=unasked`;
+  }
+  const { memory, limit, postMortems } = serving.value;
+  const told = postMortems.kind === "failed" || read2.kind === "failed" ? "unread" : `${unreadPostMortems(serving.value, read2).length}/${postMortems.value.length}`;
+  const held = memory.kind === "unmeasured" ? "unmeasured" : `${measureOf(memory.charge)}${memory.charge.kind === "stand-in" ? `(${signedMb(-memory.charge.gap)})` : ""}:${mb(memory.charge.bytes)}`;
+  return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;
+}
+function dataFields(data) {
+  const pr = () => {
+    if (data.pullRequests.kind === "unneeded") return "-";
+    const fact = data.pullRequests.fact;
+    if (fact.kind === "failed") return "failed";
+    if (fact.value === null) return "no-forge";
+    const { status } = fact.value;
+    return typeof status === "string" ? status : "logged-out";
+  };
+  const rateLimits = () => {
+    if (data.rateLimits.kind === "unneeded") return "-";
+    const fact = data.rateLimits.fact;
+    if (fact.kind === "failed") return "failed";
+    const count = (seen) => fact.value.filter((v) => v === seen).length;
+    return `${count("carried")}/${count("missing")}/${count("unanswered")}`;
+  };
+  return `data=pr:${pr()},rateLimits:${rateLimits()}`;
+}
+function frameFields(frames, { origin, elsewhere }) {
+  const chains = [origin, ...elsewhere];
+  const lines2 = chains.map(({ sources }) => statusLineValue(sources)).join(",");
+  if (frames.kind === "failed") {
+    return `frames=failed chains=${valueOf(lines2)}`;
+  }
+  const drawn = refreshedFrames(chains.flatMap((c) => c.bars));
+  const count = (seen) => drawn.filter((f) => f.frame === seen).length;
+  return `frames=${FRAMES_SEEN.map(count).join("/")} chains=${valueOf(lines2)}`;
+}
+function statusLineValue(sources) {
+  const line = statusLineOf(sources);
+  switch (line.kind) {
+    case "unread":
+      return "failed";
+    case "absent":
+    case "not-an-object":
+      return line.kind;
+    case "present":
+      return `${line.from.scope}:${line.refreshInterval === void 0 ? "-" : JSON.stringify(line.refreshInterval)}`;
+  }
+}
+function truecolorEnvFields(sources) {
+  const told = envVarOf(sources, TMUX_TRUECOLOR_VAR);
+  if (told.kind === "failed") return "truecolorEnv=failed";
+  return told.value.kind === "unset" ? "truecolorEnv=unset" : `truecolorEnv=${valueOf(`${told.value.from.scope}:${JSON.stringify(told.value.value)}`)}`;
+}
+function transcriptFields(transcripts) {
+  if (transcripts.kind === "failed") return "transcripts=failed";
+  const count = (kind) => transcripts.value.filter((t2) => t2.read.kind === kind).length;
+  const unparsed = transcripts.value.reduce(
+    (n, t2) => n + (t2.read.kind === "ok" ? t2.read.value.unparsed : 0),
+    0
+  );
+  return `transcripts=${count("ok")}/${count("absent")}/${count("failed")} unparsed=${unparsed}`;
+}
+function nerdFontFields(facts, marks) {
+  if (facts.kind === "none") return "glyphs=- terminal=- font=- mark=-";
+  const { glyphs, terminal } = facts;
+  const codes = [...glyphs].map((g) => g.codePointAt(0).toString(16));
+  const found2 = (() => {
+    switch (terminal.kind) {
+      case "unreported":
+      case "unasked":
+        return terminal.kind;
+      case "unknown":
+        return `unknown:${JSON.stringify(terminal.called)}`;
+      case "unnamed":
+        return `unnamed:${JSON.stringify(terminal.term)}`;
+      case "bundling":
+      case "unread":
+      case "configured":
+        return `${terminal.name}@${terminal.version ?? "-"}`;
+    }
+  })();
+  const font = (() => {
+    if (terminal.kind !== "configured") return "-";
+    if (terminal.font.kind === "failed") return "failed";
+    const { font: name, lacks } = terminal.font.value;
+    return `${JSON.stringify(name)}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
+  })();
+  const sighting = glyphSighting(facts);
+  const mark = marks.kind === "failed" ? "unread" : sighting === void 0 ? "-" : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? "-";
+  return `glyphs=${codes.join(",")} terminal=${found2} font=${font} mark=${mark}`;
+}
+function rowReason(reason, more = []) {
+  return more.length === 0 ? reason : `${reason} (+${more.length} more \u2014 run \`cc-candybar doctor\`)`;
+}
+function doctorReportPairs(reports) {
+  return reports.flatMap(({ check, verdict }) => {
+    const keys2 = doctorReportKeys(check.name);
+    return verdict.ok ? [
+      { key: keys2.verdict, value: VERDICT_OK },
+      { key: keys2.reason, value: verdict.note ?? "" },
+      { key: keys2.fixable, value: BOOLEAN_FALSE },
+      { key: keys2.sighting, value: "" }
+    ] : [
+      { key: keys2.verdict, value: VERDICT_FAILED },
+      { key: keys2.reason, value: rowReason(verdict.reason, verdict.more) },
+      {
+        key: keys2.fixable,
+        value: verdict.fix === void 0 ? BOOLEAN_FALSE : BOOLEAN_TRUE
+      },
+      { key: keys2.sighting, value: verdict.sighting?.glyphs ?? "" }
+    ];
+  });
+}
+
+// src/config/quick-actions.ts
+init_globals();
+var QUICK_ACTIONS = {
+  copySession: { copy: "{{ .session.id }}" },
+  copyResume: { copy: "{{ .resume_command }}" },
+  openProject: { open: "{{ .project_dir }}" },
+  openTranscript: { open: "{{ .transcript_path }}" },
+  openConfig: { open: "{{ .config_path }}" }
+};
+function quickActions(prefix) {
+  const name = (action2) => `${prefix}${action2}`;
+  return {
+    // [LAW:dataflow-not-control-flow] `⎘ resume`, `↗ repo` and `↗ config`
+    // are gated on their values: a payload the daemon did not build (the
+    // demo) carries no resume command, a local-only repo no page, and a bar
+    // on the bundled default no file, and the glyph is absent.
+    template: `{{ action "${name("copySession")}" "\u2398 id" }}{{ if ne .resume_command "" }} {{ action "${name("copyResume")}" "\u2398 resume" }}{{ end }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
+    actions: Object.fromEntries(
+      Object.entries(QUICK_ACTIONS).map(([action2, decl]) => [
+        `${prefix}${action2}`,
+        decl
+      ])
+    )
+  };
+}
+
+// src/config/command-tray.ts
+init_globals();
+
+// src/claude-input/slash-line.ts
+init_globals();
+var SLASH_LINE_PATTERN = "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$";
+var SLASH_LINE = new RegExp(SLASH_LINE_PATTERN);
+function parseSlashLine(raw) {
+  return typeof raw === "string" && SLASH_LINE.test(raw) ? { kind: "line", line: raw } : {
+    kind: "refused",
+    reason: `a slash command is "/" then its name, e.g. "/compact" or "/model opus", on one line with no control characters, got ${JSON.stringify(raw)}`
+  };
+}
+function slashLine(raw) {
+  const parsed2 = parseSlashLine(raw);
+  if (parsed2.kind === "refused") throw new Error(parsed2.reason);
+  return parsed2.line;
+}
+
+// src/config/command-tray.ts
+var COMMANDS = ["/compact", "/model"];
+var CLEAR = "/clear";
+function commandTray(prefix) {
+  const commandAction = (line) => `${prefix}${line.slice(1)}`;
+  const typeClear = `${prefix}clear.slash`;
+  const clear = confirmStep(
+    `${prefix}clear`,
+    { arm: CLEAR, confirm: `${CLEAR} \u2713 confirm` },
+    [{ action: typeClear, when: "true" }]
+  );
+  return {
+    template: COMMANDS.map(
+      (line) => `{{ action "${commandAction(line)}" "${line}" }} `
+    ).join("") + clear.template,
+    when: `{{ ${IN_TMUX} }}`,
+    actions: {
+      ...Object.fromEntries(
+        COMMANDS.map((line) => [
+          commandAction(line),
+          { slash: slashLine(line) }
+        ])
+      ),
+      ...clear.actions,
+      [typeClear]: { slash: slashLine(CLEAR) }
+    },
+    variables: clear.variables,
+    disarm: clear.disarm
+  };
+}
+
+// src/config/autocompact-control.ts
+init_globals();
+
+// src/segments/autocompact.ts
+init_globals();
+var AUTOCOMPACT_WINDOWS = Array.from(
+  { length: 10 },
+  (_, i) => (i + 1) * 1e5
+);
+var LEAST = AUTOCOMPACT_WINDOWS[0];
+var MOST = AUTOCOMPACT_WINDOWS[AUTOCOMPACT_WINDOWS.length - 1];
+function readAutoCompactWindow(settingsPath) {
+  const read2 = readClaudeSettingsOutcome(settingsPath);
+  if (read2.kind !== "ok") return read2;
+  const window2 = read2.value.autoCompactWindow;
+  if (window2 === void 0) return ok("auto");
+  return typeof window2 === "number" && Number.isInteger(window2) && window2 >= LEAST && window2 <= MOST ? ok(window2) : failed(
+    `${settingsPath}: autoCompactWindow is ${JSON.stringify(window2)}, not a window /autocompact accepts (${LEAST}\u2013${MOST} tokens)`,
+    "parse"
+  );
+}
+function autoCompactControls(window2, contextWindow) {
+  const cap = Math.min(contextWindow ?? MOST, MOST);
+  const from = window2 === "auto" ? cap : Math.min(window2, cap);
+  return {
+    window: window2 === "auto" ? 0 : window2,
+    applied: window2 === "auto" ? 0 : from,
+    lower: AUTOCOMPACT_WINDOWS.filter((w) => w < from).at(-1) ?? 0,
+    higher: AUTOCOMPACT_WINDOWS.find((w) => w > from && w <= cap) ?? 0
+  };
+}
+
+// src/config/autocompact-control.ts
+function autocompactControl(prefix, formatCount) {
+  return {
+    template: `{{ if ne .autocompact.error "" }}\u21F2 \u26A0 {{ .autocompact.error }}{{ else }}\u21F2 {{ if eq .autocompact.window 0 }}auto{{ else }}${formatCount(".autocompact.applied")}{{ end }}{{ if ${IN_TMUX} }}{{ if gt .autocompact.lower 0 }} {{ action (printf "${prefix}%d" .autocompact.lower) "\u2212" }}{{ end }}{{ if gt .autocompact.higher 0 }} {{ action (printf "${prefix}%d" .autocompact.higher) "+" }}{{ end }}{{ if gt .autocompact.window 0 }} {{ action "${prefix}auto" "\u21BA" }}{{ end }}{{ end }}{{ end }}`,
+    // [LAW:no-silent-failure] An unreadable settings file paints `error`.
+    bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
+    when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
+    // [LAW:one-source-of-truth] One action per window Claude Code accepts, so
+    // the lines a click can type are exactly AUTOCOMPACT_WINDOWS; the template
+    // picks one by name.
+    actions: {
+      [`${prefix}auto`]: { slash: slashLine("/autocompact auto") },
+      ...Object.fromEntries(
+        AUTOCOMPACT_WINDOWS.map((w) => [
+          `${prefix}${w}`,
+          { slash: slashLine(`/autocompact ${w}`) }
+        ])
+      )
+    }
+  };
+}
+
+// src/config/format-token-count.ts
+init_globals();
+var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${n} 1000000) }}M{{ else if ge ${n} 1000 }}{{ printf "%.1f" (divf ${n} 1000) }}K{{ else }}{{ ${n} }}{{ end }}`;
+
+// src/config/settings-menu.ts
+var EDIT_SEG = `${SETTINGS_NS}edit`;
+var TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
+var TOOLBAR = quickActions(SETTINGS_NS);
+var COMMANDS_SEG = `${SETTINGS_NS}commands`;
+var COMMANDS2 = commandTray(`${COMMANDS_SEG}.`);
+var AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
+var AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
+var seg = (name) => ({ kind: "segment", name });
+var TAB_KEY = `${SETTINGS_NS}tab`;
+var tabSeg = (tab) => `${TAB_KEY}.${tab}`;
+var tabToggle = (tab) => `${tabSeg(tab)}.toggle`;
+var tabRef = (tab) => ({
+  variable: TAB_KEY,
+  key: TAB_KEY,
+  member: tab
+});
+var SAVE_SEG = `${SETTINGS_NS}save`;
+var PRESET_SAVE = `${SETTINGS_NS}preset.save`;
+var PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
+var PRESET_DELETE_GLYPH = "\u{1F6AE}";
+var controlSeg = (name) => `${SETTINGS_NS}${name}`;
+var controlApply = (name) => `${SETTINGS_NS}apply.${name}`;
+var controlReset = (name) => `${SETTINGS_NS}reset.${name}`;
+var THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
+var THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
+var THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
+var THEME_DEFAULT_CELL = {
+  when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
+  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "\u2913 default for %s" .${THEME_DEFAULT_THEME}) }} {{ swatch "${controlApply("theme")}" .${THEME_DEFAULT_THEME} }}`
+};
+var RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
+var DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
+var UNDO_ACTION = `${SETTINGS_NS}undo`;
+var BACK_ACTION = `${SETTINGS_NS}back`;
+var BACK_STEP = `${BACK_ACTION}.step`;
+var BACK_COUNT = `${SETTINGS_NS}navigation.back`;
+var BACK_SEG = BACK_ACTION;
+var BACK_GLYPH = "\u25C1";
+var BACK_CELL = {
+  template: `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`
+};
+var REDO_ACTION = `${SETTINGS_NS}redo`;
+var DOCTOR_SEG = `${SETTINGS_NS}doctor`;
+var DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
+var doctorFixAction = (check) => `${DOCTOR_SEG}.fix.${check}`;
+var doctorMarkAction = (check, mark) => `${DOCTOR_SEG}.mark.${check}.${mark}`;
+var doctorRowSeg = (check) => `${DOCTOR_SEG}.${check}`;
+var MARK_GLYPH = {
+  drawn: "[\u2713 shapes]",
+  boxes: "[\u2717 boxes]"
+};
+var PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
+var submenuSeg = (name) => `${SETTINGS_NS}${name}`;
+var submenuToggle = (name) => `${submenuSeg(name)}.toggle`;
+var accordionOf = (place) => isSubmenu(place) ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`) : PICKER_KEY;
+var submenuRef = (name) => {
+  const key = accordionOf(PLACE[SUBMENUS[name].beside]);
+  return { variable: key, key, member: name };
+};
+var PREVIEWS = {
+  // `{{ layoutPreview }}` draws every row of the arrangement, one block per
+  // segment, named, each block in the tint the bar's variation and shade deal
+  // it — so it shows what a preset, a variation or a shade changes.
+  layout: { template: "{{ layoutPreview }}" },
+  // A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
+  // samples exactly the palette the bar is drawn in. (The theme picker carries
+  // its own demo of the theme it has selected.)
+  palette: { template: "{{ themePreview }}" },
+  // While the preset ring is on a preset the user made
+  // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
+  // 📐 layout tab makes one.
+  presetDelete: {
+    when: "{{ not .preset.bundled }}",
+    template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`
+  }
+};
+var controlRow = (name, row2) => `${SETTINGS_NS}list.${name}.${row2}`;
+var controlResettable = (name) => `${SETTINGS_NS}resettable.${name}`;
+var DRIFT_MARK = " \u2022";
+var anyResettable = (controls) => controls.length === 0 ? "false" : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
+var laneSettings = LANE_NAMES.map(
+  (lane) => [LANES[lane].switch.setting, lane]
+);
+var HELP_ARTIFACTS = {
+  variables: {},
+  actions: {},
+  segments: {}
+};
+var HELP = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => {
+    const name = `${SETTINGS_NS}help.${setting}`;
+    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
+  })
+);
+var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
+var laneReadout = (lane) => {
+  const feed2 = (field) => `.${laneFeedVar(lane, field)}`;
+  const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
+    " "
+  );
+  return (
+    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
+    // the renderer's: the setting's value against the one that turns the lane
+    // on, each spelled as a template literal of its own type.
+    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed2("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed2("fps")} }} fps{{ if not ${feed2("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
+  );
+};
+var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
+var FPS_SEG = `${SETTINGS_NS}fps`;
+var POLLED = "polled";
+var AT_MOST = "\u2264";
+var FPS_UNIT = " fps";
+var RATE_WIDTH = Math.max(
+  POLLED.length,
+  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length
+);
+var FRAME_RATE = `{{ if eq .${drawingVar("by")} "${"feed"}" }}{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
+var TRAIL = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
+);
+var submenusBeside = (name) => SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
+var menuControl = (name) => {
+  const row2 = SETTINGS[name];
+  const place = PLACE[name];
+  return {
+    ...row2,
+    name,
+    place,
+    control: settingControl(
+      {
+        label: row2.label,
+        domain: settingControlDomain(row2.configKey)
+      },
+      row2.sessionKey,
+      row2.effectiveVar,
+      controlApply(name),
+      accordionOf(place)
+    ),
+    beneath: row2.previews.map((preview) => PREVIEWS[preview]),
+    help: [HELP[name]].filter((h) => h !== void 0),
+    submenus: submenusBeside(name)
+  };
+};
+var CONTROLS = Object.keys(SETTINGS).map(menuControl);
+var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
+var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
+var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
+  controlsUnder(place)
+)}))`;
+var controlsAt = (place) => controlsIn(place).flatMap(
+  (c) => [
+    controlNode(c),
+    ...c.help,
+    ...c.submenus.map(
+      (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
+    )
+  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
+);
+var SETTINGS_WRITTEN_KEYS = new Set(
+  CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
+);
+var RESET_ALL = confirmStep(
+  RESET_ALL_SEG,
+  { arm: "\u27F2", confirm: "\u27F2 reset all?" },
+  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown }))
+);
+var SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"];
+var saveCountVar = (count) => `${SETTINGS_NS}${count}`;
+var UNSAVED_VAR = saveCountVar("unsaved");
+var counted = (count, body) => ({
+  body,
+  shown: `(gt .${saveCountVar(count)} 0)`
+});
+var SAVE_PARTS = [
+  counted(
+    "unsaved",
+    `{{ action "${SAVE_SEG}" (printf "\u{1F4BE} save %d" .${UNSAVED_VAR}) }}`
+  ),
+  counted("history.undo", `{{ action "${UNDO_ACTION}" "\u21B6" }}`),
+  counted("history.redo", `{{ action "${REDO_ACTION}" "\u21B7" }}`),
+  {
+    body: RESET_ALL.template,
+    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`
+  }
+];
+var SAVE_CELL = {
+  when: `{{ or ${SAVE_PARTS.map((p2) => p2.shown).join(" ")} }}`,
+  template: `{{ $sep := "" }}` + SAVE_PARTS.map(
+    (p2) => `{{ if ${p2.shown} }}{{ $sep }}${p2.body}{{ $sep = " " }}{{ end }}`
+  ).join("")
+};
+var CONFIRMS = [
+  { step: RESET_ALL, place: "door" },
+  { step: COMMANDS2, place: "session" }
+];
+var disarms = (out) => out.map((c) => c.step.disarm);
+var DOOR_DISARMS = disarms(CONFIRMS);
+var TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
+function controlNode(c) {
+  const self2 = controlSeg(c.name);
+  if (c.control.kind === "inline") return seg(self2);
+  return disclosureNode(
+    self2,
+    c.control.list.ref,
+    {
+      kind: "container",
+      direction: "vertical",
+      children: [...c.control.list.rows, ...c.beneath].map(
+        (_, row2) => seg(controlRow(c.name, row2))
+      )
+    },
+    "drop"
+  );
+}
+function isSettingsAnchor(segmentName) {
+  return segmentName === SETTINGS_ANCHOR;
+}
+function prependAnchor(node) {
+  const anchorRef = seg(SETTINGS_ANCHOR);
+  if (node.kind === "container" && node.direction === "vertical") {
+    const [first2, ...rest2] = node.children;
+    return node.when === void 0 && first2 !== void 0 ? { ...node, children: [prependAnchor(first2), ...rest2] } : {
+      kind: "container",
+      direction: "vertical",
+      children: [anchorRef, node]
+    };
+  }
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [anchorRef, node]
+    };
+  }
+  if (node.when === void 0) {
+    return { ...node, children: [anchorRef, ...node.children] };
+  }
+  const { when: when2, children: children2, ...row2 } = node;
+  return {
+    ...row2,
+    children: [
+      anchorRef,
+      { kind: "container", direction: row2.direction, when: when2, children: children2 }
+    ]
+  };
+}
+function withAnchor(node) {
+  const placed2 = countAnchors(node) > 0 ? node : prependAnchor(node);
+  return placed2;
+}
+function countAnchors(node) {
+  let n = 0;
+  for (const each of walkNodes(node)) {
+    if (each.kind === "segment" && isSettingsAnchor(each.name)) n += 1;
+  }
+  return n;
+}
+function anchorUnderGate(node, gated2 = false) {
+  const here = gated2 || node.when !== void 0;
+  if (node.kind === "segment") {
+    return here && isSettingsAnchor(node.name) || node.opens !== void 0 && anchorUnderGate(node.opens.body, true);
+  }
+  return node.children.some((child) => anchorUnderGate(child, here));
+}
+var PLACE_BODY = {
+  // `◁ back`, the controls one click from the door — theme, preset — then
+  // arranging the bar, then the save cell whenever it has something to do.
+  door: {
+    direction: "horizontal",
+    content: [seg(BACK_SEG)],
+    after: [seg(EDIT_SEG), seg(SAVE_SEG)]
+  },
+  // The quick actions, then the commands typed into Claude Code beside the
+  // auto-compact window they would summarize at.
+  session: {
+    direction: "vertical",
+    content: [
+      seg(TOOLBAR_SEG),
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [seg(COMMANDS_SEG), seg(AUTOCOMPACT_SEG)]
+      }
+    ],
+    after: []
+  },
+  look: { direction: "horizontal", content: [], after: [] },
+  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
+  config: { direction: "horizontal", content: [], after: [] },
+  tools: {
+    direction: "vertical",
+    content: [seg(DOCTOR_SEG), ...CHECKS.map((c) => seg(doctorRowSeg(c.name)))],
+    after: []
+  },
+  // The settings that adapt the theme, then — while the look they make
+  // differs from the theme's own default — the cell that saves it as that
+  // default.
+  gear: {
+    direction: "horizontal",
+    content: [],
+    after: [seg(THEME_DEFAULT_SEG)]
+  },
+  toggles: { direction: "horizontal", content: [], after: [] }
+};
+function placeBody(place) {
+  const { direction, content, after } = PLACE_BODY[place];
+  return {
+    kind: "container",
+    direction,
+    children: [...content, ...controlsAt(place), ...after]
+  };
+}
+function expandAnchor(node) {
+  if (node.kind === "segment") {
+    return isSettingsAnchor(node.name) ? {
+      kind: "container",
+      direction: "horizontal",
+      children: [
+        disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
+        seg(FPS_SEG)
+      ]
+    } : node;
+  }
+  return expandContainer(node);
+}
+function doorBody() {
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      placeBody("door"),
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: TABS.map(
+          ({ member }) => disclosureNode(
+            tabSeg(member),
+            tabRef(member),
+            placeBody(member),
+            "drop"
+          )
+        )
+      }
+    ]
+  };
+}
+var DOOR_BODY = doorBody();
+function expandContainer(node) {
+  return {
+    ...node,
+    children: node.children.map((child) => expandAnchor(child))
+  };
+}
+function settingsArtifacts(doorGlyph) {
+  const artifacts = {
+    variables: {
+      [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
+      [DIAGNOSTICS_VIEWING]: {
+        kind: "state",
+        key: DIAGNOSTICS_VIEWING,
+        default: "0"
+      }
+    },
+    actions: {
+      [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
+      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
+      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
+      [DOCTOR_RUN_ACTION]: { doctor: "run" },
+      ...TOOLBAR.actions,
+      ...COMMANDS2.actions,
+      ...AUTOCOMPACT.actions,
+      [SAVE_SEG]: { save: true },
+      [UNDO_ACTION]: { undo: true },
+      // [LAW:composability] Going back can reopen a view a confirm sits in, so
+      // it disarms every confirm as the door does: a confirm is only ever
+      // clicked in the view its own arming click was made in.
+      [BACK_STEP]: { back: true },
+      [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
+      [REDO_ACTION]: { redo: true },
+      [PRESET_SAVE]: { preset: "save" },
+      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
+      [PRESET_DELETE]: {
+        preset: "delete",
+        name: `{{ .${SETTINGS.preset.effectiveVar} }}`
+      }
+    },
+    segments: {
+      // [LAW:one-source-of-truth] ONE symbol per state, unlike the labelled toggles
+      // below, which are a word plus the ▸/▾ that gates it. The door has no
+      // label to gate: it is a glyph, so a second glyph beside it would be the
+      // only thing on the bar that spells its state twice. The door's glyph
+      // names what it opens, `✖` names what the click does.
+      //
+      // Two displays through the same `[closed, member]` cycle every other
+      // disclosure binds: the shape did not change, only the values. Open,
+      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
+      // gives it (`roleTextOn`): the theme's text-red where that reads on the
+      // pressed state, otherwise the role's own red or the nearest rung of its
+      // ladder out toward the pole the pressed state stands farther from that
+      // does, and where none does, the named red standing farthest off. It
+      // never slides lightness: a slid red stops reading as red, and the ✖
+      // must be red on every theme. `keptOn` only stops the terminal's
+      // rounding from costing it the contrast it has. Closed, the author's
+      // glyph keeps the cell's own text.
+      [SETTINGS_ANCHOR]: {
+        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
+      },
+      [FPS_SEG]: { template: FRAME_RATE },
+      [TOOLBAR_SEG]: { template: TOOLBAR.template },
+      [COMMANDS_SEG]: { template: COMMANDS2.template, when: COMMANDS2.when },
+      [AUTOCOMPACT_SEG]: {
+        template: AUTOCOMPACT.template,
+        bg: AUTOCOMPACT.bg,
+        when: AUTOCOMPACT.when
+      },
+      [BACK_SEG]: BACK_CELL,
+      [SAVE_SEG]: SAVE_CELL,
+      [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
+      [PRESET_SAVE]: {
+        template: `{{ action "${PRESET_SAVE}" "+ preset" }}`
+      },
+      [DOCTOR_SEG]: {
+        template: `{{ action "${DOCTOR_RUN_ACTION}" "\u{1FA7A} doctor" }}`
+      },
+      [EDIT_SEG]: {
+        // Entering or leaving edit mode is a click like every other in the
+        // menu: the menu stays as it was, so `◁ back` and the tabs stay in
+        // reach while the bar is arranged.
+        template: `{{ action "${EDIT_TOGGLE_ACTION}" "\u270E arrange" "\u270E done" }}`
+      }
+    }
+  };
+  artifacts.variables[THEME_DEFAULT_DIFFERS] = {
+    kind: "input",
+    path: "themeDefault.differs",
+    type: "boolean",
+    default: false
+  };
+  artifacts.variables[THEME_DEFAULT_THEME] = {
+    kind: "input",
+    path: "themeDefault.theme",
+    type: "string",
+    default: ""
+  };
+  artifacts.variables[BACK_COUNT] = {
+    kind: "input",
+    path: "navigation.back",
+    type: "number",
+    default: 0
+  };
+  for (const count of SAVE_COUNTS) {
+    artifacts.variables[saveCountVar(count)] = {
+      kind: "input",
+      path: count,
+      type: "number",
+      default: 0
+    };
+  }
+  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
+  for (const { member, label: label2 } of TABS) {
+    artifacts.actions[tabToggle(member)] = disclosureCycleAction(
+      TAB_KEY,
+      member
+    );
+    artifacts.actions[tabSeg(member)] = {
+      do: [tabToggle(member), ...TAB_DISARMS]
+    };
+    const display = markedDisplay(member);
+    artifacts.segments[tabSeg(member)] = {
+      template: `{{ ${disclosureTriggerCall(
+        tabSeg(member),
+        display(label2),
+        display(`${DISCLOSURE_GLYPH_OPEN} ${label2}`)
+      )} }}`
+    };
+  }
+  Object.assign(artifacts.variables, COMMANDS2.variables, RESET_ALL.variables);
+  declareSettingControls(artifacts);
+  declareDoctorRows(artifacts);
+  return artifacts;
+}
+function declareDoctorRows(artifacts) {
+  for (const c of CHECKS) {
+    const keys2 = doctorReportKeys(c.name);
+    const fix = doctorFixAction(c.name);
+    for (const key of Object.values(keys2)) {
+      artifacts.variables[key] = { kind: "state", key, default: VERDICT_UNRUN };
+    }
+    artifacts.actions[fix] = { doctor: "fix", check: c.name };
+    const marks = c.takesMark ? GLYPH_MARKS : [];
+    for (const mark of marks) {
+      artifacts.actions[doctorMarkAction(c.name, mark)] = {
+        doctor: "mark",
+        check: c.name,
+        mark
+      };
+    }
+    const markCells = marks.map(
+      (mark) => ` {{ action "${doctorMarkAction(c.name, mark)}" "${MARK_GLYPH[mark]}" }}`
+    ).join("");
+    artifacts.segments[doctorRowSeg(c.name)] = {
+      when: `{{ ne .${keys2.verdict} "${VERDICT_UNRUN}" }}`,
+      template: `{{ if eq .${keys2.verdict} "${VERDICT_OK}" }}\u2713 ${c.label}{{ if ne .${keys2.reason} "" }} \u2014 {{ .${keys2.reason} }}{{ end }}{{ else }}\u2717 ${c.label} \u2014 {{ .${keys2.reason} }}{{ if eq .${keys2.fixable} "${BOOLEAN_TRUE}" }} {{ action "${fix}" "[fix]" }}{{ end }}` + (markCells === "" ? "" : `{{ if ne .${keys2.sighting} "" }} {{ .${keys2.sighting} }}${markCells}{{ end }}`) + `{{ end }}`
+    };
+  }
+}
+function declareSettingControls(artifacts) {
+  for (const c of CONTROLS) {
+    Object.assign(artifacts.actions, c.control.actions);
+    const reset = controlReset(c.name);
+    artifacts.actions[reset] = { reset: c.configKey };
+    artifacts.variables[controlResettable(c.name)] = {
+      kind: "input",
+      path: `resettable.${c.name}`,
+      type: "boolean",
+      default: false
+    };
+    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "\u21BA" }}{{ end }}`;
+    Object.assign(artifacts.variables, c.control.variables);
+    artifacts.segments[controlSeg(c.name)] = {
+      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`
+    };
+    if (c.control.kind === "picker") {
+      [
+        ...c.control.list.rows.map((template) => ({ template })),
+        ...c.beneath
+      ].forEach((row2, i) => {
+        artifacts.segments[controlRow(c.name, i)] = row2;
+      });
+    }
+  }
+  Object.assign(artifacts.actions, RESET_ALL.actions);
+  Object.assign(artifacts.variables, HELP_ARTIFACTS.variables);
+  Object.assign(artifacts.actions, HELP_ARTIFACTS.actions);
+  Object.assign(artifacts.segments, HELP_ARTIFACTS.segments);
+  for (const name of SUBMENU_NAMES) {
+    const ref = submenuRef(name);
+    artifacts.actions[submenuToggle(name)] = disclosureCycleAction(
+      ref.key,
+      ref.member
+    );
+    artifacts.segments[submenuSeg(name)] = {
+      template: `{{ action "${submenuToggle(name)}" ${markedDisplay(name)(SUBMENUS[name].trigger)} }}`
+    };
+  }
+}
+function ensureEditToggle(artifacts) {
+  const { variables, actions } = editModeArtifacts();
+  Object.assign(artifacts.variables, variables);
+  Object.assign(artifacts.actions, actions);
+}
+function synthesizeSettingsMenu(config2) {
+  const artifacts = settingsArtifacts(config2.globals.menuGlyph ?? DOOR_GLYPH);
+  ensureEditToggle(artifacts);
+  const presets = { ...config2.presets };
+  const roots = [];
+  for (const name of presetNames(config2.presets)) {
+    const { node } = presetRoot(config2, name);
+    const root = expandAnchor(withAnchor(node));
+    roots.push(root);
+    presets[name] = { ...presetByName(config2.presets, name), root };
+  }
+  const ensured = synthesisInputs(artifacts, roots, config2);
+  return {
+    ...config2,
+    variables: { ...ensured, ...config2.variables, ...artifacts.variables },
+    actions: { ...config2.actions, ...artifacts.actions },
+    segments: { ...config2.segments, ...artifacts.segments },
+    presets
+  };
+}
+
+// src/config/edit-chrome.ts
+var EDIT_LIVE_KEY = `${EDIT_NS}live`;
+var EDIT_LIVE_DISPLAY = ["\u2610 live", "\u2611 live"];
+var EDIT_DONE_SEG = `${EDIT_NS}done`;
+var EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
+var EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
+var EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
+var CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
+var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
+var EDIT_LIVE_REF = {
+  variable: EDIT_LIVE_KEY,
+  key: EDIT_LIVE_KEY,
+  member: DISCLOSURE_OPEN
+};
+function configuringVar(presetIdent) {
+  return `${EDIT_NS}configuring.p${presetIdent}`;
+}
+function namesView(presetIdent) {
+  return `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) (ne .${configuringVar(presetIdent)} "true")`;
+}
+function configuringDecl(members) {
+  const terms = members.map(
+    (m) => `(eq .${EDIT_CONFIGURE_KEY} "${escapeTemplateLiteral(m)}")`
+  );
+  return { kind: "template", template: `{{ or ${terms.join(" ")} false }}` };
+}
+function inNamesView(presetIdent, verdict, when2) {
+  return `{{ if ${namesView(presetIdent)} }}${verdict}{{ else }}${when2}{{ end }}`;
+}
+var PRESET_CUSTOMIZED_VAR = "preset.customized";
+var CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
+var isChromeExempt = isReservedName;
+function configOptionDomains(config2) {
+  return new Map([
+    ...perConfigDomainsFor(config2),
+    ...addableSegmentDomains(config2)
+  ]);
+}
+var ADDABLE_DOMAIN = `${EDIT_NS}addable`;
+function addableSegmentDomains(config2) {
+  return /* @__PURE__ */ new Map([
+    [
+      ADDABLE_DOMAIN,
+      {
+        members: Object.keys(config2.segments).filter((n) => !isChromeExempt(n)),
+        library: {
+          groups: LIBRARY_GROUPS.map((id2) => ({
+            id: id2,
+            label: GROUP_LABELS[id2]
+          })),
+          entry: (option) => {
+            const decl = config2.segments[option];
+            return {
+              group: decl.group ?? OTHER_GROUP,
+              ...decl.description !== void 0 && {
+                description: decl.description
+              }
+            };
+          }
+        }
+      }
+    ]
+  ]);
+}
+function chromeCell(name, template, artifacts) {
+  artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
+  return { kind: "segment", name };
+}
+function removeTerm(ctx, posIdent, id2) {
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${posIdent}`;
+  ctx.artifacts.actions[actionName] = {
+    persist: ctx.rootKey,
+    removeSegment: id2
+  };
+  const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
+  return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
+}
+function inArrangeMode(term) {
+  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${term}{{ end }}`;
+}
+function shownWhile(refs, when2) {
+  return refs.reduce(
+    (inner, ref) => `{{ if and ${disclosureTerm(EDIT_MODE_REF)} ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
+    when2
+  );
+}
+function configureRefsIn(nodes) {
+  return nodes.flatMap(
+    (node) => [...walkNodes(node)].flatMap(
+      (n) => n.kind === "segment" && n.opens?.ref.key === EDIT_CONFIGURE_KEY ? [n.opens.ref] : []
+    )
+  );
+}
+function placementDraftKey(presetIdent, id2, setting) {
+  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
+}
+function configureParts(ctx, posIdent, node, decls) {
+  const id2 = placementId(node);
+  const prefix = `${EDIT_NS}${ctx.presetIdent}`;
+  const member = configureMember(ctx.presetIdent, id2);
+  ctx.configured.push(member);
+  const enter = `${prefix}.configure.${posIdent}`;
+  const listKey = sharedMenuStateKey(enter);
+  const fold = `${enter}.fold`;
+  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
+  ctx.artifacts.actions[enter] = {
+    do: [`${enter}.open`, fold]
+  };
+  ctx.artifacts.actions[`${enter}.open`] = {
+    set: EDIT_CONFIGURE_KEY,
+    to: member
+  };
+  const drafts = {};
+  const controls = Object.entries(decls).map(([name, decl]) => {
+    const key = placementDraftKey(ctx.presetIdent, id2, name);
+    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${posIdent}.${name}`;
+    ctx.artifacts.variables[variable] = {
+      kind: "state",
+      key,
+      default: settingSpelling(node.settings?.[name] ?? decl.default)
+    };
+    drafts[name] = { id: id2, key, variable };
+    const segName = `${prefix}.setting.${posIdent}.${name}`;
+    const control2 = settingControl(
+      controlDeclOf(decl),
+      key,
+      variable,
+      segName,
+      listKey
+    );
+    Object.assign(ctx.artifacts.actions, control2.actions);
+    Object.assign(ctx.artifacts.variables, control2.variables);
+    if (control2.kind === "inline") {
+      ctx.artifacts.segments[segName] = { template: control2.template };
+      return { kind: "segment", name: segName };
+    }
+    ctx.artifacts.segments[segName] = { template: control2.template };
+    const rows = control2.list.rows.map((template, row2) => {
+      const listSeg = `${segName}.list.${row2}`;
+      ctx.artifacts.segments[listSeg] = { template };
+      return { kind: "segment", name: listSeg };
+    });
+    return disclosureNode(
+      segName,
+      control2.list.ref,
+      { kind: "container", direction: "vertical", children: rows },
+      "drop"
+    );
+  });
+  return {
+    term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
+    ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
+    // One control per row, its list dropping below it when opened.
+    body: { kind: "container", direction: "vertical", children: controls },
+    drafts
+  };
+}
+var LABEL_NS = `${EDIT_NS}label:`;
+function arrangedSegment(name) {
+  if (name.startsWith(LABEL_NS)) {
+    const label2 = name.slice(LABEL_NS.length);
+    return label2.slice(label2.indexOf(":") + 1);
+  }
+  return name.startsWith(EDIT_NS) ? void 0 : name;
+}
+function labelChrome(child, decl, ctx, configure) {
+  const id2 = placementId(child);
+  const name = labelSegment(ctx, id2, child, decl, id2);
+  const settings = Object.fromEntries(
+    IMPLIED_SETTINGS.flatMap((setting) => {
+      const value = child.settings?.[setting];
+      return value === void 0 ? [] : [[setting, value]];
+    })
+  );
+  return {
+    ...disclosureNode(
+      name,
+      configure.ref,
+      configure.body,
+      "drop",
+      shownWhile([configure.ref], `{{ ${namesView(ctx.presetIdent)} }}`)
+    ),
+    ...Object.keys(settings).length > 0 && { settings },
+    drafts: Object.fromEntries(
+      IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]])
+    )
+  };
+}
+function labelSegment(ctx, key, child, decl, text4) {
+  const name = `${LABEL_NS}${key}:${child.name}`;
+  ctx.artifacts.segments[name] = {
+    template: `{{ "${escapeTemplateLiteral(text4)}" }}`,
+    ...decl.palette !== void 0 && { palette: decl.palette }
+  };
+  return name;
+}
+function editableUnit(child, spliced, first2, ctx) {
+  const id2 = placementId(child);
+  const leading = first2 ? [insertTerm(ctx, String(ctx.posCounter.n++), id2, "before")] : [];
+  const afterPos = String(ctx.posCounter.n++);
+  const after = insertTerm(ctx, afterPos, id2, "after");
+  const remove = removeTerm(ctx, afterPos, id2);
+  const decl = ctx.segments[child.name];
+  const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
+  const lead = inArrangeMode(remove);
+  const trail = inArrangeMode(configure.term);
+  return [
+    ...leading.map(
+      (lead2) => chromeCell(lead2.host, lead2.template, ctx.artifacts)
+    ),
+    // Labelled by the placement's id: two placements of one segment are
+    // told apart by it, and a bare placement's id is its segment's name.
+    { ...labelChrome(child, decl, ctx, configure), lead, trail },
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
+      lead,
+      trail,
+      drafts: configure.drafts
+    },
+    chromeCell(after.host, after.template, ctx.artifacts)
+  ];
+}
+function fileLabel(file) {
+  return import_node_path5.default.join(import_node_path5.default.basename(import_node_path5.default.dirname(file)), import_node_path5.default.basename(file));
+}
+function insertedUnit(child, insertedBy, spliced, ctx) {
+  const decl = ctx.segments[child.name];
+  const id2 = placementId(child);
+  const label2 = {
+    kind: "segment",
+    // Keyed by the preset too: another preset may hold the same id as an
+    // editable placement, whose label reads only the id. An id holds no
+    // `/` and a preset ident no `:`, so the two names never meet.
+    name: labelSegment(
+      ctx,
+      `${id2}/${ctx.presetIdent}`,
+      child,
+      decl,
+      `${id2} \xB7 ${fileLabel(insertedBy.file)} ${insertedBy.entry}`
+    ),
+    when: `{{ ${namesView(ctx.presetIdent)} }}`
+  };
+  return [
+    label2,
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true")
+    }
+  ];
+}
+function insertTerm(ctx, posIdent, anchor, relation) {
+  const { presetIdent, artifacts } = ctx;
+  const applyName = `${EDIT_NS}${presetIdent}.insert.${posIdent}`;
+  const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${posIdent}`;
+  artifacts.actions[applyName] = {
+    persist: ctx.rootKey,
+    insertSegmentFrom: ADDABLE_DOMAIN,
+    anchor,
+    relation
+  };
+  const member = menuMember(applyName);
+  const stateKey = menuStateKey(chromeSegName, applyName, void 0);
+  const pageKey = menuPageKey(stateKey);
+  const identity2 = menuActionName(stateKey, member);
+  artifacts.variables[stateKey] = {
+    ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
+    within: [EDIT_MODE_REF]
+  };
+  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+  artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
+  artifacts.actions[pageKey] = { set: pageKey, int: true };
+  const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
+  const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
+  return {
+    host: chromeSegName,
+    template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
+  };
+}
+function spliceContainer(node, ctx) {
+  const children2 = [];
+  const firstContent = node.children.findIndex(
+    (child) => child.kind === "segment" && !isChromeExempt(child.name) && child.insertedBy === void 0
+  );
+  const splice2 = (body) => spliceContainer(body, ctx);
+  for (const [i, child] of node.children.entries()) {
+    if (child.kind === "container") {
+      children2.push(splice2(child));
+      continue;
+    }
+    const spliced = mapOpens(child, splice2);
+    if (isChromeExempt(child.name)) {
+      children2.push(spliced);
+      continue;
+    }
+    const cells = child.insertedBy === void 0 ? editableUnit(child, spliced, i === firstContent, ctx) : insertedUnit(child, child.insertedBy, spliced, ctx);
+    const unit = {
+      kind: "container",
+      direction: "horizontal",
+      children: cells,
+      unit: true
+    };
+    children2.push(
+      node.direction === "vertical" ? { kind: "container", direction: "horizontal", children: [unit] } : unit
+    );
+  }
+  return {
+    ...node,
+    children: children2,
+    ...node.when !== void 0 && {
+      when: shownWhile(
+        configureRefsIn(children2),
+        inNamesView(ctx.presetIdent, "true", node.when)
+      )
+    }
+  };
+}
+function wrapWithPresetRows(splicedRoot, presetIdent, rootKey, artifacts, lead, live, tail) {
+  const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
+  const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
+  artifacts.actions[actionName] = { reset: rootKey };
+  artifacts.segments[chromeSegName] = {
+    template: `{{ action "${actionName}" "\u21BA reset layout" }}`,
+    when: CUSTOMIZED_BANNER_GATE
+  };
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      // The ways out lead the top row, top left, where they are found without
+      // reopening the menu edit mode was entered from: keep or discard what
+      // was changed, restore the bundled layout, and the view toggle.
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [...lead, { kind: "segment", name: chromeSegName }, live]
+      },
+      // The `(?)`'s body drops BELOW the row the trigger rides while the
+      // disclosure is open, like every other disclosure body in this codebase.
+      withTrailingCell(splicedRoot, tail)
+    ]
+  };
+}
+function withTrailingCell(node, cell3) {
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [node, cell3]
+    };
+  }
+  const last2 = node.children.at(-1);
+  if (node.direction === "vertical" && last2 !== void 0 && (last2.kind === "segment" || last2.when === void 0)) {
+    return {
+      ...node,
+      children: [...node.children.slice(0, -1), withTrailingCell(last2, cell3)]
+    };
+  }
+  return { ...node, children: [...node.children, cell3] };
+}
+function spliceEditChromeForPreset(config2, presetName, artifacts, lead, live, tail) {
+  const { node } = presetRoot(config2, presetName);
+  const ctx = {
+    presetIdent: ident(presetName),
+    rootKey: presetRootKey(presetName),
+    segments: config2.segments,
+    artifacts,
+    posCounter: { n: 0 },
+    configured: []
+  };
+  const spliced = spliceContainer(node, ctx);
+  artifacts.variables[configuringVar(ctx.presetIdent)] = configuringDecl(
+    ctx.configured
+  );
+  return wrapWithPresetRows(
+    spliced,
+    ctx.presetIdent,
+    ctx.rootKey,
+    artifacts,
+    lead,
+    live,
+    tail
+  );
+}
+function synthesizeEditChrome(config2) {
+  const artifacts = {
+    variables: {},
+    actions: {},
+    segments: {}
+  };
+  const help = declareHelp(
+    `${EDIT_NS}help`,
+    EDIT_MODE_HELP,
+    [EDIT_MODE_REF],
+    artifacts
+  );
+  artifacts.variables[EDIT_LIVE_KEY] = disclosureStateVar(
+    EDIT_LIVE_KEY,
+    DISCLOSURE_CLOSED
+  );
+  artifacts.actions[EDIT_LIVE_KEY] = disclosureCycleAction(
+    EDIT_LIVE_KEY,
+    EDIT_LIVE_REF.member
+  );
+  artifacts.segments[EDIT_LIVE_KEY] = {
+    template: disclosureTrigger(EDIT_LIVE_KEY, ...EDIT_LIVE_DISPLAY),
+    when: EDIT_MODE_GATE
+  };
+  const live = { kind: "segment", name: EDIT_LIVE_KEY };
+  const tail = help;
+  artifacts.variables[EDIT_CHANGES_VAR] = {
+    kind: "input",
+    path: "history.sinceEdit",
+    type: "number",
+    default: 0
+  };
+  artifacts.actions[EDIT_DONE_SEG] = {
+    do: [SAVE_SEG, EDIT_TOGGLE_ACTION]
+  };
+  artifacts.segments[EDIT_DONE_SEG] = {
+    template: `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "\u2713 save" }}{{ else }}{{ action "${EDIT_DONE_SEG}" "\u2713 done" }}{{ end }}`,
+    when: EDIT_MODE_GATE
+  };
+  artifacts.actions[EDIT_REWIND_ACTION] = { rewind: true };
+  artifacts.actions[EDIT_CANCEL_SEG] = {
+    do: [EDIT_REWIND_ACTION, EDIT_TOGGLE_ACTION]
+  };
+  artifacts.segments[EDIT_CANCEL_SEG] = {
+    template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
+    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
+  };
+  const lead = [
+    { kind: "segment", name: EDIT_DONE_SEG },
+    { kind: "segment", name: EDIT_CANCEL_SEG }
+  ];
+  const presets = { ...config2.presets };
+  const roots = [];
+  for (const name of presetNames(config2.presets)) {
+    const root = spliceEditChromeForPreset(
+      config2,
+      name,
+      artifacts,
+      lead,
+      live,
+      tail
+    );
+    roots.push(root);
+    presets[name] = { ...presetByName(config2.presets, name), root };
+  }
+  const ensured = synthesisInputs(artifacts, roots, config2);
+  return {
+    ...config2,
+    variables: {
+      ...ensured,
+      ...config2.variables,
+      ...artifacts.variables
+    },
+    actions: { ...config2.actions, ...artifacts.actions },
+    segments: { ...config2.segments, ...artifacts.segments },
+    presets
+  };
+}
+
+// src/config/loader/actions.ts
+init_globals();
+var import_node_path6 = __toESM(require_path_browserify(), 1);
+function validateActions(ctx, raw, home) {
+  if (raw === void 0) return {};
+  if (!isPlainObject(raw)) {
+    issue2(
+      ctx,
+      "actions",
+      `actions must be an object, got ${describeType(raw)}`
+    );
+    return {};
+  }
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const [name, decl] of Object.entries(raw)) {
+    const parsed2 = validateActionDecl(ctx, `actions.${name}`, decl, home);
+    if (parsed2 !== null) out[name] = parsed2;
+  }
+  return out;
+}
+function issue2(ctx, path42, message) {
+  ctx.issues.push({
+    path: path42,
+    message,
+    line: findKeyLine(ctx.source, path42.split("."))
+  });
+}
+function validateActionDecl(ctx, path42, raw, home) {
+  if (!isPlainObject(raw)) {
+    issue2(
+      ctx,
+      path42,
+      `${path42} must be an action object, got ${describeType(raw)}`
+    );
+    return null;
+  }
+  if ("persistWhen" in raw) {
+    issue2(
+      ctx,
+      path42,
+      `${path42}.persistWhen was removed: declare the \`set\` alone \u2014 a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`
+    );
+    return null;
+  }
+  const present = ACTION_KEYS.filter((k) => k in raw);
+  if (present.length !== 1) {
+    issue2(
+      ctx,
+      path42,
+      `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${present.length > 1 ? ` (found: ${present.join(", ")})` : ""}`
+    );
+    return null;
+  }
+  return actionArms(home)[present[0]](ctx, path42, raw);
+}
+function actionHomeOf(filePath2) {
+  if (filePath2 === "<default>") return { dir: null };
+  return import_node_path6.default.isAbsolute(filePath2) ? { dir: import_node_path6.default.dirname(filePath2) } : { text: filePath2 };
+}
+var actionArms = (home) => ({
+  set: (ctx, path42, raw) => valueSourceAction(ctx, path42, raw, "set", SET_ARMS),
+  persist: (ctx, path42, raw) => valueSourceAction(ctx, path42, raw, "persist", PERSIST_ARMS),
+  copy: templateArm("copy"),
+  open: templateArm("open"),
+  reset: resetArm,
+  undo: markerArm("undo"),
+  redo: markerArm("redo"),
+  back: markerArm("back"),
+  rewind: markerArm("rewind"),
+  save: markerArm("save"),
+  preset: presetArm,
+  themeDefault: themeDefaultArm,
+  doctor: doctorArm,
+  slash: slashArm,
+  run: runArm(home),
+  do: doArm
+});
+function templateArm(key) {
+  return (ctx, path42, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (k !== key)
+        issue2(
+          ctx,
+          `${path42}.${k}`,
+          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
+        );
+    }
+    const tmpl = requireString(ctx, path42, raw, key);
+    return tmpl === null ? null : { [key]: tmpl };
+  };
+}
+function resetArm(ctx, path42, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "reset")
+      issue2(
+        ctx,
+        `${path42}.${k}`,
+        `Unknown key "${k}" on a reset action. Expected only: reset`
+      );
+  }
+  const key = slashFreeString(
+    ctx,
+    path42,
+    "reset",
+    raw,
+    `reset key must be non-empty (the config globals field to clear)`,
+    (v) => `reset key "${v}" contains "/" \u2014 keys must be slash-free`
+  );
+  return key === null ? null : { reset: key };
+}
+var MARKER_SUBJECT = {
+  undo: "it steps the session's settings history",
+  redo: "it steps the session's settings history",
+  back: "it steps the session's navigation history",
+  rewind: "it steps the session's settings history back to where edit mode opened",
+  save: "it saves the session's unsaved settings"
+};
+function markerArm(key) {
+  return (ctx, path42, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (k !== key)
+        issue2(
+          ctx,
+          `${path42}.${k}`,
+          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
+        );
+    }
+    if (raw[key] !== true) {
+      issue2(
+        ctx,
+        `${path42}.${key}`,
+        `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue(raw[key])}`
+      );
+      return null;
+    }
+    return { [key]: true };
+  };
+}
+function presetArm(ctx, path42, raw) {
+  const verb = raw.preset;
+  const allowed = verb === "save" ? ["preset"] : ["preset", "name"];
+  for (const k of Object.keys(raw)) {
+    if (!allowed.includes(k))
+      issue2(
+        ctx,
+        `${path42}.${k}`,
+        `Unknown key "${k}" on a preset action. Expected only: ${allowed.join(", ")}`
+      );
+  }
+  if (verb !== "save" && verb !== "delete") {
+    issue2(
+      ctx,
+      `${path42}.preset`,
+      `preset must be "save" or "delete", got ${describeValue(verb)}`
+    );
+    return null;
+  }
+  if (verb === "save") return { preset: "save" };
+  const name = requireString(ctx, path42, raw, "name");
+  return name === null ? null : { preset: "delete", name };
+}
+function themeDefaultArm(ctx, path42, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "themeDefault")
+      issue2(
+        ctx,
+        `${path42}.${k}`,
+        `Unknown key "${k}" on a themeDefault action. Expected only: themeDefault`
+      );
+  }
+  if (raw.themeDefault !== "save") {
+    issue2(
+      ctx,
+      `${path42}.themeDefault`,
+      `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue(raw.themeDefault)}`
+    );
+    return null;
+  }
+  return { themeDefault: "save" };
+}
+var DOCTOR_KEYS = {
+  run: ["doctor"],
+  fix: ["doctor", "check"],
+  mark: ["doctor", "check", "mark"]
+};
+function doctorArm(ctx, path42, raw) {
+  const verb = raw.doctor;
+  const known = typeof verb === "string" && Object.hasOwn(DOCTOR_KEYS, verb);
+  const allowed = known ? DOCTOR_KEYS[verb] : [...new Set(Object.values(DOCTOR_KEYS).flat())];
+  for (const k of Object.keys(raw)) {
+    if (!allowed.includes(k))
+      issue2(
+        ctx,
+        `${path42}.${k}`,
+        `Unknown key "${k}" on a doctor action. Expected only: ${allowed.join(", ")}`
+      );
+  }
+  if (!known) {
+    issue2(
+      ctx,
+      `${path42}.doctor`,
+      `doctor must be ${Object.keys(DOCTOR_KEYS).map((v) => `"${v}"`).join(", ")}, got ${describeValue(verb)}`
+    );
+    return null;
+  }
+  if (verb === "run") return { doctor: "run" };
+  const check = raw.check;
+  const nameable = verb === "mark" ? MARKED_CHECKS : CHECKS;
+  if (typeof check !== "string" || !nameable.some((c) => c.name === check)) {
+    issue2(
+      ctx,
+      `${path42}.check`,
+      `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue(check)}`
+    );
+    return null;
+  }
+  if (verb === "fix") return { doctor: "fix", check };
+  const mark = raw.mark;
+  if (!GLYPH_MARKS.includes(mark)) {
+    issue2(
+      ctx,
+      `${path42}.mark`,
+      `doctor mark must be ${GLYPH_MARKS.map((m) => `"${m}"`).join(" or ")}, got ${describeValue(mark)}`
+    );
+    return null;
+  }
+  return { doctor: "mark", check, mark };
+}
+function slashArm(ctx, path42, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "slash")
+      issue2(
+        ctx,
+        `${path42}.${k}`,
+        `Unknown key "${k}" on a slash action. Expected only: slash`
+      );
+  }
+  const parsed2 = parseSlashLine(raw.slash);
+  if (parsed2.kind === "refused") {
+    issue2(ctx, `${path42}.slash`, parsed2.reason);
+    return null;
+  }
+  return { slash: parsed2.line };
+}
+var RUN_KEYS = ["run", "env", "refreshes"];
+var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function runArm(home) {
+  return (ctx, path42, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (!RUN_KEYS.includes(k))
+        issue2(
+          ctx,
+          `${path42}.${k}`,
+          `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`
+        );
+    }
+    const before = ctx.issues.length;
+    const run3 = raw.run;
+    if (!Array.isArray(run3) || run3.length === 0 || run3.some((item) => typeof item !== "string") || run3[0] === "") {
+      issue2(
+        ctx,
+        `${path42}.run`,
+        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run3)}`
+      );
+    }
+    const env2 = raw.env ?? {};
+    if (!isPlainObject(env2) || Object.entries(env2).some(
+      ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string"
+    )) {
+      issue2(
+        ctx,
+        `${path42}.env`,
+        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env2)}`
+      );
+    }
+    const refreshes = raw.refreshes ?? [];
+    if (!Array.isArray(refreshes) || refreshes.some((name) => typeof name !== "string" || name === "")) {
+      issue2(
+        ctx,
+        `${path42}.refreshes`,
+        `refreshes must list the names of the sources the program writes, got ${describeValue(refreshes)}`
+      );
+    }
+    if (!("dir" in home)) {
+      issue2(
+        ctx,
+        `${path42}.run`,
+        `a run action runs in the directory of the file that declares it, and ${home.text} is no file`
+      );
+    }
+    if (ctx.issues.length > before || !("dir" in home)) return null;
+    return {
+      run: run3,
+      env: env2,
+      refreshes,
+      cwd: home.dir
+    };
+  };
+}
+var RUN_ARM_JSON = {
+  type: "object",
+  properties: {
+    run: { type: "array", items: { type: "string" }, minItems: 1 },
+    env: {
+      type: "object",
+      propertyNames: { pattern: ENV_NAME.source },
+      additionalProperties: { type: "string" }
+    },
+    refreshes: { type: "array", items: { type: "string", minLength: 1 } }
+  },
+  required: ["run"],
+  additionalProperties: false
+};
+function doArm(ctx, path42, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "do")
+      issue2(
+        ctx,
+        `${path42}.${k}`,
+        `Unknown key "${k}" on a do action. Expected only: do`
+      );
+  }
+  const members = raw.do;
+  if (!Array.isArray(members) || members.length < 2 || members.some((m) => typeof m !== "string" || m === "")) {
+    issue2(
+      ctx,
+      `${path42}.do`,
+      `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue(members)}`
+    );
+    return null;
+  }
+  return { do: members };
+}
+function slashFreeString(ctx, path42, field, raw, emptyMessage, slashMessage) {
+  const v = requireString(ctx, path42, raw, field);
+  if (v === null) return null;
+  const at = `${path42}.${field}`;
+  if (v === "") {
+    issue2(ctx, at, emptyMessage);
+    return null;
+  }
+  if (v.includes("/")) {
+    issue2(ctx, at, slashMessage(v));
+    return null;
+  }
+  return v;
+}
+var DISCRIMINATOR_NOUN = {
+  set: "the SessionState key to write",
+  persist: "the config globals field to write"
+};
+function validateDiscriminatorKey(ctx, path42, raw, discriminator) {
+  const noun = DISCRIMINATOR_NOUN[discriminator];
+  const value = slashFreeString(
+    ctx,
+    path42,
+    discriminator,
+    raw,
+    `${discriminator} key must be non-empty (${noun})`,
+    (v) => `${discriminator} key "${v}" contains "/" \u2014 keys must be slash-free`
+  );
+  return value === null ? null : { [discriminator]: value };
+}
+function wireName(discriminator) {
+  return discriminator === "set" ? "set-state" : "set-config";
+}
+var TO_FIELDS_SET = {
+  to: setLiteralSpec("set")
+};
+var TO_FIELDS_PERSIST = {
+  to: setLiteralSpec("persist")
+};
+var FROM_FIELDS_SET = {
+  from: fromSpec("set")
+};
+var FROM_FIELDS_PERSIST = {
+  from: fromSpec("persist")
+};
+var BOUNDED_FIELDS = {
+  min: requireIntSpec(),
+  max: requireIntSpec(),
+  by: requireIntSpec()
+};
+var INT_FIELDS = { int: intMarkerSpec() };
+var CYCLE_FIELDS_SET = {
+  cycle: cycleSpec("set")
+};
+var CYCLE_FIELDS_PERSIST = {
+  cycle: cycleSpec("persist")
+};
+var REMOVE_SEGMENT_FIELDS = {
+  removeSegment: layoutNameSpec("removeSegment")
+};
+var INSERT_SEGMENT_FIELDS = {
+  insertSegment: layoutNameSpec("insertSegment"),
+  anchor: layoutNameSpec("anchor"),
+  relation: relationSpec()
+};
+var INSERT_SEGMENT_FROM_FIELDS = {
+  insertSegmentFrom: fromSpec("persist"),
+  anchor: layoutNameSpec("anchor"),
+  relation: relationSpec()
+};
+var minLessThanMax = {
+  ok: (v) => v.min < v.max,
+  issue: (v) => ({
+    field: "min",
+    message: `min (${v.min}) must be less than max (${v.max})`
+  })
+};
+var byNonZero = {
+  ok: (v) => v.by !== 0,
+  issue: () => ({
+    field: "by",
+    message: `by must be a non-zero integer (the per-click increment; negative steps down)`
+  })
+};
+function valueSourceArm(discriminator, fieldMap, checks = [], detectKeys) {
+  const fullKeys = Object.keys(fieldMap);
+  const detect = detectKeys ?? fullKeys;
+  const keys2 = [discriminator];
+  const inner = (ctx, path42, raw) => fields(ctx, fieldMap, path42, raw);
+  const source = objectJson(fieldMap);
+  return {
+    detect,
+    allowed: [...keys2, ...fullKeys],
+    label: fullKeys.join("/"),
+    json: {
+      type: "object",
+      properties: {
+        ...Object.fromEntries(keys2.map((k) => [k, { type: "string" }])),
+        ...source.properties
+      },
+      required: [...keys2, ...source.required ?? []],
+      additionalProperties: false
+    },
+    parse: checks.length ? refine(inner, ...checks) : inner
+  };
+}
+var SET_ARMS = [
+  valueSourceArm("set", TO_FIELDS_SET),
+  valueSourceArm("set", FROM_FIELDS_SET),
+  valueSourceArm("set", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
+  valueSourceArm("set", INT_FIELDS),
+  valueSourceArm("set", CYCLE_FIELDS_SET)
+];
+var PERSIST_ARMS = [
+  valueSourceArm("persist", TO_FIELDS_PERSIST),
+  valueSourceArm("persist", FROM_FIELDS_PERSIST),
+  valueSourceArm("persist", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
+  valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
+  valueSourceArm("persist", REMOVE_SEGMENT_FIELDS),
+  // [LAW:no-mode-explosion] Both insertSegment arms narrow detectKeys to
+  // their own discriminating field — see valueSourceArm's own comment. They
+  // share "anchor"/"relation" (same position shape, different segment-name
+  // source), so dispatching on the full field set would make EITHER arm
+  // spuriously match an action declaring the other.
+  valueSourceArm("persist", INSERT_SEGMENT_FIELDS, [], ["insertSegment"]),
+  valueSourceArm(
+    "persist",
+    INSERT_SEGMENT_FROM_FIELDS,
+    [],
+    ["insertSegmentFrom"]
+  )
+];
+function valueSourceClauses(discriminator) {
+  const clauses = [
+    `"to" (a literal value)`,
+    `"from" (an option domain \u2014 a registered domain name like "themes"/"endcaps"/"styles", or an inline array of literal values)`,
+    `"min"/"max"/"by" (a bounded step)`
+  ];
+  if (discriminator === "set")
+    clauses.push(`"int" (an unbounded integer cursor)`);
+  clauses.push(`"cycle" (an enumerated domain stepped in order)`);
+  if (discriminator === "persist") {
+    clauses.push(
+      `"removeSegment" (remove a named segment from the layout)`,
+      `"insertSegment"/"anchor"/"relation" (insert a named segment before/after an existing one)`,
+      `"insertSegmentFrom"/"anchor"/"relation" (insert a segment PICKED from an option domain before/after an existing one)`
+    );
+  }
+  return clauses;
+}
+function VALUE_SOURCE_MESSAGE(discriminator) {
+  const clauses = valueSourceClauses(discriminator);
+  const last2 = clauses[clauses.length - 1];
+  const list2 = clauses.length === 1 ? last2 : `${clauses.slice(0, -1).join(", ")}, or ${last2}`;
+  return `a ${discriminator} action declares exactly one value source: ${list2}`;
+}
+function valueSourceAction(ctx, path42, raw, discriminator, arms) {
+  const keys2 = validateDiscriminatorKey(ctx, path42, raw, discriminator);
+  const present = arms.filter((arm3) => arm3.detect.some((k) => k in raw));
+  if (present.length !== 1) {
+    issue2(
+      ctx,
+      path42,
+      `${VALUE_SOURCE_MESSAGE(discriminator)}${present.length > 1 ? ` \u2014 found: ${present.map((a) => a.label).join(", ")}` : ""}`
+    );
+    return null;
+  }
+  const arm2 = present[0];
+  for (const k of Object.keys(raw)) {
+    if (!arm2.allowed.includes(k))
+      issue2(
+        ctx,
+        `${path42}.${k}`,
+        `Unknown key "${k}" on this ${discriminator} action. Expected one of: ${arm2.allowed.join(", ")}`
+      );
+  }
+  const payload = arm2.parse(ctx, path42, raw);
+  return keys2 === null || payload === null ? null : { ...keys2, ...payload };
+}
+function setLiteralSpec(discriminator) {
+  const wire = wireName(discriminator);
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path42, field, raw) => slashFreeString(
+      ctx,
+      path42,
+      field,
+      raw,
+      `${discriminator} value must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`,
+      (v) => `${discriminator} value "${v}" contains "/" \u2014 ${discriminator} values must be slash-free`
+    ) ?? void 0
+  };
+}
+function fromSpec(discriminator) {
+  const wire = wireName(discriminator);
+  return {
+    required: true,
+    json: {
+      anyOf: [
+        { type: "string", minLength: 1 },
+        {
+          type: "array",
+          items: { type: "string", minLength: 1 },
+          minItems: 1,
+          uniqueItems: true
+        }
+      ]
+    },
+    parse: (ctx, path42, field, raw) => {
+      const from = raw[field];
+      const at = `${path42}.${field}`;
+      if (typeof from === "string") {
+        if (from === "") {
+          issue2(ctx, at, `${field} must be a non-empty domain name`);
+          return void 0;
+        }
+        return from;
+      }
+      if (Array.isArray(from) && from.every((m) => typeof m === "string")) {
+        const members = from;
+        if (members.length === 0) {
+          issue2(
+            ctx,
+            at,
+            `${field} must name a domain (a non-empty string) or declare an inline domain (a non-empty array of values)`
+          );
+          return void 0;
+        }
+        if (members.some((m) => m === "")) {
+          issue2(
+            ctx,
+            at,
+            `${field} array members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
+          );
+          return void 0;
+        }
+        const slashed = members.filter((m) => m.includes("/"));
+        if (slashed.length > 0) {
+          issue2(
+            ctx,
+            at,
+            `${field} array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
+          );
+          return void 0;
+        }
+        if (new Set(members).size !== members.length) {
+          issue2(
+            ctx,
+            at,
+            `${field} array members must be unique \u2014 a duplicated value would render the same picker option twice`
+          );
+          return void 0;
+        }
+        return members;
+      }
+      issue2(
+        ctx,
+        at,
+        `${field} must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue(from)}`
+      );
+      return void 0;
+    }
+  };
+}
+function cycleSpec(discriminator) {
+  const wire = wireName(discriminator);
+  return {
+    required: true,
+    json: {
+      type: "array",
+      items: { type: "string", minLength: 1 },
+      minItems: 2,
+      uniqueItems: true
+    },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      const at = `${path42}.${field}`;
+      if (!Array.isArray(v) || v.some((m) => typeof m !== "string")) {
+        issue2(
+          ctx,
+          at,
+          `cycle must be an array of strings (the enumerated values a click steps through), got ${describeType(v)}`
+        );
+        return void 0;
+      }
+      const members = v;
+      if (members.length < 2) {
+        issue2(
+          ctx,
+          at,
+          `cycle needs at least two members (one member has no successor \u2014 use a literal "to")`
+        );
+        return void 0;
+      }
+      const empty2 = members.some((m) => m === "");
+      const slashed = members.filter((m) => m.includes("/"));
+      if (empty2) {
+        issue2(
+          ctx,
+          at,
+          `cycle members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
+        );
+        return void 0;
+      }
+      if (slashed.length > 0) {
+        issue2(
+          ctx,
+          at,
+          `cycle member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
+        );
+        return void 0;
+      }
+      if (new Set(members).size !== members.length) {
+        issue2(
+          ctx,
+          at,
+          `cycle members must be unique \u2014 the successor of a duplicated member is ambiguous`
+        );
+        return void 0;
+      }
+      return members;
+    }
+  };
+}
+function intMarkerSpec() {
+  return {
+    required: true,
+    json: { const: true },
+    parse: (ctx, path42, field, raw) => {
+      if (raw[field] !== true) {
+        issue2(
+          ctx,
+          `${path42}.${field}`,
+          `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue(raw[field])}`
+        );
+        return void 0;
+      }
+      return true;
+    }
+  };
+}
+function layoutNameSpec(field) {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path42, f, raw) => {
+      const v = requireString(ctx, path42, raw, f);
+      if (v === null) return void 0;
+      const at = `${path42}.${f}`;
+      if (v === "") {
+        issue2(ctx, at, `${field} must be non-empty (a segment name)`);
+        return void 0;
+      }
+      if (v.includes("/") || v.includes(":")) {
+        issue2(
+          ctx,
+          at,
+          `${field} "${v}" contains "/" or ":" \u2014 segment names in a layout op must be free of both (the click wire's own delimiter and layout-ops.ts's op-token delimiter)`
+        );
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function relationSpec() {
+  return {
+    required: true,
+    json: { enum: ["before", "after"] },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (v !== "before" && v !== "after") {
+        issue2(
+          ctx,
+          `${path42}.${field}`,
+          `relation must be "before" or "after", got ${describeValue(v)}`
+        );
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function requireIntSpec() {
+  return {
+    required: true,
+    json: { type: "integer" },
+    parse: (ctx, path42, field, raw) => {
+      const v = raw[field];
+      if (typeof v !== "number" || !Number.isInteger(v)) {
+        issue2(
+          ctx,
+          `${path42}.${field}`,
+          `${field} must be an integer, got ${describeValue(v)}`
+        );
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+
+// src/config/loader/styles.ts
+init_globals();
+function endcapsNameMessage(at, name, endcapsAt) {
+  return `${at}: "${name}" is an endcaps shape, not a style \u2014 endcaps were renamed from "style" to "endcaps"; write ${endcapsAt}: "${name}"`;
+}
+var STYLE_SCHEMA = {
+  noun: "style key",
+  fields: {
+    hueShift: optionalNumberSpec(),
+    chromaScale: optionalNumberSpec({ min: 0 }),
+    lightnessScale: optionalNumberSpec(),
+    lightnessShift: optionalNumberSpec()
+  }
+};
+function validateStyles(ctx, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: "styles",
+      message: `styles must be an object mapping style names to adaptation objects, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["styles"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (name === "" || name.includes("/")) {
+      ctx.issues.push({
+        path: `styles.${name}`,
+        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free \u2014 a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
+        line: findKeyLine(ctx.source, ["styles", name])
+      });
+      continue;
+    }
+    if (isStyleEraEndcaps(name)) {
+      ctx.issues.push({
+        path: `styles.${name}`,
+        message: endcapsNameMessage(`styles.${name}`, name, "globals.endcaps"),
+        line: findKeyLine(ctx.source, ["styles", name])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, STYLE_SCHEMA, `styles.${name}`, value);
+    if (parsed2 !== null) out[name] = { ...IDENTITY, ...parsed2 };
+  }
+  return out;
+}
+
+// src/config/loader/presets.ts
+init_globals();
+var presetRootSpec = {
+  required: false,
+  json: { $ref: ROOT_FRAGMENT_REF },
+  parse: (ctx, path42, field, raw) => raw[field] === void 0 ? void 0 : validateRootFragment(ctx, `${path42}.${field}`, raw[field])
+};
+var presetGlobalsSpec = {
+  required: false,
+  json: presetGlobalsJson(),
+  parse: (ctx, path42, field, raw) => raw[field] === void 0 ? void 0 : validatePresetGlobals(ctx, `${path42}.${field}`, raw[field])
+};
+var PRESET_SCHEMA = {
+  noun: "preset key",
+  fields: { root: presetRootSpec, globals: presetGlobalsSpec }
+};
+function validatePresets(ctx, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: "presets",
+      message: `presets must be an object mapping preset names to config fragments, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["presets"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
+      ctx.issues.push({
+        path: `presets.${name}`,
+        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free \u2014 a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
+        line: findKeyLine(ctx.source, ["presets", name])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, PRESET_SCHEMA, `presets.${name}`, value);
+    if (parsed2 !== null) out[name] = parsed2;
+  }
+  return out;
+}
+
+// src/config/loader/helpers.ts
+init_globals();
+function validateHelpers(ctx, raw) {
+  if (raw === void 0) return {};
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: "helpers",
+      message: `helpers must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["helpers"])
+    });
+    return {};
+  }
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const [name, body] of Object.entries(raw)) {
+    if (typeof body !== "string") {
+      ctx.issues.push({
+        path: `helpers.${name}`,
+        message: `helpers.${name} must be a string template body, got ${describeValue(body)}`,
+        line: findKeyLine(ctx.source, ["helpers", name])
+      });
+      continue;
+    }
+    out[name] = body;
+  }
+  return out;
+}
+
+// src/config/loader/cross-ref.ts
+init_globals();
+
+// src/config/loader/unplaced.ts
+init_globals();
+function presenceOf(segments, rendering) {
+  const owners = [...rendering].map(
+    ([ns, definition]) => [ownedBy(ns), definition]
+  );
+  return (name) => {
+    if (isSettingsAnchor(name) || Object.hasOwn(segments, name))
+      return { kind: "declared" };
+    const owner = owners.find(([owns]) => owns(name));
+    if (owner !== void 0) return { kind: "plugin", definition: owner[1] };
+    const scope = scopeOf(name);
+    return scope !== void 0 && scope !== name ? { kind: "absent" } : { kind: "missing" };
+  };
+}
+function reportable(presence2) {
+  return presence2.kind === "plugin" || presence2.kind === "missing";
+}
+function absentPlacement(config2, cells, presence2) {
+  const placed2 = /* @__PURE__ */ new Map();
+  const add2 = (id2, at) => {
+    placed2.set(id2, [...placed2.get(id2) ?? [], at]);
+  };
+  const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
+  const fragments = [
+    config2.root,
+    ...Object.values(config2.presets).flatMap(
+      (p2) => p2.root === void 0 ? [] : [p2.root]
+    )
+  ];
+  for (const tree of fragments.flatMap(trees))
+    for (const node of walkNodes(tree))
+      if (node.kind === "segment") add2(placementId(node), { seg: node.name });
+  for (const cell3 of cells)
+    add2(cell3.id ?? cell3.seg, { seg: cell3.seg, anchor: cell3.anchor });
+  const absent = /* @__PURE__ */ new Set();
+  const standsOnAbsent = (at) => presence2(at.seg).kind === "absent" || at.anchor !== void 0 && absent.has(at.anchor);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [id2, at] of placed2)
+      if (!absent.has(id2) && at.every(standsOnAbsent)) {
+        absent.add(id2);
+        grew = true;
+      }
+  }
+  return (id2) => absent.has(id2);
+}
+function withoutUnplaced(config2) {
+  let removed = 0;
+  const declared = presenceOf(config2.segments, /* @__PURE__ */ new Map());
+  const placed2 = (name) => {
+    const keep2 = declared(name).kind === "declared";
+    if (!keep2) removed += 1;
+    return keep2;
+  };
+  const container = (node) => ({
+    ...node,
+    children: node.children.flatMap((child) => nodes(child))
+  });
+  const nodes = (node) => node.kind === "container" ? [container(node)] : placed2(node.name) ? [mapOpens(node, container)] : [];
+  const tree = (node) => nodes(node)[0] ?? EMPTY_ROW;
+  const root = (r) => ({
+    ...r,
+    rows: Object.fromEntries(
+      Object.entries(r.rows).map(([name, row2]) => [name, tree(row2)])
+    )
+  });
+  const fragment = (f) => isRowsFragment(f) ? root(f) : tree(f);
+  const preset = (p2) => p2.root === void 0 ? p2 : { ...p2, root: fragment(p2.root) };
+  const result = {
+    ...config2,
+    root: root(config2.root),
+    presets: Object.fromEntries(
+      Object.entries(config2.presets).map(([name, p2]) => [name, preset(p2)])
+    )
+  };
+  return removed === 0 ? config2 : result;
+}
+var EMPTY_ROW = {
+  kind: "container",
+  direction: "horizontal",
+  children: []
+};
+
+// src/config/loader/projections.ts
+init_globals();
+
+// src/template-engine/engine.ts
+init_globals();
 
 // node_modules/.pnpm/mobx@7.0.6/node_modules/mobx/dist/mobx.mjs
 init_globals();
@@ -50256,481 +55738,6 @@ if (__MOBX_DEV__ && typeof __MOBX_DEVTOOLS_GLOBAL_HOOK__ === "object") {
   });
 }
 
-// src/var-system/store.ts
-init_globals();
-
-// src/utils/outcome.ts
-init_globals();
-function ok(value) {
-  return { kind: "ok", value };
-}
-var ABSENT2 = { kind: "absent" };
-function failed(reason, failedAt) {
-  return { kind: "failed", reason, failedAt };
-}
-function orElse(outcome, fallback) {
-  return outcome?.kind === "ok" ? outcome.value : fallback;
-}
-var PENDINGS = {
-  unread: Object.freeze({ kind: "pending", why: "unread" }),
-  superseded: Object.freeze({ kind: "pending", why: "superseded" })
-};
-function pendingOf(why2) {
-  return PENDINGS[why2];
-}
-function isPending(value) {
-  return typeof value === "object" && value !== null && value.kind === "pending";
-}
-
-// src/var-system/store.ts
-var unwritten = (value) => isPending(value);
-var BoxNode = class {
-  constructor(name, type3, initial2, clock) {
-    this.name = name;
-    this.type = type3;
-    this.clock = clock;
-    if (!unwritten(initial2)) assertType(name, type3, initial2, "initial value");
-    this.cell = observable.box(initial2, { deep: false });
-    this.lastChangedAt = unwritten(initial2) ? null : clock.now();
-  }
-  name;
-  type;
-  clock;
-  kind = "box";
-  cell;
-  // [LAW:single-enforcer] One write path (`set`) updates both the value and
-  // the timestamp; introspection reads from the same place renderers do.
-  //
-  // It records when the value last CHANGED, which is what debug.ts calls the
-  // node's age and what anyone reading that age is asking (brandon-var-system-
-  // 1tl). Stamping every write instead reported attempts, and reported them most
-  // misleadingly in the one situation where the age is consulted: a source
-  // re-running with no effect.
-  lastChangedAt;
-  // [LAW:types-are-the-program] Not written yet is not a value: it is read as
-  // THE pending signal, which every place a template is evaluated takes as its
-  // own outcome.
-  read() {
-    const value = this.cell.get();
-    if (unwritten(value)) {
-      throw new PendingValueError(
-        this.name,
-        `variable "${this.name}" has no value yet: nothing has written it`
-      );
-    }
-    return value;
-  }
-  // A box written pending is not answered yet again: what its payload holds
-  // is a source that has not answered (src/daemon/render-payload.ts).
-  set(value) {
-    if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
-    if (compareStructural(this.cell.get(), value)) return;
-    this.cell.set(value);
-    this.lastChangedAt = this.clock.now();
-  }
-  lastUpdatedMs() {
-    return this.lastChangedAt;
-  }
-  // The cell as written, pending included: what `stored` reads.
-  stored() {
-    return this.cell.get();
-  }
-};
-var Kept = class {
-  cell;
-  // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
-  // `equals` is what counts as a change: MobX's own comparison unless given.
-  constructor(what, deriver, equals) {
-    this.cell = computed(deriver, {
-      keepAlive: true,
-      ...equals !== void 0 && { equals }
-    });
-    if (typeof this.cell.suspend_ !== "function") {
-      throw new TypeError(
-        `${what}: this MobX's computed has no suspend_; release() cannot unsubscribe it`
-      );
-    }
-    if (typeof this.cell.keepAlive_ !== "boolean") {
-      throw new TypeError(
-        `${what}: this MobX's computed has no keepAlive_ flag; release() cannot lift it`
-      );
-    }
-  }
-  read() {
-    return this.cell.get();
-  }
-  // Unsubscribe from every dependency and drop the cached value. A keepAlive
-  // computed never does this on its own — MobX keeps it subscribed to whatever
-  // it read for as long as those observables live, which for a daemon-wide
-  // observable (the SessionState atom) is the life of the daemon, and that
-  // subscription kept every disposed config's whole store reachable
-  // (brandon-unfiled-3248.t14). MobX offers no public release for a keepAlive
-  // computed, so this lifts the guard its own teardown checks and runs that
-  // teardown. Must run inside an action: the unobservation it cascades is
-  // settled when the outermost batch ends.
-  // [LAW:single-enforcer] exception: two MobX internals (`keepAlive_`,
-  // `suspend_`) are reached here and nowhere else; the constructor refuses a
-  // MobX without them, and test/var-store-dispose.test.ts pins the effect.
-  release() {
-    this.cell.keepAlive_ = false;
-    this.cell.suspend_();
-  }
-};
-var Projected = class {
-  constructor(deriver) {
-    this.deriver = deriver;
-  }
-  deriver;
-  read() {
-    return this.deriver();
-  }
-};
-var ComputedNode = class {
-  constructor(name, type3, deriver) {
-    this.name = name;
-    this.type = type3;
-    this.cell = new Kept(`Variable "${name}"`, () => {
-      const v = deriver();
-      assertType(this.name, this.type, v, "computed result");
-      return v;
-    });
-  }
-  name;
-  type;
-  kind = "computed";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  release() {
-    this.cell.release();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-var ProjectionNode = class {
-  constructor(name, type3, deriver) {
-    this.name = name;
-    this.type = type3;
-    this.cell = new Projected(() => {
-      const v = deriver();
-      assertType(this.name, this.type, v, "projection result");
-      return v;
-    });
-  }
-  name;
-  type;
-  kind = "projection";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-var DocumentCell = class {
-  constructor(name, initial2, clock) {
-    this.name = name;
-    this.clock = clock;
-    this.cell = observable.box(shaped(initial2), { deep: false });
-    this.lastChangedAt = initial2.kind === "pending" ? null : clock.now();
-  }
-  name;
-  clock;
-  kind = "document";
-  cell;
-  lastChangedAt;
-  read() {
-    return this.cell.get();
-  }
-  set(value) {
-    const next = shaped(value);
-    if (sameDocument(this.cell.get(), next)) return;
-    this.cell.set(next);
-    this.lastChangedAt = this.clock.now();
-  }
-  lastUpdatedMs() {
-    return this.lastChangedAt;
-  }
-};
-var DerivedDocument = class {
-  constructor(name, deriver) {
-    this.name = name;
-    this.cell = new Kept(
-      `Variable "${name}"`,
-      () => shaped(deriver()),
-      sameDocument
-    );
-  }
-  name;
-  kind = "document";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  release() {
-    this.cell.release();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-function documentKey(outcome) {
-  return JSON.stringify(outcome);
-}
-function sameDocument(a, b) {
-  return documentKey(a) === documentKey(b);
-}
-function shaped(outcome) {
-  return outcome.kind === "ok" ? { kind: "ok", value: toDocument(outcome.value) } : outcome;
-}
-function assertType(name, declared, value, context) {
-  const actual = typeOf(value);
-  if (actual !== declared) {
-    throw new TypeError(
-      `Variable "${name}": ${context} type ${actual} does not match declared type ${declared}`
-    );
-  }
-}
-var VariableStore = class {
-  // [LAW:one-source-of-truth] `clock` stamps when each box and document last
-  // changed; a child store reads the same one as its parent.
-  constructor(clock, parent = null) {
-    this.clock = clock;
-    this.parent = parent;
-  }
-  clock;
-  parent;
-  // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
-  // observable: a reaction that read a name before its declaration (a cache
-  // key over a variable declared after it) re-runs when it is declared, so
-  // what it sees does not depend on the order the config lists variables in.
-  // `deep: false` keeps each node the object it was declared as.
-  nodes = observable.map(void 0, {
-    deep: false
-  });
-  defineBox(name, type3, initial2) {
-    this.declare(name, new BoxNode(name, type3, initial2, this.clock));
-  }
-  defineDocument(name, initial2) {
-    this.declare(name, new DocumentCell(name, initial2, this.clock));
-  }
-  // A document whose reading the deriver computes from what it reads.
-  defineDerivedDocument(name, deriver) {
-    this.declare(name, new DerivedDocument(name, deriver));
-  }
-  // Computed deriver receives a `read` function that returns the value
-  // of any variable in the store. Calling `read(other)` from inside the
-  // deriver is what registers the dependency with MobX — the deriver's
-  // body is the dep graph.
-  defineComputed(name, type3, deriver) {
-    this.defineDerived(name, type3, "computed", deriver);
-  }
-  defineDerived(name, type3, derivation, deriver) {
-    const reader = (other) => this.read(other);
-    const Node = derivation === "computed" ? ComputedNode : ProjectionNode;
-    this.declare(name, new Node(name, type3, () => deriver(reader)));
-  }
-  // A derived value of this store that is no variable — a template a draw
-  // evaluates (src/dsl/parts.ts) — held as a variable's would be: kept until
-  // what it read changes, or derived at every read, and released with them.
-  derive(name, derivation, deriver) {
-    this.refuseDisposed(`Derived value "${name}"`);
-    if (derivation === "projection") return new Projected(deriver);
-    const kept = new Kept(`Derived value "${name}"`, deriver);
-    this.kept.push(kept);
-    return kept;
-  }
-  kept = [];
-  read(name) {
-    return this.requireVar(name).read();
-  }
-  readDocument(name) {
-    const node = this.requireNode(name);
-    if (node.kind !== "document") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a document`
-      );
-    }
-    return node.read();
-  }
-  // A written node's value as stored, pending included and nothing
-  // serialized: a box's value or a document's reading. Read in a reaction, it
-  // moves exactly when the node is written, which its own compare decides.
-  stored(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") return node.read();
-    if (node.kind !== "box") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a written node`
-      );
-    }
-    return node.stored();
-  }
-  setDocument(name, value) {
-    const node = this.requireOwn(name);
-    if (!(node instanceof DocumentCell)) {
-      throw new TypeError(
-        node.kind === "document" ? `Variable "${name}" is a derived document: what it reads decides it, and nothing writes it` : `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`
-      );
-    }
-    runInAction(() => node.set(value));
-  }
-  setBox(name, value) {
-    const node = this.requireOwn(name);
-    if (node.kind !== "box") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a box (use defineBox to create a settable variable)`
-      );
-    }
-    runInAction(() => node.set(value));
-  }
-  // Wrap multi-variable updates so dependents only invalidate once per
-  // batch. Used by the render path to push a whole input payload before
-  // any computed re-evaluates.
-  runInAction(fn) {
-    runInAction(fn);
-  }
-  has(name) {
-    return this.nodes.has(name) || (this.parent?.has(name) ?? false);
-  }
-  getType(name) {
-    return this.requireVar(name).type;
-  }
-  getKind(name) {
-    return this.requireNode(name).kind;
-  }
-  // [LAW:one-source-of-truth] A string that changes exactly when the node's
-  // value does — the ONE spelling a change-driven reaction (a `depends_on`
-  // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar — or pending, while the node has no value yet.
-  // Structural for documents: every stored document has sorted keys
-  // (toDocument), so a rescan yielding the same content in another key order
-  // is not a change. A failure is a key like any other, never a failed
-  // reading: a dependant re-reads when its dependency starts or stops failing.
-  changeKey(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") {
-      const doc = node.read();
-      return doc.kind === "pending" ? doc : ok(documentKey(doc));
-    }
-    try {
-      return ok(String(node.read()));
-    } catch (e) {
-      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-  // [LAW:types-are-the-program] Introspection (src/daemon/debug.ts) needs
-  // the whole node — type, kind, lastUpdatedMs — in one lookup, but
-  // returning the BoxNode directly would leak `.set` structurally even
-  // though VarNode does not advertise it. The returned wrapper is a fresh
-  // object exposing only the VarNode surface — `.set` is unreachable at
-  // any level (no structural escape, no plain-JS reach-through). The
-  // mutation path remains gated behind `setBox`, which wraps in
-  // runInAction to satisfy MobX strict-mode.
-  //
-  // [LAW:single-enforcer] One requireNode call per consumer-row — the
-  // round-1 dedup fix in introspectVars relies on the caller getting both
-  // type/kind and a read() in one go without paying for a second
-  // requireNode. The wrapper preserves that.
-  getNode(name) {
-    const node = this.requireNode(name);
-    return node.kind === "document" ? {
-      name: node.name,
-      kind: node.kind,
-      read: () => node.read(),
-      lastUpdatedMs: () => node.lastUpdatedMs()
-    } : {
-      name: node.name,
-      type: node.type,
-      kind: node.kind,
-      read: () => node.read(),
-      lastUpdatedMs: () => node.lastUpdatedMs()
-    };
-  }
-  names() {
-    return [...this.parent?.names() ?? [], ...this.nodes.keys()];
-  }
-  // Release every computed's subscriptions, so nothing outliving this store
-  // (the daemon-wide SessionState atom) keeps it reachable. The store's own
-  // boxes and documents die with it; only the computeds hold references
-  // outward. Reads after dispose still answer — a released computed recomputes
-  // uncached, and outside a batch subscribes to nothing (inside one, MobX
-  // tracks it for the batch and unobserves again as the batch ends) — so a
-  // late reader cannot resubscribe the store to the world for good. A
-  // declaration after dispose would: it would mint a keepAlive computed with
-  // no release to come, so `declare` and `derive` refuse it. Returns how many computeds it
-  // released, the fact the caller's log line carries (0 on a second call). One action, so the
-  // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
-  // called by SourceRegistry.dispose, the one teardown of everything a config
-  // holds.
-  dispose() {
-    if (this.disposed) return 0;
-    this.disposed = true;
-    let released = 0;
-    runInAction(() => {
-      for (const node of this.nodes.values()) {
-        if (node instanceof ComputedNode || node instanceof DerivedDocument) {
-          node.release();
-          released++;
-        }
-      }
-      for (const kept of this.kept) kept.release();
-    });
-    return released + this.kept.length;
-  }
-  disposed = false;
-  requireNode(name) {
-    const node = this.nodes.get(name) ?? this.parent?.requireNode(name);
-    if (!node) throw new ReferenceError(`Unknown variable "${name}"`);
-    return node;
-  }
-  // [LAW:single-enforcer] The one door a write takes: a node of this store.
-  // A view writing its directory's node would write every session's value.
-  requireOwn(name) {
-    const node = this.nodes.get(name);
-    if (node !== void 0) return node;
-    if (this.parent?.has(name)) {
-      throw new Error(
-        `Variable "${name}" lives in the directory's store; a session's view cannot write it`
-      );
-    }
-    throw new ReferenceError(`Unknown variable "${name}"`);
-  }
-  // [LAW:parse-dont-validate] The scalar reads (`read`, `getType`) demand a
-  // VarNode; a document reached through them is a caller asking a namespace
-  // for a scalar, said so by name rather than coerced to text.
-  requireVar(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") {
-      throw new TypeError(
-        `Variable "${name}" is a document; read its fields by path (.${name}.<field>)`
-      );
-    }
-    return node;
-  }
-  // [LAW:no-silent-failure] A computed declared after dispose has no release
-  // to come: it would subscribe to the world and hold this store exactly as
-  // before brandon-unfiled-3248.t14.
-  refuseDisposed(what) {
-    if (this.disposed) {
-      throw new Error(`${what}: cannot declare on a disposed store`);
-    }
-  }
-  declare(name, node) {
-    this.refuseDisposed(`Variable "${name}"`);
-    if (this.has(name)) {
-      throw new Error(`Variable "${name}" is already declared`);
-    }
-    runInAction(() => this.nodes.set(name, node));
-  }
-};
-
-// src/template-engine/engine.ts
-init_globals();
-
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
 init_globals();
 
@@ -51507,7960 +56514,6 @@ function createCcCandybarEngine(opts) {
   });
 }
 
-// src/template-engine/scope.ts
-init_globals();
-function buildScope(store) {
-  const names = new Set(store.names());
-  return makeProxy(store, names, "");
-}
-function makeProxy(store, names, prefix) {
-  return new Proxy(/* @__PURE__ */ Object.create(null), {
-    has(_, key) {
-      if (typeof key !== "string") return false;
-      const fullKey = prefix ? `${prefix}.${key}` : key;
-      if (names.has(fullKey)) return !absentDocument(store, fullKey);
-      const nsPrefix = `${fullKey}.`;
-      for (const n of names) {
-        if (n.startsWith(nsPrefix)) return true;
-      }
-      return false;
-    },
-    get(_, key) {
-      if (typeof key !== "string") return void 0;
-      const fullKey = prefix ? `${prefix}.${key}` : key;
-      if (names.has(fullKey)) {
-        if (store.getKind(fullKey) !== "document") return store.read(fullKey);
-        const doc = store.readDocument(fullKey);
-        return doc.kind === "absent" ? void 0 : unwrapDocument(fullKey, doc);
-      }
-      const nsPrefix = `${fullKey}.`;
-      for (const n of names) {
-        if (n.startsWith(nsPrefix)) {
-          return makeProxy(store, names, fullKey);
-        }
-      }
-      return void 0;
-    }
-  });
-}
-function placementScope(scope, settings) {
-  return new Proxy(scope, {
-    has: (target, key) => key === "settings" || Reflect.has(target, key),
-    get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
-  });
-}
-function absentDocument(store, name) {
-  return store.getKind(name) === "document" && store.readDocument(name).kind === "absent";
-}
-function unwrapDocument(name, doc) {
-  switch (doc.kind) {
-    case "ok":
-      return doc.value;
-    case "pending":
-      throw new PendingValueError(
-        name,
-        `variable "${name}" has no value yet: its source has not completed a scan`
-      );
-    case "failed":
-      throw new Error(`variable "${name}": ${doc.reason}`);
-  }
-}
-
-// src/daemon/session-id.ts
-init_globals();
-var SESSION_ID_MAX_BYTES = 250;
-function parseSessionId(raw) {
-  const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
-  return problem === null ? { ok: true, id: raw } : { ok: false, problem };
-}
-function sessionKeyed(record2, refused) {
-  const keyed = /* @__PURE__ */ new Map();
-  for (const [key, value] of Object.entries(record2)) {
-    const id2 = parseSessionId(key);
-    if (id2.ok) keyed.set(id2.id, value);
-    else refused(key, id2.problem);
-  }
-  return keyed;
-}
-
-// src/utils/holds.ts
-init_globals();
-var Holds = class {
-  held = /* @__PURE__ */ new Map();
-  // The keys the declaration in progress has taken, and how many of them it
-  // acquired.
-  declaring = null;
-  closed = false;
-  // `acquire` runs only for an entry this home does not hold now.
-  take(key, acquire) {
-    if (this.closed) throw new Error(`hold taken after close: ${key}`);
-    this.declaring?.taken.add(key);
-    if (this.held.has(key)) return;
-    this.held.set(key, acquire());
-    if (this.declaring !== null) this.declaring.acquired++;
-  }
-  // [LAW:no-ambient-temporal-coupling] One declaration: `body` takes every
-  // hold the home's draws read, and each hold it did not take is released
-  // once it returns, so the home holds exactly what it declared. Returns what
-  // the body answered, and how many holds it acquired and released.
-  declare(body) {
-    if (this.declaring !== null) throw new Error("declaration within one");
-    const declaring = { taken: /* @__PURE__ */ new Set(), acquired: 0 };
-    this.declaring = declaring;
-    let result;
-    try {
-      result = body();
-    } finally {
-      this.declaring = null;
-    }
-    let released = 0;
-    for (const [key, release4] of this.held) {
-      if (declaring.taken.has(key)) continue;
-      this.held.delete(key);
-      release4();
-      released++;
-    }
-    return { result, acquired: declaring.acquired, released };
-  }
-  // Releases every hold and refuses new ones: the home is gone.
-  close() {
-    this.closed = true;
-    const count = this.held.size;
-    for (const release4 of this.held.values()) release4();
-    this.held.clear();
-    return count;
-  }
-  get size() {
-    return this.held.size;
-  }
-};
-
-// src/var-system/source-runs.ts
-init_globals();
-
-// site/shims/crypto.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer3.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer3.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i) => byte === b[i]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
-// site/shims/fs-promises.ts
-init_globals();
-var import_memfs2 = __toESM(require_lib8(), 1);
-var p = import_memfs2.fs.promises;
-var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
-
-// src/daemon/cache/watchers.ts
-init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
-
-// src/utils/logfmt.ts
-init_globals();
-var BARE = /^[^\s"=\\]+$/;
-var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
-var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
-
-// src/utils/atomic-write.ts
-init_globals();
-var import_node_path2 = __toESM(require_path_browserify(), 1);
-function writeAtomic(at, text4, mode) {
-  const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path2.default.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
-  try {
-    fs_default.writeFileSync(
-      tmp,
-      text4,
-      fileMode === void 0 ? {} : { mode: fileMode }
-    );
-    fs_default.renameSync(tmp, file);
-  } catch (e) {
-    fs_default.rmSync(tmp, { force: true });
-    throw e;
-  }
-}
-function resolvedTarget(at) {
-  return linkChain(at).at(-1);
-}
-function linkChain(at) {
-  const { hops, stopped: stopped2 } = walkLinks(at);
-  if (stopped2 !== null) throw stopped2;
-  return hops;
-}
-function walkLinks(at) {
-  const hops = [at];
-  try {
-    for (let n = 0; n < MAX_LINK_HOPS; n++) {
-      const next = linkTarget(hops[hops.length - 1]);
-      if (next === null) return { hops, stopped: null };
-      hops.push(next);
-    }
-    return {
-      hops,
-      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
-    };
-  } catch (e) {
-    return { hops, stopped: e };
-  }
-}
-function linkTarget(file) {
-  try {
-    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path2.default.resolve(
-      fs_default.realpathSync(import_node_path2.default.dirname(file)),
-      fs_default.readlinkSync(file)
-    );
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return null;
-    throw e;
-  }
-}
-var MAX_LINK_HOPS = 40;
-
-// src/utils/folder-identity.ts
-init_globals();
-var statIdentity = (folder) => {
-  try {
-    const st = fs_default.statSync(folder, { bigint: true });
-    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
-  } catch (e) {
-    const code = e.code;
-    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
-    throw e;
-  }
-};
-var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
-var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
-var boundOf = (folder) => {
-  try {
-    return statIdentity(folder);
-  } catch (e) {
-    return { unreadable: e.code ?? String(e) };
-  }
-};
-var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
-var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
-
-// src/utils/watch-target.ts
-init_globals();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
-function nearestWatchTarget(candidate) {
-  let name = import_node_path3.default.basename(candidate);
-  let dir = import_node_path3.default.dirname(candidate);
-  for (; ; ) {
-    const real = canonicalDirectory(dir);
-    if (real !== null)
-      return { dir: real, name, leaf: dir === import_node_path3.default.dirname(candidate) };
-    name = import_node_path3.default.basename(dir);
-    dir = import_node_path3.default.dirname(dir);
-  }
-}
-function canonicalDirectory(p2) {
-  try {
-    return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync(p2) : null;
-  } catch {
-    return null;
-  }
-}
-
-// src/daemon/cache/watchers.ts
-var defaultLogger = (_level, message) => debug(message);
-var DEBOUNCE_MS = 50;
-function watchTargetsOf(paths2) {
-  const unresolved = [];
-  let reached = true;
-  const byDir = /* @__PURE__ */ new Map();
-  for (const at of paths2.named) {
-    const { hops, stopped: stopped2 } = walkLinks(at);
-    if (stopped2 !== null)
-      unresolved.push({ path: at, reason: stopped2.message });
-    for (const hop of hops) {
-      const { dir, name, leaf } = nearestWatchTarget(hop);
-      reached &&= leaf;
-      const names = byDir.has(dir) ? byDir.get(dir) : /* @__PURE__ */ new Set();
-      names?.add(name);
-      byDir.set(dir, names);
-    }
-  }
-  for (const dir of paths2.whole.map(canonicalDirectory))
-    if (dir !== null) byDir.set(dir, null);
-  const targets = {
-    dirs: [...byDir.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
-      ([dirPath, names]) => names === null ? { path: dirPath } : { path: dirPath, filenames: [...names].sort() }
-    )
-  };
-  const bound = new Map(
-    targets.dirs.map((d) => {
-      const at = boundOf(d.path);
-      return [d.path, bindsFolder(at) ? boundKey(at) : null];
-    })
-  );
-  return {
-    key: JSON.stringify([targets, [...bound]]),
-    targets,
-    unbound: [...bound.values()].includes(null),
-    bound,
-    reached,
-    unresolved
-  };
-}
-function watchFault(label2, watch2, beyond) {
-  const reasons = [
-    ...watch2.derived.unresolved.map(
-      // Every reason names the path it stopped at, the kernel's and the loop's.
-      (u) => `cannot follow a link chain \u2014 ${u.reason}`
-    ),
-    ...watch2.held.handle.deaf.map(
-      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
-    ),
-    ...beyond === null ? [] : [beyond]
-  ];
-  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
-}
-function folded(window2, next) {
-  if (next.kind === "failed") return next;
-  if (window2.kind !== "changed") return window2;
-  if (next.kind === "unknown") return next;
-  for (const p2 of next.paths) window2.paths.add(p2);
-  return window2;
-}
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path4.default.join(dir, filename)]) };
-var failedOf = (d) => ({
-  kind: "failed",
-  reason: `${d.path}: ${d.reason}`
-});
-var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
-var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
-var WatcherRegistry = class {
-  slots = /* @__PURE__ */ new Map();
-  dirs = /* @__PURE__ */ new Map();
-  counters;
-  logger;
-  clock;
-  closed = false;
-  constructor(opts) {
-    this.clock = opts.clock;
-    this.counters = opts.counters;
-    this.logger = opts.logger ?? defaultLogger;
-  }
-  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
-  // holder of one slot, and each holder's callback hears every window.
-  // `targets` from the first acquire wins; subsequent acquires keep the
-  // original target set (consumers must use a fresh key if they need different
-  // targets). A consumer that needs no more than "something changed" ignores
-  // the invalidation's value.
-  acquire(key, targets, onInvalidate) {
-    if (this.closed) {
-      return {
-        release: () => {
-        },
-        deaf: targets.dirs.map((d) => ({
-          kind: "refused",
-          path: d.path,
-          reason: "the watcher registry is closed"
-        }))
-      };
-    }
-    const shared = this.slots.get(key);
-    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
-    const slot = shared ?? this.opened(key, targets);
-    const holder = { onInvalidate };
-    slot.holders.add(holder);
-    return this.makeHandle(slot, holder);
-  }
-  // [LAW:single-enforcer] The one rule for a watch whose targets can move: a
-  // consumer derives its spec from disk again and the held watch follows it
-  // exactly when the key differs. The same key is the same directories, kept
-  // as they are; a new key acquires the spec's watch and then releases the
-  // held one, so a directory both name keeps its OS handle through the move.
-  // Nothing held yet is a first acquire, which is a rebind from nothing.
-  //
-  // A spec with a directory that binds nothing yet (gone, or a mount's
-  // transient fault) keeps the watch held: a derive that lands between a
-  // directory's removal and its making again would otherwise trade a watch
-  // FSEvents keeps on its path for a slot the OS refuses. The next derive
-  // that finds the directory there rebinds, since its key differs.
-  //
-  // [LAW:no-ambient-temporal-coupling] A kept watch retries nothing: its deaf
-  // directories are the period's to open again (`judge`). A follow that
-  // retried would answer the failed window its own handle's error told, and
-  // a handle that errors after every open would retry itself at the debounce
-  // cadence.
-  follow(held, spec, onInvalidate) {
-    if (held !== null && (held.key === spec.key || spec.unbound))
-      return { watch: held, move: "kept" };
-    const watch2 = {
-      key: spec.key,
-      handle: this.acquire(spec.key, spec.targets, onInvalidate)
-    };
-    held?.handle.release();
-    return { watch: watch2, move: "rebound" };
-  }
-  opened(key, targets) {
-    const slot = {
-      key,
-      listeners: [],
-      holders: /* @__PURE__ */ new Set(),
-      debounce: null
-    };
-    for (const target of targets.dirs) {
-      const dir = this.dirFor(target);
-      const listener = {
-        slot,
-        dir,
-        filter: target.filenames ? new Set(target.filenames) : null
-      };
-      dir.listeners.add(listener);
-      slot.listeners.push(listener);
-    }
-    this.slots.set(key, slot);
-    if (this.counters) {
-      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
-        this.counters.watchersOpened++;
-      else this.counters.watchRefusals++;
-    }
-    return slot;
-  }
-  // The directory watch a new slot's target joins: the one already open
-  // there, judged, or a new one.
-  dirFor(target) {
-    const id2 = dirId(target);
-    const existing = this.dirs.get(id2);
-    if (existing !== void 0) {
-      this.judged(existing, "acquire");
-      return existing;
-    }
-    const where = { path: target.path, recursive: target.recursive === true };
-    const dir = {
-      id: id2,
-      ...where,
-      listeners: /* @__PURE__ */ new Set(),
-      state: this.open(where, () => dir, "acquire", null)
-    };
-    this.dirs.set(id2, dir);
-    return dir;
-  }
-  // [LAW:single-enforcer] The one rule that a directory watch names the
-  // folder at its path, applied whenever a holder acquires the directory,
-  // whenever an event says the folder there moved, and on every period
-  // (`judge`). A deaf one is opened again; a listening one whose path holds
-  // another folder than the one it bound (removed and made again, or a strict
-  // ancestor renamed away and another tree put at its path: inotify hears the
-  // old inode, and the bound folder is what an event naming the directory is
-  // judged against) is reopened in place. A path that binds nothing right now
-  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
-  // on the path hears the folder come back.
-  judged(dir, cause) {
-    if (dir.state.kind === "deaf") {
-      this.reopen(dir, cause);
-      return;
-    }
-    const now2 = boundOf(dir.path);
-    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
-      this.reopen(dir, "another folder is at its path");
-  }
-  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
-  // the disk, on the period the file-event delivery owner keeps (the daemon
-  // wires it). It is the one trigger for a replacement no event reaches a
-  // handle for (a strict ancestor renamed away and another tree put at its
-  // path: inotify reports a directory's own removal or self-move, never its
-  // parent's), and the retry of a directory the OS refused or whose handle
-  // errored while no holder newly acquires it. A directory staying as it is
-  // costs one stat, or one refused open, and tells nothing.
-  judge() {
-    for (const dir of this.dirs.values()) this.judged(dir, "period");
-  }
-  // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, it hears the fault. Listening again, it hears an
-  // `unknown` window: whatever changed while the directory was deaf or bound
-  // to another folder went unheard, and a holder that re-derives on it reports
-  // its fault cleared. Deaf staying deaf is no change and tells nothing.
-  reopen(dir, cause) {
-    const was = dir.state;
-    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    dir.state = this.open(dir, () => dir, cause, was);
-    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening")
-      this.tell(dir, failedOf(dir.state.deafness));
-  }
-  // `dirOf` names the watch the handle belongs to; its callbacks run only
-  // after the open returns, once the watch holds the state returned here.
-  open(where, dirOf, cause, was) {
-    const at = where.path;
-    const bound = boundKey(boundOf(at));
-    try {
-      fs_default.opendirSync(at).closeSync();
-      const handle = fs_default.watch(
-        at,
-        { persistent: false, recursive: where.recursive },
-        (_event, changed) => this.heard(dirOf(), handle, changed)
-      );
-      handle.on("error", (e) => {
-        this.logger("warn", `watcher error ${at}: ${e.message}`);
-        if (this.counters) this.counters.watchErrors++;
-        const dir = dirOf();
-        if (!heldBy(dir.state, handle)) return;
-        this.closeHandle(at, handle, "error");
-        const deafness = {
-          kind: "failed",
-          path: at,
-          reason: e.message
-        };
-        dir.state = { kind: "deaf", deafness };
-        this.tell(dir, failedOf(deafness));
-      });
-      if (this.counters) this.counters.dirWatchesOpened++;
-      this.logger(
-        "info",
-        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
-      );
-      return { kind: "listening", handle, bound };
-    } catch (e) {
-      const reason = e.message;
-      const same2 = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
-      if (!same2) this.logger("warn", `watch failed ${at}: ${reason}`);
-      return {
-        kind: "deaf",
-        deafness: { kind: "refused", path: at, reason }
-      };
-    }
-  }
-  // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
-  // it lists, an unnamed event (the OS may be reporting the filtered child),
-  // or the directory's own name while the folder at the path is no longer the
-  // one this handle bound (its removal or replacement, which macOS reports as
-  // a change and Linux as a rename) reaches the slot. The same name with the
-  // folder unchanged is macOS reporting a child that came or went, or a chmod,
-  // and is not. Judged once per event, for every listener. A move is then
-  // judged, so a handle never stays bound to a folder no longer at its path
-  // and every later event naming the directory is judged against the folder
-  // there.
-  heard(dir, handle, changed) {
-    const { state } = dir;
-    if (!heldBy(state, handle)) return;
-    const moved = changed === import_node_path4.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
-    for (const { slot, filter } of dir.listeners) {
-      if (filter === null || changed === null || filter.has(changed) || moved)
-        this.fire(slot, namedOf(dir.path, changed));
-    }
-    if (moved) this.judged(dir, "moved");
-  }
-  tell(dir, invalidation) {
-    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
-  }
-  fire(slot, invalidation) {
-    if (slot.debounce !== null) {
-      slot.debounce.window = folded(slot.debounce.window, invalidation);
-      return;
-    }
-    const debounce = {
-      window: invalidation,
-      cancel: this.clock.after(
-        DEBOUNCE_MS,
-        () => {
-          slot.debounce = null;
-          for (const holder of slot.holders) {
-            try {
-              holder.onInvalidate(debounce.window);
-            } catch (e) {
-              this.logger(
-                "warn",
-                `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
-              );
-            }
-          }
-        },
-        { unref: true }
-      )
-    };
-    slot.debounce = debounce;
-  }
-  makeHandle(slot, holder) {
-    return {
-      get deaf() {
-        return slot.listeners.flatMap(
-          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
-        );
-      },
-      release: () => {
-        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
-        if (this.slots.get(slot.key) !== slot) return;
-        this.closeSlot(slot, "last release");
-        this.slots.delete(slot.key);
-      }
-    };
-  }
-  closeHandle(at, handle, cause) {
-    try {
-      handle.close();
-    } catch {
-    }
-    if (this.counters) this.counters.dirWatchesClosed++;
-    this.logger(
-      "info",
-      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
-    );
-  }
-  // A directory watch closes with the last slot on it.
-  closeSlot(slot, cause) {
-    if (slot.debounce !== null) {
-      slot.debounce.cancel();
-      slot.debounce = null;
-    }
-    for (const listener of slot.listeners) {
-      const { dir } = listener;
-      dir.listeners.delete(listener);
-      if (dir.listeners.size > 0) continue;
-      if (dir.state.kind === "listening")
-        this.closeHandle(dir.path, dir.state.handle, cause);
-      this.dirs.delete(dir.id);
-    }
-    if (this.counters) this.counters.watchersClosed++;
-  }
-  // The slots held now.
-  size() {
-    return this.slots.size;
-  }
-  // The OS directory watches open now.
-  dirWatches() {
-    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
-  }
-  // Every directory a held watch targets.
-  watchedDirs() {
-    return [...this.dirs.values()].map((d) => d.path);
-  }
-  closeAll() {
-    this.closed = true;
-    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
-    this.slots.clear();
-  }
-};
-
-// src/daemon/cache/file-events.ts
-init_globals();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
-var PROBE_EVERY_MS = 3e4;
-var STALL_AFTER = 2;
-var PROBE_FILE = "probe";
-var NO_FILE_EVENTS = {
-  delivery: () => ({
-    kind: "unmeasured",
-    since: 0,
-    reason: "outside the daemon",
-    missedSince: null
-  }),
-  subscribe: () => () => {
-  }
-};
-var iso = (at) => new Date(at).toISOString();
-var label = (d) => d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
-var FileEventDelivery = class {
-  current;
-  instrument = { kind: "idle" };
-  listeners = /* @__PURE__ */ new Set();
-  stalls = 0;
-  catchUps = 0;
-  probes = 0;
-  probeFailures = 0;
-  watchers;
-  logger;
-  identityOf;
-  clock;
-  constructor(opts) {
-    this.watchers = opts.watchers;
-    this.logger = opts.logger;
-    this.clock = opts.clock;
-    this.identityOf = opts.identityOf ?? statIdentity;
-    this.current = {
-      kind: "unmeasured",
-      since: this.clock.now(),
-      reason: "not started",
-      missedSince: null
-    };
-  }
-  delivery() {
-    return this.current;
-  }
-  subscribe(listener) {
-    this.listeners.add(listener);
-    return () => void this.listeners.delete(listener);
-  }
-  // Only the daemon starts the owner, once it has won its socket: it makes
-  // the folder, opens the one watch, and arms the period.
-  start(folder) {
-    if (this.instrument.kind !== "idle") {
-      throw new Error("file events: the owner was started twice");
-    }
-    const stopPeriod = this.clock.every(
-      PROBE_EVERY_MS,
-      () => void this.tick(),
-      {
-        unref: true
-      }
-    );
-    let identity2;
-    try {
-      fs_default.mkdirSync(folder, { recursive: true });
-      identity2 = this.identityOf(folder);
-    } catch (e) {
-      this.end(
-        stopPeriod,
-        `the probe folder could not be made: ${e.message}`
-      );
-      return;
-    }
-    if (identity2 === "gone") {
-      this.end(stopPeriod, "the probe folder was removed as it was made");
-      return;
-    }
-    const probing = {
-      kind: "probing",
-      folder,
-      identity: identity2,
-      stopPeriod,
-      // [LAW:single-enforcer] The only acquirer of this registry key.
-      handle: this.watchers.acquire(
-        `file-events:${folder}`,
-        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
-        (heard) => this.heard(probing, heard)
-      )
-    };
-    this.instrument = probing;
-    this.logger("info", `file events probing folder=${valueOf(folder)}`);
-    const [refusal] = probing.handle.deaf;
-    if (refusal !== void 0) {
-      this.end(
-        stopPeriod,
-        `the OS refused the probe folder's watch: ${refusal.reason}`
-      );
-      return;
-    }
-    this.move({ kind: "delivering", unreported: [], missedSince: null });
-    void this.tick();
-  }
-  stats() {
-    return {
-      delivery: this.current,
-      stalls: this.stalls,
-      catchUps: this.catchUps,
-      probes: this.probes,
-      probeFailures: this.probeFailures
-    };
-  }
-  close() {
-    const inst = this.instrument;
-    this.instrument = { kind: "idle" };
-    this.listeners.clear();
-    switch (inst.kind) {
-      case "probing":
-        inst.handle.release();
-        inst.stopPeriod();
-        return;
-      case "ended":
-        inst.stopPeriod();
-        return;
-      case "idle":
-        return;
-    }
-  }
-  // [LAW:dataflow-not-control-flow] The same steps at the start and every
-  // period after: tell subscribers the period passed; judge the probe folder
-  // against the one the watch opened on, first, so a folder replaced at its
-  // path never reads as a stall; judge the probes still unreported; write the
-  // next one.
-  async tick() {
-    this.notify({ kind: "period" });
-    const inst = this.instrument;
-    if (inst.kind !== "probing") return;
-    let now2;
-    try {
-      now2 = this.identityOf(inst.folder);
-    } catch (e) {
-      this.end(
-        inst.stopPeriod,
-        `the probe folder cannot be read: ${e.message}`
-      );
-      return;
-    }
-    if (now2 === "gone") {
-      this.end(inst.stopPeriod, "the probe folder was removed");
-      return;
-    }
-    if (!sameIdentity(now2, inst.identity)) {
-      this.end(inst.stopPeriod, "the probe folder was replaced");
-      return;
-    }
-    const d = this.current;
-    if (d.kind === "delivering" && d.unreported.length >= STALL_AFTER) {
-      this.stalls++;
-      this.move({
-        kind: "stalled",
-        missedSince: d.missedSince ?? d.unreported[0]
-      });
-    }
-    await this.probe(inst);
-  }
-  // A delivering watch awaits the probe; a stalled one awaits none in
-  // particular, since any report recovers it. A write that lands while
-  // unmeasured measures again, awaiting that probe, so a transient failure
-  // (a full disk) measures once it clears. A write that fails is unmeasured
-  // with its error: it tests no watch. A probe still in flight when the
-  // instrument ends or closes judges nothing.
-  async probe(inst) {
-    const at = this.clock.now();
-    const before = this.current;
-    if (before.kind === "delivering") {
-      this.current = { ...before, unreported: [...before.unreported, at] };
-    }
-    try {
-      await fs_default.promises.writeFile(
-        import_node_path5.default.join(inst.folder, PROBE_FILE),
-        String(at)
-      );
-    } catch (e) {
-      this.probeFailures++;
-      const d2 = this.current;
-      if (this.instrument !== inst || d2.kind === "unmeasured") return;
-      this.move({
-        kind: "unmeasured",
-        since: at,
-        reason: `the probe could not be written: ${e.message}`,
-        missedSince: d2.missedSince ?? at
-      });
-      return;
-    }
-    this.probes++;
-    const d = this.current;
-    if (this.instrument !== inst || d.kind !== "unmeasured") return;
-    this.move({
-      kind: "delivering",
-      unreported: [at],
-      missedSince: d.missedSince
-    });
-  }
-  // [LAW:no-silent-failure] The watch's own failure ends the instrument: the
-  // OS refuses an immediate retry the way it refused the first (limits,
-  // permissions). Anything else it reports proves delivery.
-  heard(inst, heard) {
-    if (this.instrument !== inst) return;
-    if (heard.kind === "failed") {
-      this.end(
-        inst.stopPeriod,
-        `the probe folder's watch failed: ${heard.reason}`
-      );
-      return;
-    }
-    const d = this.current;
-    const delivering = {
-      kind: "delivering",
-      unreported: [],
-      missedSince: null
-    };
-    if (d.missedSince === null) {
-      this.move(delivering);
-      return;
-    }
-    this.current = delivering;
-    this.catchUps++;
-    this.logger(
-      "info",
-      `file events resumed since=${iso(d.missedSince)} missed=${this.clock.now() - d.missedSince}ms from=${d.kind}`
-    );
-    this.notify({ kind: "caught-up", since: d.missedSince });
-  }
-  // [LAW:no-silent-failure] An ended instrument holds no watch and never
-  // measures again, so whatever ended it, only a restart can.
-  end(stopPeriod, reason) {
-    const inst = this.instrument;
-    if (inst.kind === "probing") inst.handle.release();
-    this.instrument = { kind: "ended", stopPeriod };
-    const at = this.clock.now();
-    this.move({
-      kind: "unmeasured",
-      since: at,
-      reason: `${reason}; restart the daemon`,
-      missedSince: this.current.missedSince ?? at
-    });
-  }
-  // [LAW:nothing-unseen] One line on each change of state, none per period.
-  move(next) {
-    const was = label(this.current);
-    this.current = next;
-    if (label(next) === was) return;
-    switch (next.kind) {
-      case "delivering":
-        this.logger("info", "file events delivering");
-        break;
-      case "stalled":
-        this.logger(
-          "warn",
-          `file events stalled since=${iso(next.missedSince)}`
-        );
-        break;
-      case "unmeasured":
-        this.logger(
-          "warn",
-          `file events unmeasured since=${iso(next.since)} reason=${JSON.stringify(next.reason)}`
-        );
-        break;
-    }
-    this.notify({ kind: "moved" });
-  }
-  notify(notice) {
-    for (const listener of [...this.listeners]) listener(notice);
-  }
-};
-var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
-var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
-function fileEventsWarnings(d) {
-  if (d.missedSince === null) return [];
-  const since = iso(d.missedSince);
-  const message = () => {
-    switch (d.kind) {
-      case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
-      case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
-      case "unmeasured":
-        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
-    }
-  };
-  return [{ kind: "file-events", state: d.kind, message: message() }];
-}
-
-// src/utils/keyed-source.ts
-init_globals();
-
-// src/utils/period.ts
-init_globals();
-function periodOf(every, outcome) {
-  return outcome.kind === "failed" ? every.failedMs : every.okMs;
-}
-function backedOffMs(every, failures, ceilingMs) {
-  return failures === 0 ? every.okMs : Math.min(every.failedMs * 2 ** (failures - 1), ceilingMs);
-}
-var Period = class {
-  constructor(tick, clock) {
-    this.tick = tick;
-    this.clock = clock;
-  }
-  tick;
-  clock;
-  stop = null;
-  state = "released";
-  last = null;
-  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
-  // kept from earlier). `periodMs` is chosen by the caller from the read's
-  // outcome (a failed PR lookup is retried sooner than a found one).
-  landed(periodMs, at = this.clock.monotonic()) {
-    this.last = { at, periodMs };
-    this.schedule();
-  }
-  hold(held) {
-    if (this.state === "disposed") return;
-    const next = held ? "held" : "released";
-    if (next === this.state) return;
-    this.state = next;
-    this.schedule();
-  }
-  dispose() {
-    this.state = "disposed";
-    this.cancel();
-  }
-  schedule() {
-    this.cancel();
-    if (this.state !== "held" || this.last === null) return;
-    const wait = Math.max(
-      0,
-      this.last.at + this.last.periodMs - this.clock.monotonic()
-    );
-    this.stop = this.clock.after(
-      wait,
-      () => {
-        this.stop = null;
-        this.tick();
-      },
-      { unref: true }
-    );
-  }
-  cancel() {
-    this.stop?.();
-    this.stop = null;
-  }
-};
-
-// src/utils/reading.ts
-init_globals();
-function unread() {
-  return observable.box(pending("unread"), { deep: false });
-}
-function pending(why2) {
-  let land;
-  const landed = new Promise((resolve) => {
-    land = resolve;
-  });
-  return { kind: "pending", why: why2, landed, land };
-}
-function settle(source, outcome) {
-  const prior = source.reading.get();
-  if (prior.kind !== "pending" && compareStructural(prior, outcome)) return;
-  runInAction(() => source.reading.set(outcome));
-  if (prior.kind === "pending") prior.land();
-}
-function renew(source, why2) {
-  const prior = source.reading.get();
-  if (prior.kind !== "pending") {
-    runInAction(() => source.reading.set(pending(why2)));
-  } else if (prior.why !== why2 && why2 === "unread") {
-    runInAction(() => source.reading.set({ ...prior, why: why2 }));
-  }
-}
-function answerPending(source, outcome) {
-  if (source.reading.get().kind === "pending") settle(source, outcome);
-}
-function currentOf(source) {
-  return source.reading.get();
-}
-function waitWithin(work, ms, late, after) {
-  const wait = new AbortController();
-  const clear = after(Math.max(0, ms), () => wait.abort());
-  const ended = new Promise((resolve, reject2) => {
-    wait.signal.addEventListener("abort", () => resolve("deadline"));
-    void work(wait.signal).then(
-      () => resolve("answered"),
-      // [LAW:no-silent-failure] Every rejection is reported: the wait's own
-      // while it listens, its owner's after.
-      (e) => wait.signal.aborted ? late(e) : reject2(e)
-    );
-  });
-  return ended.finally(() => {
-    clear();
-    wait.abort();
-  });
-}
-function settledLane(outcome) {
-  return { current: () => outcome };
-}
-
-// src/utils/keyed-source.ts
-var NO_WATCH = () => () => {
-};
-var KeyedSource = class {
-  constructor(spec) {
-    this.spec = spec;
-    this.refreshes = spec.ledger.declare({
-      name: spec.name,
-      scope: spec.scope,
-      refresh: ["first", "period", "change", "supersede"]
-    });
-  }
-  spec;
-  entries = /* @__PURE__ */ new Map();
-  refreshes;
-  closed = false;
-  // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
-  // home holds it until a declaration of the home's takes it no more, or the
-  // home is disposed, which keeps the entry for its next hold — and the lane
-  // reads it as it stands, never awaited and taking nothing. A key never read
-  // is created pending and read once, its first refresh.
-  //
-  // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
-  // by that refresh — so its caller logs none. A declaration that THROWS is a
-  // bug none of those saw, reported by the session's declaration (declareLanes).
-  declare(holds2, input) {
-    if (this.closed)
-      return settledLane(failed(`${this.spec.name} closed`, "read"));
-    const key = this.spec.keyOf(input);
-    const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
-    holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
-    return { current: () => currentOf(entry) };
-  }
-  // [LAW:one-source-of-truth] The one supersede rule (SOURCES-AND-FRAMES.md):
-  // the daemon itself is changing what this key reads (a click's move). The
-  // value is pending (`superseded`) and the read in flight is abandoned, so no
-  // draw after the click shows the value from before it. Every trigger of the
-  // key is held back until every supersede of it has resumed, so no read
-  // during the move stores the world from before it; the last resume starts
-  // one fresh read. A key never read is created for it, and its first read is
-  // that resume's.
-  supersede(input) {
-    if (this.closed) return () => {
-    };
-    const key = this.spec.keyOf(input);
-    const entry = this.touched(key) ?? this.created(key, input);
-    entry.superseding++;
-    renew(entry, "superseded");
-    this.abandon(entry);
-    entry.changed = false;
-    this.evict();
-    let resumed = false;
-    return () => {
-      if (resumed) return;
-      resumed = true;
-      entry.superseding--;
-      if (this.entries.get(entry.key) === entry)
-        this.refresh(entry, "supersede");
-    };
-  }
-  // The world changed under every held entry `affected` names (a watched file
-  // was written): each is read again, after the read in flight when one is
-  // out. An entry nobody holds is read when a hold returns to it.
-  changed(affected) {
-    for (const entry of this.entries.values()) {
-      if (affected(entry.input)) this.heard(entry);
-    }
-  }
-  // [LAW:single-enforcer] The one rule for a change under an entry, whether
-  // the owner's or the entry's own watch reports it: a held entry is read
-  // again; one nobody holds is not, since a hold's return re-reads it.
-  heard(entry) {
-    if (entry.holders > 0) this.refresh(entry, "change");
-  }
-  // Whether some home holds an entry `match` names now.
-  isHeld(match) {
-    for (const entry of this.entries.values()) {
-      if (entry.holders > 0 && match(entry.input)) return true;
-    }
-    return false;
-  }
-  stats() {
-    let held = 0;
-    for (const entry of this.entries.values()) if (entry.holders > 0) held++;
-    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
-    return {
-      entries: this.entries.size,
-      held,
-      refreshes,
-      failures,
-      abandoned,
-      lastMs
-    };
-  }
-  // Ends every entry's period: a held entry's period re-arms on every landing,
-  // so an owner that is not closed keeps its timers for good.
-  close() {
-    this.closed = true;
-    for (const entry of [...this.entries.values()]) this.drop(entry);
-  }
-  // LRU touch: re-inserting moves the entry to the newest end.
-  touched(key) {
-    const entry = this.entries.get(key);
-    if (entry === void 0) return void 0;
-    this.entries.delete(key);
-    this.entries.set(key, entry);
-    return entry;
-  }
-  // In place before any read, so a read's answer finds its entry stored.
-  created(key, input) {
-    const entry = {
-      key,
-      input,
-      reading: unread(),
-      holders: 0,
-      flight: null,
-      changed: false,
-      superseding: 0,
-      revisit: revisitOf(this.spec.every(input), this.spec.clock, {
-        period: () => this.refresh(entry, "period"),
-        holdReturned: () => this.refresh(entry, "change")
-      }),
-      unwatch: () => {
-      }
-    };
-    this.entries.set(key, entry);
-    entry.unwatch = this.spec.watch(input, () => this.heard(entry));
-    return entry;
-  }
-  firstRead(entry) {
-    this.refresh(entry, "first");
-    return entry;
-  }
-  refresh(entry, by) {
-    if (entry.superseding > 0) return;
-    if (entry.flight !== null) {
-      entry.changed ||= by === "change";
-      return;
-    }
-    const flight = new AbortController();
-    entry.flight = flight;
-    const startedAt = this.spec.clock.monotonic();
-    void attempt(() => this.spec.read(entry.input, flight.signal)).then((outcome) => {
-      const fields2 = this.spec.fields(entry.input, entry.holders);
-      const ms = elapsedMs(this.spec.clock, startedAt);
-      if (flight.signal.aborted) {
-        this.refreshes.abandoned(fields2, by, ms);
-        return;
-      }
-      try {
-        this.refreshes.recorded(fields2, by, outcome, ms);
-      } finally {
-        this.store(entry, outcome);
-      }
-    }).catch((e) => {
-      this.spec.logger(
-        "error",
-        `${this.spec.name} refresh threw (${this.spec.fields(entry.input, entry.holders)}): ${String(e)}`
-      );
-    });
-  }
-  store(entry, outcome) {
-    entry.flight = null;
-    try {
-      settle(entry, outcome);
-    } finally {
-      entry.revisit.landed(outcome);
-      if (entry.changed) {
-        entry.changed = false;
-        this.refresh(entry, "change");
-      }
-    }
-  }
-  hold(entry) {
-    entry.holders++;
-    entry.revisit.hold(true);
-    this.evict();
-    return () => {
-      entry.holders--;
-      entry.revisit.hold(entry.holders > 0);
-      this.evict();
-    };
-  }
-  // A held entry is never evicted, so held entries are bounded by their
-  // holders (the render cache's budget).
-  // [LAW:single-enforcer] Run by every claim that can add an entry (a hold, a
-  // supersede) and by every release, so an entry over the bound is dropped
-  // the moment nobody holds it. An entry mid-supersede is kept like a held
-  // one: dropped, a hold returning during the move would read the world
-  // from before it.
-  evict() {
-    for (const entry of [...this.entries.values()]) {
-      if (this.entries.size <= this.spec.maxEntries) return;
-      if (entry.holders === 0 && entry.superseding === 0) this.drop(entry);
-    }
-  }
-  drop(entry) {
-    this.entries.delete(entry.key);
-    this.abandon(entry);
-    entry.unwatch();
-    entry.revisit.dispose();
-    answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
-  }
-  // The read out, if one is, stores nothing and is told to stop.
-  abandon(entry) {
-    const flight = entry.flight;
-    entry.flight = null;
-    flight?.abort(new Error(`${this.spec.name} read abandoned`));
-  }
-};
-function revisitOf(every, clock, read2) {
-  if (every === null) return new HoldReturn(read2.holdReturned);
-  const period = new Period(read2.period, clock);
-  return {
-    landed: (outcome) => period.landed(periodOf(every, outcome)),
-    hold: (held) => period.hold(held),
-    dispose: () => period.dispose()
-  };
-}
-var HoldReturn = class {
-  constructor(reread) {
-    this.reread = reread;
-  }
-  reread;
-  state = "released";
-  answered = false;
-  landed() {
-    this.answered = true;
-  }
-  hold(held) {
-    if (this.state === "disposed") return;
-    const returned2 = held && this.state === "released" && this.answered;
-    this.state = held ? "held" : "released";
-    if (returned2) this.reread();
-  }
-  dispose() {
-    this.state = "disposed";
-  }
-};
-function attempt(read2) {
-  const threw2 = (e) => failed(`read threw: ${String(e)}`, "read");
-  try {
-    return read2().catch(threw2);
-  } catch (e) {
-    return Promise.resolve(threw2(e));
-  }
-}
-
-// src/utils/refresh-ledger.ts
-init_globals();
-var REFRESH_TRIGGERS = [
-  "first",
-  "period",
-  "change",
-  "request",
-  "supersede"
-];
-var RefreshLedger = class {
-  constructor(logger = quietLogger) {
-    this.logger = logger;
-  }
-  logger;
-  tallies = /* @__PURE__ */ new Map();
-  declare(declaration) {
-    const key = `${declaration.scope}/${declaration.name}`;
-    const tally = this.tallies.get(key) ?? {
-      name: declaration.name,
-      scope: declaration.scope,
-      refreshes: {},
-      failures: 0,
-      abandoned: 0,
-      lastMs: null
-    };
-    for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
-    this.tallies.set(key, tally);
-    return new Refreshes(tally, this.logger);
-  }
-  // Every source declared, by scope then name.
-  snapshot() {
-    return [...this.tallies.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, t2]) => ({ ...t2, refreshes: { ...t2.refreshes } }));
-  }
-  // Every source's refreshes summed by trigger: what the feed summary
-  // compares across its window.
-  totals() {
-    const sum = Object.fromEntries(
-      REFRESH_TRIGGERS.map((t2) => [t2, 0])
-    );
-    for (const tally of this.tallies.values()) {
-      for (const trigger of REFRESH_TRIGGERS) {
-        sum[trigger] += tally.refreshes[trigger] ?? 0;
-      }
-    }
-    return sum;
-  }
-};
-var OWN_EVENT = {
-  first: true,
-  period: true,
-  change: true,
-  request: false,
-  supersede: true
-};
-var Refreshes = class {
-  constructor(tally, logger) {
-    this.tally = tally;
-    this.logger = logger;
-  }
-  tally;
-  logger;
-  // This source's record as the ledger holds it: what its owner's own stats
-  // report, a view of the one tally rather than a count of its own.
-  record() {
-    return { ...this.tally, refreshes: { ...this.tally.refreshes } };
-  }
-  // `fields` is the refreshed entry's logfmt identity.
-  recorded(fields2, by, outcome, ms) {
-    this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
-    this.tally.lastMs = ms;
-    if (outcome.kind === "failed") this.tally.failures++;
-    const failure = outcome.kind === "failed";
-    if (!failure && !OWN_EVENT[by]) return;
-    const why2 = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
-    this.logger(
-      failure ? "warn" : "info",
-      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${ms}ms`
-    );
-  }
-  // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
-  // own count: a key that moves on every tick aborts a read on every tick,
-  // which no refresh or failure tally would show.
-  abandoned(fields2, by, ms) {
-    this.tally.abandoned++;
-    this.logger(
-      "info",
-      `${this.tally.name} refresh ${fields2} by=${by} abandoned took=${ms}ms`
-    );
-  }
-};
-
-// src/source-digest.ts
-init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
-var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
-function entryBytes(p2, st) {
-  return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
-}
-function sourceEntries(root, dir, keep2 = isSourceEntry) {
-  return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path6.default.join(dir, name);
-    const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
-    if (st === void 0) return [];
-    if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path6.default.relative(root, p2).split(import_node_path6.default.sep).join("/");
-    return [[rel, entryBytes(p2, st)]];
-  });
-}
-function digestOf(entries) {
-  const h = crypto_default.createHash("sha256");
-  for (const [rel, bytes] of entries) {
-    h.update(rel).update("\0").update(bytes).update("\0");
-  }
-  return h.digest("hex");
-}
-function sourceDigest(srcDir) {
-  return digestOf(sourceEntries(srcDir, srcDir));
-}
-var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
-function crateDigest(crateDir) {
-  return digestOf(
-    sourceEntries(
-      crateDir,
-      crateDir,
-      (name) => CRATE_SOURCE.includes(name)
-    )
-  );
-}
-var SHORT_DIGEST_LENGTH = 7;
-var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
-
-// src/utils/plain.ts
-init_globals();
-function digestOf2(value) {
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
-}
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
-    );
-  }
-  return value;
-}
-
-// src/var-system/parse.ts
-init_globals();
-var LINE_BREAK = /\r\n|\r|\n/g;
-var textParser = (text4) => ok(text4.replace(LINE_BREAK, " ").trim());
-function regexParser(regex) {
-  return (text4) => {
-    const m = regex.exec(text4);
-    const group = m?.[1];
-    return group === void 0 ? failed("regex no-match", "parse") : ok(group.replace(LINE_BREAK, " "));
-  };
-}
-var jsonParser = (text4) => {
-  try {
-    return ok(JSON.parse(text4));
-  } catch (e) {
-    return failed(`JSON parse failed: ${e.message}`, "parse");
-  }
-};
-
-// src/var-system/source-runs.ts
-var SHELL_READ_TIMEOUT_MS = 1e4;
-var digestOf3 = (identity2) => digestOf2(identity2);
-function keyHashOf(value) {
-  return crypto_default.createHash("sha256").update(value).digest("hex");
-}
-var whereOf = (read2) => read2.kind === "shell" ? `output of "${read2.command}" in ${read2.cwd}` : `"${read2.path}"`;
-function shellReader(launcher, command, cwd2, signal) {
-  return {
-    where: whereOf({ kind: "shell", command, cwd: cwd2 }),
-    read: async () => {
-      const r = await launcher.launch({
-        bin: "/bin/sh",
-        args: ["-c", command],
-        cwd: cwd2,
-        category: "user-shell",
-        timeoutMs: SHELL_READ_TIMEOUT_MS,
-        signal
-      });
-      if (r.ok) return ok(r.stdout);
-      return failed(
-        `shell "${command}" ${failureText(r, ` in ${cwd2}`)}`,
-        "read"
-      );
-    }
-  };
-}
-function fileReader(filePath2, readMode, signal) {
-  return {
-    where: whereOf({ kind: "file", path: filePath2, readMode }),
-    read: async () => {
-      try {
-        const raw = await readFile(filePath2, { encoding: "utf8", signal });
-        return ok(
-          readMode === "first-line" ? raw.split(/\r?\n/)[0] ?? "" : raw
-        );
-      } catch (e) {
-        const code = e.code ?? String(e);
-        return failed(
-          signal.aborted ? `file read aborted: ${String(signal.reason)}` : `file unreadable (${code}): ${filePath2}`,
-          "read"
-        );
-      }
-    }
-  };
-}
-function readerOf(launcher, read2, signal) {
-  switch (read2.kind) {
-    case "shell":
-      return shellReader(launcher, read2.command, read2.cwd, signal);
-    case "file":
-      return fileReader(read2.path, read2.readMode, signal);
-  }
-}
-function parserOf(parse3) {
-  switch (parse3.kind) {
-    case "text":
-      return textParser;
-    case "regex":
-      return regexParser(new RegExp(parse3.source, parse3.flags));
-    case "json":
-      return (text4) => text4.trim() === "" ? ABSENT2 : jsonParser(text4);
-  }
-}
-function parsed(read2, parser, where) {
-  if (read2.kind !== "ok") return read2;
-  const out = parser(read2.value);
-  return out.kind === "failed" ? failed(`${out.reason} in ${where}`, out.failedAt) : out;
-}
-var PathWatches = class {
-  constructor(watchers, fileEvents) {
-    this.watchers = watchers;
-    this.fileEvents = fileEvents;
-    this.releaseDelivery = fileEvents.subscribe(
-      (notice) => this.noticed(notice)
-    );
-  }
-  watchers;
-  fileEvents;
-  entries = /* @__PURE__ */ new Map();
-  releaseDelivery;
-  subscribe(filePath2, callback, onFault) {
-    const entry = this.entries.get(filePath2) ?? this.arm(filePath2);
-    entry.subscribers.set(callback, onFault);
-    onFault(this.faultOf(filePath2, entry));
-    return () => this.unsubscribe(filePath2, callback);
-  }
-  arm(filePath2) {
-    const watch2 = derived(filePath2);
-    const entry = {
-      bound: {
-        derived: watch2,
-        held: this.watchers.follow(
-          null,
-          watch2,
-          (heard) => this.heard(filePath2, entry, heard)
-        ).watch
-      },
-      subscribers: /* @__PURE__ */ new Map()
-    };
-    this.entries.set(filePath2, entry);
-    return entry;
-  }
-  // Derive where the path can change, follow it, and say the watch's fault.
-  // A new key acquires its watch, keeping every directory both keys name.
-  rederive(filePath2, entry) {
-    const paths2 = derived(filePath2);
-    const { watch: watch2 } = this.watchers.follow(
-      entry.bound.held,
-      paths2,
-      (heard) => this.heard(filePath2, entry, heard)
-    );
-    entry.bound = { derived: paths2, held: watch2 };
-    this.report(filePath2, entry);
-  }
-  // A window re-derives and re-reads.
-  heard(filePath2, entry, heard) {
-    const wasLeaf = entry.bound.derived.reached;
-    this.rederive(filePath2, entry);
-    if (heard.kind !== "failed" && !wasLeaf && !entry.bound.derived.reached)
-      return;
-    for (const cb of entry.subscribers.keys()) cb();
-  }
-  report(filePath2, entry) {
-    const fault = this.faultOf(filePath2, entry);
-    for (const onFault of entry.subscribers.values()) onFault(fault);
-  }
-  // The watch's fault, derived from what it holds now and whether the OS is
-  // delivering what it would hear. A stall is every watch's: it rides the
-  // delivery owner's one stream.
-  faultOf(filePath2, entry) {
-    return watchFault(
-      `watch_file ${filePath2}`,
-      entry.bound,
-      stallReason(this.fileEvents.delivery())
-    );
-  }
-  // [LAW:no-silent-failure] Delivery moved or a span closed, so the watches
-  // may have missed events: each watch re-derives where its path can change,
-  // since a directory may have appeared unheard, which says its fault, and
-  // every subscriber re-reads as if its own watch had reported. Both together,
-  // so no entry drops a stall's fault without reading again, and in one
-  // action, so one change of delivery is one publish of every entry's.
-  noticed(notice) {
-    switch (notice.kind) {
-      case "period":
-        return;
-      case "moved":
-      case "caught-up":
-        runInAction(() => {
-          for (const [filePath2, entry] of this.entries) {
-            this.rederive(filePath2, entry);
-            for (const cb of entry.subscribers.keys()) cb();
-          }
-        });
-        return;
-    }
-  }
-  unsubscribe(filePath2, callback) {
-    const entry = this.entries.get(filePath2);
-    if (!entry) return;
-    entry.subscribers.delete(callback);
-    if (entry.subscribers.size === 0) {
-      entry.bound.held.handle.release();
-      this.entries.delete(filePath2);
-    }
-  }
-  dispose() {
-    this.releaseDelivery();
-    for (const entry of this.entries.values())
-      entry.bound.held.handle.release();
-    this.entries.clear();
-  }
-  size() {
-    return this.entries.size;
-  }
-};
-var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
-var SourceRuns = class {
-  byKind;
-  watchMgr;
-  // Each watching entry's fault, by digest, for the lanes that read it.
-  faults = observable.map(void 0, {
-    deep: false
-  });
-  constructor(deps) {
-    const logger = deps.logger ?? quietLogger;
-    const ledger = deps.ledger ?? new RefreshLedger(logger);
-    this.watchMgr = new PathWatches(
-      deps.watchers ?? new WatcherRegistry({ clock: deps.clock }),
-      deps.fileEvents ?? NO_FILE_EVENTS
-    );
-    const source = (kind) => new KeyedSource({
-      name: `source.${kind}`,
-      scope: "daemon",
-      keyOf: digestOf3,
-      fields: (identity2, holders) => `digest=${shortDigest(digestOf3(identity2))} where=${valueOf(whereOf(identity2.read))} sharedBy=${holders}`,
-      // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
-      // readers through this one function; text/regex/json are three
-      // parsers through it.
-      read: async (identity2, signal) => {
-        const reader = readerOf(deps.launcher, identity2.read, signal);
-        return parsed(
-          await reader.read(),
-          parserOf(identity2.parse),
-          reader.where
-        );
-      },
-      every: ({ refresh }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
-      watch: (identity2, changed) => {
-        if (identity2.refresh.kind !== "watch_file") return NO_WATCH();
-        const digest2 = digestOf3(identity2);
-        const unsubscribe = this.watchMgr.subscribe(
-          identity2.refresh.path,
-          changed,
-          (fault) => runInAction(() => {
-            if (fault === null) this.faults.delete(digest2);
-            else this.faults.set(digest2, fault);
-          })
-        );
-        return () => {
-          unsubscribe();
-          runInAction(() => this.faults.delete(digest2));
-        };
-      },
-      maxEntries: 0,
-      logger,
-      ledger,
-      clock: deps.clock
-    });
-    this.byKind = { shell: source("shell"), file: source("file") };
-  }
-  // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
-  // the identity's digest, created and read once on its first hold, and the
-  // lane reads it as it stands.
-  declare(holds2, identity2) {
-    const digest2 = digestOf3(identity2);
-    const lane = this.byKind[identity2.read.kind].declare(holds2, identity2);
-    return {
-      digest: digest2,
-      current: () => lane.current(),
-      fault: () => this.faults.get(digest2) ?? null
-    };
-  }
-  stats() {
-    return {
-      shell: this.byKind.shell.stats(),
-      file: this.byKind.file.stats(),
-      watches: this.watchMgr.size()
-    };
-  }
-  // Drops every entry, ending its read, its period and its watch.
-  close() {
-    this.byKind.shell.close();
-    this.byKind.file.close();
-    this.watchMgr.dispose();
-  }
-};
-
-// src/var-system/sources.ts
-var TORN_WRITE_SETTLE_MS = 250;
-var MIN_SHELL_TTL_MS = 500;
-function clampShellCache(name, policy) {
-  if (policy.kind !== "ttl") return policy;
-  if (policy.durationMs >= MIN_SHELL_TTL_MS) return policy;
-  debug(
-    `declareShell "${name}": ttl ${policy.durationMs}ms below floor ${MIN_SHELL_TTL_MS}ms; clamping`
-  );
-  return { kind: "ttl", durationMs: MIN_SHELL_TTL_MS };
-}
-function parseDuration(s) {
-  const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(s);
-  if (!m) throw new RangeError(`Invalid duration: "${s}"`);
-  const v = parseFloat(m[1]);
-  switch (m[2]) {
-    case "ms":
-      return v;
-    case "s":
-      return v * 1e3;
-    case "m":
-      return v * 6e4;
-    case "h":
-      return v * 36e5;
-    default:
-      throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
-  }
-}
-var SESSION_ID_VAR_NAME = "session.id";
-function stateSessionOf(value) {
-  const parsed2 = parseSessionId(value);
-  return parsed2.ok ? parsed2.id : null;
-}
-function parserIdOf(parse3) {
-  switch (parse3.kind) {
-    case "text":
-      return { kind: "text" };
-    case "regex":
-      return {
-        kind: "regex",
-        source: parse3.regex.source,
-        flags: parse3.regex.flags
-      };
-    case "json":
-      return { kind: "json" };
-  }
-}
-var UNBOUND = {
-  read: () => pendingOf("unread"),
-  drawnAt: () => {
-    throw new PendingValueError(
-      "colorCompatibility.effective",
-      "the drawn depth has no value yet: no view source is bound"
-    );
-  }
-};
-var found = (value) => ({ kind: "found", value });
-function resolvePath(obj, path42) {
-  let cur = obj;
-  let inDocument = false;
-  for (const part of path42.split(".")) {
-    if (!inDocument && isPending(cur)) return cur;
-    if (cur == null || typeof cur !== "object") return found(void 0);
-    inDocument ||= part === "value" && cur.kind === "ok";
-    cur = cur[part];
-  }
-  return !inDocument && isPending(cur) ? cur : found(cur);
-}
-function sourceReading(name, resolved) {
-  if (resolved.kind === "pending") return resolved;
-  const raw = resolved.value;
-  if (raw === void 0) {
-    return failed(
-      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the config declares`,
-      "read"
-    );
-  }
-  const kind = typeof raw === "object" && raw !== null ? raw.kind : void 0;
-  switch (kind) {
-    case "ok":
-    case "absent":
-    case "failed":
-      return raw;
-    default:
-      return failed(
-        `variable "${name}": the view's payload holds no source reading at "${name}"`,
-        "read"
-      );
-  }
-}
-function coerceToType(raw, type3) {
-  if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") {
-    throw new TypeError(
-      `Expected string|number|boolean from payload, got ${typeof raw}`
-    );
-  }
-  if (type3 === "string") return toString(raw);
-  if (type3 === "number") return toNumber(raw);
-  return toBool(raw);
-}
-function zeroValue(type3) {
-  if (type3 === "number") return 0;
-  if (type3 === "boolean") return false;
-  return "";
-}
-var SourceRegistry = class _SourceRegistry {
-  // defaultEmptyValue is the global fallback of last resort — the config-level
-  // `default_empty_value` from the proposal. Defaults to empty string.
-  //
-  // sessionState lets the daemon inject its singleton so state-kind variables
-  // share one MobX atom and one disk-persistence layer with the click verbs.
-  // Omitted in tests that don't exercise state vars.
-  constructor(runs, store, defaultEmptyValue = "", sessionState, parent = null, env2 = {}) {
-    this.runs = runs;
-    this.store = store;
-    this.defaultEmptyValue = defaultEmptyValue;
-    this.parent = parent;
-    this.env = env2;
-    this.sessionState = sessionState;
-  }
-  runs;
-  store;
-  defaultEmptyValue;
-  parent;
-  env;
-  lastErrors = /* @__PURE__ */ new Map();
-  // A cache policy that cannot fire is a STANDING fault, not a read's
-  // outcome: a read that succeeds afterwards says nothing about whether the
-  // source will ever run again, so no read outcome clears it. A watch that
-  // cannot hear every place its path changes lives until it can again (its
-  // own re-derive says so); a key template that throws lives
-  // until the key evaluates again. One map, since a variable has one policy.
-  // Observable, since the bar draws each fault as a refresh warning.
-  policyFaults = observable.map(void 0, {
-    deep: false
-  });
-  // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
-  // tears everything down in one call.
-  cleanups = [];
-  // [LAW:single-enforcer] What this registry holds of the daemon's source
-  // runs (source-runs.ts): one hold per entry however many of its sources
-  // read it, declared again whenever any source's identity moves, so the
-  // entry a moved key names is held before the one it leaves is released.
-  // The session's built-in entries are held by the host's collector
-  // (src/daemon/collector.ts), which declares on requests and subscriptions,
-  // not on a source's identity moving.
-  holds = new Holds();
-  // Each source's identity as its policy last named it. A policy over the
-  // source's own values names none until they answer.
-  identities = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] The lane each source reads, by name:
-  // observable, so a source's publish is a reaction over the entry it holds
-  // now, and `inFlight()` a reaction over which of them has not answered —
-  // the explicit "the runs a wait is for have ended" state a caller (a
-  // statusline request, `cc-candybar check`) awaits instead of guessing a
-  // delay, and one its deadline can stop listening to. A re-read keeps its
-  // answer standing, so no wait is for it; a new identity has none, so a
-  // wait is for it alone.
-  lanes = observable.map(void 0, {
-    deep: false
-  });
-  // [LAW:one-source-of-truth] What this registry's inputs are derived from
-  // (`bindInputs`), and so the depth the terminal draws this view's renders at
-  // — the one depth every contrast floor reads, in this registry's variable
-  // templates and in the render engine alike. Derived from the view's own
-  // settings, so a template variable whose `readableOn` read it recomputes in
-  // the turn the setting moves (edit mode staging a depth included), never at
-  // a draw.
-  inputs = observable.box(UNBOUND, {
-    deep: false
-  });
-  drawnAt = () => this.inputs.get().drawnAt();
-  // Shared engine instance — parse() is expensive; the engine is reused for
-  // all key: template compilations.
-  // [LAW:one-source-of-truth] One engine per registry, not one per variable.
-  engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
-  // The names of this registry's own async sources (shell, file), whose
-  // stored values `published` reads.
-  sourceNames = observable.array([], { deep: false });
-  // [LAW:one-source-of-truth] What this registry's sources have published, as
-  // one value that changes exactly when one of their stored values or
-  // standing faults does: the store writes a value only when its own compare
-  // finds it changed, and a fault is written only when its reason does, so a
-  // re-read that found what was stored moves nothing. A session's view reacts
-  // to it, and so its feed wakes on a publish that changed what the bar can
-  // show (openView).
-  publishedNow = computed(
-    () => ({
-      values: this.sourceNames.map((name) => this.store.stored(name)),
-      faults: [...this.policyFaults.values()]
-    })
-  );
-  published() {
-    return this.publishedNow.get();
-  }
-  // [LAW:locality-or-seam] sessionState is injected (not constructed here)
-  // so tests can substitute a fake and the daemon shares its singleton.
-  // Absent in non-daemon contexts; declareState() rejects loudly in that case
-  // rather than silently returning empty strings.
-  sessionState;
-  // [LAW:one-source-of-truth] A session's view of this directory home
-  // (brandon-unfiled-3248.8ro6, step 2): a registry of its own over a store of
-  // its own, which reads through to this one. The session's values are
-  // declared there, so its inputs, its state and its derivations are its own,
-  // and what its sources fail with is recorded there; a directory value it
-  // reads is this home's one node, and its failure this home's one record. It
-  // shares the daemon's session state, and is disposed on its
-  // own: a session leaving the directory disposes nothing of it.
-  view() {
-    return new _SourceRegistry(
-      this.runs,
-      new VariableStore(this.store.clock, this.store),
-      this.defaultEmptyValue,
-      this.sessionState,
-      this,
-      this.env
-    );
-  }
-  // [LAW:one-source-of-truth] The registry IS the owner of its store — every
-  // variable it declares lives there, and the renderer reads back through it.
-  // Exposing it read-only lets a caller that already holds the registry obtain
-  // the one store without threading a second reference that could diverge (the
-  // action runtime reads session.id/current values from this exact store).
-  get variableStore() {
-    return this.store;
-  }
-  // ─── Synchronous source kinds ─────────────────────────────────────────────
-  // literal: type inferred from value; box written once at declaration and never again.
-  declareLiteral(name, value) {
-    this.store.defineBox(name, typeOf(value), value);
-  }
-  // A document that is a known failure for as long as it is declared.
-  declareFailedDocument(name, reason) {
-    this.store.defineDocument(name, failed(reason, "parse"));
-  }
-  // A plugin's source: a document derived from the reading its view's payload
-  // carries at the source's own name — ok, absent or failed as the storage
-  // owner read the session's file, or pending while it has not answered.
-  // [LAW:no-silent-failure] A payload with nothing there is a declaration
-  // that did not take the source the config declares: a bug, read as a failure
-  // naming the variable, never as absent.
-  declareSourceDocument(name) {
-    this.store.defineDerivedDocument(
-      name,
-      () => sourceReading(name, this.inputs.get().read(name))
-    );
-  }
-  // [LAW:single-enforcer] A handle the registry's owner holds for as long as
-  // the registry lives — a render state's hold on a plugin's storage folder —
-  // released by the registry's one teardown (`dispose`), with everything else
-  // it holds.
-  own(release4) {
-    this.cleanups.push(release4);
-  }
-  // input: a derived value of its path in the bound InputSource, cast to its
-  // type. [LAW:types-are-the-program] Before its source answers it holds no
-  // value: it is not answered yet, never its default, which answers a payload
-  // that lacks the path (brandon-unfiled-3248.8ro6). A path the draw's own
-  // instant answers (DRAW_PROJECTIONS) is a projection, read by each draw.
-  declareInput(name, path42, type3, varDefault, derivation) {
-    this.store.defineDerived(
-      name,
-      type3,
-      derivation,
-      () => this.inputAt(name, path42, type3, varDefault)
-    );
-  }
-  // [LAW:single-enforcer] The one reading of an input: its path's value cast
-  // to its type, else the fallback chain with the failure recorded.
-  inputAt(name, path42, type3, varDefault) {
-    const resolved = this.inputs.get().read(path42);
-    if (resolved.kind === "pending") {
-      this.lastErrors.delete(name);
-      throw new PendingValueError(
-        name,
-        `variable "${name}" has no value yet: its source has not answered`
-      );
-    }
-    const raw = resolved.value;
-    if (raw === void 0) {
-      return this.fallbackOf(
-        name,
-        type3,
-        varDefault,
-        `input path "${path42}" not found in payload`
-      );
-    }
-    try {
-      const value = coerceToType(raw, type3);
-      this.lastErrors.delete(name);
-      return value;
-    } catch (e) {
-      return this.fallbackOf(
-        name,
-        type3,
-        varDefault,
-        e instanceof Error ? e.message : String(e)
-      );
-    }
-  }
-  // env: resolved once at declaration from the registry's environment; box written once, never again.
-  // type is always 'string' — env vars are text by nature.
-  declareEnv(name, envVar, varDefault) {
-    const raw = this.env[envVar];
-    if (raw !== void 0) {
-      this.store.defineBox(name, "string", raw);
-      return;
-    }
-    const fallback = varDefault !== void 0 ? varDefault : typeof this.defaultEmptyValue === "string" ? this.defaultEmptyValue : "";
-    this.store.defineBox(name, "string", fallback);
-    this.recordError(name, `env var "${envVar}" is not set`);
-  }
-  // ─── Async source kinds ───────────────────────────────────────────────────
-  // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
-  declareShell(name, command, opts) {
-    this.declareSource(
-      name,
-      { kind: "shell", command, cwd: opts.cwd },
-      clampShellCache(name, opts.cache),
-      opts.parse
-    );
-  }
-  // file: read the file at path (whole, or its first line) as the text the
-  // parser sees.
-  declareFile(name, filePath2, opts) {
-    this.declareSource(
-      name,
-      { kind: "file", path: filePath2, readMode: opts.readMode ?? "whole" },
-      opts.cache,
-      opts.parse
-    );
-  }
-  // [LAW:single-enforcer] THE user-source declaration: the source's node, and
-  // the one reaction that publishes into it what the entry it holds has read
-  // (source-runs.ts runs it: read → parse). The cache policy names WHICH
-  // entry, through the identity it holds (registerCachePolicy), never whether
-  // the node exists [LAW:dataflow-not-control-flow].
-  //
-  // [LAW:types-are-the-program] Only an answered reading is published: the
-  // node holds its fallback until the first entry answers, and on a key's
-  // move it holds the old entry's answer until the new entry's lands — the
-  // old `ok` is simply not overwritten yet, so a key change draws no pending
-  // flash (spec section 19).
-  declareSource(name, read2, cache2, parse3) {
-    const publish = this.publisherFor(name, parse3);
-    runInAction(() => this.sourceNames.push(name));
-    this.cleanups.push(
-      reaction(
-        () => this.lanes.get(name)?.current(),
-        (reading) => {
-          if (reading === void 0 || reading.kind === "pending") return;
-          publish(reading);
-        },
-        { fireImmediately: true }
-      )
-    );
-    this.registerCachePolicy(
-      name,
-      cache2,
-      (refresh) => this.hold(name, { read: read2, parse: parserIdOf(parse3), refresh })
-    );
-  }
-  // [LAW:single-enforcer] The one declaration of what this registry holds:
-  // every source's current identity, taken in one body so the entry a moved
-  // identity names is held before the entry it leaves is released (Holds).
-  // A source whose entry did not move keeps its lane, so its publish reaction
-  // is untouched; the lanes are set outside the body, where a publish they
-  // start cannot nest a declaration.
-  hold(name, identity2) {
-    this.identities.set(name, identity2);
-    const { result: taken } = this.holds.declare(
-      () => [...this.identities].map(([n, id2]) => {
-        const lane = this.runs.declare(this.holds, id2);
-        const prior = this.lanes.get(n);
-        return [n, prior?.digest === lane.digest ? prior : lane];
-      })
-    );
-    runInAction(() => {
-      for (const [n, lane] of taken) this.lanes.set(n, lane);
-    });
-  }
-  // [LAW:one-type-per-behavior] One total projection of the parser arm onto
-  // the node it publishes: the text arms publish a string box, the json arm a
-  // document. Selected once, at declaration — the pipeline never asks again.
-  // The run parsed by the arm's own parser (source-runs.ts), so its value is
-  // the arm's type.
-  publisherFor(name, parse3) {
-    switch (parse3.kind) {
-      case "text":
-      case "regex":
-        return this.scalarPublisher(name, parse3.default);
-      case "json":
-        return this.documentPublisher(name, parse3.default);
-    }
-  }
-  scalarPublisher(name, varDefault) {
-    const fallback = this.stringInitial(varDefault);
-    this.store.defineBox(name, "string", fallback);
-    return (outcome) => {
-      this.noteOutcome(name, outcome);
-      this.store.setBox(name, orElse(outcome, fallback));
-    };
-  }
-  // A document's fallback is the declared default, or NO document: without a
-  // default the node is pending until its first scan, then holds what the scan
-  // found — absent when it had nothing to read, failed with its reason after a
-  // bad one — which the scope proxy surfaces naming the variable
-  // [LAW:no-silent-failure]: a document has no honest empty value the way a
-  // string has "".
-  //
-  // The default stands in for a run that had nothing to READ — a missing
-  // file, a command that failed, blank output — never for text that was read
-  // and is not a document (failed in its parse phase): that is a broken
-  // writer, and reads as its failure (⚠) whatever the default says
-  // (brandon-plugins-ktag.8fv).
-  //
-  // [LAW:no-ambient-temporal-coupling] A writer rewriting a file in place
-  // (truncate, then write) is caught mid-update by any read that lands
-  // between the two, and the text it sees is not a document. Text that does
-  // not parse is therefore held back while a document is showing: the document
-  // stays, and the failure is published only if no read replaces it within
-  // TORN_WRITE_SETTLE_MS — the writer's own final write is an event that
-  // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
-  // that settle; a document that was never good shows it at once.
-  documentPublisher(name, varDefault) {
-    const fallback = varDefault === void 0 ? pendingOf("unread") : ok(varDefault);
-    this.store.defineDocument(name, fallback);
-    let clearSettling;
-    let showingRead = false;
-    this.cleanups.push(() => clearSettling?.());
-    return (raw) => {
-      clearSettling?.();
-      const outcome = raw;
-      this.noteOutcome(name, outcome);
-      const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
-      const next = readText || varDefault === void 0 ? outcome : fallback;
-      const torn2 = showingRead && readText && outcome.kind !== "ok";
-      const show2 = () => {
-        showingRead = outcome.kind === "ok";
-        this.store.setDocument(name, next);
-      };
-      if (torn2) {
-        clearSettling = this.store.clock.after(TORN_WRITE_SETTLE_MS, show2);
-      } else {
-        show2();
-      }
-    };
-  }
-  // [LAW:no-ambient-temporal-coupling] Resolves when none of the runs a wait
-  // is for is out (`awaited`), or when `signal` aborts — and then holds
-  // nothing, so a run that never ends keeps no waiter behind it. Resolves
-  // to the names still awaited: empty when all settled, the stragglers when
-  // the signal ended the wait. A signal already aborted ends it at once, so a
-  // caller holding one deadline over many waits pays it once.
-  //
-  // Asked again until it holds at this wait's own continuation: a landing
-  // that answers a key (a `depends_on` or `key` over the value that landed)
-  // holds the next lane in a reaction of the same batch, which can run after
-  // the one this wait is, so one evaluation can see nothing pending between
-  // the answer and the hold it causes.
-  async inFlight(signal) {
-    while (!signal.aborted && this.awaited().length > 0) {
-      try {
-        await when(() => this.awaited().length === 0, { signal });
-      } catch (e) {
-        if (!signal.aborted) throw e;
-      }
-    }
-    return this.awaited();
-  }
-  // The sources a wait on this registry is for: those whose held entry, here
-  // and in the home it reads through to, has not answered (rule 2's first
-  // value, or a key its facts moved). A re-read keeps the answer it has
-  // standing, so no wait is for it, whoever's period or watch started it.
-  awaited() {
-    const here = [...this.lanes].filter(([, lane]) => lane.current().kind === "pending").map(([name]) => name);
-    return [...here, ...this.parent?.awaited() ?? []];
-  }
-  // The names still awaited once every run has ended or `withinMs` has
-  // passed: empty when all settled. The state a one-shot render awaits so it
-  // renders what those sources yielded, never a guessed delay.
-  settled(withinMs) {
-    return this.inFlight(timeoutSignal(this.store.clock, withinMs));
-  }
-  // template: a variable whose value is derived by evaluating a go-template
-  // against the current variable store.  MobX auto-tracks every store.read()
-  // made during evaluation — no explicit dep declarations needed.
-  // [LAW:dataflow-not-control-flow] A derived template is a MobX computed, its
-  // invalidation graph built from the template's read pattern; a projection
-  // (one that reads the instant: src/config/loader/projections.ts) is derived
-  // again by every read, at the draw in progress.
-  declareTemplate(name, template, opts) {
-    const parsedTpl = this.engine.parse(template);
-    this.declareDerived(
-      name,
-      opts.type,
-      opts.derivation,
-      () => parsedTpl.evaluate(buildScope(this.store)).map((f) => f.plain).join(""),
-      opts.varDefault
-    );
-  }
-  // time: the instant of the draw in progress in a Go reference-time layout —
-  // a template over `now` (`{{ date <layout> now }}`), and so a projection.
-  // [LAW:one-type-per-behavior] The engine's own `date` formats it: one Go
-  // layout implementation, the one a template calling `date` gets.
-  declareTime(name, opts) {
-    const parsedTpl = this.engine.parse("{{ date .layout now }}");
-    const scope = { layout: opts.format };
-    this.declareDerived(
-      name,
-      "string",
-      "projection",
-      () => parsedTpl.evaluate(scope).map((f) => f.plain).join(""),
-      opts.varDefault
-    );
-  }
-  // [LAW:one-type-per-behavior] The one shape of a derived string variable — a
-  // template and a time variable differ only in what they compute, and a
-  // computed and a projection only in whether the store keeps the answer.
-  // Evaluated at its first read, never at declaration: a projection has no
-  // instant to read until a draw binds one, and cycles are the loader's to
-  // refuse (validateNoCycles) [LAW:single-enforcer].
-  declareDerived(name, type3, derivation, derive, fallback) {
-    this.store.defineDerived(name, type3, derivation, () => {
-      try {
-        const result = coerceToType(derive(), type3);
-        this.lastErrors.delete(name);
-        return result;
-      } catch (e) {
-        const pending2 = readPending(e);
-        if (pending2 !== void 0) {
-          this.lastErrors.delete(name);
-          throw pending2;
-        }
-        const message = e instanceof Error ? e.message : String(e);
-        this.recordError(name, message);
-        if (fallback === void 0) {
-          throw new Error(`variable "${name}": ${message}`);
-        }
-        return fallback;
-      }
-    });
-  }
-  // state: read-through to SessionState. The computed reads two deps — the
-  // canonical session-id input variable (SESSION_ID_VAR_NAME, refreshed per
-  // render from input) and SessionState itself (MobX-tracked via its
-  // internal atom). A click verb that mutates SessionState invalidates this
-  // computed; a sessionId change (per-render) also invalidates it.
-  // Persistence rides on SessionState's disk backing — no extra wiring.
-  //
-  // [LAW:dataflow-not-control-flow] Same body every evaluation; values
-  // determine the result, never whether code runs.
-  declareState(name, opts) {
-    if (!this.sessionState) {
-      throw new Error(
-        `declareState("${name}"): SourceRegistry was constructed without a SessionState \u2014 state-kind variables require a SessionState (the daemon provides one; tests must supply one)`
-      );
-    }
-    const sessionState = this.sessionState;
-    const fallback = opts.varDefault ?? this.stringInitial(void 0);
-    this.store.defineComputed(name, "string", (read2) => {
-      const sessionId2 = stateSessionOf(read2(SESSION_ID_VAR_NAME));
-      if (sessionId2 === null) return fallback;
-      const value = sessionState.get(sessionId2, opts.key);
-      return value !== null ? value : fallback;
-    });
-  }
-  // [LAW:one-source-of-truth] The revision of the session state this render's
-  // `state` variables read (SessionStateReader.revision), found the way they
-  // find it: through the session id the render was handed. A registry with no
-  // session state, or a render naming no session, reads none — one state that
-  // never changes.
-  stateRevision() {
-    const sessionId2 = this.store.has(SESSION_ID_VAR_NAME) ? stateSessionOf(this.store.read(SESSION_ID_VAR_NAME)) : null;
-    return this.sessionState !== void 0 && sessionId2 !== null ? this.sessionState.revision(sessionId2) : 0;
-  }
-  // ─── The view's source ────────────────────────────────────────────────────
-  // [LAW:single-enforcer] What this registry's inputs, and the depth, are
-  // derived from: bound once by the view that owns the registry, whose source
-  // reads its payload as it stands. A directory binds none: it reads no
-  // payload and no depth — a source whose key reads one is a view's
-  // (src/dsl/variable-scope.ts).
-  bindInputs(source) {
-    runInAction(() => this.inputs.set(source));
-  }
-  // ─── Diagnostics ─────────────────────────────────────────────────────────
-  // Returns the recorded error for a variable, or undefined if the last
-  // resolution succeeded (or the variable has never been resolved).
-  getLastError(name) {
-    if (!this.declaredHere(name)) return this.parent?.getLastError(name);
-    const read2 = this.lastErrors.get(name);
-    const fault = this.policyFaults.get(name);
-    if (fault === void 0) return read2;
-    return read2 === void 0 ? fault : {
-      timestamp: read2.timestamp,
-      message: `${fault.message}; ${read2.message}`
-    };
-  }
-  // Every variable whose cache policy cannot fire, with why: each render
-  // reports them (`RenderWarning` kind `refresh`), since the bar draws such a
-  // variable's last value with nothing of its own to say it has stopped.
-  cachePolicyFaults() {
-    return new Map([
-      ...this.parent?.cachePolicyFaults() ?? [],
-      ...this.policyFaults
-    ]);
-  }
-  // Whether `name` lives in this registry's own store, not its directory's.
-  declaredHere(name) {
-    return this.store.has(name) && !(this.parent?.store.has(name) ?? false);
-  }
-  // ─── Lifecycle ────────────────────────────────────────────────────────────
-  // Tear down all TTL timers, fs watchers, MobX reactions, and in-flight
-  // reads registered by async source kinds.
-  // Call when the registry is no longer needed (e.g. on daemon shutdown or
-  // config hot-reload). Returns how many computeds the store released, for
-  // the caller's log line.
-  dispose() {
-    for (const cleanup of this.cleanups) cleanup();
-    this.cleanups.length = 0;
-    this.holds.close();
-    return this.store.dispose();
-  }
-  // ─── Private helpers ──────────────────────────────────────────────────────
-  // [LAW:single-enforcer] One place that maps every CachePolicy kind to the
-  // identity the source holds: a period, a watched path or nothing is the
-  // run's own refresh and is held at declaration; a policy over what the
-  // source reads names the hash of what that answered, held when it first
-  // answers and again whenever the answer moves. Adding a new policy kind
-  // means adding one case here.
-  registerCachePolicy(name, policy, hold2) {
-    switch (policy.kind) {
-      case "never":
-        hold2({ kind: "never" });
-        break;
-      case "ttl":
-        hold2({ kind: "ttl", durationMs: policy.durationMs });
-        break;
-      case "watch_file": {
-        hold2({ kind: "watch_file", path: policy.path });
-        this.cleanups.push(
-          reaction(
-            () => this.lanes.get(name)?.fault() ?? null,
-            (fault) => this.notePolicy(
-              name,
-              fault === null ? ok(void 0) : failed(fault, "read")
-            ),
-            { fireImmediately: true }
-          )
-        );
-        break;
-      }
-      case "key": {
-        const parsedKey = this.engine.parse(policy.template);
-        this.onReads(
-          name,
-          () => {
-            try {
-              return ok(
-                parsedKey.evaluate(buildScope(this.store)).map((f) => f.plain).join("")
-              );
-            } catch (e) {
-              return readPending(e) !== void 0 ? pendingOf("unread") : failed(
-                `cache key: ${e instanceof Error ? e.message : String(e)}`,
-                "read"
-              );
-            }
-          },
-          (value) => hold2({ kind: "key", hash: keyHashOf(value) })
-        );
-        break;
-      }
-      case "depends_on": {
-        this.onReads(
-          name,
-          () => {
-            const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
-            return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
-          },
-          (value) => hold2({ kind: "key", hash: keyHashOf(value) })
-        );
-        break;
-      }
-    }
-  }
-  // [LAW:one-type-per-behavior] Both policies over what a source reads — its
-  // key, the variables it depends on — hold an identity when what they read
-  // answers, and another whenever that answer differs from the one last
-  // held. Over a value not answered yet (a view's inputs before its first
-  // payload) it waits rather than reading, so its first value is one read,
-  // not a read under no value and another when the value arrives
-  // (brandon-unfiled-3248.8ro6). Measured against the last answer held
-  // rather than the previous evaluation, so one that throws for a moment and
-  // comes back unchanged holds nothing new.
-  onReads(name, reads, hold2) {
-    let heldUnder;
-    const disposer = reaction(
-      reads,
-      (answer2) => {
-        this.notePolicy(name, answer2);
-        if (answer2.kind !== "ok" || answer2.value === heldUnder) return;
-        heldUnder = answer2.value;
-        hold2(answer2.value);
-      },
-      { fireImmediately: true }
-    );
-    this.cleanups.push(disposer);
-  }
-  // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
-  // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
-  // backstop is the only "silent" path and exists because the caller has already
-  // recorded the error — downstream reads get a safe typed value, not an exception.
-  fallbackOf(name, type3, varDefault, errorMessage) {
-    this.recordError(name, errorMessage);
-    if (varDefault !== void 0) return varDefault;
-    try {
-      return coerceToType(this.defaultEmptyValue, type3);
-    } catch {
-      return zeroValue(type3);
-    }
-  }
-  // Initial string value for shell/file boxes before the first async run.
-  stringInitial(varDefault) {
-    if (varDefault !== void 0) return varDefault;
-    if (typeof this.defaultEmptyValue === "string")
-      return this.defaultEmptyValue;
-    return "";
-  }
-  recordError(name, message) {
-    this.lastErrors.set(name, {
-      timestamp: this.store.clock.now(),
-      message
-    });
-  }
-  // The one fold from a policy's own outcome — whether it can fire — to the
-  // variable's standing fault.
-  // A fault standing for the same reason keeps its record, so it moves
-  // nothing that draws it.
-  notePolicy(name, outcome) {
-    runInAction(() => {
-      if (outcome.kind !== "failed") this.policyFaults.delete(name);
-      else if (this.policyFaults.get(name)?.message !== outcome.reason)
-        this.policyFaults.set(name, {
-          timestamp: this.store.clock.now(),
-          message: outcome.reason
-        });
-    });
-  }
-  // [LAW:single-enforcer] The one fold from a source outcome to the
-  // variable's error record: ok clears it, anything else records the reason.
-  noteOutcome(name, outcome) {
-    if (outcome.kind === "ok") this.lastErrors.delete(name);
-    else
-      this.recordError(
-        name,
-        outcome.kind === "failed" ? outcome.reason : "no value"
-      );
-  }
-};
-
-// src/config/payload-inputs.ts
-function effectiveInput(field, effectiveVar) {
-  const row2 = GLOBAL_FIELDS[field];
-  const kind = wireKindOf(field);
-  const floor2 = row2.kind === "session" || row2.kind === "config" ? row2.floor : "";
-  return kind === "string" ? { kind: "input", path: effectiveVar, default: "" } : { kind: "input", path: effectiveVar, type: kind, default: floor2 };
-}
-var EFFECTIVE_INPUTS = Object.fromEntries(
-  [...CONFIG_KEY_TO_EFFECTIVE_VAR].map(([field, effectiveVar]) => [
-    effectiveVar,
-    effectiveInput(field, effectiveVar)
-  ])
-);
-var LANE_FEED_TYPES = {
-  subscribers: "number",
-  fps: "number",
-  shown: "boolean"
-};
-var LANE_FEED_FIELDS = Object.keys(LANE_FEED_TYPES);
-var TERM_COLS_FLOOR = 80;
-var PAYLOAD_INPUTS = {
-  project_dir: {
-    kind: "input",
-    path: "workspace.project_dir",
-    default: ""
-  },
-  [SESSION_ID_VAR_NAME]: { kind: "input", path: "session_id", default: "" },
-  // Transcript path (a top-level hookData field, spread onto the payload
-  // root by projectPayload). Read by the quick-action tray's
-  // openTranscript action — pass-through, no projection.
-  transcript_path: {
-    kind: "input",
-    path: "transcript_path",
-    default: ""
-  },
-  // The session's resume command and the config file it renders from
-  // (RenderPayload.resumeCommand / .configPath), read by the quick-action
-  // tray's `⎘ resume` and `↗ config`; "" is "none", which hides the glyph.
-  resume_command: { kind: "input", path: "resumeCommand", default: "" },
-  config_path: { kind: "input", path: "configPath", default: "" },
-  // [LAW:one-source-of-truth] The value every setting and config-only global
-  // renders with, whichever rung produced it — the theme, style and effect as
-  // the view settles them, every other one as the daemon resolved it. A
-  // trigger's label and a picker's current-selection mark read it back, so
-  // the label and the bar trace to one resolution. The daemon always provides
-  // each; the default is the unreachable-absence floor.
-  ...EFFECTIVE_INPUTS,
-  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
-  // file author the active preset's root, resolved alongside preset.effective
-  // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
-  // customized" segment gates on this directly; a hand-authored config can
-  // read it too for its own reset affordance.
-  "preset.customized": {
-    kind: "input",
-    path: "preset.customized",
-    type: "boolean",
-    default: false
-  },
-  // Does the bundled default declare the active preset (RenderPayload
-  // .preset.bundled) — false for a preset the user authored, which the
-  // settings menu offers to delete.
-  "preset.bundled": {
-    kind: "input",
-    path: "preset.bundled",
-    type: "boolean",
-    default: true
-  },
-  // Each lane's feed of this session's frames (RenderPayload.feeds), one input
-  // per field of LANE_FEED_TYPES.
-  ...Object.fromEntries(
-    LANE_NAMES.flatMap(
-      (lane) => LANE_FEED_FIELDS.map((field) => [
-        laneFeedVar(lane, field),
-        {
-          kind: "input",
-          path: laneFeedVar(lane, field),
-          type: LANE_FEED_TYPES[field],
-          default: UNFOLLOWED[field]
-        }
-      ])
-    )
-  ),
-  // Who this render is drawn for (Drawing): the daemon sets it beside the
-  // payload, and a caller rendering without one draws as a request does.
-  [drawingVar("by")]: {
-    kind: "input",
-    path: drawingVar("by"),
-    default: ANSWERING.by
-  },
-  [drawingVar("fps")]: {
-    kind: "input",
-    path: drawingVar("fps"),
-    type: "number",
-    default: 0
-  },
-  // The settings door's indicator (src/render/diagnostics.ts,
-  // DiagnosticsProjection): its label, "" while there is nothing to show, the
-  // colours of the worst level the draw's diagnostics hold, and the key of
-  // the message its click opens.
-  ...Object.fromEntries(
-    ["label", "fg", "bg", "open"].map((field) => [
-      `diagnostics.${field}`,
-      { kind: "input", path: `diagnostics.${field}`, default: "" }
-    ])
-  ),
-  // [LAW:one-source-of-truth] The usable terminal width for THIS render —
-  // the exact post-reserve cell count FlexStrip wraps to. The bound payload
-  // carries it, the same width a draw's `opts.width` holds: the value a row
-  // fits to (RenderBinding.width) and the strip wraps to, so a template reading
-  // it and the wrap algebra can never disagree. Never cached: a resize is just
-  // a new value on the same path, re-read every render. The default only
-  // applies to compile-only callers that render without a bound width.
-  "term.cols": {
-    kind: "input",
-    path: "term.cols",
-    type: "number",
-    default: TERM_COLS_FLOOR
-  },
-  // The tmux pane this session's Claude Code runs in, as its client reported
-  // it; "" outside tmux (and for a client too old to say). It is the pane a
-  // `slash` click types into, so IN_TMUX below is the gate for one.
-  "tmux.pane": { kind: "input", path: "tmux.pane", default: "" },
-  // Claude Code's auto-compact window as its `/autocompact` last wrote it
-  // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
-  // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
-  // to the model's context window; `lower`/`higher` are the windows − and +
-  // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
-  // settings file the daemon could not read, and the only field set when it
-  // is.
-  "autocompact.window": {
-    kind: "input",
-    path: "autocompact.window",
-    type: "number",
-    default: -1
-  },
-  ...Object.fromEntries(
-    ["applied", "lower", "higher"].map((field) => [
-      `autocompact.${field}`,
-      {
-        kind: "input",
-        path: `autocompact.${field}`,
-        type: "number",
-        default: 0
-      }
-    ])
-  ),
-  "autocompact.error": {
-    kind: "input",
-    path: "autocompact.error",
-    default: ""
-  },
-  // Where the session is, as the daemon read it from the checkout on the
-  // request, so these answer before the git lane does. `noRepo` is a read that found none.
-  "location.main": { kind: "input", path: "location.main", default: "" },
-  "location.worktree": {
-    kind: "input",
-    path: "location.worktree",
-    default: ""
-  },
-  "location.subpath": { kind: "input", path: "location.subpath", default: "" },
-  "location.noRepo": {
-    kind: "input",
-    path: "location.noRepo",
-    type: "boolean",
-    default: false
-  },
-  // The repo's browsable web page, transposed from its remote by the daemon.
-  // "" is the genuine "no remote a browser can open" (local-only repo, bare
-  // path remote) — the quick-action tray's link reads that value, not a flag.
-  "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" }
-};
-var DRAW_PROJECTIONS = {
-  today: "the day the draw is at",
-  feeds: "the frames a lane was sent up to the draw's instant",
-  drawing: "who the draw is for",
-  diagnostics: "the errors and warnings the draw owes its reader"
-};
-function drawProjectionAt(path42) {
-  const root = path42.split(".", 1)[0];
-  return Object.hasOwn(DRAW_PROJECTIONS, root) ? root : void 0;
-}
-var SLOT_PATHS = Object.fromEntries(
-  EXPRESSION_SLOTS.map((slot) => [
-    slot,
-    CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)
-  ])
-);
-function slotAt(path42) {
-  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path42);
-}
-
-// src/config/synthesis-inputs.ts
-function synthesisReads(artifacts, trees, helpers) {
-  const reads = /* @__PURE__ */ new Set();
-  const add2 = (template, scope = helpers) => {
-    for (const ref of templateReads(template ?? "", scope).keys())
-      reads.add(ref);
-  };
-  for (const seg2 of Object.values(artifacts.segments)) {
-    const segScope = seg2.partials === void 0 ? helpers : { ...helpers, ...seg2.partials };
-    add2(seg2.template, segScope);
-    add2(seg2.bg, segScope);
-    add2(seg2.fg, segScope);
-    add2(seg2.when, segScope);
-    for (const body of Object.values(seg2.partials ?? {})) add2(body, segScope);
-  }
-  for (const tree of trees) {
-    for (const node of walkNodes(tree)) {
-      add2(node.when);
-      if (node.kind === "segment") {
-        add2(node.lead);
-        add2(node.trail);
-      }
-    }
-  }
-  for (const v of Object.values(artifacts.variables)) {
-    if (v.kind === "template") add2(v.template);
-    if (v.kind === "state") reads.add(SESSION_ID_VAR_NAME);
-  }
-  for (const a of Object.values(artifacts.actions)) {
-    reads.add(SESSION_ID_VAR_NAME);
-    for (const [, source] of actionTemplates(a)) add2(source);
-    const setBack = "set" in a ? SESSION_KEY_TO_EFFECTIVE_VAR.get(a.set) : void 0;
-    const persistBack = "persist" in a ? CONFIG_KEY_TO_EFFECTIVE_VAR.get(a.persist) : void 0;
-    if (setBack !== void 0) reads.add(setBack);
-    if (persistBack !== void 0) reads.add(persistBack);
-  }
-  return reads;
-}
-function synthesisInputs(artifacts, trees, config2) {
-  const own2 = templateScopeOf({
-    ...config2,
-    variables: { ...config2.variables, ...artifacts.variables },
-    segments: { ...config2.segments, ...artifacts.segments }
-  });
-  const ensured = {};
-  for (const ref of synthesisReads(artifacts, trees, config2.helpers)) {
-    if (refResolves(ref, own2)) continue;
-    const decl = PAYLOAD_INPUTS[ref];
-    if (decl === void 0) {
-      throw new Error(
-        `synthesized chrome reads ".${ref}", which it does not declare and PAYLOAD_INPUTS does not supply`
-      );
-    }
-    ensured[ref] = decl;
-  }
-  return ensured;
-}
-
-// src/config/option-domain.ts
-init_globals();
-
-// src/themes/palette-resolvers.ts
-init_globals();
-var baseCache = /* @__PURE__ */ new Map();
-function paletteForThemeName(name) {
-  const palette = basePaletteFor(name);
-  if (palette === null) {
-    throw new Error(
-      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
-    );
-  }
-  return palette;
-}
-function placementPalette(theme24, bar) {
-  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
-}
-function basePaletteFor(name) {
-  const hit = baseCache.get(name);
-  if (hit !== void 0) return hit;
-  const palette = getThemePalette(name);
-  if (palette === null) return null;
-  baseCache.set(name, palette);
-  return palette;
-}
-function transposedPalette(base, key) {
-  return TRANSPOSED(
-    base,
-    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
-    () => transposePalette(base, key)
-  );
-}
-var TRANSPOSED = memoPerPalette();
-function namedTheme(name) {
-  const value = basePaletteFor(name);
-  return value === null ? null : { kind: "decided", name, value };
-}
-function decideThemeName(name, where, onUnresolvable) {
-  const named3 = namedTheme(name);
-  if (named3 !== null) return named3;
-  onUnresolvable(
-    ruleFloorMessage(
-      where,
-      "palette",
-      `"${name}" names no installed theme${retiredThemeNote(name)}`
-    )
-  );
-  return themeFloor();
-}
-function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
-  return resolveSelection(
-    stagedPalette,
-    sessionTheme,
-    globalsPalette,
-    themeFloor(),
-    namedTheme
-  );
-}
-function themeFloor() {
-  return {
-    kind: "decided",
-    name: THEME_FLOOR,
-    value: paletteForThemeName(THEME_FLOOR)
-  };
-}
-
-// src/config/option-domain.ts
-var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
-function registerBuiltinDomain(name, resolve, facets = {}) {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
-}
-registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
-  paletteOf: (option) => paletteForThemeName(option)
-});
-var PLACEMENT_THEMES = "placementThemes";
-registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
-  paletteOf: (option, render3) => placementPalette(option, render3.palette)
-});
-for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members, { library, labelOf });
-}
-function perConfigDomainsFor(config2) {
-  return /* @__PURE__ */ new Map([
-    [
-      "styles",
-      {
-        members: Object.keys(config2.styles),
-        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
-        // construction of an adapted palette is transposedPalette — the same
-        // call drawDsl makes for the style actually in force. One
-        // transposition of the BASE, never a second over an already-styled
-        // palette (see OptionPalette).
-        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
-        // so a member always names a declared style.
-        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config2.styles[option])
-      }
-    ],
-    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
-    // whether or not a config declares it, and presetNames is where that is
-    // stated (once, for the gate and the render alike).
-    ["presets", { members: presetNames(config2.presets) }]
-  ]);
-}
-function knownOptionDomainNames(perConfigDomains) {
-  return [
-    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
-  ];
-}
-function resolveOptionDomain(from, perConfigDomains) {
-  if (typeof from !== "string") return { members: from };
-  const local = perConfigDomains.get(from);
-  if (local) return local;
-  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
-  if (entry) {
-    return {
-      members: entry.resolve(),
-      paletteOf: entry.paletteOf,
-      library: entry.library,
-      labelOf: entry.labelOf
-    };
-  }
-  throw new Error(unknownOptionDomain(from, perConfigDomains));
-}
-var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
-  ["looks", "styles"],
-  ["progressions", "variations"]
-]);
-function unknownOptionDomain(from, perConfigDomains) {
-  const renamed = RENAMED_OPTION_DOMAINS.get(from);
-  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
-  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
-}
-
-// src/config/setting-control.ts
-init_globals();
-var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
-function controlDomainAdmits(domain, value, perConfigDomains) {
-  if (domain === "bool") return parseSessionBoolean(value) !== null;
-  if (!("min" in domain)) {
-    return resolveOptionDomain(
-      optionsOf(domain),
-      perConfigDomains
-    ).members.includes(value);
-  }
-  return parseSessionInt(value, domain) !== null;
-}
-var LISTED_MEMBERS = 8;
-var SAMPLED_MEMBERS = 3;
-function describeControlDomain(domain, perConfigDomains) {
-  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
-  if (!("min" in domain)) {
-    const from = optionsOf(domain);
-    const { members } = resolveOptionDomain(from, perConfigDomains);
-    const quoted = members.map((m) => JSON.stringify(m));
-    if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
-    const named3 = typeof from === "string" ? ` "${from}"` : "";
-    return `one of the ${members.length}${named3} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
-  }
-  return `an integer from ${domain.min} to ${domain.max}`;
-}
-function controlDeclOf(decl) {
-  return { label: decl.label, domain: controlDomainOf(decl.domain) };
-}
-function controlDomainOf(domain) {
-  if (domain === "theme") return { themes: PLACEMENT_THEMES };
-  if (domain === "bool") return domain;
-  return "min" in domain ? domain : { from: domain };
-}
-function settingControl(decl, key, readVar2, name, listKey) {
-  const label2 = escapeTemplateLiteral(decl.label);
-  const { domain } = decl;
-  if (domain === "bool") {
-    return {
-      kind: "inline",
-      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
-      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
-      variables: {}
-    };
-  }
-  if ("from" in domain) {
-    return optionPicker(key, name, listKey, domain.from, (n) => ({
-      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
-      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
-    }));
-  }
-  if ("themes" in domain) {
-    return optionPicker(key, name, listKey, domain.themes, (n) => ({
-      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
-      rows: [
-        `{{ swatches "${n.apply}" "${n.page}" }}`,
-        `{{ themePreview "${n.apply}" }}`
-      ]
-    }));
-  }
-  const step4 = (by) => ({
-    set: key,
-    min: domain.min,
-    max: domain.max,
-    by
-  });
-  return {
-    kind: "inline",
-    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
-    actions: {
-      [`${name}.down`]: step4(-domain.step),
-      [`${name}.up`]: step4(domain.step)
-    },
-    variables: {}
-  };
-}
-function optionPicker(key, name, listKey, from, face) {
-  const ref = { variable: listKey, key: listKey, member: name };
-  const toggle = menuActionName(listKey, name);
-  const open2 = `${name}.open`;
-  const page2 = menuPageKey(listKey);
-  const currentPage = `${page2}.current`;
-  const { template, rows } = face({ apply: name, open: open2, page: page2 });
-  return {
-    kind: "picker",
-    template,
-    actions: {
-      [name]: { set: key, from },
-      [toggle]: disclosureCycleAction(listKey, name),
-      [page2]: { set: page2, int: true },
-      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
-      [open2]: { do: [toggle, currentPage] }
-    },
-    variables: {
-      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
-      [page2]: { kind: "state", key: page2, default: "0" }
-    },
-    list: { ref, rows }
-  };
-}
-
-// src/config/help.ts
-init_globals();
-var HELP_GLYPH_CLOSED = "(?)";
-function declareHelp(name, lines2, within4, out) {
-  const self2 = {
-    variable: name,
-    key: name,
-    member: DISCLOSURE_OPEN
-  };
-  out.variables[name] = {
-    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
-    ...within4.length > 0 && { within: within4 }
-  };
-  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
-  out.segments[name] = {
-    template: disclosureTrigger(
-      name,
-      HELP_GLYPH_CLOSED,
-      DISCLOSURE_GLYPH_CLOSE
-    ),
-    // The trigger is visible wherever its host surface is. An unnested `(?)`
-    // (`within` empty) is always visible, and declares no `when` at all.
-    ...gateOf(within4)
-  };
-  const children2 = lines2.map((line, i) => {
-    const lineName = `${name}.${i}`;
-    out.segments[lineName] = { template: line };
-    return { kind: "segment", name: lineName };
-  });
-  return disclosureNode(
-    name,
-    self2,
-    { kind: "container", direction: "horizontal", children: children2 },
-    "drop"
-  );
-}
-function gateOf(within4) {
-  const [first2, ...rest2] = within4;
-  return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
-}
-
-// src/template-engine/colors.ts
-init_globals();
-var NO_FILL = "none";
-function groundOf(palette) {
-  return resolveColorRef(palette, "background");
-}
-var ColorSpecError = class extends Error {
-  constructor(spec, role, detail) {
-    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
-    this.name = "ColorSpecError";
-  }
-};
-function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
-  const { palette, tint, text: text4 } = active2;
-  const bgSpec = evalToPlainText(bgTemplate, scope);
-  const filled2 = bgSpec !== NO_FILL;
-  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
-  active2.bg = bgColor;
-  const fgSpec = evalToPlainText(fgTemplate, scope);
-  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
-  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
-  return new Style({
-    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
-    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
-  });
-}
-function evalToPlainText(template, scope) {
-  if (template === void 0) return void 0;
-  return template.evaluate(scope).map((f) => f.plain).join("");
-}
-function resolveRef(palette, ref, role) {
-  try {
-    return resolveColorRef(palette, ref);
-  } catch (e) {
-    if (e instanceof ColorRefError)
-      throw new ColorSpecError(ref, role, e.message);
-    throw e;
-  }
-}
-
-// src/help-text.ts
-init_globals();
-
-// src/config/edit-glyphs.ts
-init_globals();
-var REMOVE_GLYPH = "\u2716";
-var ADD_GLYPH = "\u271A";
-var CONFIGURE_GLYPH = "\u{1F527}";
-
-// src/cli-flags.ts
-init_globals();
-var NODE_FLAGS = {
-  help: ["-h", "--help"],
-  version: ["-V", "--version"]
-};
-
-// src/help-text.ts
-var LANE_PLACES = [
-  ...new Set(
-    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
-  )
-].join(" or ");
-var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
-var EDIT_MODE_HELP = [
-  `${ADD_GLYPH} inserts`,
-  `${REMOVE_GLYPH} removes`,
-  `${CONFIGURE_GLYPH} configures`,
-  "\u21BA resets layout"
-];
-var LANE_HELP = {
-  band: [
-    "animates the bar in the band above the prompt, through a Claude Code mod",
-    "on: installs the candybar-band mod from this checkout and types /reload-plugins"
-  ],
-  statusline: [
-    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
-    "on: exits this Claude Code and starts it again under that launcher, on this session",
-    "or start one yourself: cc-candybar --help prints the line to type"
-  ],
-  pane: [
-    "animates the bar in a tmux pane under this session's",
-    "on: opens that pane \xB7 off: closes it"
-  ],
-  tmuxStatus: [
-    "draws the bar in the tmux status line, while this session's pane is the one it shows",
-    "tmux: the daemon draws it there \xB7 claude: puts the status line back as it was"
-  ]
-};
-var HELP_TEXT = `
-cc-candybar - Beautiful powerline statusline for Claude Code
-
-Usage: cc-candybar [options]
-
-Standalone Commands:
-  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
-  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
-
-Debugging:
-  CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
-
-Configuration:
-  Layout and segment options are defined in .cc-candybar.json5 (place in your
-  project dir, cwd, or ~/.config/cc-candybar/config.json5). Use CC_CANDYBAR_CONFIG
-  to point at a specific file. To see the effective merged config:
-    cc-candybar config
-
-  Every bar carries a settings menu, whatever your config says \u2014 no config
-  needed, and writing your own \`root\` cannot delete it. Click
-  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
-  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
-  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
-  your config file. Under it are its
-  tabs, ${TABS.map((t2) => t2.label).join(", ")};
-  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
-  A change applies to this session at once.
-  Where each setting is in the menu: the globals field that sets it in a
-  config file, then the control's label.
-${settingsByPlace().flatMap(({ path: path42, names }) => [
-  `    ${path42}`,
-  ...names.map(
-    (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
-  )
-]).join("\n")}
-  The \u{1F9F0} tools tab holds \u{1FA7A} doctor: click it to check your setup, and click a
-  failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
-
-  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
-  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
-
-Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
-${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
-${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
-
-Subcommands:
-  install                  One-shot setup: stages the runtime (native render
-                           binary + dist bundle) at a stable path, creates the
-                           URL handler app + cc-candybar:// scheme (macOS), and
-                           writes the staged entry as the statusLine command in
-                           ~/.claude/settings.json. Re-run to update.
-  install-url-handler      Just stage the runtime and create + register the URL
-                           handler app (macOS only).
-  url-handle URL           Internal \u2014 the tmux status line's click binding
-                           runs it. Sends a cc-candybar:// link to the daemon
-                           as a click. A link clicked in a terminal goes
-                           through the URL handler app instead.
-  plugin install SOURCE    Install a repository's plugins into
-                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
-                           local path, a GitHub slug (owner/repo) or a git URL,
-                           and its plugins are the folders under
-                           .cc-candybar/plugins/. A definition the bar would
-                           drop installs nothing. Re-run to update.
-  daemon-stats [--json]    Query the running daemon for runtime stats:
-                           uptime, RSS, cache hit rates, watcher count,
-                           request totals. Does not spawn a daemon.
-  frames --lane LANE [--config PATH]
-                           One session's bar as the daemon pushes it \u2014 up to
-                           30 frames a second while it moves, at once on a
-                           click \u2014 one JSON message per stdout line. Reads
-                           Claude Code's statusline JSON from stdin (one object
-                           a line) and sends it as the session's data
-                           (--config rides with it). LANE is one of
-                           ${LANE_NAMES.join(", ")}:
-                           the experimental lane this stream serves,
-                           which streams only while its toggle in the settings
-                           menu's ${LANE_PLACES} is on.
-  bar-pane PANE            Draw the bar of the Claude Code session in tmux
-                           pane PANE (e.g. %3) in this pane, as the daemon
-                           pushes it, while this pane is shown. The bar is
-                           drawn at PANE's width, so split PANE with -v for a
-                           pane under it that fits. Experimental:
-                           runs while ${LANES.pane.label} is on in the settings
-                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
-
-Config tooling:
-  doctor [file]            Check your setup the way the bar's \u{1FA7A} doctor does \u2014
-                           one line per check. Exit 0 all ok, 1 any failed,
-                           2 usage error / unreadable settings. Run it from a
-                           Claude Code shell (or inside the same tmux pane) so
-                           it sees Claude Code's own environment. [file] is
-                           the config to check, when the statusline command
-                           names one with --config.
-  check [--render] [file]  Validate a config on the full render pipeline (parse
-                           \u2192 merge \u2192 validate \u2192 register \u2192 render, under
-                           every preset) with no daemon. With no path, checks
-                           the same file the daemon would load from here. Exit
-                           0 clean (warnings on stderr), 1 invalid, 2
-                           unreadable. --render also prints the bar a fresh
-                           session opens on, so you can read a config without
-                           installing it. "lint" is an alias.
-  schema                   Print the JSON Schema for the config file shape
-                           (.cc-candybar.json5). Point an editor's $schema at it
-                           for autocomplete + structural validation.
-  vars [--json]            Declared variables: source kind, value, last error.
-  segments [--json]        Segment templates and their last rendered output.
-  config [--json]          The effective merged config. (All three query the
-                           running daemon; none spawn one.)
-
-`;
-
-// src/config/settings-menu.ts
-init_globals();
-
-// src/config/quiet-text.ts
-init_globals();
-var QUIET_PCT = 60;
-var QUIET_MIN_CONTRAST = 3;
-var QUIET_TEXT = `readableOn (mix (color "foreground") (bgOf) ${QUIET_PCT}) (bgOf) ${QUIET_MIN_CONTRAST}`;
-
-// src/doctor/checks.ts
-init_globals();
-
-// src/tmux-hint.ts
-init_globals();
-var TMUX_ENV = {
-  // `socket,server-pid,session-id` — the socket is the part before the first
-  // comma, and it is what `tmux -S <socket>` needs to reach THIS server.
-  socket: "TMUX",
-  pane: "TMUX_PANE",
-  // Claude Code's own switch: when this is truthy in ITS environment, it stops
-  // re-encoding the statusline at 256 colours inside tmux (verified against the
-  // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
-  truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
-};
-var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
-
-// src/config-hint.ts
-init_globals();
-
-// src/utils/user-path.ts
-init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
-function expandHome(p2, home) {
-  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
-}
-function resolveUserPath(base, p2, home) {
-  return import_node_path7.default.resolve(base, expandHome(p2, home));
-}
-function explicitConfigPath(base, p2, home) {
-  return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
-}
-
-// src/config-hint.ts
-var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
-function requestedConfigTarget(argument, environment) {
-  if (argument !== void 0) return { source: "argument", path: argument };
-  if (environment !== void 0) {
-    return { source: "environment", path: environment };
-  }
-  return { source: "search" };
-}
-function chainName(paths2, none2 = "bundled default (no config file loaded)") {
-  return paths2.join(" < ") || none2;
-}
-
-// src/render/strip.ts
-init_globals();
-
-// src/render/rich-theme.ts
-init_globals();
-var RENDER_THEME = new Theme({
-  // A joiner draws `plain`'s separator and `metro`'s rail on the terminal's own
-  // ground, which the detached daemon cannot see; rich-js's `bright_black` is a
-  // slot some terminal themes paint as that ground. The terminal's own text on
-  // its own ground is the one pair known to read there.
-  "strip.separator": "default",
-  "strip.rail": "default"
-});
-function resolvedStyle(style) {
-  return RENDER_THEME.resolve(style);
-}
-
-// src/render/effect.ts
-init_globals();
-var STILL3 = { kind: "still" };
-var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
-var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
-function isMoving(part) {
-  return part.name !== EFFECT_FLOOR;
-}
-function together(parts) {
-  return (drawn) => Animation.map(
-    Animation.all(
-      parts.map(
-        ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
-      )
-    ),
-    (frames) => (colors, cell3) => frames.reduce((moved, part) => part(moved, cell3), colors)
-  );
-}
-var ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
-function fromGround(effect, ground) {
-  const terminal = new TerminalTheme(
-    ground,
-    ASSUMED_TERMINAL.foregroundColor,
-    ASSUMED_TERMINAL.ansiColors,
-    ASSUMED_TERMINAL.palette
-  );
-  return (drawn) => effect({ ...drawn, theme: terminal });
-}
-function paintedOn(effect, owners) {
-  return (row2) => confined(() => effect(row2), ...owners)(row2);
-}
-function noiseOffset(text4) {
-  let hash2 = 2166136261;
-  for (let i = 0; i < text4.length; i++) {
-    hash2 ^= text4.charCodeAt(i);
-    hash2 = Math.imul(hash2, 16777619) >>> 0;
-  }
-  return hash2 / 4294967296;
-}
-var NOISE_DEPTH = 4096;
-function closingFlash(fill, text4, begins) {
-  const lit = (look, { terminal }) => ({
-    ...look,
-    bg: terminal.bg ? look.bg : fill,
-    fg: terminal.fg ? look.fg : terminal.bg ? fill : text4
-  });
-  const dark = (colors) => colors;
-  const holds2 = CLOSING_FLASH.reduceRight(
-    (after, { lit: on2, seconds }) => Animation.sequence(Animation.constant(on2 ? lit : dark), seconds, after),
-    Animation.constant(dark)
-  );
-  const idle = Animation.sequence(Animation.constant(dark), begins, holds2);
-  return () => idle;
-}
-var SessionEffects = class {
-  constructor(key) {
-    this.key = key;
-  }
-  key;
-  // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
-  // changed to its current value: the effect's own t = 0 is a recorded fact,
-  // never inferred from when renders happened to arrive.
-  inForce = null;
-  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
-  // its last drawn frame left it — where the clock stood and the speed it ran
-  // at from there: the anchor every later reading is measured from, so a
-  // change of speed changes the clock's slope from the frame it lands in and
-  // never its reading, so no loop jumps phase. The host clock itself before
-  // the session's first frame.
-  anchor = Timeline.play(0);
-  // The same fact for each placement wearing its own effect, by placement id,
-  // kept for the placements the latest render drew: one that stopped being
-  // drawn starts its effect again at t = 0 when it is drawn again, as the
-  // effect comes into force for it again.
-  placements = /* @__PURE__ */ new Map();
-  // The effects made for the rows the latest render drew, by row and scope (the
-  // bar's, or one placement's), with the name each was made for. Each render
-  // starts an empty map and keeps only what it draws, so a row that stopped
-  // being drawn (a menu closed) takes its effects and their settled shares with
-  // it.
-  made = /* @__PURE__ */ new Map();
-  // The transitions in flight at the last frame drawn, by placement — what a
-  // placement's appearing and leaving go on from when the next frame is drawn
-  // from the same source as the view's record of it (`FrameRecord`) — or
-  // null: no frame drawn, or the last drawn with transitions off, which
-  // nothing compares against.
-  passages = null;
-  // [LAW:nothing-unseen] What the latest render wore, for the render's event.
-  frame = {
-    effect: EFFECT_FLOOR,
-    t: 0,
-    speed: 1,
-    made: 0,
-    reused: 0,
-    own: [],
-    basis: "off",
-    revision: 0,
-    fades: [],
-    leaves: []
-  };
-  // The latest render's effects: the bar's, at what t, how many of its rows'
-  // effects were made fresh rather than reused — one made every frame pays
-  // rich-js's share settling every frame — and each placement's own.
-  lastFrame() {
-    return this.frame;
-  }
-  // The effects this session holds: the ones its latest render drew, and the
-  // transitions still in flight.
-  get heldCount() {
-    const passing = this.passages?.size ?? 0;
-    return [...this.made.values()].reduce((n, row2) => n + row2.size, passing);
-  }
-  /**
-   * The session's animation clock read at the wall instant `at`, running at
-   * `speed` from it on (`Timeline.withRate`: no jump at `at`). The time since
-   * the last drawn frame passed at the speed in force then; before the first
-   * frame the timeline is the host clock itself, so a session that has only
-   * ever run at 1x reads the wall instant at every frame. Reads only: the frame
-   * that draws keeps it as the anchor (`drawn`).
-   */
-  clockAt(at, speed2) {
-    return { wall: at, timeline: Timeline.withRate(this.anchor, at, speed2) };
-  }
-  /**
-   * The motion of each row of a render drawn at `clock` whose bar wears `name`,
-   * given the row's strip items. Records an effect coming into force — the
-   * bar's, or a placement's — when it differs from the last render's, so every
-   * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
-   * from off the row, wheel at the theme's own hues. Records every placement
-   * the render draws, fades in each one the last frame did not, and dissolves
-   * out each one the last frame drew and this one does not. All of it is kept
-   * once the frame is `drawn`.
-   */
-  motion(name, clock, given2, flash = null) {
-    const at = animationAt(clock);
-    const onSession = (t2) => Timeline.seek(clock.timeline, clock.wall, t2);
-    const inForce = this.inForce?.name === name ? this.inForce : { name, since: at };
-    const bar = {
-      scope: BAR_SCOPE,
-      name,
-      t: at - inForce.since
-    };
-    const knownPlacements = this.placements;
-    const placements = /* @__PURE__ */ new Map();
-    const known = this.made;
-    const made = /* @__PURE__ */ new Map();
-    const own2 = [];
-    const { last: last2 } = given2;
-    const inFlight = this.passages;
-    const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
-    const before = basis === "compared" ? (id2) => {
-      const record2 = last2.placements.get(id2);
-      return record2?.kind === "drew" ? {
-        drawing: record2.drawing,
-        passage: inFlight.get(id2) ?? null
-      } : void 0;
-    } : null;
-    const reachedIds = /* @__PURE__ */ new Set();
-    const passages = /* @__PURE__ */ new Map();
-    const fading = [];
-    const leaving = [];
-    const frame2 = {
-      effect: name,
-      t: bar.t,
-      speed: clock.timeline.rate,
-      made: 0,
-      reused: 0,
-      own: own2,
-      basis,
-      revision: given2.source.revision,
-      fades: fading,
-      leaves: leaving
-    };
-    const begin = (transition2, id2, { ground }) => {
-      const begun = EFFECT_CATALOGUE.transitions[transition2]({
-        z: noiseOffset(`${this.key}@${id2}`) * NOISE_DEPTH
-      });
-      return {
-        name: transition2,
-        since: at,
-        done: (t2) => begun.done(t2),
-        effect: fromGround(begun.effect, ground)
-      };
-    };
-    const over2 = ({ since, done: done2 }) => done2(at - since);
-    const shown = (id2, drawing2, last3) => ({
-      drawing: drawing2,
-      passage: before === null ? null : last3 === void 0 || last3.passage?.name === "dissolve" ? begin("fade", id2, drawing2) : last3.passage !== null && !over2(last3.passage) ? last3.passage : null
-    });
-    const gone = (id2, last3) => {
-      if (last3 === void 0 || last3.drawing.opened || last3.drawing.own.length === 0)
-        return void 0;
-      if (last3.passage?.name === "dissolve")
-        return over2(last3.passage) ? void 0 : last3;
-      const held = { ...last3.drawing, own: last3.drawing.own.map(given2.hold) };
-      return { drawing: held, passage: begin("dissolve", id2, held) };
-    };
-    const reached = (id2, lines2) => {
-      if (reachedIds.has(id2))
-        throw new Error(`placement "${id2}" was reached twice in one frame`);
-      reachedIds.add(id2);
-      const last3 = before?.(id2);
-      const { drawing: drawing2, deeper } = given2.returned(id2, lines2);
-      const now2 = drawing2 === null ? gone(id2, last3) : shown(id2, drawing2, last3);
-      if (now2 === void 0) return lines2;
-      if (now2.passage !== null) {
-        passages.set(id2, now2.passage);
-        (now2.passage.name === "fade" ? fading : leaving).push({
-          placement: id2,
-          t: at - now2.passage.since
-        });
-      }
-      return drawing2 === null ? [...now2.drawing.own, ...deeper] : lines2;
-    };
-    const ownPart = (placement, name2) => {
-      const last3 = placements.get(placement) ?? knownPlacements.get(placement);
-      const since = last3?.name === name2 ? last3 : { name: name2, since: at };
-      const t2 = at - since.since;
-      if (!placements.has(placement)) {
-        placements.set(placement, since);
-        own2.push({ placement, effect: name2, t: t2 });
-      }
-      return { scope: placement, name: name2, t: t2 };
-    };
-    const effectOf = (rowKey, part) => {
-      const row3 = made.get(rowKey) ?? /* @__PURE__ */ new Map();
-      made.set(rowKey, row3);
-      const current = row3.get(part.scope);
-      if (current !== void 0) return current.effect;
-      const last3 = known.get(rowKey)?.get(part.scope);
-      const reuse = last3?.name === part.name;
-      const z = noiseOffset(
-        part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`
-      );
-      const effect = reuse ? last3.effect : EFFECT_CATALOGUE.loops[part.name]({ z: z * NOISE_DEPTH });
-      frame2[reuse ? "reused" : "made"]++;
-      row3.set(part.scope, { name: part.name, effect });
-      return effect;
-    };
-    const byScope = (items) => {
-      const parts = /* @__PURE__ */ new Map();
-      for (const { owner, placement } of items) {
-        const part = placement.effect === FOLLOW_BAR ? bar : ownPart(placement.id, placement.effect);
-        const seen = parts.get(part.scope);
-        if (seen === void 0)
-          parts.set(part.scope, { ...part, owners: [owner] });
-        else seen.owners.push(owner);
-      }
-      return [...parts.values()];
-    };
-    const passagesOf = (items) => {
-      const byPlacement = /* @__PURE__ */ new Map();
-      for (const { owner, placement } of items) {
-        const mine = byPlacement.get(placement.id);
-        if (mine === void 0) byPlacement.set(placement.id, [owner]);
-        else mine.push(owner);
-      }
-      return [...byPlacement].flatMap(([id2, owners]) => {
-        const passage = passages.get(id2) ?? null;
-        return passage === null ? [] : [
-          {
-            timeline: onSession(at - passage.since),
-            effect: confined(passage.effect, ...owners)
-          }
-        ];
-      });
-    };
-    const flashPart = flash === null ? [] : [
-      {
-        timeline: Timeline.play(flash.idleSince),
-        effect: closingFlash(
-          flash.fill,
-          flash.text,
-          flashBegins(flash.timeoutS)
-        )
-      }
-    ];
-    const flashing = (kind) => kind === "menu" ? flashPart : [];
-    const row2 = (rowName, kind, items) => {
-      const parts = items.some(
-        (i) => i.placement.effect !== FOLLOW_BAR
-      ) ? byScope(items) : [{ ...bar, owners: void 0 }];
-      const moving = parts.filter(isMoving);
-      const passing = passagesOf(items);
-      const flashed = flashing(kind);
-      if (moving.length === 0 && passing.length === 0 && flashed.length === 0)
-        return STILL3;
-      const rowKey = `${this.key}#${rowName}`;
-      return {
-        kind: "moving",
-        time: clock.wall,
-        wrap: (strip) => new Effected(
-          strip,
-          together([
-            ...moving.map((part) => {
-              const effect = effectOf(rowKey, part);
-              return {
-                timeline: onSession(part.t),
-                effect: part.owners === void 0 ? effect : paintedOn(effect, part.owners)
-              };
-            }),
-            ...passing,
-            // Last, so a lit hold is the flash's over whatever a fade
-            // veils: the menu is about to close.
-            ...flashed
-          ]),
-          { key: rowKey, theme: ASSUMED_TERMINAL }
-        )
-      };
-    };
-    return {
-      // [LAW:dataflow-not-control-flow] With transitions off nothing is
-      // compared or kept, so every placement draws exactly what it returned.
-      placed: basis === "off" ? (_id, lines2) => lines2 : reached,
-      row: row2,
-      drawn: () => {
-        this.anchor = clock.timeline;
-        this.inForce = inForce;
-        this.placements = placements;
-        this.made = made;
-        this.passages = basis === "off" ? null : passages;
-        this.frame = frame2;
-      }
-    };
-  }
-};
-var MAX_SESSIONS = 256;
-var EffectSessions = class {
-  constructor(maxSessions = MAX_SESSIONS) {
-    this.maxSessions = maxSessions;
-  }
-  maxSessions;
-  sessions = /* @__PURE__ */ new Map();
-  of(sessionId2) {
-    const known = this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, known);
-    for (const oldest of this.sessions.keys()) {
-      if (this.sessions.size <= this.maxSessions) break;
-      this.sessions.delete(oldest);
-    }
-    return known;
-  }
-  // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
-  // effect made for a row keeps rich-js's settled shares, so their count is the
-  // size that grows.
-  getStats() {
-    let effects = 0;
-    for (const session of this.sessions.values()) effects += session.heldCount;
-    return { sessions: this.sessions.size, effects };
-  }
-};
-
-// src/render/frame.ts
-init_globals();
-
-// src/render/diagnostic-style.ts
-init_globals();
-var DIAGNOSTIC_ERROR_COLORS = {
-  fg: "#ffffff",
-  bg: "#c82828"
-};
-var DIAGNOSTIC_WARNING_COLORS = {
-  fg: "#000000",
-  bg: "#dca028"
-};
-var DIAGNOSTIC_INFO_COLORS = {
-  fg: "#ffffff",
-  bg: "#2f6db5"
-};
-function sgrOf(layer, hex3) {
-  const channels = [1, 3, 5].map(
-    (at) => Number.parseInt(hex3.slice(at, at + 2), 16)
-  );
-  return `\x1B[${layer};2;${channels.join(";")}m`;
-}
-var DIAGNOSTIC_ERROR_FG = sgrOf(38, DIAGNOSTIC_ERROR_COLORS.fg);
-var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
-
-// src/render/diagnostic-text.ts
-init_globals();
-var ELLIPSIS = "\u2026";
-var NEUTRALIZED_RANGES = [
-  [0, 31],
-  [127, 159],
-  [8234, 8238],
-  [8294, 8303]
-];
-function isControlChar(code) {
-  return NEUTRALIZED_RANGES.some(([lo, hi]) => code >= lo && code <= hi);
-}
-function sanitizeText(text4) {
-  let sanitized = "";
-  for (const ch of text4) {
-    sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
-  }
-  return sanitized.replace(/\s+/g, " ").trim();
-}
-function sanitizeAndTruncate(text4, maxLen) {
-  const sanitized = sanitizeText(text4);
-  let out = "";
-  let count = 0;
-  for (const ch of sanitized) {
-    if (count === maxLen) {
-      return out.replace(/.$/u, ELLIPSIS);
-    }
-    out += ch;
-    count++;
-  }
-  return out;
-}
-
-// src/render/error-glyph.ts
-init_globals();
-var OPEN = `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}`;
-var PREFIX = "\u26A0 cc-candybar: ";
-var MAX_MESSAGE_LEN = 60;
-function permanentGlyphText(outcome) {
-  return `${PREFIX}${describe2(outcome)}`;
-}
-function describe2(outcome) {
-  switch (outcome.cause) {
-    case "version_mismatch": {
-      const daemon3 = outcome.daemonV === 0 ? "unknown" : `v${outcome.daemonV}`;
-      return `protocol mismatch (client v${outcome.clientV} \u2260 daemon ${daemon3})`;
-    }
-    case "bad_request":
-      return `daemon rejected request: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "render_failed":
-      return `render failed: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "switched_off":
-      return `switched off: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "malformed_response":
-      return `malformed daemon response: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-  }
-}
-
-// src/render/frame.ts
-function parseFrame(wire) {
-  return { ...wire, nextChange: wire.nextChange ?? Infinity };
-}
-function standIn(frame2, rows) {
-  return {
-    depth: frame2.depth,
-    rows,
-    nextChange: Infinity,
-    motion: frame2.motion === "still" ? "still" : "can-move",
-    pending: []
-  };
-}
-function diagnosticFrame(text4, colors) {
-  return {
-    depth: "truecolor",
-    rows: [
-      { kind: "diagnostic", runs: [{ text: sanitizeText(text4), ...colors }] }
-    ],
-    nextChange: Infinity,
-    motion: "still",
-    pending: []
-  };
-}
-function renderFailedFrame(message) {
-  return diagnosticFrame(
-    permanentGlyphText({ kind: "permanent", cause: "render_failed", message }),
-    DIAGNOSTIC_ERROR_COLORS
-  );
-}
-function laneEncoded(encode2, frame2) {
-  try {
-    return encode2(frame2);
-  } catch (error) {
-    const why2 = error instanceof Error ? error.message : String(error);
-    return encode2(
-      diagnosticFrame(`\u26A0 cc-candybar ${why2}`, DIAGNOSTIC_ERROR_COLORS)
-    );
-  }
-}
-function drawnColor(spec) {
-  if (spec.type === ColorDepth.TRUECOLOR) return spec.value.hex;
-  return spec.number === void 0 ? spec.name : `color(${spec.number})`;
-}
-var ATTRIBUTES = Object.keys(new Style().attributes);
-function lookOf(style, depth) {
-  const { color, bgcolor } = style.drawnColors(depth);
-  const attrs = ATTRIBUTES.filter((name) => style[name] === true);
-  return {
-    ...color !== void 0 && { fg: drawnColor(color) },
-    ...bgcolor !== void 0 && { bg: drawnColor(bgcolor) },
-    ...attrs.length > 0 && { attrs }
-  };
-}
-function runOf({ text: text4, style }, depth) {
-  return {
-    text: text4,
-    ...style !== void 0 && depth !== null && lookOf(style, depth),
-    ...style?.link !== void 0 && { link: style.link }
-  };
-}
-function runLines(segments, depth) {
-  const written2 = segments.filter((s) => !s.isControl && s.text.length > 0);
-  return Segment.splitLines(written2).map(
-    (line) => line.map((segment) => runOf(segment, depth))
-  );
-}
-function segmentOf({ text: text4, fg, bg, attrs = [], link }) {
-  return new Segment(
-    text4,
-    new Style({
-      color: fg,
-      bgcolor: bg,
-      link,
-      ...Object.fromEntries(attrs.map((name) => [name, true]))
-    })
-  );
-}
-function encodeAnsi(lines2, depth) {
-  const destination = resolveDestination(depth);
-  return lines2.map((runs) => segmentsToString(runs.map(segmentOf), destination)).join("\n");
-}
-function ansiOf(frame2) {
-  return encodeAnsi(
-    frame2.rows.map((row2) => row2.runs),
-    frame2.depth
-  );
-}
-function composeBar(frame2) {
-  return ansiOf(frame2) + "\n";
-}
-var sameLook = (a, b) => a.fg === b.fg && a.bg === b.bg && a.link === b.link && a.attrs?.join() === b.attrs?.join();
-function mergedRuns({ runs }) {
-  const merged = [];
-  for (const run3 of runs) {
-    const last2 = merged.at(-1);
-    if (last2 !== void 0 && sameLook(last2, run3))
-      merged[merged.length - 1] = { ...last2, text: last2.text + run3.text };
-    else merged.push(run3);
-  }
-  return merged;
-}
-function plainOf2(runs) {
-  return runs.map((run3) => run3.text).join("");
-}
-
-// src/render/strip.ts
-var UNBOUNDED_DRAW_WIDTH = 80;
-var ROW_HOST = {};
-function draw(renderable, options) {
-  const destination = resolveDestination(options.colorSystem);
-  const { time } = options;
-  let told = Infinity;
-  const segments = [
-    ...render(renderable, {
-      maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
-      isTerminal: false,
-      asciiOnly: false,
-      theme: RENDER_THEME,
-      colorSystem: destination.colorSystem,
-      ...time === void 0 ? {} : { frame: { time, host: ROW_HOST } },
-      // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
-      // as no style at all; a name the theme lacks is a broken config, so it
-      // throws here exactly as the cell splitter throws on it.
-      onStyleError: (error) => {
-        throw error;
-      },
-      onHold: ({ nextChange }) => {
-        told = Math.min(told, nextChange);
-      }
-    })
-  ];
-  return {
-    lines: runLines(segments, destination.colorSystem),
-    nextChange: Math.min(Segment.nextChange(segments), told)
-  };
-}
-var DEFAULT_TERMINAL_WIDTH = 120;
-var separatorJoiners = /* @__PURE__ */ new Map();
-function plainWith(separator) {
-  const known = separatorJoiners.get(separator);
-  if (known !== void 0) return known;
-  const withGlyph = (form) => {
-    const seam2 = form.seam.map(
-      (cell3) => "cap" in cell3 ? cell3 : { ...cell3, glyph: separator }
-    );
-    return { seam: seam2 };
-  };
-  const { seam, caps } = JOINERS2.plain;
-  const joiner = new CellJoiner(
-    {
-      glyph: withGlyph(seam.glyph),
-      ascii: seam.ascii
-    },
-    caps
-  );
-  separatorJoiners.set(separator, joiner);
-  return joiner;
-}
-function pickJoiner(endcaps, separator) {
-  return endcaps === "plain" && separator !== void 0 ? plainWith(separator) : JOINERS2[endcaps];
-}
-var geometryMemo = /* @__PURE__ */ new Map();
-function stripGeometry(options) {
-  const key = JSON.stringify([options.endcaps, options.separator ?? null]);
-  const known = geometryMemo.get(key);
-  if (known !== void 0) return known;
-  const joiner = pickJoiner(options.endcaps, options.separator);
-  const cell3 = (bgcolor) => new RichText("x", {
-    end: "",
-    overflow: "ignore",
-    style: new Style({ bgcolor })
-  });
-  const width = (cells) => {
-    const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
-    return new RichText(plainOf2(lines2.flat())).cellLength;
-  };
-  const one = width([cell3("#101010")]);
-  const geometry = {
-    chrome: one - 1,
-    seam: width([cell3("#101010"), cell3("#202020")]) - one - 1
-  };
-  geometryMemo.set(key, geometry);
-  return geometry;
-}
-function stripChromeCols(options) {
-  return stripGeometry(options).chrome;
-}
-function stripSeamCols(options) {
-  return stripGeometry(options).seam;
-}
-var PRIVATE_USE = /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
-function privateGlyphsIn(text4) {
-  return [...new Set(text4.match(PRIVATE_USE) ?? [])].join("");
-}
-function stripPrivateGlyphs(options) {
-  const joiner = pickJoiner(options.endcaps, options.separator);
-  const cell3 = (bgcolor) => new RichText("x", { end: "", style: new Style({ bgcolor }) });
-  const cells = [cell3("#101010"), cell3("#202020")];
-  const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
-  return privateGlyphsIn(plainOf2(lines2.flat()));
-}
-var WIDEST_GLYPH_COLS = 2;
-function lineWidth(options) {
-  return options.wrap ? options.width : Infinity;
-}
-function wrappedLines(plain, width) {
-  const wrapping = new RichText(plain, { overflow: "fold", end: "" });
-  return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf2);
-}
-function drawStripCells(cells, options, motion = STILL3) {
-  if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
-  const joiner = pickJoiner(options.endcaps, options.separator);
-  const flex = Number.isFinite(lineWidth(options));
-  const drawn = {
-    colorSystem: options.colorCompatibility,
-    ...flex ? { width: options.width } : {}
-  };
-  const strip = flex ? new FlexStrip([...cells], { joiner }) : new Strip([...cells], joiner);
-  const row2 = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
-  if (row2.lines.length === 0) {
-    throw new Error("drawStripCells: rich-js strip drew no line");
-  }
-  return row2;
-}
-function renderStripCells(cells, options) {
-  return encodeAnsi(
-    drawStripCells(cells, options).lines,
-    options.colorCompatibility
-  );
-}
-
-// src/claude-settings.ts
-init_globals();
-var import_node_path8 = __toESM(require_path_browserify(), 1);
-
-// src/utils/transcript-fs.ts
-init_globals();
-
-// src/utils/limiter.ts
-init_globals();
-var Limiter = class {
-  slots;
-  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
-  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
-  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
-  // would be O(n²) on the render hot path). A dequeued node is immediately
-  // unreferenced, so a continuously-saturated queue retains only the waiters
-  // currently parked — no consumed-prefix accumulates, unlike a head-index
-  // array that only reclaims on full drain.
-  head = null;
-  tail = null;
-  constructor(max2) {
-    this.slots = max2;
-  }
-  async run(task) {
-    await this.acquire();
-    try {
-      return await task();
-    } finally {
-      this.release();
-    }
-  }
-  async acquire() {
-    if (this.slots > 0) {
-      this.slots--;
-      return;
-    }
-    await new Promise((wake) => {
-      const node = { wake, next: null };
-      if (this.tail) this.tail.next = node;
-      else this.head = node;
-      this.tail = node;
-    });
-  }
-  release() {
-    const node = this.head;
-    if (!node) {
-      this.slots++;
-      return;
-    }
-    this.head = node.next;
-    if (!this.head) this.tail = null;
-    node.wake();
-  }
-};
-
-// src/utils/transcript-fs.ts
-function statStamp(filePath2) {
-  if (!filePath2) return "";
-  try {
-    return stampOf(statSync(filePath2));
-  } catch {
-    return "";
-  }
-}
-function stampOf(st) {
-  return `${st.mtimeMs}:${st.size}`;
-}
-var TRANSCRIPT_FS_CONCURRENCY = 8;
-var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
-function gated(fn) {
-  return ((...args) => gate.run(() => fn(...args)));
-}
-var readdir2 = gated(readdir);
-var stat2 = gated(stat);
-var FOLD_WINDOW_BYTES = 512 * 1024;
-var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
-function transcriptReads() {
-  return { ...totals };
-}
-var windows = [];
-function giveBack(window2) {
-  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
-}
-async function readAppended(path42, prior, until2) {
-  return gate.run(async () => {
-    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
-    const read2 = await readWholeLines(path42, prior, until2, window2);
-    if (read2.kind !== "ok") {
-      giveBack(window2);
-      return read2;
-    }
-    let lent = window2;
-    return ok({
-      ...read2.value,
-      [Symbol.dispose]: () => {
-        if (lent !== void 0) giveBack(lent);
-        lent = void 0;
-      }
-    });
-  });
-}
-function decodeLines(read2, decode) {
-  var _stack = [];
-  try {
-    const lent = __using(_stack, read2);
-    return decode(lent.lines);
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
-async function readWholeLines(path42, prior, until2, window2) {
-  let fh = null;
-  try {
-    fh = await open(path42, "r");
-    const st = await fh.stat();
-    const { size, ino } = st;
-    const stamp2 = stampOf(st);
-    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
-    const start = reset || prior === void 0 ? 0 : prior.offset;
-    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
-    let bytesRead = 0;
-    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
-    bytesRead += first2.length;
-    let lastNl = first2.lastIndexOf(10);
-    let reached = start + first2.length;
-    let shortRead = first2.length < Math.min(window2.length, end - start);
-    while (lastNl < 0 && reached < end && !shortRead) {
-      const next = await readInto(
-        fh,
-        window2.subarray(0, end - reached),
-        reached
-      );
-      bytesRead += next.length;
-      const nl = next.indexOf(10);
-      if (nl >= 0) lastNl = reached - start + nl;
-      shortRead = next.length < Math.min(window2.length, end - reached);
-      reached += next.length;
-    }
-    const bytes = lastNl + 1;
-    const longLine = bytes > window2.length ? bytes : 0;
-    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
-    bytesRead += longLine > 0 ? wholeLines.length : 0;
-    const complete = wholeLines.length === bytes;
-    totals.reads++;
-    totals.bytes += bytesRead;
-    totals.longLines += longLine > 0 ? 1 : 0;
-    totals.largestLine = Math.max(totals.largestLine, longLine);
-    return ok({
-      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
-      start,
-      // A long line was found by its newline alone, so lines after it may
-      // still be unread; otherwise the read saw everything up to its end.
-      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
-      size,
-      stamp: stamp2,
-      ino,
-      reset,
-      longLine
-    });
-  } catch (e) {
-    if (e.code === "ENOENT") return ABSENT2;
-    return failed(
-      `readAppended ${path42}: ${e instanceof Error ? e.message : String(e)}`,
-      "read"
-    );
-  } finally {
-    await fh?.close().catch((e) => {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    });
-  }
-}
-async function readInto(fh, buf, position) {
-  let off = 0;
-  while (off < buf.length) {
-    const { bytesRead } = await fh.read(
-      buf,
-      off,
-      buf.length - off,
-      position + off
-    );
-    if (bytesRead === 0) break;
-    off += bytesRead;
-  }
-  return buf.subarray(0, off);
-}
-async function readTail(path42, maxBytes) {
-  return gate.run(async () => {
-    let fh = null;
-    try {
-      fh = await open(path42, "r");
-      const { size } = await fh.stat();
-      const start = Math.max(0, size - maxBytes);
-      return ok({
-        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
-        fromStart: start === 0
-      });
-    } catch (e) {
-      if (e.code === "ENOENT") return ABSENT2;
-      return failed(
-        `readTail ${path42}: ${e instanceof Error ? e.message : String(e)}`,
-        "read"
-      );
-    } finally {
-      await fh?.close().catch((e) => {
-        debug(
-          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-        );
-      });
-    }
-  });
-}
-function readTailSync(path42, maxBytes) {
-  let fd;
-  try {
-    fd = openSync(path42, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT2;
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  }
-  try {
-    const stat3 = fstatSync(fd, { bigint: true });
-    if (!stat3.isFile()) return failed("not a regular file", "read");
-    const size = Number(stat3.size);
-    const start = Math.max(0, size - maxBytes);
-    const buf = import_buffer.Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok({
-      buf: buf.subarray(0, off),
-      fromStart: start === 0,
-      file: `${stat3.dev}:${stat3.ino}`
-    });
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (e) {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-}
-
-// src/claude-settings.ts
-var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
-function claudeConfigDir(detected, home) {
-  return detected ?? import_node_path8.default.join(home, ".claude");
-}
-function claudeSettingsPath(configDir) {
-  return import_node_path8.default.join(configDir, "settings.json");
-}
-function readSettingsFile(settingsPath) {
-  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read2.kind) {
-    case "absent":
-      return null;
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
-    case "ok":
-      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
-  }
-}
-var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
-function readClaudeSettingsText(settingsPath) {
-  return readSettingsFile(settingsPath)?.text ?? "";
-}
-function readClaudeSettingsOutcome(settingsPath) {
-  const reason = (e) => e instanceof Error ? e.message : String(e);
-  let text4;
-  try {
-    text4 = readClaudeSettingsText(settingsPath);
-  } catch (e) {
-    return failed(reason(e), "read");
-  }
-  try {
-    return ok(parseSettings(settingsPath, text4));
-  } catch (e) {
-    return failed(reason(e), "parse");
-  }
-}
-function parseSettings(settingsPath, text4) {
-  let parsed2;
-  try {
-    if (/^\s*$/.test(text4)) return {};
-    parsed2 = JSON_DIALECT.parse(text4);
-  } catch (e) {
-    throw cannotRead(settingsPath, e);
-  }
-  if (!isJsonObject(parsed2)) {
-    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
-  }
-  return parsed2;
-}
-function claudeManagedSettingsDir(platform3) {
-  switch (platform3) {
-    case "darwin":
-      return "/Library/Application Support/ClaudeCode";
-    case "win32":
-      return "C:\\Program Files\\ClaudeCode";
-    default:
-      return "/etc/claude-code";
-  }
-}
-var projectLocalSettingsFile = (projectDir) => import_node_path8.default.join(projectDir, ".claude", "settings.local.json");
-function readSettingsChain(at) {
-  const dropIns = import_node_path8.default.join(at.managedDir, "managed-settings.d");
-  const located2 = [
-    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
-      scope: "managed",
-      path: import_node_path8.default.join(dropIns, name)
-    })),
-    {
-      scope: "managed",
-      path: import_node_path8.default.join(at.managedDir, "managed-settings.json")
-    },
-    {
-      scope: "project-local",
-      path: projectLocalSettingsFile(at.projectDir)
-    },
-    {
-      scope: "project",
-      path: import_node_path8.default.join(at.projectDir, ".claude", "settings.json")
-    },
-    { scope: "user", path: at.userFile }
-  ];
-  const read2 = located2.flatMap((l) => {
-    const file = readSettingsFile(l.path);
-    if (file === null) return [];
-    const settings = parseSettings(l.path, file.text);
-    const { env: env2 = {} } = settings;
-    if (!isJsonObject(env2)) {
-      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
-    }
-    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
-  });
-  const user = read2.find((r) => r.source.scope === "user");
-  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
-}
-function visibleJsonFiles(dir) {
-  try {
-    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
-  } catch (e) {
-    if (e.code === "ENOENT") return [];
-    throw cannotRead(dir, e);
-  }
-}
-var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
-
-// src/daemon/render-sightings.ts
-init_globals();
-
-// src/render/drawn-motion.ts
-init_globals();
-var DRAWN_MOTIONS = ["moves", "can-move", "still"];
-
-// src/daemon/foundations/sighting-roles.ts
-init_globals();
-function answeredOf(hookData2) {
-  const usage = hookData2.context_window?.current_usage;
-  return usage === null ? "no" : usage === void 0 ? "unknown" : "yes";
-}
-var roleOf = (client) => client?.kind === "frames" ? "frames" : "statusline";
-
-// src/daemon/render-sightings.ts
-var SIGHTINGS_KEPT = 64;
-function rateLimitsSeen(hookData2) {
-  const windows2 = hookData2.rate_limits;
-  if (windows2?.five_hour != null || windows2?.seven_day != null) {
-    return "carried";
-  }
-  return answeredOf(hookData2) === "no" ? "unanswered" : "missing";
-}
-function transcriptSaid(hookData2) {
-  return {
-    path: hookData2.transcript_path,
-    answered: answeredOf(hookData2) === "yes"
-  };
-}
-var FRAMES_SEEN = [...DRAWN_MOTIONS, "failed", "drawing"];
-var RenderSightings = class {
-  seen = /* @__PURE__ */ new Map();
-  // `order`: the request's arrival order. Renders settle out of order — the
-  // day's first seed, a PR lookup — so a request that settles after a newer
-  // one of the same session and role is not its latest, and is dropped; its
-  // own settling replaces its arrival.
-  see(sessionId2, said, at, order2) {
-    const role = roleOf(said.client);
-    const key = JSON.stringify([sessionId2, role]);
-    const known = this.seen.get(key);
-    if (known !== void 0 && known.order > order2) return;
-    this.seen.delete(key);
-    this.seen.set(key, { sessionId: sessionId2, said: { ...said, role }, at, order: order2 });
-    if (this.seen.size > SIGHTINGS_KEPT) {
-      this.seen.delete(this.seen.keys().next().value);
-    }
-  }
-  list(now2) {
-    return [...this.seen.values()].map(({ sessionId: sessionId2, said, at }) => ({
-      ...said,
-      sessionId: sessionId2,
-      ago: now2 - at
-    }));
-  }
-  // The latest render in each role that drew one session's bar — none when
-  // this process has served it no render (a daemon restarted under a bar
-  // already on screen).
-  ofSession(sessionId2, now2) {
-    return this.list(now2).filter((s) => s.sessionId === sessionId2);
-  }
-};
-
-// src/daemon/limits.ts
-init_globals();
-var import_node_path9 = __toESM(require_path_browserify(), 1);
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse2 = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse2("net.connect");
-var createServer = refuse2("net.createServer");
-var createConnection = refuse2("net.createConnection");
-var get2 = refuse2("https.get");
-var request = refuse2("https.request");
-var createInterface = refuse2("readline.createInterface");
-var createRequire = refuse2("module.createRequire");
-var json = refuse2("stream/consumers.json");
-var text3 = refuse2("stream/consumers.text");
-var writeHeapSnapshot = refuse2("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
-
-// src/daemon/memory-report.ts
-init_globals();
-var PROBE_TIMEOUT_MS = 5e3;
-async function memoryReport(probes) {
-  const refusals = [];
-  for (const probe2 of probes) {
-    const outcome = await probe2.read();
-    if (outcome.kind === "text") {
-      return `# memory report from: ${probe2.name}
-${outcome.text}`;
-    }
-    refusals.push(`# ${probe2.name}: unavailable \u2014 ${outcome.reason}`);
-  }
-  return [
-    "# memory report: no probe answered",
-    ...refusals.length > 0 ? refusals : ["# no probe is known for this platform"]
-  ].join("\n");
-}
-var FOOTPRINT = "/usr/bin/footprint";
-var VMMAP = "/usr/bin/vmmap";
-function platformProbes(launcher, platform3, pid2) {
-  if (platform3 === "darwin") {
-    return [
-      // The whole-process category table: V8's mappings, the MALLOC_* regions
-      // with their reclaimable share, and page tables, each with a size.
-      commandProbe(launcher, FOOTPRINT, ["-p", String(pid2)]),
-      // Same mappings, coarser, but present on hosts where `footprint` is not.
-      commandProbe(launcher, VMMAP, ["--summary", String(pid2)])
-    ];
-  }
-  if (platform3 === "linux") {
-    return [
-      // One line per accounting class for the whole address space — Linux's
-      // answer to `footprint`, and free (no subprocess).
-      fileProbe("/proc/self/smaps_rollup"),
-      // Always present, coarser: VmRSS and friends, so Linux never falls all
-      // the way through to "no probe answered".
-      fileProbe("/proc/self/status")
-    ];
-  }
-  return [];
-}
-function chargeProbe(launcher, platform3, pid2) {
-  return platform3 === "darwin" ? footprintCharge(
-    pid2,
-    (args) => launcher.launch({
-      bin: FOOTPRINT,
-      args,
-      timeoutMs: PROBE_TIMEOUT_MS,
-      category: "limits.charge"
-    })
-  ) : async (rss) => ({ kind: "charged", measure: "rss", bytes: rss });
-}
-function footprintCharge(pid2, run3) {
-  return async (rss) => {
-    const result = await run3([
-      "-p",
-      String(pid2),
-      "--noCategories",
-      "-f",
-      "bytes"
-    ]);
-    if (!result.ok) {
-      return {
-        kind: "stand-in",
-        bytes: rss,
-        unread: `footprint ${failureText(result)}`
-      };
-    }
-    const bytes = physFootprintOf(result.stdout);
-    return bytes === null ? {
-      kind: "stand-in",
-      bytes: rss,
-      unread: "footprint printed no phys_footprint line"
-    } : { kind: "charged", measure: "phys_footprint", bytes };
-  };
-}
-function physFootprintOf(text4) {
-  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
-  return m === null ? null : Number(m[1]);
-}
-function commandProbe(launcher, bin, args) {
-  return {
-    name: `${bin} ${args.join(" ")}`,
-    read: async () => {
-      const result = await launcher.launch({
-        bin,
-        args: [...args],
-        timeoutMs: PROBE_TIMEOUT_MS,
-        category: "limits.memory-report"
-      });
-      if (!result.ok) {
-        return {
-          kind: "unavailable",
-          reason: failureText(result)
-        };
-      }
-      return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
-    }
-  };
-}
-function fileProbe(path42) {
-  return {
-    name: path42,
-    read: async () => {
-      try {
-        const text4 = fs_default.readFileSync(path42, "utf8");
-        return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
-      } catch (e) {
-        return { kind: "unavailable", reason: e.message };
-      }
-    }
-  };
-}
-
-// src/daemon/limits.ts
-var RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
-var DEFAULT_RSS_LIMIT_MB = 1024;
-function memoryLimitMb(env2) {
-  const raw = env2[RSS_LIMIT_ENV];
-  if (raw === void 0) return DEFAULT_RSS_LIMIT_MB;
-  const mb2 = /^\d+$/.test(raw) ? Number(raw) : NaN;
-  if (!Number.isSafeInteger(mb2) || mb2 <= 0) {
-    throw new Error(
-      `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`
-    );
-  }
-  return mb2;
-}
-var BYTES_PER_MB = 1024 * 1024;
-var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
-function memoryLimitBytes(env2) {
-  return memoryLimitMb(env2) * BYTES_PER_MB;
-}
-var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
-var HEAP_SNAPSHOT_KEEP = 3;
-var BREACH_ARTIFACTS = {
-  memoryReport: { prefix: "memory-", suffix: ".txt" },
-  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
-};
-function laterIdentity(a, b) {
-  return a > b;
-}
-function readCharge(probed, previous) {
-  if (probed.kind === "charged") return probed;
-  const gap = previous.kind === "unmeasured" ? 0 : previous.charge.kind === "charged" ? previous.rss - previous.charge.bytes : previous.charge.gap;
-  return { ...probed, bytes: probed.bytes - gap, gap };
-}
-var NEAR_LIMIT = 0.75;
-function approachingLimit(bytes, limit) {
-  return bytes > limit * NEAR_LIMIT;
-}
-function artifactFile(dir, kind, identity2) {
-  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path9.default.join(dir, `${prefix}${identity2}${suffix}`);
-}
-function breachArtifactOf(base) {
-  for (const kind of Object.keys(BREACH_ARTIFACTS)) {
-    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-    if (base.startsWith(prefix) && base.endsWith(suffix)) return kind;
-  }
-  return null;
-}
-function makeLimits(deps) {
-  const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
-  const keep2 = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
-  let triggered = false;
-  let latest = { kind: "unmeasured" };
-  let inFlight = null;
-  let disarmed = false;
-  let clearTimer;
-  function check() {
-    inFlight ??= measure3().finally(() => {
-      inFlight = null;
-    });
-    return inFlight;
-  }
-  async function measure3() {
-    if (triggered) return true;
-    const { rss, heapTotal } = deps.memoryBytes();
-    const charge = readCharge(await deps.memoryCharge(rss), latest);
-    const reading = { kind: "measured", charge, rss, heapTotal };
-    latest = reading;
-    deps.log("info", `memory ${readingFields(reading, limit)}`);
-    if (disarmed || charge.bytes <= limit) return false;
-    triggered = true;
-    deps.log(
-      "warn",
-      `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
-    );
-    const stamp2 = new Date(deps.clock.now()).toISOString().replace(/[:.]/g, "-");
-    const identity2 = `${stamp2}-${deps.pid}`;
-    await attempt2(deps.log, "memory report", async () => {
-      const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
-      const report2 = await deps.captureMemoryReport();
-      if (disarmed) return;
-      deps.writeMemoryReport(file, report2);
-      deps.log("info", `memory report written: ${file}`);
-    });
-    if (disarmed) {
-      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
-      return false;
-    }
-    await attempt2(deps.log, "heap snapshot", () => {
-      deps.writeLogNow();
-      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
-      deps.log(
-        "info",
-        `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
-      );
-    });
-    await attempt2(deps.log, "artifact rotation", async () => {
-      for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
-        keep2
-      )) {
-        for (const file of Object.values(artifacts)) {
-          await attempt2(
-            deps.log,
-            `evicting ${file}`,
-            () => deps.removeFile(file)
-          );
-        }
-      }
-    });
-    deps.shutdown(0);
-    return true;
-  }
-  function describeNextRestart() {
-    return latest.kind === "measured" && approachingLimit(latest.charge.bytes, limit) ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)` : null;
-  }
-  function serving() {
-    let postMortems;
-    try {
-      postMortems = { kind: "ok", value: postMortemsOf(deps.listArtifacts()) };
-    } catch (e) {
-      postMortems = { kind: "failed", reason: e.message };
-    }
-    return { pid: deps.pid, memory: latest, limit, postMortems };
-  }
-  function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
-    const tick = async () => {
-      try {
-        if (await check()) return;
-      } catch (e) {
-        deps.log("warn", `memory check failed: ${e.message}`);
-      }
-      if (disarmed) return;
-      clearTimer = deps.clock.after(intervalMs, () => void tick(), {
-        unref: true
-      });
-    };
-    void tick();
-  }
-  function disarm() {
-    disarmed = true;
-    clearTimer?.();
-  }
-  return { check, describeNextRestart, serving, arm: arm2, disarm };
-}
-function chargeWords(charge) {
-  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
-}
-function measureOf(charge) {
-  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
-}
-function readingFields({ charge, rss, heapTotal }, limit) {
-  const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
-  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}`;
-}
-async function attempt2(log, what, body) {
-  try {
-    await body();
-  } catch (e) {
-    log("warn", `${what} failed: ${e.message}`);
-  }
-}
-function postMortemsOf(files) {
-  const byIdentity = /* @__PURE__ */ new Map();
-  for (const file of files) {
-    const base = import_node_path9.default.basename(file);
-    const kind = breachArtifactOf(base);
-    if (kind === null) continue;
-    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-    const identity2 = base.slice(prefix.length, base.length - suffix.length);
-    byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
-  }
-  const kinds = Object.keys(BREACH_ARTIFACTS);
-  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found2]) => ({
-    identity: identity2,
-    artifacts: Object.fromEntries(
-      kinds.flatMap((k) => found2[k] === void 0 ? [] : [[k, found2[k]]])
-    )
-  }));
-}
-function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
-  const dir = owner.snapshotDir;
-  return {
-    clock: owner.clock,
-    pid: process_default.pid,
-    snapshotDir: dir,
-    log: owner.log,
-    memoryBytes: () => {
-      const mem = process_default.memoryUsage();
-      return { rss: mem.rss, heapTotal: mem.heapTotal };
-    },
-    memoryCharge: chargeProbe(owner.launcher, process_default.platform, process_default.pid),
-    captureMemoryReport: () => memoryReport(
-      platformProbes(owner.launcher, process_default.platform, process_default.pid)
-    ),
-    // 0600 like the heap snapshot v8 writes beside it: the pair shares an
-    // identity, so it shares a permission — a post-mortem pair where one half is
-    // world-readable and the other is not invites exactly the "is this
-    // sensitive?" question at the worst moment to be asking it.
-    writeMemoryReport: (file, text4) => fs_default.writeFileSync(file, text4, { mode: 384 }),
-    writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
-    writeLogNow: owner.writeLogNow,
-    // [LAW:no-silent-failure] A directory not yet made holds no breaches;
-    // one that cannot be read is said so — never read as "none".
-    listArtifacts: () => {
-      let names;
-      try {
-        names = fs_default.readdirSync(dir);
-      } catch (e) {
-        if (e.code === "ENOENT") return [];
-        throw e;
-      }
-      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path9.default.join(dir, f));
-    },
-    removeFile: (file) => fs_default.unlinkSync(file),
-    shutdown,
-    startedAtMs,
-    ...overrides
-  };
-}
-
-// src/doctor/terminal.ts
-init_globals();
-var TERMINALS = {
-  kitty: {
-    label: "kitty",
-    xtversion: "kitty",
-    program: null,
-    programVersion: true,
-    term: "xterm-kitty",
-    links: { since: "0.19.0" },
-    glyphs: { kind: "bundled", since: "0.36.0" }
-  },
-  wezterm: {
-    label: "WezTerm",
-    xtversion: "WezTerm",
-    program: "WezTerm",
-    programVersion: true,
-    term: "wezterm",
-    links: { since: null },
-    glyphs: { kind: "bundled", since: "20230712" }
-  },
-  ghostty: {
-    label: "Ghostty",
-    xtversion: "ghostty",
-    program: "ghostty",
-    programVersion: true,
-    term: "xterm-ghostty",
-    links: { since: null },
-    glyphs: { kind: "bundled", since: null }
-  },
-  iterm2: {
-    label: "iTerm2",
-    xtversion: "iTerm2",
-    program: "iTerm.app",
-    programVersion: true,
-    term: null,
-    links: { since: "3.1" },
-    glyphs: { kind: "configured" }
-  },
-  alacritty: {
-    label: "Alacritty",
-    xtversion: "alacritty",
-    program: null,
-    programVersion: true,
-    term: "alacritty",
-    links: { since: "0.11.0" },
-    glyphs: { kind: "configured" }
-  },
-  "apple-terminal": {
-    label: "Terminal",
-    xtversion: null,
-    program: "Apple_Terminal",
-    programVersion: true,
-    term: null,
-    links: null,
-    glyphs: { kind: "unread" }
-  },
-  vscode: {
-    label: "VS Code",
-    xtversion: null,
-    program: "vscode",
-    programVersion: false,
-    term: null,
-    links: { since: "1.72" },
-    glyphs: { kind: "unread" }
-  }
-};
-var row = (name) => TERMINALS[name];
-function isBundling(name) {
-  return row(name).glyphs.kind === "bundled";
-}
-function isConfigured(name) {
-  return row(name).glyphs.kind === "configured";
-}
-var terminalLabel = (name) => row(name).label;
-var ITERM_POWERLINE = [
-  { since: "3.5.0", from: 57504, to: 57507 },
-  { since: "3.5.0", from: 57520, to: 57554 },
-  { since: "3.5.0", from: 57556, to: 57556 },
-  { since: "3.5.6", from: 57558, to: 57559 }
-];
-function itermDrawsItself(version, glyph) {
-  const point = glyph.codePointAt(0);
-  return ITERM_POWERLINE.some(
-    ({ since, from, to }) => from <= point && point <= to && version !== null && releasedSince(version, since) === true
-  );
-}
-var NAMES = Object.keys(TERMINALS);
-function release2(version) {
-  const lead = /^\d+(?:\.\d+)*/.exec(version);
-  return lead === null ? null : lead[0].split(".").map(Number);
-}
-function releasedSince(version, since) {
-  const have = release2(version);
-  const need2 = release2(since);
-  if (have === null) return null;
-  for (let i = 0; i < Math.max(have.length, need2.length); i++) {
-    const a = have[i] ?? 0;
-    const b = need2[i] ?? 0;
-    if (a !== b) return a > b;
-  }
-  return true;
-}
-function fromXtversion(termtype) {
-  for (const name of NAMES) {
-    const prefix = row(name).xtversion;
-    if (prefix !== null && termtype.toLowerCase().startsWith(prefix.toLowerCase())) {
-      const rest2 = termtype.slice(prefix.length).replace(/^[\s(]+/, "");
-      const version = /^[^\s)]+/.exec(rest2)?.[0] ?? null;
-      return { name, version };
-    }
-  }
-  return null;
-}
-function fromTerm(term) {
-  const name = NAMES.find((n) => row(n).term === term);
-  return name === void 0 ? null : { name, version: null };
-}
-function identifyInTmux(client) {
-  const terminal = fromXtversion(client.termtype) ?? fromTerm(client.termname);
-  if (terminal !== null) return { kind: "known", terminal };
-  const called = /^[^\s(]*/.exec(client.termtype)[0];
-  return called === "" ? { kind: "unnamed", term: client.termname } : { kind: "unknown", called };
-}
-function identifyFromEnv(env2) {
-  const program = env2.TERM_PROGRAM;
-  const byProgram = NAMES.find((n) => row(n).program === program);
-  const terminal = byProgram === void 0 ? fromTerm(env2.TERM) : {
-    name: byProgram,
-    version: row(byProgram).programVersion ? env2.TERM_PROGRAM_VERSION ?? null : null
-  };
-  if (terminal !== null) return { kind: "known", terminal };
-  return program === void 0 || program === "tmux" ? { kind: "unnamed", term: env2.TERM ?? "" } : { kind: "unknown", called: program };
-}
-function sightingOf(identified) {
-  switch (identified.kind) {
-    case "known":
-      return terminalLabel(identified.terminal.name);
-    case "unknown":
-      return identified.called;
-    case "unnamed":
-      return identified.term || null;
-  }
-}
-function identifiedAs(identified) {
-  switch (identified.kind) {
-    case "known":
-      return terminalLabel(identified.terminal.name);
-    case "unknown":
-      return identified.called;
-    case "unnamed":
-      return identified.term || "this terminal";
-  }
-}
-function linkSupport({ name, version }) {
-  const links2 = row(name).links;
-  if (links2 === null) return { kind: "none" };
-  if (links2.since === null) return { kind: "draws" };
-  if (version === null) return { kind: "unsaid", since: links2.since };
-  const drawn = releasedSince(version, links2.since);
-  return drawn === null ? { kind: "unsaid", since: links2.since } : drawn ? { kind: "draws" } : { kind: "older", since: links2.since, version };
-}
-var LINK_TERMINALS = NAMES.filter((n) => row(n).links !== null).map(terminalLabel).join(", ");
-
-// src/doctor/checks.ts
-function statusLineOf(sources) {
-  if (sources.kind === "failed") {
-    return { kind: "unread", reason: sources.reason };
-  }
-  const lines2 = sources.value.flatMap(
-    ({ scope, path: path42, settings }) => "statusLine" in settings ? [{ from: { scope, path: path42 }, line: settings.statusLine }] : []
-  );
-  const top = lines2[0];
-  if (top === void 0) {
-    return { kind: "absent", read: sources.value.map((s) => s.path) };
-  }
-  if (!isJsonObject(top.line)) {
-    return { kind: "not-an-object", value: top.line, from: top.from };
-  }
-  for (const { from, line } of lines2) {
-    if (from.scope !== top.from.scope || !isJsonObject(line)) break;
-    if ("refreshInterval" in line) {
-      return { kind: "present", refreshInterval: line.refreshInterval, from };
-    }
-  }
-  return { kind: "present", refreshInterval: void 0, from: top.from };
-}
-function envVarOf(sources, name) {
-  if (sources.kind === "failed") return sources;
-  const top = sources.value.find((s) => Object.hasOwn(s.env, name));
-  return {
-    kind: "ok",
-    value: top === void 0 ? { kind: "unset" } : {
-      kind: "set",
-      value: top.env[name],
-      from: { scope: top.scope, path: top.path }
-    }
-  };
-}
-var UNWRITTEN_SCOPES = [
-  "managed",
-  "project"
-];
-var doctorWrites = (from) => !UNWRITTEN_SCOPES.includes(from.scope);
-var ENV_FIX_FILE = {
-  managed: () => null,
-  "project-local": (path42) => ({ scope: "project-local", path: path42 }),
-  project: (_, at) => ({
-    scope: "project-local",
-    path: projectLocalSettingsFile(at.projectDir)
-  }),
-  user: (path42) => ({ scope: "user", path: path42 })
-};
-var GLYPH_MARKS = ["drawn", "boxes"];
-var TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
-var whoseWidth = (of) => of.kind === "session" ? `session ${of.sessionId}'s statusline client` : "this command's terminal";
-function describeFix(fix) {
-  switch (fix.kind) {
-    case "claude-settings":
-      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)} scope=${fix.file.scope}`;
-    case "post-mortems-read":
-      return `${fix.kind} through=${fix.through}`;
-  }
-}
-function problemsVerdict(problems) {
-  const [reason, ...more] = problems;
-  return reason === void 0 ? { ok: true } : { ok: false, reason, more };
-}
-var TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
-function ofTmuxClient(tmux3, decide) {
-  switch (tmux3.kind) {
-    case "unreported":
-      return {
-        ok: false,
-        reason: "the client reported no tmux facts \u2014 re-run `cc-candybar install` to stage a current client"
-      };
-    case "outside":
-      return { ok: true };
-    case "inside":
-      if (tmux3.client.kind === "failed") {
-        return {
-          ok: false,
-          reason: `tmux could not be asked: ${tmux3.client.reason}`
-        };
-      }
-      return tmux3.client.value === null ? { ok: true } : decide(tmux3.client.value, tmux3.hint);
-  }
-}
-var tmuxTruecolor = {
-  name: "tmuxTruecolor",
-  label: "tmux truecolor",
-  takesMark: false,
-  probe: ({ tmux: tmux3, claudeSettings: { origin } }) => ofTmuxClient(tmux3, (client, hint) => {
-    if (!client.features.includes("RGB")) return { ok: true };
-    if (hint.truecolor !== null) return { ok: true };
-    const staged = envVarOf(origin.sources, TMUX_TRUECOLOR_VAR);
-    if (staged.kind === "failed") return { ok: false, reason: staged.reason };
-    const told = staged.value;
-    if (told.kind === "set" && typeof told.value === "string" && told.value !== "") {
-      return {
-        ok: false,
-        reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} \u2014 restart Claude Code to apply`
-      };
-    }
-    const reason = "Claude Code renders the bar in 256 colours inside tmux";
-    const fixInto = (file2) => ({
-      ok: false,
-      reason,
-      fix: {
-        kind: "claude-settings",
-        file: file2,
-        path: ["env", TMUX_TRUECOLOR_VAR],
-        value: "1"
-      }
-    });
-    if (told.kind === "unset") {
-      return fixInto({ scope: "user", path: origin.at.userFile });
-    }
-    const file = ENV_FIX_FILE[told.from.scope](told.from.path, origin.at);
-    return file === null ? {
-      ok: false,
-      reason: `${reason} \u2014 the value that counts is in managed settings, ${told.from.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`
-    } : fixInto(file);
-  })
-};
-var utf82 = {
-  name: "utf8",
-  label: "UTF-8",
-  takesMark: false,
-  probe: ({ tmux: tmux3 }) => ofTmuxClient(
-    tmux3,
-    (client) => client.utf8 ? { ok: true } : {
-      ok: false,
-      reason: "tmux draws this terminal without UTF-8, so every glyph on the bar arrives as `_` \u2014 attach with `tmux -u`, or set a UTF-8 LC_ALL/LC_CTYPE/LANG in the shell that runs tmux"
-    }
-  )
-};
-var termWidth = {
-  name: "termWidth",
-  label: "terminal width",
-  takesMark: false,
-  probe: ({ width }) => width.kind === "failed" ? { ok: false, reason: width.reason } : width.value.columns !== null ? {
-    ok: true,
-    note: `${width.value.columns} columns, as ${whoseWidth(width.value.of)} measured`
-  } : {
-    ok: false,
-    reason: `${whoseWidth(width.value.of)} measured no width (no COLUMNS, and no terminal to ask \u2014 or the daemon refused the width sent, which the bar's diagnostics name), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`
-  }
-};
-var UNUSED = {
-  variable: "is never read",
-  action: "is never clicked",
-  helper: "is never called",
-  segment: "is in no preset"
-};
-var NAMED_BY = {
-  argument: "command argument",
-  environment: `$${CONFIG_ENV}`,
-  pick: "load-config pick",
-  unknown: "source unknown"
-};
-function judgedConfig({ target, layers }) {
-  if (target.source !== "search") {
-    return `${target.path} (${NAMED_BY[target.source]})`;
-  }
-  return layers.length === 0 ? chainName(layers) : `${chainName(layers)} (searched)`;
-}
-function configProblems(config2) {
-  switch (config2.kind) {
-    case "failed": {
-      const problems = [
-        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
-        ...config2.warnings
-      ];
-      return problems.length === 0 ? ["the config failed to load"] : problems;
-    }
-    case "loaded":
-      return [
-        ...config2.warnings,
-        ...config2.unused.map(
-          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
-        )
-      ];
-  }
-}
-var config = {
-  name: "config",
-  label: "config",
-  takesMark: false,
-  probe: ({ config: config2 }) => {
-    const judged = judgedConfig(config2);
-    const verdict = problemsVerdict(configProblems(config2));
-    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
-  }
-};
-var REINSTALL = "re-run `cc-candybar install`";
-function handlerAppProblems(opener) {
-  if (opener.kind === "failed") {
-    return [
-      `Launch Services could not be asked which app opens cc-candybar:// \u2014 ${opener.reason}`
-    ];
-  }
-  if (opener.value === null) {
-    return [`no app is registered for cc-candybar:// \u2014 ${REINSTALL}`];
-  }
-  const { app, forwarder } = opener.value;
-  return forwarder ? [] : [
-    `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
-  ];
-}
-var urlHandler = {
-  name: "urlHandler",
-  label: "URL handler",
-  takesMark: false,
-  probe: ({ urlHandler: urlHandler2 }) => {
-    switch (urlHandler2.kind) {
-      case "unsupported":
-        return { ok: true };
-      case "unprobed":
-        return { ok: false, reason: urlHandler2.reason };
-      case "arrived":
-        if (urlHandler2.delivery.kind === "forwarder") return { ok: true };
-        return {
-          ok: false,
-          // What is known: a click request brought it, which is what the
-          // retired applet runs — and a hand-run `cc-candybar url-handle`,
-          // or the browser page. Which app Launch Services opens the scheme
-          // with is the opener's row to say (handlerAppProblems).
-          reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
-        };
-      case "lost":
-        return problemsVerdict([
-          ...handlerAppProblems(urlHandler2.opener),
-          urlHandler2.unopened === null ? "a cc-candybar:// link was opened and did not arrive at the daemon" : `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
-        ]);
-    }
-  }
-};
-var RECENT_CLIENT_S = 300;
-function clientStanding({ bundle, checkout }, client) {
-  return {
-    bundle: client.bundle.kind === "failed" ? { kind: "unresolved", reason: client.bundle.reason } : client.bundle.value === bundle ? { kind: "same" } : { kind: "other", path: client.bundle.value },
-    source: client.client !== "native" || checkout === null ? { kind: "uncompared" } : checkout.rustSource.kind === "failed" ? {
-      kind: "unreadable",
-      root: checkout.root,
-      reason: checkout.rustSource.reason
-    } : client.source === null ? { kind: "unstamped" } : client.source === checkout.rustSource.value ? { kind: "same" } : { kind: "other", root: checkout.root }
-  };
-}
-function remedy(daemon3, client) {
-  if (client === "frames")
-    return `run \`node ${daemon3.bundle} frames --lane <${LANE_NAMES.join("|")}>\``;
-  return daemon3.checkout === null ? REINSTALL : `run \`just install-rust\` and point the statusLine command at ${daemon3.checkout.root}/bin/cc-candybar-native`;
-}
-function installProblems(daemon3, nativeShipped, client) {
-  const { checkout } = daemon3;
-  if (client.kind === "unreported") {
-    return [
-      `the bar is drawn by a statusline client too old to say what it is \u2014 ${remedy(daemon3, "native")}`
-    ];
-  }
-  const { bundle, source } = clientStanding(daemon3, client);
-  switch (bundle.kind) {
-    case "unresolved":
-      return [
-        `the statusline client's bundle cannot be resolved: ${bundle.reason}`
-      ];
-    case "other":
-      return [
-        `the statusline client runs ${bundle.path}, not the daemon's ${daemon3.bundle} \u2014 ${remedy(daemon3, client.client)}`
-      ];
-    case "same":
-      break;
-  }
-  if (client.client === "node" && (nativeShipped || checkout !== null)) {
-    return [
-      `the bar is drawn by the Node fallback, which starts node on every render \u2014 ${remedy(daemon3, "native")}`
-    ];
-  }
-  switch (source.kind) {
-    case "uncompared":
-    case "same":
-      return [];
-    case "unreadable":
-      return [`${source.root}/rust-client could not be read: ${source.reason}`];
-    case "unstamped":
-      return [
-        "the native client carries no source stamp, so which source it was built from is unknown \u2014 run `just install-rust`"
-      ];
-    case "other":
-      return [
-        `the native client was built from other source than ${source.root}/rust-client holds \u2014 run \`just install-rust\``
-      ];
-  }
-}
-var noRenderOf = (sighted) => {
-  const lost = `restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions`;
-  return sighted.kind === "clicked" ? `this daemon holds no render of this bar (it ${lost})` : `this daemon holds no render of session ${sighted.sessionId}'s bar (its statusLine does not run cc-candybar \u2014 a \`claude -p\` session draws none \u2014 or the daemon ${lost}; unset CLAUDE_CODE_SESSION_ID to judge every bar drawn recently)`;
-};
-var install = {
-  name: "install",
-  label: "install",
-  takesMark: false,
-  probe: ({ install: install2, sighted }) => {
-    if (install2.kind === "failed") {
-      return {
-        ok: false,
-        reason: `the daemon could not be asked which clients draw the bar: ${install2.reason}`
-      };
-    }
-    const { daemon: daemon3, nativeShipped, clients } = install2.value;
-    if (clients.length === 0) {
-      return {
-        ok: false,
-        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which client draws it is unknown \u2014 run the doctor again once the bar has redrawn` : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes \u2014 run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`
-      };
-    }
-    return problemsVerdict([
-      ...new Set(
-        clients.flatMap((c) => installProblems(daemon3, nativeShipped, c))
-      )
-    ]);
-  }
-};
-function unreadPostMortems({ postMortems }, read2) {
-  return postMortems.kind === "ok" && read2.kind === "ok" ? postMortems.value.filter(
-    (m) => read2.value.through === null || laterIdentity(m.identity, read2.value.through)
-  ) : [];
-}
-function otherDaemons(serving, processes) {
-  return serving.kind === "failed" ? processes : processes.filter((p2) => p2.pid !== serving.value.pid);
-}
-var daemon = {
-  name: "daemon",
-  label: "daemon",
-  takesMark: false,
-  probe: ({ daemon: { serving, processes, read: read2 } }) => {
-    const unreadable = processes.kind === "failed" ? [`the process table could not be read: ${processes.reason}`] : [];
-    const others = processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
-    if (serving.kind === "failed") {
-      const running = others.length > 0 ? ` \u2014 daemon ${others.map((p2) => p2.pid).join(", ")} running` : "";
-      return problemsVerdict([`${serving.reason}${running}`, ...unreadable]);
-    }
-    const { pid: pid2, memory, limit, postMortems } = serving.value;
-    const unread2 = unreadPostMortems(serving.value, read2);
-    const verdict = problemsVerdict([
-      ...unread2.map(
-        (m) => `the daemon ran out of memory and restarted (${m.identity}) \u2014 post-mortem: ${Object.values(m.artifacts).join(", ")}`
-      ),
-      ...postMortems.kind === "failed" ? [
-        `the daemon's post-mortems could not be listed: ${postMortems.reason}`
-      ] : [],
-      // Which were read decides nothing only while none are listed.
-      ...read2.kind === "failed" && !(postMortems.kind === "ok" && postMortems.value.length === 0) ? [`which post-mortems were read could not be read: ${read2.reason}`] : [],
-      ...unreadable,
-      ...others.map(
-        (p2) => `daemon ${p2.pid} (started ${p2.started}, rss ${mb(p2.rss)} MB${p2.ppid === 1 ? "" : `, child of ${p2.ppid}`}) runs beside the one serving the bar (${pid2}) \u2014 \`kill ${p2.pid}\``
-      ),
-      // [LAW:no-silent-failure] RSS standing in for the platform's charge is
-      // the limit judging an estimate — or, with no gap yet read, what macOS
-      // has already reclaimed, the very misjudgment the charge exists to end —
-      // so it is a finding, near the limit or not.
-      ...memory.kind === "measured" && memory.charge.kind === "stand-in" ? [
-        `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${memory.charge.gap !== 0 ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate` : "RSS, which counts pages macOS has reclaimed"}`
-      ] : [],
-      ...memory.kind === "measured" && approachingLimit(memory.charge.bytes, limit) ? [
-        `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit \u2014 at the limit it records a post-mortem and restarts`
-      ] : []
-    ]);
-    if (verdict.ok && memory.kind === "unmeasured") {
-      return { ok: true, note: "the daemon has not measured its memory yet" };
-    }
-    const newest = unread2[0];
-    return verdict.ok || newest === void 0 ? verdict : {
-      ...verdict,
-      fix: { kind: "post-mortems-read", through: newest.identity }
-    };
-  }
-};
-var CLICK_TO_SEE = "click \u{1FA7A} doctor in the bar's settings menu: if it runs, links work";
-function drawsLinks(identified, clicked) {
-  const id2 = sightingOf(identified);
-  if (clicked.kind === "ok" && id2 !== null && clicked.value.includes(id2)) {
-    return { kind: "draws" };
-  }
-  return identified.kind === "known" ? linkSupport(identified.terminal) : { kind: "unknown" };
-}
-function linkProblems({ identified, tmuxClient }, clicked) {
-  const called = identifiedAs(identified);
-  const support = drawsLinks(identified, clicked);
-  const prove = sightingOf(identified) === null ? CLICK_TO_SEE : `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
-  const terminal = (() => {
-    switch (support.kind) {
-      case "draws":
-        return [];
-      case "none":
-        return [
-          `${called} draws no links (OSC 8), so nothing on the bar can be clicked \u2014 run Claude Code in a terminal that draws them: ${LINK_TERMINALS}`
-        ];
-      case "older":
-        return [
-          `${called} ${support.version} draws no links (OSC 8 came in ${support.since}) \u2014 update ${called}`
-        ];
-      case "unsaid":
-        return [
-          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is \u2014 ${prove}`
-        ];
-      case "unknown":
-        return [
-          `the doctor does not know whether ${called} draws links (OSC 8) \u2014 ${prove}`
-        ];
-    }
-  })();
-  const remembered = clicked.kind === "failed" && support.kind !== "draws" ? [
-    `the terminals a doctor click came back from could not be read: ${clicked.reason}`
-  ] : [];
-  const tmux3 = support.kind === "none" || tmuxClient === null || tmuxClient.features.includes("hyperlinks") ? [] : [
-    `tmux does not pass links through to ${called} \u2014 add \`set -as terminal-features ",${tmuxClient.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`
-  ];
-  return [...terminal, ...remembered, ...tmux3];
-}
-var links = {
-  name: "links",
-  label: "links",
-  takesMark: false,
-  probe: ({ sighted, terminal, clicked }) => {
-    if (sighted.kind === "clicked" && sighted.via === "link")
-      return { ok: true };
-    switch (terminal.kind) {
-      case "unreported":
-        return {
-          ok: false,
-          reason: "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
-        };
-      case "unasked":
-        return {
-          ok: false,
-          reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`
-        };
-      case "seen":
-        return problemsVerdict(linkProblems(terminal, clicked));
-    }
-  }
-};
-var EFFECT_REFRESH_INTERVAL = 1;
-var refreshedFrames = (frames) => frames.filter((f) => f.role === "statusline");
-var effectRefresh = {
-  name: "effectRefresh",
-  label: "effect refresh",
-  takesMark: false,
-  probe: ({ frames, claudeSettings: { origin, elsewhere }, sighted }) => {
-    const verdicts = [origin, ...elsewhere].flatMap(
-      ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? []
-    );
-    const [first2] = verdicts;
-    if (first2 === void 0) {
-      if (frames.kind === "failed") return { ok: false, reason: frames.reason };
-      return unknownMotion(
-        sighted.kind !== "recent" ? noRenderOf(sighted) : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`
-      );
-    }
-    const [lead, ...others] = verdicts.flatMap((v) => v.ok ? [] : [v]);
-    if (lead === void 0) return first2;
-    const more = [...new Set(others.map((f) => f.reason))].filter(
-      (r) => r !== lead.reason
-    );
-    return more.length === 0 ? lead : { ...lead, more };
-  }
-};
-var barsSeen = (bars) => {
-  const drawn = refreshedFrames(bars).map((f) => f.frame);
-  if (drawn.includes("moves")) {
-    return {
-      kind: "moving",
-      wearing: "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"
-    };
-  }
-  if (drawn.includes("can-move")) {
-    return {
-      kind: "moving",
-      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)"
-    };
-  }
-  if (drawn.includes("still")) return { kind: "still" };
-  if (drawn.includes("drawing")) {
-    return {
-      kind: "unknown",
-      unseen: "the bar's latest render has not finished"
-    };
-  }
-  if (drawn.length > 0) {
-    return { kind: "unknown", unseen: "the bar's recent renders failed" };
-  }
-  if (bars.length > 0) {
-    return {
-      kind: "unknown",
-      unseen: "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
-    };
-  }
-  return { kind: "none" };
-};
-var unknownMotion = (unseen) => ({
-  ok: false,
-  reason: `${unseen}, so whether it moves is unknown \u2014 run the doctor again once the bar has redrawn`
-});
-function chainVerdict(sources, seen) {
-  const statusLine = statusLineOf(sources);
-  if (statusLine.kind === "present" && statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL) {
-    return {
-      ok: true,
-      note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`
-    };
-  }
-  switch (seen.kind) {
-    case "none":
-      return null;
-    case "still":
-      return { ok: true };
-    case "unknown":
-      return unknownMotion(seen.unseen);
-    case "moving":
-      break;
-  }
-  const { wearing } = seen;
-  switch (statusLine.kind) {
-    case "unread":
-      return {
-        ok: false,
-        reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`
-      };
-    case "absent":
-      return {
-        ok: false,
-        reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) \u2014 the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`
-      };
-    case "not-an-object":
-      return {
-        ok: false,
-        // `cc-candybar install` writes the user file only, so only there
-        // does re-running it replace the line.
-        reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object \u2014 ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`
-      };
-    case "present": {
-      const { from, refreshInterval: interval } = statusLine;
-      const why2 = interval === void 0 ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events" : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL ? `its statusLine redraws it only every ${interval} s` : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
-      return doctorWrites(from) ? {
-        ok: false,
-        reason: `${wearing}, but ${why2} (statusLine from ${from.path})`,
-        fix: {
-          kind: "claude-settings",
-          file: from,
-          path: ["statusLine", "refreshInterval"],
-          value: EFFECT_REFRESH_INTERVAL
-        }
-      } : {
-        ok: false,
-        reason: `${wearing}, but ${why2} \u2014 its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`
-      };
-    }
-  }
-}
-var codePoints = (glyphs) => [...glyphs].map((g) => `U+${g.codePointAt(0).toString(16).toUpperCase()}`).join(" ");
-function terminalCalled(terminal) {
-  switch (terminal.kind) {
-    case "unreported":
-    case "unasked":
-      return "this terminal";
-    case "unknown":
-    case "unnamed":
-      return identifiedAs(terminal);
-    case "bundling":
-    case "unread":
-    case "configured":
-      return [terminalLabel(terminal.name), terminal.version].filter((part) => part !== null).join(" ");
-  }
-}
-function sightedIn(terminal) {
-  switch (terminal.kind) {
-    case "unreported":
-    case "unasked":
-      return null;
-    case "unknown":
-    case "unnamed":
-      return sightingOf(terminal);
-    case "bundling":
-    case "unread":
-      return terminalLabel(terminal.name);
-    case "configured": {
-      const label2 = terminalLabel(terminal.name);
-      return terminal.font.kind === "ok" ? `${label2} with ${terminal.font.value.font} (${terminal.font.value.from})` : `${label2}, its font unread: ${terminal.font.reason}`;
-    }
-  }
-}
-function glyphSighting(facts) {
-  const where = sightedIn(facts.terminal);
-  return where === null ? void 0 : { glyphs: facts.glyphs, id: `${where}|${codePoints(facts.glyphs)}` };
-}
-var NERD_FONT_CHECK = "nerdFont";
-var nerdFont = {
-  name: NERD_FONT_CHECK,
-  label: "Nerd Font",
-  takesMark: true,
-  probe: ({ nerdFont: facts, marks }) => {
-    if (facts.kind === "none") return { ok: true };
-    const sighting = glyphSighting(facts);
-    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
-      ok: false,
-      reason,
-      more: [`the mark book could not be read: ${marks.reason}`]
-    } : { ok: false, reason, ...sighting !== void 0 && { sighting } };
-    const terminal = facts.terminal;
-    const called = terminalCalled(terminal);
-    const mark = sighting === void 0 || marks.kind === "failed" ? null : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? null;
-    switch (mark) {
-      case "drawn":
-        return { ok: true };
-      case "boxes":
-        return failed3(
-          `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
-        );
-      case null:
-        break;
-    }
-    switch (terminal.kind) {
-      case "unreported":
-        return failed3(
-          "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
-        );
-      case "unasked":
-        return failed3(
-          `tmux could not be asked which terminal is attached: ${terminal.reason}`
-        );
-      case "unknown":
-      case "unnamed":
-      case "unread":
-        return failed3(`the doctor cannot read ${called}'s font`);
-      case "bundling": {
-        const since = TERMINALS[terminal.name].glyphs.since;
-        if (since === null) return { ok: true };
-        const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
-        if (shipped === true) return { ok: true };
-        const label2 = terminalLabel(terminal.name);
-        return failed3(
-          shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
-        );
-      }
-      case "configured": {
-        if (terminal.font.kind === "failed") {
-          return failed3(
-            `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
-          );
-        }
-        const { font, from, lacks } = terminal.font.value;
-        if (lacks === null) {
-          return failed3(
-            `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
-          );
-        }
-        if (lacks.length === 0) return { ok: true };
-        return failed3(
-          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
-        );
-      }
-    }
-  }
-};
-function named(segments) {
-  return segments.join(", ");
-}
-function optOut(segments) {
-  return `or set missingData: "ignore" on ${named(segments)}`;
-}
-function pullRequestProblems(need2) {
-  if (need2.kind === "unneeded") return [];
-  const { segments, fact } = need2;
-  if (fact.kind === "failed") {
-    return [
-      `${named(segments)}: whether the forge CLI is ready could not be asked: ${fact.reason}`
-    ];
-  }
-  if (fact.value === null) return [];
-  const { cli, host, status } = fact.value;
-  if (status === "ready") return [];
-  return status === "missing" ? [
-    `${named(segments)}: ${cli} is not installed, so no pull request is ever shown \u2014 install it, ${optOut(segments)}`
-  ] : [
-    `${named(segments)}: ${cli} is not logged in to ${host} (${status.loggedOut}) \u2014 run \`${cli} auth login --hostname ${host}\`, ${optOut(segments)}`
-  ];
-}
-function rateLimitProblems(need2, sighted) {
-  if (need2.kind === "unneeded") return [];
-  const { segments, fact } = need2;
-  if (fact.kind === "failed") return [`${named(segments)}: ${fact.reason}`];
-  if (fact.value.length === 0) {
-    return [
-      sighted.kind !== "recent" ? `${named(segments)}: ${noRenderOf(sighted)}, so whether Claude Code sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn` : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn`
-    ];
-  }
-  return fact.value.includes("missing") && !fact.value.includes("carried") ? [
-    `${named(segments)}: Claude Code sent no rate_limits \u2014 it sends them only to Claude.ai subscription sessions; on any other account, set missingData: "ignore" on ${named(segments)}`
-  ] : [];
-}
-var segmentData = {
-  name: "segmentData",
-  label: "segment data",
-  takesMark: false,
-  probe: ({ data, sighted }) => problemsVerdict([
-    ...pullRequestProblems(data.pullRequests),
-    ...rateLimitProblems(data.rateLimits, sighted)
-  ])
-};
-function transcriptProblems({
-  path: path42,
-  answered,
-  read: read2
-}) {
-  switch (read2.kind) {
-    case "absent":
-      return answered ? [
-        `the transcript ${path42} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
-      ] : [];
-    case "failed":
-      return [`the transcript ${path42} cannot be read: ${read2.reason}`];
-    case "ok": {
-      const { lines: lines2, unparsed, whole } = read2.value;
-      return unparsed === 0 ? [] : [
-        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path42} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
-      ];
-    }
-  }
-}
-var sessionData = {
-  name: "sessionData",
-  label: "session data",
-  takesMark: false,
-  probe: ({ transcripts, sighted }) => {
-    if (transcripts.kind === "failed") {
-      return { ok: false, reason: transcripts.reason };
-    }
-    if (transcripts.value.length === 0) {
-      return {
-        ok: false,
-        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which transcript it reads is unknown \u2014 run the doctor again once the bar has redrawn` : `no session has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so no transcript was named \u2014 run the doctor again once the bar has redrawn`
-      };
-    }
-    return problemsVerdict(transcripts.value.flatMap(transcriptProblems));
-  }
-};
-var CHECKS = [
-  config,
-  install,
-  daemon,
-  urlHandler,
-  links,
-  tmuxTruecolor,
-  utf82,
-  termWidth,
-  effectRefresh,
-  nerdFont,
-  segmentData,
-  sessionData
-];
-var MARKED_CHECKS = CHECKS.filter(
-  (c) => c.takesMark
-);
-function runDoctor(facts) {
-  return CHECKS.map((check) => ({ check, verdict: check.probe(facts) }));
-}
-function checkByName(name) {
-  return CHECKS.find((c) => c.name === name);
-}
-
-// src/doctor/report.ts
-init_globals();
-var DOCTOR_NS = `${SETTINGS_NS}doctor.`;
-var VERDICT_OK = "ok";
-var VERDICT_FAILED = "failed";
-var VERDICT_UNRUN = "";
-function doctorReportKeys(checkName) {
-  const base = `${DOCTOR_NS}${checkName}.`;
-  return {
-    verdict: `${base}verdict`,
-    reason: `${base}reason`,
-    fixable: `${base}fixable`,
-    sighting: `${base}sighting`
-  };
-}
-function configFields({ target }) {
-  return `configTarget=${target.source}`;
-}
-function linkFields(terminal, clicked) {
-  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
-  const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
-  const from = clicked.kind === "failed" ? "unread" : sighting === null ? "-" : clicked.value.includes(sighting) ? "yes" : "no";
-  return `tmuxLinks=${client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"} clicked=${from}`;
-}
-function terminalFeatureFields(terminal, width) {
-  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
-  const cols = width.kind === "failed" ? "failed widthOf=-" : `${width.value.columns ?? "-"} widthOf=${width.value.of.kind}`;
-  return `cols=${cols} clientUtf8=${client === null ? "-" : client.utf8 ? "yes" : "no"}`;
-}
-function installFields(install2) {
-  if (install2.kind === "failed") return "clients=unasked";
-  const { daemon: daemon3, clients } = install2.value;
-  const described = clients.map((c) => {
-    if (c.kind === "unreported") return "unreported/-/-";
-    const { bundle, source } = clientStanding(daemon3, c);
-    return `${c.client}/${bundle.kind}/${source.kind === "uncompared" ? "-" : source.kind}`;
-  });
-  return `clients=${described.join(",") || "-"}`;
-}
-var signedMb = (bytes) => `${bytes >= 0 ? "+" : ""}${mb(bytes)}`;
-function daemonFields({
-  serving,
-  processes,
-  read: read2
-}) {
-  const running = processes.kind === "failed" ? "daemons=unread others=-" : `daemons=${processes.value.length} others=${otherDaemons(serving, processes.value).map((p2) => p2.pid).join(",") || "-"}`;
-  if (serving.kind === "failed") {
-    return `${running} memory=unasked postMortems=unasked`;
-  }
-  const { memory, limit, postMortems } = serving.value;
-  const told = postMortems.kind === "failed" || read2.kind === "failed" ? "unread" : `${unreadPostMortems(serving.value, read2).length}/${postMortems.value.length}`;
-  const held = memory.kind === "unmeasured" ? "unmeasured" : `${measureOf(memory.charge)}${memory.charge.kind === "stand-in" ? `(${signedMb(-memory.charge.gap)})` : ""}:${mb(memory.charge.bytes)}`;
-  return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;
-}
-function dataFields(data) {
-  const pr = () => {
-    if (data.pullRequests.kind === "unneeded") return "-";
-    const fact = data.pullRequests.fact;
-    if (fact.kind === "failed") return "failed";
-    if (fact.value === null) return "no-forge";
-    const { status } = fact.value;
-    return typeof status === "string" ? status : "logged-out";
-  };
-  const rateLimits = () => {
-    if (data.rateLimits.kind === "unneeded") return "-";
-    const fact = data.rateLimits.fact;
-    if (fact.kind === "failed") return "failed";
-    const count = (seen) => fact.value.filter((v) => v === seen).length;
-    return `${count("carried")}/${count("missing")}/${count("unanswered")}`;
-  };
-  return `data=pr:${pr()},rateLimits:${rateLimits()}`;
-}
-function frameFields(frames, { origin, elsewhere }) {
-  const chains = [origin, ...elsewhere];
-  const lines2 = chains.map(({ sources }) => statusLineValue(sources)).join(",");
-  if (frames.kind === "failed") {
-    return `frames=failed chains=${valueOf(lines2)}`;
-  }
-  const drawn = refreshedFrames(chains.flatMap((c) => c.bars));
-  const count = (seen) => drawn.filter((f) => f.frame === seen).length;
-  return `frames=${FRAMES_SEEN.map(count).join("/")} chains=${valueOf(lines2)}`;
-}
-function statusLineValue(sources) {
-  const line = statusLineOf(sources);
-  switch (line.kind) {
-    case "unread":
-      return "failed";
-    case "absent":
-    case "not-an-object":
-      return line.kind;
-    case "present":
-      return `${line.from.scope}:${line.refreshInterval === void 0 ? "-" : JSON.stringify(line.refreshInterval)}`;
-  }
-}
-function truecolorEnvFields(sources) {
-  const told = envVarOf(sources, TMUX_TRUECOLOR_VAR);
-  if (told.kind === "failed") return "truecolorEnv=failed";
-  return told.value.kind === "unset" ? "truecolorEnv=unset" : `truecolorEnv=${valueOf(`${told.value.from.scope}:${JSON.stringify(told.value.value)}`)}`;
-}
-function transcriptFields(transcripts) {
-  if (transcripts.kind === "failed") return "transcripts=failed";
-  const count = (kind) => transcripts.value.filter((t2) => t2.read.kind === kind).length;
-  const unparsed = transcripts.value.reduce(
-    (n, t2) => n + (t2.read.kind === "ok" ? t2.read.value.unparsed : 0),
-    0
-  );
-  return `transcripts=${count("ok")}/${count("absent")}/${count("failed")} unparsed=${unparsed}`;
-}
-function nerdFontFields(facts, marks) {
-  if (facts.kind === "none") return "glyphs=- terminal=- font=- mark=-";
-  const { glyphs, terminal } = facts;
-  const codes = [...glyphs].map((g) => g.codePointAt(0).toString(16));
-  const found2 = (() => {
-    switch (terminal.kind) {
-      case "unreported":
-      case "unasked":
-        return terminal.kind;
-      case "unknown":
-        return `unknown:${JSON.stringify(terminal.called)}`;
-      case "unnamed":
-        return `unnamed:${JSON.stringify(terminal.term)}`;
-      case "bundling":
-      case "unread":
-      case "configured":
-        return `${terminal.name}@${terminal.version ?? "-"}`;
-    }
-  })();
-  const font = (() => {
-    if (terminal.kind !== "configured") return "-";
-    if (terminal.font.kind === "failed") return "failed";
-    const { font: name, lacks } = terminal.font.value;
-    return `${JSON.stringify(name)}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
-  })();
-  const sighting = glyphSighting(facts);
-  const mark = marks.kind === "failed" ? "unread" : sighting === void 0 ? "-" : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? "-";
-  return `glyphs=${codes.join(",")} terminal=${found2} font=${font} mark=${mark}`;
-}
-function rowReason(reason, more = []) {
-  return more.length === 0 ? reason : `${reason} (+${more.length} more \u2014 run \`cc-candybar doctor\`)`;
-}
-function doctorReportPairs(reports) {
-  return reports.flatMap(({ check, verdict }) => {
-    const keys2 = doctorReportKeys(check.name);
-    return verdict.ok ? [
-      { key: keys2.verdict, value: VERDICT_OK },
-      { key: keys2.reason, value: verdict.note ?? "" },
-      { key: keys2.fixable, value: BOOLEAN_FALSE },
-      { key: keys2.sighting, value: "" }
-    ] : [
-      { key: keys2.verdict, value: VERDICT_FAILED },
-      { key: keys2.reason, value: rowReason(verdict.reason, verdict.more) },
-      {
-        key: keys2.fixable,
-        value: verdict.fix === void 0 ? BOOLEAN_FALSE : BOOLEAN_TRUE
-      },
-      { key: keys2.sighting, value: verdict.sighting?.glyphs ?? "" }
-    ];
-  });
-}
-
-// src/config/quick-actions.ts
-init_globals();
-var QUICK_ACTIONS = {
-  copySession: { copy: "{{ .session.id }}" },
-  copyResume: { copy: "{{ .resume_command }}" },
-  openProject: { open: "{{ .project_dir }}" },
-  openTranscript: { open: "{{ .transcript_path }}" },
-  openConfig: { open: "{{ .config_path }}" }
-};
-function quickActions(prefix) {
-  const name = (action2) => `${prefix}${action2}`;
-  return {
-    // [LAW:dataflow-not-control-flow] `⎘ resume`, `↗ repo` and `↗ config`
-    // are gated on their values: a payload the daemon did not build (the
-    // demo) carries no resume command, a local-only repo no page, and a bar
-    // on the bundled default no file, and the glyph is absent.
-    template: `{{ action "${name("copySession")}" "\u2398 id" }}{{ if ne .resume_command "" }} {{ action "${name("copyResume")}" "\u2398 resume" }}{{ end }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
-    actions: Object.fromEntries(
-      Object.entries(QUICK_ACTIONS).map(([action2, decl]) => [
-        `${prefix}${action2}`,
-        decl
-      ])
-    )
-  };
-}
-
-// src/config/command-tray.ts
-init_globals();
-
-// src/claude-input/slash-line.ts
-init_globals();
-var SLASH_LINE_PATTERN = "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$";
-var SLASH_LINE = new RegExp(SLASH_LINE_PATTERN);
-function parseSlashLine(raw) {
-  return typeof raw === "string" && SLASH_LINE.test(raw) ? { kind: "line", line: raw } : {
-    kind: "refused",
-    reason: `a slash command is "/" then its name, e.g. "/compact" or "/model opus", on one line with no control characters, got ${JSON.stringify(raw)}`
-  };
-}
-function slashLine(raw) {
-  const parsed2 = parseSlashLine(raw);
-  if (parsed2.kind === "refused") throw new Error(parsed2.reason);
-  return parsed2.line;
-}
-
-// src/config/command-tray.ts
-var COMMANDS = ["/compact", "/model"];
-var CLEAR = "/clear";
-function commandTray(prefix) {
-  const commandAction = (line) => `${prefix}${line.slice(1)}`;
-  const typeClear = `${prefix}clear.slash`;
-  const clear = confirmStep(
-    `${prefix}clear`,
-    { arm: CLEAR, confirm: `${CLEAR} \u2713 confirm` },
-    [{ action: typeClear, when: "true" }]
-  );
-  return {
-    template: COMMANDS.map(
-      (line) => `{{ action "${commandAction(line)}" "${line}" }} `
-    ).join("") + clear.template,
-    when: `{{ ${IN_TMUX} }}`,
-    actions: {
-      ...Object.fromEntries(
-        COMMANDS.map((line) => [
-          commandAction(line),
-          { slash: slashLine(line) }
-        ])
-      ),
-      ...clear.actions,
-      [typeClear]: { slash: slashLine(CLEAR) }
-    },
-    variables: clear.variables,
-    disarm: clear.disarm
-  };
-}
-
-// src/config/autocompact-control.ts
-init_globals();
-
-// src/segments/autocompact.ts
-init_globals();
-var AUTOCOMPACT_WINDOWS = Array.from(
-  { length: 10 },
-  (_, i) => (i + 1) * 1e5
-);
-var LEAST = AUTOCOMPACT_WINDOWS[0];
-var MOST = AUTOCOMPACT_WINDOWS[AUTOCOMPACT_WINDOWS.length - 1];
-function readAutoCompactWindow(settingsPath) {
-  const read2 = readClaudeSettingsOutcome(settingsPath);
-  if (read2.kind !== "ok") return read2;
-  const window2 = read2.value.autoCompactWindow;
-  if (window2 === void 0) return ok("auto");
-  return typeof window2 === "number" && Number.isInteger(window2) && window2 >= LEAST && window2 <= MOST ? ok(window2) : failed(
-    `${settingsPath}: autoCompactWindow is ${JSON.stringify(window2)}, not a window /autocompact accepts (${LEAST}\u2013${MOST} tokens)`,
-    "parse"
-  );
-}
-function autoCompactControls(window2, contextWindow) {
-  const cap = Math.min(contextWindow ?? MOST, MOST);
-  const from = window2 === "auto" ? cap : Math.min(window2, cap);
-  return {
-    window: window2 === "auto" ? 0 : window2,
-    applied: window2 === "auto" ? 0 : from,
-    lower: AUTOCOMPACT_WINDOWS.filter((w) => w < from).at(-1) ?? 0,
-    higher: AUTOCOMPACT_WINDOWS.find((w) => w > from && w <= cap) ?? 0
-  };
-}
-
-// src/config/autocompact-control.ts
-function autocompactControl(prefix, formatCount) {
-  return {
-    template: `{{ if ne .autocompact.error "" }}\u21F2 \u26A0 {{ .autocompact.error }}{{ else }}\u21F2 {{ if eq .autocompact.window 0 }}auto{{ else }}${formatCount(".autocompact.applied")}{{ end }}{{ if ${IN_TMUX} }}{{ if gt .autocompact.lower 0 }} {{ action (printf "${prefix}%d" .autocompact.lower) "\u2212" }}{{ end }}{{ if gt .autocompact.higher 0 }} {{ action (printf "${prefix}%d" .autocompact.higher) "+" }}{{ end }}{{ if gt .autocompact.window 0 }} {{ action "${prefix}auto" "\u21BA" }}{{ end }}{{ end }}{{ end }}`,
-    // [LAW:no-silent-failure] An unreadable settings file paints `error`.
-    bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
-    when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
-    // [LAW:one-source-of-truth] One action per window Claude Code accepts, so
-    // the lines a click can type are exactly AUTOCOMPACT_WINDOWS; the template
-    // picks one by name.
-    actions: {
-      [`${prefix}auto`]: { slash: slashLine("/autocompact auto") },
-      ...Object.fromEntries(
-        AUTOCOMPACT_WINDOWS.map((w) => [
-          `${prefix}${w}`,
-          { slash: slashLine(`/autocompact ${w}`) }
-        ])
-      )
-    }
-  };
-}
-
-// src/config/format-token-count.ts
-init_globals();
-var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${n} 1000000) }}M{{ else if ge ${n} 1000 }}{{ printf "%.1f" (divf ${n} 1000) }}K{{ else }}{{ ${n} }}{{ end }}`;
-
-// src/config/settings-menu.ts
-var EDIT_SEG = `${SETTINGS_NS}edit`;
-var TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
-var TOOLBAR = quickActions(SETTINGS_NS);
-var COMMANDS_SEG = `${SETTINGS_NS}commands`;
-var COMMANDS2 = commandTray(`${COMMANDS_SEG}.`);
-var AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
-var AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
-var seg = (name) => ({ kind: "segment", name });
-var TAB_KEY = `${SETTINGS_NS}tab`;
-var tabSeg = (tab) => `${TAB_KEY}.${tab}`;
-var tabToggle = (tab) => `${tabSeg(tab)}.toggle`;
-var tabRef = (tab) => ({
-  variable: TAB_KEY,
-  key: TAB_KEY,
-  member: tab
-});
-var SAVE_SEG = `${SETTINGS_NS}save`;
-var PRESET_SAVE = `${SETTINGS_NS}preset.save`;
-var PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
-var PRESET_DELETE_GLYPH = "\u{1F6AE}";
-var controlSeg = (name) => `${SETTINGS_NS}${name}`;
-var controlApply = (name) => `${SETTINGS_NS}apply.${name}`;
-var controlReset = (name) => `${SETTINGS_NS}reset.${name}`;
-var THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
-var THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
-var THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
-var THEME_DEFAULT_CELL = {
-  when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
-  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "\u2913 default for %s" .${THEME_DEFAULT_THEME}) }} {{ swatch "${controlApply("theme")}" .${THEME_DEFAULT_THEME} }}`
-};
-var RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
-var DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
-var UNDO_ACTION = `${SETTINGS_NS}undo`;
-var BACK_ACTION = `${SETTINGS_NS}back`;
-var BACK_STEP = `${BACK_ACTION}.step`;
-var BACK_COUNT = `${SETTINGS_NS}navigation.back`;
-var BACK_SEG = BACK_ACTION;
-var BACK_GLYPH = "\u25C1";
-var BACK_CELL = {
-  template: `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`
-};
-var REDO_ACTION = `${SETTINGS_NS}redo`;
-var DOCTOR_SEG = `${SETTINGS_NS}doctor`;
-var DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
-var doctorFixAction = (check) => `${DOCTOR_SEG}.fix.${check}`;
-var doctorMarkAction = (check, mark) => `${DOCTOR_SEG}.mark.${check}.${mark}`;
-var doctorRowSeg = (check) => `${DOCTOR_SEG}.${check}`;
-var MARK_GLYPH = {
-  drawn: "[\u2713 shapes]",
-  boxes: "[\u2717 boxes]"
-};
-var PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
-var submenuSeg = (name) => `${SETTINGS_NS}${name}`;
-var submenuToggle = (name) => `${submenuSeg(name)}.toggle`;
-var accordionOf = (place) => isSubmenu(place) ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`) : PICKER_KEY;
-var submenuRef = (name) => {
-  const key = accordionOf(PLACE[SUBMENUS[name].beside]);
-  return { variable: key, key, member: name };
-};
-var PREVIEWS = {
-  // `{{ layoutPreview }}` draws every row of the arrangement, one block per
-  // segment, named, each block in the tint the bar's variation and shade deal
-  // it — so it shows what a preset, a variation or a shade changes.
-  layout: { template: "{{ layoutPreview }}" },
-  // A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
-  // samples exactly the palette the bar is drawn in. (The theme picker carries
-  // its own demo of the theme it has selected.)
-  palette: { template: "{{ themePreview }}" },
-  // While the preset ring is on a preset the user made
-  // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
-  // 📐 layout tab makes one.
-  presetDelete: {
-    when: "{{ not .preset.bundled }}",
-    template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`
-  }
-};
-var controlRow = (name, row2) => `${SETTINGS_NS}list.${name}.${row2}`;
-var controlResettable = (name) => `${SETTINGS_NS}resettable.${name}`;
-var DRIFT_MARK = " \u2022";
-var anyResettable = (controls) => controls.length === 0 ? "false" : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
-var laneSettings = LANE_NAMES.map(
-  (lane) => [LANES[lane].switch.setting, lane]
-);
-var HELP_ARTIFACTS = {
-  variables: {},
-  actions: {},
-  segments: {}
-};
-var HELP = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => {
-    const name = `${SETTINGS_NS}help.${setting}`;
-    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
-  })
-);
-var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
-var laneReadout = (lane) => {
-  const feed2 = (field) => `.${laneFeedVar(lane, field)}`;
-  const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
-    " "
-  );
-  return (
-    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
-    // the renderer's: the setting's value against the one that turns the lane
-    // on, each spelled as a template literal of its own type.
-    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed2("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed2("fps")} }} fps{{ if not ${feed2("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
-  );
-};
-var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
-var FPS_SEG = `${SETTINGS_NS}fps`;
-var POLLED = "polled";
-var AT_MOST = "\u2264";
-var FPS_UNIT = " fps";
-var RATE_WIDTH = Math.max(
-  POLLED.length,
-  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length
-);
-var FRAME_RATE = `{{ if eq .${drawingVar("by")} "${"feed"}" }}{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
-var TRAIL = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
-);
-var submenusBeside = (name) => SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
-var menuControl = (name) => {
-  const row2 = SETTINGS[name];
-  const place = PLACE[name];
-  return {
-    ...row2,
-    name,
-    place,
-    control: settingControl(
-      {
-        label: row2.label,
-        domain: settingControlDomain(row2.configKey)
-      },
-      row2.sessionKey,
-      row2.effectiveVar,
-      controlApply(name),
-      accordionOf(place)
-    ),
-    beneath: row2.previews.map((preview) => PREVIEWS[preview]),
-    help: [HELP[name]].filter((h) => h !== void 0),
-    submenus: submenusBeside(name)
-  };
-};
-var CONTROLS = Object.keys(SETTINGS).map(menuControl);
-var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
-var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
-var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
-  controlsUnder(place)
-)}))`;
-var controlsAt = (place) => controlsIn(place).flatMap(
-  (c) => [
-    controlNode(c),
-    ...c.help,
-    ...c.submenus.map(
-      (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
-    )
-  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
-);
-var SETTINGS_WRITTEN_KEYS = new Set(
-  CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
-);
-var RESET_ALL = confirmStep(
-  RESET_ALL_SEG,
-  { arm: "\u27F2", confirm: "\u27F2 reset all?" },
-  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown }))
-);
-var SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"];
-var saveCountVar = (count) => `${SETTINGS_NS}${count}`;
-var UNSAVED_VAR = saveCountVar("unsaved");
-var counted = (count, body) => ({
-  body,
-  shown: `(gt .${saveCountVar(count)} 0)`
-});
-var SAVE_PARTS = [
-  counted(
-    "unsaved",
-    `{{ action "${SAVE_SEG}" (printf "\u{1F4BE} save %d" .${UNSAVED_VAR}) }}`
-  ),
-  counted("history.undo", `{{ action "${UNDO_ACTION}" "\u21B6" }}`),
-  counted("history.redo", `{{ action "${REDO_ACTION}" "\u21B7" }}`),
-  {
-    body: RESET_ALL.template,
-    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`
-  }
-];
-var SAVE_CELL = {
-  when: `{{ or ${SAVE_PARTS.map((p2) => p2.shown).join(" ")} }}`,
-  template: `{{ $sep := "" }}` + SAVE_PARTS.map(
-    (p2) => `{{ if ${p2.shown} }}{{ $sep }}${p2.body}{{ $sep = " " }}{{ end }}`
-  ).join("")
-};
-var CONFIRMS = [
-  { step: RESET_ALL, place: "door" },
-  { step: COMMANDS2, place: "session" }
-];
-var disarms = (out) => out.map((c) => c.step.disarm);
-var DOOR_DISARMS = disarms(CONFIRMS);
-var TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
-function controlNode(c) {
-  const self2 = controlSeg(c.name);
-  if (c.control.kind === "inline") return seg(self2);
-  return disclosureNode(
-    self2,
-    c.control.list.ref,
-    {
-      kind: "container",
-      direction: "vertical",
-      children: [...c.control.list.rows, ...c.beneath].map(
-        (_, row2) => seg(controlRow(c.name, row2))
-      )
-    },
-    "drop"
-  );
-}
-function isSettingsAnchor(segmentName) {
-  return segmentName === SETTINGS_ANCHOR;
-}
-function prependAnchor(node) {
-  const anchorRef = seg(SETTINGS_ANCHOR);
-  if (node.kind === "container" && node.direction === "vertical") {
-    const [first2, ...rest2] = node.children;
-    return node.when === void 0 && first2 !== void 0 ? { ...node, children: [prependAnchor(first2), ...rest2] } : {
-      kind: "container",
-      direction: "vertical",
-      children: [anchorRef, node]
-    };
-  }
-  if (node.kind === "segment") {
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: [anchorRef, node]
-    };
-  }
-  if (node.when === void 0) {
-    return { ...node, children: [anchorRef, ...node.children] };
-  }
-  const { when: when2, children: children2, ...row2 } = node;
-  return {
-    ...row2,
-    children: [
-      anchorRef,
-      { kind: "container", direction: row2.direction, when: when2, children: children2 }
-    ]
-  };
-}
-function withAnchor(node) {
-  const placed2 = countAnchors(node) > 0 ? node : prependAnchor(node);
-  return placed2;
-}
-function countAnchors(node) {
-  let n = 0;
-  for (const each of walkNodes(node)) {
-    if (each.kind === "segment" && isSettingsAnchor(each.name)) n += 1;
-  }
-  return n;
-}
-function anchorUnderGate(node, gated2 = false) {
-  const here = gated2 || node.when !== void 0;
-  if (node.kind === "segment") {
-    return here && isSettingsAnchor(node.name) || node.opens !== void 0 && anchorUnderGate(node.opens.body, true);
-  }
-  return node.children.some((child) => anchorUnderGate(child, here));
-}
-var PLACE_BODY = {
-  // `◁ back`, the controls one click from the door — theme, preset — then
-  // arranging the bar, then the save cell whenever it has something to do.
-  door: {
-    direction: "horizontal",
-    content: [seg(BACK_SEG)],
-    after: [seg(EDIT_SEG), seg(SAVE_SEG)]
-  },
-  // The quick actions, then the commands typed into Claude Code beside the
-  // auto-compact window they would summarize at.
-  session: {
-    direction: "vertical",
-    content: [
-      seg(TOOLBAR_SEG),
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [seg(COMMANDS_SEG), seg(AUTOCOMPACT_SEG)]
-      }
-    ],
-    after: []
-  },
-  look: { direction: "horizontal", content: [], after: [] },
-  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
-  config: { direction: "horizontal", content: [], after: [] },
-  tools: {
-    direction: "vertical",
-    content: [seg(DOCTOR_SEG), ...CHECKS.map((c) => seg(doctorRowSeg(c.name)))],
-    after: []
-  },
-  // The settings that adapt the theme, then — while the look they make
-  // differs from the theme's own default — the cell that saves it as that
-  // default.
-  gear: {
-    direction: "horizontal",
-    content: [],
-    after: [seg(THEME_DEFAULT_SEG)]
-  },
-  toggles: { direction: "horizontal", content: [], after: [] }
-};
-function placeBody(place) {
-  const { direction, content, after } = PLACE_BODY[place];
-  return {
-    kind: "container",
-    direction,
-    children: [...content, ...controlsAt(place), ...after]
-  };
-}
-function expandAnchor(node) {
-  if (node.kind === "segment") {
-    return isSettingsAnchor(node.name) ? {
-      kind: "container",
-      direction: "horizontal",
-      children: [
-        disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
-        seg(FPS_SEG)
-      ]
-    } : node;
-  }
-  return expandContainer(node);
-}
-function doorBody() {
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: [
-      placeBody("door"),
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: TABS.map(
-          ({ member }) => disclosureNode(
-            tabSeg(member),
-            tabRef(member),
-            placeBody(member),
-            "drop"
-          )
-        )
-      }
-    ]
-  };
-}
-var DOOR_BODY = doorBody();
-function expandContainer(node) {
-  return {
-    ...node,
-    children: node.children.map((child) => expandAnchor(child))
-  };
-}
-function settingsArtifacts(doorGlyph) {
-  const artifacts = {
-    variables: {
-      [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
-      [DIAGNOSTICS_VIEWING]: {
-        kind: "state",
-        key: DIAGNOSTICS_VIEWING,
-        default: "0"
-      }
-    },
-    actions: {
-      [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
-      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
-      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
-      [DOCTOR_RUN_ACTION]: { doctor: "run" },
-      ...TOOLBAR.actions,
-      ...COMMANDS2.actions,
-      ...AUTOCOMPACT.actions,
-      [SAVE_SEG]: { save: true },
-      [UNDO_ACTION]: { undo: true },
-      // [LAW:composability] Going back can reopen a view a confirm sits in, so
-      // it disarms every confirm as the door does: a confirm is only ever
-      // clicked in the view its own arming click was made in.
-      [BACK_STEP]: { back: true },
-      [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
-      [REDO_ACTION]: { redo: true },
-      [PRESET_SAVE]: { preset: "save" },
-      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
-      [PRESET_DELETE]: {
-        preset: "delete",
-        name: `{{ .${SETTINGS.preset.effectiveVar} }}`
-      }
-    },
-    segments: {
-      // [LAW:one-source-of-truth] ONE symbol per state, unlike the labelled toggles
-      // below, which are a word plus the ▸/▾ that gates it. The door has no
-      // label to gate: it is a glyph, so a second glyph beside it would be the
-      // only thing on the bar that spells its state twice. The door's glyph
-      // names what it opens, `✖` names what the click does.
-      //
-      // Two displays through the same `[closed, member]` cycle every other
-      // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
-      // gives it (`roleTextOn`): the theme's text-red where that reads on the
-      // pressed state, otherwise the role's own red or the nearest rung of its
-      // ladder out toward the pole the pressed state stands farther from that
-      // does, and where none does, the named red standing farthest off. It
-      // never slides lightness: a slid red stops reading as red, and the ✖
-      // must be red on every theme. `keptOn` only stops the terminal's
-      // rounding from costing it the contrast it has. Closed, the author's
-      // glyph keeps the cell's own text.
-      [SETTINGS_ANCHOR]: {
-        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
-      },
-      [FPS_SEG]: { template: FRAME_RATE },
-      [TOOLBAR_SEG]: { template: TOOLBAR.template },
-      [COMMANDS_SEG]: { template: COMMANDS2.template, when: COMMANDS2.when },
-      [AUTOCOMPACT_SEG]: {
-        template: AUTOCOMPACT.template,
-        bg: AUTOCOMPACT.bg,
-        when: AUTOCOMPACT.when
-      },
-      [BACK_SEG]: BACK_CELL,
-      [SAVE_SEG]: SAVE_CELL,
-      [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
-      [PRESET_SAVE]: {
-        template: `{{ action "${PRESET_SAVE}" "+ preset" }}`
-      },
-      [DOCTOR_SEG]: {
-        template: `{{ action "${DOCTOR_RUN_ACTION}" "\u{1FA7A} doctor" }}`
-      },
-      [EDIT_SEG]: {
-        // Entering or leaving edit mode is a click like every other in the
-        // menu: the menu stays as it was, so `◁ back` and the tabs stay in
-        // reach while the bar is arranged.
-        template: `{{ action "${EDIT_TOGGLE_ACTION}" "\u270E arrange" "\u270E done" }}`
-      }
-    }
-  };
-  artifacts.variables[THEME_DEFAULT_DIFFERS] = {
-    kind: "input",
-    path: "themeDefault.differs",
-    type: "boolean",
-    default: false
-  };
-  artifacts.variables[THEME_DEFAULT_THEME] = {
-    kind: "input",
-    path: "themeDefault.theme",
-    type: "string",
-    default: ""
-  };
-  artifacts.variables[BACK_COUNT] = {
-    kind: "input",
-    path: "navigation.back",
-    type: "number",
-    default: 0
-  };
-  for (const count of SAVE_COUNTS) {
-    artifacts.variables[saveCountVar(count)] = {
-      kind: "input",
-      path: count,
-      type: "number",
-      default: 0
-    };
-  }
-  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
-  for (const { member, label: label2 } of TABS) {
-    artifacts.actions[tabToggle(member)] = disclosureCycleAction(
-      TAB_KEY,
-      member
-    );
-    artifacts.actions[tabSeg(member)] = {
-      do: [tabToggle(member), ...TAB_DISARMS]
-    };
-    const display = markedDisplay(member);
-    artifacts.segments[tabSeg(member)] = {
-      template: `{{ ${disclosureTriggerCall(
-        tabSeg(member),
-        display(label2),
-        display(`${DISCLOSURE_GLYPH_OPEN} ${label2}`)
-      )} }}`
-    };
-  }
-  Object.assign(artifacts.variables, COMMANDS2.variables, RESET_ALL.variables);
-  declareSettingControls(artifacts);
-  declareDoctorRows(artifacts);
-  return artifacts;
-}
-function declareDoctorRows(artifacts) {
-  for (const c of CHECKS) {
-    const keys2 = doctorReportKeys(c.name);
-    const fix = doctorFixAction(c.name);
-    for (const key of Object.values(keys2)) {
-      artifacts.variables[key] = { kind: "state", key, default: VERDICT_UNRUN };
-    }
-    artifacts.actions[fix] = { doctor: "fix", check: c.name };
-    const marks = c.takesMark ? GLYPH_MARKS : [];
-    for (const mark of marks) {
-      artifacts.actions[doctorMarkAction(c.name, mark)] = {
-        doctor: "mark",
-        check: c.name,
-        mark
-      };
-    }
-    const markCells = marks.map(
-      (mark) => ` {{ action "${doctorMarkAction(c.name, mark)}" "${MARK_GLYPH[mark]}" }}`
-    ).join("");
-    artifacts.segments[doctorRowSeg(c.name)] = {
-      when: `{{ ne .${keys2.verdict} "${VERDICT_UNRUN}" }}`,
-      template: `{{ if eq .${keys2.verdict} "${VERDICT_OK}" }}\u2713 ${c.label}{{ if ne .${keys2.reason} "" }} \u2014 {{ .${keys2.reason} }}{{ end }}{{ else }}\u2717 ${c.label} \u2014 {{ .${keys2.reason} }}{{ if eq .${keys2.fixable} "${BOOLEAN_TRUE}" }} {{ action "${fix}" "[fix]" }}{{ end }}` + (markCells === "" ? "" : `{{ if ne .${keys2.sighting} "" }} {{ .${keys2.sighting} }}${markCells}{{ end }}`) + `{{ end }}`
-    };
-  }
-}
-function declareSettingControls(artifacts) {
-  for (const c of CONTROLS) {
-    Object.assign(artifacts.actions, c.control.actions);
-    const reset = controlReset(c.name);
-    artifacts.actions[reset] = { reset: c.configKey };
-    artifacts.variables[controlResettable(c.name)] = {
-      kind: "input",
-      path: `resettable.${c.name}`,
-      type: "boolean",
-      default: false
-    };
-    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "\u21BA" }}{{ end }}`;
-    Object.assign(artifacts.variables, c.control.variables);
-    artifacts.segments[controlSeg(c.name)] = {
-      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`
-    };
-    if (c.control.kind === "picker") {
-      [
-        ...c.control.list.rows.map((template) => ({ template })),
-        ...c.beneath
-      ].forEach((row2, i) => {
-        artifacts.segments[controlRow(c.name, i)] = row2;
-      });
-    }
-  }
-  Object.assign(artifacts.actions, RESET_ALL.actions);
-  Object.assign(artifacts.variables, HELP_ARTIFACTS.variables);
-  Object.assign(artifacts.actions, HELP_ARTIFACTS.actions);
-  Object.assign(artifacts.segments, HELP_ARTIFACTS.segments);
-  for (const name of SUBMENU_NAMES) {
-    const ref = submenuRef(name);
-    artifacts.actions[submenuToggle(name)] = disclosureCycleAction(
-      ref.key,
-      ref.member
-    );
-    artifacts.segments[submenuSeg(name)] = {
-      template: `{{ action "${submenuToggle(name)}" ${markedDisplay(name)(SUBMENUS[name].trigger)} }}`
-    };
-  }
-}
-function ensureEditToggle(artifacts) {
-  const { variables, actions } = editModeArtifacts();
-  Object.assign(artifacts.variables, variables);
-  Object.assign(artifacts.actions, actions);
-}
-function synthesizeSettingsMenu(config2) {
-  const artifacts = settingsArtifacts(config2.globals.menuGlyph ?? DOOR_GLYPH);
-  ensureEditToggle(artifacts);
-  const presets = { ...config2.presets };
-  const roots = [];
-  for (const name of presetNames(config2.presets)) {
-    const { node } = presetRoot(config2, name);
-    const root = expandAnchor(withAnchor(node));
-    roots.push(root);
-    presets[name] = { ...presetByName(config2.presets, name), root };
-  }
-  const ensured = synthesisInputs(artifacts, roots, config2);
-  return {
-    ...config2,
-    variables: { ...ensured, ...config2.variables, ...artifacts.variables },
-    actions: { ...config2.actions, ...artifacts.actions },
-    segments: { ...config2.segments, ...artifacts.segments },
-    presets
-  };
-}
-
-// src/config/edit-chrome.ts
-var EDIT_LIVE_KEY = `${EDIT_NS}live`;
-var EDIT_LIVE_DISPLAY = ["\u2610 live", "\u2611 live"];
-var EDIT_DONE_SEG = `${EDIT_NS}done`;
-var EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
-var EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
-var EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
-var CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
-var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
-var EDIT_LIVE_REF = {
-  variable: EDIT_LIVE_KEY,
-  key: EDIT_LIVE_KEY,
-  member: DISCLOSURE_OPEN
-};
-function configuringVar(presetIdent) {
-  return `${EDIT_NS}configuring.p${presetIdent}`;
-}
-function namesView(presetIdent) {
-  return `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) (ne .${configuringVar(presetIdent)} "true")`;
-}
-function configuringDecl(members) {
-  const terms = members.map(
-    (m) => `(eq .${EDIT_CONFIGURE_KEY} "${escapeTemplateLiteral(m)}")`
-  );
-  return { kind: "template", template: `{{ or ${terms.join(" ")} false }}` };
-}
-function inNamesView(presetIdent, verdict, when2) {
-  return `{{ if ${namesView(presetIdent)} }}${verdict}{{ else }}${when2}{{ end }}`;
-}
-var PRESET_CUSTOMIZED_VAR = "preset.customized";
-var CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
-var isChromeExempt = isReservedName;
-function configOptionDomains(config2) {
-  return new Map([
-    ...perConfigDomainsFor(config2),
-    ...addableSegmentDomains(config2)
-  ]);
-}
-var ADDABLE_DOMAIN = `${EDIT_NS}addable`;
-function addableSegmentDomains(config2) {
-  return /* @__PURE__ */ new Map([
-    [
-      ADDABLE_DOMAIN,
-      {
-        members: Object.keys(config2.segments).filter((n) => !isChromeExempt(n)),
-        library: {
-          groups: LIBRARY_GROUPS.map((id2) => ({
-            id: id2,
-            label: GROUP_LABELS[id2]
-          })),
-          entry: (option) => {
-            const decl = config2.segments[option];
-            return {
-              group: decl.group ?? OTHER_GROUP,
-              ...decl.description !== void 0 && {
-                description: decl.description
-              }
-            };
-          }
-        }
-      }
-    ]
-  ]);
-}
-function chromeCell(name, template, artifacts) {
-  artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
-  return { kind: "segment", name };
-}
-function removeTerm(ctx, posIdent, id2) {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${posIdent}`;
-  ctx.artifacts.actions[actionName] = {
-    persist: ctx.rootKey,
-    removeSegment: id2
-  };
-  const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
-  return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
-}
-function inArrangeMode(term) {
-  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${term}{{ end }}`;
-}
-function shownWhile(refs, when2) {
-  return refs.reduce(
-    (inner, ref) => `{{ if and ${disclosureTerm(EDIT_MODE_REF)} ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
-    when2
-  );
-}
-function configureRefsIn(nodes) {
-  return nodes.flatMap(
-    (node) => [...walkNodes(node)].flatMap(
-      (n) => n.kind === "segment" && n.opens?.ref.key === EDIT_CONFIGURE_KEY ? [n.opens.ref] : []
-    )
-  );
-}
-function placementDraftKey(presetIdent, id2, setting) {
-  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
-}
-function configureParts(ctx, posIdent, node, decls) {
-  const id2 = placementId(node);
-  const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.presetIdent, id2);
-  ctx.configured.push(member);
-  const enter = `${prefix}.configure.${posIdent}`;
-  const listKey = sharedMenuStateKey(enter);
-  const fold = `${enter}.fold`;
-  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
-  ctx.artifacts.actions[enter] = {
-    do: [`${enter}.open`, fold]
-  };
-  ctx.artifacts.actions[`${enter}.open`] = {
-    set: EDIT_CONFIGURE_KEY,
-    to: member
-  };
-  const drafts = {};
-  const controls = Object.entries(decls).map(([name, decl]) => {
-    const key = placementDraftKey(ctx.presetIdent, id2, name);
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${posIdent}.${name}`;
-    ctx.artifacts.variables[variable] = {
-      kind: "state",
-      key,
-      default: settingSpelling(node.settings?.[name] ?? decl.default)
-    };
-    drafts[name] = { id: id2, key, variable };
-    const segName = `${prefix}.setting.${posIdent}.${name}`;
-    const control2 = settingControl(
-      controlDeclOf(decl),
-      key,
-      variable,
-      segName,
-      listKey
-    );
-    Object.assign(ctx.artifacts.actions, control2.actions);
-    Object.assign(ctx.artifacts.variables, control2.variables);
-    if (control2.kind === "inline") {
-      ctx.artifacts.segments[segName] = { template: control2.template };
-      return { kind: "segment", name: segName };
-    }
-    ctx.artifacts.segments[segName] = { template: control2.template };
-    const rows = control2.list.rows.map((template, row2) => {
-      const listSeg = `${segName}.list.${row2}`;
-      ctx.artifacts.segments[listSeg] = { template };
-      return { kind: "segment", name: listSeg };
-    });
-    return disclosureNode(
-      segName,
-      control2.list.ref,
-      { kind: "container", direction: "vertical", children: rows },
-      "drop"
-    );
-  });
-  return {
-    term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
-    ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
-    // One control per row, its list dropping below it when opened.
-    body: { kind: "container", direction: "vertical", children: controls },
-    drafts
-  };
-}
-var LABEL_NS = `${EDIT_NS}label:`;
-function arrangedSegment(name) {
-  if (name.startsWith(LABEL_NS)) {
-    const label2 = name.slice(LABEL_NS.length);
-    return label2.slice(label2.indexOf(":") + 1);
-  }
-  return name.startsWith(EDIT_NS) ? void 0 : name;
-}
-function labelChrome(child, decl, ctx, configure) {
-  const id2 = placementId(child);
-  const name = labelSegment(ctx, id2, child, decl, id2);
-  const settings = Object.fromEntries(
-    IMPLIED_SETTINGS.flatMap((setting) => {
-      const value = child.settings?.[setting];
-      return value === void 0 ? [] : [[setting, value]];
-    })
-  );
-  return {
-    ...disclosureNode(
-      name,
-      configure.ref,
-      configure.body,
-      "drop",
-      shownWhile([configure.ref], `{{ ${namesView(ctx.presetIdent)} }}`)
-    ),
-    ...Object.keys(settings).length > 0 && { settings },
-    drafts: Object.fromEntries(
-      IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]])
-    )
-  };
-}
-function labelSegment(ctx, key, child, decl, text4) {
-  const name = `${LABEL_NS}${key}:${child.name}`;
-  ctx.artifacts.segments[name] = {
-    template: `{{ "${escapeTemplateLiteral(text4)}" }}`,
-    ...decl.palette !== void 0 && { palette: decl.palette }
-  };
-  return name;
-}
-function editableUnit(child, spliced, first2, ctx) {
-  const id2 = placementId(child);
-  const leading = first2 ? [insertTerm(ctx, String(ctx.posCounter.n++), id2, "before")] : [];
-  const afterPos = String(ctx.posCounter.n++);
-  const after = insertTerm(ctx, afterPos, id2, "after");
-  const remove = removeTerm(ctx, afterPos, id2);
-  const decl = ctx.segments[child.name];
-  const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
-  const lead = inArrangeMode(remove);
-  const trail = inArrangeMode(configure.term);
-  return [
-    ...leading.map(
-      (lead2) => chromeCell(lead2.host, lead2.template, ctx.artifacts)
-    ),
-    // Labelled by the placement's id: two placements of one segment are
-    // told apart by it, and a bare placement's id is its segment's name.
-    { ...labelChrome(child, decl, ctx, configure), lead, trail },
-    {
-      ...spliced,
-      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
-      lead,
-      trail,
-      drafts: configure.drafts
-    },
-    chromeCell(after.host, after.template, ctx.artifacts)
-  ];
-}
-function fileLabel(file) {
-  return import_node_path10.default.join(import_node_path10.default.basename(import_node_path10.default.dirname(file)), import_node_path10.default.basename(file));
-}
-function insertedUnit(child, insertedBy, spliced, ctx) {
-  const decl = ctx.segments[child.name];
-  const id2 = placementId(child);
-  const label2 = {
-    kind: "segment",
-    // Keyed by the preset too: another preset may hold the same id as an
-    // editable placement, whose label reads only the id. An id holds no
-    // `/` and a preset ident no `:`, so the two names never meet.
-    name: labelSegment(
-      ctx,
-      `${id2}/${ctx.presetIdent}`,
-      child,
-      decl,
-      `${id2} \xB7 ${fileLabel(insertedBy.file)} ${insertedBy.entry}`
-    ),
-    when: `{{ ${namesView(ctx.presetIdent)} }}`
-  };
-  return [
-    label2,
-    {
-      ...spliced,
-      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true")
-    }
-  ];
-}
-function insertTerm(ctx, posIdent, anchor, relation) {
-  const { presetIdent, artifacts } = ctx;
-  const applyName = `${EDIT_NS}${presetIdent}.insert.${posIdent}`;
-  const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${posIdent}`;
-  artifacts.actions[applyName] = {
-    persist: ctx.rootKey,
-    insertSegmentFrom: ADDABLE_DOMAIN,
-    anchor,
-    relation
-  };
-  const member = menuMember(applyName);
-  const stateKey = menuStateKey(chromeSegName, applyName, void 0);
-  const pageKey = menuPageKey(stateKey);
-  const identity2 = menuActionName(stateKey, member);
-  artifacts.variables[stateKey] = {
-    ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
-    within: [EDIT_MODE_REF]
-  };
-  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-  artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
-  artifacts.actions[pageKey] = { set: pageKey, int: true };
-  const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
-  const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
-  return {
-    host: chromeSegName,
-    template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
-  };
-}
-function spliceContainer(node, ctx) {
-  const children2 = [];
-  const firstContent = node.children.findIndex(
-    (child) => child.kind === "segment" && !isChromeExempt(child.name) && child.insertedBy === void 0
-  );
-  const splice2 = (body) => spliceContainer(body, ctx);
-  for (const [i, child] of node.children.entries()) {
-    if (child.kind === "container") {
-      children2.push(splice2(child));
-      continue;
-    }
-    const spliced = mapOpens(child, splice2);
-    if (isChromeExempt(child.name)) {
-      children2.push(spliced);
-      continue;
-    }
-    const cells = child.insertedBy === void 0 ? editableUnit(child, spliced, i === firstContent, ctx) : insertedUnit(child, child.insertedBy, spliced, ctx);
-    const unit = {
-      kind: "container",
-      direction: "horizontal",
-      children: cells,
-      unit: true
-    };
-    children2.push(
-      node.direction === "vertical" ? { kind: "container", direction: "horizontal", children: [unit] } : unit
-    );
-  }
-  return {
-    ...node,
-    children: children2,
-    ...node.when !== void 0 && {
-      when: shownWhile(
-        configureRefsIn(children2),
-        inNamesView(ctx.presetIdent, "true", node.when)
-      )
-    }
-  };
-}
-function wrapWithPresetRows(splicedRoot, presetIdent, rootKey, artifacts, lead, live, tail) {
-  const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
-  const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
-  artifacts.actions[actionName] = { reset: rootKey };
-  artifacts.segments[chromeSegName] = {
-    template: `{{ action "${actionName}" "\u21BA reset layout" }}`,
-    when: CUSTOMIZED_BANNER_GATE
-  };
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: [
-      // The ways out lead the top row, top left, where they are found without
-      // reopening the menu edit mode was entered from: keep or discard what
-      // was changed, restore the bundled layout, and the view toggle.
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [...lead, { kind: "segment", name: chromeSegName }, live]
-      },
-      // The `(?)`'s body drops BELOW the row the trigger rides while the
-      // disclosure is open, like every other disclosure body in this codebase.
-      withTrailingCell(splicedRoot, tail)
-    ]
-  };
-}
-function withTrailingCell(node, cell3) {
-  if (node.kind === "segment") {
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: [node, cell3]
-    };
-  }
-  const last2 = node.children.at(-1);
-  if (node.direction === "vertical" && last2 !== void 0 && (last2.kind === "segment" || last2.when === void 0)) {
-    return {
-      ...node,
-      children: [...node.children.slice(0, -1), withTrailingCell(last2, cell3)]
-    };
-  }
-  return { ...node, children: [...node.children, cell3] };
-}
-function spliceEditChromeForPreset(config2, presetName, artifacts, lead, live, tail) {
-  const { node } = presetRoot(config2, presetName);
-  const ctx = {
-    presetIdent: ident(presetName),
-    rootKey: presetRootKey(presetName),
-    segments: config2.segments,
-    artifacts,
-    posCounter: { n: 0 },
-    configured: []
-  };
-  const spliced = spliceContainer(node, ctx);
-  artifacts.variables[configuringVar(ctx.presetIdent)] = configuringDecl(
-    ctx.configured
-  );
-  return wrapWithPresetRows(
-    spliced,
-    ctx.presetIdent,
-    ctx.rootKey,
-    artifacts,
-    lead,
-    live,
-    tail
-  );
-}
-function synthesizeEditChrome(config2) {
-  const artifacts = {
-    variables: {},
-    actions: {},
-    segments: {}
-  };
-  const help = declareHelp(
-    `${EDIT_NS}help`,
-    EDIT_MODE_HELP,
-    [EDIT_MODE_REF],
-    artifacts
-  );
-  artifacts.variables[EDIT_LIVE_KEY] = disclosureStateVar(
-    EDIT_LIVE_KEY,
-    DISCLOSURE_CLOSED
-  );
-  artifacts.actions[EDIT_LIVE_KEY] = disclosureCycleAction(
-    EDIT_LIVE_KEY,
-    EDIT_LIVE_REF.member
-  );
-  artifacts.segments[EDIT_LIVE_KEY] = {
-    template: disclosureTrigger(EDIT_LIVE_KEY, ...EDIT_LIVE_DISPLAY),
-    when: EDIT_MODE_GATE
-  };
-  const live = { kind: "segment", name: EDIT_LIVE_KEY };
-  const tail = help;
-  artifacts.variables[EDIT_CHANGES_VAR] = {
-    kind: "input",
-    path: "history.sinceEdit",
-    type: "number",
-    default: 0
-  };
-  artifacts.actions[EDIT_DONE_SEG] = {
-    do: [SAVE_SEG, EDIT_TOGGLE_ACTION]
-  };
-  artifacts.segments[EDIT_DONE_SEG] = {
-    template: `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "\u2713 save" }}{{ else }}{{ action "${EDIT_DONE_SEG}" "\u2713 done" }}{{ end }}`,
-    when: EDIT_MODE_GATE
-  };
-  artifacts.actions[EDIT_REWIND_ACTION] = { rewind: true };
-  artifacts.actions[EDIT_CANCEL_SEG] = {
-    do: [EDIT_REWIND_ACTION, EDIT_TOGGLE_ACTION]
-  };
-  artifacts.segments[EDIT_CANCEL_SEG] = {
-    template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
-    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
-  };
-  const lead = [
-    { kind: "segment", name: EDIT_DONE_SEG },
-    { kind: "segment", name: EDIT_CANCEL_SEG }
-  ];
-  const presets = { ...config2.presets };
-  const roots = [];
-  for (const name of presetNames(config2.presets)) {
-    const root = spliceEditChromeForPreset(
-      config2,
-      name,
-      artifacts,
-      lead,
-      live,
-      tail
-    );
-    roots.push(root);
-    presets[name] = { ...presetByName(config2.presets, name), root };
-  }
-  const ensured = synthesisInputs(artifacts, roots, config2);
-  return {
-    ...config2,
-    variables: {
-      ...ensured,
-      ...config2.variables,
-      ...artifacts.variables
-    },
-    actions: { ...config2.actions, ...artifacts.actions },
-    segments: { ...config2.segments, ...artifacts.segments },
-    presets
-  };
-}
-
-// src/config/loader/actions.ts
-init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
-function validateActions(ctx, raw, home) {
-  if (raw === void 0) return {};
-  if (!isPlainObject(raw)) {
-    issue2(
-      ctx,
-      "actions",
-      `actions must be an object, got ${describeType(raw)}`
-    );
-    return {};
-  }
-  const out = /* @__PURE__ */ Object.create(null);
-  for (const [name, decl] of Object.entries(raw)) {
-    const parsed2 = validateActionDecl(ctx, `actions.${name}`, decl, home);
-    if (parsed2 !== null) out[name] = parsed2;
-  }
-  return out;
-}
-function issue2(ctx, path42, message) {
-  ctx.issues.push({
-    path: path42,
-    message,
-    line: findKeyLine(ctx.source, path42.split("."))
-  });
-}
-function validateActionDecl(ctx, path42, raw, home) {
-  if (!isPlainObject(raw)) {
-    issue2(
-      ctx,
-      path42,
-      `${path42} must be an action object, got ${describeType(raw)}`
-    );
-    return null;
-  }
-  if ("persistWhen" in raw) {
-    issue2(
-      ctx,
-      path42,
-      `${path42}.persistWhen was removed: declare the \`set\` alone \u2014 a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`
-    );
-    return null;
-  }
-  const present = ACTION_KEYS.filter((k) => k in raw);
-  if (present.length !== 1) {
-    issue2(
-      ctx,
-      path42,
-      `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${present.length > 1 ? ` (found: ${present.join(", ")})` : ""}`
-    );
-    return null;
-  }
-  return actionArms(home)[present[0]](ctx, path42, raw);
-}
-function actionHomeOf(filePath2) {
-  if (filePath2 === "<default>") return { dir: null };
-  return import_node_path11.default.isAbsolute(filePath2) ? { dir: import_node_path11.default.dirname(filePath2) } : { text: filePath2 };
-}
-var actionArms = (home) => ({
-  set: (ctx, path42, raw) => valueSourceAction(ctx, path42, raw, "set", SET_ARMS),
-  persist: (ctx, path42, raw) => valueSourceAction(ctx, path42, raw, "persist", PERSIST_ARMS),
-  copy: templateArm("copy"),
-  open: templateArm("open"),
-  reset: resetArm,
-  undo: markerArm("undo"),
-  redo: markerArm("redo"),
-  back: markerArm("back"),
-  rewind: markerArm("rewind"),
-  save: markerArm("save"),
-  preset: presetArm,
-  themeDefault: themeDefaultArm,
-  doctor: doctorArm,
-  slash: slashArm,
-  run: runArm(home),
-  do: doArm
-});
-function templateArm(key) {
-  return (ctx, path42, raw) => {
-    for (const k of Object.keys(raw)) {
-      if (k !== key)
-        issue2(
-          ctx,
-          `${path42}.${k}`,
-          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
-        );
-    }
-    const tmpl = requireString(ctx, path42, raw, key);
-    return tmpl === null ? null : { [key]: tmpl };
-  };
-}
-function resetArm(ctx, path42, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "reset")
-      issue2(
-        ctx,
-        `${path42}.${k}`,
-        `Unknown key "${k}" on a reset action. Expected only: reset`
-      );
-  }
-  const key = slashFreeString(
-    ctx,
-    path42,
-    "reset",
-    raw,
-    `reset key must be non-empty (the config globals field to clear)`,
-    (v) => `reset key "${v}" contains "/" \u2014 keys must be slash-free`
-  );
-  return key === null ? null : { reset: key };
-}
-var MARKER_SUBJECT = {
-  undo: "it steps the session's settings history",
-  redo: "it steps the session's settings history",
-  back: "it steps the session's navigation history",
-  rewind: "it steps the session's settings history back to where edit mode opened",
-  save: "it saves the session's unsaved settings"
-};
-function markerArm(key) {
-  return (ctx, path42, raw) => {
-    for (const k of Object.keys(raw)) {
-      if (k !== key)
-        issue2(
-          ctx,
-          `${path42}.${k}`,
-          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
-        );
-    }
-    if (raw[key] !== true) {
-      issue2(
-        ctx,
-        `${path42}.${key}`,
-        `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue(raw[key])}`
-      );
-      return null;
-    }
-    return { [key]: true };
-  };
-}
-function presetArm(ctx, path42, raw) {
-  const verb = raw.preset;
-  const allowed = verb === "save" ? ["preset"] : ["preset", "name"];
-  for (const k of Object.keys(raw)) {
-    if (!allowed.includes(k))
-      issue2(
-        ctx,
-        `${path42}.${k}`,
-        `Unknown key "${k}" on a preset action. Expected only: ${allowed.join(", ")}`
-      );
-  }
-  if (verb !== "save" && verb !== "delete") {
-    issue2(
-      ctx,
-      `${path42}.preset`,
-      `preset must be "save" or "delete", got ${describeValue(verb)}`
-    );
-    return null;
-  }
-  if (verb === "save") return { preset: "save" };
-  const name = requireString(ctx, path42, raw, "name");
-  return name === null ? null : { preset: "delete", name };
-}
-function themeDefaultArm(ctx, path42, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "themeDefault")
-      issue2(
-        ctx,
-        `${path42}.${k}`,
-        `Unknown key "${k}" on a themeDefault action. Expected only: themeDefault`
-      );
-  }
-  if (raw.themeDefault !== "save") {
-    issue2(
-      ctx,
-      `${path42}.themeDefault`,
-      `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue(raw.themeDefault)}`
-    );
-    return null;
-  }
-  return { themeDefault: "save" };
-}
-var DOCTOR_KEYS = {
-  run: ["doctor"],
-  fix: ["doctor", "check"],
-  mark: ["doctor", "check", "mark"]
-};
-function doctorArm(ctx, path42, raw) {
-  const verb = raw.doctor;
-  const known = typeof verb === "string" && Object.hasOwn(DOCTOR_KEYS, verb);
-  const allowed = known ? DOCTOR_KEYS[verb] : [...new Set(Object.values(DOCTOR_KEYS).flat())];
-  for (const k of Object.keys(raw)) {
-    if (!allowed.includes(k))
-      issue2(
-        ctx,
-        `${path42}.${k}`,
-        `Unknown key "${k}" on a doctor action. Expected only: ${allowed.join(", ")}`
-      );
-  }
-  if (!known) {
-    issue2(
-      ctx,
-      `${path42}.doctor`,
-      `doctor must be ${Object.keys(DOCTOR_KEYS).map((v) => `"${v}"`).join(", ")}, got ${describeValue(verb)}`
-    );
-    return null;
-  }
-  if (verb === "run") return { doctor: "run" };
-  const check = raw.check;
-  const nameable = verb === "mark" ? MARKED_CHECKS : CHECKS;
-  if (typeof check !== "string" || !nameable.some((c) => c.name === check)) {
-    issue2(
-      ctx,
-      `${path42}.check`,
-      `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue(check)}`
-    );
-    return null;
-  }
-  if (verb === "fix") return { doctor: "fix", check };
-  const mark = raw.mark;
-  if (!GLYPH_MARKS.includes(mark)) {
-    issue2(
-      ctx,
-      `${path42}.mark`,
-      `doctor mark must be ${GLYPH_MARKS.map((m) => `"${m}"`).join(" or ")}, got ${describeValue(mark)}`
-    );
-    return null;
-  }
-  return { doctor: "mark", check, mark };
-}
-function slashArm(ctx, path42, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "slash")
-      issue2(
-        ctx,
-        `${path42}.${k}`,
-        `Unknown key "${k}" on a slash action. Expected only: slash`
-      );
-  }
-  const parsed2 = parseSlashLine(raw.slash);
-  if (parsed2.kind === "refused") {
-    issue2(ctx, `${path42}.slash`, parsed2.reason);
-    return null;
-  }
-  return { slash: parsed2.line };
-}
-var RUN_KEYS = ["run", "env", "refreshes"];
-var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-function runArm(home) {
-  return (ctx, path42, raw) => {
-    for (const k of Object.keys(raw)) {
-      if (!RUN_KEYS.includes(k))
-        issue2(
-          ctx,
-          `${path42}.${k}`,
-          `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`
-        );
-    }
-    const before = ctx.issues.length;
-    const run3 = raw.run;
-    if (!Array.isArray(run3) || run3.length === 0 || run3.some((item) => typeof item !== "string") || run3[0] === "") {
-      issue2(
-        ctx,
-        `${path42}.run`,
-        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run3)}`
-      );
-    }
-    const env2 = raw.env ?? {};
-    if (!isPlainObject(env2) || Object.entries(env2).some(
-      ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string"
-    )) {
-      issue2(
-        ctx,
-        `${path42}.env`,
-        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env2)}`
-      );
-    }
-    const refreshes = raw.refreshes ?? [];
-    if (!Array.isArray(refreshes) || refreshes.some((name) => typeof name !== "string" || name === "")) {
-      issue2(
-        ctx,
-        `${path42}.refreshes`,
-        `refreshes must list the names of the sources the program writes, got ${describeValue(refreshes)}`
-      );
-    }
-    if (!("dir" in home)) {
-      issue2(
-        ctx,
-        `${path42}.run`,
-        `a run action runs in the directory of the file that declares it, and ${home.text} is no file`
-      );
-    }
-    if (ctx.issues.length > before || !("dir" in home)) return null;
-    return {
-      run: run3,
-      env: env2,
-      refreshes,
-      cwd: home.dir
-    };
-  };
-}
-var RUN_ARM_JSON = {
-  type: "object",
-  properties: {
-    run: { type: "array", items: { type: "string" }, minItems: 1 },
-    env: {
-      type: "object",
-      propertyNames: { pattern: ENV_NAME.source },
-      additionalProperties: { type: "string" }
-    },
-    refreshes: { type: "array", items: { type: "string", minLength: 1 } }
-  },
-  required: ["run"],
-  additionalProperties: false
-};
-function doArm(ctx, path42, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "do")
-      issue2(
-        ctx,
-        `${path42}.${k}`,
-        `Unknown key "${k}" on a do action. Expected only: do`
-      );
-  }
-  const members = raw.do;
-  if (!Array.isArray(members) || members.length < 2 || members.some((m) => typeof m !== "string" || m === "")) {
-    issue2(
-      ctx,
-      `${path42}.do`,
-      `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue(members)}`
-    );
-    return null;
-  }
-  return { do: members };
-}
-function slashFreeString(ctx, path42, field, raw, emptyMessage, slashMessage) {
-  const v = requireString(ctx, path42, raw, field);
-  if (v === null) return null;
-  const at = `${path42}.${field}`;
-  if (v === "") {
-    issue2(ctx, at, emptyMessage);
-    return null;
-  }
-  if (v.includes("/")) {
-    issue2(ctx, at, slashMessage(v));
-    return null;
-  }
-  return v;
-}
-var DISCRIMINATOR_NOUN = {
-  set: "the SessionState key to write",
-  persist: "the config globals field to write"
-};
-function validateDiscriminatorKey(ctx, path42, raw, discriminator) {
-  const noun = DISCRIMINATOR_NOUN[discriminator];
-  const value = slashFreeString(
-    ctx,
-    path42,
-    discriminator,
-    raw,
-    `${discriminator} key must be non-empty (${noun})`,
-    (v) => `${discriminator} key "${v}" contains "/" \u2014 keys must be slash-free`
-  );
-  return value === null ? null : { [discriminator]: value };
-}
-function wireName(discriminator) {
-  return discriminator === "set" ? "set-state" : "set-config";
-}
-var TO_FIELDS_SET = {
-  to: setLiteralSpec("set")
-};
-var TO_FIELDS_PERSIST = {
-  to: setLiteralSpec("persist")
-};
-var FROM_FIELDS_SET = {
-  from: fromSpec("set")
-};
-var FROM_FIELDS_PERSIST = {
-  from: fromSpec("persist")
-};
-var BOUNDED_FIELDS = {
-  min: requireIntSpec(),
-  max: requireIntSpec(),
-  by: requireIntSpec()
-};
-var INT_FIELDS = { int: intMarkerSpec() };
-var CYCLE_FIELDS_SET = {
-  cycle: cycleSpec("set")
-};
-var CYCLE_FIELDS_PERSIST = {
-  cycle: cycleSpec("persist")
-};
-var REMOVE_SEGMENT_FIELDS = {
-  removeSegment: layoutNameSpec("removeSegment")
-};
-var INSERT_SEGMENT_FIELDS = {
-  insertSegment: layoutNameSpec("insertSegment"),
-  anchor: layoutNameSpec("anchor"),
-  relation: relationSpec()
-};
-var INSERT_SEGMENT_FROM_FIELDS = {
-  insertSegmentFrom: fromSpec("persist"),
-  anchor: layoutNameSpec("anchor"),
-  relation: relationSpec()
-};
-var minLessThanMax = {
-  ok: (v) => v.min < v.max,
-  issue: (v) => ({
-    field: "min",
-    message: `min (${v.min}) must be less than max (${v.max})`
-  })
-};
-var byNonZero = {
-  ok: (v) => v.by !== 0,
-  issue: () => ({
-    field: "by",
-    message: `by must be a non-zero integer (the per-click increment; negative steps down)`
-  })
-};
-function valueSourceArm(discriminator, fieldMap, checks = [], detectKeys) {
-  const fullKeys = Object.keys(fieldMap);
-  const detect = detectKeys ?? fullKeys;
-  const keys2 = [discriminator];
-  const inner = (ctx, path42, raw) => fields(ctx, fieldMap, path42, raw);
-  const source = objectJson(fieldMap);
-  return {
-    detect,
-    allowed: [...keys2, ...fullKeys],
-    label: fullKeys.join("/"),
-    json: {
-      type: "object",
-      properties: {
-        ...Object.fromEntries(keys2.map((k) => [k, { type: "string" }])),
-        ...source.properties
-      },
-      required: [...keys2, ...source.required ?? []],
-      additionalProperties: false
-    },
-    parse: checks.length ? refine(inner, ...checks) : inner
-  };
-}
-var SET_ARMS = [
-  valueSourceArm("set", TO_FIELDS_SET),
-  valueSourceArm("set", FROM_FIELDS_SET),
-  valueSourceArm("set", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
-  valueSourceArm("set", INT_FIELDS),
-  valueSourceArm("set", CYCLE_FIELDS_SET)
-];
-var PERSIST_ARMS = [
-  valueSourceArm("persist", TO_FIELDS_PERSIST),
-  valueSourceArm("persist", FROM_FIELDS_PERSIST),
-  valueSourceArm("persist", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
-  valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
-  valueSourceArm("persist", REMOVE_SEGMENT_FIELDS),
-  // [LAW:no-mode-explosion] Both insertSegment arms narrow detectKeys to
-  // their own discriminating field — see valueSourceArm's own comment. They
-  // share "anchor"/"relation" (same position shape, different segment-name
-  // source), so dispatching on the full field set would make EITHER arm
-  // spuriously match an action declaring the other.
-  valueSourceArm("persist", INSERT_SEGMENT_FIELDS, [], ["insertSegment"]),
-  valueSourceArm(
-    "persist",
-    INSERT_SEGMENT_FROM_FIELDS,
-    [],
-    ["insertSegmentFrom"]
-  )
-];
-function valueSourceClauses(discriminator) {
-  const clauses = [
-    `"to" (a literal value)`,
-    `"from" (an option domain \u2014 a registered domain name like "themes"/"endcaps"/"styles", or an inline array of literal values)`,
-    `"min"/"max"/"by" (a bounded step)`
-  ];
-  if (discriminator === "set")
-    clauses.push(`"int" (an unbounded integer cursor)`);
-  clauses.push(`"cycle" (an enumerated domain stepped in order)`);
-  if (discriminator === "persist") {
-    clauses.push(
-      `"removeSegment" (remove a named segment from the layout)`,
-      `"insertSegment"/"anchor"/"relation" (insert a named segment before/after an existing one)`,
-      `"insertSegmentFrom"/"anchor"/"relation" (insert a segment PICKED from an option domain before/after an existing one)`
-    );
-  }
-  return clauses;
-}
-function VALUE_SOURCE_MESSAGE(discriminator) {
-  const clauses = valueSourceClauses(discriminator);
-  const last2 = clauses[clauses.length - 1];
-  const list2 = clauses.length === 1 ? last2 : `${clauses.slice(0, -1).join(", ")}, or ${last2}`;
-  return `a ${discriminator} action declares exactly one value source: ${list2}`;
-}
-function valueSourceAction(ctx, path42, raw, discriminator, arms) {
-  const keys2 = validateDiscriminatorKey(ctx, path42, raw, discriminator);
-  const present = arms.filter((arm3) => arm3.detect.some((k) => k in raw));
-  if (present.length !== 1) {
-    issue2(
-      ctx,
-      path42,
-      `${VALUE_SOURCE_MESSAGE(discriminator)}${present.length > 1 ? ` \u2014 found: ${present.map((a) => a.label).join(", ")}` : ""}`
-    );
-    return null;
-  }
-  const arm2 = present[0];
-  for (const k of Object.keys(raw)) {
-    if (!arm2.allowed.includes(k))
-      issue2(
-        ctx,
-        `${path42}.${k}`,
-        `Unknown key "${k}" on this ${discriminator} action. Expected one of: ${arm2.allowed.join(", ")}`
-      );
-  }
-  const payload = arm2.parse(ctx, path42, raw);
-  return keys2 === null || payload === null ? null : { ...keys2, ...payload };
-}
-function setLiteralSpec(discriminator) {
-  const wire = wireName(discriminator);
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path42, field, raw) => slashFreeString(
-      ctx,
-      path42,
-      field,
-      raw,
-      `${discriminator} value must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`,
-      (v) => `${discriminator} value "${v}" contains "/" \u2014 ${discriminator} values must be slash-free`
-    ) ?? void 0
-  };
-}
-function fromSpec(discriminator) {
-  const wire = wireName(discriminator);
-  return {
-    required: true,
-    json: {
-      anyOf: [
-        { type: "string", minLength: 1 },
-        {
-          type: "array",
-          items: { type: "string", minLength: 1 },
-          minItems: 1,
-          uniqueItems: true
-        }
-      ]
-    },
-    parse: (ctx, path42, field, raw) => {
-      const from = raw[field];
-      const at = `${path42}.${field}`;
-      if (typeof from === "string") {
-        if (from === "") {
-          issue2(ctx, at, `${field} must be a non-empty domain name`);
-          return void 0;
-        }
-        return from;
-      }
-      if (Array.isArray(from) && from.every((m) => typeof m === "string")) {
-        const members = from;
-        if (members.length === 0) {
-          issue2(
-            ctx,
-            at,
-            `${field} must name a domain (a non-empty string) or declare an inline domain (a non-empty array of values)`
-          );
-          return void 0;
-        }
-        if (members.some((m) => m === "")) {
-          issue2(
-            ctx,
-            at,
-            `${field} array members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
-          );
-          return void 0;
-        }
-        const slashed = members.filter((m) => m.includes("/"));
-        if (slashed.length > 0) {
-          issue2(
-            ctx,
-            at,
-            `${field} array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
-          );
-          return void 0;
-        }
-        if (new Set(members).size !== members.length) {
-          issue2(
-            ctx,
-            at,
-            `${field} array members must be unique \u2014 a duplicated value would render the same picker option twice`
-          );
-          return void 0;
-        }
-        return members;
-      }
-      issue2(
-        ctx,
-        at,
-        `${field} must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue(from)}`
-      );
-      return void 0;
-    }
-  };
-}
-function cycleSpec(discriminator) {
-  const wire = wireName(discriminator);
-  return {
-    required: true,
-    json: {
-      type: "array",
-      items: { type: "string", minLength: 1 },
-      minItems: 2,
-      uniqueItems: true
-    },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      const at = `${path42}.${field}`;
-      if (!Array.isArray(v) || v.some((m) => typeof m !== "string")) {
-        issue2(
-          ctx,
-          at,
-          `cycle must be an array of strings (the enumerated values a click steps through), got ${describeType(v)}`
-        );
-        return void 0;
-      }
-      const members = v;
-      if (members.length < 2) {
-        issue2(
-          ctx,
-          at,
-          `cycle needs at least two members (one member has no successor \u2014 use a literal "to")`
-        );
-        return void 0;
-      }
-      const empty2 = members.some((m) => m === "");
-      const slashed = members.filter((m) => m.includes("/"));
-      if (empty2) {
-        issue2(
-          ctx,
-          at,
-          `cycle members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
-        );
-        return void 0;
-      }
-      if (slashed.length > 0) {
-        issue2(
-          ctx,
-          at,
-          `cycle member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
-        );
-        return void 0;
-      }
-      if (new Set(members).size !== members.length) {
-        issue2(
-          ctx,
-          at,
-          `cycle members must be unique \u2014 the successor of a duplicated member is ambiguous`
-        );
-        return void 0;
-      }
-      return members;
-    }
-  };
-}
-function intMarkerSpec() {
-  return {
-    required: true,
-    json: { const: true },
-    parse: (ctx, path42, field, raw) => {
-      if (raw[field] !== true) {
-        issue2(
-          ctx,
-          `${path42}.${field}`,
-          `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue(raw[field])}`
-        );
-        return void 0;
-      }
-      return true;
-    }
-  };
-}
-function layoutNameSpec(field) {
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path42, f, raw) => {
-      const v = requireString(ctx, path42, raw, f);
-      if (v === null) return void 0;
-      const at = `${path42}.${f}`;
-      if (v === "") {
-        issue2(ctx, at, `${field} must be non-empty (a segment name)`);
-        return void 0;
-      }
-      if (v.includes("/") || v.includes(":")) {
-        issue2(
-          ctx,
-          at,
-          `${field} "${v}" contains "/" or ":" \u2014 segment names in a layout op must be free of both (the click wire's own delimiter and layout-ops.ts's op-token delimiter)`
-        );
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function relationSpec() {
-  return {
-    required: true,
-    json: { enum: ["before", "after"] },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (v !== "before" && v !== "after") {
-        issue2(
-          ctx,
-          `${path42}.${field}`,
-          `relation must be "before" or "after", got ${describeValue(v)}`
-        );
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function requireIntSpec() {
-  return {
-    required: true,
-    json: { type: "integer" },
-    parse: (ctx, path42, field, raw) => {
-      const v = raw[field];
-      if (typeof v !== "number" || !Number.isInteger(v)) {
-        issue2(
-          ctx,
-          `${path42}.${field}`,
-          `${field} must be an integer, got ${describeValue(v)}`
-        );
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-
-// src/config/loader/styles.ts
-init_globals();
-function endcapsNameMessage(at, name, endcapsAt) {
-  return `${at}: "${name}" is an endcaps shape, not a style \u2014 endcaps were renamed from "style" to "endcaps"; write ${endcapsAt}: "${name}"`;
-}
-var STYLE_SCHEMA = {
-  noun: "style key",
-  fields: {
-    hueShift: optionalNumberSpec(),
-    chromaScale: optionalNumberSpec({ min: 0 }),
-    lightnessScale: optionalNumberSpec(),
-    lightnessShift: optionalNumberSpec()
-  }
-};
-function validateStyles(ctx, raw) {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path: "styles",
-      message: `styles must be an object mapping style names to adaptation objects, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["styles"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [name, value] of Object.entries(raw)) {
-    if (name === "" || name.includes("/")) {
-      ctx.issues.push({
-        path: `styles.${name}`,
-        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free \u2014 a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
-        line: findKeyLine(ctx.source, ["styles", name])
-      });
-      continue;
-    }
-    if (isStyleEraEndcaps(name)) {
-      ctx.issues.push({
-        path: `styles.${name}`,
-        message: endcapsNameMessage(`styles.${name}`, name, "globals.endcaps"),
-        line: findKeyLine(ctx.source, ["styles", name])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, STYLE_SCHEMA, `styles.${name}`, value);
-    if (parsed2 !== null) out[name] = { ...IDENTITY, ...parsed2 };
-  }
-  return out;
-}
-
-// src/config/loader/presets.ts
-init_globals();
-var presetRootSpec = {
-  required: false,
-  json: { $ref: ROOT_FRAGMENT_REF },
-  parse: (ctx, path42, field, raw) => raw[field] === void 0 ? void 0 : validateRootFragment(ctx, `${path42}.${field}`, raw[field])
-};
-var presetGlobalsSpec = {
-  required: false,
-  json: presetGlobalsJson(),
-  parse: (ctx, path42, field, raw) => raw[field] === void 0 ? void 0 : validatePresetGlobals(ctx, `${path42}.${field}`, raw[field])
-};
-var PRESET_SCHEMA = {
-  noun: "preset key",
-  fields: { root: presetRootSpec, globals: presetGlobalsSpec }
-};
-function validatePresets(ctx, raw) {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path: "presets",
-      message: `presets must be an object mapping preset names to config fragments, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["presets"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [name, value] of Object.entries(raw)) {
-    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
-      ctx.issues.push({
-        path: `presets.${name}`,
-        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free \u2014 a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
-        line: findKeyLine(ctx.source, ["presets", name])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, PRESET_SCHEMA, `presets.${name}`, value);
-    if (parsed2 !== null) out[name] = parsed2;
-  }
-  return out;
-}
-
-// src/config/loader/helpers.ts
-init_globals();
-function validateHelpers(ctx, raw) {
-  if (raw === void 0) return {};
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path: "helpers",
-      message: `helpers must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["helpers"])
-    });
-    return {};
-  }
-  const out = /* @__PURE__ */ Object.create(null);
-  for (const [name, body] of Object.entries(raw)) {
-    if (typeof body !== "string") {
-      ctx.issues.push({
-        path: `helpers.${name}`,
-        message: `helpers.${name} must be a string template body, got ${describeValue(body)}`,
-        line: findKeyLine(ctx.source, ["helpers", name])
-      });
-      continue;
-    }
-    out[name] = body;
-  }
-  return out;
-}
-
-// src/config/loader/cross-ref.ts
-init_globals();
-
-// src/config/loader/unplaced.ts
-init_globals();
-function presenceOf(segments, rendering) {
-  const owners = [...rendering].map(
-    ([ns, definition]) => [ownedBy(ns), definition]
-  );
-  return (name) => {
-    if (isSettingsAnchor(name) || Object.hasOwn(segments, name))
-      return { kind: "declared" };
-    const owner = owners.find(([owns]) => owns(name));
-    if (owner !== void 0) return { kind: "plugin", definition: owner[1] };
-    const scope = scopeOf(name);
-    return scope !== void 0 && scope !== name ? { kind: "absent" } : { kind: "missing" };
-  };
-}
-function reportable(presence2) {
-  return presence2.kind === "plugin" || presence2.kind === "missing";
-}
-function absentPlacement(config2, cells, presence2) {
-  const placed2 = /* @__PURE__ */ new Map();
-  const add2 = (id2, at) => {
-    placed2.set(id2, [...placed2.get(id2) ?? [], at]);
-  };
-  const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
-  const fragments = [
-    config2.root,
-    ...Object.values(config2.presets).flatMap(
-      (p2) => p2.root === void 0 ? [] : [p2.root]
-    )
-  ];
-  for (const tree of fragments.flatMap(trees))
-    for (const node of walkNodes(tree))
-      if (node.kind === "segment") add2(placementId(node), { seg: node.name });
-  for (const cell3 of cells)
-    add2(cell3.id ?? cell3.seg, { seg: cell3.seg, anchor: cell3.anchor });
-  const absent = /* @__PURE__ */ new Set();
-  const standsOnAbsent = (at) => presence2(at.seg).kind === "absent" || at.anchor !== void 0 && absent.has(at.anchor);
-  for (let grew = true; grew; ) {
-    grew = false;
-    for (const [id2, at] of placed2)
-      if (!absent.has(id2) && at.every(standsOnAbsent)) {
-        absent.add(id2);
-        grew = true;
-      }
-  }
-  return (id2) => absent.has(id2);
-}
-function withoutUnplaced(config2) {
-  let removed = 0;
-  const declared = presenceOf(config2.segments, /* @__PURE__ */ new Map());
-  const placed2 = (name) => {
-    const keep2 = declared(name).kind === "declared";
-    if (!keep2) removed += 1;
-    return keep2;
-  };
-  const container = (node) => ({
-    ...node,
-    children: node.children.flatMap((child) => nodes(child))
-  });
-  const nodes = (node) => node.kind === "container" ? [container(node)] : placed2(node.name) ? [mapOpens(node, container)] : [];
-  const tree = (node) => nodes(node)[0] ?? EMPTY_ROW;
-  const root = (r) => ({
-    ...r,
-    rows: Object.fromEntries(
-      Object.entries(r.rows).map(([name, row2]) => [name, tree(row2)])
-    )
-  });
-  const fragment = (f) => isRowsFragment(f) ? root(f) : tree(f);
-  const preset = (p2) => p2.root === void 0 ? p2 : { ...p2, root: fragment(p2.root) };
-  const result = {
-    ...config2,
-    root: root(config2.root),
-    presets: Object.fromEntries(
-      Object.entries(config2.presets).map(([name, p2]) => [name, preset(p2)])
-    )
-  };
-  return removed === 0 ? config2 : result;
-}
-var EMPTY_ROW = {
-  kind: "container",
-  direction: "horizontal",
-  children: []
-};
-
-// src/config/loader/projections.ts
-init_globals();
-
 // src/config/loader/value-reads.ts
 init_globals();
 function valueReads({ names, helpers, actions }) {
@@ -59638,7 +56691,7 @@ function templateInstants(basis) {
 
 // src/config/loader/plugins.ts
 init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
+var import_node_path7 = __toESM(require_path_browserify(), 1);
 var import_json52 = __toESM(require_dist(), 1);
 function droppedPluginNotice(d) {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
@@ -59654,7 +56707,7 @@ var DEFINITION_KEYS = /* @__PURE__ */ new Set([
 var DEFINITION_FILE = "plugin.json5";
 var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
 function pluginDefinition(definition, scope) {
-  const name = import_node_path12.default.basename(import_node_path12.default.dirname(definition));
+  const name = import_node_path7.default.basename(import_node_path7.default.dirname(definition));
   return PLUGIN_NAME.test(name) ? { path: definition, scope, name } : { path: definition, scope, name: void 0 };
 }
 function pluginDataVar(ns) {
@@ -59664,7 +56717,7 @@ var STORAGE_FOLDER = "session";
 function sessionFileName(sessionId2) {
   return `${sessionId2}.json`;
 }
-function attempt3(run3) {
+function attempt2(run3) {
   try {
     return { ok: true, value: run3() };
   } catch (err) {
@@ -59681,7 +56734,7 @@ function reasonOf(err) {
 }
 function listedPlugins(refs, from, scope, home) {
   return refs.map(
-    (ref) => pluginDefinition(resolveUserPath(import_node_path12.default.dirname(from), ref, home), scope)
+    (ref) => pluginDefinition(resolveUserPath(import_node_path7.default.dirname(from), ref, home), scope)
   );
 }
 function applyPlugins(definitions, ctx, base, validate) {
@@ -59700,7 +56753,7 @@ function applyPlugins(definitions, ctx, base, validate) {
           dropped: [...layer.dropped, { ...definition, reason }]
         };
       };
-      if (import_node_path12.default.basename(file) !== DEFINITION_FILE) {
+      if (import_node_path7.default.basename(file) !== DEFINITION_FILE) {
         const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
         return drop2(
           reason,
@@ -59712,7 +56765,7 @@ function applyPlugins(definitions, ctx, base, validate) {
       }
       if (definition.name === void 0 || ns === void 0) {
         return drop2(
-          `its folder "${import_node_path12.default.basename(import_node_path12.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
+          `its folder "${import_node_path7.default.basename(import_node_path7.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
           layer.config
         );
       }
@@ -59725,7 +56778,7 @@ function applyPlugins(definitions, ctx, base, validate) {
       }
       taken.set(ns, file);
       const under3 = withoutPlugin(layer.config, ns);
-      const merged = attempt3(() => {
+      const merged = attempt2(() => {
         const source = fs_default.readFileSync(file, "utf-8");
         const config2 = mergeWithDefault(
           fragmentOf(
@@ -59961,7 +57014,7 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout, home }) {
     if (!DEFINITION_KEYS.has(key)) {
       issues.push({
         path: key,
-        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path12.default.basename(import_node_path12.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
+        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path7.default.basename(import_node_path7.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
       });
     }
   }
@@ -60031,7 +57084,7 @@ function fragmentOf(file, id2, { source, json: json2 }, { checkout, home }) {
       setKeysUnder(
         ns,
         validateActions(ctx, json2.actions, {
-          dir: fs_default.realpathSync(import_node_path12.default.dirname(file))
+          dir: fs_default.realpathSync(import_node_path7.default.dirname(file))
         })
       )
     )
@@ -60245,8 +57298,8 @@ function sourcesOf(sources, file, issues) {
     });
     return {};
   }
-  const storage = import_node_path12.default.join(
-    fs_default.realpathSync(import_node_path12.default.dirname(file)),
+  const storage = import_node_path7.default.join(
+    fs_default.realpathSync(import_node_path7.default.dirname(file)),
     STORAGE_FOLDER
   );
   const built = JSON.stringify(BUILT_SOURCE);
@@ -60288,7 +57341,7 @@ function requireOneSourcePerFile(file, plugin, config2) {
   if (issues.length > 0) throw new ConfigError(file, issues);
 }
 function sourceFileOf(source) {
-  return import_node_path12.default.join(source.storage, sessionFileName("<session id>"));
+  return import_node_path7.default.join(source.storage, sessionFileName("<session id>"));
 }
 function unbuilt(authored, built, at) {
   if (!isPlainObject(built) || !isPlainObject(authored)) {
@@ -60305,11 +57358,11 @@ function unbuilt(authored, built, at) {
 }
 function dataPathOf(data, file, checkout, home, issues) {
   if (typeof data === "string" && data !== "") {
-    return resolveUserPath(import_node_path12.default.dirname(file), data, home);
+    return resolveUserPath(import_node_path7.default.dirname(file), data, home);
   }
   if (isPlainObject(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
     const rel = data.checkout;
-    if (import_node_path12.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path12.default.normalize(rel).split(import_node_path12.default.sep)[0] === "..") {
+    if (import_node_path7.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path7.default.normalize(rel).split(import_node_path7.default.sep)[0] === "..") {
       issues.push({
         path: "data.checkout",
         message: `data.checkout "${rel}" must be a path inside the checkout, relative to its root (like ".lit/statusline.json"): no absolute path, "~" or ".."`
@@ -60323,7 +57376,7 @@ function dataPathOf(data, file, checkout, home, issues) {
       });
       return void 0;
     }
-    return import_node_path12.default.resolve(checkout.root, rel);
+    return import_node_path7.default.resolve(checkout.root, rel);
   }
   if (isPlainObject(data) && "project" in data) {
     issues.push({
@@ -61278,21 +58331,21 @@ function validateNoNesting(ctx, cfg, names) {
 
 // src/config/loader/plugin-folders.ts
 init_globals();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
+var import_node_path8 = __toESM(require_path_browserify(), 1);
 function pluginRoots(locs, repo2) {
   const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path13.default.join(d, "cc-candybar", "plugins")),
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path8.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
   return [
     ...installed.filter((r, i) => installed.lastIndexOf(r) === i).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path13.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
+    ...repo2 === null ? [] : [{ dir: import_node_path8.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
   ];
 }
 function userPluginRoot(locs) {
-  return import_node_path13.default.join(locs.dataHome, "cc-candybar", "plugins");
+  return import_node_path8.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
-var REPO_PLUGIN_DIR = import_node_path13.default.join(".cc-candybar", "plugins");
+var REPO_PLUGIN_DIR = import_node_path8.default.join(".cc-candybar", "plugins");
 function installedPlugins(locs, repo2) {
   const roots = pluginRoots(locs, repo2);
   const byNs = /* @__PURE__ */ new Map();
@@ -61306,7 +58359,7 @@ function installedPlugins(locs, repo2) {
     }
     for (const name of listed.folders) {
       const definition = pluginDefinition(
-        import_node_path13.default.join(root, name, DEFINITION_FILE),
+        import_node_path8.default.join(root, name, DEFINITION_FILE),
         scope
       );
       const key = `${scope}\0${name}`;
@@ -61315,10 +58368,10 @@ function installedPlugins(locs, repo2) {
     }
     for (const file of listed.files) {
       strays.push({
-        path: import_node_path13.default.join(root, file),
+        path: import_node_path8.default.join(root, file),
         scope,
         name: void 0,
-        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path13.default.join(root, "<name>", DEFINITION_FILE)}`
+        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path8.default.join(root, "<name>", DEFINITION_FILE)}`
       });
     }
   }
@@ -61344,7 +58397,7 @@ function listFolders(root) {
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;
   try {
-    return fs_default.statSync(import_node_path13.default.join(root, e.name)).isDirectory();
+    return fs_default.statSync(import_node_path8.default.join(root, e.name)).isDirectory();
   } catch {
     return true;
   }
@@ -61352,22 +58405,22 @@ function isDirectoryLink(root, e) {
 
 // src/utils/git-root.ts
 init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
+var import_node_path9 = __toESM(require_path_browserify(), 1);
 function holdsGit(dir) {
-  return fs_default.existsSync(import_node_path14.default.join(dir, ".git"));
+  return fs_default.existsSync(import_node_path9.default.join(dir, ".git"));
 }
 function gitRootOf(start) {
-  let dir = import_node_path14.default.resolve(start);
+  let dir = import_node_path9.default.resolve(start);
   for (; ; ) {
     if (holdsGit(dir)) return dir;
-    const parent = import_node_path14.default.dirname(dir);
+    const parent = import_node_path9.default.dirname(dir);
     if (parent === dir) return void 0;
     dir = parent;
   }
 }
 function checkoutOf(cwd2) {
   const root = gitRootOf(cwd2);
-  return root === void 0 ? { root: import_node_path14.default.resolve(cwd2), git: false } : { root, git: true };
+  return root === void 0 ? { root: import_node_path9.default.resolve(cwd2), git: false } : { root, git: true };
 }
 function probe(read2) {
   try {
@@ -61379,18 +58432,18 @@ function probe(read2) {
 var realDir = (p2) => probe(() => fs_default.realpathSync.native(p2));
 var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
 function gitDirNamed(root) {
-  const text4 = probe(() => fs_default.readFileSync(import_node_path14.default.join(root, ".git"), "utf-8"));
+  const text4 = probe(() => fs_default.readFileSync(import_node_path9.default.join(root, ".git"), "utf-8"));
   if (text4.kind !== "ok") return text4;
   const named3 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named3 === void 0 ? failed(`${import_node_path14.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path14.default.resolve(root, named3));
+  return named3 === void 0 ? failed(`${import_node_path9.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path9.default.resolve(root, named3));
 }
 function commonDirOf(gitDir) {
   const text4 = probe(
-    () => fs_default.readFileSync(import_node_path14.default.join(gitDir, "commondir"), "utf-8")
+    () => fs_default.readFileSync(import_node_path9.default.join(gitDir, "commondir"), "utf-8")
   );
   if (text4.kind !== "ok") return text4;
   const common = text4.value.trim();
-  return common === "" ? failed(`${import_node_path14.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path14.default.resolve(gitDir, common));
+  return common === "" ? failed(`${import_node_path9.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path9.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
 var unproven = (reason) => ({
@@ -61400,7 +58453,7 @@ var unproven = (reason) => ({
 function worktreeLink(dir) {
   const root = gitRootOf(dir);
   if (root === void 0) return UNLINKED;
-  const dotGit = import_node_path14.default.join(root, ".git");
+  const dotGit = import_node_path9.default.join(root, ".git");
   const followed = probe(() => fs_default.statSync(dotGit));
   if (followed.kind === "ok" && followed.value.isDirectory()) return UNLINKED;
   const entry = probe(() => fs_default.lstatSync(dotGit));
@@ -61415,34 +58468,34 @@ function worktreeLink(dir) {
   if (common.kind === "failed") return unproven(common.reason);
   const realCommon = realDir(common.value);
   if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
-  if (import_node_path14.default.dirname(gitDir.value) !== import_node_path14.default.join(realCommon.value, "worktrees")) {
+  if (import_node_path9.default.dirname(gitDir.value) !== import_node_path9.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
-  const backFile = import_node_path14.default.join(gitDir.value, "gitdir");
+  const backFile = import_node_path9.default.join(gitDir.value, "gitdir");
   const back2 = probe(() => fs_default.readFileSync(backFile, "utf-8"));
   if (back2.kind !== "ok") return unproven(why(backFile, back2));
-  const pointer = import_node_path14.default.resolve(gitDir.value, back2.value.trim());
-  const pointerDir = realDir(import_node_path14.default.dirname(pointer));
-  if (import_node_path14.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
+  const pointer = import_node_path9.default.resolve(gitDir.value, back2.value.trim());
+  const pointerDir = realDir(import_node_path9.default.dirname(pointer));
+  if (import_node_path9.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const main = import_node_path14.default.basename(realCommon.value) === ".git" ? import_node_path14.default.dirname(realCommon.value) : realCommon.value;
-  return { kind: "linked", main: import_node_path14.default.join(main, import_node_path14.default.relative(root, dir)) };
+  const main = import_node_path9.default.basename(realCommon.value) === ".git" ? import_node_path9.default.dirname(realCommon.value) : realCommon.value;
+  return { kind: "linked", main: import_node_path9.default.join(main, import_node_path9.default.relative(root, dir)) };
 }
 function checkoutLocation(dir) {
   const real = realDir(dir);
-  const at = real.kind === "ok" ? real.value : import_node_path14.default.resolve(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path9.default.resolve(dir);
   const root = gitRootOf(at);
   if (root === void 0)
     return { main: "", worktree: "", subpath: "", noRepo: true };
-  const sub2 = import_node_path14.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path14.default.sep).join("/")}`;
+  const sub2 = import_node_path9.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path9.default.sep).join("/")}`;
   const link = worktreeLink(at);
   return link.kind === "linked" ? {
-    main: import_node_path14.default.resolve(link.main, import_node_path14.default.relative(at, root)),
-    worktree: import_node_path14.default.basename(root),
+    main: import_node_path9.default.resolve(link.main, import_node_path9.default.relative(at, root)),
+    worktree: import_node_path9.default.basename(root),
     subpath,
     noRepo: false
   } : { main: root, worktree: "", subpath, noRepo: false };
@@ -61450,7 +58503,7 @@ function checkoutLocation(dir) {
 
 // src/config/loader/discovery.ts
 init_globals();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path10 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
 init_globals();
@@ -61535,10 +58588,10 @@ function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
   return [
     .../* @__PURE__ */ new Set([
       ...projectDir ? CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path15.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
+        (ext) => import_node_path10.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
       ) : [],
       ...CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path15.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
+        (ext) => import_node_path10.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
       ),
       ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`)
     ])
@@ -61546,7 +58599,7 @@ function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
 }
 var REPO_CONFIG_BASE = ".cc-candybar";
 function xdgConfigBase(locs) {
-  return import_node_path15.default.join(locs.configHome, "cc-candybar", "config");
+  return import_node_path10.default.join(locs.configHome, "cc-candybar", "config");
 }
 function homeLayer(path42) {
   return { path: path42, scope: "plugins" };
@@ -61566,10 +58619,10 @@ function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
       unchecked.push(p2);
       continue;
     }
-    const dir = fs_default.realpathSync.native(import_node_path15.default.dirname(candidate));
-    const location = import_node_path15.default.join(
+    const dir = fs_default.realpathSync.native(import_node_path10.default.dirname(candidate));
+    const location = import_node_path10.default.join(
       dir,
-      import_node_path15.default.basename(candidate).replace(/\.(json5|json)$/, "")
+      import_node_path10.default.basename(candidate).replace(/\.(json5|json)$/, "")
     );
     if (!atLocation.has(location)) {
       atLocation.set(location, {
@@ -61616,7 +58669,7 @@ function repoProject(projectDir) {
   if (projectDir === void 0 || presence(projectDir) !== "present") {
     return null;
   }
-  const listed = listFolders(import_node_path15.default.join(projectDir, REPO_PLUGIN_DIR));
+  const listed = listFolders(import_node_path10.default.join(projectDir, REPO_PLUGIN_DIR));
   const dir = fs_default.realpathSync.native(projectDir);
   return {
     dir,
@@ -61664,9 +58717,9 @@ function detectConfigCollisions(locs, projectDir, cwd2) {
   );
   const groups = /* @__PURE__ */ new Map();
   for (const candidate of existing) {
-    const dir = import_node_path15.default.dirname(candidate);
-    const base = import_node_path15.default.basename(candidate).replace(/\.(json5|json)$/, "");
-    const key = import_node_path15.default.join(dir, base);
+    const dir = import_node_path10.default.dirname(candidate);
+    const base = import_node_path10.default.basename(candidate).replace(/\.(json5|json)$/, "");
+    const key = import_node_path10.default.join(dir, base);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(candidate);
   }
@@ -64141,6 +61194,65 @@ function decodeWire(decode) {
 // src/daemon/config-file-store.ts
 var import_json54 = __toESM(require_dist(), 1);
 
+// src/utils/atomic-write.ts
+init_globals();
+var import_node_path11 = __toESM(require_path_browserify(), 1);
+function writeAtomic(at, text4, mode) {
+  const file = resolvedTarget(at);
+  fs_default.mkdirSync(import_node_path11.default.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
+  try {
+    fs_default.writeFileSync(
+      tmp,
+      text4,
+      fileMode === void 0 ? {} : { mode: fileMode }
+    );
+    fs_default.renameSync(tmp, file);
+  } catch (e) {
+    fs_default.rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+function resolvedTarget(at) {
+  return linkChain(at).at(-1);
+}
+function linkChain(at) {
+  const { hops, stopped: stopped2 } = walkLinks(at);
+  if (stopped2 !== null) throw stopped2;
+  return hops;
+}
+function walkLinks(at) {
+  const hops = [at];
+  try {
+    for (let n = 0; n < MAX_LINK_HOPS; n++) {
+      const next = linkTarget(hops[hops.length - 1]);
+      if (next === null) return { hops, stopped: null };
+      hops.push(next);
+    }
+    return {
+      hops,
+      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
+    };
+  } catch (e) {
+    return { hops, stopped: e };
+  }
+}
+function linkTarget(file) {
+  try {
+    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
+    return import_node_path11.default.resolve(
+      fs_default.realpathSync(import_node_path11.default.dirname(file)),
+      fs_default.readlinkSync(file)
+    );
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    throw e;
+  }
+}
+var MAX_LINK_HOPS = 40;
+
 // src/config/layout-ops.ts
 init_globals();
 function encodeLayoutOp(op) {
@@ -64686,7 +61798,7 @@ function spliceOp(text4, path42, op, rendered) {
 
 // src/daemon/settings-history.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path12 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/session-state.ts
 init_globals();
@@ -64879,6 +61991,23 @@ var SessionState = class {
     return snapshot;
   }
 };
+
+// src/daemon/session-id.ts
+init_globals();
+var SESSION_ID_MAX_BYTES = 250;
+function parseSessionId(raw) {
+  const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
+  return problem === null ? { ok: true, id: raw } : { ok: false, problem };
+}
+function sessionKeyed(record2, refused) {
+  const keyed = /* @__PURE__ */ new Map();
+  for (const [key, value] of Object.entries(record2)) {
+    const id2 = parseSessionId(key);
+    if (id2.ok) keyed.set(id2.id, value);
+    else refused(key, id2.problem);
+  }
+  return keyed;
+}
 
 // src/daemon/settings-history.ts
 var EPHEMERAL_HISTORY_STORAGE = {
@@ -65336,7 +62465,7 @@ function fileHistoryStorage(file, logger) {
     },
     save: (state) => {
       try {
-        fs_default.mkdirSync(import_node_path16.default.dirname(file), { recursive: true });
+        fs_default.mkdirSync(import_node_path12.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(state), 384);
       } catch (e) {
         const message = `settings-history write failed \u2014 the change landed but is not undoable: ${e.message}`;
@@ -65349,13 +62478,13 @@ function fileHistoryStorage(file, logger) {
 
 // src/daemon/repo-configs.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 
 // src/doctor/state-file.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path13 = __toESM(require_path_browserify(), 1);
 function stateFile(dir, name, empty2, parse3) {
-  const file = import_node_path17.default.join(dir, name);
+  const file = import_node_path13.default.join(dir, name);
   const read2 = () => {
     let text4;
     try {
@@ -65395,6 +62524,50 @@ function stateFile(dir, name, empty2, parse3) {
 
 // src/render/diagnostics.ts
 init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer3 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer3.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer3.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i) => byte === b[i]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/render/diagnostics.ts
 var DIAGNOSTIC_LEVELS = {
   error: { rank: 0, glyph: "\u26A0", colors: DIAGNOSTIC_ERROR_COLORS },
   warning: { rank: 1, glyph: "\u26A0", colors: DIAGNOSTIC_WARNING_COLORS },
@@ -65622,10 +62795,10 @@ function channelRows(message, opts, trailing) {
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
-  return import_node_path18.default.join(dir, REPO_CONFIGS_DIR);
+  return import_node_path14.default.join(dir, REPO_CONFIGS_DIR);
 }
 function repoConfigsPath(dir) {
-  return import_node_path18.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+  return import_node_path14.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 var repoConfigs = (dir) => {
   const book = stateFile(
@@ -65725,7 +62898,7 @@ function sessionEnv(facts) {
 
 // src/daemon/protocol.ts
 init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 
 // src/terminal-hint.ts
 init_globals();
@@ -65812,7 +62985,7 @@ function sanitizeTerminalEnv(v) {
   return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
 }
 function sanitizeAbsolutePath(v) {
-  return typeof v === "string" && import_node_path19.default.isAbsolute(v) ? v : void 0;
+  return typeof v === "string" && import_node_path15.default.isAbsolute(v) ? v : void 0;
 }
 function sanitizeTmux(v) {
   if (v === null) return null;
@@ -65912,7 +63085,7 @@ var barsOf = (scope, sightings) => inScope(scope, sightings).map(
 // src/doctor/edge.ts
 init_globals();
 init_os();
-var import_node_path25 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // src/proc/process-table.ts
 init_globals();
@@ -65965,7 +63138,7 @@ async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
 
 // src/segments/git.ts
 init_globals();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 function trackingOf(upstream, aheadBehind) {
   if (upstream.kind === "absent") return ok("none");
   if (upstream.kind === "failed") return upstream;
@@ -66027,7 +63200,7 @@ function launchFailure(label2, result) {
 function firstLine(s) {
   return s.trim().split("\n", 1)[0] ?? "";
 }
-function derived2(from, project) {
+function derived(from, project) {
   if (from.kind !== "ok") return from;
   const value = project(from.value);
   return value === null ? ABSENT2 : ok(value);
@@ -66399,12 +63572,12 @@ var GitService = class {
       // this value is display-only. The full oid is what keys the
       // commit-timestamp cache, so ambiguity here stays cosmetic instead of
       // becoming a wrong lookup.
-      sha: derived2(core.value.oid, (o) => o.slice(0, 7)),
+      sha: derived(core.value.oid, (o) => o.slice(0, 7)),
       upstream: core.value.upstream,
       committedAt,
       stashCount: this.getStashCount(gitDir),
-      repoName: derived2(remotes, (r) => this.repoNameFrom(r, gitDir)),
-      repoUrl: derived2(remotes, repoWebUrl),
+      repoName: derived(remotes, (r) => this.repoNameFrom(r, gitDir)),
+      repoUrl: derived(remotes, repoWebUrl),
       operation: this.getOngoingOperation(gitDir)
     });
   }
@@ -66419,17 +63592,17 @@ var GitService = class {
   // A `.git` that names nothing readable (a directory, an unreadable or
   // malformed file) watches the dotGit path, so callers always get a string.
   resolveGitDir(workingDir) {
-    return orElse(gitDirNamed(workingDir), import_node_path20.default.join(workingDir, ".git"));
+    return orElse(gitDirNamed(workingDir), import_node_path16.default.join(workingDir, ".git"));
   }
   getOngoingOperation(workingDir) {
     try {
       const gitDir = this.resolveGitDir(workingDir);
-      if (fs_default.existsSync(import_node_path20.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
-      if (fs_default.existsSync(import_node_path20.default.join(gitDir, "CHERRY_PICK_HEAD")))
+      if (fs_default.existsSync(import_node_path16.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
+      if (fs_default.existsSync(import_node_path16.default.join(gitDir, "CHERRY_PICK_HEAD")))
         return ok("CHERRY-PICK");
-      if (fs_default.existsSync(import_node_path20.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
-      if (fs_default.existsSync(import_node_path20.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
-      if (fs_default.existsSync(import_node_path20.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path20.default.join(gitDir, "rebase-apply")))
+      if (fs_default.existsSync(import_node_path16.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
+      if (fs_default.existsSync(import_node_path16.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
+      if (fs_default.existsSync(import_node_path16.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path16.default.join(gitDir, "rebase-apply")))
         return ok("REBASE");
       return ABSENT2;
     } catch (e) {
@@ -66556,7 +63729,7 @@ var GitService = class {
   // unrepresentable. Sync, because reading one small file is not worth a
   // microtask: its former `Promise.all` partner is the only spawn left.
   getStashCount(workingDir) {
-    const reflog = import_node_path20.default.join(
+    const reflog = import_node_path16.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "logs",
       "refs",
@@ -66623,7 +63796,7 @@ var GitService = class {
   // yields no stamp and therefore no memo, so an unreadable config re-reads rather
   // than freezing an answer.
   async getRemotesAsync(workingDir) {
-    const configPath = import_node_path20.default.join(
+    const configPath = import_node_path16.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "config"
     );
@@ -66672,7 +63845,7 @@ var GitService = class {
   // remotes read stays failed at the call site instead of borrowing this rule.
   repoNameFrom(remotes, workingDir) {
     const url = repoRemoteUrl(remotes);
-    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path20.default.basename(workingDir);
+    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path16.default.basename(workingDir);
   }
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
   // remote to fold into its PR cache key (the PR value depends on the remote; a
@@ -66746,7 +63919,7 @@ var GitService = class {
   }
   isWorktree(workingDir) {
     try {
-      const gitDir = import_node_path20.default.join(workingDir, ".git");
+      const gitDir = import_node_path16.default.join(workingDir, ".git");
       if (fs_default.existsSync(gitDir) && fs_default.statSync(gitDir).isFile()) {
         return true;
       }
@@ -66782,13 +63955,66 @@ init_globals();
 
 // src/daemon/render-payload.ts
 init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
+var import_node_path18 = __toESM(require_path_browserify(), 1);
 
 // src/utils/terminal-width.ts
 init_globals();
 var RESERVED_CHARS = 2;
 function applyClaudeCodeReserve(rawCols) {
   return Math.max(1, rawCols - RESERVED_CHARS);
+}
+
+// src/utils/reading.ts
+init_globals();
+function unread() {
+  return observable.box(pending("unread"), { deep: false });
+}
+function pending(why2) {
+  let land;
+  const landed = new Promise((resolve) => {
+    land = resolve;
+  });
+  return { kind: "pending", why: why2, landed, land };
+}
+function settle(source, outcome) {
+  const prior = source.reading.get();
+  if (prior.kind !== "pending" && compareStructural(prior, outcome)) return;
+  runInAction(() => source.reading.set(outcome));
+  if (prior.kind === "pending") prior.land();
+}
+function renew(source, why2) {
+  const prior = source.reading.get();
+  if (prior.kind !== "pending") {
+    runInAction(() => source.reading.set(pending(why2)));
+  } else if (prior.why !== why2 && why2 === "unread") {
+    runInAction(() => source.reading.set({ ...prior, why: why2 }));
+  }
+}
+function answerPending(source, outcome) {
+  if (source.reading.get().kind === "pending") settle(source, outcome);
+}
+function currentOf(source) {
+  return source.reading.get();
+}
+function waitWithin(work, ms, late, after) {
+  const wait = new AbortController();
+  const clear = after(Math.max(0, ms), () => wait.abort());
+  const ended = new Promise((resolve, reject2) => {
+    wait.signal.addEventListener("abort", () => resolve("deadline"));
+    void work(wait.signal).then(
+      () => resolve("answered"),
+      // [LAW:no-silent-failure] Every rejection is reported: the wait's own
+      // while it listens, its owner's after.
+      (e) => wait.signal.aborted ? late(e) : reject2(e)
+    );
+  });
+  return ended.finally(() => {
+    clear();
+    wait.abort();
+  });
+}
+function settledLane(outcome) {
+  return { current: () => outcome };
 }
 
 // src/daemon/cache/today-facts.ts
@@ -66842,7 +64068,7 @@ init_globals();
 
 // src/utils/claude.ts
 init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-activity.ts
 init_globals();
@@ -66916,19 +64142,19 @@ function entryActivity(parsed2, userEntry) {
 // src/utils/claude.ts
 function getClaudePaths(detected, homeDir) {
   if (detected !== void 0) return [detected];
-  return [(0, import_node_path21.join)(homeDir, ".config", "claude"), (0, import_node_path21.join)(homeDir, ".claude")].filter(
+  return [(0, import_node_path17.join)(homeDir, ".config", "claude"), (0, import_node_path17.join)(homeDir, ".claude")].filter(
     (dir) => existsSync(dir)
   );
 }
 async function findProjectPaths(claudePaths) {
   const projectPaths = [];
   for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path21.join)(claudePath, "projects");
+    const projectsDir = (0, import_node_path17.join)(claudePath, "projects");
     const entries = await unlessGone(
       readdir2(projectsDir, { withFileTypes: true })
     );
     for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path21.join)(projectsDir, entry.name));
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path17.join)(projectsDir, entry.name));
     }
   }
   return projectPaths;
@@ -66944,14 +64170,14 @@ async function unlessGone(read2) {
 async function findAgentTranscripts(sessionId2, projectPath, verified) {
   const paths2 = [];
   let longLines = [];
-  const subagentsDir = (0, import_node_path21.join)(projectPath, sessionId2, "subagents");
+  const subagentsDir = (0, import_node_path17.join)(projectPath, sessionId2, "subagents");
   try {
     const files = await readdir2(subagentsDir);
     const agentFileNames = files.filter(
       (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
     );
     for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path21.join)(subagentsDir, fileName2);
+      const filePath2 = (0, import_node_path17.join)(subagentsDir, fileName2);
       if (verified?.has(filePath2)) {
         paths2.push(filePath2);
         continue;
@@ -67197,6 +64423,97 @@ var TranscriptFold = class {
   store(sessionId2, folded2, answer2) {
     this.sessions.set(sessionId2, { folded: folded2, answer: answer2 });
     return answer2;
+  }
+};
+
+// src/utils/refresh-ledger.ts
+init_globals();
+var REFRESH_TRIGGERS = [
+  "first",
+  "period",
+  "change",
+  "request",
+  "supersede"
+];
+var RefreshLedger = class {
+  constructor(logger = quietLogger) {
+    this.logger = logger;
+  }
+  logger;
+  tallies = /* @__PURE__ */ new Map();
+  declare(declaration) {
+    const key = `${declaration.scope}/${declaration.name}`;
+    const tally = this.tallies.get(key) ?? {
+      name: declaration.name,
+      scope: declaration.scope,
+      refreshes: {},
+      failures: 0,
+      abandoned: 0,
+      lastMs: null
+    };
+    for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
+    this.tallies.set(key, tally);
+    return new Refreshes(tally, this.logger);
+  }
+  // Every source declared, by scope then name.
+  snapshot() {
+    return [...this.tallies.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, t2]) => ({ ...t2, refreshes: { ...t2.refreshes } }));
+  }
+  // Every source's refreshes summed by trigger: what the feed summary
+  // compares across its window.
+  totals() {
+    const sum = Object.fromEntries(
+      REFRESH_TRIGGERS.map((t2) => [t2, 0])
+    );
+    for (const tally of this.tallies.values()) {
+      for (const trigger of REFRESH_TRIGGERS) {
+        sum[trigger] += tally.refreshes[trigger] ?? 0;
+      }
+    }
+    return sum;
+  }
+};
+var OWN_EVENT = {
+  first: true,
+  period: true,
+  change: true,
+  request: false,
+  supersede: true
+};
+var Refreshes = class {
+  constructor(tally, logger) {
+    this.tally = tally;
+    this.logger = logger;
+  }
+  tally;
+  logger;
+  // This source's record as the ledger holds it: what its owner's own stats
+  // report, a view of the one tally rather than a count of its own.
+  record() {
+    return { ...this.tally, refreshes: { ...this.tally.refreshes } };
+  }
+  // `fields` is the refreshed entry's logfmt identity.
+  recorded(fields2, by, outcome, ms) {
+    this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
+    this.tally.lastMs = ms;
+    if (outcome.kind === "failed") this.tally.failures++;
+    const failure = outcome.kind === "failed";
+    if (!failure && !OWN_EVENT[by]) return;
+    const why2 = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
+    this.logger(
+      failure ? "warn" : "info",
+      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${ms}ms`
+    );
+  }
+  // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
+  // own count: a key that moves on every tick aborts a read on every tick,
+  // which no refresh or failure tally would show.
+  abandoned(fields2, by, ms) {
+    this.tally.abandoned++;
+    this.logger(
+      "info",
+      `${this.tally.name} refresh ${fields2} by=${by} abandoned took=${ms}ms`
+    );
   }
 };
 
@@ -68003,7 +65320,7 @@ function pickNonNull(src) {
 }
 function posixify(s) {
   if (s === void 0 || s.length === 0) return s;
-  if (import_node_path22.default.sep !== "\\") return s;
+  if (import_node_path18.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
 function projectGitInfo(info, pullRequest, pending2) {
@@ -68134,7 +65451,7 @@ function dataNeeds(config2, preset) {
 
 // src/doctor/font-edge.ts
 init_globals();
-var import_node_path23 = __toESM(require_path_browserify(), 1);
+var import_node_path19 = __toESM(require_path_browserify(), 1);
 
 // node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/index.js
 init_globals();
@@ -69107,12 +66424,12 @@ function coverage(launcher, ref, glyphs) {
   return process_default.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
 }
 function alacrittyConfigPaths(home, xdgConfigHome) {
-  const xdg = xdgConfigHome || import_node_path23.default.join(home, ".config");
+  const xdg = xdgConfigHome || import_node_path19.default.join(home, ".config");
   return [
-    import_node_path23.default.join(xdg, "alacritty", "alacritty.toml"),
-    import_node_path23.default.join(xdg, "alacritty.toml"),
-    import_node_path23.default.join(home, ".config", "alacritty", "alacritty.toml"),
-    import_node_path23.default.join(home, ".alacritty.toml")
+    import_node_path19.default.join(xdg, "alacritty", "alacritty.toml"),
+    import_node_path19.default.join(xdg, "alacritty.toml"),
+    import_node_path19.default.join(home, ".config", "alacritty", "alacritty.toml"),
+    import_node_path19.default.join(home, ".alacritty.toml")
   ];
 }
 function alacrittyDefaultFamily(platform3) {
@@ -69154,7 +66471,7 @@ function alacrittyFamilyIn(file, home, depth) {
   if (depth === 5) return { kind: "ok", value: null };
   let found2 = null;
   for (const imported of own2.imports) {
-    const target = imported.startsWith("~/") ? import_node_path23.default.join(home, imported.slice(2)) : import_node_path23.default.resolve(import_node_path23.default.dirname(file), imported);
+    const target = imported.startsWith("~/") ? import_node_path19.default.join(home, imported.slice(2)) : import_node_path19.default.resolve(import_node_path19.default.dirname(file), imported);
     if (!fs_default.existsSync(target)) continue;
     const inner = alacrittyFamilyIn(target, home, depth + 1);
     if (inner.kind === "failed") return inner;
@@ -69196,8 +66513,48 @@ function fontInUse(launcher, terminal, env2, glyphs, home) {
 
 // src/daemon/build-currency.ts
 init_globals();
-var import_node_path24 = __toESM(require_path_browserify(), 1);
+var import_node_path21 = __toESM(require_path_browserify(), 1);
 init_url();
+
+// src/source-digest.ts
+init_globals();
+var import_node_path20 = __toESM(require_path_browserify(), 1);
+var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
+function entryBytes(p2, st) {
+  return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
+}
+function sourceEntries(root, dir, keep2 = isSourceEntry) {
+  return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
+    const p2 = import_node_path20.default.join(dir, name);
+    const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
+    if (st === void 0) return [];
+    if (st.isDirectory()) return sourceEntries(root, p2);
+    const rel = import_node_path20.default.relative(root, p2).split(import_node_path20.default.sep).join("/");
+    return [[rel, entryBytes(p2, st)]];
+  });
+}
+function digestOf(entries) {
+  const h = crypto_default.createHash("sha256");
+  for (const [rel, bytes] of entries) {
+    h.update(rel).update("\0").update(bytes).update("\0");
+  }
+  return h.digest("hex");
+}
+function sourceDigest(srcDir) {
+  return digestOf(sourceEntries(srcDir, srcDir));
+}
+var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
+function crateDigest(crateDir) {
+  return digestOf(
+    sourceEntries(
+      crateDir,
+      crateDir,
+      (name) => CRATE_SOURCE.includes(name)
+    )
+  );
+}
+var SHORT_DIGEST_LENGTH = 7;
+var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
 
 // src/version.ts
 init_globals();
@@ -69210,8 +66567,8 @@ var PACKAGE_VERSION = "1.218.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
-  const root = import_node_path24.default.dirname(import_node_path24.default.dirname(bundlePath));
-  return fs_default.existsSync(import_node_path24.default.join(root, "src")) ? root : null;
+  const root = import_node_path21.default.dirname(import_node_path21.default.dirname(bundlePath));
+  return fs_default.existsSync(import_node_path21.default.join(root, "src")) ? root : null;
 }
 function bundleStamp(digest2) {
   if (digest2 === null) {
@@ -69223,11 +66580,11 @@ function bundleStamp(digest2) {
 }
 function checkoutVersion(root) {
   const raw = JSON.parse(
-    fs_default.readFileSync(import_node_path24.default.join(root, "package.json"), "utf8")
+    fs_default.readFileSync(import_node_path21.default.join(root, "package.json"), "utf8")
   );
   const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
   if (typeof version !== "string") {
-    throw new Error(`${import_node_path24.default.join(root, "package.json")} has no version string`);
+    throw new Error(`${import_node_path21.default.join(root, "package.json")} has no version string`);
   }
   return version;
 }
@@ -69236,7 +66593,7 @@ function assessBuild(entryUrl, runningStamp) {
     const root = sourceCheckoutOf(fileURLToPath(entryUrl));
     if (root === null) return { kind: "not-source-checkout" };
     const running = runningStamp();
-    const digest2 = sourceDigest(import_node_path24.default.join(root, "src"));
+    const digest2 = sourceDigest(import_node_path21.default.join(root, "src"));
     if (digest2 === running.digest)
       return { kind: "current", root, stamp: running };
     return {
@@ -69308,7 +66665,7 @@ function installFacts(edge, daemonBundle, clients) {
         bundle: bundle.value,
         checkout: root === null ? null : {
           root,
-          rustSource: edge.digest(import_node_path25.default.join(root, "rust-client"))
+          rustSource: edge.digest(import_node_path22.default.join(root, "rust-client"))
         }
       },
       nativeShipped: edge.nativeShipped,
@@ -69428,7 +66785,7 @@ function ownsEntry(entry) {
     return false;
   }
   const root = DAEMON_ENTRY.exec(real)?.[1];
-  return root !== void 0 && fs_default.existsSync(import_node_path25.default.join(root, "bin", "cc-candybar"));
+  return root !== void 0 && fs_default.existsSync(import_node_path22.default.join(root, "bin", "cc-candybar"));
 }
 async function daemons(launcher) {
   const run3 = await launcher.launch({
@@ -69810,25 +67167,25 @@ init_globals();
 // src/daemon/paths.ts
 init_globals();
 init_os();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
+var import_node_path23 = __toESM(require_path_browserify(), 1);
 function xdgEnv(env2, name) {
   const v = env2[name];
   return v && v.length > 0 ? v : void 0;
 }
 function stateDir(host) {
-  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path26.default.join(host.home, ".local", "state");
-  return import_node_path26.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path23.default.join(host.home, ".local", "state");
+  return import_node_path23.default.join(base, "cc-candybar");
 }
 function cacheDir(host) {
-  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path26.default.join(host.home, ".cache");
-  return import_node_path26.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path23.default.join(host.home, ".cache");
+  return import_node_path23.default.join(base, "cc-candybar");
 }
 function socketPath(host) {
   return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
 }
 function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
-  return import_node_path26.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+  return import_node_path23.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
 function leasePathFor(sockPath) {
   return `${sockPath}.lease`;
@@ -69837,26 +67194,26 @@ function leasePath(host) {
   return leasePathFor(socketPath(host));
 }
 function sessionStatePath(host) {
-  return import_node_path26.default.join(stateDir(host), "session-state.json");
+  return import_node_path23.default.join(stateDir(host), "session-state.json");
 }
 function settingsHistoryPath(host) {
-  return import_node_path26.default.join(stateDir(host), "settings-history.json");
+  return import_node_path23.default.join(stateDir(host), "settings-history.json");
 }
 function daemonRegistryDir(host) {
   const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
   if (override) return override;
   const uid = os_default.userInfo().uid;
-  return import_node_path26.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+  return import_node_path23.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
 }
 var SPAWN_BACKOFF_FILE = "spawn.backoff";
 function spawnBackoffPath(host) {
-  return import_node_path26.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+  return import_node_path23.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
 }
 function watchProbeDir(host) {
-  return import_node_path26.default.join(stateDir(host), "watch-probe");
+  return import_node_path23.default.join(stateDir(host), "watch-probe");
 }
 function logPath(host) {
-  return import_node_path26.default.join(stateDir(host), "daemon.log");
+  return import_node_path23.default.join(stateDir(host), "daemon.log");
 }
 function daemonPaths(host) {
   return {
@@ -69874,11 +67231,11 @@ function daemonPaths(host) {
 function locations(host) {
   const { env: env2 } = host;
   const xdgDefault = "/usr/local/share:/usr/share";
-  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path26.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path23.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
   return {
     home: host.home,
-    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path26.default.join(host.home, ".config"),
-    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path26.default.join(host.home, ".local", "share"),
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path23.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path23.default.join(host.home, ".local", "share"),
     dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
   };
 }
@@ -70205,6 +67562,324 @@ var RuntimeStats = class _RuntimeStats {
   }
 };
 
+// src/daemon/cache/file-events.ts
+init_globals();
+var import_node_path24 = __toESM(require_path_browserify(), 1);
+
+// src/utils/folder-identity.ts
+init_globals();
+var statIdentity = (folder) => {
+  try {
+    const st = fs_default.statSync(folder, { bigint: true });
+    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
+  } catch (e) {
+    const code = e.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
+    throw e;
+  }
+};
+var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
+var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
+var boundOf = (folder) => {
+  try {
+    return statIdentity(folder);
+  } catch (e) {
+    return { unreadable: e.code ?? String(e) };
+  }
+};
+var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
+var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
+
+// src/daemon/cache/file-events.ts
+var PROBE_EVERY_MS = 3e4;
+var STALL_AFTER = 2;
+var PROBE_FILE = "probe";
+var NO_FILE_EVENTS = {
+  delivery: () => ({
+    kind: "unmeasured",
+    since: 0,
+    reason: "outside the daemon",
+    missedSince: null
+  }),
+  subscribe: () => () => {
+  }
+};
+var iso = (at) => new Date(at).toISOString();
+var label = (d) => d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
+var FileEventDelivery = class {
+  current;
+  instrument = { kind: "idle" };
+  listeners = /* @__PURE__ */ new Set();
+  stalls = 0;
+  catchUps = 0;
+  probes = 0;
+  probeFailures = 0;
+  watchers;
+  logger;
+  identityOf;
+  clock;
+  constructor(opts) {
+    this.watchers = opts.watchers;
+    this.logger = opts.logger;
+    this.clock = opts.clock;
+    this.identityOf = opts.identityOf ?? statIdentity;
+    this.current = {
+      kind: "unmeasured",
+      since: this.clock.now(),
+      reason: "not started",
+      missedSince: null
+    };
+  }
+  delivery() {
+    return this.current;
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => void this.listeners.delete(listener);
+  }
+  // Only the daemon starts the owner, once it has won its socket: it makes
+  // the folder, opens the one watch, and arms the period.
+  start(folder) {
+    if (this.instrument.kind !== "idle") {
+      throw new Error("file events: the owner was started twice");
+    }
+    const stopPeriod = this.clock.every(
+      PROBE_EVERY_MS,
+      () => void this.tick(),
+      {
+        unref: true
+      }
+    );
+    let identity2;
+    try {
+      fs_default.mkdirSync(folder, { recursive: true });
+      identity2 = this.identityOf(folder);
+    } catch (e) {
+      this.end(
+        stopPeriod,
+        `the probe folder could not be made: ${e.message}`
+      );
+      return;
+    }
+    if (identity2 === "gone") {
+      this.end(stopPeriod, "the probe folder was removed as it was made");
+      return;
+    }
+    const probing = {
+      kind: "probing",
+      folder,
+      identity: identity2,
+      stopPeriod,
+      // [LAW:single-enforcer] The only acquirer of this registry key.
+      handle: this.watchers.acquire(
+        `file-events:${folder}`,
+        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
+        (heard) => this.heard(probing, heard)
+      )
+    };
+    this.instrument = probing;
+    this.logger("info", `file events probing folder=${valueOf(folder)}`);
+    const [refusal] = probing.handle.deaf;
+    if (refusal !== void 0) {
+      this.end(
+        stopPeriod,
+        `the OS refused the probe folder's watch: ${refusal.reason}`
+      );
+      return;
+    }
+    this.move({ kind: "delivering", unreported: [], missedSince: null });
+    void this.tick();
+  }
+  stats() {
+    return {
+      delivery: this.current,
+      stalls: this.stalls,
+      catchUps: this.catchUps,
+      probes: this.probes,
+      probeFailures: this.probeFailures
+    };
+  }
+  close() {
+    const inst = this.instrument;
+    this.instrument = { kind: "idle" };
+    this.listeners.clear();
+    switch (inst.kind) {
+      case "probing":
+        inst.handle.release();
+        inst.stopPeriod();
+        return;
+      case "ended":
+        inst.stopPeriod();
+        return;
+      case "idle":
+        return;
+    }
+  }
+  // [LAW:dataflow-not-control-flow] The same steps at the start and every
+  // period after: tell subscribers the period passed; judge the probe folder
+  // against the one the watch opened on, first, so a folder replaced at its
+  // path never reads as a stall; judge the probes still unreported; write the
+  // next one.
+  async tick() {
+    this.notify({ kind: "period" });
+    const inst = this.instrument;
+    if (inst.kind !== "probing") return;
+    let now2;
+    try {
+      now2 = this.identityOf(inst.folder);
+    } catch (e) {
+      this.end(
+        inst.stopPeriod,
+        `the probe folder cannot be read: ${e.message}`
+      );
+      return;
+    }
+    if (now2 === "gone") {
+      this.end(inst.stopPeriod, "the probe folder was removed");
+      return;
+    }
+    if (!sameIdentity(now2, inst.identity)) {
+      this.end(inst.stopPeriod, "the probe folder was replaced");
+      return;
+    }
+    const d = this.current;
+    if (d.kind === "delivering" && d.unreported.length >= STALL_AFTER) {
+      this.stalls++;
+      this.move({
+        kind: "stalled",
+        missedSince: d.missedSince ?? d.unreported[0]
+      });
+    }
+    await this.probe(inst);
+  }
+  // A delivering watch awaits the probe; a stalled one awaits none in
+  // particular, since any report recovers it. A write that lands while
+  // unmeasured measures again, awaiting that probe, so a transient failure
+  // (a full disk) measures once it clears. A write that fails is unmeasured
+  // with its error: it tests no watch. A probe still in flight when the
+  // instrument ends or closes judges nothing.
+  async probe(inst) {
+    const at = this.clock.now();
+    const before = this.current;
+    if (before.kind === "delivering") {
+      this.current = { ...before, unreported: [...before.unreported, at] };
+    }
+    try {
+      await fs_default.promises.writeFile(
+        import_node_path24.default.join(inst.folder, PROBE_FILE),
+        String(at)
+      );
+    } catch (e) {
+      this.probeFailures++;
+      const d2 = this.current;
+      if (this.instrument !== inst || d2.kind === "unmeasured") return;
+      this.move({
+        kind: "unmeasured",
+        since: at,
+        reason: `the probe could not be written: ${e.message}`,
+        missedSince: d2.missedSince ?? at
+      });
+      return;
+    }
+    this.probes++;
+    const d = this.current;
+    if (this.instrument !== inst || d.kind !== "unmeasured") return;
+    this.move({
+      kind: "delivering",
+      unreported: [at],
+      missedSince: d.missedSince
+    });
+  }
+  // [LAW:no-silent-failure] The watch's own failure ends the instrument: the
+  // OS refuses an immediate retry the way it refused the first (limits,
+  // permissions). Anything else it reports proves delivery.
+  heard(inst, heard) {
+    if (this.instrument !== inst) return;
+    if (heard.kind === "failed") {
+      this.end(
+        inst.stopPeriod,
+        `the probe folder's watch failed: ${heard.reason}`
+      );
+      return;
+    }
+    const d = this.current;
+    const delivering = {
+      kind: "delivering",
+      unreported: [],
+      missedSince: null
+    };
+    if (d.missedSince === null) {
+      this.move(delivering);
+      return;
+    }
+    this.current = delivering;
+    this.catchUps++;
+    this.logger(
+      "info",
+      `file events resumed since=${iso(d.missedSince)} missed=${this.clock.now() - d.missedSince}ms from=${d.kind}`
+    );
+    this.notify({ kind: "caught-up", since: d.missedSince });
+  }
+  // [LAW:no-silent-failure] An ended instrument holds no watch and never
+  // measures again, so whatever ended it, only a restart can.
+  end(stopPeriod, reason) {
+    const inst = this.instrument;
+    if (inst.kind === "probing") inst.handle.release();
+    this.instrument = { kind: "ended", stopPeriod };
+    const at = this.clock.now();
+    this.move({
+      kind: "unmeasured",
+      since: at,
+      reason: `${reason}; restart the daemon`,
+      missedSince: this.current.missedSince ?? at
+    });
+  }
+  // [LAW:nothing-unseen] One line on each change of state, none per period.
+  move(next) {
+    const was = label(this.current);
+    this.current = next;
+    if (label(next) === was) return;
+    switch (next.kind) {
+      case "delivering":
+        this.logger("info", "file events delivering");
+        break;
+      case "stalled":
+        this.logger(
+          "warn",
+          `file events stalled since=${iso(next.missedSince)}`
+        );
+        break;
+      case "unmeasured":
+        this.logger(
+          "warn",
+          `file events unmeasured since=${iso(next.since)} reason=${JSON.stringify(next.reason)}`
+        );
+        break;
+    }
+    this.notify({ kind: "moved" });
+  }
+  notify(notice) {
+    for (const listener of [...this.listeners]) listener(notice);
+  }
+};
+var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
+var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
+function fileEventsWarnings(d) {
+  if (d.missedSince === null) return [];
+  const since = iso(d.missedSince);
+  const message = () => {
+    switch (d.kind) {
+      case "delivering":
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+      case "stalled":
+        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
+      case "unmeasured":
+        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
+    }
+  };
+  return [{ kind: "file-events", state: d.kind, message: message() }];
+}
+
 // src/daemon/client-stats.ts
 var STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot());
 
@@ -70213,17 +67888,17 @@ init_globals();
 
 // src/attach-launcher.ts
 init_globals();
-var import_node_path27 = __toESM(require_path_browserify(), 1);
+var import_node_path25 = __toESM(require_path_browserify(), 1);
 var ATTACH_DIR = "cc-extra";
 function attachLauncherOf(bundle) {
-  return import_node_path27.default.join(import_node_path27.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
+  return import_node_path25.default.join(import_node_path25.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
 }
 function moduleGraphReaderOf(launcher) {
-  return import_node_path27.default.join(import_node_path27.default.dirname(launcher), "bun-graph.js");
+  return import_node_path25.default.join(import_node_path25.default.dirname(launcher), "bun-graph.js");
 }
 var ATTACH_PRELOAD = "attach-preload.cjs";
 function attachPreloadOf(bundle) {
-  return import_node_path27.default.join(import_node_path27.default.dirname(bundle), ATTACH_PRELOAD);
+  return import_node_path25.default.join(import_node_path25.default.dirname(bundle), ATTACH_PRELOAD);
 }
 var PRELOAD_VARIABLE = "BUN_OPTIONS";
 function attachCommandLine(preload, command) {
@@ -70237,7 +67912,7 @@ function attachCommandLine(preload, command) {
 }
 
 // src/install/index.ts
-var import_node_path29 = __toESM(require_path_browserify(), 1);
+var import_node_path27 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/client.ts
 init_globals();
@@ -70267,7 +67942,7 @@ var CLICK_BUDGETS = {
 
 // src/daemon/acquire.ts
 init_globals();
-var import_node_path28 = __toESM(require_path_browserify(), 1);
+var import_node_path26 = __toESM(require_path_browserify(), 1);
 init_process();
 
 // src/install/currency.ts
@@ -70346,17 +68021,17 @@ function assessCurrency(stamp2, latest) {
 // src/install/index.ts
 function supportDir(host) {
   if (process_default.platform === "darwin") {
-    return import_node_path29.default.join(host.home, "Library", "Application Support", "CCCandybar");
+    return import_node_path27.default.join(host.home, "Library", "Application Support", "CCCandybar");
   }
-  return import_node_path29.default.join(locations(host).dataHome, "cc-candybar");
+  return import_node_path27.default.join(locations(host).dataHome, "cc-candybar");
 }
 function stagedDistPath(dir) {
-  return import_node_path29.default.join(dir, "dist", "index.mjs");
+  return import_node_path27.default.join(dir, "dist", "index.mjs");
 }
 function stableAttachPreload(runningBundle, host) {
   const checkout = sourceCheckoutOf(runningBundle);
   return attachPreloadOf(
-    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path29.default.join(checkout, "dist", "index.mjs")
+    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path27.default.join(checkout, "dist", "index.mjs")
   );
 }
 
@@ -70536,13 +68211,13 @@ async function clickLaunch(launcher, opts, what, log) {
 }
 var HANDOFF_POLL_MS = 50;
 async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
-  const dir = mkdtempSync(import_node_path30.default.join(tmp, "cc-candybar-handoff-"));
+  const dir = mkdtempSync(import_node_path28.default.join(tmp, "cc-candybar-handoff-"));
   try {
     const files = {
       // Unread, and a handed-off browser would write to it for its whole life.
       stdout: "/dev/null",
-      stderr: import_node_path30.default.join(dir, "stderr"),
-      status: import_node_path30.default.join(dir, "status")
+      stderr: import_node_path28.default.join(dir, "stderr"),
+      status: import_node_path28.default.join(dir, "status")
     };
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
@@ -71840,7 +69515,7 @@ init_globals();
 
 // src/daemon/runs.ts
 init_globals();
-var import_node_path31 = __toESM(require_path_browserify(), 1);
+var import_node_path29 = __toESM(require_path_browserify(), 1);
 var RUN_TIMEOUT_MS = 1e4;
 function outcomeOf(result) {
   if (result.ok) return "ok";
@@ -71896,7 +69571,7 @@ var Runs = class {
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
-      bin: program.includes("/") ? import_node_path31.default.resolve(run3.cwd, program) : program,
+      bin: program.includes("/") ? import_node_path29.default.resolve(run3.cwd, program) : program,
       args,
       envOverlay: run3.envOverlay,
       cwd: run3.cwd,
@@ -72371,6 +70046,405 @@ function daemonGates() {
   });
 }
 
+// src/daemon/cache/watchers.ts
+init_globals();
+var import_node_path31 = __toESM(require_path_browserify(), 1);
+
+// src/utils/watch-target.ts
+init_globals();
+var import_node_path30 = __toESM(require_path_browserify(), 1);
+function nearestWatchTarget(candidate) {
+  let name = import_node_path30.default.basename(candidate);
+  let dir = import_node_path30.default.dirname(candidate);
+  for (; ; ) {
+    const real = canonicalDirectory(dir);
+    if (real !== null)
+      return { dir: real, name, leaf: dir === import_node_path30.default.dirname(candidate) };
+    name = import_node_path30.default.basename(dir);
+    dir = import_node_path30.default.dirname(dir);
+  }
+}
+function canonicalDirectory(p2) {
+  try {
+    return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync(p2) : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/daemon/cache/watchers.ts
+var defaultLogger = (_level, message) => debug(message);
+var DEBOUNCE_MS = 50;
+function watchTargetsOf(paths2) {
+  const unresolved = [];
+  let reached = true;
+  const byDir = /* @__PURE__ */ new Map();
+  for (const at of paths2.named) {
+    const { hops, stopped: stopped2 } = walkLinks(at);
+    if (stopped2 !== null)
+      unresolved.push({ path: at, reason: stopped2.message });
+    for (const hop of hops) {
+      const { dir, name, leaf } = nearestWatchTarget(hop);
+      reached &&= leaf;
+      const names = byDir.has(dir) ? byDir.get(dir) : /* @__PURE__ */ new Set();
+      names?.add(name);
+      byDir.set(dir, names);
+    }
+  }
+  for (const dir of paths2.whole.map(canonicalDirectory))
+    if (dir !== null) byDir.set(dir, null);
+  const targets = {
+    dirs: [...byDir.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
+      ([dirPath, names]) => names === null ? { path: dirPath } : { path: dirPath, filenames: [...names].sort() }
+    )
+  };
+  const bound = new Map(
+    targets.dirs.map((d) => {
+      const at = boundOf(d.path);
+      return [d.path, bindsFolder(at) ? boundKey(at) : null];
+    })
+  );
+  return {
+    key: JSON.stringify([targets, [...bound]]),
+    targets,
+    unbound: [...bound.values()].includes(null),
+    bound,
+    reached,
+    unresolved
+  };
+}
+function watchFault(label2, watch2, beyond) {
+  const reasons = [
+    ...watch2.derived.unresolved.map(
+      // Every reason names the path it stopped at, the kernel's and the loop's.
+      (u) => `cannot follow a link chain \u2014 ${u.reason}`
+    ),
+    ...watch2.held.handle.deaf.map(
+      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
+    ),
+    ...beyond === null ? [] : [beyond]
+  ];
+  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
+}
+function folded(window2, next) {
+  if (next.kind === "failed") return next;
+  if (window2.kind !== "changed") return window2;
+  if (next.kind === "unknown") return next;
+  for (const p2 of next.paths) window2.paths.add(p2);
+  return window2;
+}
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path31.default.join(dir, filename)]) };
+var failedOf = (d) => ({
+  kind: "failed",
+  reason: `${d.path}: ${d.reason}`
+});
+var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+var WatcherRegistry = class {
+  slots = /* @__PURE__ */ new Map();
+  dirs = /* @__PURE__ */ new Map();
+  counters;
+  logger;
+  clock;
+  closed = false;
+  constructor(opts) {
+    this.clock = opts.clock;
+    this.counters = opts.counters;
+    this.logger = opts.logger ?? defaultLogger;
+  }
+  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
+  // holder of one slot, and each holder's callback hears every window.
+  // `targets` from the first acquire wins; subsequent acquires keep the
+  // original target set (consumers must use a fresh key if they need different
+  // targets). A consumer that needs no more than "something changed" ignores
+  // the invalidation's value.
+  acquire(key, targets, onInvalidate) {
+    if (this.closed) {
+      return {
+        release: () => {
+        },
+        deaf: targets.dirs.map((d) => ({
+          kind: "refused",
+          path: d.path,
+          reason: "the watcher registry is closed"
+        }))
+      };
+    }
+    const shared = this.slots.get(key);
+    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    const slot = shared ?? this.opened(key, targets);
+    const holder = { onInvalidate };
+    slot.holders.add(holder);
+    return this.makeHandle(slot, holder);
+  }
+  // [LAW:single-enforcer] The one rule for a watch whose targets can move: a
+  // consumer derives its spec from disk again and the held watch follows it
+  // exactly when the key differs. The same key is the same directories, kept
+  // as they are; a new key acquires the spec's watch and then releases the
+  // held one, so a directory both name keeps its OS handle through the move.
+  // Nothing held yet is a first acquire, which is a rebind from nothing.
+  //
+  // A spec with a directory that binds nothing yet (gone, or a mount's
+  // transient fault) keeps the watch held: a derive that lands between a
+  // directory's removal and its making again would otherwise trade a watch
+  // FSEvents keeps on its path for a slot the OS refuses. The next derive
+  // that finds the directory there rebinds, since its key differs.
+  //
+  // [LAW:no-ambient-temporal-coupling] A kept watch retries nothing: its deaf
+  // directories are the period's to open again (`judge`). A follow that
+  // retried would answer the failed window its own handle's error told, and
+  // a handle that errors after every open would retry itself at the debounce
+  // cadence.
+  follow(held, spec, onInvalidate) {
+    if (held !== null && (held.key === spec.key || spec.unbound))
+      return { watch: held, move: "kept" };
+    const watch2 = {
+      key: spec.key,
+      handle: this.acquire(spec.key, spec.targets, onInvalidate)
+    };
+    held?.handle.release();
+    return { watch: watch2, move: "rebound" };
+  }
+  opened(key, targets) {
+    const slot = {
+      key,
+      listeners: [],
+      holders: /* @__PURE__ */ new Set(),
+      debounce: null
+    };
+    for (const target of targets.dirs) {
+      const dir = this.dirFor(target);
+      const listener = {
+        slot,
+        dir,
+        filter: target.filenames ? new Set(target.filenames) : null
+      };
+      dir.listeners.add(listener);
+      slot.listeners.push(listener);
+    }
+    this.slots.set(key, slot);
+    if (this.counters) {
+      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
+        this.counters.watchersOpened++;
+      else this.counters.watchRefusals++;
+    }
+    return slot;
+  }
+  // The directory watch a new slot's target joins: the one already open
+  // there, judged, or a new one.
+  dirFor(target) {
+    const id2 = dirId(target);
+    const existing = this.dirs.get(id2);
+    if (existing !== void 0) {
+      this.judged(existing, "acquire");
+      return existing;
+    }
+    const where = { path: target.path, recursive: target.recursive === true };
+    const dir = {
+      id: id2,
+      ...where,
+      listeners: /* @__PURE__ */ new Set(),
+      state: this.open(where, () => dir, "acquire", null)
+    };
+    this.dirs.set(id2, dir);
+    return dir;
+  }
+  // [LAW:single-enforcer] The one rule that a directory watch names the
+  // folder at its path, applied whenever a holder acquires the directory,
+  // whenever an event says the folder there moved, and on every period
+  // (`judge`). A deaf one is opened again; a listening one whose path holds
+  // another folder than the one it bound (removed and made again, or a strict
+  // ancestor renamed away and another tree put at its path: inotify hears the
+  // old inode, and the bound folder is what an event naming the directory is
+  // judged against) is reopened in place. A path that binds nothing right now
+  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
+  // on the path hears the folder come back.
+  judged(dir, cause) {
+    if (dir.state.kind === "deaf") {
+      this.reopen(dir, cause);
+      return;
+    }
+    const now2 = boundOf(dir.path);
+    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
+      this.reopen(dir, "another folder is at its path");
+  }
+  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
+  // the disk, on the period the file-event delivery owner keeps (the daemon
+  // wires it). It is the one trigger for a replacement no event reaches a
+  // handle for (a strict ancestor renamed away and another tree put at its
+  // path: inotify reports a directory's own removal or self-move, never its
+  // parent's), and the retry of a directory the OS refused or whose handle
+  // errored while no holder newly acquires it. A directory staying as it is
+  // costs one stat, or one refused open, and tells nothing.
+  judge() {
+    for (const dir of this.dirs.values()) this.judged(dir, "period");
+  }
+  // [LAW:no-silent-failure] Every slot on the directory hears it change
+  // state. Going deaf, it hears the fault. Listening again, it hears an
+  // `unknown` window: whatever changed while the directory was deaf or bound
+  // to another folder went unheard, and a holder that re-derives on it reports
+  // its fault cleared. Deaf staying deaf is no change and tells nothing.
+  reopen(dir, cause) {
+    const was = dir.state;
+    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
+    dir.state = this.open(dir, () => dir, cause, was);
+    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
+    else if (was.kind === "listening")
+      this.tell(dir, failedOf(dir.state.deafness));
+  }
+  // `dirOf` names the watch the handle belongs to; its callbacks run only
+  // after the open returns, once the watch holds the state returned here.
+  open(where, dirOf, cause, was) {
+    const at = where.path;
+    const bound = boundKey(boundOf(at));
+    try {
+      fs_default.opendirSync(at).closeSync();
+      const handle = fs_default.watch(
+        at,
+        { persistent: false, recursive: where.recursive },
+        (_event, changed) => this.heard(dirOf(), handle, changed)
+      );
+      handle.on("error", (e) => {
+        this.logger("warn", `watcher error ${at}: ${e.message}`);
+        if (this.counters) this.counters.watchErrors++;
+        const dir = dirOf();
+        if (!heldBy(dir.state, handle)) return;
+        this.closeHandle(at, handle, "error");
+        const deafness = {
+          kind: "failed",
+          path: at,
+          reason: e.message
+        };
+        dir.state = { kind: "deaf", deafness };
+        this.tell(dir, failedOf(deafness));
+      });
+      if (this.counters) this.counters.dirWatchesOpened++;
+      this.logger(
+        "info",
+        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
+      );
+      return { kind: "listening", handle, bound };
+    } catch (e) {
+      const reason = e.message;
+      const same2 = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
+      if (!same2) this.logger("warn", `watch failed ${at}: ${reason}`);
+      return {
+        kind: "deaf",
+        deafness: { kind: "refused", path: at, reason }
+      };
+    }
+  }
+  // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
+  // it lists, an unnamed event (the OS may be reporting the filtered child),
+  // or the directory's own name while the folder at the path is no longer the
+  // one this handle bound (its removal or replacement, which macOS reports as
+  // a change and Linux as a rename) reaches the slot. The same name with the
+  // folder unchanged is macOS reporting a child that came or went, or a chmod,
+  // and is not. Judged once per event, for every listener. A move is then
+  // judged, so a handle never stays bound to a folder no longer at its path
+  // and every later event naming the directory is judged against the folder
+  // there.
+  heard(dir, handle, changed) {
+    const { state } = dir;
+    if (!heldBy(state, handle)) return;
+    const moved = changed === import_node_path31.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    for (const { slot, filter } of dir.listeners) {
+      if (filter === null || changed === null || filter.has(changed) || moved)
+        this.fire(slot, namedOf(dir.path, changed));
+    }
+    if (moved) this.judged(dir, "moved");
+  }
+  tell(dir, invalidation) {
+    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
+  }
+  fire(slot, invalidation) {
+    if (slot.debounce !== null) {
+      slot.debounce.window = folded(slot.debounce.window, invalidation);
+      return;
+    }
+    const debounce = {
+      window: invalidation,
+      cancel: this.clock.after(
+        DEBOUNCE_MS,
+        () => {
+          slot.debounce = null;
+          for (const holder of slot.holders) {
+            try {
+              holder.onInvalidate(debounce.window);
+            } catch (e) {
+              this.logger(
+                "warn",
+                `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
+              );
+            }
+          }
+        },
+        { unref: true }
+      )
+    };
+    slot.debounce = debounce;
+  }
+  makeHandle(slot, holder) {
+    return {
+      get deaf() {
+        return slot.listeners.flatMap(
+          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
+        );
+      },
+      release: () => {
+        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
+        if (this.slots.get(slot.key) !== slot) return;
+        this.closeSlot(slot, "last release");
+        this.slots.delete(slot.key);
+      }
+    };
+  }
+  closeHandle(at, handle, cause) {
+    try {
+      handle.close();
+    } catch {
+    }
+    if (this.counters) this.counters.dirWatchesClosed++;
+    this.logger(
+      "info",
+      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
+    );
+  }
+  // A directory watch closes with the last slot on it.
+  closeSlot(slot, cause) {
+    if (slot.debounce !== null) {
+      slot.debounce.cancel();
+      slot.debounce = null;
+    }
+    for (const listener of slot.listeners) {
+      const { dir } = listener;
+      dir.listeners.delete(listener);
+      if (dir.listeners.size > 0) continue;
+      if (dir.state.kind === "listening")
+        this.closeHandle(dir.path, dir.state.handle, cause);
+      this.dirs.delete(dir.id);
+    }
+    if (this.counters) this.counters.watchersClosed++;
+  }
+  // The slots held now.
+  size() {
+    return this.slots.size;
+  }
+  // The OS directory watches open now.
+  dirWatches() {
+    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
+  }
+  // Every directory a held watch targets.
+  watchedDirs() {
+    return [...this.dirs.values()].map((d) => d.path);
+  }
+  closeAll() {
+    this.closed = true;
+    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
+    this.slots.clear();
+  }
+};
+
 // src/daemon/foundations/render-origin.ts
 init_globals();
 function encodeRenderOrigin({
@@ -72388,6 +70462,1933 @@ function encodeRenderOrigin({
 
 // src/dsl/render.ts
 init_globals();
+
+// src/var-system/sources.ts
+init_globals();
+
+// src/var-system/store.ts
+init_globals();
+var unwritten = (value) => isPending(value);
+var BoxNode = class {
+  constructor(name, type3, initial2, clock) {
+    this.name = name;
+    this.type = type3;
+    this.clock = clock;
+    if (!unwritten(initial2)) assertType(name, type3, initial2, "initial value");
+    this.cell = observable.box(initial2, { deep: false });
+    this.lastChangedAt = unwritten(initial2) ? null : clock.now();
+  }
+  name;
+  type;
+  clock;
+  kind = "box";
+  cell;
+  // [LAW:single-enforcer] One write path (`set`) updates both the value and
+  // the timestamp; introspection reads from the same place renderers do.
+  //
+  // It records when the value last CHANGED, which is what debug.ts calls the
+  // node's age and what anyone reading that age is asking (brandon-var-system-
+  // 1tl). Stamping every write instead reported attempts, and reported them most
+  // misleadingly in the one situation where the age is consulted: a source
+  // re-running with no effect.
+  lastChangedAt;
+  // [LAW:types-are-the-program] Not written yet is not a value: it is read as
+  // THE pending signal, which every place a template is evaluated takes as its
+  // own outcome.
+  read() {
+    const value = this.cell.get();
+    if (unwritten(value)) {
+      throw new PendingValueError(
+        this.name,
+        `variable "${this.name}" has no value yet: nothing has written it`
+      );
+    }
+    return value;
+  }
+  // A box written pending is not answered yet again: what its payload holds
+  // is a source that has not answered (src/daemon/render-payload.ts).
+  set(value) {
+    if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
+    if (compareStructural(this.cell.get(), value)) return;
+    this.cell.set(value);
+    this.lastChangedAt = this.clock.now();
+  }
+  lastUpdatedMs() {
+    return this.lastChangedAt;
+  }
+  // The cell as written, pending included: what `stored` reads.
+  stored() {
+    return this.cell.get();
+  }
+};
+var Kept = class {
+  cell;
+  // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
+  // `equals` is what counts as a change: MobX's own comparison unless given.
+  constructor(what, deriver, equals) {
+    this.cell = computed(deriver, {
+      keepAlive: true,
+      ...equals !== void 0 && { equals }
+    });
+    if (typeof this.cell.suspend_ !== "function") {
+      throw new TypeError(
+        `${what}: this MobX's computed has no suspend_; release() cannot unsubscribe it`
+      );
+    }
+    if (typeof this.cell.keepAlive_ !== "boolean") {
+      throw new TypeError(
+        `${what}: this MobX's computed has no keepAlive_ flag; release() cannot lift it`
+      );
+    }
+  }
+  read() {
+    return this.cell.get();
+  }
+  // Unsubscribe from every dependency and drop the cached value. A keepAlive
+  // computed never does this on its own — MobX keeps it subscribed to whatever
+  // it read for as long as those observables live, which for a daemon-wide
+  // observable (the SessionState atom) is the life of the daemon, and that
+  // subscription kept every disposed config's whole store reachable
+  // (brandon-unfiled-3248.t14). MobX offers no public release for a keepAlive
+  // computed, so this lifts the guard its own teardown checks and runs that
+  // teardown. Must run inside an action: the unobservation it cascades is
+  // settled when the outermost batch ends.
+  // [LAW:single-enforcer] exception: two MobX internals (`keepAlive_`,
+  // `suspend_`) are reached here and nowhere else; the constructor refuses a
+  // MobX without them, and test/var-store-dispose.test.ts pins the effect.
+  release() {
+    this.cell.keepAlive_ = false;
+    this.cell.suspend_();
+  }
+};
+var Projected = class {
+  constructor(deriver) {
+    this.deriver = deriver;
+  }
+  deriver;
+  read() {
+    return this.deriver();
+  }
+};
+var ComputedNode = class {
+  constructor(name, type3, deriver) {
+    this.name = name;
+    this.type = type3;
+    this.cell = new Kept(`Variable "${name}"`, () => {
+      const v = deriver();
+      assertType(this.name, this.type, v, "computed result");
+      return v;
+    });
+  }
+  name;
+  type;
+  kind = "computed";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  release() {
+    this.cell.release();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+var ProjectionNode = class {
+  constructor(name, type3, deriver) {
+    this.name = name;
+    this.type = type3;
+    this.cell = new Projected(() => {
+      const v = deriver();
+      assertType(this.name, this.type, v, "projection result");
+      return v;
+    });
+  }
+  name;
+  type;
+  kind = "projection";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+var DocumentCell = class {
+  constructor(name, initial2, clock) {
+    this.name = name;
+    this.clock = clock;
+    this.cell = observable.box(shaped(initial2), { deep: false });
+    this.lastChangedAt = initial2.kind === "pending" ? null : clock.now();
+  }
+  name;
+  clock;
+  kind = "document";
+  cell;
+  lastChangedAt;
+  read() {
+    return this.cell.get();
+  }
+  set(value) {
+    const next = shaped(value);
+    if (sameDocument(this.cell.get(), next)) return;
+    this.cell.set(next);
+    this.lastChangedAt = this.clock.now();
+  }
+  lastUpdatedMs() {
+    return this.lastChangedAt;
+  }
+};
+var DerivedDocument = class {
+  constructor(name, deriver) {
+    this.name = name;
+    this.cell = new Kept(
+      `Variable "${name}"`,
+      () => shaped(deriver()),
+      sameDocument
+    );
+  }
+  name;
+  kind = "document";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  release() {
+    this.cell.release();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+function documentKey(outcome) {
+  return JSON.stringify(outcome);
+}
+function sameDocument(a, b) {
+  return documentKey(a) === documentKey(b);
+}
+function shaped(outcome) {
+  return outcome.kind === "ok" ? { kind: "ok", value: toDocument(outcome.value) } : outcome;
+}
+function assertType(name, declared, value, context) {
+  const actual = typeOf(value);
+  if (actual !== declared) {
+    throw new TypeError(
+      `Variable "${name}": ${context} type ${actual} does not match declared type ${declared}`
+    );
+  }
+}
+var VariableStore = class {
+  // [LAW:one-source-of-truth] `clock` stamps when each box and document last
+  // changed; a child store reads the same one as its parent.
+  constructor(clock, parent = null) {
+    this.clock = clock;
+    this.parent = parent;
+  }
+  clock;
+  parent;
+  // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
+  // observable: a reaction that read a name before its declaration (a cache
+  // key over a variable declared after it) re-runs when it is declared, so
+  // what it sees does not depend on the order the config lists variables in.
+  // `deep: false` keeps each node the object it was declared as.
+  nodes = observable.map(void 0, {
+    deep: false
+  });
+  defineBox(name, type3, initial2) {
+    this.declare(name, new BoxNode(name, type3, initial2, this.clock));
+  }
+  defineDocument(name, initial2) {
+    this.declare(name, new DocumentCell(name, initial2, this.clock));
+  }
+  // A document whose reading the deriver computes from what it reads.
+  defineDerivedDocument(name, deriver) {
+    this.declare(name, new DerivedDocument(name, deriver));
+  }
+  // Computed deriver receives a `read` function that returns the value
+  // of any variable in the store. Calling `read(other)` from inside the
+  // deriver is what registers the dependency with MobX — the deriver's
+  // body is the dep graph.
+  defineComputed(name, type3, deriver) {
+    this.defineDerived(name, type3, "computed", deriver);
+  }
+  defineDerived(name, type3, derivation, deriver) {
+    const reader = (other) => this.read(other);
+    const Node = derivation === "computed" ? ComputedNode : ProjectionNode;
+    this.declare(name, new Node(name, type3, () => deriver(reader)));
+  }
+  // A derived value of this store that is no variable — a template a draw
+  // evaluates (src/dsl/parts.ts) — held as a variable's would be: kept until
+  // what it read changes, or derived at every read, and released with them.
+  derive(name, derivation, deriver) {
+    this.refuseDisposed(`Derived value "${name}"`);
+    if (derivation === "projection") return new Projected(deriver);
+    const kept = new Kept(`Derived value "${name}"`, deriver);
+    this.kept.push(kept);
+    return kept;
+  }
+  kept = [];
+  read(name) {
+    return this.requireVar(name).read();
+  }
+  readDocument(name) {
+    const node = this.requireNode(name);
+    if (node.kind !== "document") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a document`
+      );
+    }
+    return node.read();
+  }
+  // A written node's value as stored, pending included and nothing
+  // serialized: a box's value or a document's reading. Read in a reaction, it
+  // moves exactly when the node is written, which its own compare decides.
+  stored(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") return node.read();
+    if (node.kind !== "box") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a written node`
+      );
+    }
+    return node.stored();
+  }
+  setDocument(name, value) {
+    const node = this.requireOwn(name);
+    if (!(node instanceof DocumentCell)) {
+      throw new TypeError(
+        node.kind === "document" ? `Variable "${name}" is a derived document: what it reads decides it, and nothing writes it` : `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`
+      );
+    }
+    runInAction(() => node.set(value));
+  }
+  setBox(name, value) {
+    const node = this.requireOwn(name);
+    if (node.kind !== "box") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a box (use defineBox to create a settable variable)`
+      );
+    }
+    runInAction(() => node.set(value));
+  }
+  // Wrap multi-variable updates so dependents only invalidate once per
+  // batch. Used by the render path to push a whole input payload before
+  // any computed re-evaluates.
+  runInAction(fn) {
+    runInAction(fn);
+  }
+  has(name) {
+    return this.nodes.has(name) || (this.parent?.has(name) ?? false);
+  }
+  getType(name) {
+    return this.requireVar(name).type;
+  }
+  getKind(name) {
+    return this.requireNode(name).kind;
+  }
+  // [LAW:one-source-of-truth] A string that changes exactly when the node's
+  // value does — the ONE spelling a change-driven reaction (a `depends_on`
+  // cache policy) compares, total over node kinds so a document can be
+  // depended on like a scalar — or pending, while the node has no value yet.
+  // Structural for documents: every stored document has sorted keys
+  // (toDocument), so a rescan yielding the same content in another key order
+  // is not a change. A failure is a key like any other, never a failed
+  // reading: a dependant re-reads when its dependency starts or stops failing.
+  changeKey(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") {
+      const doc = node.read();
+      return doc.kind === "pending" ? doc : ok(documentKey(doc));
+    }
+    try {
+      return ok(String(node.read()));
+    } catch (e) {
+      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  // [LAW:types-are-the-program] Introspection (src/daemon/debug.ts) needs
+  // the whole node — type, kind, lastUpdatedMs — in one lookup, but
+  // returning the BoxNode directly would leak `.set` structurally even
+  // though VarNode does not advertise it. The returned wrapper is a fresh
+  // object exposing only the VarNode surface — `.set` is unreachable at
+  // any level (no structural escape, no plain-JS reach-through). The
+  // mutation path remains gated behind `setBox`, which wraps in
+  // runInAction to satisfy MobX strict-mode.
+  //
+  // [LAW:single-enforcer] One requireNode call per consumer-row — the
+  // round-1 dedup fix in introspectVars relies on the caller getting both
+  // type/kind and a read() in one go without paying for a second
+  // requireNode. The wrapper preserves that.
+  getNode(name) {
+    const node = this.requireNode(name);
+    return node.kind === "document" ? {
+      name: node.name,
+      kind: node.kind,
+      read: () => node.read(),
+      lastUpdatedMs: () => node.lastUpdatedMs()
+    } : {
+      name: node.name,
+      type: node.type,
+      kind: node.kind,
+      read: () => node.read(),
+      lastUpdatedMs: () => node.lastUpdatedMs()
+    };
+  }
+  names() {
+    return [...this.parent?.names() ?? [], ...this.nodes.keys()];
+  }
+  // Release every computed's subscriptions, so nothing outliving this store
+  // (the daemon-wide SessionState atom) keeps it reachable. The store's own
+  // boxes and documents die with it; only the computeds hold references
+  // outward. Reads after dispose still answer — a released computed recomputes
+  // uncached, and outside a batch subscribes to nothing (inside one, MobX
+  // tracks it for the batch and unobserves again as the batch ends) — so a
+  // late reader cannot resubscribe the store to the world for good. A
+  // declaration after dispose would: it would mint a keepAlive computed with
+  // no release to come, so `declare` and `derive` refuse it. Returns how many computeds it
+  // released, the fact the caller's log line carries (0 on a second call). One action, so the
+  // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
+  // called by SourceRegistry.dispose, the one teardown of everything a config
+  // holds.
+  dispose() {
+    if (this.disposed) return 0;
+    this.disposed = true;
+    let released = 0;
+    runInAction(() => {
+      for (const node of this.nodes.values()) {
+        if (node instanceof ComputedNode || node instanceof DerivedDocument) {
+          node.release();
+          released++;
+        }
+      }
+      for (const kept of this.kept) kept.release();
+    });
+    return released + this.kept.length;
+  }
+  disposed = false;
+  requireNode(name) {
+    const node = this.nodes.get(name) ?? this.parent?.requireNode(name);
+    if (!node) throw new ReferenceError(`Unknown variable "${name}"`);
+    return node;
+  }
+  // [LAW:single-enforcer] The one door a write takes: a node of this store.
+  // A view writing its directory's node would write every session's value.
+  requireOwn(name) {
+    const node = this.nodes.get(name);
+    if (node !== void 0) return node;
+    if (this.parent?.has(name)) {
+      throw new Error(
+        `Variable "${name}" lives in the directory's store; a session's view cannot write it`
+      );
+    }
+    throw new ReferenceError(`Unknown variable "${name}"`);
+  }
+  // [LAW:parse-dont-validate] The scalar reads (`read`, `getType`) demand a
+  // VarNode; a document reached through them is a caller asking a namespace
+  // for a scalar, said so by name rather than coerced to text.
+  requireVar(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") {
+      throw new TypeError(
+        `Variable "${name}" is a document; read its fields by path (.${name}.<field>)`
+      );
+    }
+    return node;
+  }
+  // [LAW:no-silent-failure] A computed declared after dispose has no release
+  // to come: it would subscribe to the world and hold this store exactly as
+  // before brandon-unfiled-3248.t14.
+  refuseDisposed(what) {
+    if (this.disposed) {
+      throw new Error(`${what}: cannot declare on a disposed store`);
+    }
+  }
+  declare(name, node) {
+    this.refuseDisposed(`Variable "${name}"`);
+    if (this.has(name)) {
+      throw new Error(`Variable "${name}" is already declared`);
+    }
+    runInAction(() => this.nodes.set(name, node));
+  }
+};
+
+// src/template-engine/scope.ts
+init_globals();
+function buildScope(store) {
+  const names = new Set(store.names());
+  return makeProxy(store, names, "");
+}
+function makeProxy(store, names, prefix) {
+  return new Proxy(/* @__PURE__ */ Object.create(null), {
+    has(_, key) {
+      if (typeof key !== "string") return false;
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (names.has(fullKey)) return !absentDocument(store, fullKey);
+      const nsPrefix = `${fullKey}.`;
+      for (const n of names) {
+        if (n.startsWith(nsPrefix)) return true;
+      }
+      return false;
+    },
+    get(_, key) {
+      if (typeof key !== "string") return void 0;
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (names.has(fullKey)) {
+        if (store.getKind(fullKey) !== "document") return store.read(fullKey);
+        const doc = store.readDocument(fullKey);
+        return doc.kind === "absent" ? void 0 : unwrapDocument(fullKey, doc);
+      }
+      const nsPrefix = `${fullKey}.`;
+      for (const n of names) {
+        if (n.startsWith(nsPrefix)) {
+          return makeProxy(store, names, fullKey);
+        }
+      }
+      return void 0;
+    }
+  });
+}
+function placementScope(scope, settings) {
+  return new Proxy(scope, {
+    has: (target, key) => key === "settings" || Reflect.has(target, key),
+    get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
+  });
+}
+function absentDocument(store, name) {
+  return store.getKind(name) === "document" && store.readDocument(name).kind === "absent";
+}
+function unwrapDocument(name, doc) {
+  switch (doc.kind) {
+    case "ok":
+      return doc.value;
+    case "pending":
+      throw new PendingValueError(
+        name,
+        `variable "${name}" has no value yet: its source has not completed a scan`
+      );
+    case "failed":
+      throw new Error(`variable "${name}": ${doc.reason}`);
+  }
+}
+
+// src/utils/holds.ts
+init_globals();
+var Holds = class {
+  held = /* @__PURE__ */ new Map();
+  // The keys the declaration in progress has taken, and how many of them it
+  // acquired.
+  declaring = null;
+  closed = false;
+  // `acquire` runs only for an entry this home does not hold now.
+  take(key, acquire) {
+    if (this.closed) throw new Error(`hold taken after close: ${key}`);
+    this.declaring?.taken.add(key);
+    if (this.held.has(key)) return;
+    this.held.set(key, acquire());
+    if (this.declaring !== null) this.declaring.acquired++;
+  }
+  // [LAW:no-ambient-temporal-coupling] One declaration: `body` takes every
+  // hold the home's draws read, and each hold it did not take is released
+  // once it returns, so the home holds exactly what it declared. Returns what
+  // the body answered, and how many holds it acquired and released.
+  declare(body) {
+    if (this.declaring !== null) throw new Error("declaration within one");
+    const declaring = { taken: /* @__PURE__ */ new Set(), acquired: 0 };
+    this.declaring = declaring;
+    let result;
+    try {
+      result = body();
+    } finally {
+      this.declaring = null;
+    }
+    let released = 0;
+    for (const [key, release4] of this.held) {
+      if (declaring.taken.has(key)) continue;
+      this.held.delete(key);
+      release4();
+      released++;
+    }
+    return { result, acquired: declaring.acquired, released };
+  }
+  // Releases every hold and refuses new ones: the home is gone.
+  close() {
+    this.closed = true;
+    const count = this.held.size;
+    for (const release4 of this.held.values()) release4();
+    this.held.clear();
+    return count;
+  }
+  get size() {
+    return this.held.size;
+  }
+};
+
+// src/var-system/source-runs.ts
+init_globals();
+
+// src/utils/keyed-source.ts
+init_globals();
+
+// src/utils/period.ts
+init_globals();
+function periodOf(every, outcome) {
+  return outcome.kind === "failed" ? every.failedMs : every.okMs;
+}
+function backedOffMs(every, failures, ceilingMs) {
+  return failures === 0 ? every.okMs : Math.min(every.failedMs * 2 ** (failures - 1), ceilingMs);
+}
+var Period = class {
+  constructor(tick, clock) {
+    this.tick = tick;
+    this.clock = clock;
+  }
+  tick;
+  clock;
+  stop = null;
+  state = "released";
+  last = null;
+  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
+  // kept from earlier). `periodMs` is chosen by the caller from the read's
+  // outcome (a failed PR lookup is retried sooner than a found one).
+  landed(periodMs, at = this.clock.monotonic()) {
+    this.last = { at, periodMs };
+    this.schedule();
+  }
+  hold(held) {
+    if (this.state === "disposed") return;
+    const next = held ? "held" : "released";
+    if (next === this.state) return;
+    this.state = next;
+    this.schedule();
+  }
+  dispose() {
+    this.state = "disposed";
+    this.cancel();
+  }
+  schedule() {
+    this.cancel();
+    if (this.state !== "held" || this.last === null) return;
+    const wait = Math.max(
+      0,
+      this.last.at + this.last.periodMs - this.clock.monotonic()
+    );
+    this.stop = this.clock.after(
+      wait,
+      () => {
+        this.stop = null;
+        this.tick();
+      },
+      { unref: true }
+    );
+  }
+  cancel() {
+    this.stop?.();
+    this.stop = null;
+  }
+};
+
+// src/utils/keyed-source.ts
+var NO_WATCH = () => () => {
+};
+var KeyedSource = class {
+  constructor(spec) {
+    this.spec = spec;
+    this.refreshes = spec.ledger.declare({
+      name: spec.name,
+      scope: spec.scope,
+      refresh: ["first", "period", "change", "supersede"]
+    });
+  }
+  spec;
+  entries = /* @__PURE__ */ new Map();
+  refreshes;
+  closed = false;
+  // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
+  // home holds it until a declaration of the home's takes it no more, or the
+  // home is disposed, which keeps the entry for its next hold — and the lane
+  // reads it as it stands, never awaited and taking nothing. A key never read
+  // is created pending and read once, its first refresh.
+  //
+  // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
+  // by that refresh — so its caller logs none. A declaration that THROWS is a
+  // bug none of those saw, reported by the session's declaration (declareLanes).
+  declare(holds2, input) {
+    if (this.closed)
+      return settledLane(failed(`${this.spec.name} closed`, "read"));
+    const key = this.spec.keyOf(input);
+    const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
+    holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
+    return { current: () => currentOf(entry) };
+  }
+  // [LAW:one-source-of-truth] The one supersede rule (SOURCES-AND-FRAMES.md):
+  // the daemon itself is changing what this key reads (a click's move). The
+  // value is pending (`superseded`) and the read in flight is abandoned, so no
+  // draw after the click shows the value from before it. Every trigger of the
+  // key is held back until every supersede of it has resumed, so no read
+  // during the move stores the world from before it; the last resume starts
+  // one fresh read. A key never read is created for it, and its first read is
+  // that resume's.
+  supersede(input) {
+    if (this.closed) return () => {
+    };
+    const key = this.spec.keyOf(input);
+    const entry = this.touched(key) ?? this.created(key, input);
+    entry.superseding++;
+    renew(entry, "superseded");
+    this.abandon(entry);
+    entry.changed = false;
+    this.evict();
+    let resumed = false;
+    return () => {
+      if (resumed) return;
+      resumed = true;
+      entry.superseding--;
+      if (this.entries.get(entry.key) === entry)
+        this.refresh(entry, "supersede");
+    };
+  }
+  // The world changed under every held entry `affected` names (a watched file
+  // was written): each is read again, after the read in flight when one is
+  // out. An entry nobody holds is read when a hold returns to it.
+  changed(affected) {
+    for (const entry of this.entries.values()) {
+      if (affected(entry.input)) this.heard(entry);
+    }
+  }
+  // [LAW:single-enforcer] The one rule for a change under an entry, whether
+  // the owner's or the entry's own watch reports it: a held entry is read
+  // again; one nobody holds is not, since a hold's return re-reads it.
+  heard(entry) {
+    if (entry.holders > 0) this.refresh(entry, "change");
+  }
+  // Whether some home holds an entry `match` names now.
+  isHeld(match) {
+    for (const entry of this.entries.values()) {
+      if (entry.holders > 0 && match(entry.input)) return true;
+    }
+    return false;
+  }
+  stats() {
+    let held = 0;
+    for (const entry of this.entries.values()) if (entry.holders > 0) held++;
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return {
+      entries: this.entries.size,
+      held,
+      refreshes,
+      failures,
+      abandoned,
+      lastMs
+    };
+  }
+  // Ends every entry's period: a held entry's period re-arms on every landing,
+  // so an owner that is not closed keeps its timers for good.
+  close() {
+    this.closed = true;
+    for (const entry of [...this.entries.values()]) this.drop(entry);
+  }
+  // LRU touch: re-inserting moves the entry to the newest end.
+  touched(key) {
+    const entry = this.entries.get(key);
+    if (entry === void 0) return void 0;
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry;
+  }
+  // In place before any read, so a read's answer finds its entry stored.
+  created(key, input) {
+    const entry = {
+      key,
+      input,
+      reading: unread(),
+      holders: 0,
+      flight: null,
+      changed: false,
+      superseding: 0,
+      revisit: revisitOf(this.spec.every(input), this.spec.clock, {
+        period: () => this.refresh(entry, "period"),
+        holdReturned: () => this.refresh(entry, "change")
+      }),
+      unwatch: () => {
+      }
+    };
+    this.entries.set(key, entry);
+    entry.unwatch = this.spec.watch(input, () => this.heard(entry));
+    return entry;
+  }
+  firstRead(entry) {
+    this.refresh(entry, "first");
+    return entry;
+  }
+  refresh(entry, by) {
+    if (entry.superseding > 0) return;
+    if (entry.flight !== null) {
+      entry.changed ||= by === "change";
+      return;
+    }
+    const flight = new AbortController();
+    entry.flight = flight;
+    const startedAt = this.spec.clock.monotonic();
+    void attempt3(() => this.spec.read(entry.input, flight.signal)).then((outcome) => {
+      const fields2 = this.spec.fields(entry.input, entry.holders);
+      const ms = elapsedMs(this.spec.clock, startedAt);
+      if (flight.signal.aborted) {
+        this.refreshes.abandoned(fields2, by, ms);
+        return;
+      }
+      try {
+        this.refreshes.recorded(fields2, by, outcome, ms);
+      } finally {
+        this.store(entry, outcome);
+      }
+    }).catch((e) => {
+      this.spec.logger(
+        "error",
+        `${this.spec.name} refresh threw (${this.spec.fields(entry.input, entry.holders)}): ${String(e)}`
+      );
+    });
+  }
+  store(entry, outcome) {
+    entry.flight = null;
+    try {
+      settle(entry, outcome);
+    } finally {
+      entry.revisit.landed(outcome);
+      if (entry.changed) {
+        entry.changed = false;
+        this.refresh(entry, "change");
+      }
+    }
+  }
+  hold(entry) {
+    entry.holders++;
+    entry.revisit.hold(true);
+    this.evict();
+    return () => {
+      entry.holders--;
+      entry.revisit.hold(entry.holders > 0);
+      this.evict();
+    };
+  }
+  // A held entry is never evicted, so held entries are bounded by their
+  // holders (the render cache's budget).
+  // [LAW:single-enforcer] Run by every claim that can add an entry (a hold, a
+  // supersede) and by every release, so an entry over the bound is dropped
+  // the moment nobody holds it. An entry mid-supersede is kept like a held
+  // one: dropped, a hold returning during the move would read the world
+  // from before it.
+  evict() {
+    for (const entry of [...this.entries.values()]) {
+      if (this.entries.size <= this.spec.maxEntries) return;
+      if (entry.holders === 0 && entry.superseding === 0) this.drop(entry);
+    }
+  }
+  drop(entry) {
+    this.entries.delete(entry.key);
+    this.abandon(entry);
+    entry.unwatch();
+    entry.revisit.dispose();
+    answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
+  }
+  // The read out, if one is, stores nothing and is told to stop.
+  abandon(entry) {
+    const flight = entry.flight;
+    entry.flight = null;
+    flight?.abort(new Error(`${this.spec.name} read abandoned`));
+  }
+};
+function revisitOf(every, clock, read2) {
+  if (every === null) return new HoldReturn(read2.holdReturned);
+  const period = new Period(read2.period, clock);
+  return {
+    landed: (outcome) => period.landed(periodOf(every, outcome)),
+    hold: (held) => period.hold(held),
+    dispose: () => period.dispose()
+  };
+}
+var HoldReturn = class {
+  constructor(reread) {
+    this.reread = reread;
+  }
+  reread;
+  state = "released";
+  answered = false;
+  landed() {
+    this.answered = true;
+  }
+  hold(held) {
+    if (this.state === "disposed") return;
+    const returned2 = held && this.state === "released" && this.answered;
+    this.state = held ? "held" : "released";
+    if (returned2) this.reread();
+  }
+  dispose() {
+    this.state = "disposed";
+  }
+};
+function attempt3(read2) {
+  const threw2 = (e) => failed(`read threw: ${String(e)}`, "read");
+  try {
+    return read2().catch(threw2);
+  } catch (e) {
+    return Promise.resolve(threw2(e));
+  }
+}
+
+// src/utils/plain.ts
+init_globals();
+function digestOf2(value) {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
+    );
+  }
+  return value;
+}
+
+// src/var-system/parse.ts
+init_globals();
+var LINE_BREAK = /\r\n|\r|\n/g;
+var textParser = (text4) => ok(text4.replace(LINE_BREAK, " ").trim());
+function regexParser(regex) {
+  return (text4) => {
+    const m = regex.exec(text4);
+    const group = m?.[1];
+    return group === void 0 ? failed("regex no-match", "parse") : ok(group.replace(LINE_BREAK, " "));
+  };
+}
+var jsonParser = (text4) => {
+  try {
+    return ok(JSON.parse(text4));
+  } catch (e) {
+    return failed(`JSON parse failed: ${e.message}`, "parse");
+  }
+};
+
+// src/var-system/source-runs.ts
+var SHELL_READ_TIMEOUT_MS = 1e4;
+var digestOf3 = (identity2) => digestOf2(identity2);
+function keyHashOf(value) {
+  return crypto_default.createHash("sha256").update(value).digest("hex");
+}
+var whereOf = (read2) => read2.kind === "shell" ? `output of "${read2.command}" in ${read2.cwd}` : `"${read2.path}"`;
+function shellReader(launcher, command, cwd2, signal) {
+  return {
+    where: whereOf({ kind: "shell", command, cwd: cwd2 }),
+    read: async () => {
+      const r = await launcher.launch({
+        bin: "/bin/sh",
+        args: ["-c", command],
+        cwd: cwd2,
+        category: "user-shell",
+        timeoutMs: SHELL_READ_TIMEOUT_MS,
+        signal
+      });
+      if (r.ok) return ok(r.stdout);
+      return failed(
+        `shell "${command}" ${failureText(r, ` in ${cwd2}`)}`,
+        "read"
+      );
+    }
+  };
+}
+function fileReader(filePath2, readMode, signal) {
+  return {
+    where: whereOf({ kind: "file", path: filePath2, readMode }),
+    read: async () => {
+      try {
+        const raw = await readFile(filePath2, { encoding: "utf8", signal });
+        return ok(
+          readMode === "first-line" ? raw.split(/\r?\n/)[0] ?? "" : raw
+        );
+      } catch (e) {
+        const code = e.code ?? String(e);
+        return failed(
+          signal.aborted ? `file read aborted: ${String(signal.reason)}` : `file unreadable (${code}): ${filePath2}`,
+          "read"
+        );
+      }
+    }
+  };
+}
+function readerOf(launcher, read2, signal) {
+  switch (read2.kind) {
+    case "shell":
+      return shellReader(launcher, read2.command, read2.cwd, signal);
+    case "file":
+      return fileReader(read2.path, read2.readMode, signal);
+  }
+}
+function parserOf(parse3) {
+  switch (parse3.kind) {
+    case "text":
+      return textParser;
+    case "regex":
+      return regexParser(new RegExp(parse3.source, parse3.flags));
+    case "json":
+      return (text4) => text4.trim() === "" ? ABSENT2 : jsonParser(text4);
+  }
+}
+function parsed(read2, parser, where) {
+  if (read2.kind !== "ok") return read2;
+  const out = parser(read2.value);
+  return out.kind === "failed" ? failed(`${out.reason} in ${where}`, out.failedAt) : out;
+}
+var PathWatches = class {
+  constructor(watchers, fileEvents) {
+    this.watchers = watchers;
+    this.fileEvents = fileEvents;
+    this.releaseDelivery = fileEvents.subscribe(
+      (notice) => this.noticed(notice)
+    );
+  }
+  watchers;
+  fileEvents;
+  entries = /* @__PURE__ */ new Map();
+  releaseDelivery;
+  subscribe(filePath2, callback, onFault) {
+    const entry = this.entries.get(filePath2) ?? this.arm(filePath2);
+    entry.subscribers.set(callback, onFault);
+    onFault(this.faultOf(filePath2, entry));
+    return () => this.unsubscribe(filePath2, callback);
+  }
+  arm(filePath2) {
+    const watch2 = derived2(filePath2);
+    const entry = {
+      bound: {
+        derived: watch2,
+        held: this.watchers.follow(
+          null,
+          watch2,
+          (heard) => this.heard(filePath2, entry, heard)
+        ).watch
+      },
+      subscribers: /* @__PURE__ */ new Map()
+    };
+    this.entries.set(filePath2, entry);
+    return entry;
+  }
+  // Derive where the path can change, follow it, and say the watch's fault.
+  // A new key acquires its watch, keeping every directory both keys name.
+  rederive(filePath2, entry) {
+    const paths2 = derived2(filePath2);
+    const { watch: watch2 } = this.watchers.follow(
+      entry.bound.held,
+      paths2,
+      (heard) => this.heard(filePath2, entry, heard)
+    );
+    entry.bound = { derived: paths2, held: watch2 };
+    this.report(filePath2, entry);
+  }
+  // A window re-derives and re-reads.
+  heard(filePath2, entry, heard) {
+    const wasLeaf = entry.bound.derived.reached;
+    this.rederive(filePath2, entry);
+    if (heard.kind !== "failed" && !wasLeaf && !entry.bound.derived.reached)
+      return;
+    for (const cb of entry.subscribers.keys()) cb();
+  }
+  report(filePath2, entry) {
+    const fault = this.faultOf(filePath2, entry);
+    for (const onFault of entry.subscribers.values()) onFault(fault);
+  }
+  // The watch's fault, derived from what it holds now and whether the OS is
+  // delivering what it would hear. A stall is every watch's: it rides the
+  // delivery owner's one stream.
+  faultOf(filePath2, entry) {
+    return watchFault(
+      `watch_file ${filePath2}`,
+      entry.bound,
+      stallReason(this.fileEvents.delivery())
+    );
+  }
+  // [LAW:no-silent-failure] Delivery moved or a span closed, so the watches
+  // may have missed events: each watch re-derives where its path can change,
+  // since a directory may have appeared unheard, which says its fault, and
+  // every subscriber re-reads as if its own watch had reported. Both together,
+  // so no entry drops a stall's fault without reading again, and in one
+  // action, so one change of delivery is one publish of every entry's.
+  noticed(notice) {
+    switch (notice.kind) {
+      case "period":
+        return;
+      case "moved":
+      case "caught-up":
+        runInAction(() => {
+          for (const [filePath2, entry] of this.entries) {
+            this.rederive(filePath2, entry);
+            for (const cb of entry.subscribers.keys()) cb();
+          }
+        });
+        return;
+    }
+  }
+  unsubscribe(filePath2, callback) {
+    const entry = this.entries.get(filePath2);
+    if (!entry) return;
+    entry.subscribers.delete(callback);
+    if (entry.subscribers.size === 0) {
+      entry.bound.held.handle.release();
+      this.entries.delete(filePath2);
+    }
+  }
+  dispose() {
+    this.releaseDelivery();
+    for (const entry of this.entries.values())
+      entry.bound.held.handle.release();
+    this.entries.clear();
+  }
+  size() {
+    return this.entries.size;
+  }
+};
+var derived2 = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
+var SourceRuns = class {
+  byKind;
+  watchMgr;
+  // Each watching entry's fault, by digest, for the lanes that read it.
+  faults = observable.map(void 0, {
+    deep: false
+  });
+  constructor(deps) {
+    const logger = deps.logger ?? quietLogger;
+    const ledger = deps.ledger ?? new RefreshLedger(logger);
+    this.watchMgr = new PathWatches(
+      deps.watchers ?? new WatcherRegistry({ clock: deps.clock }),
+      deps.fileEvents ?? NO_FILE_EVENTS
+    );
+    const source = (kind) => new KeyedSource({
+      name: `source.${kind}`,
+      scope: "daemon",
+      keyOf: digestOf3,
+      fields: (identity2, holders) => `digest=${shortDigest(digestOf3(identity2))} where=${valueOf(whereOf(identity2.read))} sharedBy=${holders}`,
+      // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
+      // readers through this one function; text/regex/json are three
+      // parsers through it.
+      read: async (identity2, signal) => {
+        const reader = readerOf(deps.launcher, identity2.read, signal);
+        return parsed(
+          await reader.read(),
+          parserOf(identity2.parse),
+          reader.where
+        );
+      },
+      every: ({ refresh }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
+      watch: (identity2, changed) => {
+        if (identity2.refresh.kind !== "watch_file") return NO_WATCH();
+        const digest2 = digestOf3(identity2);
+        const unsubscribe = this.watchMgr.subscribe(
+          identity2.refresh.path,
+          changed,
+          (fault) => runInAction(() => {
+            if (fault === null) this.faults.delete(digest2);
+            else this.faults.set(digest2, fault);
+          })
+        );
+        return () => {
+          unsubscribe();
+          runInAction(() => this.faults.delete(digest2));
+        };
+      },
+      maxEntries: 0,
+      logger,
+      ledger,
+      clock: deps.clock
+    });
+    this.byKind = { shell: source("shell"), file: source("file") };
+  }
+  // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
+  // the identity's digest, created and read once on its first hold, and the
+  // lane reads it as it stands.
+  declare(holds2, identity2) {
+    const digest2 = digestOf3(identity2);
+    const lane = this.byKind[identity2.read.kind].declare(holds2, identity2);
+    return {
+      digest: digest2,
+      current: () => lane.current(),
+      fault: () => this.faults.get(digest2) ?? null
+    };
+  }
+  stats() {
+    return {
+      shell: this.byKind.shell.stats(),
+      file: this.byKind.file.stats(),
+      watches: this.watchMgr.size()
+    };
+  }
+  // Drops every entry, ending its read, its period and its watch.
+  close() {
+    this.byKind.shell.close();
+    this.byKind.file.close();
+    this.watchMgr.dispose();
+  }
+};
+
+// src/var-system/sources.ts
+var TORN_WRITE_SETTLE_MS = 250;
+var MIN_SHELL_TTL_MS = 500;
+function clampShellCache(name, policy) {
+  if (policy.kind !== "ttl") return policy;
+  if (policy.durationMs >= MIN_SHELL_TTL_MS) return policy;
+  debug(
+    `declareShell "${name}": ttl ${policy.durationMs}ms below floor ${MIN_SHELL_TTL_MS}ms; clamping`
+  );
+  return { kind: "ttl", durationMs: MIN_SHELL_TTL_MS };
+}
+function parseDuration(s) {
+  const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(s);
+  if (!m) throw new RangeError(`Invalid duration: "${s}"`);
+  const v = parseFloat(m[1]);
+  switch (m[2]) {
+    case "ms":
+      return v;
+    case "s":
+      return v * 1e3;
+    case "m":
+      return v * 6e4;
+    case "h":
+      return v * 36e5;
+    default:
+      throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
+  }
+}
+function parserIdOf(parse3) {
+  switch (parse3.kind) {
+    case "text":
+      return { kind: "text" };
+    case "regex":
+      return {
+        kind: "regex",
+        source: parse3.regex.source,
+        flags: parse3.regex.flags
+      };
+    case "json":
+      return { kind: "json" };
+  }
+}
+var UNBOUND = {
+  session: () => {
+    throw new PendingValueError(
+      "session_id",
+      "the view's session has no value yet: no view source is bound"
+    );
+  },
+  read: () => pendingOf("unread"),
+  drawnAt: () => {
+    throw new PendingValueError(
+      "colorCompatibility.effective",
+      "the drawn depth has no value yet: no view source is bound"
+    );
+  }
+};
+var found = (value) => ({ kind: "found", value });
+function resolvePath(obj, path42) {
+  let cur = obj;
+  let inDocument = false;
+  for (const part of path42.split(".")) {
+    if (!inDocument && isPending(cur)) return cur;
+    if (cur == null || typeof cur !== "object") return found(void 0);
+    inDocument ||= part === "value" && cur.kind === "ok";
+    cur = cur[part];
+  }
+  return !inDocument && isPending(cur) ? cur : found(cur);
+}
+function sourceReading(name, resolved) {
+  if (resolved.kind === "pending") return resolved;
+  const raw = resolved.value;
+  if (raw === void 0) {
+    return failed(
+      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the config declares`,
+      "read"
+    );
+  }
+  const kind = typeof raw === "object" && raw !== null ? raw.kind : void 0;
+  switch (kind) {
+    case "ok":
+    case "absent":
+    case "failed":
+      return raw;
+    default:
+      return failed(
+        `variable "${name}": the view's payload holds no source reading at "${name}"`,
+        "read"
+      );
+  }
+}
+function coerceToType(raw, type3) {
+  if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") {
+    throw new TypeError(
+      `Expected string|number|boolean from payload, got ${typeof raw}`
+    );
+  }
+  if (type3 === "string") return toString(raw);
+  if (type3 === "number") return toNumber(raw);
+  return toBool(raw);
+}
+function zeroValue(type3) {
+  if (type3 === "number") return 0;
+  if (type3 === "boolean") return false;
+  return "";
+}
+var SourceRegistry = class _SourceRegistry {
+  // defaultEmptyValue is the global fallback of last resort — the config-level
+  // `default_empty_value` from the proposal. Defaults to empty string.
+  //
+  // sessionState lets the daemon inject its singleton so state-kind variables
+  // share one MobX atom and one disk-persistence layer with the click verbs.
+  // Omitted in tests that don't exercise state vars.
+  constructor(runs, store, defaultEmptyValue = "", sessionState, parent = null, env2 = {}) {
+    this.runs = runs;
+    this.store = store;
+    this.defaultEmptyValue = defaultEmptyValue;
+    this.parent = parent;
+    this.env = env2;
+    this.sessionState = sessionState;
+  }
+  runs;
+  store;
+  defaultEmptyValue;
+  parent;
+  env;
+  lastErrors = /* @__PURE__ */ new Map();
+  // A cache policy that cannot fire is a STANDING fault, not a read's
+  // outcome: a read that succeeds afterwards says nothing about whether the
+  // source will ever run again, so no read outcome clears it. A watch that
+  // cannot hear every place its path changes lives until it can again (its
+  // own re-derive says so); a key template that throws lives
+  // until the key evaluates again. One map, since a variable has one policy.
+  // Observable, since the bar draws each fault as a refresh warning.
+  policyFaults = observable.map(void 0, {
+    deep: false
+  });
+  // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
+  // tears everything down in one call.
+  cleanups = [];
+  // [LAW:single-enforcer] What this registry holds of the daemon's source
+  // runs (source-runs.ts): one hold per entry however many of its sources
+  // read it, declared again whenever any source's identity moves, so the
+  // entry a moved key names is held before the one it leaves is released.
+  // The session's built-in entries are held by the host's collector
+  // (src/daemon/collector.ts), which declares on requests and subscriptions,
+  // not on a source's identity moving.
+  holds = new Holds();
+  // Each source's identity as its policy last named it. A policy over the
+  // source's own values names none until they answer.
+  identities = /* @__PURE__ */ new Map();
+  // [LAW:no-ambient-temporal-coupling] The lane each source reads, by name:
+  // observable, so a source's publish is a reaction over the entry it holds
+  // now, and `inFlight()` a reaction over which of them has not answered —
+  // the explicit "the runs a wait is for have ended" state a caller (a
+  // statusline request, `cc-candybar check`) awaits instead of guessing a
+  // delay, and one its deadline can stop listening to. A re-read keeps its
+  // answer standing, so no wait is for it; a new identity has none, so a
+  // wait is for it alone.
+  lanes = observable.map(void 0, {
+    deep: false
+  });
+  // [LAW:one-source-of-truth] What this registry's inputs are derived from
+  // (`bindInputs`), and so the depth the terminal draws this view's renders at
+  // — the one depth every contrast floor reads, in this registry's variable
+  // templates and in the render engine alike. Derived from the view's own
+  // settings, so a template variable whose `readableOn` read it recomputes in
+  // the turn the setting moves (edit mode staging a depth included), never at
+  // a draw.
+  inputs = observable.box(UNBOUND, {
+    deep: false
+  });
+  drawnAt = () => this.inputs.get().drawnAt();
+  // Shared engine instance — parse() is expensive; the engine is reused for
+  // all key: template compilations.
+  // [LAW:one-source-of-truth] One engine per registry, not one per variable.
+  engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
+  // The names of this registry's own async sources (shell, file), whose
+  // stored values `published` reads.
+  sourceNames = observable.array([], { deep: false });
+  // [LAW:one-source-of-truth] What this registry's sources have published, as
+  // one value that changes exactly when one of their stored values or
+  // standing faults does: the store writes a value only when its own compare
+  // finds it changed, and a fault is written only when its reason does, so a
+  // re-read that found what was stored moves nothing. A session's view reacts
+  // to it, and so its feed wakes on a publish that changed what the bar can
+  // show (openView).
+  publishedNow = computed(
+    () => ({
+      values: this.sourceNames.map((name) => this.store.stored(name)),
+      faults: [...this.policyFaults.values()]
+    })
+  );
+  published() {
+    return this.publishedNow.get();
+  }
+  // [LAW:locality-or-seam] sessionState is injected (not constructed here)
+  // so tests can substitute a fake and the daemon shares its singleton.
+  // Absent in non-daemon contexts; declareState() rejects loudly in that case
+  // rather than silently returning empty strings.
+  sessionState;
+  // [LAW:one-source-of-truth] A session's view of this directory home
+  // (brandon-unfiled-3248.8ro6, step 2): a registry of its own over a store of
+  // its own, which reads through to this one. The session's values are
+  // declared there, so its inputs, its state and its derivations are its own,
+  // and what its sources fail with is recorded there; a directory value it
+  // reads is this home's one node, and its failure this home's one record. It
+  // shares the daemon's session state, and is disposed on its
+  // own: a session leaving the directory disposes nothing of it.
+  view() {
+    return new _SourceRegistry(
+      this.runs,
+      new VariableStore(this.store.clock, this.store),
+      this.defaultEmptyValue,
+      this.sessionState,
+      this,
+      this.env
+    );
+  }
+  // [LAW:one-source-of-truth] The registry IS the owner of its store — every
+  // variable it declares lives there, and the renderer reads back through it.
+  // Exposing it read-only lets a caller that already holds the registry obtain
+  // the one store without threading a second reference that could diverge (the
+  // action runtime reads current values from this exact store).
+  get variableStore() {
+    return this.store;
+  }
+  // ─── Synchronous source kinds ─────────────────────────────────────────────
+  // literal: type inferred from value; box written once at declaration and never again.
+  declareLiteral(name, value) {
+    this.store.defineBox(name, typeOf(value), value);
+  }
+  // A document that is a known failure for as long as it is declared.
+  declareFailedDocument(name, reason) {
+    this.store.defineDocument(name, failed(reason, "parse"));
+  }
+  // A plugin's source: a document derived from the reading its view's payload
+  // carries at the source's own name — ok, absent or failed as the storage
+  // owner read the session's file, or pending while it has not answered.
+  // [LAW:no-silent-failure] A payload with nothing there is a declaration
+  // that did not take the source the config declares: a bug, read as a failure
+  // naming the variable, never as absent.
+  declareSourceDocument(name) {
+    this.store.defineDerivedDocument(
+      name,
+      () => sourceReading(name, this.inputs.get().read(name))
+    );
+  }
+  // [LAW:single-enforcer] A handle the registry's owner holds for as long as
+  // the registry lives — a render state's hold on a plugin's storage folder —
+  // released by the registry's one teardown (`dispose`), with everything else
+  // it holds.
+  own(release4) {
+    this.cleanups.push(release4);
+  }
+  // input: a derived value of its path in the bound InputSource, cast to its
+  // type. [LAW:types-are-the-program] Before its source answers it holds no
+  // value: it is not answered yet, never its default, which answers a payload
+  // that lacks the path (brandon-unfiled-3248.8ro6). A path the draw's own
+  // instant answers (DRAW_PROJECTIONS) is a projection, read by each draw.
+  declareInput(name, path42, type3, varDefault, derivation) {
+    this.store.defineDerived(
+      name,
+      type3,
+      derivation,
+      () => this.inputAt(name, path42, type3, varDefault)
+    );
+  }
+  // [LAW:single-enforcer] The one reading of an input: its path's value cast
+  // to its type, else the fallback chain with the failure recorded.
+  inputAt(name, path42, type3, varDefault) {
+    const resolved = this.inputs.get().read(path42);
+    if (resolved.kind === "pending") {
+      this.lastErrors.delete(name);
+      throw new PendingValueError(
+        name,
+        `variable "${name}" has no value yet: its source has not answered`
+      );
+    }
+    const raw = resolved.value;
+    if (raw === void 0) {
+      return this.fallbackOf(
+        name,
+        type3,
+        varDefault,
+        `input path "${path42}" not found in payload`
+      );
+    }
+    try {
+      const value = coerceToType(raw, type3);
+      this.lastErrors.delete(name);
+      return value;
+    } catch (e) {
+      return this.fallbackOf(
+        name,
+        type3,
+        varDefault,
+        e instanceof Error ? e.message : String(e)
+      );
+    }
+  }
+  // env: resolved once at declaration from the registry's environment; box written once, never again.
+  // type is always 'string' — env vars are text by nature.
+  declareEnv(name, envVar, varDefault) {
+    const raw = this.env[envVar];
+    if (raw !== void 0) {
+      this.store.defineBox(name, "string", raw);
+      return;
+    }
+    const fallback = varDefault !== void 0 ? varDefault : typeof this.defaultEmptyValue === "string" ? this.defaultEmptyValue : "";
+    this.store.defineBox(name, "string", fallback);
+    this.recordError(name, `env var "${envVar}" is not set`);
+  }
+  // ─── Async source kinds ───────────────────────────────────────────────────
+  // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
+  declareShell(name, command, opts) {
+    this.declareSource(
+      name,
+      { kind: "shell", command, cwd: opts.cwd },
+      clampShellCache(name, opts.cache),
+      opts.parse
+    );
+  }
+  // file: read the file at path (whole, or its first line) as the text the
+  // parser sees.
+  declareFile(name, filePath2, opts) {
+    this.declareSource(
+      name,
+      { kind: "file", path: filePath2, readMode: opts.readMode ?? "whole" },
+      opts.cache,
+      opts.parse
+    );
+  }
+  // [LAW:single-enforcer] THE user-source declaration: the source's node, and
+  // the one reaction that publishes into it what the entry it holds has read
+  // (source-runs.ts runs it: read → parse). The cache policy names WHICH
+  // entry, through the identity it holds (registerCachePolicy), never whether
+  // the node exists [LAW:dataflow-not-control-flow].
+  //
+  // [LAW:types-are-the-program] Only an answered reading is published: the
+  // node holds its fallback until the first entry answers, and on a key's
+  // move it holds the old entry's answer until the new entry's lands — the
+  // old `ok` is simply not overwritten yet, so a key change draws no pending
+  // flash (spec section 19).
+  declareSource(name, read2, cache2, parse3) {
+    const publish = this.publisherFor(name, parse3);
+    runInAction(() => this.sourceNames.push(name));
+    this.cleanups.push(
+      reaction(
+        () => this.lanes.get(name)?.current(),
+        (reading) => {
+          if (reading === void 0 || reading.kind === "pending") return;
+          publish(reading);
+        },
+        { fireImmediately: true }
+      )
+    );
+    this.registerCachePolicy(
+      name,
+      cache2,
+      (refresh) => this.hold(name, { read: read2, parse: parserIdOf(parse3), refresh })
+    );
+  }
+  // [LAW:single-enforcer] The one declaration of what this registry holds:
+  // every source's current identity, taken in one body so the entry a moved
+  // identity names is held before the entry it leaves is released (Holds).
+  // A source whose entry did not move keeps its lane, so its publish reaction
+  // is untouched; the lanes are set outside the body, where a publish they
+  // start cannot nest a declaration.
+  hold(name, identity2) {
+    this.identities.set(name, identity2);
+    const { result: taken } = this.holds.declare(
+      () => [...this.identities].map(([n, id2]) => {
+        const lane = this.runs.declare(this.holds, id2);
+        const prior = this.lanes.get(n);
+        return [n, prior?.digest === lane.digest ? prior : lane];
+      })
+    );
+    runInAction(() => {
+      for (const [n, lane] of taken) this.lanes.set(n, lane);
+    });
+  }
+  // [LAW:one-type-per-behavior] One total projection of the parser arm onto
+  // the node it publishes: the text arms publish a string box, the json arm a
+  // document. Selected once, at declaration — the pipeline never asks again.
+  // The run parsed by the arm's own parser (source-runs.ts), so its value is
+  // the arm's type.
+  publisherFor(name, parse3) {
+    switch (parse3.kind) {
+      case "text":
+      case "regex":
+        return this.scalarPublisher(name, parse3.default);
+      case "json":
+        return this.documentPublisher(name, parse3.default);
+    }
+  }
+  scalarPublisher(name, varDefault) {
+    const fallback = this.stringInitial(varDefault);
+    this.store.defineBox(name, "string", fallback);
+    return (outcome) => {
+      this.noteOutcome(name, outcome);
+      this.store.setBox(name, orElse(outcome, fallback));
+    };
+  }
+  // A document's fallback is the declared default, or NO document: without a
+  // default the node is pending until its first scan, then holds what the scan
+  // found — absent when it had nothing to read, failed with its reason after a
+  // bad one — which the scope proxy surfaces naming the variable
+  // [LAW:no-silent-failure]: a document has no honest empty value the way a
+  // string has "".
+  //
+  // The default stands in for a run that had nothing to READ — a missing
+  // file, a command that failed, blank output — never for text that was read
+  // and is not a document (failed in its parse phase): that is a broken
+  // writer, and reads as its failure (⚠) whatever the default says
+  // (brandon-plugins-ktag.8fv).
+  //
+  // [LAW:no-ambient-temporal-coupling] A writer rewriting a file in place
+  // (truncate, then write) is caught mid-update by any read that lands
+  // between the two, and the text it sees is not a document. Text that does
+  // not parse is therefore held back while a document is showing: the document
+  // stays, and the failure is published only if no read replaces it within
+  // TORN_WRITE_SETTLE_MS — the writer's own final write is an event that
+  // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
+  // that settle; a document that was never good shows it at once.
+  documentPublisher(name, varDefault) {
+    const fallback = varDefault === void 0 ? pendingOf("unread") : ok(varDefault);
+    this.store.defineDocument(name, fallback);
+    let clearSettling;
+    let showingRead = false;
+    this.cleanups.push(() => clearSettling?.());
+    return (raw) => {
+      clearSettling?.();
+      const outcome = raw;
+      this.noteOutcome(name, outcome);
+      const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
+      const next = readText || varDefault === void 0 ? outcome : fallback;
+      const torn2 = showingRead && readText && outcome.kind !== "ok";
+      const show2 = () => {
+        showingRead = outcome.kind === "ok";
+        this.store.setDocument(name, next);
+      };
+      if (torn2) {
+        clearSettling = this.store.clock.after(TORN_WRITE_SETTLE_MS, show2);
+      } else {
+        show2();
+      }
+    };
+  }
+  // [LAW:no-ambient-temporal-coupling] Resolves when none of the runs a wait
+  // is for is out (`awaited`), or when `signal` aborts — and then holds
+  // nothing, so a run that never ends keeps no waiter behind it. Resolves
+  // to the names still awaited: empty when all settled, the stragglers when
+  // the signal ended the wait. A signal already aborted ends it at once, so a
+  // caller holding one deadline over many waits pays it once.
+  //
+  // Asked again until it holds at this wait's own continuation: a landing
+  // that answers a key (a `depends_on` or `key` over the value that landed)
+  // holds the next lane in a reaction of the same batch, which can run after
+  // the one this wait is, so one evaluation can see nothing pending between
+  // the answer and the hold it causes.
+  async inFlight(signal) {
+    while (!signal.aborted && this.awaited().length > 0) {
+      try {
+        await when(() => this.awaited().length === 0, { signal });
+      } catch (e) {
+        if (!signal.aborted) throw e;
+      }
+    }
+    return this.awaited();
+  }
+  // The sources a wait on this registry is for: those whose held entry, here
+  // and in the home it reads through to, has not answered (rule 2's first
+  // value, or a key its facts moved). A re-read keeps the answer it has
+  // standing, so no wait is for it, whoever's period or watch started it.
+  awaited() {
+    const here = [...this.lanes].filter(([, lane]) => lane.current().kind === "pending").map(([name]) => name);
+    return [...here, ...this.parent?.awaited() ?? []];
+  }
+  // The names still awaited once every run has ended or `withinMs` has
+  // passed: empty when all settled. The state a one-shot render awaits so it
+  // renders what those sources yielded, never a guessed delay.
+  settled(withinMs) {
+    return this.inFlight(timeoutSignal(this.store.clock, withinMs));
+  }
+  // template: a variable whose value is derived by evaluating a go-template
+  // against the current variable store.  MobX auto-tracks every store.read()
+  // made during evaluation — no explicit dep declarations needed.
+  // [LAW:dataflow-not-control-flow] A derived template is a MobX computed, its
+  // invalidation graph built from the template's read pattern; a projection
+  // (one that reads the instant: src/config/loader/projections.ts) is derived
+  // again by every read, at the draw in progress.
+  declareTemplate(name, template, opts) {
+    const parsedTpl = this.engine.parse(template);
+    this.declareDerived(
+      name,
+      opts.type,
+      opts.derivation,
+      () => parsedTpl.evaluate(buildScope(this.store)).map((f) => f.plain).join(""),
+      opts.varDefault
+    );
+  }
+  // time: the instant of the draw in progress in a Go reference-time layout —
+  // a template over `now` (`{{ date <layout> now }}`), and so a projection.
+  // [LAW:one-type-per-behavior] The engine's own `date` formats it: one Go
+  // layout implementation, the one a template calling `date` gets.
+  declareTime(name, opts) {
+    const parsedTpl = this.engine.parse("{{ date .layout now }}");
+    const scope = { layout: opts.format };
+    this.declareDerived(
+      name,
+      "string",
+      "projection",
+      () => parsedTpl.evaluate(scope).map((f) => f.plain).join(""),
+      opts.varDefault
+    );
+  }
+  // [LAW:one-type-per-behavior] The one shape of a derived string variable — a
+  // template and a time variable differ only in what they compute, and a
+  // computed and a projection only in whether the store keeps the answer.
+  // Evaluated at its first read, never at declaration: a projection has no
+  // instant to read until a draw binds one, and cycles are the loader's to
+  // refuse (validateNoCycles) [LAW:single-enforcer].
+  declareDerived(name, type3, derivation, derive, fallback) {
+    this.store.defineDerived(name, type3, derivation, () => {
+      try {
+        const result = coerceToType(derive(), type3);
+        this.lastErrors.delete(name);
+        return result;
+      } catch (e) {
+        const pending2 = readPending(e);
+        if (pending2 !== void 0) {
+          this.lastErrors.delete(name);
+          throw pending2;
+        }
+        const message = e instanceof Error ? e.message : String(e);
+        this.recordError(name, message);
+        if (fallback === void 0) {
+          throw new Error(`variable "${name}": ${message}`);
+        }
+        return fallback;
+      }
+    });
+  }
+  // state: read-through to SessionState. The computed reads two deps — the
+  // bound view's session (`session()`) and SessionState itself (MobX-tracked
+  // via its internal atom). A click verb that mutates SessionState
+  // invalidates this computed.
+  // Persistence rides on SessionState's disk backing — no extra wiring.
+  //
+  // [LAW:dataflow-not-control-flow] Same body every evaluation; values
+  // determine the result, never whether code runs.
+  declareState(name, opts) {
+    if (!this.sessionState) {
+      throw new Error(
+        `declareState("${name}"): SourceRegistry was constructed without a SessionState \u2014 state-kind variables require a SessionState (the daemon provides one; tests must supply one)`
+      );
+    }
+    const sessionState = this.sessionState;
+    const fallback = opts.varDefault ?? this.stringInitial(void 0);
+    this.store.defineComputed(name, "string", () => {
+      const value = sessionState.get(this.session(), opts.key);
+      return value !== null ? value : fallback;
+    });
+  }
+  // [LAW:one-source-of-truth] The revision of the session state this render's
+  // `state` variables read (SessionStateReader.revision), found the way they
+  // find it: through the session id the render was handed. A registry with no
+  // session state reads none — one state that never changes.
+  stateRevision() {
+    return this.sessionState !== void 0 ? this.sessionState.revision(this.session()) : 0;
+  }
+  // The session the bound view draws for (InputSource.session): pending, as
+  // every input is, before a view is bound.
+  session() {
+    return this.inputs.get().session();
+  }
+  // ─── The view's source ────────────────────────────────────────────────────
+  // [LAW:single-enforcer] What this registry's inputs, and the depth, are
+  // derived from: bound once by the view that owns the registry, whose source
+  // reads its payload as it stands. A directory binds none: it reads no
+  // payload and no depth — a source whose key reads one is a view's
+  // (src/dsl/variable-scope.ts).
+  bindInputs(source) {
+    runInAction(() => this.inputs.set(source));
+  }
+  // ─── Diagnostics ─────────────────────────────────────────────────────────
+  // Returns the recorded error for a variable, or undefined if the last
+  // resolution succeeded (or the variable has never been resolved).
+  getLastError(name) {
+    if (!this.declaredHere(name)) return this.parent?.getLastError(name);
+    const read2 = this.lastErrors.get(name);
+    const fault = this.policyFaults.get(name);
+    if (fault === void 0) return read2;
+    return read2 === void 0 ? fault : {
+      timestamp: read2.timestamp,
+      message: `${fault.message}; ${read2.message}`
+    };
+  }
+  // Every variable whose cache policy cannot fire, with why: each render
+  // reports them (`RenderWarning` kind `refresh`), since the bar draws such a
+  // variable's last value with nothing of its own to say it has stopped.
+  cachePolicyFaults() {
+    return new Map([
+      ...this.parent?.cachePolicyFaults() ?? [],
+      ...this.policyFaults
+    ]);
+  }
+  // Whether `name` lives in this registry's own store, not its directory's.
+  declaredHere(name) {
+    return this.store.has(name) && !(this.parent?.store.has(name) ?? false);
+  }
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
+  // Tear down all TTL timers, fs watchers, MobX reactions, and in-flight
+  // reads registered by async source kinds.
+  // Call when the registry is no longer needed (e.g. on daemon shutdown or
+  // config hot-reload). Returns how many computeds the store released, for
+  // the caller's log line.
+  dispose() {
+    for (const cleanup of this.cleanups) cleanup();
+    this.cleanups.length = 0;
+    this.holds.close();
+    return this.store.dispose();
+  }
+  // ─── Private helpers ──────────────────────────────────────────────────────
+  // [LAW:single-enforcer] One place that maps every CachePolicy kind to the
+  // identity the source holds: a period, a watched path or nothing is the
+  // run's own refresh and is held at declaration; a policy over what the
+  // source reads names the hash of what that answered, held when it first
+  // answers and again whenever the answer moves. Adding a new policy kind
+  // means adding one case here.
+  registerCachePolicy(name, policy, hold2) {
+    switch (policy.kind) {
+      case "never":
+        hold2({ kind: "never" });
+        break;
+      case "ttl":
+        hold2({ kind: "ttl", durationMs: policy.durationMs });
+        break;
+      case "watch_file": {
+        hold2({ kind: "watch_file", path: policy.path });
+        this.cleanups.push(
+          reaction(
+            () => this.lanes.get(name)?.fault() ?? null,
+            (fault) => this.notePolicy(
+              name,
+              fault === null ? ok(void 0) : failed(fault, "read")
+            ),
+            { fireImmediately: true }
+          )
+        );
+        break;
+      }
+      case "key": {
+        const parsedKey = this.engine.parse(policy.template);
+        this.onReads(
+          name,
+          () => {
+            try {
+              return ok(
+                parsedKey.evaluate(buildScope(this.store)).map((f) => f.plain).join("")
+              );
+            } catch (e) {
+              return readPending(e) !== void 0 ? pendingOf("unread") : failed(
+                `cache key: ${e instanceof Error ? e.message : String(e)}`,
+                "read"
+              );
+            }
+          },
+          (value) => hold2({ kind: "key", hash: keyHashOf(value) })
+        );
+        break;
+      }
+      case "depends_on": {
+        this.onReads(
+          name,
+          () => {
+            const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
+            return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
+          },
+          (value) => hold2({ kind: "key", hash: keyHashOf(value) })
+        );
+        break;
+      }
+    }
+  }
+  // [LAW:one-type-per-behavior] Both policies over what a source reads — its
+  // key, the variables it depends on — hold an identity when what they read
+  // answers, and another whenever that answer differs from the one last
+  // held. Over a value not answered yet (a view's inputs before its first
+  // payload) it waits rather than reading, so its first value is one read,
+  // not a read under no value and another when the value arrives
+  // (brandon-unfiled-3248.8ro6). Measured against the last answer held
+  // rather than the previous evaluation, so one that throws for a moment and
+  // comes back unchanged holds nothing new.
+  onReads(name, reads, hold2) {
+    let heldUnder;
+    const disposer = reaction(
+      reads,
+      (answer2) => {
+        this.notePolicy(name, answer2);
+        if (answer2.kind !== "ok" || answer2.value === heldUnder) return;
+        heldUnder = answer2.value;
+        hold2(answer2.value);
+      },
+      { fireImmediately: true }
+    );
+    this.cleanups.push(disposer);
+  }
+  // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
+  // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
+  // backstop is the only "silent" path and exists because the caller has already
+  // recorded the error — downstream reads get a safe typed value, not an exception.
+  fallbackOf(name, type3, varDefault, errorMessage) {
+    this.recordError(name, errorMessage);
+    if (varDefault !== void 0) return varDefault;
+    try {
+      return coerceToType(this.defaultEmptyValue, type3);
+    } catch {
+      return zeroValue(type3);
+    }
+  }
+  // Initial string value for shell/file boxes before the first async run.
+  stringInitial(varDefault) {
+    if (varDefault !== void 0) return varDefault;
+    if (typeof this.defaultEmptyValue === "string")
+      return this.defaultEmptyValue;
+    return "";
+  }
+  recordError(name, message) {
+    this.lastErrors.set(name, {
+      timestamp: this.store.clock.now(),
+      message
+    });
+  }
+  // The one fold from a policy's own outcome — whether it can fire — to the
+  // variable's standing fault.
+  // A fault standing for the same reason keeps its record, so it moves
+  // nothing that draws it.
+  notePolicy(name, outcome) {
+    runInAction(() => {
+      if (outcome.kind !== "failed") this.policyFaults.delete(name);
+      else if (this.policyFaults.get(name)?.message !== outcome.reason)
+        this.policyFaults.set(name, {
+          timestamp: this.store.clock.now(),
+          message: outcome.reason
+        });
+    });
+  }
+  // [LAW:single-enforcer] The one fold from a source outcome to the
+  // variable's error record: ok clears it, anything else records the reason.
+  noteOutcome(name, outcome) {
+    if (outcome.kind === "ok") this.lastErrors.delete(name);
+    else
+      this.recordError(
+        name,
+        outcome.kind === "failed" ? outcome.reason : "no value"
+      );
+  }
+};
 
 // src/render/fill.ts
 init_globals();
@@ -72881,6 +72882,9 @@ function parseActionTemplate(parse3, src, name) {
 function readVar(store, name) {
   return store.has(name) ? toString(store.read(name)) : "";
 }
+function clickSession(runtime, reader) {
+  return renderBinding(runtime, reader).registry.session();
+}
 function evalTemplate(tpl, scope) {
   return tpl.evaluate(scope).map((f) => f.plain).join("");
 }
@@ -73214,7 +73218,7 @@ function renderAction(name, displays, runtime) {
     displays,
     store
   );
-  const sessionId2 = readVar(store, "session.id");
+  const sessionId2 = clickSession(runtime, `action "${name}"`);
   const { effects, active: active2 } = realize(
     declared,
     display.plain,
@@ -73238,13 +73242,13 @@ function actionFuncs(runtime) {
 
 // src/render/disclosure-close.ts
 init_globals();
-function disclosureCloseFragment(store, key) {
+function disclosureCloseFragment(sessionId2, key) {
   return linkFragment(
     DISCLOSURE_GLYPH_CLOSE,
     effectsUrl([
       {
         verb: VERB_SET_STATE,
-        args: [readVar(store, "session.id"), key, DISCLOSURE_CLOSED]
+        args: [sessionId2, key, DISCLOSURE_CLOSED]
       }
     ]),
     false
@@ -73539,7 +73543,7 @@ function requireOptionKind(runtime, name, helper) {
 function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
   const declared = runtime.compiled.get(applyName);
   const store = renderBinding(runtime, "picker").store;
-  const sessionId2 = readVar(store, "session.id");
+  const sessionId2 = clickSession(runtime, "picker");
   const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
   const optionFace = (i, label2) => {
     const option = apply.options[i];
@@ -73743,7 +73747,7 @@ function renderCarousel(applyName, apply, openName, label2, runtime) {
     );
   }
   const declared = runtime.compiled.get(applyName);
-  const sessionId2 = readVar(store, "session.id");
+  const sessionId2 = clickSession(runtime, "carousel");
   const { options } = apply;
   if (options.length === 0) return assemble([]);
   const indexAt = ringAround(options, readVar(store, apply.stateVar));
@@ -74099,7 +74103,7 @@ function renderMenu(applyName, displays, options, runtime) {
   const member = menuMember(applyName);
   const store = renderBinding(action2, "menu").store;
   const open2 = readVar(store, stateKey) === member;
-  const sessionId2 = readVar(store, "session.id");
+  const sessionId2 = clickSession(action2, "menu");
   const successor = open2 ? DISCLOSURE_CLOSED : member;
   const glyph = linkFragment(
     pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open2 ? 1 : 0),
@@ -74972,6 +74976,7 @@ var ViewParts = class {
       );
     });
     registry.bindInputs({
+      session: () => this.view.get().session,
       read: (path42) => this.inputAt(path42),
       drawnAt: () => drawnDepth(this.colorCompatibility())
     });
@@ -76051,9 +76056,9 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         // `decorationFor` each time a band item opens the next — so a nested
         // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
         renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
-        // [LAW:one-source-of-truth] The row ✕ reads the session id from the
-        // same store every other affordance's URL does.
-        closeDisclosure: (key) => disclosureCloseFragment(store, key),
+        // [LAW:one-source-of-truth] The row ✕ names the session every other
+        // affordance's URL does.
+        closeDisclosure: (key) => disclosureCloseFragment(registry.session(), key),
         placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
         lastDrawn: (id2) => last2?.placements.get(id2),
         waited: (variable) => waited.add(variable),
@@ -83104,6 +83109,7 @@ function sessionSource(deps) {
       () => composePayload(document(), compose.read(), draw2.read())
     );
     return {
+      session: sessionId2,
       payload: () => payload.read(),
       effective: () => draw2.read().effective,
       facts: document,
