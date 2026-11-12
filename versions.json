@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "6265510f73032c0f771cd0fd10f3a178141b03ea",
+      "timestamp": "2026-11-12T00:57:29.120Z",
+      "commits": [
+        {
+          "sha": "6265510f73032c0f771cd0fd10f3a178141b03ea",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-12T00:56:36Z",
+          "message": "chore(release): set `package.json` to 1.218.0\n\n## [1.218.0](https://github.com/promptctl/cc-candybar/compare/v1.217.1...v1.218.0) (2026-11-12)\n\n### Features\n\n* **renderer:** a click is a turn through answer, and its output carries what its act moved (candybar-host-renderer-x96a.8se) ([#717](https://github.com/promptctl/cc-candybar/issues/717)) ([ef62dc2](https://github.com/promptctl/cc-candybar/commit/ef62dc27975021a4aedb20614df8ab62ea63b6e7))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-718",
       "ref": "refs/pull/718/merge",
       "sha": "320d88445a65beb96eda6b34f9d3a28197b8b920",
@@ -20,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T17:55:30-07:00",
           "message": "refactor(daemon): the idle clock keys sessions by the checked SessionId, so its menu-idle turn names its session with no cast (candybar-host-renderer-x96a.snf)\n\nThe clock's records, pending counts, methods and deps take SessionId; the\nverb context's clickLanded, closeIdleMenus and the renderer's closeIdle\npass it through. Every caller already held a checked id, so nothing parses\nanew, and closeByTurn's cast and its parse-dont-validate exception go. The\nverb layer's wider sid: string stays: it reads ids, and SessionId narrows\nto string there.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "ef62dc27975021a4aedb20614df8ab62ea63b6e7",
-      "timestamp": "2026-11-12T00:48:27.538Z",
-      "commits": [
-        {
-          "sha": "ef62dc27975021a4aedb20614df8ab62ea63b6e7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T17:47:36-07:00",
-          "message": "feat(renderer): a click is a turn through answer, and its output carries what its act moved (candybar-host-renderer-x96a.8se) (#717)\n\n* feat(renderer): a click is a turn through answer, and its output carries what its act moved (candybar-host-renderer-x96a.8se)\n\nA click that runs a verb is now one `click` turn of the main renderer, and\nthe idle clock's close of a session's menus is a `menu-idle` turn. Every\nverb still acts in place, through the verb table over the daemon's verb\ncontext, now reached as the renderer's own port. So a turn's output reads\nthe subscriptions once the act has landed (its commit and its view's\nfollow), which 8e9 needs once the host learns of a moved run only from an\noutput.\n\nThe host keeps the session checkpoint, the status row's resolution and its\nopener; a turn's throw is the click's reply by its class, as before. A click\nin flight holds its session against the collector's sweep, and its release\nnames the session as a request does. The idle close turns a turn that threw\nback into a rejection, so the clock waits a timeout before retrying and\nwrites its one line.\n\n* fix(renderer): a turn that threw still names its views, and the host refuses every effect a turn answering no request returns (candybar-host-renderer-x96a.8se)\n\nA click can commit and follow its view before a later step throws, so a\nthrown turn carries the open views' subscriptions and the host takes them.\nEvery effect of a turn other than a request is refused through the host's\none path, which replaces the config turn's own refusal. Only a live session\nis held by a click: a retiring record goes once its retire settles.\n\n* fix(renderer): the host records what it knows of a click before parsing it, and stamps a refusal by its own clock (candybar-host-renderer-x96a.8se)\n\nA click whose session segment does not decode is refused before its turn\nruns, so its verb and session are noted by the host ahead of the parse and\nthe click turn records only what it learns. The idle clock's click brackets\nbelong to the main renderer's parts, not the draw's. A refused effect's\neffect-done carries the instant the host refused it, through instantAt."
         }
       ]
     }
