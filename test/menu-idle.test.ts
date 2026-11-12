@@ -17,7 +17,7 @@ import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, clickSessionOf, type VerbContext } from "../src/daemon/verbs/index";
 import { instantOf, type Instant } from "../src/utils/instant";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
@@ -71,7 +71,7 @@ describe("the flash", () => {
 
 describe("MenuIdle: the close follows the idle clock, whoever writes it", () => {
   let now = 0;
-  let closes: Array<{ sid: string; idleS: number; timeoutS: number }>;
+  let closes: Array<{ sid: SessionId; idleS: number; timeoutS: number }>;
   let failures: string[];
   let idle: MenuIdle;
   beforeEach(() => {

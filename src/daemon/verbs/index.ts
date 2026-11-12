@@ -2201,7 +2201,7 @@ function throwAll(failures: readonly unknown[]): void {
 // handler keeps its step whole. A turn the daemon's close cut off was committed
 // there, and the daemon is gone from under what follows the commit.
 async function journaled<C extends DaemonContext>(
-  sid: string | null,
+  sid: SessionId | null,
   ctx: C,
   turn: JournalTurn,
   handler: (ctx: Journaled<C>) => Promise<void>,
