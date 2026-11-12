@@ -44,7 +44,7 @@ import {
 import type { SourceParse } from "./parse.js";
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
-import { parseSessionId, type SessionId } from "../daemon/session-id.js";
+import type { SessionId } from "../daemon/session-id.js";
 import { Holds } from "../utils/holds.js";
 import { timeoutSignal } from "../time";
 import {
@@ -160,29 +160,10 @@ export interface TimeOptions {
 
 // [LAW:one-source-of-truth] state vars read through to SessionState; the
 // reactive contract is owned by SessionState's internal atom. The computed
-// reads the canonical session-id variable (SESSION_ID_VAR_NAME) and
-// dispatches through SessionStateReader.get.
+// reads the bound view's session and dispatches through SessionStateReader.get.
 export interface StateOptions {
   readonly key: string;
   readonly varDefault?: string;
-}
-
-// [LAW:one-source-of-truth] The conventional name DSL configs use for the
-// hook payload's session_id input variable. State-kind variables resolve
-// "which session am I in" from this name — no per-decl override.
-// [LAW:no-mode-explosion] One axis of variability less; configs cannot
-// drift on which variable carries the session id.
-export const SESSION_ID_VAR_NAME = "session.id";
-
-// [LAW:parse-dont-validate] exception: the session a `state` variable keys by
-// is read back from the `session.id` input, which a config can redeclare, so
-// the id the hook door checked arrives here unbranded and is checked again. A
-// value the checkpoint refuses (a non-string, or a name no file could carry)
-// reads as no session, with no warning: every `state` variable answers its
-// fallback. The fix is the view handing its checked SessionId in.
-function stateSessionOf(value: unknown): SessionId | null {
-  const parsed = parseSessionId(value);
-  return parsed.ok ? parsed.id : null;
 }
 
 // ─── Private infrastructure ───────────────────────────────────────────────────
@@ -228,6 +209,7 @@ export interface Published {
 // floor reads. A read is tracked, so an input moves in the turn its value
 // does, and nothing else moves it.
 export interface InputSource {
+  session(): SessionId;
   read(path: string): Resolved;
   drawnAt(): ColorDepth;
 }
@@ -237,6 +219,12 @@ export interface InputSource {
 // and its depth neither, so a key measuring a floor waits for the view's
 // rather than running once at a depth no draw is at.
 const UNBOUND: InputSource = {
+  session: () => {
+    throw new PendingValueError(
+      "session_id",
+      "the view's session has no value yet: no view source is bound",
+    );
+  },
   read: () => pendingOf("unread"),
   drawnAt: () => {
     throw new PendingValueError(
@@ -467,7 +455,7 @@ export class SourceRegistry {
   // variable it declares lives there, and the renderer reads back through it.
   // Exposing it read-only lets a caller that already holds the registry obtain
   // the one store without threading a second reference that could diverge (the
-  // action runtime reads session.id/current values from this exact store).
+  // action runtime reads current values from this exact store).
   get variableStore(): VariableStore {
     return this.store;
   }
@@ -892,10 +880,9 @@ export class SourceRegistry {
   }
 
   // state: read-through to SessionState. The computed reads two deps — the
-  // canonical session-id input variable (SESSION_ID_VAR_NAME, refreshed per
-  // render from input) and SessionState itself (MobX-tracked via its
-  // internal atom). A click verb that mutates SessionState invalidates this
-  // computed; a sessionId change (per-render) also invalidates it.
+  // bound view's session (`session()`) and SessionState itself (MobX-tracked
+  // via its internal atom). A click verb that mutates SessionState
+  // invalidates this computed.
   // Persistence rides on SessionState's disk backing — no extra wiring.
   //
   // [LAW:dataflow-not-control-flow] Same body every evaluation; values
@@ -909,16 +896,10 @@ export class SourceRegistry {
     }
     const sessionState = this.sessionState;
     const fallback = opts.varDefault ?? this.stringInitial(undefined);
-    this.store.defineComputed(name, "string", (read) => {
-      // [LAW:types-are-the-program] By convention session.id is declared as
-      // a string-typed input variable. The var-system's type discipline
-      // (assertType in store.ts) enforces that at declaration; we read its
-      // value as a string here. A user who redeclares session.id as a
-      // non-string variable receives empty state lookups — the failure
-      // mode is loud-by-absence rather than silently coerced.
-      const sessionId = stateSessionOf(read(SESSION_ID_VAR_NAME));
-      if (sessionId === null) return fallback;
-      const value = sessionState.get(sessionId, opts.key);
+    this.store.defineComputed(name, "string", () => {
+      // [LAW:parse-dont-validate] The view's checked session, never the
+      // `session.id` variable a config can redeclare.
+      const value = sessionState.get(this.session(), opts.key);
       return value !== null ? value : fallback;
     });
   }
@@ -926,15 +907,17 @@ export class SourceRegistry {
   // [LAW:one-source-of-truth] The revision of the session state this render's
   // `state` variables read (SessionStateReader.revision), found the way they
   // find it: through the session id the render was handed. A registry with no
-  // session state, or a render naming no session, reads none — one state that
-  // never changes.
+  // session state reads none — one state that never changes.
   stateRevision(): number {
-    const sessionId = this.store.has(SESSION_ID_VAR_NAME)
-      ? stateSessionOf(this.store.read(SESSION_ID_VAR_NAME))
-      : null;
-    return this.sessionState !== undefined && sessionId !== null
-      ? this.sessionState.revision(sessionId)
+    return this.sessionState !== undefined
+      ? this.sessionState.revision(this.session())
       : 0;
+  }
+
+  // The session the bound view draws for (InputSource.session): pending, as
+  // every input is, before a view is bound.
+  session(): SessionId {
+    return this.inputs.get().session();
   }
 
   // ─── The view's source ────────────────────────────────────────────────────

@@ -21,6 +21,7 @@
 // FuncMap in as data). The generic engine never imports this module.
 
 import type { PlacedSegment } from "../dsl/node-registry.js";
+import type { SessionId } from "../daemon/session-id.js";
 import { RichText, Style } from "@promptctl/rich-js";
 import type { Palette } from "@promptctl/rich-js";
 import type { FuncMap, Template } from "@promptctl/go-template-js";
@@ -270,8 +271,8 @@ export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes
 // over. Populated after the engine is constructed (the func references the
 // engine, the compiled actions reference the engine — the holder breaks the
-// cycle). The render in progress is bound into it, so the action reads
-// session.id and the current value from the same store the rest of the render
+// cycle). The render in progress is bound into it, so the action reads its
+// session and the current value from the same view the rest of the render
 // does.
 export interface ActionRuntime {
   // [LAW:no-ambient-temporal-coupling] The render in progress, bound by
@@ -307,12 +308,13 @@ export interface RenderLook extends RenderPalettes {
  */
 export interface RenderBinding {
   // [LAW:one-source-of-truth] The store the render reads every variable from —
-  // so an action reads session.id and the current values the bar shows.
+  // so an action reads the current values the bar shows.
   readonly store: VariableStore;
   // The depth the render draws at, its view's (SourceRegistry.drawnAt). Its
   // instant is no part of the binding: the engine's clock reads the draw in
   // progress (template-engine/engine.ts, bindClock).
-  readonly registry: Pick<SourceRegistry, "drawnAt">;
+  // And the session its view draws for, which every click URL names.
+  readonly registry: Pick<SourceRegistry, "drawnAt" | "session">;
   // [LAW:locality-or-seam] The width the render's strip wraps to (the value
   // `term.cols` carries), so fitting a row reads no variable a config must
   // declare.
@@ -722,6 +724,15 @@ export function readVar(store: VariableStore, name: string): string {
   return store.has(name) ? varToString(store.read(name)) : "";
 }
 
+// [LAW:parse-dont-validate] The session a click names: the view's checked id,
+// never the `session.id` variable a config can redeclare.
+export function clickSession(
+  runtime: ActionRuntime,
+  reader: string,
+): SessionId {
+  return renderBinding(runtime, reader).registry.session();
+}
+
 function evalTemplate(tpl: Template<RichText>, scope: object): string {
   return tpl
     .evaluate(scope)
@@ -813,7 +824,7 @@ export function realize(
   display: string,
   boundValue: string | undefined,
   store: VariableStore,
-  sessionId: string,
+  sessionId: SessionId,
   signer: LinkSigner,
 ): { effects: readonly Effect[]; active: boolean } {
   switch (c.kind) {
@@ -1175,7 +1186,7 @@ export function renderAction(
     displays,
     store,
   );
-  const sessionId = readVar(store, "session.id");
+  const sessionId = clickSession(runtime, `action "${name}"`);
   const { effects, active } = realize(
     declared,
     display.plain,

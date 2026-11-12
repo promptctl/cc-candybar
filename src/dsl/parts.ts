@@ -311,6 +311,7 @@ export class ViewParts {
     // last: binding reruns, in its action, every cache policy already declared
     // over an input, and one reaching a rule reads this view's binding.
     registry.bindInputs({
+      session: () => this.view.get().session,
       read: (path) => this.inputAt(path),
       drawnAt: () => drawnDepth(this.colorCompatibility()),
     });

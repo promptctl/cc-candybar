@@ -23,7 +23,6 @@ import {
   CONFIG_KEY_TO_EFFECTIVE_VAR,
   SESSION_KEY_TO_EFFECTIVE_VAR,
 } from "./setting-projections.js";
-import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
 
 export interface SynthesisArtifacts {
   readonly variables: Readonly<Record<string, VariableDecl>>;
@@ -33,9 +32,8 @@ export interface SynthesisArtifacts {
 
 // Every variable the artifacts READ. Three kinds of read: the dotted refs of
 // every template (segment fields, node `when`s and the lead/trail drawn in a
-// segment node's cell, template variables, copy/open actions); session.id, which realizing an action reads for the click's first
-// wire segment (render/action.ts) and a `state` variable reads to key its
-// session (SourceRegistry.declareState); and the `.effective` projection a
+// segment node's cell, template variables, copy/open actions); and the
+// `.effective` projection a
 // `set` or `persist` on a setting reads its current value back through
 // (registerDslConfig's stateKeyToVar, CONFIG_KEY_TO_EFFECTIVE_VAR).
 function synthesisReads(
@@ -74,10 +72,8 @@ function synthesisReads(
   }
   for (const v of Object.values(artifacts.variables)) {
     if (v.kind === "template") add(v.template);
-    if (v.kind === "state") reads.add(SESSION_ID_VAR_NAME);
   }
   for (const a of Object.values(artifacts.actions)) {
-    reads.add(SESSION_ID_VAR_NAME);
     // [LAW:one-source-of-truth] Every arm's text, as the one walker lists it.
     for (const [, source] of actionTemplates(a)) add(source);
     const setBack =

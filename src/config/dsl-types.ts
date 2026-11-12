@@ -702,12 +702,9 @@ export interface TimeVarDecl {
 // variable's downstream computeds automatically. Persistence rides for free
 // on SessionState's disk backing.
 //
-// The session id is resolved from the conventional `session.id` variable —
-// that name is the canonical anchor for "which session am I in," declared
-// once by DSL configs as an input variable carrying hook_data.session_id.
-// [LAW:no-mode-explosion] No per-decl override knob: a single canonical
-// session-id source keeps every state var's resolution uniform and removes
-// an axis along which configs could drift from each other.
+// [LAW:no-mode-explosion] The session is the view's own, as the hook door
+// checked it: no per-decl knob, no variable, and so no config, names which
+// session's state a `state` variable reads.
 export interface StateVarDecl {
   readonly kind: "state";
   readonly key: string;

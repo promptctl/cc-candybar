@@ -10,20 +10,20 @@
 // body does not, so this write is the pair alone.
 //
 // [LAW:effects-at-boundaries] A pure description — a link span carrying the
-// click URL — built from the store's session id; the click itself happens in
+// click URL — built from the view's session; the click itself happens in
 // the daemon's verb handler like every other affordance on the bar.
 
 import type { RichText } from "@promptctl/rich-js";
-import type { VariableStore } from "../var-system/store.js";
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
 } from "../config/disclosure.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
-import { linkFragment, readVar } from "./action.js";
+import { linkFragment } from "./action.js";
+import type { SessionId } from "../daemon/session-id.js";
 
 export function disclosureCloseFragment(
-  store: VariableStore,
+  sessionId: SessionId,
   key: string,
 ): RichText {
   return linkFragment(
@@ -31,7 +31,7 @@ export function disclosureCloseFragment(
     effectsUrl([
       {
         verb: VERB_SET_STATE,
-        args: [readVar(store, "session.id"), key, DISCLOSURE_CLOSED],
+        args: [sessionId, key, DISCLOSURE_CLOSED],
       },
     ]),
     false,

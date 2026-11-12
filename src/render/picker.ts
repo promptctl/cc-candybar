@@ -31,6 +31,7 @@ import {
   linkFragment,
   linkOver,
   realize,
+  clickSession,
   readVar,
   renderBinding,
   renderLook,
@@ -318,7 +319,7 @@ export function renderPicker(
   // write" to drift from realize's.
   const declared = runtime.compiled.get(applyName)!;
   const store = renderBinding(runtime, "picker").store;
-  const sessionId = readVar(store, "session.id");
+  const sessionId = clickSession(runtime, "picker");
   // [LAW:no-defensive-null-guards] layout-op-option carries no `stateVar` —
   // a structural insert is a one-shot trigger, not a persisted single value,
   // so there is no "current selection" to mark. `undefined` here (never a

@@ -9,6 +9,7 @@
 // so "spawns once" is a count of lines, and "in the turn the fact moved" is
 // the run in flight before any draw.
 
+import { TEST_SESSION } from "./helpers/payload-session";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { processLauncher } from "./helpers/host";
 import fs from "node:fs";
@@ -56,6 +57,7 @@ function viewOver(
     () => false,
   );
   bindView(compiled, store, registry, {
+    session: TEST_SESSION,
     payload: () => answer.get(),
     selections: () => selections,
   });

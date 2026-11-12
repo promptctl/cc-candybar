@@ -12,7 +12,6 @@
 
 import type { VariableDecl } from "./dsl-types.js";
 import type { DiagnosticsProjection } from "../render/diagnostics.js";
-import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
 import {
   ANSWERING,
   drawingVar,
@@ -74,7 +73,7 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     path: "workspace.project_dir",
     default: "",
   },
-  [SESSION_ID_VAR_NAME]: { kind: "input", path: "session_id", default: "" },
+  "session.id": { kind: "input", path: "session_id", default: "" },
   // Transcript path (a top-level hookData field, spread onto the payload
   // root by projectPayload). Read by the quick-action tray's
   // openTranscript action — pass-through, no projection.

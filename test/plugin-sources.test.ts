@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { TEST_SESSION } from "./helpers/payload-session";
 import { reaction, runInAction } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
@@ -740,6 +741,7 @@ describe("a source's document", () => {
     const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store);
     registry.declareSourceDocument(STATUS);
     registry.bindInputs({
+      session: () => TEST_SESSION,
       read: (p) => resolvePath(payload(), p),
       drawnAt: () => {
         throw new Error("no depth is read");

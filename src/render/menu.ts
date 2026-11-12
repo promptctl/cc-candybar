@@ -51,6 +51,7 @@ import { DISCLOSURE_CLOSED, pickCycleDisplay } from "../config/disclosure.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
   linkFragment,
+  clickSession,
   readVar,
   renderBinding,
   renderLook,
@@ -126,7 +127,7 @@ function renderMenu(
   // [LAW:decomposition] — does the same. The synthesized cycle action stays the
   // GATE source (deriveActionValidators); both keys are independently gated, so the
   // coupled batch passes the same wire gate every click does [LAW:single-enforcer].
-  const sessionId = readVar(store, "session.id");
+  const sessionId = clickSession(action, "menu");
   const successor = open ? DISCLOSURE_CLOSED : member;
   // [LAW:one-source-of-truth] The trigger's text is AUTHORED, resolved through
   // the one display rule a cycle `{{ action }}` uses — a menu's disclosure is a

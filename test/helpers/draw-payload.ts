@@ -15,6 +15,7 @@ import type { Instant } from "../../src/utils/instant";
 import type { SourceRegistry } from "../../src/var-system/sources";
 import type { VariableStore } from "../../src/var-system/store";
 import { globalsFor } from "./selection";
+import { sessionOfPayload } from "./payload-session";
 
 export function drawPayload(
   config: ValidatedConfig,
@@ -31,6 +32,24 @@ export function drawPayload(
   // the bar does.
   selection: RenderSelection = globalsFor(config),
 ): DrawnFrame {
-  const drawn = bindPayload(compiled, store, registry, payload, opts, selection);
-  return drawDsl(config, compiled, store, registry, drawn, at, opts, observers, selection);
+  const drawn = bindPayload(
+    compiled,
+    store,
+    registry,
+    payload,
+    opts,
+    selection,
+    sessionOfPayload(payload),
+  );
+  return drawDsl(
+    config,
+    compiled,
+    store,
+    registry,
+    drawn,
+    at,
+    opts,
+    observers,
+    selection,
+  );
 }

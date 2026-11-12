@@ -6,12 +6,17 @@
 // either.
 
 import type { EffectiveGlobals } from "../config/effective-globals.js";
+import type { SessionId } from "../daemon/session-id.js";
 
 // The selections whose config rung may hold a rule, as the resolution left
 // them: a decided name, or the rule the view's slot settles.
 export type Selections = Pick<EffectiveGlobals, "theme" | "style" | "effect">;
 
 export interface ViewSource {
+  // [LAW:parse-dont-validate] The session the view draws for, as the hook
+  // door checked it: every `state` read and every click URL keys by this,
+  // never by a variable a config can redeclare.
+  readonly session: SessionId;
   readonly payload: () => unknown;
   readonly selections: () => Selections;
 }
@@ -22,6 +27,11 @@ export interface ViewSource {
 export function fixedSource(
   payload: unknown,
   selections: Selections,
+  session: SessionId,
 ): ViewSource {
-  return { payload: () => payload, selections: () => selections };
+  return {
+    session,
+    payload: () => payload,
+    selections: () => selections,
+  };
 }
