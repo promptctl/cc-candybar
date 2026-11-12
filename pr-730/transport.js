@@ -72346,7 +72346,7 @@ var SourceRegistry = class _SourceRegistry {
   // back unchanged names nothing new; what it failed with is the variable's
   // standing fault (notePolicy).
   answeredUnder(name, reads) {
-    const answer2 = computed(reads);
+    const answer2 = computed(reads, { equals: compareStructural });
     this.cleanups.push(
       reaction(
         () => answer2.get(),

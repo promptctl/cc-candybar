@@ -4,15 +4,22 @@
     {
       "version": "pr-730",
       "ref": "refs/pull/730/merge",
-      "sha": "db52885197815364d8a4d457a3b103a2e4493607",
-      "timestamp": "2026-11-12T09:20:40.749Z",
+      "sha": "d2227a79779d1f47adc5c26cd83fb39e029004af",
+      "timestamp": "2026-11-12T09:23:21.523Z",
       "commits": [
         {
-          "sha": "db52885197815364d8a4d457a3b103a2e4493607",
+          "sha": "d2227a79779d1f47adc5c26cd83fb39e029004af",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:19:34Z",
-          "message": "Merge a47821f7dc551c3bdbb9ad89d9bd9d39ac8abeaa into 717218f3277b68494d6138b7195debffd0a866d0\n"
+          "timestamp": "2026-11-12T09:22:21Z",
+          "message": "Merge c083a0b517ed29ad79a0cc11fe4775383852cf8e into 717218f3277b68494d6138b7195debffd0a866d0\n"
+        },
+        {
+          "sha": "c083a0b517ed29ad79a0cc11fe4775383852cf8e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T02:22:11-07:00",
+          "message": "perf(sources): a key or depends_on policy compares what it read by value, so an input that moved without moving it hashes nothing (candybar-host-renderer-x96a.8e9)\n"
         },
         {
           "sha": "a47821f7dc551c3bdbb9ad89d9bd9d39ac8abeaa",
