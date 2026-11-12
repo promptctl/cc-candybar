@@ -4,15 +4,22 @@
     {
       "version": "pr-729",
       "ref": "refs/pull/729/merge",
-      "sha": "1f95018fbf6545dc0cf266cc14eeeb8c190846b2",
-      "timestamp": "2026-11-12T07:42:52.724Z",
+      "sha": "4cfbdab453d3c24f46a352410f6dfc41b4e5a286",
+      "timestamp": "2026-11-12T07:52:59.532Z",
       "commits": [
         {
-          "sha": "1f95018fbf6545dc0cf266cc14eeeb8c190846b2",
+          "sha": "4cfbdab453d3c24f46a352410f6dfc41b4e5a286",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:41:54-07:00",
-          "message": "Merge 429e248b2f77056555d38f902bd9235d9104f668 into 7c43611a9831800d0c61d84c0a4dbcebc50c6fda\n"
+          "timestamp": "2026-11-12T07:52:03Z",
+          "message": "Merge 99915b395361303588bffd9da1ae8983bc7d2360 into 7c43611a9831800d0c61d84c0a4dbcebc50c6fda\n"
+        },
+        {
+          "sha": "99915b395361303588bffd9da1ae8983bc7d2360",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T00:51:51-07:00",
+          "message": "fix(daemon): request ids count every kind apart from the render total, the render event records its id, and a test reads only its own daemon's click event (candybar-host-renderer-x96a.9m0)\n"
         },
         {
           "sha": "429e248b2f77056555d38f902bd9235d9104f668",

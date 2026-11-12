@@ -67238,10 +67238,12 @@ var RuntimeStats = class _RuntimeStats {
   inFlight = 0;
   unknownHookFields = /* @__PURE__ */ new Set();
   // [LAW:single-enforcer] Where a request is accepted: its id is the count
-  // of requests accepted so far, so ids follow the order they arrived.
+  // of requests of every kind accepted so far, so ids follow the order they
+  // arrived. Apart from `requestsTotal`, which counts renders alone.
+  accepted = 0;
   accept() {
     return {
-      id: ++this.requestsTotal,
+      id: ++this.accepted,
       at: this.clock.monotonic()
     };
   }
@@ -77843,6 +77845,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const t0 = clock.monotonic();
     const queuedMs = spanMs(accepted.at, t0);
     const facts = [];
+    stats.requestsTotal++;
     const order2 = accepted.id;
     const checked = checkRenderRequest(req, stats, parts.log, parts.home);
     const sighted = (req2, frame2) => renderSightings.see(
@@ -77869,6 +77872,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const recorded2 = (rendered) => {
       if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
       noteFacts(facts, {
+        req: String(accepted.id),
         timedOut: timedOut() ? "Y" : "N",
         clientLeft: clientLeft() ? "Y" : "N",
         queued: `${queuedMs}ms`
