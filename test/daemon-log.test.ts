@@ -299,7 +299,9 @@ describe("a disposed DaemonLog", () => {
   });
 
   test("a flush under way when it is disposed ends the descriptor it opens", async () => {
-    const opened: number[] = [];
+    // Every open in the worker passes this spy, so only the log file's own
+    // opens are counted: another file opening meanwhile is not the flush's.
+    const opened: Array<{ file: unknown; fd: number }> = [];
     const realOpen = fs.open;
     const openSpy = jest
       .spyOn(fs, "open")
@@ -308,7 +310,7 @@ describe("a disposed DaemonLog", () => {
         (realOpen as (...a: unknown[]) => void)(
           ...args.slice(0, -1),
           (err: Error | null, fd: number) => {
-            if (err === null) opened.push(fd);
+            if (err === null) opened.push({ file: args[0], fd });
             cb(err, fd);
           },
         );
@@ -317,12 +319,13 @@ describe("a disposed DaemonLog", () => {
     try {
       await withFreshLog(
         () => {},
-        async (dlog, _logFile, drained, log) => {
+        async (dlog, logFile, drained, log) => {
           dlog("info", "mid-flush");
           log.dispose();
           await drained();
-          expect(opened).toHaveLength(1);
-          expect(closeSpy).toHaveBeenCalledWith(opened[0]);
+          const own = opened.filter((o) => o.file === logFile);
+          expect(own).toHaveLength(1);
+          expect(closeSpy).toHaveBeenCalledWith(own[0]!.fd);
         },
       );
     } finally {
