@@ -229,10 +229,12 @@ export class RuntimeStats {
   }
 
   // [LAW:single-enforcer] Where a request is accepted: its id is the count
-  // of requests accepted so far, so ids follow the order they arrived.
+  // of requests of every kind accepted so far, so ids follow the order they
+  // arrived. Apart from `requestsTotal`, which counts renders alone.
+  private accepted = 0;
   accept(): Acceptance {
     return {
-      id: ++this.requestsTotal as RequestId,
+      id: ++this.accepted as RequestId,
       at: this.clock.monotonic(),
     };
   }

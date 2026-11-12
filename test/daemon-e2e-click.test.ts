@@ -13,7 +13,9 @@ import {
   encodeFrame,
   makeFrameReader,
   PROTOCOL_VERSION,
+  type Response,
 } from "../src/daemon/protocol";
+import type { RequestId } from "../src/renderer/interface";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
 import {
   requestEvent,
@@ -49,11 +51,13 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
               error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
               code: "TIMEOUT",
               daemonV: PROTOCOL_VERSION,
-            }),
+              request: clicks as RequestId,
+            } satisfies Response),
           );
           const { level, line } = requestEvent(
             "click",
             [
+              ["req", String(clicks)],
               ["queued", "240ms"],
               ["verb", "dispatch"],
               ["timedOut", "Y"],

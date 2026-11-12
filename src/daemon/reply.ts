@@ -317,6 +317,7 @@ export async function replyTo(
     // A throw is this request's own RENDER_FAILED reply, so the event is the
     // one record of it and the connection's catch never sees a render.
     const facts: RequestFacts = [];
+    stats.requestsTotal++;
     // Where this request came in the order they arrived: renders of one session
     // can finish out of it.
     // [LAW:one-source-of-truth] The request's id, its place in the order the
@@ -367,8 +368,9 @@ export async function replyTo(
       // and how long the request was queued, from the connection's accept,
       // before it began: the daemon's own delay and the client's sending of its
       // frame both count, so a round trip longer than `took` is time spent
-      // there.
+      // there. And which request this was, the id a TIMEOUT reply carries.
       noteFacts(facts, {
+        req: String(accepted.id),
         timedOut: timedOut() ? "Y" : "N",
         clientLeft: clientLeft() ? "Y" : "N",
         queued: `${queuedMs}ms`,
@@ -768,7 +770,7 @@ async function handleClick(
 }
 
 // [LAW:single-enforcer] The reply a click's outcome is answered with.
-function clickReply(outcome: RequestOutcome): Response {
+export function clickReply(outcome: RequestOutcome): Response {
   switch (outcome.kind) {
     case "ok":
       return { ok: true, output: "" };

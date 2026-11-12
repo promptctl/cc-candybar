@@ -43,6 +43,8 @@ import {
 } from "./daemon-log";
 import { until } from "./until";
 import { fieldOf, fieldsOf } from "../../src/utils/logfmt";
+import { clickReply } from "../../src/daemon/reply";
+import type { RequestOutcome } from "../../src/daemon/request-event";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
 export const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
@@ -79,10 +81,12 @@ export function answeredEvents(log: string, sessionId: string): string[] {
 }
 
 // The click event of the request the daemon accepted as `id`, or "" while
-// none is written.
-export function clickEventOf(log: string, id: number): string {
+// none is written. Ids count from one in each daemon's life and the log
+// outlives a daemon, so only lines past `from` (the log's line count when the
+// click was sent) can be this click's.
+export function clickEventOf(log: string, id: number, from: number): string {
   return (
-    logLines(log).find(
+    logLines(log).slice(from).find(
       (l) => l.includes("] click ") && fieldsOf(l).get("req") === String(id),
     ) ?? ""
   );
@@ -278,13 +282,14 @@ export async function clickAnswer(
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<ClickAnswer> {
   const { log } = endpointOf(target);
+  const from = logLines(log).length;
   const resp = await sendClick(target, url, replyBudgetMs);
   if (resp.ok || resp.code !== "TIMEOUT") return { kind: "replied", resp };
   let event = "";
   // The event is the click's answer by another road, so its wait gets the
   // reply's budget again, counted from the TIMEOUT.
   await until(
-    () => (event = clickEventOf(log, resp.request)) !== "",
+    () => (event = clickEventOf(log, resp.request, from)) !== "",
     `the click event of request ${resp.request} (${url})`,
     replyBudgetMs,
   );
@@ -302,7 +307,11 @@ export const toldOf = (answer: ClickAnswer): string =>
 
 // What the daemon said of the click, in full: its reply, or its event.
 export const saidOf = (answer: ClickAnswer): string =>
-  answer.kind === "timed-out" ? answer.event : JSON.stringify(answer.resp);
+  answer.kind === "timed-out"
+    ? answer.event
+    : answer.resp.ok
+      ? "ok"
+      : `${answer.resp.error} (${answer.resp.code})`;
 
 // `clickAnswer`, for a test whose click must land.
 export async function click(
@@ -314,21 +323,24 @@ export async function click(
   if (toldOf(answer) !== "ok") throw new Error(`click failed: ${saidOf(answer)}`);
 }
 
-// The reply code a click outcome is answered with, when its reply reaches
-// the client. `abandoned` is missing because only a click answered TIMEOUT
-// is abandoned, so a click that was answered RENDER_FAILED threw.
-const REPLY_CODE = { "bad-request": "BAD_REQUEST", threw: "RENDER_FAILED" } as const;
+// [LAW:one-source-of-truth] The outcomes a test expects a refusal to have,
+// each answered by the daemon's own reply for it.
+const REFUSAL = {
+  "bad-request": { kind: "bad-request", problems: [] },
+  threw: { kind: "threw", error: new Error() },
+} as const satisfies Record<string, RequestOutcome>;
 
 // `clickAnswer`, for a test whose click the daemon must refuse: a forged link
 // is a bad request, and a click whose verb fails threw.
 export async function refusedClick(
   target: DaemonTarget,
   url: string,
-  outcome: keyof typeof REPLY_CODE,
+  outcome: keyof typeof REFUSAL,
 ): Promise<void> {
   const answer = await clickAnswer(target, url);
+  const replied = clickReply(REFUSAL[outcome]);
   expect(toldOf(answer)).toBe(
-    answer.kind === "timed-out" ? outcome : REPLY_CODE[outcome],
+    answer.kind === "timed-out" ? outcome : replied.ok ? "ok" : replied.code,
   );
 }
 
