@@ -84,7 +84,7 @@ describe("SessionState disk persistence", () => {
   });
 
   // [LAW:parse-dont-validate] The file's keys cross the session id
-  // checkpoint on load: a refused key is reported and left behind, and the
+  // checkpoint on load: a refused key is reported and dropped, and the
   // sessions beside it load whole.
   it("a stored key the session id checkpoint refuses is reported and not loaded", () => {
     writeFileSync(

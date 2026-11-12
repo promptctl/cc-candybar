@@ -1020,14 +1020,11 @@ export function laneSessionOf(
   req: CheckedRenderRequest,
 ): LaneSession {
   const { sessionState } = parts;
+  const sessionId = req.hookData.session_id;
   return {
-    sessionId: req.hookData.session_id,
+    sessionId,
     hints: req.hints,
-    origin: sessionRenderOrigin(
-      req.requested,
-      sessionState,
-      req.hookData.session_id,
-    ),
+    origin: sessionRenderOrigin(req.requested, sessionState, sessionId),
     transcript: req.hookData.transcript_path,
     answered: answeredOf(req.hookData),
   };

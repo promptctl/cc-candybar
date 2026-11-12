@@ -33,7 +33,7 @@ import type { DaemonLogger } from "../utils/logger";
 import { recordingView, type SessionStateRW } from "./session-state";
 import { BadVerbArgs } from "./verb-error";
 import { writeAtomic } from "../utils/atomic-write.js";
-import { parseSessionId, type SessionId } from "./session-id";
+import { sessionKeyed, type SessionId } from "./session-id";
 
 // [LAW:types-are-the-program] What a change touched and the two states it
 // stepped between. `null` is absence on both kinds: an unset session key, a
@@ -734,17 +734,14 @@ export function fileHistoryStorage(
           Object.values(parsed).every(isSessionHistory)
         ) {
           const retired = new Set<string>();
-          for (const [sid, history] of Object.entries(parsed as HistoryState)) {
-            const id = parseSessionId(sid);
-            if (id.ok) {
-              loaded.set(id.id, withoutRetiredKeys(history, retired));
-            } else {
-              logger(
-                "warn",
-                `settings-history load: dropped session key ${JSON.stringify(sid)}: session id ${id.problem}`,
-              );
-            }
-          }
+          const keyed = sessionKeyed(parsed as HistoryState, (key, problem) =>
+            logger(
+              "warn",
+              `settings-history load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
+            ),
+          );
+          for (const [id, history] of keyed)
+            loaded.set(id, withoutRetiredKeys(history, retired));
           if (retired.size > 0) {
             logger(
               "warn",

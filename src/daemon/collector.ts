@@ -188,11 +188,12 @@ export class Collector {
   // a retiring session makes it live again.
   requested(req: ViewFacts): WorldState {
     const locator = locatorOf(req);
+    const sessionId = req.hookData.session_id;
     const document = runInAction(() => {
-      const held = this.records.get(req.hookData.session_id);
+      const held = this.records.get(sessionId);
       if (held === undefined) {
-        const opened = this.open(req.hookData.session_id, locator);
-        this.records.set(req.hookData.session_id, opened);
+        const opened = this.open(sessionId, locator);
+        this.records.set(sessionId, opened);
         return opened.stamped.document;
       }
       held.active = true;

@@ -434,7 +434,7 @@ describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
     ).toEqual({
       kind: "failed",
       reason:
-        'the running daemon (1.0.0) reported clients without their age or session: [{"client":null}]',
+        'the running daemon (1.0.0) reported clients without their age: [{"client":null}]',
     });
     expect(
       parseDaemonClients(stats({ bundle: BUNDLE, clients: [{ client: null, ago: 1 }] })),

@@ -6,7 +6,7 @@ import type {
   SessionSnapshot,
   SessionStorage,
 } from "./session-state";
-import { parseSessionId, type SessionId } from "./session-id";
+import { sessionKeyed, type SessionId } from "./session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
 // [LAW:no-silent-failure] Corrupt/missing file → empty state is the *defined*
@@ -79,20 +79,13 @@ export class FileSessionStorage implements SessionStorage {
       const parsed: unknown = JSON.parse(raw);
       if (isSnapshot(parsed)) {
         // [LAW:no-silent-failure] A key the session id checkpoint refuses is
-        // reported here, the one place a file's keys are read, and dropped; the
-        // keys that remain come back branded.
-        for (const [key, values] of Object.entries(parsed)) {
-          const id = parseSessionId(key);
-          if (id.ok) {
-            loaded.set(id.id, values);
-          } else {
-            this.logger(
-              "warn",
-              `session-state load: dropped session key ${JSON.stringify(key)}: session id ${id.problem}`,
-            );
-          }
-        }
-        return loaded;
+        // reported and dropped.
+        return sessionKeyed(parsed, (key, problem) =>
+          this.logger(
+            "warn",
+            `session-state load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
+          ),
+        );
       }
       this.logger(
         "warn",

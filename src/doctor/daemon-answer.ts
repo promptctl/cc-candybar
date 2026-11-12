@@ -89,14 +89,10 @@ export function parseDaemonClients(stats: StatsSnapshot): Asked<DaemonClients> {
     };
   }
   const sightings = sightingRecords(stats);
-  if (
-    !sightings.every(
-      (c) => typeof c.ago === "number" && typeof c.sessionId === "string",
-    )
-  ) {
+  if (!sightings.every((c) => typeof c.ago === "number")) {
     return {
       kind: "failed",
-      reason: `the running daemon (${stats.version}) reported clients without their age or session: ${JSON.stringify(stats.clients)}`,
+      reason: `the running daemon (${stats.version}) reported clients without their age: ${JSON.stringify(stats.clients)}`,
     };
   }
   const clients: Array<DaemonClients["clients"][number]> = [];
