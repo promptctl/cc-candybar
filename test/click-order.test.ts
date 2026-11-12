@@ -14,8 +14,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { VERBS, type VerbContext, type VerbHandler } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
-  VERB_COPY,
-  VERB_COPY_DIAGNOSTIC,
+  VERB_OPEN_VSCODE,
   VERB_DISPATCH,
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_PROBE,
@@ -193,16 +192,16 @@ describe("a gather holds no turn", () => {
     const { ctx, turns } = setup();
     const parked = gate();
     const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
+    const holding = VERBS.get(VERB_OPEN_VSCODE)!("x", { ...ctx, launcher });
     await drain();
-    expect(turns.getStats().holder).toBe(VERB_COPY);
+    expect(turns.getStats().holder).toBe(VERB_OPEN_VSCODE);
     await VERBS.get(VERB_DOCTOR_PROBE)!(NONCE, {
       ...ctx,
       clientGone: () => true,
       arrival: { via: "link", delivery: { kind: "cli" } },
     });
     expect(ctx.probes.list().map((p) => p.nonce)).toEqual([NONCE]);
-    expect(turns.getStats().holder).toBe(VERB_COPY);
+    expect(turns.getStats().holder).toBe(VERB_OPEN_VSCODE);
     parked.open();
     await holding;
   });
@@ -266,7 +265,7 @@ describe("one session's order", () => {
     const parked = gate();
     let gone = false;
     const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
+    const holding = VERBS.get(VERB_OPEN_VSCODE)!("x", { ...ctx, launcher });
     await drain();
     const a = doDoctorThen({ ...ctx, clientGone: () => gone });
     held.open();
@@ -409,24 +408,38 @@ test("a slash click re-checks nothing outside the turn: read and typing share it
   expect(holders).toEqual([VERB_SLASH, VERB_SLASH]);
 });
 
-test("a watcher reload during a parked pbcopy starts no `by=click` setup", async () => {
-  const { ctx } = setup();
+test("a watcher reload while a click that writes nothing is parked starts no `by=click` setup", async () => {
+  const { ctx, sessionState } = setup();
+  sessionState.set(
+    A,
+    SESSION_CLIENT_HINTS_KEY,
+    JSON.stringify({ tmux: { pane: "%1", socket: "/tmp/s", truecolor: null } }),
+  );
+  const config = parseAndValidate(
+    "<user>",
+    `{ actions: { c: { slash: "/compact" } } }`,
+    ALLOWED,
+    DEFAULT_DSL_CONFIG,
+  );
   const parked = gate();
   const quiet = { band: false } as never as ReturnType<VerbContext["lanes"]["of"]>;
   const moved = { band: true } as never as typeof quiet;
   let now = quiet;
   const moves: unknown[][] = [];
-  const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
-  const copying = VERBS.get(VERB_COPY_DIAGNOSTIC)!(encodeSegments([A, "request", "k"]), {
+  // A slash click writes nothing: it reads the pane, then parks typing.
+  const typing = VERBS.get(VERB_SLASH)!(encodeSegments([A, "/compact"]), {
     ...ctx,
-    launcher,
-    diagnosticCopy: () => "text",
+    configFor: () => config,
+    claudeInput: {
+      read: async () => ({ inMode: false, screen: IDLE_SCREEN }),
+      type: () => parked.wait.then(() => ({ kind: "typed" as const })),
+    },
     lanes: { of: () => now, clicked: (...args) => moves.push(args) },
   });
   await drain();
   now = moved;
   parked.open();
-  await copying;
+  await typing;
   expect(moves).toEqual([[A, moved, moved]]);
 });
 

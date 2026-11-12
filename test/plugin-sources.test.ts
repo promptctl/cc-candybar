@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { NO_CLIPBOARD } from "./helpers/click-parts";
 import { TEST_SESSION } from "./helpers/payload-session";
 import { reaction, runInAction } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
@@ -814,11 +815,13 @@ function statusline(r: Rig, configFile: string) {
     {
       answer: async (input) => {
         const output = await renderer.answer(input);
-        for (const effect of output.effects) presented.push(effect.frame);
+        for (const effect of output.effects)
+          if (effect.kind === "present") presented.push(effect.frame);
         return output;
       },
     },
     () => {},
+    NO_CLIPBOARD,
     r.collector,
   );
   // [LAW:no-ambient-temporal-coupling] An ask returns once every turn its

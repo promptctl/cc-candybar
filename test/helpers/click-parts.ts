@@ -9,12 +9,21 @@ import type { DaemonParts } from "../../src/daemon/daemon-parts";
 import type { MenuIdle } from "../../src/daemon/menu-idle";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { mainRenderer } from "../../src/renderer/main";
+import { CopyFailures } from "../../src/renderer/copy-failures";
+import type { EffectOutcome } from "../../src/renderer/interface";
 import { systemTimekeeper } from "../../src/time";
 import {
   verbsOver,
   type DaemonVerbContext,
   type MainRendererParts,
 } from "../../src/renderer/verbs";
+
+// A clipboard no write reaches: each is a failed copy, which the renderer
+// holds for the bar.
+export const NO_CLIPBOARD = async (): Promise<EffectOutcome> => ({
+  kind: "failed",
+  reason: "no clipboard in this test",
+});
 
 export function clickParts(
   verbCtx: DaemonVerbContext,
@@ -23,6 +32,8 @@ export function clickParts(
     holding: () => () => {},
     clicked: () => {},
   },
+  // Where a copy click's text goes: by default nowhere.
+  clipboard: (text: string) => Promise<EffectOutcome> = NO_CLIPBOARD,
 ): Pick<DaemonParts, "renderer"> & {
   collector: Pick<Collector, "holding" | "clicked">;
 } {
@@ -32,6 +43,7 @@ export function clickParts(
     verbs: verbsOver(verbCtx),
     menuIdle,
     renderCache: { subscriptions: () => ({ sources: {} }) },
+    copyFailures: new CopyFailures(),
   } as unknown as MainRendererParts;
   return {
     renderer: rendererHost(
@@ -39,6 +51,7 @@ export function clickParts(
       systemTimekeeper,
       mainRenderer(parts),
       () => {},
+      clipboard,
       { subscribed: () => {}, holding: collector.holding },
     ),
     collector,

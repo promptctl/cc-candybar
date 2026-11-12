@@ -4,7 +4,8 @@
 // view reads before the request after it waits. A request's turn holds that
 // view at its own context, draws the bar and returns it as a `present`; that
 // present's `effect-done` records what the frame showed, once the host says
-// whether its client took it. A world state the host hands in, with a
+// whether its client took it. A click's copy is returned as a `copy`, and its
+// `effect-done` holds a failure for the bar. A world state the host hands in, with a
 // `config` or alone, is what the session's views draw from, and a retire ends
 // what the renderer holds of the session. A click, and the idle clock's close
 // of a session's menus, act in their turn. Every output says what the open
@@ -21,40 +22,40 @@ import type { MainRendererParts } from "./verbs.js";
 import type { Instant } from "../utils/instant.js";
 import {
   TurnThrew,
+  type Effect,
   type EffectId,
+  type EffectOutcome,
   type Event,
   type Renderer,
-  type RendererOutput,
 } from "./interface.js";
 
 export function mainRenderer(parts: MainRendererParts): Renderer {
-  // [LAW:single-enforcer] What each present's frame records once it reached
-  // its client, held from the turn that returned it until its one
-  // `effect-done`: the host settles every present it is handed, so this
-  // holds only presents still on their way.
-  const deliveries = new Map<EffectId, () => void>();
+  // [LAW:single-enforcer] What each effect does with its one `effect-done`,
+  // held from the turn that returned it until then: a present records what
+  // its frame showed once it reached its client, and a copy holds its failure
+  // for the bar. The host settles every effect it is handed, so this holds
+  // only effects still on their way.
+  const owed = new Map<
+    EffectId,
+    (outcome: EffectOutcome, at: Instant) => void
+  >();
   let minted = 0;
-
-  // [LAW:one-source-of-truth] What a turn's output says the renderer needs
-  // read: the open views' subscriptions as they stand when it answers.
-  const answered = (
-    effects: RendererOutput["effects"],
-    record: RequestFacts,
-  ): RendererOutput => ({
-    effects,
-    subscriptions: parts.renderCache.subscriptions(),
-    record,
-  });
 
   const turn = async (
     event: Event,
     at: Instant,
     record: RequestFacts,
-  ): Promise<RendererOutput> => {
+    // [LAW:one-source-of-truth] The turn's effects as it returns them, each
+    // owed its `effect-done` from the moment it is added.
+    owe: (
+      effect: (id: EffectId) => Effect,
+      settle: (outcome: EffectOutcome, at: Instant) => void,
+    ) => void,
+  ): Promise<void> => {
     switch (event.kind) {
       case "config":
         configureSession(parts, event.context, event.worldState, at, record);
-        return answered([], record);
+        return;
       case "request": {
         const { frame, delivered } = await answerRequest(
           parts,
@@ -63,57 +64,86 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
           event.waitEndsAt,
           record,
         );
-        const id = ++minted as EffectId;
-        deliveries.set(id, delivered);
-        return answered(
-          [
-            {
-              kind: "present",
-              id,
-              session: event.context.hookData.session_id,
-              surface: "statusline",
-              request: event.id,
-              frame,
-            },
-          ],
-          record,
+        owe(
+          (id) => ({
+            kind: "present",
+            id,
+            session: event.context.hookData.session_id,
+            surface: "statusline",
+            request: event.id,
+            frame,
+          }),
+          (outcome) => {
+            if (outcome.kind === "ok") delivered();
+          },
         );
+        return;
       }
       case "world-state":
         parts.worldStates.take(event.worldState);
-        return answered([], record);
+        return;
       case "retire":
         retireSession(parts, event.session);
-        return answered([], record);
+        return;
       case "effect-done": {
-        const delivered = deliveries.get(event.of);
+        const settle = owed.get(event.of);
         // [LAW:no-silent-failure] An effect this renderer never returned, or
         // one already settled, is the host's bug: said, never ignored.
-        if (delivered === undefined)
+        if (settle === undefined)
           throw new Error(
-            `effect-done for effect ${event.of}, which is not a present on its way`,
+            `effect-done for effect ${event.of}, which is not an effect on its way`,
           );
-        deliveries.delete(event.of);
-        if (event.outcome.kind === "ok") delivered();
-        return answered([], record);
+        owed.delete(event.of);
+        settle(event.outcome, at);
+        return;
       }
       case "click":
-        await clickTurn(parts, event, record);
-        return answered([], record);
+        await clickTurn(parts, event, record, (text) =>
+          owe(
+            (id) => ({ kind: "copy", id, text }),
+            (outcome, settledAt) => {
+              if (outcome.kind === "failed")
+                parts.copyFailures.failed(outcome.reason, settledAt);
+            },
+          ),
+        );
+        return;
       case "menu-idle":
         await parts.verbs.closeIdle(event.session, event.idle);
-        return answered([], record);
+        return;
     }
   };
 
   return {
     answer: async ({ event, at }) => {
       const record: RequestFacts = [];
+      const effects: Effect[] = [];
+      const owe = (
+        effect: (id: EffectId) => Effect,
+        settle: (outcome: EffectOutcome, at: Instant) => void,
+      ): void => {
+        const made = effect(++minted as EffectId);
+        owed.set(made.id, settle);
+        effects.push(made);
+      };
       try {
-        return await turn(event, at, record);
+        await turn(event, at, record, owe);
       } catch (thrown) {
-        throw new TurnThrew(record, thrown, parts.renderCache.subscriptions());
+        throw new TurnThrew(
+          record,
+          thrown,
+          parts.renderCache.subscriptions(),
+          effects,
+        );
       }
+      // [LAW:one-source-of-truth] What a turn's output says the renderer
+      // needs read: the open views' subscriptions as they stand when it
+      // answers.
+      return {
+        effects,
+        subscriptions: parts.renderCache.subscriptions(),
+        record,
+      };
     },
   };
 }

@@ -58,7 +58,7 @@ The click is answered at once and the program runs after it. Its failure therefo
 
 ## A failed click's error
 
-A failed click's error shows for a few seconds of reruns, and after that until an answer has actually carried it to a client. With no refresh interval, Claude Code asks only on events, so a time limit alone could expire the error before anyone sees it. It counts as delivered only once an answer carrying it has been flushed successfully. The same hold rule serves every event-shaped error, such as a launched program's pipe cut or failing after its launch, each with its own hold length, so two errors can never disagree on when an event stops showing. The launcher's event is daemon-wide: one session's answer carrying it is what makes it seen.
+A failed click's error shows for a few seconds of reruns, and after that until an answer has actually carried it to a client. With no refresh interval, Claude Code asks only on events, so a time limit alone could expire the error before anyone sees it. It counts as delivered only once an answer carrying it has been flushed successfully. The same hold rule serves every event-shaped error, such as a launched program's pipe cut or failing after its launch, each with its own hold length, so two errors can never disagree on when an event stops showing. The launcher's event is daemon-wide: one session's answer carrying it is what makes it seen. A click's copy failing is daemon-wide too: the host writes the clipboard after the click's turn, the URL handler reads no reply, and a copy names no session, so the bar is the only place left to see it.
 
 ## Copying a diagnostic
 

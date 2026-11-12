@@ -78,6 +78,11 @@ export function testVerbContext(
     history,
     navigation: new NavigationHistory(),
     clientGone: () => false,
+    // A copy is the click's effect, which the host performs: a test that
+    // drives a copy verb hands in where its text goes.
+    copy: () => {
+      throw new Error("copy: no clipboard in this test");
+    },
     journalTurns: new JournalTurns({
       log: () => {},
       monotonic: () => systemTimekeeper.monotonic(),

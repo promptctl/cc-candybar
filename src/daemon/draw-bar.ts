@@ -9,6 +9,11 @@ import {
   type FileEventsWarning,
 } from "./cache/file-events";
 import type { Launcher, LauncherWarning, PipeEvent } from "../proc/launch";
+import type {
+  CopyFailedWarning,
+  CopyFailures,
+} from "../renderer/copy-failures";
+import type { HeldEvent } from "../utils/event-hold";
 import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import { UPDATE_DISMISSED_KEY } from "./update-keys";
 import { type RenderOrigin } from "../config-hint";
@@ -139,6 +144,8 @@ export interface RendererParts {
   readonly fileEvents: Pick<FileEventDelivery, "delivery">;
   readonly menuIdle: Pick<MenuIdle, "observe" | "since">;
   readonly launcher: Pick<Launcher, "launcherWarnings" | "answeredPipeEvent">;
+  // The renderer's own record of a click's copy the host could not write.
+  readonly copyFailures: Pick<CopyFailures, "warnings" | "answered">;
   readonly laneSetups: Pick<LaneSetups, "noted">;
   readonly tmuxStatusLines: Pick<TmuxStatusLines, "observe">;
 }
@@ -539,6 +546,9 @@ export function drawRender(
   // The launcher's pipe event this draw showed, which an answer carrying it
   // marks answered.
   pipeShown: PipeEvent | null;
+  // The copy failure this draw showed, which an answer carrying it marks
+  // answered.
+  copyShown: HeldEvent | null;
   // Records what the frame's copy clicks copy, once it reached its client.
   delivered: () => void;
   // Which animation lanes the session's settings switch on, as drawn.
@@ -556,6 +566,7 @@ export function drawRender(
     effectSessions,
     menuIdle,
     launcher,
+    copyFailures,
   } = parts;
   const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
   // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
@@ -647,9 +658,11 @@ export function drawRender(
   const launched = launcher.launcherWarnings(at, drawing.by);
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
   const pipeShown = pipeWarning?.event ?? null;
+  const [copyWarning] = copyFailures.warnings(at, drawing.by);
   const standing: readonly StandingWarning[] = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...launched,
+    ...(copyWarning === undefined ? [] : [copyWarning]),
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
@@ -850,6 +863,7 @@ export function drawRender(
       case "config-watch":
       case "lifeline":
       case "launch-pipes":
+      case "copy-failed":
       case "when":
         return w.kind;
     }
@@ -889,6 +903,8 @@ export function drawRender(
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     // The launcher's pipe event as this frame showed it: `-` for not at all.
     pipeEvent: pipeWarning?.hold ?? "-",
+    // The click copy failure as this frame showed it: `-` for not at all.
+    copyFailed: copyWarning?.hold ?? "-",
     upd: String(updates.offer.length),
     // How many repositories the bar asked about.
     ask: String(questions.length),
@@ -914,6 +930,7 @@ export function drawRender(
     cellBreaks,
     clickShown,
     pipeShown,
+    copyShown: copyWarning?.event ?? null,
     delivered,
     lanes,
   };
@@ -942,6 +959,7 @@ interface FactsWarning {
 type StandingWarning =
   | FileEventsWarning
   | LauncherWarning
+  | CopyFailedWarning
   | ConfigWatchWarning
   | LoadWarning
   | FactsWarning;
@@ -1118,11 +1136,8 @@ export async function answerRequest(
     ended,
     refreshed: refreshedFact(refreshed),
   });
-  const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
-    parts,
-    setup,
-    ANSWERING,
-  );
+  const { drawn, clickShown, pipeShown, copyShown, delivered, lanes } =
+    drawRender(parts, setup, ANSWERING);
   const sessionId = req.hookData.session_id;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands
@@ -1147,6 +1162,7 @@ export async function answerRequest(
       delivered,
       clickShown,
       pipeShown,
+      copyShown,
     ),
   };
 }
@@ -1155,8 +1171,9 @@ export async function answerRequest(
 // the draw, because a closure keeps alive every variable its function's other
 // closures capture: one made inside the draw would hold the draw's setup until
 // its frame settles.
-// [LAW:single-enforcer] An answer carrying the click error or the launcher's
-// pipe event that reaches its client is the one that delivered it
+// [LAW:single-enforcer] An answer carrying the click error, the launcher's
+// pipe event or a copy failure that reaches its client is the one that
+// delivered it
 // (src/utils/event-hold.ts).
 function answerDelivered(
   parts: RendererParts,
@@ -1164,14 +1181,16 @@ function answerDelivered(
   copied: () => void,
   clickShown: ClickErrorRecord | null,
   pipeShown: PipeEvent | null,
+  copyShown: HeldEvent | null,
 ): () => void {
   return () => {
     copied();
     if (clickShown !== null)
       answeredClickError(parts.sessionState, sessionId, clickShown);
     // Daemon-wide: one session's answer having shown the launcher's pipe
-    // event is what makes it not silent.
+    // event or a copy failure is what makes it not silent.
     if (pipeShown !== null) parts.launcher.answeredPipeEvent(pipeShown);
+    if (copyShown !== null) parts.copyFailures.answered(copyShown);
   };
 }
 

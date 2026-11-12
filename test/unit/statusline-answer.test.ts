@@ -17,6 +17,7 @@ import type { RequestFacts } from "../../src/daemon/request-event";
 import {
   TurnThrew,
   type Effect,
+  type Present,
   type EffectId,
   type Event,
   type Renderer,
@@ -47,7 +48,7 @@ const CLOCK = {
   now: () => 1_700_000_000_000,
 };
 
-const present = (id: number, request = REQUEST): Effect => ({
+const present = (id: number, request = REQUEST): Present => ({
   kind: "present",
   id: id as EffectId,
   session: SESSION,
@@ -113,6 +114,9 @@ async function answer(
       CLOCK,
       renderer,
       (_level, line) => logged.push(line),
+      async () => {
+        throw new Error("no copy is performed answering a request");
+      },
       {
         subscribed: (subscriptions) => void subscribed.push(subscriptions),
         // Mirrors the collector: only a session a request has named is held.
@@ -220,7 +224,7 @@ test("a config turn's effects are refused, each owed its effect-done, and the re
     {
       kind: "effect-done",
       of: 2,
-      outcome: { kind: "failed", reason: "a config turn answers no request" },
+      outcome: { kind: "failed", reason: "a config turn returns no present" },
     },
   ]);
 });
@@ -231,6 +235,7 @@ test("a turn that throws is a failure naming the renderer, with what it learned 
       [["lanes", "-"]],
       new Error("the draw broke"),
       NO_SUBSCRIPTIONS,
+      [],
     ),
   );
   const { answered, facts } = await answer(renderer);
@@ -249,7 +254,7 @@ test("a turn that throws still hands the host what its open views read", async (
   };
   const subscribed: Subscriptions[] = [];
   const { renderer } = scripted(
-    new TurnThrew([], new Error("the draw broke"), left),
+    new TurnThrew([], new Error("the draw broke"), left, []),
   );
   await answer(renderer, [], subscribed);
   expect(subscribed).toEqual([NO_SUBSCRIPTIONS, left]);
@@ -261,7 +266,7 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
     answer: async ({ event }) => {
       if (event.kind === "config") return output([]);
       if (event.kind === "request") return output([present(1)]);
-      throw new TurnThrew([], new Error("no such present"), NO_SUBSCRIPTIONS);
+      throw new TurnThrew([], new Error("no such present"), NO_SUBSCRIPTIONS, []);
     },
   };
   const { answered } = await answer(renderer, logged);
@@ -306,7 +311,7 @@ test("the session's config reaches the renderer first, with the world state read
 });
 
 test("the host holds the session through each of its turns, with nothing held by the request's own code, and lets go once each answers or throws", async () => {
-  const threw = () => new TurnThrew([], new Error("x"), NO_SUBSCRIPTIONS);
+  const threw = () => new TurnThrew([], new Error("x"), NO_SUBSCRIPTIONS, []);
   for (const [config, request] of [
     [output([]), output([present(1)])],
     [output([]), threw()],

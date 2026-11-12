@@ -6,6 +6,7 @@ import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { RenderWarningRecords } from "../../src/daemon/render-warnings";
 import type { SessionState } from "../../src/daemon/session-state";
 import { EffectSessions } from "../../src/render/effect";
+import { CopyFailures } from "../../src/renderer/copy-failures";
 import type { MainRendererParts, RendererVerbs } from "../../src/renderer/verbs";
 import type { WorldStates } from "../../src/renderer/world-states";
 import { systemTimekeeper } from "../../src/time";
@@ -54,6 +55,7 @@ export function rendererParts({
       clickSettled: () => {},
     },
     launcher: { launcherWarnings: () => [], answeredPipeEvent: () => {} },
+    copyFailures: new CopyFailures(),
     laneSetups: { noted: () => {} },
     tmuxStatusLines: { observe: () => {} },
     verbs,

@@ -3,21 +3,14 @@
 // under that key: the full prompt reaches the clipboard while the link stays
 // short, and a key that draw does not list is refused loudly.
 
-import { type LaunchOpts } from "../src/proc/launch";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
 import { SessionState } from "../src/daemon/session-state";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
 import { clickUrl, testVerbContext } from "./helpers/click";
 
-const launched: LaunchOpts[] = [];
-const recording = {
-  ...unscriptedLauncher,
-  launch: async (opts: LaunchOpts) => {
-    launched.push(opts);
-    return { ok: true as const, exitCode: 0, stdout: "", stderr: "" };
-  },
-};
+// What the click asked the clipboard to hold, which the host then writes.
+const copied: string[] = [];
+const copy = (text: string) => void copied.push(text);
 
 const SID = "sid-copy";
 const PROMPT = `Fix my config.\n\n${"a placement that names nothing; ".repeat(200)}`;
@@ -36,7 +29,7 @@ const drawn = () => {
 };
 
 beforeEach(() => {
-  launched.length = 0;
+  copied.length = 0;
 });
 
 test("the first line's click copies the full prompt, though its link carries only a key", async () => {
@@ -46,13 +39,11 @@ test("the first line's click copies the full prompt, though its link carries onl
   expect(link).not.toContain("placement");
   await clickUrl(link, {
     ...testVerbContext(new SessionState()),
-    launcher: recording,
+    copy,
     diagnosticCopy: (sid, by, key) =>
       sid === SID && by === "request" ? copies.get(key) : undefined,
   });
-  expect(launched).toHaveLength(1);
-  expect(launched[0]!.bin).toBe("/usr/bin/pbcopy");
-  expect(launched[0]!.stdinInput).toBe(PROMPT);
+  expect(copied).toEqual([PROMPT]);
 });
 
 test("a key the session's last draw no longer lists is refused, and nothing is copied", async () => {
@@ -60,11 +51,11 @@ test("a key the session's last draw no longer lists is refused, and nothing is c
   const link = list[0]!.lines[0]![0].link!;
   await expect(clickUrl(link, {
       ...testVerbContext(new SessionState()),
-    launcher: recording,
+    copy,
       diagnosticCopy: () => undefined,
     }),
   ).rejects.toThrow(/no longer listed/);
-  expect(launched).toHaveLength(0);
+  expect(copied).toEqual([]);
 });
 
 test("a dropped placement's prompt names the file to edit and carries the error whole", () => {

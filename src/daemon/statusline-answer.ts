@@ -4,7 +4,7 @@
 // encoding the client asked for.
 
 import path from "node:path";
-import type { Effect, RequestId } from "../renderer/interface.js";
+import type { Present, RequestId } from "../renderer/interface.js";
 import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { checkoutLocation } from "../utils/git-root.js";
@@ -92,7 +92,7 @@ export async function answerStatusline(
   const req = located(arrived);
   // [LAW:single-enforcer] The one `effect-done` each effect is owed, through
   // the host's one path to the renderer.
-  const done = (effect: Effect, reason: string | null): void =>
+  const done = (effect: Present, reason: string | null): void =>
     void host.deliver(
       {
         kind: "event",
@@ -146,12 +146,15 @@ export async function answerStatusline(
   const { effects } = delivered.output;
   noteFacts(facts, {
     renderer: host.name,
-    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
+    effects:
+      effects
+        .map((e) => (e.kind === "present" ? `${e.kind}:${e.surface}` : e.kind))
+        .join(",") || "-",
   });
   // [LAW:types-are-the-program] Every effect the turn returned, in its order,
   // is performed or refused: the first statusline frame for this request
   // answers it, and nothing else may.
-  let answer: Effect | null = null;
+  let answer: Present | null = null;
   for (const effect of effects) {
     switch (effect.kind) {
       case "present":
@@ -163,6 +166,9 @@ export async function answerStatusline(
         else if (answer !== null)
           done(effect, `a second statusline frame for request ${id}`);
         else answer = effect;
+        break;
+      case "copy":
+        // A click's act: the host refused it from this turn and settled it.
         break;
     }
   }

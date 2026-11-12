@@ -80,6 +80,8 @@ import { JournalTurns } from "./journal-turns.js";
 import { rendererHost } from "./renderer-host.js";
 import { mainRenderer } from "../renderer/main.js";
 import { verbsOver } from "../renderer/verbs.js";
+import { CopyFailures } from "../renderer/copy-failures.js";
+import { launchedClipboard } from "./clipboard.js";
 import { closeByTurn, MenuIdle } from "./menu-idle.js";
 import type { SessionId } from "./session-id.js";
 
@@ -520,6 +522,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:single-enforcer] What each session's renderers could not honour, as
   // their frames recorded it (src/daemon/render-warnings.ts).
   const renderWarnings = new RenderWarningRecords();
+  // The main renderer's record of a click's copy that failed, read by every
+  // draw: its own answers' and the frames the host pushes.
+  const copyFailures = new CopyFailures();
   // [LAW:one-source-of-truth] The daemon's one update fact: the update watch
   // writes it and every session's facts document reads it, so the box exists
   // before either.
@@ -771,6 +776,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     tmuxStatusLines,
     frameFeeds,
     renderWarnings,
+    copyFailures,
     renderCache,
     updateWatch,
     limits,
@@ -798,9 +804,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         launcher,
         laneSetups,
         tmuxStatusLines,
+        copyFailures,
         verbs: verbsOver(verbCtx),
       }),
       log,
+      launchedClipboard(launcher),
       collector,
     ),
   };

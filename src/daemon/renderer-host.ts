@@ -2,7 +2,10 @@
 // which answers with the turn's output or with how the turn failed: a turn's
 // throw comes back as a value, never as a rejection. Every turn's
 // subscriptions are taken here, in the order the turns answered, and so is
-// every effect a turn that answers no request returned, refused. A caller
+// every effect: a click's copies are performed here, each answered by its
+// `effect-done`, and an effect of a kind its turn does not return is refused.
+// A request's present is performed by the request's reply, which holds the
+// connection it goes out on. A caller
 // whose own event records the turn takes it by `answer`; every other input is
 // taken by `deliver`, which writes the turn's own line.
 
@@ -10,6 +13,7 @@ import { inspect } from "node:util";
 import {
   TurnThrew,
   type Effect,
+  type EffectOutcome,
   type Event,
   type Renderer,
   type RendererInput,
@@ -51,6 +55,9 @@ export function rendererHost(
   clock: Pick<Timekeeper, "now">,
   renderer: Renderer,
   log: DaemonLogger,
+  // [LAW:effects-at-boundaries] Where a copy's text is written, and how it
+  // went.
+  clipboard: (text: string) => Promise<EffectOutcome>,
   collector: {
     // [LAW:single-enforcer] Where every output's subscriptions go: the
     // collector, which diffs each whole set against the last.
@@ -67,35 +74,59 @@ export function rendererHost(
     try {
       const output = await renderer.answer(input);
       collector.subscribed(output.subscriptions);
-      // [LAW:single-enforcer] A present answers the request whose turn
-      // returned it, so every effect another turn returns is refused here,
-      // and none is left owed its `effect-done`.
-      if (input.event.kind !== "request")
-        for (const effect of output.effects)
-          refuse(effect, `a ${input.event.kind} turn answers no request`);
+      await perform(input.event.kind, output.effects);
       return { kind: "answered", output };
     } catch (e) {
       if (!(e instanceof TurnThrew))
         return { kind: "threw", error: e, record: [] };
       collector.subscribed(e.subscriptions);
+      await perform(input.event.kind, e.effects);
       return { kind: "threw", error: e.thrown, record: e.record };
     } finally {
       release();
     }
   };
-  const refuse = (effect: Effect, reason: string): void =>
-    void deliver(
+  // [LAW:single-enforcer] Every effect is settled here or by the reply that
+  // performs a present, so none is left owed its `effect-done`.
+  const perform = async (
+    by: Event["kind"],
+    effects: readonly Effect[],
+  ): Promise<void> => {
+    for (const effect of effects) {
+      if (RETURNED_BY[effect.kind] !== by) {
+        await settle(effect, {
+          kind: "failed",
+          reason: `a ${by} turn returns no ${effect.kind}`,
+        });
+        continue;
+      }
+      switch (effect.kind) {
+        case "present":
+          continue;
+        case "copy":
+          await settle(effect, await clipboard(effect.text));
+      }
+    }
+  };
+  const settle = (effect: Effect, outcome: EffectOutcome): Promise<Delivered> =>
+    deliver(
       {
         kind: "event",
         at: instantAt(clock),
         event: {
           kind: "effect-done",
-          session: effect.session,
+          session: effect.kind === "present" ? effect.session : null,
           of: effect.id,
-          outcome: { kind: "failed", reason },
+          outcome,
         },
       },
-      [["effect", String(effect.id)]],
+      [
+        ["effect", String(effect.id)],
+        ["kind", effect.kind],
+        ...(outcome.kind === "failed"
+          ? ([["failed", outcome.reason]] as const)
+          : []),
+      ],
     );
   // A turn's line, when it learned something or failed.
   const record = (
@@ -139,6 +170,14 @@ export function rendererHost(
   };
   return { name, answer: turn, deliver };
 }
+
+// [LAW:types-are-the-program] The one turn that returns each kind of effect:
+// a present answers its request, and a copy is a click's act. Keyed by the
+// kind, so a new effect names its turn here or fails to compile.
+const RETURNED_BY: Readonly<Record<Effect["kind"], Event["kind"]>> = {
+  present: "request",
+  copy: "click",
+};
 
 // [LAW:one-source-of-truth] The session an event names: what a turn holds,
 // and what its line's `sid` says. A click naming none, or one whose id failed

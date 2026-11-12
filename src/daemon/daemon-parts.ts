@@ -1,4 +1,5 @@
 import type { Collector } from "./collector.js";
+import type { CopyFailures } from "../renderer/copy-failures.js";
 import type { WorldStates } from "../renderer/world-states.js";
 import type { Timekeeper } from "../time.js";
 import type { FileEventDelivery } from "./cache/file-events";
@@ -63,6 +64,8 @@ export interface DaemonParts {
   readonly tmuxStatusLines: TmuxStatusLines;
   readonly frameFeeds: FrameFeeds<CheckedRenderRequest>;
   readonly renderWarnings: RenderWarningRecords;
+  // The main renderer's record of a click's copy that failed.
+  readonly copyFailures: CopyFailures;
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
   readonly updateWatch: UpdateWatch;
   readonly limits: LimitsHandle;

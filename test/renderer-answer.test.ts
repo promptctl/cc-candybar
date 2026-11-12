@@ -17,12 +17,15 @@ import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import {
   TurnThrew,
   type Effect,
+  type EffectOutcome,
+  type Present,
   type Renderer,
   type Event,
   type RequestId,
 } from "../src/renderer/interface";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
+import { NO_CLIPBOARD } from "./helpers/click-parts";
 import type { CheckedRenderRequest } from "../src/renderer/request-context";
 import { systemTimekeeper } from "../src/time";
 import {
@@ -165,7 +168,7 @@ function viewOf(rig: SessionRig) {
   return held.view;
 }
 
-const done = (r: Renderer, { session, id: of }: Effect, ok: boolean) =>
+const done = (r: Renderer, { session, id: of }: Present, ok: boolean) =>
   r.answer({
     kind: "event",
     at: AT,
@@ -177,9 +180,12 @@ const done = (r: Renderer, { session, id: of }: Effect, ok: boolean) =>
     },
   });
 
-const presentOf = (effects: readonly Effect[]): Effect => {
+const presentOf = (effects: readonly Effect[]): Present => {
   expect(effects).toHaveLength(1);
-  return effects[0]!;
+  const [effect] = effects;
+  if (effect?.kind !== "present")
+    throw new Error(`the turn returned a ${effect?.kind}, not a present`);
+  return effect;
 };
 
 describe("a statusline request", () => {
@@ -240,7 +246,7 @@ describe("a statusline request", () => {
     expect(recorded).toEqual([]);
     await expect(done(r, present, true)).rejects.toThrow(TurnThrew);
     await expect(done(r, present, true)).rejects.toThrow(
-      /not a present on its way/,
+      /not an effect on its way/,
     );
   });
 });
@@ -367,6 +373,7 @@ describe("the session's config, ahead of its request", () => {
         },
       },
       () => {},
+      NO_CLIPBOARD,
       t.rig.served.collector,
     );
     const facts: Array<readonly [string, string]> = [];
@@ -447,6 +454,7 @@ describe("two requests of one session at different keys", () => {
         },
       },
       () => {},
+      NO_CLIPBOARD,
       t.rig.served.collector,
     );
     const ask = (pane: string, id: number) =>
@@ -536,6 +544,56 @@ describe("a click", () => {
     const thrown = await handIn(t.r, click("act")).catch((e: TurnThrew) => e);
     expect(thrown).toBeInstanceOf(TurnThrew);
     expect(thrown.subscriptions.sources).toEqual(new Map());
+  });
+
+  // A renderer whose `copier` verb asks the clipboard for `text`, then
+  // throws if `fails` says so.
+  const copier = (fails = false) =>
+    renderer({
+      handler: (verb) =>
+        verb === "copier"
+          ? async (_value, { copy }) => {
+              copy("the text");
+              if (fails) throw new Error("a later step broke");
+            }
+          : undefined,
+      closeIdle: () => Promise.reject(new Error("no idle close here")),
+    });
+
+  test("whose act copies returns the copy as an effect, which the host performs", async () => {
+    const { effects } = await handIn(copier().r, click("copier"));
+    expect(effects).toEqual([
+      { kind: "copy", id: expect.any(Number), text: "the text" },
+    ]);
+  });
+
+  test("that throws after its act copied still hands the host the copy, which the act was owed", async () => {
+    const thrown = await handIn(copier(true).r, click("copier")).catch(
+      (e: TurnThrew) => e,
+    );
+    expect(thrown).toBeInstanceOf(TurnThrew);
+    expect(thrown.effects).toEqual([
+      { kind: "copy", id: expect.any(Number), text: "the text" },
+    ]);
+  });
+
+  test("whose copy failed shows the failure on the next draw, and one that was written shows nothing", async () => {
+    const copied = async (outcome: EffectOutcome) => {
+      const t = copier();
+      const [copy] = (await handIn(t.r, click("copier"))).effects;
+      await handIn(t.r, {
+        kind: "effect-done",
+        session: null,
+        of: copy!.id,
+        outcome,
+      });
+      return new Map((await request(t)).record);
+    };
+    const failed = await copied({ kind: "failed", reason: "pbcopy broke" });
+    expect(failed.get("copyFailed")).toBe("held");
+    expect(failed.get("warn")).toContain("copy-failed");
+    const written = await copied({ kind: "ok" });
+    expect(written.get("copyFailed")).toBe("-");
   });
 
   test("of a verb the renderer does not have is its bad request", async () => {

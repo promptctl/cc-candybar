@@ -301,6 +301,9 @@ export interface VerbContext extends DaemonContext {
   readonly turnWaited: (ms: number) => void;
   // Whether the client that sent THIS click has left.
   readonly clientGone: () => boolean;
+  // [LAW:effects-at-boundaries] THIS click's clipboard write, returned as an
+  // effect the host performs once the click's turn is over.
+  readonly copy: (text: string) => void;
 }
 
 // What only the turn may wait on: a handler reaches a launch through `launch`,
@@ -529,20 +532,7 @@ export async function clickHandoff(
   }
 }
 
-// One clipboard primitive, no decode — both the `copy` verb (decodes a wire
-// segment) and the diagnostic verbs (already hold a plain message) funnel here.
-function pbcopy(text: string, ctx: ClickContext): Promise<void> {
-  return ctx.launch(
-    {
-      bin: "/usr/bin/pbcopy",
-      stdinInput: text,
-      category: "click.pbcopy",
-    },
-    "pbcopy",
-  );
-}
-
-const copy: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
+const copy: VerbHandler = async (value, ctx) => ctx.copy(oneArg(value));
 
 // [LAW:parse-dont-validate] The renderer a copy click names: the surface it
 // was drawn on, whose last frame it copies from.
@@ -569,7 +559,7 @@ const copyDiagnostic: VerbHandler = async (value, ctx) => {
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics — open the indicator beside the settings door again and copy from there`,
     );
-  await pbcopy(text, ctx);
+  ctx.copy(text);
 };
 
 const openVscode: VerbHandler = (value, ctx) =>
@@ -2047,7 +2037,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 // [LAW:types-are-the-program] The aggregate PRESERVES the dispatcher's
 // input-vs-operational error classification: a leaf throws BadVerbArgs for bad
 // input (→ BAD_REQUEST) and a plain Error for an operational failure (e.g. a
-// pbcopy/open launch failure → RENDER_FAILED). If ANY effect failed
+// an `open` launch failure → RENDER_FAILED). If ANY effect failed
 // operationally, the whole click failed operationally (plain Error); only when
 // every failure is an input error does the aggregate stay BadVerbArgs. An
 // unknown verb is bad input — it does not flip the classification.

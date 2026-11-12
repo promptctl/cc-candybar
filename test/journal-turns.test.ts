@@ -14,7 +14,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { closeIdleMenus, VERBS, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
-  VERB_COPY,
+  VERB_OPEN_VSCODE,
   VERB_DISPATCH,
   VERB_SET_STATE,
   VERB_TMUX_STATUS_CLICK,
@@ -58,7 +58,7 @@ function parkedClick(
 ): Promise<void> {
   const url = effectsUrl([
     { verb: VERB_SET_STATE, args: [SID, "theme", theme] },
-    { verb: VERB_COPY, args: ["x"] },
+    { verb: VERB_OPEN_VSCODE, args: ["x"] },
     { verb: VERB_SET_STATE, args: [SID, "endcaps", style] },
   ]);
   const launcher = {
@@ -170,7 +170,7 @@ describe("the idle close decides in its turn", () => {
     m.idle.observe(SID, m.at(), true, 30);
     const held = gate();
     // Another session holds the turn past this session's deadline.
-    const other = VERBS.get(VERB_COPY)!("x", {
+    const other = VERBS.get(VERB_OPEN_VSCODE)!("x", {
       ...ctx,
       launcher: {
         ...ctx.launcher,
@@ -195,7 +195,7 @@ describe("the idle close decides in its turn", () => {
     const m = idleOver(ctx);
     const held = gate();
     m.idle.observe(SID, m.at(), true, 30);
-    const other = VERBS.get(VERB_COPY)!("x", {
+    const other = VERBS.get(VERB_OPEN_VSCODE)!("x", {
       ...ctx,
       launcher: {
         ...ctx.launcher,
@@ -493,8 +493,8 @@ describe("a click's real launch", () => {
         launcher.launch({ ...opts, bin: "/bin/sleep", args: ["30"], timeoutMs: 100, stdinInput: undefined }),
     } as Launcher;
     await expect(
-      VERBS.get(VERB_COPY)!("x", { ...ctx, launcher: hung }),
-    ).rejects.toThrow(/pbcopy failed/);
+      VERBS.get(VERB_OPEN_VSCODE)!("x", { ...ctx, launcher: hung }),
+    ).rejects.toThrow(/Visual Studio Code" failed/);
     expect(turns.getStats().holder).toBeNull();
   });
 
@@ -510,7 +510,7 @@ describe("a click's real launch", () => {
     let ticks = 0;
     const ticking = setInterval(() => ticks++, 10);
     const started = performance.now();
-    await VERBS.get(VERB_COPY)!("x", { ...ctx, launcher: holder });
+    await VERBS.get(VERB_OPEN_VSCODE)!("x", { ...ctx, launcher: holder });
     clearInterval(ticking);
     expect(performance.now() - started).toBeLessThan(2500);
     expect(ticks).toBeGreaterThan(0);

@@ -87,14 +87,16 @@ export type Event =
     }
   | {
       readonly kind: "effect-done";
-      // The session of the effect it reports on.
-      readonly session: SessionId;
+      // The session of the effect it reports on: null for a copy, which
+      // names none.
+      readonly session: SessionId | null;
       readonly of: EffectId;
       readonly outcome: EffectOutcome;
     }
   | {
       // A click on a link the bar drew: the renderer decides what it means
-      // and acts on it in this turn, so the output names what the act moved.
+      // and acts on it in this turn, so the output names what the act moved,
+      // and returns as effects the acts the host performs.
       readonly kind: "click";
       readonly verb: string;
       readonly value: string;
@@ -136,7 +138,15 @@ export interface Present {
   readonly frame: Frame;
 }
 
-export type Effect = Present;
+// [LAW:effects-at-boundaries] A click's clipboard write, which the host
+// performs: the text is the whole of it, so it names no session.
+export interface Copy {
+  readonly kind: "copy";
+  readonly id: EffectId;
+  readonly text: string;
+}
+
+export type Effect = Present | Copy;
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
 // the host writes beside the input's event.
@@ -169,14 +179,17 @@ export interface RendererOutput {
 
 // [LAW:no-silent-failure] A turn that threw, with the record it reached, so the
 // host still writes what the turn learned before it stopped.
-// [LAW:one-source-of-truth] It names the open views' subscriptions as they
-// stand after the throw too: an act can land before its turn throws (a click
-// that committed and followed its view), and its view is read all the same.
+// [LAW:one-source-of-truth] It names the open views' subscriptions and the
+// effects it returned as they stand after the throw too: an act can land
+// before its turn throws (a click that committed and followed its view, a
+// batch's copy step before a later step failed), and its view is read and its
+// effects performed all the same.
 export class TurnThrew extends Error {
   constructor(
     readonly record: TurnRecord,
     readonly thrown: unknown,
     readonly subscriptions: Subscriptions,
+    readonly effects: readonly Effect[],
   ) {
     super(thrown instanceof Error ? thrown.message : String(thrown));
     this.name = "TurnThrew";
