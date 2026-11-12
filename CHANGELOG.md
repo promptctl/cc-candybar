@@ -1,3 +1,9 @@
+## [1.218.3](https://github.com/promptctl/cc-candybar/compare/v1.218.2...v1.218.3) (2026-11-12)
+
+### Performance Improvements
+
+* **config:** a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg) ([#723](https://github.com/promptctl/cc-candybar/issues/723)) ([a454d2f](https://github.com/promptctl/cc-candybar/commit/a454d2f2ed6d81675e56ae6c45bef77b1db7007f))
+
 ## [1.218.2](https://github.com/promptctl/cc-candybar/compare/v1.218.1...v1.218.2) (2026-11-12)
 
 ### Bug Fixes
