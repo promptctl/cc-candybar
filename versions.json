@@ -4,15 +4,22 @@
     {
       "version": "pr-724",
       "ref": "refs/pull/724/merge",
-      "sha": "d8a8e4d873dea85a100be1622cbd3006a942a649",
-      "timestamp": "2026-11-12T05:54:34.545Z",
+      "sha": "e901569ae5a3ef12291430896fffe4183bc2aeb5",
+      "timestamp": "2026-11-12T05:57:52.206Z",
       "commits": [
         {
-          "sha": "d8a8e4d873dea85a100be1622cbd3006a942a649",
+          "sha": "e901569ae5a3ef12291430896fffe4183bc2aeb5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:53:28-07:00",
-          "message": "Merge eefa81ad7fa861cb796367ac1f8de3bbd703d7da into a454d2f2ed6d81675e56ae6c45bef77b1db7007f\n"
+          "timestamp": "2026-11-12T05:56:54Z",
+          "message": "Merge fd0ca68fa1990370e4e9be095438853de4f4d237 into a454d2f2ed6d81675e56ae6c45bef77b1db7007f\n"
+        },
+        {
+          "sha": "fd0ca68fa1990370e4e9be095438853de4f4d237",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:56:42-07:00",
+          "message": "test(config): the chain cases load over the setup's isolated host, name their layers in order, and prove the load raised no advisory (candybar-host-renderer-x96a.01x)\n"
         },
         {
           "sha": "eefa81ad7fa861cb796367ac1f8de3bbd703d7da",
