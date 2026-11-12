@@ -1,3 +1,9 @@
+## [1.219.1](https://github.com/promptctl/cc-candybar/compare/v1.219.0...v1.219.1) (2026-11-12)
+
+### Bug Fixes
+
+* **collector:** a request turn holds its session as a click's does, so no sweep retires it while its wait is out (candybar-host-renderer-x96a.pww) ([#734](https://github.com/promptctl/cc-candybar/issues/734)) ([9bf2fb3](https://github.com/promptctl/cc-candybar/commit/9bf2fb3ecbfd8acdf5eb0ee20826b372202773da))
+
 ## [1.219.0](https://github.com/promptctl/cc-candybar/compare/v1.218.4...v1.219.0) (2026-11-12)
 
 ### Features
