@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-729",
-      "ref": "refs/pull/729/merge",
-      "sha": "4f336ba9120219768f6f4800e4ab88d8afa1359f",
-      "timestamp": "2026-11-12T07:57:00.396Z",
-      "commits": [
-        {
-          "sha": "4f336ba9120219768f6f4800e4ab88d8afa1359f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T07:56:01Z",
-          "message": "Merge d2d90af65c3fb8bcd28dd6166b1929c30fee289c into 7c43611a9831800d0c61d84c0a4dbcebc50c6fda\n"
-        },
-        {
-          "sha": "d2d90af65c3fb8bcd28dd6166b1929c30fee289c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:55:49-07:00",
-          "message": "fix(daemon): the TIMEOUT id's docs say which requests record it, and a refused click is checked against the test's own statement of the wire (candybar-host-renderer-x96a.9m0)\n"
-        },
-        {
-          "sha": "99915b395361303588bffd9da1ae8983bc7d2360",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:51:51-07:00",
-          "message": "fix(daemon): request ids count every kind apart from the render total, the render event records its id, and a test reads only its own daemon's click event (candybar-host-renderer-x96a.9m0)\n"
-        },
-        {
-          "sha": "429e248b2f77056555d38f902bd9235d9104f668",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:41:34-07:00",
-          "message": "fix(daemon): a TIMEOUT names its request, and the click's event records it, so a test settles its own click (candybar-host-renderer-x96a.9m0)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "7c43611a9831800d0c61d84c0a4dbcebc50c6fda",
-      "timestamp": "2026-11-12T07:32:25.619Z",
+      "sha": "3e80b4374f9aaffca5c6005bf4cf3bc1021e4b63",
+      "timestamp": "2026-11-12T08:02:46.128Z",
       "commits": [
         {
-          "sha": "7c43611a9831800d0c61d84c0a4dbcebc50c6fda",
+          "sha": "3e80b4374f9aaffca5c6005bf4cf3bc1021e4b63",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:31:24-07:00",
-          "message": "test(clicks): must-land clicks in the plugin and repository tests go through the click helper (candybar-host-renderer-x96a.iml) (#728)\n\n* test(plugins): a click the plugin tests need to land goes through the click helper (candybar-host-renderer-x96a.iml)\n\n* test(clicks): the repository answers land through the click helper, and one builder spells the click request (candybar-host-renderer-x96a.iml)\n\n* test(clicks): the click helper reads its event's fields through logfmt, and its comment says outcome tells landed from dropped (candybar-host-renderer-x96a.iml)\n\n* test(clicks): the answer budget's and the event wait's comments say what they bound (candybar-host-renderer-x96a.iml)"
+          "timestamp": "2026-11-12T01:01:46-07:00",
+          "message": "fix(daemon): a TIMEOUT names its request, and the click's event records it, so a test settles its own click (candybar-host-renderer-x96a.9m0) (#729)\n\n* fix(daemon): a TIMEOUT names its request, and the click's event records it, so a test settles its own click (candybar-host-renderer-x96a.9m0)\n\n* fix(daemon): request ids count every kind apart from the render total, the render event records its id, and a test reads only its own daemon's click event (candybar-host-renderer-x96a.9m0)\n\n* fix(daemon): the TIMEOUT id's docs say which requests record it, and a refused click is checked against the test's own statement of the wire (candybar-host-renderer-x96a.9m0)"
         }
       ]
     }

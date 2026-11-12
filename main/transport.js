@@ -67237,6 +67237,16 @@ var RuntimeStats = class _RuntimeStats {
   requestsTimedOut = 0;
   inFlight = 0;
   unknownHookFields = /* @__PURE__ */ new Set();
+  // [LAW:single-enforcer] Where a request is accepted: its id is the count
+  // of requests of every kind accepted so far, so ids follow the order they
+  // arrived. Apart from `requestsTotal`, which counts renders alone.
+  accepted = 0;
+  accept() {
+    return {
+      id: ++this.accepted,
+      at: this.clock.monotonic()
+    };
+  }
   // Whether `field` is the first sight of that unknown hook field in this
   // daemon's life: every request carries it, so it is said once.
   firstSightOfUnknownHookField(field) {
@@ -76134,7 +76144,8 @@ var FrameFeeds = class {
   refused = 0;
   lookups = 0;
   found = 0;
-  // A valid render request the daemon received `order`-th. The latest request
+  // A valid render request the daemon accepted `order`-th, among requests of
+  // every kind. The latest request
   // a session sent is where the feeds find the session: whether its pane is
   // shown, and which sessions a wake or a lookup matches. Its frames draw by
   // the request its view is declared with. One that arrived before it — a
@@ -77833,9 +77844,10 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const started2 = new Date(clock.now());
     const at = instantOf(started2);
     const t0 = clock.monotonic();
-    const queuedMs = spanMs(accepted, t0);
+    const queuedMs = spanMs(accepted.at, t0);
     const facts = [];
-    const order2 = ++stats.requestsTotal;
+    stats.requestsTotal++;
+    const order2 = accepted.id;
     const checked = checkRenderRequest(req, stats, parts.log, parts.home);
     const sighted = (req2, frame2) => renderSightings.see(
       req2.hookData.session_id,
@@ -77861,6 +77873,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const recorded2 = (rendered) => {
       if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
       noteFacts(facts, {
+        req: String(accepted.id),
         timedOut: timedOut() ? "Y" : "N",
         clientLeft: clientLeft() ? "Y" : "N",
         queued: `${queuedMs}ms`
@@ -77889,7 +77902,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to
       // draw (src/daemon/request-deadline.ts).
-      t0 + waitBudgetMs(checked.req.deadline, accepted, {
+      t0 + waitBudgetMs(checked.req.deadline, accepted.at, {
         epochMs: started2.getTime(),
         monoMs: t0
       }),
@@ -78021,7 +78034,10 @@ function serializeSegmentCells(cells, colorCompatibility) {
 async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
   const { clock } = parts;
   const t0 = clock.monotonic();
-  const facts = [["queued", `${spanMs(accepted, t0)}ms`]];
+  const facts = [
+    ["req", String(accepted.id)],
+    ["queued", `${spanMs(accepted.at, t0)}ms`]
+  ];
   const gone = () => timedOut() || clientLeft();
   const outcome = await run3(facts, gone);
   noteFacts(facts, {
@@ -86952,7 +86968,7 @@ function hookData() {
   };
 }
 async function daemon2(request2) {
-  const { resp, settled: settled3 } = await pageDaemon.reply(request2, () => false, pageDaemon.clock.monotonic(), () => false);
+  const { resp, settled: settled3 } = await pageDaemon.reply(request2, () => false, pageDaemon.stats.accept(), () => false);
   settled3(true);
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return resp;
