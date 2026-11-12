@@ -69309,7 +69309,10 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
     rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
   }
 }
-var copy = async (value, ctx) => ctx.copy(oneArg(value));
+function pbcopy(text4, ctx) {
+  return ctx.perform({ kind: "copy", text: text4 });
+}
+var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
 var DRAWERS = /* @__PURE__ */ new Set([
   "request",
   "feed"
@@ -69329,7 +69332,7 @@ var copyDiagnostic = async (value, ctx) => {
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics \u2014 open the indicator beside the settings door again and copy from there`
     );
-  ctx.copy(text4);
+  await pbcopy(text4, ctx);
 };
 var openVscode = (value, ctx) => ctx.launch(
   {
@@ -70371,6 +70374,10 @@ async function journaled(sid, ctx, turn, handler) {
   };
   const launches = {
     launch: (opts, what) => turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
+    perform: async (effect) => {
+      const result = await turn.landed(ctx.perform(effect));
+      if (!result.ok) clickFailed(result, effect.kind, ctx.log);
+    },
     typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
     applyUpdate: () => turn.landed(ctx.applyUpdate())
   };
@@ -76801,8 +76808,7 @@ function drawRender(parts, setup, drawing2) {
     payloadProviders,
     effectSessions,
     menuIdle,
-    launcher,
-    copyFailures
+    launcher
   } = parts;
   const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const payload = view.source.payload();
@@ -76847,11 +76853,9 @@ function drawRender(parts, setup, drawing2) {
   const launched = launcher.launcherWarnings(at, drawing2.by);
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
   const pipeShown = pipeWarning?.event ?? null;
-  const [copyWarning] = copyFailures.warnings(at, drawing2.by);
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...launched,
-    ...copyWarning === void 0 ? [] : [copyWarning],
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }],
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
@@ -76997,7 +77001,6 @@ function drawRender(parts, setup, drawing2) {
       case "config-watch":
       case "lifeline":
       case "launch-pipes":
-      case "copy-failed":
       case "when":
         return w.kind;
     }
@@ -77035,8 +77038,6 @@ function drawRender(parts, setup, drawing2) {
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     // The launcher's pipe event as this frame showed it: `-` for not at all.
     pipeEvent: pipeWarning?.hold ?? "-",
-    // The click copy failure as this frame showed it: `-` for not at all.
-    copyFailed: copyWarning?.hold ?? "-",
     upd: String(updates.offer.length),
     // How many repositories the bar asked about.
     ask: String(questions.length),
@@ -77059,7 +77060,6 @@ function drawRender(parts, setup, drawing2) {
     cellBreaks,
     clickShown,
     pipeShown,
-    copyShown: copyWarning?.event ?? null,
     delivered,
     lanes
   };
@@ -77149,7 +77149,11 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
       ended,
       refreshed: refreshedFact(refreshed)
     });
-    const { drawn, clickShown, pipeShown, copyShown, delivered, lanes } = drawRender(parts, setup, ANSWERING);
+    const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
+      parts,
+      setup,
+      ANSWERING
+    );
     const sessionId2 = req.hookData.session_id;
     const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
     const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
@@ -77165,8 +77169,7 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
         sessionId2,
         delivered,
         clickShown,
-        pipeShown,
-        copyShown
+        pipeShown
       )
     };
   } catch (_) {
@@ -77175,13 +77178,12 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function answerDelivered(parts, sessionId2, copied, clickShown, pipeShown, copyShown) {
+function answerDelivered(parts, sessionId2, copied, clickShown, pipeShown) {
   return () => {
     copied();
     if (clickShown !== null)
       answeredClickError(parts.sessionState, sessionId2, clickShown);
     if (pipeShown !== null) parts.launcher.answeredPipeEvent(pipeShown);
-    if (copyShown !== null) parts.copyFailures.answered(copyShown);
   };
 }
 function statuslineOf(sessionId2, drawn, elsewhere) {
@@ -77276,7 +77278,7 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
   const { effects } = delivered.output;
   noteFacts(facts, {
     renderer: host.name,
-    effects: effects.map((e) => e.kind === "present" ? `${e.kind}:${e.surface}` : e.kind).join(",") || "-"
+    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
   });
   let answer2 = null;
   for (const effect of effects) {
@@ -77290,8 +77292,6 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
         else if (answer2 !== null)
           done2(effect, `a second statusline frame for request ${id2}`);
         else answer2 = effect;
-        break;
-      case "copy":
         break;
     }
   }
@@ -84900,22 +84900,20 @@ init_globals();
 // src/renderer/interface.ts
 init_globals();
 var TurnThrew = class extends Error {
-  constructor(record2, thrown2, subscriptions, effects) {
+  constructor(record2, thrown2, subscriptions) {
     super(thrown2 instanceof Error ? thrown2.message : String(thrown2));
     this.record = record2;
     this.thrown = thrown2;
     this.subscriptions = subscriptions;
-    this.effects = effects;
     this.name = "TurnThrew";
   }
   record;
   thrown;
   subscriptions;
-  effects;
 };
 
 // src/daemon/renderer-host.ts
-function rendererHost(name, clock, renderer, log, clipboard, collector) {
+function rendererHost(name, clock, renderer, log, collector) {
   const turn = async (input) => {
     const session = sessionOf(input.event);
     const release4 = session === null ? () => {
@@ -84923,51 +84921,31 @@ function rendererHost(name, clock, renderer, log, clipboard, collector) {
     try {
       const output = await renderer.answer(input);
       collector.subscribed(output.subscriptions);
-      await perform2(input.event.kind, output.effects);
+      if (input.event.kind !== "request")
+        for (const effect of output.effects)
+          refuse4(effect, `a ${input.event.kind} turn answers no request`);
       return { kind: "answered", output };
     } catch (e) {
       if (!(e instanceof TurnThrew))
         return { kind: "threw", error: e, record: [] };
       collector.subscribed(e.subscriptions);
-      await perform2(input.event.kind, e.effects);
       return { kind: "threw", error: e.thrown, record: e.record };
     } finally {
       release4();
     }
   };
-  const perform2 = async (by, effects) => {
-    for (const effect of effects) {
-      if (RETURNED_BY[effect.kind] !== by) {
-        await settle3(effect, {
-          kind: "failed",
-          reason: `a ${by} turn returns no ${effect.kind}`
-        });
-        continue;
-      }
-      switch (effect.kind) {
-        case "present":
-          continue;
-        case "copy":
-          await settle3(effect, await clipboard(effect.text));
-      }
-    }
-  };
-  const settle3 = (effect, outcome) => deliver(
+  const refuse4 = (effect, reason) => void deliver(
     {
       kind: "event",
       at: instantAt(clock),
       event: {
         kind: "effect-done",
-        session: effect.kind === "present" ? effect.session : null,
+        session: effect.session,
         of: effect.id,
-        outcome
+        outcome: { kind: "failed", reason }
       }
     },
-    [
-      ["effect", String(effect.id)],
-      ["kind", effect.kind],
-      ...outcome.kind === "failed" ? [["failed", outcome.reason]] : []
-    ]
+    [["effect", String(effect.id)]]
   );
   const record2 = (input, about, delivered) => {
     const session = sessionOf(input.event);
@@ -85000,10 +84978,6 @@ function rendererHost(name, clock, renderer, log, clipboard, collector) {
   };
   return { name, answer: turn, deliver };
 }
-var RETURNED_BY = {
-  present: "request",
-  copy: "click"
-};
 function sessionOf(event) {
   switch (event.kind) {
     case "config":
@@ -85019,13 +84993,26 @@ function sessionOf(event) {
       return event.session;
   }
 }
+function effectInterpreter(launcher) {
+  return (effect) => {
+    switch (effect.kind) {
+      case "copy":
+        return launcher.launch({
+          bin: "/usr/bin/pbcopy",
+          stdinInput: effect.text,
+          category: "click.pbcopy",
+          timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
+        });
+    }
+  };
+}
 
 // src/renderer/main.ts
 init_globals();
 
 // src/renderer/click.ts
 init_globals();
-async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, gone }, record2, copy3) {
+async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, gone }, record2) {
   const handler = verbs.handler(verb);
   if (handler === void 0)
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
@@ -85037,8 +85024,7 @@ async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, g
       placeWaited: (ms) => noteFacts(record2, { placeWait: `${ms}ms` }),
       gatherTook: (ms) => noteFacts(record2, { gather: `${ms}ms` }),
       turnWaited: (ms) => noteFacts(record2, { turnWait: `${ms}ms` }),
-      clientGone: gone,
-      copy: copy3
+      clientGone: gone
     });
   } finally {
     if (pending2 !== null) menuIdle.clickSettled(pending2);
@@ -85047,13 +85033,18 @@ async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, g
 
 // src/renderer/main.ts
 function mainRenderer(parts) {
-  const owed = /* @__PURE__ */ new Map();
+  const deliveries = /* @__PURE__ */ new Map();
   let minted = 0;
-  const turn = async (event, at, record2, owe2) => {
+  const answered = (effects, record2) => ({
+    effects,
+    subscriptions: parts.renderCache.subscriptions(),
+    record: record2
+  });
+  const turn = async (event, at, record2) => {
     switch (event.kind) {
       case "config":
         configureSession(parts, event.context, event.worldState, at, record2);
-        return;
+        return answered([], record2);
       case "request": {
         const { frame: frame2, delivered } = await answerRequest(
           parts,
@@ -85062,80 +85053,54 @@ function mainRenderer(parts) {
           event.waitEndsAt,
           record2
         );
-        owe2(
-          (id2) => ({
-            kind: "present",
-            id: id2,
-            session: event.context.hookData.session_id,
-            surface: "statusline",
-            request: event.id,
-            frame: frame2
-          }),
-          (outcome) => {
-            if (outcome.kind === "ok") delivered();
-          }
+        const id2 = ++minted;
+        deliveries.set(id2, delivered);
+        return answered(
+          [
+            {
+              kind: "present",
+              id: id2,
+              session: event.context.hookData.session_id,
+              surface: "statusline",
+              request: event.id,
+              frame: frame2
+            }
+          ],
+          record2
         );
-        return;
       }
       case "world-state":
         parts.worldStates.take(event.worldState);
-        return;
+        return answered([], record2);
       case "retire":
         retireSession(parts, event.session);
-        return;
+        return answered([], record2);
       case "effect-done": {
-        const settle3 = owed.get(event.of);
-        if (settle3 === void 0)
+        const delivered = deliveries.get(event.of);
+        if (delivered === void 0)
           throw new Error(
-            `effect-done for effect ${event.of}, which is not an effect on its way`
+            `effect-done for effect ${event.of}, which is not a present on its way`
           );
-        owed.delete(event.of);
-        settle3(event.outcome, at);
-        return;
+        deliveries.delete(event.of);
+        if (event.outcome.kind === "ok") delivered();
+        return answered([], record2);
       }
       case "click":
-        await clickTurn(
-          parts,
-          event,
-          record2,
-          (text4) => owe2(
-            (id2) => ({ kind: "copy", id: id2, text: text4 }),
-            (outcome, settledAt) => {
-              if (outcome.kind === "failed")
-                parts.copyFailures.failed(outcome.reason, settledAt);
-            }
-          )
-        );
-        return;
+        await clickTurn(parts, event, record2);
+        return answered([], record2);
       case "menu-idle":
         await parts.verbs.closeIdle(event.session, event.idle);
-        return;
+        return answered([], record2);
     }
   };
   return {
     answer: async ({ event, at }) => {
       const record2 = [];
-      const effects = [];
-      const owe2 = (effect, settle3) => {
-        const made = effect(++minted);
-        owed.set(made.id, settle3);
-        effects.push(made);
-      };
       try {
-        await turn(event, at, record2, owe2);
+        return await turn(event, at, record2);
       } catch (thrown2) {
-        throw new TurnThrew(
-          record2,
-          thrown2,
-          parts.renderCache.subscriptions(),
-          effects
-        );
+        throw new TurnThrew(record2, thrown2, parts.renderCache.subscriptions());
       }
-      return {
-        effects,
-        subscriptions: parts.renderCache.subscriptions(),
-        record: record2
-      };
     }
   };
 }
@@ -85149,41 +85114,6 @@ function verbsOver(ctx) {
       return handler && ((value, click3) => handler(value, { ...ctx, ...click3 }));
     },
     closeIdle: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, ctx)
-  };
-}
-
-// src/renderer/copy-failures.ts
-init_globals();
-var CopyFailures = class {
-  last = null;
-  failed(reason, at) {
-    this.last = { text: `copy failed: ${reason}`, at, answered: false };
-  }
-  warnings(at, render3) {
-    const event = this.last;
-    if (event === null) return [];
-    const hold2 = eventHoldAt(event, CLICK_ERROR_HOLD_S, at, render3);
-    return hold2 === "over" ? [] : [{ kind: "copy-failed", message: event.text, event, hold: hold2 }];
-  }
-  // [LAW:single-enforcer] An answer carrying `shown` reached its client.
-  answered(shown) {
-    const last2 = this.last;
-    if (last2 === null || !answeredBy(last2, shown)) return;
-    this.last = { ...last2, answered: true };
-  }
-};
-
-// src/daemon/clipboard.ts
-init_globals();
-function launchedClipboard(launcher) {
-  return async (text4) => {
-    const result = await launcher.launch({
-      bin: "/usr/bin/pbcopy",
-      stdinInput: text4,
-      category: "click.pbcopy",
-      timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
-    });
-    return result.ok ? { kind: "ok" } : { kind: "failed", reason: `pbcopy ${failureText(result)}` };
   };
 }
 
@@ -85541,7 +85471,6 @@ function createDaemon(inputs) {
     return tmux3 === null || tmux3 === void 0 ? [] : [tmux3.socket];
   }
   const renderWarnings = new RenderWarningRecords();
-  const copyFailures = new CopyFailures();
   const updateFact = newUpdateFact();
   const worldStates = new WorldStates();
   const renderCache = new RenderCache(
@@ -85654,6 +85583,7 @@ function createDaemon(inputs) {
     clickLanded: (sessionId2) => menuIdle.clicked(sessionId2, instant()),
     log,
     launcher,
+    perform: effectInterpreter(launcher),
     now: instant,
     applyUpdate: () => updateWatch.act(),
     // The load the session's bar is drawn from: its cache entry's load
@@ -85744,7 +85674,6 @@ function createDaemon(inputs) {
     tmuxStatusLines,
     frameFeeds,
     renderWarnings,
-    copyFailures,
     renderCache,
     updateWatch,
     limits,
@@ -85772,11 +85701,9 @@ function createDaemon(inputs) {
         launcher,
         laneSetups,
         tmuxStatusLines,
-        copyFailures,
         verbs: verbsOver(verbCtx)
       }),
       log,
-      launchedClipboard(launcher),
       collector
     )
   };

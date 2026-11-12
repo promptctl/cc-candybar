@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-739",
-      "ref": "refs/pull/739/merge",
-      "sha": "224f396bb1098fef793478ca0f5f4656684f00a8",
-      "timestamp": "2026-11-12T18:30:59.789Z",
+      "version": "pr-740",
+      "ref": "refs/pull/740/merge",
+      "sha": "55fc9455d8ed98b1d498de2a4c827405d79f94e4",
+      "timestamp": "2026-11-12T18:43:00.816Z",
       "commits": [
         {
-          "sha": "224f396bb1098fef793478ca0f5f4656684f00a8",
+          "sha": "55fc9455d8ed98b1d498de2a4c827405d79f94e4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T11:30:00-07:00",
-          "message": "Merge 1f8fd2b3a688de8e86cb0cf37a8cc7e483a7eabd into 62d68333106c04b0083e0576a630ef2bc03762ce\n"
+          "timestamp": "2026-11-12T11:42:06-07:00",
+          "message": "Merge 12d2593abaa31207af294dbac43dbf40745a048c into 62d68333106c04b0083e0576a630ef2bc03762ce\n"
         },
         {
-          "sha": "1f8fd2b3a688de8e86cb0cf37a8cc7e483a7eabd",
+          "sha": "12d2593abaa31207af294dbac43dbf40745a048c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T11:29:50-07:00",
-          "message": "feat(renderer): a copy click's act is a copy effect the host performs, and a failed copy shows on the bar (candybar-host-renderer-x96a.zty)\n\nThe copy and copy-diagnostic verbs hand their text to the click's `copy`,\nwhich the click turn returns as a `copy` effect. The renderer host performs\nit through the clipboard part after the turn, on both outcomes (TurnThrew\ncarries effects, as it carries subscriptions), and hands the outcome back as\nits `effect-done`. Which turn returns which effect is one table, so a present\nfrom a non-request turn and a copy from a non-click turn are refused.\n\nA failed copy is a daemon-wide held event under the one event-hold rule: the\nURL handler reads no reply and a copy names no session, so the bar is the only\nplace a person sees it. pbcopy no longer runs inside the journal turn.\n"
+          "timestamp": "2026-11-12T11:41:42-07:00",
+          "message": "feat(renderer): a copy click's clipboard write is a copy effect the host performs, inside the click's turn (candybar-host-renderer-x96a.zty)\n\nThe click's order (its session's place, the daemon-wide journal turn, the\nclose that cuts it off) is taken inside its turn while the other verbs act in\nplace, so the turn waits out its own copy rather than returning it: a batch's\nsteps stay in order, a failed copy is still the click's reply, and the\nlaunch-outcome rule stays the verb's one rule.\n"
         }
       ]
     },
