@@ -8,21 +8,19 @@
 
 import {
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { homeLayer, loadConfigChain } from "../../src/config/dsl-loader";
 import { placementIds, type DslConfig } from "../../src/config/dsl-types";
 import { presetRoot } from "../../src/config/presets";
 import { rootNode } from "../../src/config/root";
-import { locations } from "../../src/daemon/paths";
-import { hostOf } from "../helpers/host";
+import { locs } from "../helpers/host";
+import { jestTmpDir } from "../helpers/jest-tmp";
 import { EMPTY_DEFAULT, parseAndPlace } from "../helpers/parse-and-validate";
 import { unresolvedReads } from "../helpers/synthesis-reads";
 
@@ -104,35 +102,36 @@ describe("unresolvedReads", () => {
 
 // The cases above draw with no plugin rendering and no layer beneath, so a
 // plugin's placement is cut as absent and an insert has no lower tree to land
-// in. These load through the chain itself, over a host whose installed
-// plugins are its own (none), so the names a rendering plugin and a beneath
-// layer make the chrome mint reach the synthesis.
+// in. These load through the chain itself, over the setup's isolated host, so
+// the names a rendering plugin and a beneath layer make the chrome mint reach
+// the synthesis, and the load's own advisories are part of the proof.
 describe("unresolvedReads over the loader's own chain", () => {
   let tmp: string;
   beforeEach(() => {
-    tmp = mkdtempSync(join(tmpdir(), "cc-candybar-synthesis-reads-"));
+    tmp = jestTmpDir("config");
+    mkdirSync(tmp, { recursive: true });
   });
   afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
-  const load = (files: Record<string, string>) => {
+  // Layers are listed lowest first; files are everything written, layers or not.
+  const load = (layers: string[], files: Record<string, string>) => {
     for (const [name, text] of Object.entries(files)) {
       mkdirSync(dirname(join(tmp, name)), { recursive: true });
       writeFileSync(join(tmp, name), text);
     }
-    const host = hostOf({ XDG_CONFIG_HOME: join(tmp, "xdg") }, { home: tmp });
-    return loadConfigChain(
-      locations(host),
-      Object.keys(files)
-        .filter((name) => !name.startsWith("p/"))
-        .map((name) => homeLayer(join(tmp, name))),
+    const warnings: string[] = [];
+    const loaded = loadConfigChain(
+      locs(),
+      layers.map((name) => homeLayer(join(tmp, name))),
       DEFAULT_DSL_CONFIG,
-      { warned: () => {} },
+      { warned: (ws) => warnings.push(...ws) },
       { repo: null, cwd: null },
     );
+    return { ...loaded, warnings };
   };
 
   test("a rendering plugin's segment, its settings and a placement's override", () => {
-    const { config, placed, dropped } = load({
+    const { config, placed, dropped, warnings } = load(["config.json5"], {
       "p/plugin.json5": `{
         segments: {
           tag: {
@@ -152,23 +151,29 @@ describe("unresolvedReads over the loader's own chain", () => {
       }`,
     });
     expect(dropped).toEqual([]);
+    expect(warnings).toEqual([]);
     expect(placementIds(rootNode(config.root))).toContain("plugins.p.tag");
+    expect(placementIds(presetRoot(config, "compact").node)).toContain("short");
     expect(unresolvedReads(config, placed)).toEqual([]);
   });
 
   test("an insert into the presets of the layer beneath", () => {
-    const { config, placed, dropped } = load({
-      "lower.json5": `{
+    const { config, placed, dropped, warnings } = load(
+      ["lower.json5", "upper.json5"],
+      {
+        "lower.json5": `{
         segments: { mine: { template: "mine" } },
         root: { h: ["mine"] },
         presets: { compact: { globals: { padding: 0 }, root: { v: ["mine"] } } },
       }`,
-      "upper.json5": `{
+        "upper.json5": `{
         segments: { theirs: { template: "{{ .model.display_name }}" } },
         insert: [{ seg: "theirs", after: "mine" }],
       }`,
-    });
+      },
+    );
     expect(dropped).toEqual([]);
+    expect(warnings).toEqual([]);
     expect(placementIds(presetRoot(config, "compact").node)).toContain(
       "theirs",
     );
