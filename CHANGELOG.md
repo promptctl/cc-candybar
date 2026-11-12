@@ -1,3 +1,9 @@
+## [1.218.4](https://github.com/promptctl/cc-candybar/compare/v1.218.3...v1.218.4) (2026-11-12)
+
+### Bug Fixes
+
+* **daemon:** a TIMEOUT names its request, and the click's event records it, so a test settles its own click (candybar-host-renderer-x96a.9m0) ([#729](https://github.com/promptctl/cc-candybar/issues/729)) ([3e80b43](https://github.com/promptctl/cc-candybar/commit/3e80b4374f9aaffca5c6005bf4cf3bc1021e4b63))
+
 ## [1.218.3](https://github.com/promptctl/cc-candybar/compare/v1.218.2...v1.218.3) (2026-11-12)
 
 ### Performance Improvements
