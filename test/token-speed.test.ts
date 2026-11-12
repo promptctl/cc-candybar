@@ -85,7 +85,7 @@ describe("projectTokensPerSecond (pure)", () => {
   });
 });
 
-// ─── SessionUsageStore.observeSpeed (the prior-sample owner) ──────────────────
+// ─── SessionUsageStore request speed (the prior-sample owner) ──────────────────
 
 function usageLine(tag: string, input: number, output: number): string {
   return (
@@ -102,7 +102,7 @@ function usageLine(tag: string, input: number, output: number): string {
   );
 }
 
-describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
+describe("SessionUsageStore request speed — prior-sample retention", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "cc-candybar-speed-"));
@@ -119,7 +119,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       sweepIntervalMs: 0,
     });
     try {
-      const first = await store.observeSpeed(S_2, t, 1_000);
+      const first = await store.request(S_2, t).speed(1_000);
       expect(first.kind).toBe("ok");
       if (first.kind !== "ok") return;
       expect(first.value.prev).toBeUndefined();
@@ -133,7 +133,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       // Transcript grows by one more turn; bump mtime so the store re-parses.
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 5));
       utimesSync(t, new Date(2000), new Date(2000));
-      const second = await store.observeSpeed(S_2, t, 2_000);
+      const second = await store.request(S_2, t).speed(2_000);
       expect(second.kind).toBe("ok");
       if (second.kind !== "ok") return;
       expect(second.value.prev).toMatchObject({
@@ -170,7 +170,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     });
     try {
       // Establish a baseline (output 5) at the first transcript state.
-      await store.observeSpeed(C_2, t, 1_000);
+      await store.request(C_2, t).speed(1_000);
 
       // Output grows to 25; bump mtime to the new state.
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 20));
@@ -181,8 +181,8 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       // (output 25) as its prev and degrade to a zero delta. Coalesced, both
       // share ONE observation: prev = the baseline (5), cur = the new state (25).
       const [a, b] = await Promise.all([
-        store.observeSpeed(C_2, t, 2_000),
-        store.observeSpeed(C_2, t, 2_000),
+        store.request(C_2, t).speed(2_000),
+        store.request(C_2, t).speed(2_000),
       ]);
       expect(a.kind).toBe("ok");
       expect(b.kind).toBe("ok");
@@ -216,7 +216,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
         const ms = (i + 1) * 1000;
         writeFileSync(t, lines);
         utimesSync(t, new Date(ms), new Date(ms));
-        const r = await store.observeSpeed(R_2, t, ms);
+        const r = await store.request(R_2, t).speed(ms);
         expect(r.kind).toBe("ok");
         if (r.kind !== "ok") return;
         results.push(r.value);
@@ -249,12 +249,12 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
     try {
       writeFileSync(t, usageLine("a", 10, 5));
       utimesSync(t, new Date(1000), new Date(1000));
-      const first = await store.observeSpeed(O_2, t, 3_000); // inserted first, atMs 3000
+      const first = await store.request(O_2, t).speed(3_000); // inserted first, atMs 3000
       expect(first.kind).toBe("ok");
 
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 5));
       utimesSync(t, new Date(2000), new Date(2000));
-      const second = await store.observeSpeed(O_2, t, 1_000); // inserted second, atMs 1000
+      const second = await store.request(O_2, t).speed(1_000); // inserted second, atMs 1000
       expect(second.kind).toBe("ok");
       if (second.kind !== "ok") return;
 

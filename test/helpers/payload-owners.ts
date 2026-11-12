@@ -13,6 +13,7 @@
 
 import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
+import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-store";
 import { HOST } from "./host";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import type { CheckedHookData } from "../../src/renderer/request-context";
@@ -213,7 +214,10 @@ export function fakeUsage(
       nowMs: number,
     ) => Loose;
   } = {},
-) {
+): Pick<
+  SessionUsageStore,
+  "request" | "usageOf" | "declareToday" | "daysOutside" | "speedOf"
+> {
   const usage = refreshed<TranscriptUsage>();
   // The sessions whose request refreshed `today`: before one has, a draw
   // reads it as not answered yet.
@@ -221,20 +225,15 @@ export function fakeUsage(
   const speed = refreshed<SpeedObservation>();
   const refreshUsage = (sessionId: string) =>
     usage.store(sessionId, readers.usage?.(sessionId) ?? ABSENT);
-  const observeSpeed = (
-    sessionId: string,
-    transcriptPath: string | undefined,
-    nowMs: number,
-  ) =>
-    speed.store(
-      sessionId,
-      readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
-    );
   return {
     // A request's lanes over its session, as the real store's `request`.
     request: (sessionId: string, transcriptPath: string | undefined) => ({
       usage: () => refreshUsage(sessionId),
-      speed: (nowMs: number) => observeSpeed(sessionId, transcriptPath, nowMs),
+      speed: (nowMs: number) =>
+        speed.store(
+          sessionId,
+          readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
+        ),
       today: async () => {
         runInAction(() => todayRefreshed.add(sessionId));
       },
@@ -263,12 +262,6 @@ export function fakeUsage(
       };
     },
     daysOutside: (): Outcome<never> => ABSENT,
-    refreshToday: async (
-      hookData: ClaudeHookData | undefined,
-    ): Promise<void> => {
-      runInAction(() => todayRefreshed.add(hookData?.session_id ?? ""));
-    },
-    observeSpeed,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
       speed.read(sessionId),
   };
