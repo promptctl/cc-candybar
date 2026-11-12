@@ -37,9 +37,8 @@ import {
   orElse,
   isPending,
   pendingOf,
-  type Failed,
-  type Ok,
   type Outcome,
+  type Present,
   type PayloadNode,
   type Pending,
   type Reading,
@@ -61,11 +60,10 @@ import { UNREAD_RUN, type RunFact } from "../facts/world-state.js";
 
 export type { ReadMode } from "../facts/source-identity.js";
 
-// What a source's cache policy names: the value it names, pending while what
-// it reads has not answered, or failed while a key failed before answering.
-type Named<T> = Pending | Ok<T> | Failed;
-// The run a `shell` or `file` source names, or why it names none.
-export type SourceRun = Named<Run>;
+// The run a `shell` or `file` source names, or why it names none: pending
+// while what its policy reads has not answered, failed while a key failed
+// before answering.
+export type SourceRun = Present<Run>;
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -661,11 +659,13 @@ export class SourceRegistry {
             )
           : refresh;
       },
+      // A failure is a failure whatever it says: its text is the variable's
+      // standing fault, so a key throwing a moving message moves no run.
       {
         equals: (a, b) =>
           a.kind === "ok" && b.kind === "ok"
             ? a.value.digest === b.value.digest
-            : compareStructural(a, b),
+            : a.kind === b.kind,
       },
     );
     runInAction(() => {
@@ -1001,7 +1001,7 @@ export class SourceRegistry {
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
-  ): () => Named<RunRefresh> {
+  ): () => Present<RunRefresh> {
     switch (policy.kind) {
       case "never":
         return () => ok({ kind: "never" });
@@ -1084,7 +1084,7 @@ export class SourceRegistry {
   private answeredUnder(
     name: string,
     reads: () => Reading<string>,
-  ): () => Named<RunRefresh> {
+  ): () => Present<RunRefresh> {
     // Equal by value, so an input that moved without moving what the policy
     // read hashes nothing and names the run it named.
     const answer = computed(reads, { equals: compareStructural });

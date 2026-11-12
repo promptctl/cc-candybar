@@ -1604,8 +1604,9 @@ describe("SourceRegistry — shell: key: cache policy", () => {
 
       // A key that throws once it has answered keeps the run it named, so
       // the source keeps its value; the fault stands as the variable's.
+      const named = registry.namedRuns().get("val")?.digest;
       store.setBox("trigger", "bad later");
-      expect(registry.runSources().get("val")?.kind).toBe("ok");
+      expect(registry.namedRuns().get("val")?.digest).toBe(named);
       expect(registry.getLastError("val")?.message).toMatch(fault);
       stop();
     } finally {
