@@ -53595,6 +53595,83 @@ function isObservable(value) {
   }
   return _isObservable(value);
 }
+function observe(thing, propOrCb, cbOrFire, fireImmediately) {
+  if (isFunction(cbOrFire)) {
+    return observeObservableProperty(thing, propOrCb, cbOrFire, fireImmediately);
+  } else {
+    return observeObservable(thing, propOrCb, cbOrFire);
+  }
+}
+function observeObservable(thing, listener, fireImmediately) {
+  const adm = getAdministration(thing);
+  if (isObservableArray(thing)) {
+    if (fireImmediately) {
+      listener({
+        observableKind: "array",
+        object: adm.proxy_,
+        debugObjectName: adm.atom_.name_,
+        type: "splice",
+        index: 0,
+        added: adm.values_.slice(),
+        addedCount: adm.values_.length,
+        removed: [],
+        removedCount: 0
+      });
+    }
+  } else if (isObservableMap(thing)) {
+    if (__MOBX_DEV__ && fireImmediately === true) {
+      die("`observe` doesn't support fireImmediately=true in combination with maps.");
+    }
+  } else if (isObservableSet(thing)) {
+    if (__MOBX_DEV__ && fireImmediately === true) {
+      die("`observe` doesn't support fireImmediately=true in combination with sets.");
+    }
+  } else if (isObservableObject(thing)) {
+    if (__MOBX_DEV__ && fireImmediately === true) {
+      die("`observe` doesn't support the fire immediately property for observable objects.");
+    }
+  } else {
+    return observeValue(adm, listener, fireImmediately);
+  }
+  return registerListener(adm, listener);
+}
+function observeObservableProperty(thing, property, listener, fireImmediately) {
+  return observeValue(getAdministration(thing, property), listener, fireImmediately);
+}
+function observeValue(adm, listener, fireImmediately) {
+  if (isComputedValue(adm)) {
+    let firstTime = true;
+    let prevValue = void 0;
+    return autorun(() => {
+      const newValue = adm.get();
+      if (!firstTime || fireImmediately) {
+        const prevU = untrackedStart();
+        listener({
+          observableKind: "computed",
+          debugObjectName: adm.name_,
+          type: UPDATE,
+          object: adm,
+          newValue,
+          oldValue: prevValue
+        });
+        untrackedEnd(prevU);
+      }
+      firstTime = false;
+      prevValue = newValue;
+    });
+  }
+  if (fireImmediately) {
+    listener({
+      observableKind: "value",
+      debugObjectName: adm.name_,
+      object: adm,
+      type: UPDATE,
+      newValue: adm.value_,
+      oldValue: void 0
+    });
+  }
+  return registerListener(adm, listener);
+}
 function transaction(action2, thisArg = void 0) {
   startBatch();
   try {
@@ -53734,6 +53811,20 @@ function interceptChange(interceptable, change) {
 }
 function hasListeners(listenable) {
   return listenable.changeListeners_ !== void 0 && listenable.changeListeners_.length > 0;
+}
+function registerListener(listenable, handler) {
+  let listeners2 = listenable.changeListeners_;
+  if (listeners2) {
+    listeners2.push(handler);
+  } else {
+    listeners2 = listenable.changeListeners_ = [handler];
+  }
+  return once(() => {
+    const idx = listeners2.indexOf(handler);
+    if (idx !== -1) {
+      listeners2.splice(idx, 1);
+    }
+  });
 }
 function notifyListeners(listenable, change) {
   const prevU = untrackedStart();
@@ -71721,6 +71812,8 @@ var SourceRegistry = class _SourceRegistry {
     this.parent = parent;
     this.env = env2;
     this.sessionState = sessionState;
+    this.cleanups.push(observe(this.subscriptionsNow, () => {
+    }));
   }
   store;
   defaultEmptyValue;
@@ -71763,7 +71856,9 @@ var SourceRegistry = class _SourceRegistry {
   }
   // [LAW:one-source-of-truth] What this registry needs run, deduped by
   // digest, in digest order, so an output is the same whatever order a config
-  // declares in. Computed, so a turn in which nothing moved sorts nothing.
+  // declares in. Computed and observed for the registry's life (the
+  // constructor), so a turn in which nothing moved sorts nothing: a computed
+  // read outside a reaction is derived again on every read.
   subscriptionsNow = computed(
     () => [
       ...new Map(
