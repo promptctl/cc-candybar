@@ -83,7 +83,10 @@ const liveRuns = new Set<SourceRuns>();
 // [LAW:single-enforcer] What holds each registry's runs, over the owner it was
 // made with, as the host holds a session view's: the one way a registry's
 // `shell` and `file` sources run in this suite.
-const holders = new Map<SourceRegistry, { held: CheckRuns; runs: SourceRuns }>();
+const holders = new Map<
+  SourceRegistry,
+  { held: CheckRuns; runs: SourceRuns }
+>();
 afterEach(() => {
   for (const registry of live) registry.dispose();
   live.clear();
@@ -3473,5 +3476,25 @@ describe("SourceRegistry — in-flight runs", () => {
     expect(alive(nap)).toBe(false);
     expect(store.read("s")).toBe("pending");
     expect(registry.getLastError("s")).toBeUndefined();
+  });
+});
+
+// The host reads a registry's runs on every turn, outside any reaction: a
+// turn in which nothing moved reads the runs it read last, derived nothing
+// again.
+describe("SourceRegistry — the runs it needs", () => {
+  it("are the same runs on a read in which nothing moved, with nothing observing", () => {
+    const store = new VariableStore(systemTimekeeper);
+    const registry = new SourceRegistry(store);
+    live.add(registry);
+    registry.declareShell("val", "echo hi", {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
+    const first = registry.subscriptions();
+    expect(first).toHaveLength(1);
+    expect(registry.subscriptions()).toBe(first);
+    expect(registry.namedRuns()).toBe(registry.namedRuns());
   });
 });

@@ -13,6 +13,7 @@ import { debug } from "../utils/logger";
 import {
   computed,
   observable,
+  observe,
   reaction,
   runInAction,
   type IComputedValue,
@@ -372,7 +373,9 @@ export class SourceRegistry {
   }
   // [LAW:one-source-of-truth] What this registry needs run, deduped by
   // digest, in digest order, so an output is the same whatever order a config
-  // declares in. Computed, so a turn in which nothing moved sorts nothing.
+  // declares in. Computed and observed for the registry's life (the
+  // constructor), so a turn in which nothing moved sorts nothing: a computed
+  // read outside a reaction is derived again on every read.
   private readonly subscriptionsNow = computed((): readonly Run[] =>
     [
       ...new Map(
@@ -445,6 +448,7 @@ export class SourceRegistry {
     private readonly env: Readonly<Record<string, string | undefined>> = {},
   ) {
     this.sessionState = sessionState;
+    this.cleanups.push(observe(this.subscriptionsNow, () => {}));
   }
 
   // [LAW:one-source-of-truth] A session's view of this directory home
