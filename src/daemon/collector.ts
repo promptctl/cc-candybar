@@ -13,7 +13,7 @@
 //
 // [LAW:no-ambient-temporal-coupling] The collector owns the session's
 // lifetime: a session idle across a whole sweep, with no open feed and no
-// click in flight, is retired, and its record goes once the retire settles.
+// turn in flight, is retired, and its record goes once the retire settles.
 
 import { inspect } from "node:util";
 import {
@@ -129,11 +129,11 @@ interface SessionRecord {
   readonly stamped: Stamped;
   subscriptions: Subscribed;
   // Whether an input named the session since the last sweep: a request, or
-  // a click that settled.
+  // a turn, a request's or a click's, that settled.
   active: boolean;
-  // The clicks on the session the host still awaits: each holds the session
-  // as an open feed does.
-  clicks: number;
+  // The turns on the session the host still awaits, a request's or a click's:
+  // each holds the session as an open feed does.
+  turns: number;
   phase: Phase;
 }
 
@@ -255,17 +255,18 @@ export class Collector {
     });
   }
 
-  // [LAW:no-ambient-temporal-coupling] A click holds its session for as long
-  // as the host awaits its turn, however long that is, and its release names
-  // the session as a request does, so the next sweep keeps it too. Only a
+  // [LAW:no-ambient-temporal-coupling] A turn, a request's or a click's, holds
+  // its session for as long as the host awaits it, however long that is, so
+  // no sweep retires the session under a turn still drawing it. Its release
+  // names the session as a request does, so the next sweep keeps it too. Only a
   // live session is kept: a retiring one has released its reads, and its
   // record goes once the retire settles, as one with no record has gone.
   holding(session: SessionId): () => void {
     const record = this.records.get(session);
     if (record?.phase.kind !== "live") return () => {};
-    record.clicks++;
+    record.turns++;
     return () => {
-      record.clicks--;
+      record.turns--;
       record.active = true;
     };
   }
@@ -275,7 +276,7 @@ export class Collector {
     for (const record of this.records.values()) {
       if (record.phase.kind !== "live") continue;
       if (record.active) record.active = false;
-      else if (record.clicks === 0 && !this.deps.watched(record.session))
+      else if (record.turns === 0 && !this.deps.watched(record.session))
         this.retire(record, record.phase);
     }
   }
@@ -322,7 +323,7 @@ export class Collector {
       stamped,
       subscriptions,
       active: true,
-      clicks: 0,
+      turns: 0,
       phase: this.watch(session, stamped, reader),
     };
   }

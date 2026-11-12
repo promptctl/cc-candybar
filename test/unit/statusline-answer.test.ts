@@ -103,8 +103,10 @@ async function answer(
   renderer: Renderer,
   logged: string[] = [],
   subscribed: Subscriptions[] = [],
+  holds: { count: number; sessions: string[] } = { count: 0, sessions: [] },
 ) {
   const facts: RequestFacts = [];
+  const named = new Set<string>();
   const answered = await answerStatusline(
     rendererHost(
       "main",
@@ -113,7 +115,19 @@ async function answer(
       (_level, line) => logged.push(line),
       (subscriptions) => subscribed.push(subscriptions),
     ),
-    { requested: () => WORLD },
+    // Mirrors the collector: only a session a request has named is held.
+    {
+      requested: (req) => {
+        named.add(req.hookData.session_id);
+        return WORLD;
+      },
+      holding: (session) => {
+        if (!named.has(session)) return () => {};
+        holds.count++;
+        holds.sessions.push(session);
+        return () => holds.count--;
+      },
+    },
     CLOCK,
     REQ,
     REQUEST,
@@ -287,4 +301,31 @@ test("the session's config reaches the renderer first, with the world state read
     { kind: "request", id: REQUEST, context: REQ, waitEndsAt: 0 },
   ]);
   expect(subscribed).toEqual([opened, drawn]);
+});
+
+test("the session is held across its config and request turns, and let go once either answers or throws", async () => {
+  const threw = () => new TurnThrew([], new Error("x"), NO_SUBSCRIPTIONS);
+  for (const [config, request] of [
+    [output([]), output([present(1)])],
+    [output([]), threw()],
+    [threw(), output([])],
+  ] as const) {
+    const holds = { count: 0, sessions: [] as string[] };
+    const heldDuring: string[] = [];
+    const renderer: Renderer = {
+      answer: async ({ event }) => {
+        const turn = event.kind === "config" ? config : request;
+        heldDuring.push(`${event.kind}:${holds.count}`);
+        if (turn instanceof TurnThrew) throw turn;
+        return turn;
+      },
+    };
+    await answer(renderer, [], [], holds);
+    expect(heldDuring).toEqual(
+      config instanceof TurnThrew ? ["config:1"] : ["config:1", "request:1"],
+    );
+    // The hold names the session the request's document was read for.
+    expect(holds.sessions).toEqual([REQ.hookData.session_id]);
+    expect(holds.count).toBe(0);
+  }
 });

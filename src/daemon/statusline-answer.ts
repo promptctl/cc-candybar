@@ -81,7 +81,7 @@ function recorded(facts: RequestFacts, delivered: Delivered): void {
 
 export async function answerStatusline(
   host: RendererHost,
-  collector: Pick<Collector, "requested">,
+  collector: Pick<Collector, "requested" | "holding">,
   clock: Pick<Timekeeper, "monotonic" | "now">,
   arrived: CheckedRenderRequest,
   id: RequestId,
@@ -109,6 +109,10 @@ export async function answerStatusline(
         ["effect", String(effect.id)],
       ],
     );
+  // [LAW:no-ambient-temporal-coupling] The session is held from its document
+  // to the request turn's answer, so no sweep retires it while its wait is out.
+  const worldState = collector.requested(req);
+  const release = collector.holding(req.hookData.session_id);
   // [LAW:no-ambient-temporal-coupling] The host owns the order: the session's
   // config goes first, with the world state read at the request's keys, and
   // its output's subscriptions reach the collector as the turn answers. A set
@@ -117,32 +121,37 @@ export async function answerStatusline(
   // In process the config turn answers at once, so nothing that opens or
   // closes a view runs between it and the request; out of process, the
   // router's mailbox is what keeps the two adjacent.
-  const configured = await host.answer({
-    kind: "event",
-    at,
-    event: {
-      kind: "config",
-      context: req,
-      worldState: collector.requested(req),
-    },
-  });
-  // [LAW:nothing-unseen] The config turn's record leads: it opens with the
-  // session, which the event's readers key on (`render sid=`), and says what
-  // the context was, whether or not a request turn runs after it.
-  recorded(facts, configured);
-  if (configured.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed(host, configured.error, "its config turn: ");
-  }
-  const delivered = await host.answer({
-    kind: "event",
-    at,
-    event: { kind: "request", id, context: req, waitEndsAt },
-  });
-  recorded(facts, delivered);
-  if (delivered.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed(host, delivered.error);
+  let delivered: Delivered;
+  try {
+    const configured = await host.answer({
+      kind: "event",
+      at,
+      event: {
+        kind: "config",
+        context: req,
+        worldState,
+      },
+    });
+    // [LAW:nothing-unseen] The config turn's record leads: it opens with the
+    // session, which the event's readers key on (`render sid=`), and says what
+    // the context was, whether or not a request turn runs after it.
+    recorded(facts, configured);
+    if (configured.kind === "threw") {
+      noteFacts(facts, { renderer: host.name });
+      return failed(host, configured.error, "its config turn: ");
+    }
+    delivered = await host.answer({
+      kind: "event",
+      at,
+      event: { kind: "request", id, context: req, waitEndsAt },
+    });
+    recorded(facts, delivered);
+    if (delivered.kind === "threw") {
+      noteFacts(facts, { renderer: host.name });
+      return failed(host, delivered.error);
+    }
+  } finally {
+    release();
   }
   const { effects } = delivered.output;
   noteFacts(facts, {
