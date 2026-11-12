@@ -29,7 +29,7 @@ import { rangeOf } from "../../../src/tmux-status/frames";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/protocol";
-import { click, render, sendClick } from "../../helpers/daemon-e2e";
+import { click, landedClick, render } from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
@@ -174,15 +174,16 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       .join("/");
     const statusClick = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/${at}`;
     // Refused until the status line has drawn its first frame, which runs
-    // nothing; the first click it answers runs the link. A click answered
-    // TIMEOUT was accepted and still runs, so it is never sent again: the
-    // event below is its outcome.
+    // nothing; the first click it answers runs the link.
     let refusal = "";
     await until(
       async () => {
-        const resp = await sendClick(daemon, statusClick);
-        refusal = resp.ok ? "" : resp.error;
-        return resp.ok || resp.code === "TIMEOUT";
+        const landed = await landedClick(daemon, statusClick);
+        if (landed.kind === "dropped") {
+          throw new Error(`the status-line click was dropped: ${landed.event}`);
+        }
+        refusal = landed.kind === "refused" ? landed.why : "";
+        return landed.kind === "landed";
       },
       () => `the status-line click's acceptance (refused: ${refusal})`,
     );

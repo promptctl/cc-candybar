@@ -244,7 +244,8 @@ export function clickBody(url: string): {
 }
 
 // A click sent as the URL handler app sends it. The daemon's answer is
-// returned as it came, refusal included.
+// returned as it came, refusal included, and a TIMEOUT is not an outcome:
+// a test asking what the click became asks `landedClick`.
 export function sendClick(
   target: DaemonTarget,
   url: string,
@@ -253,30 +254,38 @@ export function sendClick(
   return sendDaemonRequest(target, clickBody(url), replyBudgetMs);
 }
 
-// `sendClick`, for a click whose landing is the question: the refusal it
-// became, or null once it landed, a TIMEOUT settled by what the click became.
+// What a click became: it ran, it was refused, or the daemon dropped it
+// unrun while it waited for its turn.
+export type Landed =
+  | { kind: "landed" }
+  | { kind: "refused"; why: string }
+  | { kind: "dropped"; event: string };
+
+// `sendClick`, settled to what the click became.
 //
 // [LAW:no-ambient-temporal-coupling] A TIMEOUT is not the click's outcome. The
-// daemon's 200 ms guard abandons a request's reply, never its work, so a click
-// answered TIMEOUT still runs and its effect still lands (reply.ts records it
-// as `timedOut=Y`). A render may be asked again on TIMEOUT because it is a
-// read; a click is a write, so sending it again applies it twice, and a second
-// apply-update is refused as already running. On TIMEOUT the click's outcome
-// is read from the daemon's own click event instead, the first one past the
-// send that carries this click's verb (the event records no value).
+// daemon's 200 ms guard abandons the reply; a click already running still
+// lands, and one still waiting for its turn is dropped unrun (`abandoned`), so
+// a click whose client took a TIMEOUT never lands late. Either way the click's
+// event (`timedOut=Y`) says which, so on TIMEOUT the outcome is read from it:
+// the first such event past the send that carries this click's verb (the
+// event records no value). A dropped click is not sent again here: the event
+// is matched by order, and a misread one would apply the click twice.
 export async function landedClick(
   target: DaemonTarget,
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
-): Promise<string | null> {
+): Promise<Landed> {
   const { log } = endpointOf(target);
   const { verb } = linkClick(url);
   const mine = (): string[] =>
     timedOutClicks(log).filter((l) => l.includes(` verb=${verb} `));
   const before = mine().length;
   const resp = await sendClick(target, url, replyBudgetMs);
-  if (resp.ok) return null;
-  if (resp.code !== "TIMEOUT") return `${resp.error} (${resp.code})`;
+  if (resp.ok) return { kind: "landed" };
+  if (resp.code !== "TIMEOUT") {
+    return { kind: "refused", why: `${resp.error} (${resp.code})` };
+  }
   let event = "";
   // The event is the click's answer by another road, so it has the budget
   // the click's reply had.
@@ -285,9 +294,9 @@ export async function landedClick(
     `the click event of a click answered TIMEOUT (${url})`,
     replyBudgetMs,
   );
-  return / outcome=ok(?: |$)/.test(event)
-    ? null
-    : `failed once it ran past its TIMEOUT: ${event}`;
+  if (/ outcome=ok(?: |$)/.test(event)) return { kind: "landed" };
+  if (/ outcome=abandoned(?: |$)/.test(event)) return { kind: "dropped", event };
+  return { kind: "refused", why: `refused past its TIMEOUT: ${event}` };
 }
 
 // A click a test needs to land, failing loudly when it does not.
@@ -296,8 +305,11 @@ export async function click(
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<void> {
-  const refused = await landedClick(target, url, replyBudgetMs);
-  if (refused !== null) throw new Error(`click failed: ${refused}`);
+  const landed = await landedClick(target, url, replyBudgetMs);
+  if (landed.kind === "refused") throw new Error(`click refused: ${landed.why}`);
+  if (landed.kind === "dropped") {
+    throw new Error(`click dropped unrun after its TIMEOUT: ${landed.event}`);
+  }
 }
 
 // [LAW:no-ambient-temporal-coupling] Render until the daemon's own state

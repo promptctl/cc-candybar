@@ -205,8 +205,12 @@ export async function startBar(
     if (effectsOf(hit.url).some(({ verb }) => HOST_VERBS.has(verb))) {
       return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
     }
+    const landed = await landedClick(daemon.target, hit.url, REPLY_BUDGET_MS);
+    if (landed.kind === "dropped") {
+      throw new Error(`"${hit.text}" was dropped unrun after its TIMEOUT: ${landed.event}`);
+    }
     return {
-      refused: await landedClick(daemon.target, hit.url, REPLY_BUDGET_MS),
+      refused: landed.kind === "refused" ? landed.why : null,
       rendered: await render(),
     };
   };
