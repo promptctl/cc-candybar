@@ -1930,11 +1930,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       );
 
       // The delivery subscription is the owner's, for as long as it lives:
-      // a run nobody holds is kept, and its watch with it, until the owner
-      // drops it.
+      // a run nobody holds is dropped, its watch with it.
       heldOf(view).held.close();
       heldOf(registry).held.close();
-      expect(runs.stats().file).toMatchObject({ entries: 1, held: 0 });
+      expect(runs.stats().file).toMatchObject({ entries: 0, held: 0 });
       expect(events.listening()).toBe(1);
       runs.close();
       expect(events.listening()).toBe(0);
@@ -2159,14 +2158,9 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         watchersOpened: 1,
         dirWatchesOpened: 1,
       });
-      // A run nobody holds keeps its watch until its owner drops it.
+      // A run nobody holds is dropped, and its watch closed with it.
       heldOf(view).held.close();
       heldOf(home).held.close();
-      expect(counters).toMatchObject({
-        watchersClosed: 0,
-        dirWatchesClosed: 0,
-      });
-      heldOf(home).runs.close();
       expect(counters).toMatchObject({
         watchersClosed: 1,
         dirWatchesClosed: 1,

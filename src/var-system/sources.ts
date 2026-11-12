@@ -1076,6 +1076,10 @@ export class SourceRegistry {
         { fireImmediately: true },
       ),
     );
+    // [LAW:dataflow-not-control-flow] exception: the last answer is kept in
+    // the run's derivation, as a value a reaction wrote would lag the key's
+    // move inside the host's batch. The registry observes its runs for its
+    // life (the constructor), so this derivation runs at every answer.
     let last: string | undefined;
     return () => {
       const now = answer.get();

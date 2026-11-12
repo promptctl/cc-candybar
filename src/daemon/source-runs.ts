@@ -16,13 +16,10 @@
 // seam's (src/facts/source-identity.ts): a renderer names a run, and this
 // owner keys it by the digest it is handed, hashing nothing.
 //
-// [LAW:no-ambient-temporal-coupling] A period runs only while its entry is
-// held, so an unheld entry spawns nothing. Unheld entries are kept under the
-// bound every keyed source has, least recently read out first: a view that
-// closes and reopens finds its value at once, and a kept `watch_file` entry's
-// watch stays open until the entry is dropped, so the bound bounds watches
-// too. A change heard while nothing holds the entry is not read; the returning
-// hold's read picks it up.
+// [LAW:no-ambient-temporal-coupling] An entry lives while it is held: its
+// last release drops it, ending its read in flight, its period and its watch.
+// The collector holds a session's runs across each whole set of
+// subscriptions, so a view reopened within a turn's output keeps its runs.
 
 import { readFile as fsReadFile } from "node:fs/promises";
 import { observable, runInAction } from "mobx";
@@ -75,9 +72,6 @@ import type { JsonValue } from "../var-system/types.js";
 // failed in its read phase, naming the bound.
 // [LAW:no-mode-explosion] Not a config knob: one bound, named where chosen.
 export const SHELL_READ_TIMEOUT_MS = 10_000;
-
-// How many runs nothing holds are kept, the tmux names' bound.
-const MAX_UNHELD_RUNS = 64;
 
 // ─── Readers ─────────────────────────────────────────────────────────────────
 
@@ -387,8 +381,6 @@ export interface SourceRunsDeps {
   // delivering file events, which the watches ride. Only the daemon measures
   // delivery.
   readonly fileEvents?: FileEvents;
-  // How many entries nothing holds are kept, least recently read out first.
-  readonly maxUnheld?: number;
 }
 
 export interface SourceRunsStats {
@@ -456,7 +448,10 @@ export class SourceRuns {
             runInAction(() => this.faults.delete(digest));
           };
         },
-        maxEntries: deps.maxUnheld ?? MAX_UNHELD_RUNS,
+        // [LAW:no-ambient-temporal-coupling] A run lives while it is held:
+        // the last release drops it, ending its child, its period and its
+        // watch, so a key that moves every tick leaves no child behind.
+        maxEntries: 0,
         logger,
         ledger,
         clock: deps.clock,

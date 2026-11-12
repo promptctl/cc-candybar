@@ -874,8 +874,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["tmuxService close", () => tmuxService.close()],
         ["hostService close", () => hostService.close()],
         ["runs close", () => runs.close()],
-        // After the render cache: its states' registries release their holds
-        // first, so this close drops nothing a registry still reads.
+        // After the collector, which holds every session's runs: its close
+        // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],

@@ -237,7 +237,7 @@ export function engineClockFunctions(
   return new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
 }
 
-// The functions that read the drawn depth: rich-js's one DrawnAt-reading
+// [LAW:one-source-of-truth] The functions that read the drawn depth: rich-js's one DrawnAt-reading
 // binding, registered from this table over richTextFuncs' own.
 const DEPTH_BINDINGS = { readableOn: readableOnFunc } as const;
 

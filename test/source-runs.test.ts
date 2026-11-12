@@ -29,10 +29,10 @@ interface Held {
 // A rig: one owner over a scripted launcher on a held clock, and as many
 // registries over it as the test opens, each holding its own runs, as the
 // host holds a session view's.
-function rig(maxUnheld?: number) {
+function rig() {
   const clock = heldClock(new Date(0));
   const { launcher, spawner, started } = fakeLauncher(clock);
-  const runs = new SourceRuns({ launcher, clock, maxUnheld });
+  const runs = new SourceRuns({ launcher, clock });
   const opened: Held[] = [];
   const registry = (): Held => {
     const store = new VariableStore(clock);
@@ -227,15 +227,15 @@ describe("SourceRuns — a moved key is a new identity, the old value standing",
       expect(r.started()).toHaveLength(2);
       expect(store.read("branch")).toBe("main");
       expect(await h.held.settled(AbortSignal.abort())).toEqual(["branch"]);
-      // The entry the key left is kept, unheld, for a return.
-      expect(r.runs.stats().shell).toMatchObject({ entries: 2, held: 1 });
+      // The entry the key left is dropped with its last hold.
+      expect(r.runs.stats().shell).toMatchObject({ entries: 1, held: 1 });
 
       r.clock.advance(500);
       await settledAll(r.clock, h);
       expect(store.read("branch")).toBe("feature");
 
-      // Back to the first value: the kept entry answers at once, and a run
-      // with no period is read again once on its hold's return.
+      // Back to the first value: its entry went with its hold, so it is a
+      // new run like any other, awaited while the last value stands.
       r.spawner.program(
         shell("git branch --show-current"),
         runsFor(500, exits(0, "main")),
@@ -243,9 +243,12 @@ describe("SourceRuns — a moved key is a new identity, the old value standing",
       store.setBox("head", "A");
       r.clock.advance(0);
       await turns();
-      expect(store.read("branch")).toBe("main");
-      expect(await h.held.settled(AbortSignal.abort())).toEqual([]);
       expect(r.started()).toHaveLength(3);
+      expect(store.read("branch")).toBe("feature");
+      expect(await h.held.settled(AbortSignal.abort())).toEqual(["branch"]);
+      r.clock.advance(500);
+      await settledAll(r.clock, h);
+      expect(store.read("branch")).toBe("main");
     } finally {
       r.close();
     }
@@ -291,8 +294,12 @@ describe("SourceRuns — a moved key is a new identity, the old value standing",
   });
 });
 
-describe("SourceRuns — an entry is kept while held, and under the bound after", () => {
-  it("one holder's release leaves the run to the other; the last release keeps its value and arms no period", async () => {
+// [LAW:no-ambient-temporal-coupling] An entry lives while something holds
+// it: a run nobody reads spawns nothing, so the last release drops it, ending
+// its read in flight, its period and its watch. A key that moves every tick
+// would otherwise leave a child running per tick.
+describe("SourceRuns — an entry is kept while held, and dropped with its last hold", () => {
+  it("one holder's release leaves the run to the other; the last release ends its read and arms no period", async () => {
     const r = rig();
     try {
       r.spawner.program(shell("sleep 1"), runsFor(1000, exits(0, "done")));
@@ -313,53 +320,15 @@ describe("SourceRuns — an entry is kept while held, and under the bound after"
       expect(r.started()[0]!.signals).toEqual([]);
       expect(r.runs.stats().shell).toMatchObject({ entries: 1, held: 1 });
 
-      r.clock.advance(1000);
-      await settledAll(r.clock, b);
-      expect(b.store.read("slow")).toBe("done");
-
-      // Nobody holds it now: it is kept, and its period spawns nothing.
+      // Nobody holds it now: its child is ended, and its period spawns
+      // nothing.
       b.held.close();
+      await turns();
+      expect(r.started()[0]!.signals).not.toEqual([]);
       r.clock.advance(120_000);
       await turns();
       expect(r.started()).toHaveLength(1);
-      expect(r.runs.stats().shell).toMatchObject({ entries: 1, held: 0 });
-
-      // A hold that returns reads the kept value at once.
-      const c = r.registry();
-      c.registry.declareShell("slow", "sleep 1", {
-        cwd: "/work",
-        parse: TEXT,
-        cache: { kind: "ttl", durationMs: 60_000 },
-      });
-      expect(c.store.read("slow")).toBe("done");
-      expect(await c.held.settled(AbortSignal.abort())).toEqual([]);
-    } finally {
-      r.close();
-    }
-  });
-
-  it("past the bound, the least recently read unheld run is dropped", async () => {
-    const r = rig(1);
-    try {
-      r.spawner.program(shell("echo one"), exits(0, "one"));
-      r.spawner.program(shell("echo two"), exits(0, "two"));
-      const a = r.registry();
-      a.registry.declareShell("v", "echo one", {
-        cwd: "/work",
-        parse: TEXT,
-        cache: { kind: "never" },
-      });
-      await settledAll(r.clock, a);
-      a.held.close();
-      expect(r.runs.stats().shell).toMatchObject({ entries: 1, held: 0 });
-      const b = r.registry();
-      b.registry.declareShell("v", "echo two", {
-        cwd: "/work",
-        parse: TEXT,
-        cache: { kind: "never" },
-      });
-      await settledAll(r.clock, b);
-      expect(r.runs.stats().shell).toMatchObject({ entries: 1, held: 1 });
+      expect(r.runs.stats().shell).toMatchObject({ entries: 0, held: 0 });
     } finally {
       r.close();
     }
