@@ -237,14 +237,9 @@ export function engineClockFunctions(
   return new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
 }
 
-// [LAW:one-source-of-truth] The functions that read the drawn depth: rich-js's
-// one DrawnAt-reading binding, registered from this table over richTextFuncs'
-// own, so the names the scope fold reads (a cache key calling one reads a
-// session's value — src/dsl/variable-scope.ts) are the names the engine binds.
+// [LAW:one-source-of-truth] The functions that read the drawn depth: rich-js's one DrawnAt-reading
+// binding, registered from this table over richTextFuncs' own.
 const DEPTH_BINDINGS = { readableOn: readableOnFunc } as const;
-export const DEPTH_FUNCTIONS: ReadonlySet<string> = new Set(
-  Object.keys(DEPTH_BINDINGS),
-);
 
 // [LAW:single-enforcer] fromString/toString are declared once here.
 // richTextFuncs() provides the theme-independent vocabulary: painting, color

@@ -2,7 +2,7 @@ import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { processLauncher } from "./helpers/host";
 import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
-import { feedInputs } from "./helpers/inputs";
+import { feedInputs as feedPayload } from "./helpers/inputs";
 import { shellGate } from "./helpers/shell-gate";
 import { until } from "./helpers/until";
 import { handDelivery } from "./helpers/hand-delivery";
@@ -16,15 +16,21 @@ import type { Delivery } from "../src/daemon/cache/file-events";
 import {
   VariableStore,
   SourceRegistry,
-  SourceRuns,
   parseDuration,
   MIN_SHELL_TTL_MS,
-  SHELL_READ_TIMEOUT_MS,
   type Published,
   type SourceParse,
-  type SourceRunsDeps,
   type VarValue,
 } from "../src/var-system";
+import {
+  SourceRuns,
+  SHELL_READ_TIMEOUT_MS,
+  type SourceRunsDeps,
+} from "../src/daemon/source-runs";
+import { CheckRuns } from "../src/check-runs";
+import { PendingValueError } from "../src/var-system/types";
+import { instantOf } from "../src/utils/instant";
+import { timeoutSignal } from "../src/time";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
 import {
@@ -74,12 +80,71 @@ const regex = (pattern: string, dflt?: string): SourceParse => ({
 // dispose is idempotent.
 const live = new Set<SourceRegistry>();
 const liveRuns = new Set<SourceRuns>();
+// [LAW:single-enforcer] What holds each registry's runs, over the owner it was
+// made with, as the host holds a session view's: the one way a registry's
+// `shell` and `file` sources run in this suite.
+const holders = new Map<
+  SourceRegistry,
+  { held: CheckRuns; runs: SourceRuns }
+>();
 afterEach(() => {
   for (const registry of live) registry.dispose();
   live.clear();
+  for (const { held } of holders.values()) held.close();
+  holders.clear();
   for (const runs of liveRuns) runs.close();
   liveRuns.clear();
 });
+const heldOf = (registry: SourceRegistry) => {
+  const holding = holders.get(registry);
+  if (holding === undefined)
+    throw new Error("a registry this suite holds no runs for");
+  return holding;
+};
+// Its runs held, and its inputs bound as an unbound registry's are, its runs
+// answered by the holder.
+function hold(registry: SourceRegistry, runs: SourceRuns): void {
+  const held = new CheckRuns(runs, registry, instantOf(new Date()));
+  holders.set(registry, { held, runs });
+  registry.bindInputs({
+    session: () => {
+      throw new PendingValueError("session_id", "no view source is bound");
+    },
+    read: () => pendingOf("unread"),
+    run: (digest) => held.run(digest),
+    drawnAt: () => {
+      throw new PendingValueError(
+        "colorCompatibility.effective",
+        "no view source is bound",
+      );
+    },
+  });
+}
+// A fixed payload bound as the registry's inputs, its runs still the holder's.
+function feedInputs(
+  registry: SourceRegistry,
+  payload: unknown,
+  drawnAt?: ColorDepth,
+): void {
+  const { held } = heldOf(registry);
+  feedPayload(registry, payload, drawnAt, (digest) => held.run(digest));
+}
+// A session's view of `home`, its runs held over home's owner.
+function viewOf(home: SourceRegistry): SourceRegistry {
+  const view = home.view();
+  live.add(view);
+  hold(view, heldOf(home).runs);
+  return view;
+}
+// The stragglers once every run the registry names has answered, or `withinMs`
+// has passed on its store's clock.
+const settledOf = (
+  registry: SourceRegistry,
+  withinMs: number,
+): Promise<readonly string[]> =>
+  heldOf(registry).held.settled(
+    timeoutSignal(registry.variableStore.clock, withinMs),
+  );
 // A source-runs owner for a test's registries: over the process launcher on
 // the real clock unless the test says otherwise, closed after the test.
 function runsOver(deps: Partial<SourceRunsDeps> = {}): SourceRuns {
@@ -100,7 +165,6 @@ function registryOver(
   runs: SourceRuns = runsOver(),
 ): SourceRegistry {
   const registry = new SourceRegistry(
-    runs,
     store,
     defaultEmptyValue,
     sessionState,
@@ -108,6 +172,7 @@ function registryOver(
     env,
   );
   live.add(registry);
+  hold(registry, runs);
   return registry;
 }
 
@@ -503,7 +568,7 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 // it too.
 const RUN_WITHIN_MS = 10_000;
 async function ran(registry: SourceRegistry): Promise<void> {
-  expect(await registry.settled(RUN_WITHIN_MS)).toEqual([]);
+  expect(await settledOf(registry, RUN_WITHIN_MS)).toEqual([]);
 }
 
 // A wall-clock wait, for what no state reports: a TTL tick still to come, or a
@@ -1822,7 +1887,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     }
   });
 
-  it("a catch-up re-reads every watch_file source, in a view too, as if its watch had reported; a disposed registry holds none", async () => {
+  it("a catch-up re-reads every watch_file source, in a view too, as if its watch had reported; the owner's close ends its subscription", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       // The watched file is never written: only the catch-up can trigger.
@@ -1841,8 +1906,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         undefined,
         runs,
       );
-      const view = registry.view();
-      live.add(view);
+      const view = viewOf(registry);
       registry.declareFile("home", f, {
         parse: TEXT,
         cache: { kind: "watch_file", path: watchedFile },
@@ -1865,12 +1929,11 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         "both registries re-reading v2",
       );
 
-      // The delivery subscription is the owner's, for as long as it lives; a
-      // disposed registry holds no entry of it, so there is nothing left for
-      // a catch-up to re-read.
-      view.dispose();
-      registry.dispose();
-      expect(runs.stats().file.entries).toBe(0);
+      // The delivery subscription is the owner's, for as long as it lives:
+      // a run nobody holds is dropped, its watch with it.
+      heldOf(view).held.close();
+      heldOf(registry).held.close();
+      expect(runs.stats().file).toMatchObject({ entries: 0, held: 0 });
       expect(events.listening()).toBe(1);
       runs.close();
       expect(events.listening()).toBe(0);
@@ -1914,8 +1977,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       const { dir, cleanup } = makeTmpDir();
       try {
         const { watched, data, events, store, registry, cache } = rig(dir);
-        const view = registry.view();
-        live.add(view);
+        const view = viewOf(registry);
         registry.declareFile("file", data, { parse: TEXT, cache });
         registry.declareShell("shell", `cat ${data}`, {
           cwd: process.cwd(),
@@ -2080,8 +2142,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         undefined,
         runsOver({ watchers }),
       );
-      const view = home.view();
-      live.add(view);
+      const view = viewOf(home);
       home.declareFile("a", f, {
         parse: TEXT,
         cache: { kind: "watch_file", path: f },
@@ -2097,12 +2158,9 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         watchersOpened: 1,
         dirWatchesOpened: 1,
       });
-      view.dispose();
-      expect(counters).toMatchObject({
-        watchersClosed: 0,
-        dirWatchesClosed: 0,
-      });
-      home.dispose();
+      // A run nobody holds is dropped, and its watch closed with it.
+      heldOf(view).held.close();
+      heldOf(home).held.close();
       expect(counters).toMatchObject({
         watchersClosed: 1,
         dirWatchesClosed: 1,
@@ -3148,7 +3206,7 @@ describe("SourceRegistry — parse seam", () => {
     expect(() => doc(store, "doc")).toThrow(
       'variable "doc" has no value yet: its source has not completed a scan',
     );
-    expect(await registry.settled(2000)).toEqual([]);
+    expect(await settledOf(registry, 2000)).toEqual([]);
     expect(doc(store, "doc").a).toBe(1);
   });
 
@@ -3169,9 +3227,9 @@ describe("SourceRegistry — parse seam", () => {
         cache: { kind: "never" },
       });
       await until(() => store.read("fast") === "y", "fast's run publishing");
-      expect(await registry.settled(0)).toEqual(["slow"]);
+      expect(await settledOf(registry, 0)).toEqual(["slow"]);
       gate.open();
-      expect(await registry.settled(3000)).toEqual([]);
+      expect(await settledOf(registry, 3000)).toEqual([]);
     } finally {
       cleanup();
     }
@@ -3301,7 +3359,7 @@ describe("SourceRegistry — in-flight runs", () => {
           cache: { kind: "depends_on", varNames: ["A"] },
         },
       );
-      expect(await registry.settled(3000)).toEqual([]);
+      expect(await settledOf(registry, 3000)).toEqual([]);
       expect(store.read("A")).toBe("a");
       expect(store.read("B")).toBe("2");
     } finally {
@@ -3309,15 +3367,14 @@ describe("SourceRegistry — in-flight runs", () => {
     }
   });
 
-  it("a wait is for a first value, never for a period's re-read: the view's own or its directory's", async () => {
+  it("a wait is for a first value, never for a period's re-read", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       const spawns = path.join(dir, "spawns");
       const gate = shellGate(path.join(dir, "gate"));
       gate.close();
       const { registry: home } = make();
-      const view = home.view();
-      live.add(view);
+      const view = viewOf(home);
       const period = { kind: "ttl", durationMs: MIN_SHELL_TTL_MS } as const;
       const counted = (out: string) =>
         `echo x >> ${spawns}; ${gate.hold}; echo ${out}`;
@@ -3331,9 +3388,11 @@ describe("SourceRegistry — in-flight runs", () => {
         parse: TEXT,
         cache: period,
       });
-      expect([...(await view.settled(50))].sort()).toEqual(["dir", "own"]);
+      expect(await settledOf(home, 50)).toEqual(["dir"]);
+      expect(await settledOf(view, 50)).toEqual(["own"]);
       gate.open();
-      expect(await view.settled(3000)).toEqual([]);
+      expect(await settledOf(home, 3000)).toEqual([]);
+      expect(await settledOf(view, 3000)).toEqual([]);
       // Both periods' re-runs held out: a re-read keeps the answer it has. A
       // re-run can pass the gate while it is open, so only the runs spawned
       // after it closes are the held ones.
@@ -3346,7 +3405,8 @@ describe("SourceRegistry — in-flight runs", () => {
         "both periods' re-runs spawning",
         3000,
       );
-      expect(await view.settled(3000)).toEqual([]);
+      expect(await settledOf(home, 0)).toEqual([]);
+      expect(await settledOf(view, 0)).toEqual([]);
     } finally {
       cleanup();
     }
@@ -3364,18 +3424,18 @@ describe("SourceRegistry — in-flight runs", () => {
         parse: TEXT,
         cache: { kind: "key", template: "{{ .trigger }}" },
       });
-      expect(await registry.settled(3000)).toEqual([]);
+      expect(await settledOf(registry, 3000)).toEqual([]);
       gate.close();
       store.setBox("trigger", "b");
-      expect(await registry.settled(50)).toEqual(["val"]);
+      expect(await settledOf(registry, 50)).toEqual(["val"]);
       gate.open();
-      expect(await registry.settled(3000)).toEqual([]);
+      expect(await settledOf(registry, 3000)).toEqual([]);
     } finally {
       cleanup();
     }
   });
 
-  it("inFlight() lets go of a run that never ends when its signal aborts", async () => {
+  it("a wait lets go of a run that never ends when its signal aborts", async () => {
     const { registry } = make();
     registry.declareShell("stuck", "sleep 30", {
       cwd: process.cwd(),
@@ -3385,12 +3445,12 @@ describe("SourceRegistry — in-flight runs", () => {
     const wait = new AbortController();
     setTimeout(() => wait.abort(), 50);
     const asked = Date.now();
-    await registry.inFlight(wait.signal);
+    await heldOf(registry).held.settled(wait.signal);
     expect(Date.now() - asked).toBeLessThan(1000);
-    expect(await registry.settled(0)).toEqual(["stuck"]);
+    expect(await settledOf(registry, 0)).toEqual(["stuck"]);
   });
 
-  it("dispose() aborts an in-flight shell run: the child tree dies with the registry and nothing is published", async () => {
+  it("the owner's close aborts an in-flight shell run: the child tree dies and nothing is published", async () => {
     const stamp = `${process.pid}${Date.now()}`;
     const marker = `ccb-registry-abort-${stamp}`;
     const nap = `sleep 5.${stamp}`;
@@ -3404,12 +3464,31 @@ describe("SourceRegistry — in-flight runs", () => {
     });
     expect(alive(marker)).toBe(true);
     registry.dispose();
-    // The run completes (the child is reaped) — the launcher resolves only
-    // on the actual exit, so an empty settled() is the proof of death.
-    expect(await registry.settled(3000)).toEqual([]);
-    expect(alive(marker)).toBe(false);
+    heldOf(registry).held.close();
+    heldOf(registry).runs.close();
+    await until(() => !alive(marker), "the run's child ending", 3000);
     expect(alive(nap)).toBe(false);
     expect(store.read("s")).toBe("pending");
     expect(registry.getLastError("s")).toBeUndefined();
+  });
+});
+
+// The host reads a registry's runs on every turn, outside any reaction: a
+// turn in which nothing moved reads the runs it read last, derived nothing
+// again.
+describe("SourceRegistry — the runs it needs", () => {
+  it("are the same runs on a read in which nothing moved, with nothing observing", () => {
+    const store = new VariableStore(systemTimekeeper);
+    const registry = new SourceRegistry(store);
+    live.add(registry);
+    registry.declareShell("val", "echo hi", {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
+    const first = registry.subscriptions();
+    expect(first).toHaveLength(1);
+    expect(registry.subscriptions()).toBe(first);
+    expect(registry.namedRuns()).toBe(registry.namedRuns());
   });
 });

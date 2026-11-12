@@ -20,7 +20,7 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper, type Timekeeper } from "../src/time";
 import { heldClock } from "./helpers/held-clock";
 import { valueOf } from "../src/utils/logfmt";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
 
 // [LAW:behavior-not-structure] A reload keeps the state it serves exactly when
 // what it read from disk is what that state was built from, read through
@@ -73,10 +73,6 @@ function rig(
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({
-        launcher: world.launcher,
-        clock: systemTimekeeper,
-      }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

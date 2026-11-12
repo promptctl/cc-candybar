@@ -705,7 +705,14 @@ export function drawRender(
     today: todayOf(document.builtins.today, at),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
-  noteFacts(facts, sourcesFactOf([...view.state.sources.keys()], document));
+  noteFacts(
+    facts,
+    sourcesFactOf(
+      [...view.state.sources.keys()],
+      view.registry.runSources(),
+      document,
+    ),
+  );
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
@@ -1070,11 +1077,10 @@ export async function answerRequest(
     laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
   );
   // Rules 1 and 2 of the model: the answer shows what this request carried,
-  // so it waits for the refreshes its arrival triggers, the first value of
-  // every fact of its world state it waits on, and every run of its view's or
-  // its directory's sources that answers a new key — a first value, or a key
-  // its fields moved — until its client's deadline. What has not
-  // answered by then draws as pending, and lands for the next frame.
+  // so it waits for the refreshes its arrival triggers and the first value of
+  // every fact of its world state it waits on (`awaitedReading`), its view's
+  // runs among them, until its client's deadline. What has not answered by
+  // then draws as pending, and lands for the next frame.
   const waitFrom = clock.monotonic();
   // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
   // reading. Setup has spent part of what the request arrived with, and below
@@ -1086,16 +1092,14 @@ export async function answerRequest(
   const refreshed: Refreshed = new Map();
   const ended = await waitWithin(
     (signal) =>
-      Promise.all([
-        settleWorld(
-          setup.payloadInputs,
-          at,
-          refreshed,
-          () => parts.worldStates.of(setup.sessionId),
-          signal,
-        ),
-        setup.view.registry.inFlight(signal),
-      ]),
+      settleWorld(
+        setup.payloadInputs,
+        at,
+        refreshed,
+        () => parts.worldStates.of(setup.sessionId),
+        () => setup.view.registry.namedRuns().values(),
+        signal,
+      ),
     budget,
     // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
     // it is a bug, said against the session, never one that ends the daemon.

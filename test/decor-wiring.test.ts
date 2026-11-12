@@ -94,7 +94,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const store = new VariableStore(systemTimekeeper);
   const sessionState = new SessionState();
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame =>

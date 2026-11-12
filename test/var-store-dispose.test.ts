@@ -64,7 +64,7 @@ function renderedEntry(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   if (drawn) {
     drawPayload(
@@ -138,7 +138,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
   it("a never-rendered registry subscribes nothing, and its dispose changes nothing", () => {
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     registerDslConfig(
       parseAndValidate(
         "<test>",

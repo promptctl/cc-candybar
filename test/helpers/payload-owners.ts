@@ -65,6 +65,7 @@ import { CacheExpiryProvider } from "../../src/segments/cache";
 import { RefreshFaults } from "../../src/daemon/refresh-faults";
 import { systemTimekeeper } from "../../src/time";
 import { sessionIdOf } from "../../src/daemon/session-id";
+import { unscriptedRuns } from "./fake-launcher";
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
 
@@ -170,6 +171,7 @@ export async function settleLanes(
     at,
     refreshed,
     () => documentOf(inputs),
+    () => [],
     new AbortController().signal,
   );
 }
@@ -348,6 +350,9 @@ export function absentOwners() {
     metricsProvider: fakeMetrics(() => ABSENT),
     activityProvider: fakeActivity(() => ABSENT),
     tmuxService: fakeTmux(() => ABSENT),
+    // An owner whose runs fail to start, as a missing program does: a case
+    // that subscribes one says what it runs.
+    sourceRuns: unscriptedRuns(),
     autoCompact: fakeAutoCompact(() => ABSENT),
     faults: new RefreshFaults(),
     clock: systemTimekeeper,
@@ -422,7 +427,7 @@ function openHome(
     owners as KeyedOwners,
     holds,
     facts,
-    new Map(),
+    { plugins: new Map(), runs: new Map() },
   );
   // [LAW:no-silent-failure] An owner whose declaration throws is a broken
   // fixture, failed here with its stack, as the daemon logs it as an error.

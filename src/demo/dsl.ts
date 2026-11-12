@@ -73,7 +73,8 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 import type { CheckedHookData } from "../renderer/request-context.js";
 import { debug, setDebug } from "../utils/logger.js";
 import { instantOf } from "../utils/instant.js";
-import { SourceRuns } from "../var-system/source-runs.js";
+import { SourceRuns } from "../daemon/source-runs.js";
+import type { Subscriptions } from "../renderer/interface.js";
 
 const FRAMES = 4;
 const FRAME_INTERVAL_MS = 450;
@@ -83,8 +84,8 @@ const cwd = process.cwd();
 // [LAW:effects-at-boundaries] This script is its own process main: it reads the
 // machine once, as src/index.ts does, and the debug channel follows it.
 const world = processWorld();
-// [LAW:single-enforcer] The demo's own owner of its sources' runs, closed
-// with the registry that holds them.
+// [LAW:single-enforcer] The demo's own owner of its sources' runs, which its
+// collector holds, closed when the demo ends.
 const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
 const { host } = world;
 setDebug(Boolean(host.env.CC_CANDYBAR_DEBUG));
@@ -125,6 +126,7 @@ const providers = createPayloadProviders({
   clock: world.clock,
   logger: log,
   ledger: new RefreshLedger(log),
+  sourceRuns: runs,
 });
 // A session that has never clicked: every pick is absent, so each setting
 // resolves to the config's own value, every picker is closed, and there is
@@ -156,7 +158,6 @@ function loadState(): DslRenderState {
     chain,
     {
       clock: world.clock,
-      runs,
       locations: locs,
       env: host.env,
       sessionState,
@@ -189,6 +190,10 @@ async function renderFrames(): Promise<void> {
   // collector over the demo's providers and handed straight to the store its
   // view reads, as the daemon's renderer takes it.
   const worldStates = new WorldStates();
+  // What the view needs read, handed back after every world state as the
+  // host hands back every turn's output: a run named once a fact landed is
+  // subscribed by the turn that landed it. Nothing until the view opens.
+  let subscriptions = (): Subscriptions => ({ sources: new Map() });
   const collector = new Collector({
     owners: providers,
     update: () => updateFact.get(),
@@ -197,6 +202,7 @@ async function renderFrames(): Promise<void> {
     watched: () => true,
     deliver: async (event) => {
       if (event.kind === "world-state") worldStates.take(event.worldState);
+      collector.subscribed(subscriptions());
       return { kind: "answered" };
     },
     log,
@@ -221,9 +227,10 @@ async function renderFrames(): Promise<void> {
     });
     // [LAW:one-source-of-truth] The view's subscriptions reach the collector as
     // a turn's output takes them to the daemon's.
-    collector.subscribed({
-      sources: new Map([[sessionId, subscriptionsOf(state)]]),
+    subscriptions = () => ({
+      sources: new Map([[sessionId, subscriptionsOf(view)]]),
     });
+    collector.subscribed(subscriptions());
     try {
       const effective = view.source.effective();
 
@@ -245,6 +252,7 @@ async function renderFrames(): Promise<void> {
           at,
           new Map(),
           () => worldStates.of(sessionId),
+          () => view.registry.namedRuns().values(),
           // The demo's frames have no client to hang up.
           new AbortController().signal,
         );

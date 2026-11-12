@@ -21,7 +21,6 @@
 // a bar to its theme.
 
 import { drawPayload } from "../test/helpers/draw-payload";
-import { unscriptedRuns } from "../test/helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, truecolorOf } from "../test/helpers/frame";
 import { TEST_SIGNER } from "../test/helpers/link-signer";
@@ -130,7 +129,7 @@ const CALM = {
 // over between renders but the compiled config itself. One instant for every
 // render, so the renders differ only in the pick.
 const STORE = new VariableStore(systemTimekeeper);
-const REGISTRY = new SourceRegistry(unscriptedRuns(), STORE, "", new SessionState());
+const REGISTRY = new SourceRegistry(STORE, "", new SessionState());
 const COMPILED = registerDslConfig(CONFIG, REGISTRY, { signer: TEST_SIGNER, cwd: process.cwd() });
 const AT = instantOf(new Date());
 afterAll(() => REGISTRY.dispose());

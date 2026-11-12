@@ -34,6 +34,7 @@ import {
   type ViewPayload,
 } from "./render-payload.js";
 import type { SessionStateReader } from "./session-state.js";
+import { UNREAD_RUN } from "../facts/world-state.js";
 import type { HistoryDepth } from "./settings-history.js";
 import { settingCounts } from "./setting-drafts.js";
 
@@ -124,6 +125,9 @@ export function sessionSource(
       payload: () => payload.read(),
       effective: () => draw.read().effective,
       facts: document,
+      // [LAW:types-are-the-program] A digest the document does not carry is a
+      // run the host has not read for this session yet.
+      run: (digest) => document().runs[digest] ?? UNREAD_RUN,
       hints: () => compose.read().hints,
       failure: () => stampFailureOf(document()),
       selections: () => draw.read().effective,

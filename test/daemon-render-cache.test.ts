@@ -66,7 +66,7 @@ import { repoConfigsDir, repoConfigsPath } from "../src/daemon/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
 
@@ -122,7 +122,6 @@ function makeCache(
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -250,8 +249,8 @@ describe("RenderCache", () => {
 
   // brandon-lit-widget-3xo.rvo: a `shell` source runs in its entry's cwd, not
   // the detached daemon's, so one config rendered from two checkouts asks each
-  // command about its own directory.
-  test("a shell source runs in its entry's cwd", async () => {
+  // command about its own directory: the run each view names reads there.
+  test("a shell source runs in its entry's cwd", () => {
     const { cache, cleanups } = makeCache();
     const { dir, cleanup } = mkConfigDir();
     try {
@@ -268,12 +267,18 @@ describe("RenderCache", () => {
       const b = realpathSync(mkdtempSync(join(tmpdir(), "ccb-entry-b-")));
       cleanups.push(() => rmSync(a, { recursive: true, force: true }));
       cleanups.push(() => rmSync(b, { recursive: true, force: true }));
-      const inA = cache.getOrCreate(a, a, cfg).state;
-      const inB = cache.getOrCreate(b, b, cfg).state;
-      expect(await inA.registry.settled(5000)).toEqual([]);
-      expect(await inB.registry.settled(5000)).toEqual([]);
-      expect(inA.store.read("here")).toBe(a);
-      expect(inB.store.read("here")).toBe(b);
+      const cwdOf = (at: string, sid: string) => {
+        using held = cache.holdSession(at, at, cfg, viewFacts(at, sid));
+        return held.view.registry
+          .subscriptions()
+          .map(({ identity }) => identity.read);
+      };
+      expect(cwdOf(a, "s-a")).toEqual([
+        { kind: "shell", command: "pwd -P", cwd: a },
+      ]);
+      expect(cwdOf(b, "s-b")).toEqual([
+        { kind: "shell", command: "pwd -P", cwd: b },
+      ]);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -1408,7 +1413,6 @@ describe("RenderCache close", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1463,7 +1467,6 @@ describe("RenderCache frames and pins", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1607,7 +1610,6 @@ describe("RenderCache frames and pins", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1679,7 +1681,6 @@ describe("RenderCache frames and pins", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1723,7 +1724,6 @@ describe("RenderCache frames and pins", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),

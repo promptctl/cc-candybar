@@ -48,8 +48,7 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
     "<test>",
   ) as ValidatedConfig;
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(),
-    store,
+  const registry = new SourceRegistry(store,
     "",
     new SessionState(),
   );

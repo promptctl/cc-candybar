@@ -64,7 +64,7 @@ function renderGitPr(git: Record<string, unknown>): Frame {
     },
   };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     const payload = {

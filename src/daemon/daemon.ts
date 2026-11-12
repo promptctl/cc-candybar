@@ -38,7 +38,7 @@ import { FileEventDelivery } from "./cache/file-events";
 import type { Timekeeper } from "../time";
 import type { Acceptance } from "./request-event.js";
 import { RefreshLedger } from "../utils/refresh-ledger";
-import { SourceRuns } from "../var-system/source-runs";
+import { SourceRuns } from "./source-runs";
 import {
   configLoadedLine,
   RenderCache,
@@ -343,9 +343,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
   });
   // [LAW:single-enforcer] The daemon's one owner of every declared source's
-  // runs: every config's `shell` and `file` sources hold entries of it, so
-  // one identity is one program however many sessions, directories or
-  // configs declare it.
+  // runs: the collector holds each run a session's renderer subscribes to, so
+  // one identity is one program however many sessions name it.
   const sourceRuns = new SourceRuns({
     launcher,
     clock,
@@ -362,6 +361,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     logger: log,
     ledger: refreshLedger,
+    sourceRuns,
   });
   const {
     gitProvider: gitService,
@@ -529,7 +529,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock,
-      runs: sourceRuns,
       stateDir: paths.state,
       locations: locs,
       env: host.env,
@@ -875,8 +874,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["tmuxService close", () => tmuxService.close()],
         ["hostService close", () => hostService.close()],
         ["runs close", () => runs.close()],
-        // After the render cache: its states' registries release their holds
-        // first, so this close drops nothing a registry still reads.
+        // After the collector, which holds every session's runs: its close
+        // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],

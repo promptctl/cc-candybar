@@ -61,7 +61,7 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
   );
   const session = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
+  const registry = new SourceRegistry(store, "", session);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/home/tester/code/project" });
   return {
     pick: (key, value) => session.set(SID, key, value),

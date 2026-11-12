@@ -16,6 +16,7 @@ import type { SourceRegistry } from "../../src/var-system/sources";
 import type { VariableStore } from "../../src/var-system/store";
 import { globalsFor } from "./selection";
 import { sessionOfPayload } from "./payload-session";
+import { UNREAD_RUN, type RunFact } from "../../src/facts/world-state";
 
 export function drawPayload(
   config: ValidatedConfig,
@@ -31,6 +32,7 @@ export function drawPayload(
   // declaring globals.preset or globals.style draws the preset, theme and look
   // the bar does.
   selection: RenderSelection = globalsFor(config),
+  run: (digest: string) => RunFact = () => UNREAD_RUN,
 ): DrawnFrame {
   const drawn = bindPayload(
     compiled,
@@ -40,6 +42,7 @@ export function drawPayload(
     opts,
     selection,
     sessionOfPayload(payload),
+    run,
   );
   return drawDsl(
     config,

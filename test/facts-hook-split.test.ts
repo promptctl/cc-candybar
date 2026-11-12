@@ -143,7 +143,7 @@ test("two hooks that differ only in their instantaneous fields read one document
     return assembleFacts(
       undefined,
       SID,
-      readingsOf(inputs, settledLanes(ABSENT, [])),
+      readingsOf(inputs, settledLanes(ABSENT, { plugins: new Map(), runs: new Map() })),
       pendingOf("unread"),
       AT,
     );

@@ -54,7 +54,8 @@ import { VariableStore } from "./var-system/store.js";
 import type { World } from "./host";
 import { timeoutSignal } from "./time";
 import { SourceRegistry } from "./var-system/sources.js";
-import { SourceRuns } from "./var-system/source-runs.js";
+import { SourceRuns } from "./daemon/source-runs.js";
+import { CheckRuns } from "./check-runs.js";
 import { SessionState } from "./daemon/session-state.js";
 import {
   bindPayload,
@@ -153,9 +154,10 @@ function bindPass(
     compiled,
     store,
     registry,
+    runs,
   }: Pick<
     PreparedConfig,
-    "layers" | "config" | "compiled" | "store" | "registry"
+    "layers" | "config" | "compiled" | "store" | "registry" | "runs"
   >,
   effective: EffectiveGlobals,
   width: number,
@@ -170,6 +172,7 @@ function bindPass(
     opts,
     effective,
     CHECK_SESSION,
+    (digest) => runs.run(digest),
   );
   return { drawn, opts };
 }
@@ -318,6 +321,9 @@ function checkReadings(
       // control renders all of its cells.
       autoCompact: ok<AutoCompactWindow>(400_000),
       sources: new Map(sources.map((name) => [name, ABSENT])),
+      // The runs reach the view through its holder (check-runs.ts), not the
+      // payload.
+      runs: new Map(),
     },
     // [LAW:one-source-of-truth] One day's sums, which the draw projects to its
     // own day (`todayOf`) as the daemon's draw does.
@@ -586,8 +592,11 @@ export interface PreparedConfig {
   readonly compiled: CompiledConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
-  // The check's own owner of its sources' runs, closed with the registry.
-  readonly runs: SourceRuns;
+  // What holds the registry's runs.
+  readonly runs: CheckRuns;
+  // [LAW:single-enforcer] The one teardown of what a prepare opened: the
+  // registry, its runs' holder and the check's own owner of those runs.
+  [Symbol.dispose](): void;
 }
 
 // The repository a chain loads with: its approved project.
@@ -624,17 +633,25 @@ export async function prepareConfig(
 
   const store = new VariableStore(world.clock);
   // [LAW:single-enforcer] A one-shot's own owner of its sources' runs: no
-  // daemon shares them, and the check closes them with the registry that
-  // holds them.
-  const runs = new SourceRuns({ launcher: world.launcher, clock: world.clock });
+  // daemon shares them, and the check closes them with the registry whose
+  // runs they are.
+  const sourceRuns = new SourceRuns({
+    launcher: world.launcher,
+    clock: world.clock,
+  });
   const registry = new SourceRegistry(
-    runs,
     store,
     config.globals.default_empty_value ?? "",
     new SessionState(),
     null,
     world.host.env,
   );
+  const runs = new CheckRuns(sourceRuns, registry, at);
+  const dispose = (): void => {
+    registry.dispose();
+    runs.close();
+    sourceRuns.close();
+  };
   try {
     // [LAW:single-enforcer] check draws `run` links as the daemon does,
     // signed with the one key.
@@ -655,7 +672,7 @@ export async function prepareConfig(
     );
     const settle = settleWindow(world.clock, settleMs);
     bindPass(
-      { layers, config, compiled, store, registry },
+      { layers, config, compiled, store, registry, runs },
       effective,
       CHECK_WIDTH,
       at,
@@ -664,9 +681,9 @@ export async function prepareConfig(
     // or file read — completes after registration; a prepared config's store
     // holds what the sources YIELDED, not their pre-scan fallbacks (a json
     // document with no default draws its loading cell until it is scanned).
-    // The registry owns the "every run complete" state; a source still out at
+    // The holder owns the "every run complete" state; a source still out at
     // the deadline is left to the pass that draws without it.
-    await registry.inFlight(settle.signal);
+    await runs.settled(settle.signal);
     return {
       settle,
       layers,
@@ -679,10 +696,10 @@ export async function prepareConfig(
       store,
       registry,
       runs,
+      [Symbol.dispose]: dispose,
     };
   } catch (e) {
-    registry.dispose();
-    runs.close();
+    dispose();
     throw e;
   }
 }
@@ -755,9 +772,9 @@ export async function renderEffective(
         warning satisfies never;
     }
   };
-  const { config, compiled, store, registry, settle } = prepared;
+  const { config, compiled, store, registry, runs, settle } = prepared;
   const { drawn, opts } = bindPass(prepared, effective, width, at);
-  for (const line of stragglers(settle, await registry.inFlight(settle.signal)))
+  for (const line of stragglers(settle, await runs.settled(settle.signal)))
     advisories.add(line);
   const { frame } = drawDsl(
     config,
@@ -926,11 +943,9 @@ async function loadRegisterRender(
     }
     return bar;
   } finally {
-    // [LAW:single-enforcer] The registry owns every async handle the config
-    // declared (timers, fs watchers); a one-shot check must
-    // not leak them past the verdict.
-    prepared.registry.dispose();
-    prepared.runs.close();
+    // A one-shot check must not leak the timers, watches and children the
+    // config declared past the verdict.
+    prepared[Symbol.dispose]();
   }
 }
 

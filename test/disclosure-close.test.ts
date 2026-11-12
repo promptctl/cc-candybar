@@ -126,7 +126,7 @@ function build(src: string, withDefault: boolean) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   recordRender(sessionState, SID);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);

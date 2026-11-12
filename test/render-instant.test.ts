@@ -53,7 +53,7 @@ function renderer(): {
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(CONFIG, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   return {
     render: (at) =>
@@ -129,8 +129,7 @@ describe("a stored instant is read against the frame's instant", () => {
 
   test("one payload, two frames: each draws its own age and ETA", () => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(),
-      store,
+    const registry = new SourceRegistry(store,
       "",
       new SessionState(),
     );
@@ -159,8 +158,7 @@ describe("a stored instant is read against the frame's instant", () => {
 
   test("no commit date reads as no age, and an unused window as no ETA", () => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(),
-      store,
+    const registry = new SourceRegistry(store,
       "",
       new SessionState(),
     );

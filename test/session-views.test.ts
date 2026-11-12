@@ -24,7 +24,8 @@ import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
+import { CheckRuns } from "../src/check-runs";
 import { sessionIdOf } from "../src/daemon/session-id";
 const S_A = sessionIdOf("s-a");
 const S_COPY = sessionIdOf("s-copy");
@@ -35,6 +36,10 @@ const S_COPY = sessionIdOf("s-copy");
 // switched to each rendering session's values in turn, so a source keyed on a
 // session value re-ran on every alternation between two sessions, and each saw
 // whichever ran last.
+//
+// The host runs a view's `shell` and `file` sources from the runs its registry
+// names. Here each view's runs are held for the view's life over one owner, as
+// the collector holds a session's, so views naming one digest share its run.
 
 let dir: string;
 let cleanups: Array<() => void>;
@@ -47,6 +52,22 @@ beforeEach(() => {
 afterEach(() => {
   for (const fn of cleanups.reverse()) fn();
 });
+
+// What holds each view's runs, over the one owner the test's cache was made
+// with.
+let holding: { sourceRuns: SourceRuns; held: Map<SessionView, CheckRuns> };
+const runsOf = (view: SessionView): CheckRuns => {
+  let held = holding.held.get(view);
+  if (held === undefined) {
+    held = new CheckRuns(
+      holding.sourceRuns,
+      view.registry,
+      instantOf(new Date()),
+    );
+    holding.held.set(view, held);
+  }
+  return held;
+};
 
 function makeCache(
   opts: {
@@ -75,7 +96,6 @@ function makeCache(
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      runs: new SourceRuns({ launcher: launcher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -90,6 +110,13 @@ function makeCache(
     { budgetBytes: () => opts.budgetBytes ?? 1024 * 1024 * 1024 },
   );
   cleanups.push(() => cache.close());
+  const sourceRuns = new SourceRuns({ launcher, clock: systemTimekeeper });
+  holding = { sourceRuns, held: new Map() };
+  const held = holding.held;
+  cleanups.push(() => {
+    for (const h of held.values()) h.close();
+    sourceRuns.close();
+  });
   return { cache, lines };
 }
 
@@ -156,11 +183,14 @@ const drawn = (
         padding: 1,
         width: 300,
       },
+      undefined,
+      undefined,
+      (digest) => runsOf(view).run(digest),
     ).frame,
   );
 
 // One render of session `sid` from `cwd`, as the daemon draws one: through the
-// session's view, held for the render, then every source it started settled.
+// session's view, held for the render, then every run its view names settled.
 async function render(
   cache: RenderCache,
   sid: string,
@@ -171,9 +201,7 @@ async function render(
     using held = cache.holdSession(cwd, cwd, undefined, viewFacts(cwd, sid));
     return { text: drawn(held.view, sid, at), view: held.view };
   })();
-  // Both homes the render read: the view's sources, and the directory's.
-  expect(await view.registry.settled(5000)).toEqual([]);
-  expect(await view.state.registry.settled(5000)).toEqual([]);
+  expect(await runsOf(view).settled(AbortSignal.timeout(5000))).toEqual([]);
   return { text, view };
 }
 
@@ -197,7 +225,8 @@ test("two sessions alternating on one directory each keep their own values", asy
   // Alternating re-runs nothing: each session's key is its own, and never
   // moved by the other's render.
   expect(runs("perSession")).toBe(settledRuns);
-  // The directory's source ran once, for every session rendering there.
+  // A source no session value reaches is one digest, run once for every
+  // session rendering there.
   expect(runs("perDirectory")).toBe(1);
 });
 
@@ -402,10 +431,10 @@ test("views the served entry alone carries past the budget are said, not hidden"
 });
 
 // A config load declares the session values into a view no session draws, to
-// find what cannot declare. Every source a view holds reads a session value,
-// which that view never answers, so the load starts none of them: counted at
-// the spawn, since the probe's teardown aborts a shell it started before the
-// shell can leave a trace of its own.
+// find what cannot declare. Every `shell` source is a view's, and a load holds
+// no run, so it starts none of them: counted at the spawn, since the probe's
+// teardown aborts a shell it started before the shell can leave a trace of its
+// own.
 test("a config load starts no view's source, and still names a session value that cannot declare", async () => {
   const shell = (name: string, cache: object) => ({
     kind: "shell",
@@ -458,17 +487,20 @@ test("a config load starts no view's source, and still names a session value tha
 
   const entry = cache.getOrCreate(dir, dir, undefined);
   expect(entry.lastError).toBeNull();
-  expect(await entry.state!.registry.settled(5000)).toEqual([]);
   // The one value that cannot declare, and no view source faulted for want of
   // a session.
   expect(entry.lastWarning).toBe('Variable "unclosed": unclosed action');
-  // The directory's one source, and nothing a session did not ask for.
-  expect(shells).toBe(1);
-  expect(runs("perDirectory")).toBe(1);
+  expect(shells).toBe(0);
 
   // A session asks for each of them, and a render settles what it started.
   await render(cache, "s-a");
-  for (const name of ["byInput", "byState", "afterState", "byDepth"]) {
+  for (const name of [
+    "byInput",
+    "byState",
+    "afterState",
+    "byDepth",
+    "perDirectory",
+  ]) {
     expect([name, runs(name)]).toEqual([name, 1]);
   }
   expect(shells).toBe(5);

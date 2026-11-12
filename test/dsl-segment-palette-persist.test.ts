@@ -70,7 +70,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -481,7 +481,6 @@ function makeCache(): {
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
       env: durable.host.env,
-      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

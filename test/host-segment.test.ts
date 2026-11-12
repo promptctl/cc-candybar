@@ -214,8 +214,7 @@ describe("the bundled host segment", () => {
 
   function render(host: Record<string, unknown>): Frame {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(),
-      store,
+    const registry = new SourceRegistry(store,
       "",
       new SessionState(),
     );

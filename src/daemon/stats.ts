@@ -13,7 +13,7 @@ import type { GitCacheStats } from "./cache/git";
 import type { SourceRecord, SourceScope } from "../utils/refresh-ledger";
 import type { ManagedStorageStats } from "./cache/managed-storage";
 import type { FileEventsStats } from "./cache/file-events";
-import type { SourceRunsStats } from "../var-system/source-runs";
+import type { SourceRunsStats } from "./source-runs";
 import type { JournalTurnStats } from "./journal-turns";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";

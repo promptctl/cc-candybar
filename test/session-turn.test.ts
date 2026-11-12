@@ -23,7 +23,7 @@ import {
 } from "../src/daemon/render-payload";
 import { sessionIdOf } from "../src/daemon/session-id";
 import { instantOf } from "../src/utils/instant";
-import { pendingOf } from "../src/utils/outcome";
+import { ok, pendingOf } from "../src/utils/outcome";
 import type { Fact } from "../src/facts/fact";
 import type { UpdateNotice } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
@@ -36,9 +36,14 @@ import {
   openSettled,
   requestOf,
   sessionRig,
+  settledRequest,
 } from "./helpers/session-rig";
 import { sessionBar } from "./helpers/session-bar";
 import { until } from "./helpers/until";
+import { fakeLauncher } from "./helpers/fake-launcher";
+import { SourceRuns } from "../src/daemon/source-runs";
+import { exits, runsFor, shell } from "../src/proc/spawner-fake";
+import { systemTimekeeper } from "../src/time";
 
 const SID = sessionIdOf(SESSION);
 
@@ -82,7 +87,9 @@ describe("one turn", () => {
     const rig = sessionRig(dir, cleanups);
     let declarations = 0;
     const declare = rig.providers.gitProvider.declare;
-    rig.providers.gitProvider.declare = ((...args: Parameters<typeof declare>) => {
+    rig.providers.gitProvider.declare = ((
+      ...args: Parameters<typeof declare>
+    ) => {
       declarations++;
       return declare(...args);
     }) as typeof declare;
@@ -205,10 +212,12 @@ describe("what wakes a view", () => {
     const { rig, changed } = await woken();
     const settled = changed.length;
     const request = requestOf(dir);
-    rig.cache.holdSession(dir, dir, path.join(dir, "config.json5"), {
-      ...request,
-      hints: { ...request.hints, termCols: 77 },
-    })[Symbol.dispose]();
+    rig.cache
+      .holdSession(dir, dir, path.join(dir, "config.json5"), {
+        ...request,
+        hints: { ...request.hints, termCols: 77 },
+      })
+      [Symbol.dispose]();
     expect(changed.length).toBeGreaterThan(settled);
   });
 
@@ -229,6 +238,7 @@ describe("what wakes a view", () => {
       AT,
       new Map(),
       () => rig.served.worldStates.of(SID),
+      () => view.registry.namedRuns().values(),
       new AbortController().signal,
     );
     expect(view.source.facts()).toBe(document);
@@ -244,7 +254,11 @@ describe("the all-pending document", () => {
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
-  const waiting = { kind: "pending", why: "unread", landed: new Promise<void>(() => {}) } as const;
+  const waiting = {
+    kind: "pending",
+    why: "unread",
+    landed: new Promise<void>(() => {}),
+  } as const;
   // Every owner has not answered yet.
   const pendingReadings: Readings = {
     lanes: {
@@ -260,6 +274,7 @@ describe("the all-pending document", () => {
       speed: pendingOf("unread"),
       autoCompact: pendingOf("unread"),
       sources: new Map(),
+      runs: new Map(),
     },
     today: waiting,
     faults: [],
@@ -314,4 +329,55 @@ describe("the all-pending document", () => {
       expect(frame.rows.length).toBeGreaterThan(0);
     },
   );
+});
+
+// A run keyed on a fact that lands after the config turn is named only when
+// that fact lands, before the host subscribes it: the request still waits on
+// its first read.
+describe("a request's wait", () => {
+  test("covers a run whose key lands after the request arrived", async () => {
+    const rig = sessionRig(dir, cleanups);
+    // The run takes real time to answer, so a wait that ended before the host
+    // subscribed it would draw it pending.
+    const runs = fakeLauncher(systemTimekeeper);
+    runs.spawner.program(shell("echo hi"), runsFor(30, exits(0, "hi\n")));
+    const sourceRuns = new SourceRuns({
+      launcher: runs.launcher,
+      clock: systemTimekeeper,
+    });
+    cleanups.push(() => sourceRuns.close());
+    rig.providers.sourceRuns = sourceRuns;
+    // The repository lands after the request's own refresh has, as a real
+    // read of it does, so the key moves while the wait is already listening.
+    const landed = observable.box(false);
+    setTimeout(() => runInAction(() => landed.set(true)), 20);
+    const declare = rig.providers.gitProvider.declare;
+    rig.providers.gitProvider.declare = ((
+      ...args: Parameters<typeof declare>
+    ) => {
+      const lane = declare(...args);
+      return {
+        current: () =>
+          landed.get()
+            ? lane.current()
+            : {
+                kind: "pending",
+                why: "unread",
+                landed: until(() => landed.get(), "git"),
+              },
+      };
+    }) as typeof declare;
+    const configFile = path.join(dir, "config.json5");
+    fs.writeFileSync(
+      configFile,
+      `{ variables: { branchy: { kind: "shell", command: "echo hi", cache: { key: "{{ .git.branch }}" } } },
+         segments: { mine: { template: "b={{ .branchy }}" } }, root: { h: ["mine"] } }`,
+    );
+    const view = await settledRequest(rig, dir, configFile, cleanups);
+    const run = view.registry.namedRuns().get("branchy");
+    expect(run).toBeDefined();
+    expect(view.source.run(run!.digest).reading).toMatchObject({
+      kind: "ok",
+    });
+  });
 });

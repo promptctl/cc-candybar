@@ -64,7 +64,7 @@ function render(): Frame {
   );
 
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     return drawPayload(config, compiled, store, registry, GIT_PAYLOAD, instantOf(new Date()), {

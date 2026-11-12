@@ -40,6 +40,7 @@ import {
   type PullRequest,
 } from "../src/segments/git";
 import { Holds } from "../src/utils/holds";
+import { runOf } from "../src/facts/source-identity";
 import {
   ABSENT,
   failed,
@@ -165,9 +166,7 @@ function heldRetires() {
   const answers: Array<() => void> = [];
   return {
     retired: () =>
-      new Promise<unknown>((resolve) =>
-        answers.push(() => resolve(ANSWERED)),
-      ),
+      new Promise<unknown>((resolve) => answers.push(() => resolve(ANSWERED))),
     answer: (i: number) => answers[i]!(),
   };
 }
@@ -532,7 +531,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   // The git hold an earlier declaration took goes with the one that threw.
   holds.declare(() => take("git"));
   const declared = holds.declare(() =>
-    declareLanes(owners, holds, facts, new Map()),
+    declareLanes(owners, holds, facts, { plugins: new Map(), runs: new Map() }),
   );
   expect(declared.result.faults).toEqual([
     expect.stringMatching(/^git: .*resolver bug/),
@@ -545,4 +544,42 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   expect(taken).toEqual(["git", "tmux", "host.name", "host.user", "today"]);
   expect(released).toEqual(["git"]);
   expect(declared).toMatchObject({ acquired: 4, released: 1 });
+});
+
+test("a run whose declaration throws answers its failure, and every other run and lane declares", () => {
+  const holds = new Holds();
+  const runAt = (command: string) =>
+    runOf({
+      read: { kind: "shell", command, cwd: "/w" },
+      parse: { kind: "text" },
+      refresh: { kind: "never" },
+    });
+  const broken = runAt("broken");
+  const fine = runAt("fine");
+  const owners = {
+    ...absentOwners(),
+    sourceRuns: {
+      declare: (_: Holds, run: typeof broken) => {
+        if (run.digest === broken.digest) throw new Error("watch bug");
+        return { digest: run.digest, current: () => ABSENT, fault: () => null };
+      },
+    },
+  } as unknown as KeyedOwners;
+  const declared = holds.declare(() =>
+    declareLanes(owners, holds, requestAt("/w"), {
+      plugins: new Map(),
+      runs: new Map([
+        [broken.digest, broken],
+        [fine.digest, fine],
+      ]),
+    }),
+  );
+  expect(declared.result.faults).toEqual([
+    expect.stringMatching(/^run [0-9a-f]+: .*watch bug/),
+  ]);
+  const { runs, git } = declared.result.lanes;
+  expect(runs.get(broken.digest)?.current()).toMatchObject({ kind: "failed" });
+  expect(runs.get(broken.digest)?.fault()).toBeNull();
+  expect(runs.get(fine.digest)?.current()).toEqual(ABSENT);
+  expect(git.current().kind).not.toBe("failed");
 });

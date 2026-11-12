@@ -12,22 +12,24 @@
 // digest, its period the identity's ttl and its change the identity's watched
 // path. What differs is data in the spec.
 //
-// [LAW:one-source-of-truth] The identity is what a run needs and nothing the
-// renderer owns: the default, the empty default and the key template are a
-// declaration's, so two declarations differing only in those share a run.
-// The key's VALUE is in, hashed, so a key that moves is a new identity with a
-// run of its own, and the declaration keeps publishing the old entry's answer
-// until the new one lands (sources.ts).
+// [LAW:one-source-of-truth] The identity, its digest and the key hash are the
+// seam's (src/facts/source-identity.ts): a renderer names a run, and this
+// owner keys it by the digest it is handed, hashing nothing.
 //
-// [LAW:no-ambient-temporal-coupling] An entry exists exactly while held: the
-// last release drops it, aborting the read in flight and ending its period or
-// watch. Nothing unheld is kept, because a key value nobody holds has nobody
-// to answer, and a kept entry's period would keep spawning for no bar.
+// [LAW:no-ambient-temporal-coupling] An entry lives while it is held: its
+// last release drops it, ending its read in flight, its period and its watch.
+// The collector holds a session's runs across each whole set of
+// subscriptions, so a view reopened within a turn's output keeps its runs.
 
-import crypto from "node:crypto";
 import { readFile as fsReadFile } from "node:fs/promises";
 import { observable, runInAction } from "mobx";
 import { failureText, type Launcher } from "../proc/launch";
+import type {
+  Run,
+  SourceRead,
+  ParserId,
+  ReadMode,
+} from "../facts/source-identity.js";
 import {
   WatcherRegistry,
   watchFault,
@@ -35,13 +37,13 @@ import {
   type BoundWatch,
   type Invalidation,
   type PathsWatch,
-} from "../daemon/cache/watchers.js";
+} from "./cache/watchers.js";
 import {
   NO_FILE_EVENTS,
   stallReason,
   type DeliveryNotice,
   type FileEvents,
-} from "../daemon/cache/file-events.js";
+} from "./cache/file-events.js";
 import type { Holds } from "../utils/holds.js";
 import {
   KeyedSource,
@@ -54,9 +56,14 @@ import type { Current } from "../utils/reading.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { shortDigest } from "../source-digest.js";
-import { digestOf as plainDigestOf } from "../utils/plain.js";
 import type { Timekeeper } from "../time";
-import { jsonParser, regexParser, textParser, type Parser } from "./parse.js";
+import {
+  jsonParser,
+  regexParser,
+  textParser,
+  type Parser,
+} from "../var-system/parse.js";
+import type { JsonValue } from "../var-system/types.js";
 
 // [LAW:no-silent-failure] How long one run of a shell source may take. The
 // launcher's output bound ends a child that writes without end; this ends one
@@ -65,55 +72,6 @@ import { jsonParser, regexParser, textParser, type Parser } from "./parse.js";
 // failed in its read phase, naming the bound.
 // [LAW:no-mode-explosion] Not a config knob: one bound, named where chosen.
 export const SHELL_READ_TIMEOUT_MS = 10_000;
-
-export type ReadMode = "whole" | "first-line";
-
-// ─── Identity ────────────────────────────────────────────────────────────────
-
-// What text a run reads: a command's stdout in a directory, or a file's
-// content, whole or its first line.
-export type SourceRead =
-  | { readonly kind: "shell"; readonly command: string; readonly cwd: string }
-  | {
-      readonly kind: "file";
-      readonly path: string;
-      readonly readMode: ReadMode;
-    };
-
-// [LAW:types-are-the-program] The parser without its default: the identity
-// arm, a capture over a pattern, or a document. A `RegExp` is not JSON, so the
-// identity carries its source and flags.
-export type ParserId =
-  | { readonly kind: "text" }
-  | { readonly kind: "regex"; readonly source: string; readonly flags: string }
-  | { readonly kind: "json" };
-
-// The cache policy as a run sees it: a period, a watched path, or none, the
-// run reading once. A policy over the declaration's own values (`key`,
-// `depends_on`) is a hash of what those values answered: the template is the
-// renderer's, its value's hash is the run's.
-export type RunRefresh =
-  | { readonly kind: "ttl"; readonly durationMs: number }
-  | { readonly kind: "watch_file"; readonly path: string }
-  | { readonly kind: "key"; readonly hash: string }
-  | { readonly kind: "never" };
-
-export interface SourceIdentity {
-  readonly read: SourceRead;
-  readonly parse: ParserId;
-  readonly refresh: RunRefresh;
-}
-
-// [LAW:one-source-of-truth] The identity's digest is the one digest of a
-// plain value (src/utils/plain.ts): lowercase sha256 hex of its canonical JSON.
-export const digestOf = (identity: SourceIdentity): string =>
-  plainDigestOf(identity);
-
-// [LAW:one-source-of-truth] The one hash of a key's value, the `key` message's
-// `keyHash` on the wire (spec section 13).
-export function keyHashOf(value: string): string {
-  return crypto.createHash("sha256").update(value).digest("hex");
-}
 
 // ─── Readers ─────────────────────────────────────────────────────────────────
 
@@ -209,7 +167,7 @@ function readerOf(
 // the document parser is nothing to read — a command that printed nothing, a
 // file only touched — exactly as a missing file is; a string arm reads blank
 // text as the empty string it is.
-function parserOf(parse: ParserId): Parser<unknown> {
+function parserOf(parse: ParserId): Parser<JsonValue> {
   switch (parse.kind) {
     case "text":
       return textParser;
@@ -224,9 +182,9 @@ function parserOf(parse: ParserId): Parser<unknown> {
 // untouched (it already names its origin); a failed parse gains the origin.
 function parsed(
   read: Outcome<string>,
-  parser: Parser<unknown>,
+  parser: Parser<JsonValue>,
   where: string,
-): Outcome<unknown> {
+): Outcome<JsonValue> {
   if (read.kind !== "ok") return read;
   const out = parser(read.value);
   return out.kind === "failed"
@@ -400,7 +358,7 @@ const derived = (filePath: string): PathsWatch =>
 // its watch's fault, read the same way; and the digest, for the record.
 export interface SourceLane {
   readonly digest: string;
-  current(): Current<unknown>;
+  current(): Current<JsonValue>;
   // Why the run's watch may be missing changes to its path, or `null` when
   // it hears every place the path can change, or the run watches nothing.
   fault(): string | null;
@@ -433,7 +391,7 @@ export interface SourceRunsStats {
 
 export class SourceRuns {
   private readonly byKind: Readonly<
-    Record<SourceRead["kind"], KeyedSource<SourceIdentity, unknown>>
+    Record<SourceRead["kind"], KeyedSource<Run, JsonValue>>
   >;
   private readonly watchMgr: PathWatches;
   // Each watching entry's fault, by digest, for the lanes that read it.
@@ -453,16 +411,16 @@ export class SourceRuns {
     // share it. A record per digest would grow with every key value a bar
     // ever had.
     const source = (kind: SourceRead["kind"]) =>
-      new KeyedSource<SourceIdentity, unknown>({
+      new KeyedSource<Run, JsonValue>({
         name: `source.${kind}`,
         scope: "daemon",
-        keyOf: digestOf,
-        fields: (identity, holders) =>
-          `digest=${shortDigest(digestOf(identity))} where=${valueOf(whereOf(identity.read))} sharedBy=${holders}`,
+        keyOf: (run) => run.digest,
+        fields: ({ digest, identity }, holders) =>
+          `digest=${shortDigest(digest)} where=${valueOf(whereOf(identity.read))} sharedBy=${holders}`,
         // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
         // readers through this one function; text/regex/json are three
         // parsers through it.
-        read: async (identity, signal) => {
+        read: async ({ identity }, signal) => {
           const reader = readerOf(deps.launcher, identity.read, signal);
           return parsed(
             await reader.read(),
@@ -470,13 +428,12 @@ export class SourceRuns {
             reader.where,
           );
         },
-        every: ({ refresh }) =>
+        every: ({ identity: { refresh } }) =>
           refresh.kind === "ttl"
             ? { okMs: refresh.durationMs, failedMs: refresh.durationMs }
             : null,
-        watch: (identity, changed) => {
+        watch: ({ digest, identity }, changed) => {
           if (identity.refresh.kind !== "watch_file") return NO_WATCH();
-          const digest = digestOf(identity);
           const unsubscribe = this.watchMgr.subscribe(
             identity.refresh.path,
             changed,
@@ -491,6 +448,9 @@ export class SourceRuns {
             runInAction(() => this.faults.delete(digest));
           };
         },
+        // [LAW:no-ambient-temporal-coupling] A run lives while it is held:
+        // the last release drops it, ending its child, its period and its
+        // watch, so a key that moves every tick leaves no child behind.
         maxEntries: 0,
         logger,
         ledger,
@@ -500,11 +460,11 @@ export class SourceRuns {
   }
 
   // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
-  // the identity's digest, created and read once on its first hold, and the
-  // lane reads it as it stands.
-  declare(holds: Holds, identity: SourceIdentity): SourceLane {
-    const digest = digestOf(identity);
-    const lane = this.byKind[identity.read.kind].declare(holds, identity);
+  // the run's digest, created and read once on its first hold, and the lane
+  // reads it as it stands.
+  declare(holds: Holds, run: Run): SourceLane {
+    const { digest } = run;
+    const lane = this.byKind[run.identity.read.kind].declare(holds, run);
     return {
       digest,
       current: () => lane.current(),
@@ -526,4 +486,26 @@ export class SourceRuns {
     this.byKind.file.close();
     this.watchMgr.dispose();
   }
+}
+
+// [LAW:single-enforcer] The one step from a set of runs to the lanes that read
+// them: each run is declared in `holds`, inside the caller's one
+// `Holds.declare`, so a run dropped from the set is released by that
+// declaration's diff and a run two holders share is one entry held twice. The
+// host's collector and `check`'s holder both take their lanes here. `take`
+// is how the caller meets one run's declaration throwing: the collector's
+// turns it into that run's failed lane while every other run declares, and
+// `check`'s lets it fail the check.
+export function declareRuns(
+  sourceRuns: Pick<SourceRuns, "declare">,
+  holds: Holds,
+  runs: ReadonlyMap<string, Run>,
+  take: (digest: string, declare: () => SourceLane) => SourceLane,
+): ReadonlyMap<string, SourceLane> {
+  return new Map(
+    [...runs].map(([digest, run]) => [
+      digest,
+      take(digest, () => sourceRuns.declare(holds, run)),
+    ]),
+  );
 }

@@ -44,7 +44,8 @@ import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
+import { CheckRuns } from "../src/check-runs";
 
 let dir: string;
 // The machine a test runs on: this worker's own unless its describe states another.
@@ -153,7 +154,7 @@ describe("a listed plugin", () => {
         .members;
       expect(members).toContain("plugins.deploy.status");
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -190,7 +191,7 @@ describe("a listed plugin", () => {
         value: { env: "prod", state: "live" },
       });
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 });
@@ -350,7 +351,7 @@ test("the user's config still renders beside a dropped plugin", async () => {
     expect(prepared.droppedPlugins).toHaveLength(1);
     expect(warnings.join("\n")).toContain("was not loaded");
   } finally {
-    prepared.registry.dispose();
+    prepared[Symbol.dispose]();
   }
 });
 
@@ -388,7 +389,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
       expect(prepared.droppedPlugins).toHaveLength(1);
       return prepared.config.segments["plugins.deploy.status"]!.template!;
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   }
 
@@ -437,7 +438,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
         prepared.config.segments["plugins.deploy.status"]!.template,
       ).toContain("was not loaded");
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -462,7 +463,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
         "plugin not loaded",
       );
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -501,7 +502,7 @@ test("the user's file retunes a plugin segment by field", async () => {
       prepared.config.segments["plugins.deploy.status"]!.template,
     ).toContain("⇪");
   } finally {
-    prepared.registry.dispose();
+    prepared[Symbol.dispose]();
   }
 });
 
@@ -540,7 +541,7 @@ test("a data file written after load, and replaced by rename, is read", async ()
       });
     }
   } finally {
-    prepared.registry.dispose();
+    prepared[Symbol.dispose]();
   }
 });
 
@@ -565,7 +566,7 @@ test("a plugin whose names another layer already declares is dropped; the first 
     );
     expect(prepared.config.segments["plugins.deploy.status"]).toBeDefined();
   } finally {
-    prepared.registry.dispose();
+    prepared[Symbol.dispose]();
   }
 });
 
@@ -590,7 +591,6 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     stateDir: stateDir(host),
     locations: locations(host),
     env: host.env,
-    runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
     storage: NO_PLUGIN_STORAGE,
     signer: TEST_SIGNER,
     gates: bareGates(),
@@ -652,7 +652,6 @@ describe("a plugin's own variables", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -702,7 +701,6 @@ describe("a plugin's own variables", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -762,7 +760,6 @@ describe("a plugin's own variables", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -783,7 +780,6 @@ describe("a plugin's own variables", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -842,7 +838,7 @@ describe("an installed plugin", () => {
         /^(plugins|repo)\./.test(n),
       );
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   }
 
@@ -879,7 +875,7 @@ describe("an installed plugin", () => {
         .members;
       expect(members).toContain("plugins.deploy.status");
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -937,7 +933,6 @@ describe("an installed plugin", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -998,7 +993,6 @@ describe("an installed plugin", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1008,6 +1002,11 @@ describe("an installed plugin", () => {
       },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );
+    // The runs each view's sources name, held as the host holds a session's.
+    const sourceRuns = new SourceRuns({
+      launcher: processLauncher,
+      clock: systemTimekeeper,
+    });
     try {
       const main = path.join(dir, "main");
       const cwds = [
@@ -1030,24 +1029,36 @@ describe("an installed plugin", () => {
           using held = cache.holdSession(main, cwd, p, viewFacts(cwd, `s${i}`));
           const s = held.state;
           expect(s).toBe(states[i]);
-          expect(await s.registry.settled(5000)).toEqual([]);
-          return textOf(
-            drawPayload(
-              s.config,
-              s.compiled,
-              held.view.store,
-              held.view.registry,
-              { session_id: `s${i}`, project_dir: main },
-              instantOf(new Date()),
-              {
-                endcaps: "powerline",
-                colorCompatibility: "truecolor",
-                wrap: true,
-                padding: 1,
-                width: 200,
-              },
-            ).frame,
+          const runs = new CheckRuns(
+            sourceRuns,
+            held.view.registry,
+            instantOf(new Date()),
           );
+          try {
+            expect(await runs.settled(AbortSignal.timeout(5000))).toEqual([]);
+            return textOf(
+              drawPayload(
+                s.config,
+                s.compiled,
+                held.view.store,
+                held.view.registry,
+                { session_id: `s${i}`, project_dir: main },
+                instantOf(new Date()),
+                {
+                  endcaps: "powerline",
+                  colorCompatibility: "truecolor",
+                  wrap: true,
+                  padding: 1,
+                  width: 200,
+                },
+                undefined,
+                undefined,
+                (digest) => runs.run(digest),
+              ).frame,
+            );
+          } finally {
+            runs.close();
+          }
         }),
       );
       expect(drawn[0]).toContain("#main-1");
@@ -1055,6 +1066,7 @@ describe("an installed plugin", () => {
       expect(drawn[2]).toContain("#main-1");
     } finally {
       cache.close();
+      sourceRuns.close();
       watchers.closeAll();
     }
   });
@@ -1081,7 +1093,6 @@ describe("an installed plugin", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1306,7 +1317,7 @@ describe("an installed plugin", () => {
         `references unknown action "plugins.deploy.go"`,
       );
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -1410,7 +1421,7 @@ describe("an installed plugin", () => {
         prepared.config.segments["plugins.lit.ticket"]!.template,
       ).toContain(notice);
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -1454,7 +1465,7 @@ describe("an installed plugin", () => {
         prepared.config.segments["plugins.lit.ticket"]!.template,
       ).toContain(notice);
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -1541,7 +1552,7 @@ describe("an installed plugin", () => {
       expect(prepared.droppedPlugins).toEqual([]);
       expect(warnings).toEqual([]);
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
     const p = write(
       "config.json5",
@@ -1586,7 +1597,7 @@ describe("an installed plugin", () => {
       expect(prepared.droppedPlugins).toEqual([]);
       expect(warnings).toEqual([]);
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -1627,7 +1638,6 @@ describe("an installed plugin", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -1667,7 +1677,6 @@ describe("an installed plugin", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1719,7 +1728,7 @@ describe("an installed plugin", () => {
         ["plugins", "lit"],
       ]);
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -1750,7 +1759,7 @@ describe("an installed plugin", () => {
         Object.keys(prepared.config.segments["plugins.lit.s"]!.settings ?? {}),
       ).toContain("b");
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -1773,7 +1782,6 @@ describe("an installed plugin", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -1806,7 +1814,7 @@ describe("an installed plugin", () => {
         `its folder \\"a.b\\" is not a plugin name`,
       );
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
 
@@ -1856,7 +1864,6 @@ describe("an installed plugin", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -1938,7 +1945,7 @@ test("a placement under a refused loose definition's folder stands in naming the
       "move this file to",
     );
   } finally {
-    prepared.registry.dispose();
+    prepared[Symbol.dispose]();
   }
 });
 
@@ -2020,7 +2027,6 @@ describe("a repo's plugin beside an installed one of its name", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

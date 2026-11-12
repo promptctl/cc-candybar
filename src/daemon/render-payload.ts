@@ -101,15 +101,23 @@ import {
   type RefreshLane,
 } from "./refresh-faults.js";
 import type { Fact } from "../facts/fact.js";
-import type {
-  LaneDiagnostic,
-  WorldState,
-  SourceValue,
+import {
+  UNREAD_RUN,
+  type LaneDiagnostic,
+  type WorldState,
+  type SourceValue,
 } from "../facts/world-state.js";
 import type { SessionId } from "./session-id.js";
 import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
+import {
+  declareRuns,
+  type SourceLane,
+  type SourceRuns,
+} from "./source-runs.js";
+import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
 import { elapsedMs, type Timekeeper } from "../time";
+import { shortDigest } from "../source-digest.js";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -591,6 +599,10 @@ export interface RenderPayloadDeps {
   // session's declaration holds each source its renderer subscribes to there,
   // and a render state's build holds the folders its config declares.
   readonly managedStorage: ManagedStorage;
+  // [LAW:single-enforcer] The one owner of every `shell` and `file` run: a
+  // session's declaration holds each run its renderer subscribes to there,
+  // so one digest is one run however many sessions name it.
+  readonly sourceRuns: Pick<SourceRuns, "declare">;
   // Claude Code's auto-compact window, read from the user settings file at
   // the path a render names.
   readonly autoCompact: AutoCompactProvider;
@@ -887,6 +899,14 @@ export interface Lanes {
   readonly speed: Reading<SpeedObservation>;
   readonly autoCompact: Reading<AutoCompactWindow>;
   readonly sources: ReadonlyMap<string, Current<JsonValue>>;
+  // Each run the session's renderer subscribes to, by digest: its reading
+  // and its watch's fault.
+  readonly runs: ReadonlyMap<string, RunReading>;
+}
+
+export interface RunReading {
+  readonly reading: Current<JsonValue>;
+  readonly fault: string | null;
 }
 
 // [LAW:one-source-of-truth] Everything a session's readers read of its owners
@@ -911,6 +931,7 @@ export type KeyedOwners = Pick<
   | "hostService"
   | "usageStore"
   | "managedStorage"
+  | "sourceRuns"
 >;
 
 // [LAW:types-are-the-program] What a session's declaration hands its stamps:
@@ -926,11 +947,20 @@ export interface DeclaredLanes {
   // declares, by the source variable's name: no fixed list — the set is what
   // the loaded plugins declare.
   readonly sources: ReadonlyMap<string, Lane<JsonValue>>;
+  // One lane per run the renderer subscribes to, by digest.
+  readonly runs: ReadonlyMap<string, SourceLane>;
 }
 
 // The plugin sources a config declares, by variable name, at the storage key
 // its render state's build took for each one's folder.
 export type DeclaredSources = ReadonlyMap<string, StorageKey>;
+
+// What a session's renderer subscribes to: its config's plugin sources, and
+// the runs its `shell` and `file` sources name, by digest.
+export interface Subscribed {
+  readonly plugins: DeclaredSources;
+  readonly runs: ReadonlyMap<string, Run>;
+}
 
 // A declaration's lanes, and what threw while it took them.
 export interface Declaration {
@@ -938,11 +968,11 @@ export interface Declaration {
   readonly faults: readonly string[];
 }
 
-// Every lane answering one outcome, `sources` one per name: a view's when its
-// declaration threw whole, or a caller's that declares nothing.
+// Every lane answering one outcome, one per plugin source and run: a view's
+// when its declaration threw whole, or a caller's that declares nothing.
 export function settledLanes(
   outcome: Outcome<never>,
-  sources: readonly string[],
+  { plugins, runs }: Subscribed,
 ): DeclaredLanes {
   const lane = settledLane(outcome);
   return {
@@ -951,7 +981,13 @@ export function settledLanes(
     hostName: lane,
     hostUser: lane,
     today: lane,
-    sources: new Map(sources.map((name) => [name, lane])),
+    sources: new Map([...plugins.keys()].map((name) => [name, lane])),
+    runs: new Map(
+      [...runs.keys()].map((digest) => [
+        digest,
+        { digest, current: () => lane.current(), fault: () => null },
+      ]),
+    ),
   };
 }
 
@@ -982,7 +1018,7 @@ export function declareLanes(
   owners: KeyedOwners,
   holds: Holds,
   facts: ViewFacts,
-  sources: DeclaredSources,
+  sources: Subscribed,
 ): Declaration {
   const pane = facts.hints.tmux ?? null;
   // [LAW:no-silent-failure] A lane whose declaration throws is a bug in its
@@ -1012,7 +1048,7 @@ export function declareLanes(
     // [LAW:one-source-of-truth] Each source's hold at (its folder's storage
     // key, the session the checkpoint parsed).
     sources: new Map(
-      [...sources].map(([name, storage]) => [
+      [...sources.plugins].map(([name, storage]) => [
         name,
         declare(name, () =>
           owners.managedStorage.declare(
@@ -1022,6 +1058,18 @@ export function declareLanes(
           ),
         ),
       ]),
+    ),
+    // A run whose declaration threw answers that failure and watches nothing;
+    // a declared run's own lane carries its watch's fault.
+    runs: declareRuns(
+      owners.sourceRuns,
+      holds,
+      sources.runs,
+      (digest, take) => ({
+        digest,
+        fault: () => null,
+        ...declare(`run ${shortDigest(digest)}`, take),
+      }),
     ),
   };
   return { lanes, faults };
@@ -1071,6 +1119,12 @@ export function readingsOf(
     sources: new Map(
       [...lanes.sources].map(([name, lane]) => [name, lane.current()]),
     ),
+    runs: new Map(
+      [...lanes.runs].map(([digest, lane]) => [
+        digest,
+        { reading: lane.current(), fault: lane.fault() },
+      ]),
+    ),
   };
   return {
     lanes: laneReadings,
@@ -1113,17 +1167,30 @@ export function todayReading(
 // world state. A fact the daemon itself superseded (a click's move) is not
 // waited on either: it draws its loading cell, and its landing reaches the
 // next frame.
-export function awaitsReading({ builtins, sources }: WorldState): boolean {
-  // [LAW:dataflow-not-control-flow] One test over every fact: why it is
-  // pending decides, never which fact it is.
+// The runs it waits on are the ones its view names, read in the world state:
+// a run whose key or dependency moved is named before the host subscribes
+// it, and until then the world state has no entry for it, while a run the
+// view stopped naming stays there until the host drops it, read by nothing.
+export function awaitsReading(
+  { builtins, sources, runs }: WorldState,
+  named: Iterable<Run>,
+): boolean {
   return [
     builtins.git,
     builtins.tmux,
     builtins.hostName,
     builtins.hostUser,
     ...Object.values(sources),
-  ].some((fact) => fact.kind === "pending" && fact.why === "unread");
+    ...[...named].map((run) => (runs[run.digest] ?? UNREAD_RUN).reading),
+  ].some(awaitedReading);
 }
+
+// [LAW:single-enforcer] The one rule for whether a draw waits on a fact: it
+// has never answered. Why it is pending decides, never which fact it is
+// [LAW:dataflow-not-control-flow]. The request's wait and `check`'s both ask
+// it.
+export const awaitedReading = (fact: Reading<unknown>): boolean =>
+  fact.kind === "pending" && fact.why === "unread";
 
 // A request's wait on its world state (rule 1 of the model): it refreshes
 // what its arrival triggers, then waits until its session's world state has
@@ -1137,11 +1204,12 @@ export async function settleWorld(
   at: Instant,
   refreshed: Refreshed,
   worldState: () => WorldState,
+  named: () => Iterable<Run>,
   signal: AbortSignal,
 ): Promise<void> {
   await refreshPayload(inputs, at, refreshed);
   try {
-    await when(() => !awaitsReading(worldState()), { signal });
+    await when(() => !awaitsReading(worldState(), named()), { signal });
   } catch (e) {
     // The signal's abort is the one rejection the wait expects.
     if (!signal.aborted) throw e;
@@ -1415,18 +1483,31 @@ export const sourceFactOf = (
 ): Fact<SourceValue> => facts.sources[name] ?? pendingOf("unread");
 
 // [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
-// how many plugin sources the view's config declares, and those not answered
-// yet as the draw reads them, each with why (`<name>:unread` or `<name>:superseded`;
-// `-` for none), so a source that never lands is told from one nothing
-// declared, and a run's superseded source from a wait that left one out.
+// how many plugin, `shell` and `file` sources the view's config declares, and
+// those not answered yet (a source whose key has not answered among them) as the draw reads them, each
+// by variable with why (`<name>:unread` or `<name>:superseded`; `-` for none),
+// so a source that never lands is told from one nothing declared, and a run's
+// superseded source from a wait that left one out.
 export function sourcesFactOf(
   names: readonly string[],
-  facts: Pick<WorldState, "sources">,
+  runs: ReadonlyMap<string, Run | undefined>,
+  facts: Pick<WorldState, "sources" | "runs">,
 ): {
   readonly sources: string;
   readonly sourcesPending: string;
 } {
-  const named = names.map((name) => [name, sourceFactOf(facts, name)] as const);
+  const named = [
+    ...names.map((name) => [name, sourceFactOf(facts, name)] as const),
+    ...[...runs].map(
+      ([name, run]) =>
+        [
+          name,
+          run === undefined
+            ? UNREAD_RUN.reading
+            : (facts.runs[run.digest] ?? UNREAD_RUN).reading,
+        ] as const,
+    ),
+  ];
   return {
     sources: String(named.length),
     sourcesPending:

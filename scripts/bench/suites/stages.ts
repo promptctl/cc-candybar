@@ -61,7 +61,7 @@ async function prepared(
     instantOf(new Date()),
   );
   if (warnings.length > 0 || config.droppedPlugins.length > 0) {
-    config.registry.dispose();
+    config[Symbol.dispose]();
     throw new Error(
       `${layers.join(", ") || "the bundled default"} did not prepare cleanly: ${[
         ...warnings,
@@ -122,7 +122,7 @@ async function drawing(
       });
       return { ms, bytes };
     } finally {
-      config.registry.dispose();
+      config[Symbol.dispose]();
     }
   } finally {
     removeTree(cwd);
@@ -179,7 +179,7 @@ export const STAGES: readonly Benchmark[] = [
       const cwd = scratchDir("ccbn-stage");
       try {
         const ms = await repeat(plan.samples, async () => {
-          (await prepared([], cwd)).registry.dispose();
+          (await prepared([], cwd))[Symbol.dispose]();
         });
         return measured([{ name: "prepare", samples: ms }]);
       } finally {
@@ -215,7 +215,7 @@ export const STAGES: readonly Benchmark[] = [
             ms.push(performance.now() - started);
             bytes = drawnClean(drew, "stages.draw.first");
           } finally {
-            config.registry.dispose();
+            config[Symbol.dispose]();
           }
         }
         return measured([{ name: "first-draw", samples: ms }], { bytes });

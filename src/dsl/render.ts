@@ -84,6 +84,7 @@ import type { LinkSigner } from "../click/link-signer.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import type { SessionId } from "../daemon/session-id.js";
+import type { RunFact } from "../facts/world-state.js";
 import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
 import { themePreviewFuncs } from "../render/theme-preview.js";
@@ -1305,13 +1306,19 @@ export function bindPayload(
   opts: BuildLineOptions,
   selection: RenderSelection,
   session: SessionId,
+  run: (digest: string) => RunFact,
 ): unknown {
   const drawn = {
     ...(payload as object),
     term: { cols: opts.width },
     colorCompatibility: { effective: opts.colorCompatibility },
   };
-  bindView(compiled, store, registry, fixedSource(drawn, selection, session));
+  bindView(
+    compiled,
+    store,
+    registry,
+    fixedSource(drawn, selection, session, run),
+  );
   return drawn;
 }
 

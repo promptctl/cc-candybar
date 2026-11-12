@@ -3,7 +3,7 @@
 // src/renderer/main.ts) with no renderer built: a world state the collector
 // hands in is taken into the store, a retire closes the session's view and
 // drops its document, and every turn's subscriptions go back to the
-// collector.
+// collector, as the host hands back every output's (src/daemon/renderer-host.ts).
 
 import { Collector, type CollectorDeps } from "../../src/daemon/collector";
 import { retireSession } from "../../src/daemon/draw-bar";
@@ -46,12 +46,14 @@ export function collected(
     clock: systemTimekeeper,
     watched: () => false,
     ...deps,
+    // The host hands an output's subscriptions back once the renderer's
+    // answer settles, a turn of the event loop after the store took the
+    // world state, so a wait resolved inside the take sees no run it names
+    // subscribed yet.
     deliver: async (event) => {
-      if (event.kind === "world-state") {
-        worldStates.take(event.worldState);
-        return { kind: "answered" };
-      }
-      retireSession({ renderCache: cache(), worldStates }, event.session);
+      if (event.kind === "world-state") worldStates.take(event.worldState);
+      else retireSession({ renderCache: cache(), worldStates }, event.session);
+      await Promise.resolve();
       collector.subscribed(cache().subscriptions());
       return { kind: "answered" };
     },

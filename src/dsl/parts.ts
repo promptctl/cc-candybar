@@ -313,6 +313,7 @@ export class ViewParts {
     registry.bindInputs({
       session: () => this.view.get().session,
       read: (path) => this.inputAt(path),
+      run: (digest) => this.view.get().run(digest),
       drawnAt: () => drawnDepth(this.colorCompatibility()),
     });
   }

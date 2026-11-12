@@ -96,5 +96,5 @@ try {
     );
   }
 } finally {
-  prepared.registry.dispose();
+  prepared[Symbol.dispose]();
 }

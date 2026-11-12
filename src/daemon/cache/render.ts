@@ -60,8 +60,8 @@ import { fixedSource, type ViewSource } from "../../dsl/view-source.js";
 import { bindView } from "../../dsl/parts.js";
 import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
-import type { SourceRuns } from "../../var-system/source-runs.js";
 import { SourceRegistry } from "../../var-system/sources.js";
+import { UNREAD_RUN } from "../../facts/world-state.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateRW } from "../session-state.js";
 import {
@@ -152,9 +152,6 @@ export const MAX_ENTRIES = 256;
 export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The daemon's clock (StateDeps).
   clock: Timekeeper;
-  // The owner of every declared source's runs, whose entries its states'
-  // `shell` and `file` sources hold (StateDeps).
-  runs: SourceRuns;
   // The daemon's state directory, where the repositories' answers are kept
   // (StateDeps).
   stateDir: string;
@@ -200,11 +197,6 @@ export interface StateDeps {
   // The clock its variables' ages and the load's own duration run on: the
   // daemon's.
   readonly clock: Timekeeper;
-  // [LAW:single-enforcer] The daemon's one owner of every declared source's
-  // runs: a state's `shell` and `file` sources hold entries of it, so two
-  // states declaring one identity share one run. A build outside the daemon
-  // (check, the doctor, a test) hands in one of its own.
-  readonly runs: SourceRuns;
   // The state directory whose answers book a load reads: which repositories'
   // plugins it may run.
   readonly stateDir: string;
@@ -907,7 +899,6 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // its own `default`. The loader validates it as a string; the registry
   // default ("") matches the historical behavior when omitted.
   const registry = new SourceRegistry(
-    deps.runs,
     store,
     config.globals.default_empty_value ?? "",
     deps.sessionState,
@@ -1244,6 +1235,7 @@ export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ sessionId, state }) =>
       (preset) => state.authoredRoots.has(preset),
     ),
     sessionId,
+    () => UNREAD_RUN,
   );
 
 // What a view draws from, and whom it tells that what it draws from moved.
@@ -1340,16 +1332,19 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   };
 }
 
-// What a view of a state needs read: each plugin source its config declares,
-// at its folder's storage key.
+// What a view needs read: each plugin source its config declares, at its
+// folder's storage key, then each run its registry names, in digest order.
 export const subscriptionsOf = ({
-  sources,
-}: Pick<DslRenderState, "sources">): Subscription[] =>
-  [...sources].map(([source, storage]) => ({
-    kind: "plugin",
-    source,
-    storage,
-  }));
+  state,
+  registry,
+}: Pick<SessionView, "state" | "registry">): Subscription[] => [
+  ...[...state.sources].map(
+    ([source, storage]): Subscription => ({ kind: "plugin", source, storage }),
+  ),
+  ...registry
+    .subscriptions()
+    .map((run): Subscription => ({ kind: "run", run })),
+];
 
 export class RenderCache<
   S extends ViewSource = ViewSource,
@@ -1775,7 +1770,8 @@ export class RenderCache<
   }
 
   // [LAW:one-source-of-truth] What every session's open view needs read: the
-  // plugin sources its config declares, at their folders' storage keys. Read
+  // plugin sources its config declares, at their folders' storage keys, and
+  // the runs its `shell` and `file` sources name. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.
   subscriptions(): Subscriptions {
@@ -1783,7 +1779,7 @@ export class RenderCache<
       sources: new Map(
         [...this.views].map(([session, view]) => [
           session,
-          subscriptionsOf(view.state),
+          subscriptionsOf(view),
         ]),
       ),
     };

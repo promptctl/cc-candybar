@@ -60,8 +60,9 @@ import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
 import type { WorldStates } from "../src/renderer/world-states";
+import { UNREAD_RUN } from "../src/facts/world-state";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
 import { rendererHost } from "../src/daemon/renderer-host";
@@ -157,7 +158,10 @@ interface Rig {
   ): ReturnType<RenderCache<SessionSource>["holdSession"]>;
   // What the turn that opens session s1's view reads of it, before that
   // turn's subscriptions reach the collector.
-  inTurn<T>(configFile: string, read: (view: SessionView<SessionSource>) => T): T;
+  inTurn<T>(
+    configFile: string,
+    read: (view: SessionView<SessionSource>) => T,
+  ): T;
 }
 
 // The daemon's own composition of a render cache (src/daemon/daemon.ts).
@@ -191,6 +195,10 @@ function rig(): Rig {
     }),
     logger: log,
     ledger: new RefreshLedger(log),
+    sourceRuns: new SourceRuns({
+      launcher: world.launcher,
+      clock: systemTimekeeper,
+    }),
   });
   const sessionState = new SessionState();
   const updateFact = newUpdateFact();
@@ -205,7 +213,6 @@ function rig(): Rig {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState,
       watchers,
       storage: providers.managedStorage,
@@ -353,7 +360,6 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -449,7 +455,6 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -485,7 +490,6 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -613,7 +617,6 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -738,11 +741,12 @@ describe("a session reads its source", () => {
 describe("a source's document", () => {
   function sourceDoc(payload: () => unknown) {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store);
+    const registry = new SourceRegistry(store);
     registry.declareSourceDocument(STATUS);
     registry.bindInputs({
       session: () => TEST_SESSION,
       read: (p) => resolvePath(payload(), p),
+      run: () => UNREAD_RUN,
       drawnAt: () => {
         throw new Error("no depth is read");
       },
@@ -910,15 +914,23 @@ describe("the session subscribes to every source the config declares", () => {
 
   // [LAW:nothing-unseen] The render event's fields.
   test("the render event counts the declared sources and names the pending ones", () => {
-    expect(sourcesFactOf([], { sources: {} })).toEqual({
+    expect(sourcesFactOf([], new Map(), { sources: {}, runs: {} })).toEqual({
       sources: "0",
       sourcesPending: "-",
     });
     const at = instantOf(new Date(0));
     expect(
       sourcesFactOf(
-        ["plugins.a.s", "plugins.b.s", "plugins.c.s", "plugins.d.s", "plugins.e.s"],
+        [
+          "plugins.a.s",
+          "plugins.b.s",
+          "plugins.c.s",
+          "plugins.d.s",
+          "plugins.e.s",
+        ],
+        new Map(),
         {
+          runs: {},
           sources: {
             "plugins.a.s": restamp(undefined, ok({}), at),
             "plugins.b.s": pendingOf("unread"),
@@ -935,6 +947,14 @@ describe("the session subscribes to every source the config declares", () => {
       sourcesPending:
         "plugins.b.s:unread,plugins.d.s:superseded,plugins.e.s:unread",
     });
+    // A shell source whose key has not answered names no run, and is counted
+    // and pending all the same.
+    expect(
+      sourcesFactOf([], new Map([["probe", undefined]]), {
+        runs: {},
+        sources: {},
+      }),
+    ).toEqual({ sources: "1", sourcesPending: "probe:unread" });
   });
 });
 

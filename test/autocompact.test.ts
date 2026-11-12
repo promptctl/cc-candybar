@@ -77,8 +77,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
     JSON.stringify({ tmux: HINT }),
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(),
-    store,
+  const registry = new SourceRegistry(store,
     "",
     sessionState,
   );

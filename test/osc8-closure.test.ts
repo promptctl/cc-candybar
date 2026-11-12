@@ -70,7 +70,7 @@ function render(src: string, opts: BuildLineOptions): Frame {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   return drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), opts).frame;
 }

@@ -69,7 +69,6 @@ import {
   UNOWNED_STORAGE,
 } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
-import { SourceRuns } from "../var-system/source-runs.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
   RateLimitsSeen,
@@ -103,12 +102,11 @@ function reportLine({ check, verdict }: CheckReport): string {
 // state, keeps the outcome, and releases the sources the state started. A
 // load that failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(
-  { host, launcher, clock }: World,
+  { host, clock }: World,
   origin: RenderOrigin,
 ): ConfigLoad {
   const deps = {
     clock,
-    runs: new SourceRuns({ launcher, clock }),
     locations: locations(host),
     env: host.env,
     sessionState: new SessionState(),
@@ -126,7 +124,6 @@ export function loadConfigOnce(
   const state =
     loaded.state ?? fallbackState(origin.cwd, loaded.repos.plugins, deps);
   state.registry.dispose();
-  deps.runs.close();
   return {
     layers: loaded.layers,
     // [LAW:no-silent-failure] A placement the bar drew past is still the

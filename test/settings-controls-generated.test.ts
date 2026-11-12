@@ -226,7 +226,7 @@ describe("a global the menu has never seen gets its control from the generator",
     );
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
     const render = () =>
       drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame;
