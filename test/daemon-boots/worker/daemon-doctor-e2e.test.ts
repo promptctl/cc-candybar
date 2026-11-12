@@ -44,12 +44,10 @@ import {
   VERB_LOAD_CONFIG,
 } from "../../../src/click/wire";
 import {
-  PROTOCOL_VERSION,
   URL_FRAME_KIND,
   URL_FRAME_VERSION,
   encodeFrame,
 } from "../../../src/daemon/protocol";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { checkByName } from "../../../src/doctor/checks";
 import {
   probeUrlHandler,
@@ -277,9 +275,6 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
 
     const SID = "doctor-e2e-2";
     await render(daemon, SID, projectDir);
-    // [LAW:no-ambient-temporal-coupling] The run's probes spawn, so its reply
-    // can outlast the daemon's guard; the helper reads a TIMEOUT's outcome
-    // from the click's own event.
     await click(daemon, `cc-candybar://${VERB_DOCTOR_RUN}/${SID}`);
     await click(
       daemon,
