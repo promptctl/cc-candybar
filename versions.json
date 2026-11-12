@@ -2,17 +2,31 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-719",
-      "ref": "refs/pull/719/merge",
-      "sha": "1f37b39bfa28a1f43a8232b900e986f663732813",
-      "timestamp": "2026-11-12T01:21:05.930Z",
+      "version": "pr-720",
+      "ref": "refs/pull/720/merge",
+      "sha": "1455b420bd0841cdf20483ca9a3baaf0cd006310",
+      "timestamp": "2026-11-12T02:17:42.418Z",
       "commits": [
         {
-          "sha": "1f37b39bfa28a1f43a8232b900e986f663732813",
+          "sha": "1455b420bd0841cdf20483ca9a3baaf0cd006310",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T18:20:09-07:00",
-          "message": "Merge 131495a0c5565347b6f3073b50fbad915a80fbb5 into 23abb3a1cc2bd8b7b5c9a71d0fdef270db785dbc\n"
+          "timestamp": "2026-11-11T19:16:45-07:00",
+          "message": "Merge bfc9d449305ee2423c3f3ff2a56ce4251f22d928 into 23abb3a1cc2bd8b7b5c9a71d0fdef270db785dbc\n"
+        },
+        {
+          "sha": "bfc9d449305ee2423c3f3ff2a56ce4251f22d928",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T19:16:23-07:00",
+          "message": "test: session ids in tests are built by the checkpoint, and a stored key it refuses is reported and not loaded (candybar-host-renderer-x96a.6ql)\n"
+        },
+        {
+          "sha": "04729e79f4ed2cf3d84e4dd8c928f4444df95a60",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T19:05:00-07:00",
+          "message": "refactor(daemon): the checked SessionId travels from its door to every unit that keys by it (candybar-host-renderer-x96a.6ql)\n"
         },
         {
           "sha": "131495a0c5565347b6f3073b50fbad915a80fbb5",

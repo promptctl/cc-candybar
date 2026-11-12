@@ -51566,6 +51566,14 @@ function unwrapDocument(name, doc) {
   }
 }
 
+// src/daemon/session-id.ts
+init_globals();
+var SESSION_ID_MAX_BYTES = 250;
+function parseSessionId(raw) {
+  const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
+  return problem === null ? { ok: true, id: raw } : { ok: false, problem };
+}
+
 // src/utils/holds.ts
 init_globals();
 var Holds = class {
@@ -53264,6 +53272,10 @@ function parseDuration(s) {
   }
 }
 var SESSION_ID_VAR_NAME = "session.id";
+function stateSessionOf(value) {
+  const parsed2 = parseSessionId(value);
+  return parsed2.ok ? parsed2.id : null;
+}
 function parserIdOf(parse3) {
   switch (parse3.kind) {
     case "text":
@@ -53792,8 +53804,8 @@ var SourceRegistry = class _SourceRegistry {
     const sessionState = this.sessionState;
     const fallback = opts.varDefault ?? this.stringInitial(void 0);
     this.store.defineComputed(name, "string", (read2) => {
-      const sessionId2 = read2(SESSION_ID_VAR_NAME);
-      if (typeof sessionId2 !== "string" || !sessionId2) return fallback;
+      const sessionId2 = stateSessionOf(read2(SESSION_ID_VAR_NAME));
+      if (sessionId2 === null) return fallback;
       const value = sessionState.get(sessionId2, opts.key);
       return value !== null ? value : fallback;
     });
@@ -53804,8 +53816,8 @@ var SourceRegistry = class _SourceRegistry {
   // session state, or a render naming no session, reads none — one state that
   // never changes.
   stateRevision() {
-    const sessionId2 = this.store.has(SESSION_ID_VAR_NAME) ? this.store.read(SESSION_ID_VAR_NAME) : "";
-    return this.sessionState !== void 0 && typeof sessionId2 === "string" && sessionId2 !== "" ? this.sessionState.revision(sessionId2) : 0;
+    const sessionId2 = this.store.has(SESSION_ID_VAR_NAME) ? stateSessionOf(this.store.read(SESSION_ID_VAR_NAME)) : null;
+    return this.sessionState !== void 0 && sessionId2 !== null ? this.sessionState.revision(sessionId2) : 0;
   }
   // ─── The view's source ────────────────────────────────────────────────────
   // [LAW:single-enforcer] What this registry's inputs, and the depth, are
@@ -64690,7 +64702,7 @@ function recordingView(store, records, onChange) {
   };
 }
 var EPHEMERAL_SESSION_STORAGE = {
-  load: () => ({}),
+  load: () => /* @__PURE__ */ new Map(),
   save: () => {
   },
   flush: () => {
@@ -64719,8 +64731,8 @@ var SessionState = class {
   atom = createAtom("SessionState");
   hydrateFromStorage() {
     this.sessions = new Map(
-      Object.entries(this.storage.load()).map(([sessionId2, kv]) => [
-        sessionId2,
+      Array.from(this.storage.load(), ([id2, kv]) => [
+        id2,
         { values: new Map(Object.entries(kv)), revision: ++this.head }
       ])
     );
@@ -64861,7 +64873,7 @@ var SessionState = class {
 
 // src/daemon/settings-history.ts
 var EPHEMERAL_HISTORY_STORAGE = {
-  load: () => ({}),
+  load: () => /* @__PURE__ */ new Map(),
   save: () => {
   }
 };
@@ -64879,7 +64891,7 @@ var SettingsHistory = class {
     this.sessionState = sessionState;
     this.logger = logger;
     this.storage = storage;
-    this.state = new Map(Object.entries(storage.load()));
+    this.state = new Map(storage.load());
   }
   sessionState;
   logger;
@@ -65273,6 +65285,7 @@ function withoutRetiredKeys(history, retired) {
 function fileHistoryStorage(file, logger) {
   return {
     load: () => {
+      const loaded = /* @__PURE__ */ new Map();
       let raw;
       try {
         raw = fs_default.readFileSync(file, "utf8");
@@ -65284,30 +65297,35 @@ function fileHistoryStorage(file, logger) {
             `settings-history read failed (${code}); starting empty`
           );
         }
-        return {};
+        return loaded;
       }
       try {
         const parsed2 = JSON.parse(raw);
         if (parsed2 !== null && typeof parsed2 === "object" && !Array.isArray(parsed2) && Object.values(parsed2).every(isSessionHistory)) {
           const retired = /* @__PURE__ */ new Set();
-          const state = Object.fromEntries(
-            Object.entries(parsed2).map(([sid, history]) => [
-              sid,
-              withoutRetiredKeys(history, retired)
-            ])
-          );
+          for (const [sid, history] of Object.entries(parsed2)) {
+            const id2 = parseSessionId(sid);
+            if (id2.ok) {
+              loaded.set(id2.id, withoutRetiredKeys(history, retired));
+            } else {
+              logger(
+                "warn",
+                `settings-history load: dropped session key ${JSON.stringify(sid)}: session id ${id2.problem}`
+              );
+            }
+          }
           if (retired.size > 0) {
             logger(
               "warn",
               `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`
             );
           }
-          return state;
+          return loaded;
         }
       } catch {
       }
       logger("warn", "settings-history load: unexpected shape, starting empty");
-      return {};
+      return loaded;
     },
     save: (state) => {
       try {
@@ -67541,8 +67559,7 @@ function refreshedFact(refreshed) {
   return [...refreshed].map(([lane, ms]) => `${lane}:${ms === null ? "\u2026" : `${ms}ms`}`).join(",") || "-";
 }
 async function refreshPayload(inputs, at, refreshed) {
-  const { hookData: hookData2, deps, hints } = inputs;
-  const sessionId2 = hookData2.session_id;
+  const { hookData: hookData2, deps, hints, sessionId: sessionId2 } = inputs;
   const session = deps.usageStore.request(sessionId2, hookData2.transcript_path);
   const lane = async (name, run3) => {
     const startedAt = deps.clock.monotonic();
@@ -67646,8 +67663,7 @@ function declareLanes(owners, holds2, facts, sources) {
   return { lanes, faults };
 }
 function readingsOf(inputs, lanes) {
-  const { hookData: hookData2, deps } = inputs;
-  const sessionId2 = hookData2.session_id;
+  const { deps, sessionId: sessionId2 } = inputs;
   const read2 = (lane, value) => {
     const fault = deps.faults.of(sessionId2, lane);
     if (fault !== void 0) return fault;
@@ -67733,7 +67749,7 @@ var unstamped = (fact) => {
   }
 };
 function composePayload(facts, inputs, draw2) {
-  const { hookData: hookData2, hints } = inputs;
+  const { hookData: hookData2, hints, sessionId: sessionId2 } = inputs;
   const { effective, configFacts: configFacts2 } = draw2;
   const { configPath, ...settingCounts2 } = configFacts2;
   const built = facts.builtins;
@@ -67806,7 +67822,6 @@ function composePayload(facts, inputs, draw2) {
       (dir) => posixify(dir) ?? dir
     )
   } : hookData2.workspace;
-  const sessionId2 = hookData2.session_id;
   const payload = {
     ...hookData2,
     ...workspace !== void 0 && { workspace },
@@ -70475,14 +70490,6 @@ function productionClaudeInputEdge(launcher) {
   };
 }
 
-// src/daemon/session-id.ts
-init_globals();
-var SESSION_ID_MAX_BYTES = 250;
-function parseSessionId(raw) {
-  const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
-  return problem === null ? { ok: true, id: raw } : { ok: false, problem };
-}
-
 // src/daemon/verbs/index.ts
 var inTurn = (handler) => ({
   gathers: false,
@@ -71890,6 +71897,8 @@ var Runs = class {
     });
   }
   // A link refused before anything ran: counted, and its one event.
+  // The link's id as it arrived: a link refused at the checkpoint never
+  // parsed, so it is not a SessionId.
   refused(sessionId2, action2, reason) {
     this.refusals++;
     this.deps.log(
@@ -76786,6 +76795,7 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
     const { sessionId: sessionId2, hints } = req;
     const payloadInputs = {
       hookData: req.hookData,
+      sessionId: sessionId2,
       deps: payloadProviders,
       cwd: req.cwd,
       hints
@@ -77084,15 +77094,11 @@ function recordRequest(parts, req) {
 function arrived2(parts, req, lanes) {
   const { laneSetups, tmuxStatusLines } = parts;
   laneSetups.noted(laneSessionOf(parts, req), lanes);
-  tmuxStatusLines.observe(
-    req.hookData.session_id,
-    req.hints.tmux,
-    lanes.tmuxStatus
-  );
+  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
 }
 function laneSessionOf(parts, req) {
   const { sessionState } = parts;
-  const sessionId2 = req.hookData.session_id;
+  const { sessionId: sessionId2 } = req;
   return {
     sessionId: sessionId2,
     hints: req.hints,
@@ -80079,9 +80085,12 @@ var SessionUsageStore = class {
   // scalars per file and retained day, and `sweepStale` bounds the map to the
   // sessions seen within `staleAgeMs` plus those holding work done today.
   // Observable, shallowly: a slot replaced is the change the day sums read.
-  sessions = observable.map(void 0, {
-    deep: false
-  });
+  sessions = observable.map(
+    void 0,
+    {
+      deep: false
+    }
+  );
   // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
   // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
   // not a cache — the records map IS the cache).
@@ -80251,11 +80260,8 @@ var SessionUsageStore = class {
   // A request's refresh of `today`: the active session's own record, so
   // `today` keeps up with the cost it was sent with. The directory set's
   // scan is not waited for (`declareToday`).
-  refreshToday(hookData2) {
-    return this.request(
-      hookData2?.session_id ?? "",
-      hookData2?.transcript_path
-    ).today();
+  refreshToday(sessionId2, transcriptPath) {
+    return this.request(sessionId2, transcriptPath).today();
   }
   // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
@@ -80303,7 +80309,6 @@ var SessionUsageStore = class {
   }
   // A request's speed sample, over the request's one refresh of the session.
   async observed(sessionId2, refresh, nowMs) {
-    if (!sessionId2) return ABSENT2;
     const { stamp: stamp2, record: refreshed } = refresh();
     return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
       const record2 = await refreshed;
@@ -80335,16 +80340,14 @@ var SessionUsageStore = class {
   // The session's speed as its last request observed it, for a draw: a frame
   // takes no sample, so how often the bar is drawn moves no rate.
   speedOf(sessionId2) {
-    if (!sessionId2) return ABSENT2;
     return this.sessions.get(sessionId2)?.speed.get() ?? pendingOf("unread");
   }
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
-  // `absent` is an unknown empty session (or no sessionId), `failed` is a
+  // `absent` is a session with no transcript to read, `failed` is a
   // transcript that exists but couldn't be parsed — NOT cached (only ok
   // records are stored; the next render retries, same rule as the git
   // cache). This is the single write-path of a slot's record.
   async ingest(sessionId2, transcriptPath, tally, stamp2) {
-    if (!sessionId2) return ABSENT2;
     const existing = this.see(sessionId2)?.record;
     if (existing && stamp2 !== "" && existing.transcriptStamp === stamp2) {
       tally.hits++;
@@ -80487,8 +80490,16 @@ var SessionUsageStore = class {
           const filePath2 = (0, import_node_path37.join)(dir, file);
           const st = await unlessGone(stat2(filePath2));
           if (st === void 0 || st.mtimeMs < cutoff) continue;
+          const id2 = parseSessionId(file.slice(0, -".jsonl".length));
+          if (!id2.ok) {
+            this.log(
+              "warn",
+              `usageStore scan: transcript ${JSON.stringify(file)} names no session: session id ${id2.problem}`
+            );
+            continue;
+          }
           candidates.push({
-            sessionId: file.slice(0, -".jsonl".length),
+            sessionId: id2.id,
             path: filePath2,
             stamp: stampOf(st)
           });
@@ -82175,12 +82186,10 @@ var RenderCache = class {
   // next output's.
   subscriptions() {
     return {
-      sources: Object.fromEntries(
-        [...this.views].map(([sessionId2, view]) => [
-          sessionId2,
-          subscriptionsOf(view.state)
-        ])
-      )
+      sources: [...this.views].map(([session, view]) => ({
+        session,
+        subscriptions: subscriptionsOf(view.state)
+      }))
     };
   }
   // The cache's teardown: every entry is dropped, so its state is disposed now
@@ -82740,16 +82749,19 @@ var Collector = class {
   // no plugin sources. A retiring session takes its set too, and holds none
   // of it.
   subscribed({ sources }) {
-    for (const session of Object.keys(sources)) {
+    for (const { session } of sources) {
       if (!this.records.has(session))
         this.deps.log(
           "error",
           `subscriptions name session ${JSON.stringify(session)}, which the collector has no record of`
         );
     }
+    const bySession = new Map(
+      sources.map((e) => [e.session, e.subscriptions])
+    );
     runInAction(() => {
       for (const record2 of this.records.values()) {
-        const next = sourcesOf2(sources[record2.session] ?? []);
+        const next = sourcesOf2(bySession.get(record2.session) ?? []);
         if (sameSources(next, record2.subscriptions)) continue;
         record2.subscriptions = next;
         const { phase } = record2;
@@ -83051,8 +83063,8 @@ function sessionSource(deps) {
       "session.compose",
       "computed",
       () => {
-        const { hookData: hookData2, hints } = requested();
-        return { hookData: hookData2, hints, home: deps.home };
+        const { hookData: hookData2, hints, sessionId: sessionId3 } = requested();
+        return { hookData: hookData2, hints, sessionId: sessionId3, home: deps.home };
       }
     );
     const draw2 = store.derive(
@@ -85966,6 +85978,7 @@ var FileSessionStorage = class {
   // The debounced write's temp file: what a flush removes to supersede it.
   writingPath;
   load() {
+    const loaded = /* @__PURE__ */ new Map();
     let raw;
     try {
       raw = fs_default.readFileSync(this.filePath, "utf8");
@@ -85977,19 +85990,32 @@ var FileSessionStorage = class {
           `session-state read failed (${code}); starting empty`
         );
       }
-      return {};
+      return loaded;
     }
     try {
       const parsed2 = JSON.parse(raw);
-      if (isSnapshot(parsed2)) return parsed2;
+      if (isSnapshot(parsed2)) {
+        for (const [key, values2] of Object.entries(parsed2)) {
+          const id2 = parseSessionId(key);
+          if (id2.ok) {
+            loaded.set(id2.id, values2);
+          } else {
+            this.logger(
+              "warn",
+              `session-state load: dropped session key ${JSON.stringify(key)}: session id ${id2.problem}`
+            );
+          }
+        }
+        return loaded;
+      }
       this.logger(
         "warn",
         `session-state load: unexpected shape, starting empty`
       );
-      return {};
+      return loaded;
     } catch {
       this.logger("warn", `session-state load: corrupt JSON, starting empty`);
-      return {};
+      return loaded;
     }
   }
   save(snapshot) {
