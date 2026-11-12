@@ -245,6 +245,7 @@ async function renderFrames(): Promise<void> {
           at,
           new Map(),
           () => worldStates.of(sessionId),
+          () => view.registry.namedRuns().values(),
           // The demo's frames have no client to hang up.
           new AbortController().signal,
         );

@@ -256,6 +256,7 @@ export async function settledRequest(
     AT,
     refreshed,
     () => rig.served.worldStates.of(request.hookData.session_id),
+    () => held.view.registry.namedRuns().values(),
     new AbortController().signal,
   );
   return held.view;

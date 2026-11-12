@@ -171,6 +171,7 @@ export async function settleLanes(
     at,
     refreshed,
     () => documentOf(inputs),
+    () => [],
     new AbortController().signal,
   );
 }

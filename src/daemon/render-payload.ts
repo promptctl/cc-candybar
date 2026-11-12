@@ -1155,11 +1155,13 @@ export function todayReading(
 // world state. A fact the daemon itself superseded (a click's move) is not
 // waited on either: it draws its loading cell, and its landing reaches the
 // next frame.
-export function awaitsReading({
-  builtins,
-  sources,
-  runs,
-}: WorldState): boolean {
+// The runs it waits on are the ones its view names as well as the ones the
+// world state carries: a run whose key or dependency moved is named before
+// the host subscribes it, and until then the world state has no entry for it.
+export function awaitsReading(
+  { builtins, sources, runs }: WorldState,
+  named: Iterable<Run>,
+): boolean {
   return [
     builtins.git,
     builtins.tmux,
@@ -1167,6 +1169,7 @@ export function awaitsReading({
     builtins.hostUser,
     ...Object.values(sources),
     ...Object.values(runs).map((run) => run.reading),
+    ...[...named].map((run) => (runs[run.digest] ?? UNREAD_RUN).reading),
   ].some(awaitedReading);
 }
 
@@ -1189,11 +1192,12 @@ export async function settleWorld(
   at: Instant,
   refreshed: Refreshed,
   worldState: () => WorldState,
+  named: () => Iterable<Run>,
   signal: AbortSignal,
 ): Promise<void> {
   await refreshPayload(inputs, at, refreshed);
   try {
-    await when(() => !awaitsReading(worldState()), { signal });
+    await when(() => !awaitsReading(worldState(), named()), { signal });
   } catch (e) {
     // The signal's abort is the one rejection the wait expects.
     if (!signal.aborted) throw e;
