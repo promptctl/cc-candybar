@@ -24,6 +24,8 @@ import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
 import type { Monotonic, Timekeeper } from "../time";
+import type { RequestId } from "../renderer/interface.js";
+import type { Acceptance } from "./request-event.js";
 
 // A read kind no run of which has happened yet.
 const NO_RUNS: SourceRunsStats["shell"] = {
@@ -224,6 +226,15 @@ export class RuntimeStats {
   // like everything else the daemon times.
   constructor(private readonly clock: Pick<Timekeeper, "now" | "monotonic">) {
     this.startedAt = new Date(clock.now());
+  }
+
+  // [LAW:single-enforcer] Where a request is accepted: its id is the count
+  // of requests accepted so far, so ids follow the order they arrived.
+  accept(): Acceptance {
+    return {
+      id: ++this.requestsTotal as RequestId,
+      at: this.clock.monotonic(),
+    };
   }
 
   // Whether `field` is the first sight of that unknown hook field in this

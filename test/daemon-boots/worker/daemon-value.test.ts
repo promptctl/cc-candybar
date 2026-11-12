@@ -149,7 +149,7 @@ describe("the daemon is a value", () => {
     const handled = await daemon.handle(
       classifyInbound(req),
       () => false,
-      daemon.clock.monotonic(),
+      daemon.stats.accept(),
       () => false,
     );
     if (handled.kind !== "reply") throw new Error("expected a reply");
@@ -389,7 +389,7 @@ describe("the daemon is a value", () => {
     const midWait = daemon.handle(
       classifyInbound(renderRequest("value-close", 20_000)),
       () => false,
-      daemon.clock.monotonic(),
+      daemon.stats.accept(),
       () => false,
     );
 

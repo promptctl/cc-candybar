@@ -17,7 +17,7 @@ import {
   click,
   frameRequest,
   hookData,
-  sendClick,
+  refusedClick,
 } from "../../helpers/daemon-e2e";
 import { barOf } from "../../helpers/drawn-frame";
 import { linkUrls } from "../../helpers/frame";
@@ -234,8 +234,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     ]);
     const before = await statsOf(daemon.daemon);
 
-    const refused = await sendClick(daemon, forged);
-    expect(refused).toMatchObject({ ok: false });
+    await refusedClick(daemon, forged, "bad-request");
     expect((await statsOf(daemon.daemon)).runs).toMatchObject({
       started: before.runs.started,
       refused: before.runs.refused + 1,

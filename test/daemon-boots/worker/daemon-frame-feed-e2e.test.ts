@@ -40,7 +40,7 @@ import {
   type Response,
 } from "../../../src/daemon/protocol";
 import type { StatsSnapshot } from "../../../src/daemon/stats";
-import { click, frameRequest, sendClick, render, renderBody, renderRequest, urlWriting } from "../../helpers/daemon-e2e";
+import { click, frameRequest, refusedClick, render, renderBody, renderRequest, urlWriting } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { HANDOFF_BUTTON } from "../../../src/daemon/lane-handoff";
 import { linksOf } from "../../../src/click/read";
@@ -1110,7 +1110,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       sid,
       async ({ received, waitFor }) => {
         await waitFor(() => received.length > 0, "the bar before the click");
-        expect((await sendClick(sockPath, bad)).ok).toBe(false);
+        await refusedClick(sockPath, bad, "bad-request");
         const bar = await render(sockPath, sid, projectDir, {}, args("toggle"));
         expect(textOf(bar)).toContain("⚠ 1");
       },
@@ -1139,7 +1139,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       async ({ received, elapsed, waitFor }) => {
         await waitFor(() => received.length > 0, "the bar before the click");
         clickedAt = elapsed();
-        expect((await sendClick(sockPath, bad)).ok).toBe(false);
+        await refusedClick(sockPath, bad, "bad-request");
         await waitFor(
           () => hold(received).errorAt > 0,
           "a frame showing the error",

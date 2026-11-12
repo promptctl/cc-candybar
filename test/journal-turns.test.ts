@@ -2,6 +2,8 @@
 // its `copy` launch; the click-path cases drive `replyTo`, the daemon's real
 // click arm.
 
+import { fieldOf } from "../src/utils/logfmt";
+import { RuntimeStats } from "../src/daemon/stats";
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
@@ -314,12 +316,13 @@ describe("the click path", () => {
       },
       ...clickParts(verbCtx, menuIdle),
     } as unknown as DaemonParts;
+    const stats = new RuntimeStats(systemTimekeeper);
     const send = (verb: string, value: string, gone = () => false) =>
       replyTo(
         given,
         { kind: "click", verb, value } as Parameters<typeof replyTo>[1],
         () => false,
-        systemTimekeeper.monotonic(),
+        stats.accept(),
         gone,
       );
     return { send, events };
@@ -335,6 +338,14 @@ describe("the click path", () => {
       error: expect.stringContaining("nothing to undo"),
     });
     expect(events[0]).toMatch(/ turnWait=\d+ms /);
+  });
+
+  test("a click's event names the request it was accepted as", async () => {
+    const { ctx } = setup();
+    const { send, events } = parts(ctx);
+    await send(VERB_UNDO, encodeSegments([SID]));
+    await send(VERB_UNDO, encodeSegments([SID]));
+    expect(events.map((e) => fieldOf(e, "req"))).toEqual(["1", "2"]);
   });
 
   test("a status-line link naming a verb re-enters without deadlock", async () => {

@@ -4,6 +4,7 @@
 // one would answer inside the backstop. A connection to a daemon built in the
 // worker is the other half (test/daemon-boots/worker/daemon-built-connection.test.ts).
 
+import type { Acceptance } from "../src/daemon/request-event";
 import { setImmediate } from "node:timers";
 
 import {
@@ -70,15 +71,18 @@ const held = () => {
   let answer!: (handled: HandledRequest) => void;
   let told: (() => boolean) | undefined;
   let left: (() => boolean) | undefined;
+  let acceptance: Acceptance | undefined;
   return {
-    handle: (async (_req, timedOut, _accepted, clientLeft) => {
+    handle: (async (_req, timedOut, accepted, clientLeft) => {
       told = timedOut;
       left = clientLeft;
+      acceptance = accepted;
       return new Promise<HandledRequest>((resolve) => (answer = resolve));
     }) as ConnectionDaemon["handle"],
     answer: (handled: HandledRequest) => answer(handled),
     timedOut: () => told!(),
     clientLeft: () => left!(),
+    accepted: () => acceptance!,
   };
 };
 
@@ -178,6 +182,25 @@ describe("a connection over a stream", () => {
     await settled();
     expect(received).toHaveLength(1);
     expect(settle.mock.calls).toEqual([[false]]);
+  });
+
+  test("each TIMEOUT names the request its handler was handed, however many are in flight", async () => {
+    const requests = [held(), held()];
+    let next = 0;
+    const daemon = standIn({
+      handle: (...args) => requests[next++]!.handle(...args),
+    });
+    const clients = [open(daemon), open(daemon)];
+    for (const { send } of clients) send(STATS);
+    await settled();
+
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    await settled();
+    const ids = requests.map((r) => r.accepted().id);
+    expect(new Set(ids).size).toBe(2);
+    expect(clients.map((c) => c.received)).toEqual(
+      ids.map((request) => [expect.objectContaining({ code: "TIMEOUT", request })]),
+    );
   });
 
   // The URL handler app writes its frame and hangs up without reading

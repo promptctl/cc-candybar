@@ -35,7 +35,8 @@ import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
 import { FileEventDelivery } from "./cache/file-events";
-import type { Monotonic, Timekeeper } from "../time";
+import type { Timekeeper } from "../time";
+import type { Acceptance } from "./request-event.js";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import { SourceRuns } from "../var-system/source-runs";
 import {
@@ -199,12 +200,12 @@ export interface Daemon {
   // [LAW:one-source-of-truth] The funnel this daemon was built with, which a
   // connection reaches once a reply carrying an exit has flushed.
   readonly exit: DaemonInputs["exit"];
-  // The request handling a connection calls. `accepted` is when its connection
-  // came in, on `clock`'s monotonic reading.
+  // The request handling a connection calls, with the request as its
+  // connection accepted it.
   readonly handle: (
     inbound: Inbound,
     timedOut: () => boolean,
-    accepted: Monotonic,
+    accepted: Acceptance,
     clientLeft: () => boolean,
   ) => Promise<HandledRequest>;
   // The reply to a request of any kind but a subscribe, past the connection's
@@ -212,7 +213,7 @@ export interface Daemon {
   readonly reply: (
     req: ReplyRequest,
     timedOut: () => boolean,
-    accepted: Monotonic,
+    accepted: Acceptance,
     clientLeft: () => boolean,
   ) => Promise<Reply>;
   readonly subscribe: FrameFeeds<CheckedRenderRequest>["subscribe"];

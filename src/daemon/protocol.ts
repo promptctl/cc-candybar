@@ -1,3 +1,4 @@
+import type { RequestId } from "../renderer/interface.js";
 import path from "node:path";
 import type { Duplex } from "node:stream";
 import type { ClaudeHookData } from "../utils/claude";
@@ -474,7 +475,22 @@ export type Response =
   // a meaningful diagnostic on VERSION_MISMATCH without parsing the human
   // message. Optional for back-compat: older daemons (or test stubs) that
   // omit it are still parseable by current clients.
-  | { ok: false; error: string; code: ErrorCode; daemonV?: number };
+  // A TIMEOUT also carries `request`, the id the request's own event records:
+  // a TIMEOUT abandons the reply, not the work, and that event is where its
+  // outcome is told.
+  | {
+      ok: false;
+      error: string;
+      code: Exclude<ErrorCode, "TIMEOUT">;
+      daemonV?: number;
+    }
+  | {
+      ok: false;
+      error: string;
+      code: "TIMEOUT";
+      daemonV?: number;
+      request: RequestId;
+    };
 
 // [LAW:types-are-the-program] The wire-level discriminator splits failures
 // into two recovery classes: TIMEOUT is busy — the daemon is alive but slow,

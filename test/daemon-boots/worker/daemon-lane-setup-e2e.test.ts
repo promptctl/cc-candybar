@@ -29,7 +29,7 @@ import { rangeOf } from "../../../src/tmux-status/frames";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/protocol";
-import { click, render, sendClick } from "../../helpers/daemon-e2e";
+import { click, clickAnswer, render, saidOf, toldOf } from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
@@ -174,13 +174,14 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       .join("/");
     const statusClick = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/${at}`;
     // Refused until the status line has drawn its first frame, which runs
-    // nothing; the first click it answers runs the link.
+    // nothing; the first click it answers runs the link. Only a click that
+    // landed is not sent again, a TIMEOUT's included.
     let refusal = "";
     await until(
       async () => {
-        const resp = await sendClick(daemon, statusClick);
-        refusal = resp.ok ? "" : resp.error;
-        return resp.ok;
+        const answer = await clickAnswer(daemon, statusClick);
+        refusal = saidOf(answer);
+        return toldOf(answer) === "ok";
       },
       () => `the status-line click's acceptance (refused: ${refusal})`,
     );
