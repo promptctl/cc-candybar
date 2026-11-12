@@ -43,8 +43,6 @@ import {
 } from "./daemon-log";
 import { until } from "./until";
 import { fieldOf, fieldsOf } from "../../src/utils/logfmt";
-import { clickReply } from "../../src/daemon/reply";
-import type { RequestOutcome } from "../../src/daemon/request-event";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
 export const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
@@ -323,24 +321,21 @@ export async function click(
   if (toldOf(answer) !== "ok") throw new Error(`click failed: ${saidOf(answer)}`);
 }
 
-// [LAW:one-source-of-truth] The outcomes a test expects a refusal to have,
-// each answered by the daemon's own reply for it.
-const REFUSAL = {
-  "bad-request": { kind: "bad-request", problems: [] },
-  threw: { kind: "threw", error: new Error() },
-} as const satisfies Record<string, RequestOutcome>;
+// The reply code a refused click's outcome reaches its client as: the test's
+// own statement of the wire, kept apart from the daemon's mapping so the two
+// check each other.
+const REPLY_CODE = { "bad-request": "BAD_REQUEST", threw: "RENDER_FAILED" } as const;
 
 // `clickAnswer`, for a test whose click the daemon must refuse: a forged link
 // is a bad request, and a click whose verb fails threw.
 export async function refusedClick(
   target: DaemonTarget,
   url: string,
-  outcome: keyof typeof REFUSAL,
+  outcome: keyof typeof REPLY_CODE,
 ): Promise<void> {
   const answer = await clickAnswer(target, url);
-  const replied = clickReply(REFUSAL[outcome]);
   expect(toldOf(answer)).toBe(
-    answer.kind === "timed-out" ? outcome : replied.ok ? "ok" : replied.code,
+    answer.kind === "timed-out" ? outcome : REPLY_CODE[outcome],
   );
 }
 

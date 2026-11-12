@@ -475,9 +475,10 @@ export type Response =
   // a meaningful diagnostic on VERSION_MISMATCH without parsing the human
   // message. Optional for back-compat: older daemons (or test stubs) that
   // omit it are still parseable by current clients.
-  // A TIMEOUT also carries `request`, the id the request's own event records:
-  // a TIMEOUT abandons the reply, not the work, and that event is where its
-  // outcome is told.
+  // A TIMEOUT also carries `request`, the request's id: a TIMEOUT abandons
+  // the reply, not the work, and a render's or a click's event records the
+  // id where its outcome is told. Other kinds write no event, and nor does a
+  // request whose frame never arrived.
   | {
       ok: false;
       error: string;

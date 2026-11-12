@@ -770,7 +770,7 @@ async function handleClick(
 }
 
 // [LAW:single-enforcer] The reply a click's outcome is answered with.
-export function clickReply(outcome: RequestOutcome): Response {
+function clickReply(outcome: RequestOutcome): Response {
   switch (outcome.kind) {
     case "ok":
       return { ok: true, output: "" };
