@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "3e80b4374f9aaffca5c6005bf4cf3bc1021e4b63",
-      "timestamp": "2026-11-12T08:02:46.128Z",
+      "sha": "717218f3277b68494d6138b7195debffd0a866d0",
+      "timestamp": "2026-11-12T08:11:15.548Z",
       "commits": [
         {
-          "sha": "3e80b4374f9aaffca5c6005bf4cf3bc1021e4b63",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T01:01:46-07:00",
-          "message": "fix(daemon): a TIMEOUT names its request, and the click's event records it, so a test settles its own click (candybar-host-renderer-x96a.9m0) (#729)\n\n* fix(daemon): a TIMEOUT names its request, and the click's event records it, so a test settles its own click (candybar-host-renderer-x96a.9m0)\n\n* fix(daemon): request ids count every kind apart from the render total, the render event records its id, and a test reads only its own daemon's click event (candybar-host-renderer-x96a.9m0)\n\n* fix(daemon): the TIMEOUT id's docs say which requests record it, and a refused click is checked against the test's own statement of the wire (candybar-host-renderer-x96a.9m0)"
+          "sha": "717218f3277b68494d6138b7195debffd0a866d0",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-12T08:10:14Z",
+          "message": "chore(release): set `package.json` to 1.218.4\n\n## [1.218.4](https://github.com/promptctl/cc-candybar/compare/v1.218.3...v1.218.4) (2026-11-12)\n\n### Bug Fixes\n\n* **daemon:** a TIMEOUT names its request, and the click's event records it, so a test settles its own click (candybar-host-renderer-x96a.9m0) ([#729](https://github.com/promptctl/cc-candybar/issues/729)) ([3e80b43](https://github.com/promptctl/cc-candybar/commit/3e80b4374f9aaffca5c6005bf4cf3bc1021e4b63))\n"
         }
       ]
     }
