@@ -51,7 +51,10 @@ function viewOver(
 ) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: os.tmpdir() });
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: os.tmpdir(),
+  });
   const answer = observable.box(payload, { deep: false });
   const sourceRuns = new SourceRuns({
     launcher: processLauncher,
@@ -72,9 +75,11 @@ function viewOver(
   return {
     // The stragglers once every run the view names answered, or `withinMs`
     // passed.
-    settled: (withinMs: number) =>
-      held.settled(AbortSignal.timeout(withinMs)),
+    settled: (withinMs: number) => held.settled(AbortSignal.timeout(withinMs)),
     // A request's arrival: the payload moves, in one turn.
+    // What the holder answers for the run a variable names.
+    fact: (name: string) =>
+      held.run(registry.namedRuns().get(name)?.digest ?? ""),
     arrive: (next: Record<string, unknown>) =>
       runInAction(() => answer.set(next)),
     draw: () =>
@@ -146,6 +151,31 @@ describe("a cache policy over the view's payload", () => {
     }
   });
 
+  // The registry's publish compares a run's fact by reference, so a run whose
+  // answer moved nothing answers the same fact, and nothing re-publishes it.
+  test("a run that moved nothing answers the same fact", async () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        variables: {
+          probe: { kind: "shell", command: "echo ran", cache: { never: true } },
+        },
+        segments: { s: { template: "{{ .probe }}" } },
+        root: { h: ["s"] },
+      }`,
+    );
+    const view = viewOver(config, {}, runs);
+    try {
+      expect(await view.settled(RUN_WITHIN_MS)).toEqual([]);
+      const first = view.fact("probe");
+      expect(first.reading).toMatchObject({ kind: "ok" });
+      view.arrive({ moved: true });
+      expect(view.fact("probe")).toBe(first);
+    } finally {
+      view.dispose();
+    }
+  });
+
   test("a key over readableOn at colour depth 256 runs once, whatever draws", async () => {
     const config = parseAndValidate(
       "<test>",
@@ -186,7 +216,9 @@ describe("a policy or rule over what the draw answers is refused at load", () =>
     expect(
       load(`{ variables: { p: { kind: "shell", command: "true",
         cache: { key: "{{ .feeds.pane.fps }}" } } } }`),
-    ).toThrow(/cache\.key reads "feeds\.pane\.fps", which reads the draw's "feeds"/);
+    ).toThrow(
+      /cache\.key reads "feeds\.pane\.fps", which reads the draw's "feeds"/,
+    );
     expect(
       load(`{ variables: { p: { kind: "shell", command: "true",
         cache: { key: "{{ .feeds.pane.fps }}" } } } }`),
@@ -240,7 +272,9 @@ describe("a policy or rule over what the draw answers is refused at load", () =>
 
   test("a rule reading a slot's .effective, its own or another's", () => {
     expect(
-      load(`{ globals: { effect: '{{ if eq .theme.effective "nord" }}pulse{{ else }}none{{ end }}' } }`),
+      load(
+        `{ globals: { effect: '{{ if eq .theme.effective "nord" }}pulse{{ else }}none{{ end }}' } }`,
+      ),
     ).toThrow(
       /globals\.effect reads "theme\.effective", the palette's own name: a rule decides that name, so it cannot read it/,
     );

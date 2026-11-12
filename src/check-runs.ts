@@ -6,7 +6,13 @@
 // once `check` draws through `Renderer.answer` with a collector in process, as
 // the demo does, the collector holds these runs.
 
-import { observable, reaction, runInAction, when } from "mobx";
+import {
+  compareStructural,
+  observable,
+  reaction,
+  runInAction,
+  when,
+} from "mobx";
 import {
   declareRuns,
   type SourceLane,
@@ -26,6 +32,9 @@ export class CheckRuns {
   private readonly lanes = observable.map<string, SourceLane>(undefined, {
     deep: false,
   });
+  // The fact each run last answered, by digest, so a run that moved nothing
+  // answers the same object: the registry's publish compares by reference.
+  private readonly answered = new Map<string, RunFact>();
   private readonly stop: () => void;
 
   constructor(
@@ -45,6 +54,8 @@ export class CheckRuns {
             (_, declare) => declare(),
           ),
         );
+        for (const digest of this.answered.keys())
+          if (!result.has(digest)) this.answered.delete(digest);
         runInAction(() => this.lanes.replace([...result]));
       },
       { fireImmediately: true },
@@ -55,12 +66,16 @@ export class CheckRuns {
   // stands, or a run not held yet.
   run(digest: string): RunFact {
     const lane = this.lanes.get(digest);
-    return lane === undefined
-      ? UNREAD_RUN
-      : {
-          reading: restamp(undefined, lane.current(), this.at),
-          fault: lane.fault(),
-        };
+    if (lane === undefined) return UNREAD_RUN;
+    const prior = this.answered.get(digest);
+    const next: RunFact = {
+      reading: restamp(undefined, lane.current(), this.at),
+      fault: lane.fault(),
+    };
+    const fact =
+      prior !== undefined && compareStructural(prior, next) ? prior : next;
+    this.answered.set(digest, fact);
+    return fact;
   }
 
   // [LAW:no-ambient-temporal-coupling] Resolves when no run the registry
