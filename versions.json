@@ -4,15 +4,22 @@
     {
       "version": "pr-730",
       "ref": "refs/pull/730/merge",
-      "sha": "ec9f583531d49172287efdd7ae45329b4839da08",
-      "timestamp": "2026-11-12T09:13:33.625Z",
+      "sha": "957a7849edbacf0ba80b8d069238d0a952112735",
+      "timestamp": "2026-11-12T09:14:36.459Z",
       "commits": [
         {
-          "sha": "ec9f583531d49172287efdd7ae45329b4839da08",
+          "sha": "957a7849edbacf0ba80b8d069238d0a952112735",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:12:25Z",
-          "message": "Merge c1138a0f7fbc651b2ba17db315be934ee5a184f6 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+          "timestamp": "2026-11-12T09:13:32Z",
+          "message": "Merge a925287ac6de01c3a74c57a0c6b08b9626d21ef3 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+        },
+        {
+          "sha": "a925287ac6de01c3a74c57a0c6b08b9626d21ef3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T02:13:23-07:00",
+          "message": "fix(check): a run that moved nothing answers the same fact, so a re-bind publishes nothing again (candybar-host-renderer-x96a.8e9)\n"
         },
         {
           "sha": "c1138a0f7fbc651b2ba17db315be934ee5a184f6",
