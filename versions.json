@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "b6d03dff468ab270253e97ec293b10ccfad5e970",
-      "timestamp": "2026-11-12T18:12:02.129Z",
+      "sha": "62d68333106c04b0083e0576a630ef2bc03762ce",
+      "timestamp": "2026-11-12T18:21:05.859Z",
       "commits": [
         {
-          "sha": "b6d03dff468ab270253e97ec293b10ccfad5e970",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T11:11:05-07:00",
-          "message": "feat(judge): the host judges each shell and file run once, where its set arrives, and a refusal stands as the run's fault (candybar-host-renderer-x96a.jmi) (#738)\n\n* feat(judge): the host judges each shell and file run once, where its set arrives, and a refusal stands as the run's fault (candybar-host-renderer-x96a.jmi)\n\nThe loader parses a run's path, regex and ttl and no longer judges them.\nThe collector judges a subscribed set's new digests as it arrives, and\ncheck's holder judges its set as it moves, so a request judges nothing.\nA refused run never reaches a reader: its lane answers \"refused: <reason>\"\nfor good, and that is its standing fault, so the bar draws the fallback\nbeside a ⚠ and check fails naming the variable. A shell ttl below 500ms is\nrefused rather than raised, so a digest is the identity that runs.\n\n* fix(judge): the judge hands its compiled parser to the run, a refusal is said once, and its log reason is quoted (candybar-host-renderer-x96a.jmi)\n\n* docs(judge): keep only the judge's edits in the authoring docs and check tests, dropping a formatter's reflow (candybar-host-renderer-x96a.jmi)"
+          "sha": "62d68333106c04b0083e0576a630ef2bc03762ce",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-12T18:19:51Z",
+          "message": "chore(release): set `package.json` to 1.220.0\n\n## [1.220.0](https://github.com/promptctl/cc-candybar/compare/v1.219.2...v1.220.0) (2026-11-12)\n\n### Features\n\n* **judge:** the host judges each shell and file run once, where its set arrives, and a refusal stands as the run's fault (candybar-host-renderer-x96a.jmi) ([#738](https://github.com/promptctl/cc-candybar/issues/738)) ([b6d03df](https://github.com/promptctl/cc-candybar/commit/b6d03dff468ab270253e97ec293b10ccfad5e970))\n"
         }
       ]
     }
