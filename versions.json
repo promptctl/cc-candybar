@@ -4,15 +4,22 @@
     {
       "version": "pr-723",
       "ref": "refs/pull/723/merge",
-      "sha": "d520a809f5a6bc75cfccc21591c41fc7859a118c",
-      "timestamp": "2026-11-12T05:31:45.568Z",
+      "sha": "a6e3465cd73dc843457ce2b8aea141af534d5bf4",
+      "timestamp": "2026-11-12T05:37:00.685Z",
       "commits": [
         {
-          "sha": "d520a809f5a6bc75cfccc21591c41fc7859a118c",
+          "sha": "a6e3465cd73dc843457ce2b8aea141af534d5bf4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T05:30:41Z",
-          "message": "Merge dd780f79ee21b76d8690cb37ba23238077bf00b0 into 5e6bce6dfd01f43eca1c1503452bc4699f03ff91\n"
+          "timestamp": "2026-11-12T05:36:06Z",
+          "message": "Merge fdf270552f3e8e87c28722ca7afde6d20dab7e66 into 5e6bce6dfd01f43eca1c1503452bc4699f03ff91\n"
+        },
+        {
+          "sha": "fdf270552f3e8e87c28722ca7afde6d20dab7e66",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:35:47-07:00",
+          "message": "test(config): the chrome-reads corpus authors a menu, the helpers share one authored-config builder, and unrelated helper formatting is restored (candybar-host-renderer-x96a.dbg)\n"
         },
         {
           "sha": "dd780f79ee21b76d8690cb37ba23238077bf00b0",
