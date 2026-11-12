@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-720",
-      "ref": "refs/pull/720/merge",
-      "sha": "76c9730d0503b99ec4a75c25e3a759b72f498026",
-      "timestamp": "2026-11-12T02:45:58.356Z",
-      "commits": [
-        {
-          "sha": "76c9730d0503b99ec4a75c25e3a759b72f498026",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:44:59Z",
-          "message": "Merge 7db8e2420767c55be4cd4c786f40b40f1c947c7d into 23abb3a1cc2bd8b7b5c9a71d0fdef270db785dbc\n"
-        },
-        {
-          "sha": "7db8e2420767c55be4cd4c786f40b40f1c947c7d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T19:44:38-07:00",
-          "message": "refactor(daemon): a stored session key crosses the checkpoint through one loader (candybar-host-renderer-x96a.6ql)\n\nFrom the medium review of #720: the state and history files share one keyed loader; the doctor's client read leaves the session id to the checkpoint alone.\n"
-        },
-        {
-          "sha": "b3b3a9319ce94ca197c5f092a806751cb289ce62",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T19:35:51-07:00",
-          "message": "refactor(daemon): the hook's session_id is the checked SessionId, so a request carries its session once (candybar-host-renderer-x96a.6ql)\n\nFrom the high review of #720:\n- the request and payload inputs drop their second session field; hookData.session_id is typed SessionId at the checkpoint\n- Subscriptions.sources is a Map keyed by session, so no session is listed twice\n- the doctor's sighting parsers brand a session id only through the checkpoint\n- the transcript folds, effect sessions, lane-setup queue and pane lookup key by SessionId\n- tests build session ids by the checkpoint, with no casts\n"
-        },
-        {
-          "sha": "bfc9d449305ee2423c3f3ff2a56ce4251f22d928",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T19:16:23-07:00",
-          "message": "test: session ids in tests are built by the checkpoint, and a stored key it refuses is reported and not loaded (candybar-host-renderer-x96a.6ql)\n"
-        },
-        {
-          "sha": "04729e79f4ed2cf3d84e4dd8c928f4444df95a60",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T19:05:00-07:00",
-          "message": "refactor(daemon): the checked SessionId travels from its door to every unit that keys by it (candybar-host-renderer-x96a.6ql)\n"
-        },
-        {
-          "sha": "131495a0c5565347b6f3073b50fbad915a80fbb5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T18:19:57-07:00",
-          "message": "test(daemon-log): the dispose-mid-flush case counts only the log file's own opens (candybar-host-renderer-x96a.jg5)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "23abb3a1cc2bd8b7b5c9a71d0fdef270db785dbc",
-      "timestamp": "2026-11-12T01:17:44.141Z",
+      "sha": "6c654604baf9e9029c99910f667305f85dd79ae8",
+      "timestamp": "2026-11-12T02:54:29.973Z",
       "commits": [
         {
-          "sha": "23abb3a1cc2bd8b7b5c9a71d0fdef270db785dbc",
+          "sha": "6c654604baf9e9029c99910f667305f85dd79ae8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T18:16:50-07:00",
-          "message": "refactor(daemon): the idle clock keys sessions by the checked SessionId (candybar-host-renderer-x96a.snf) (#718)\n\n* refactor(daemon): the idle clock keys sessions by the checked SessionId, so its menu-idle turn names its session with no cast (candybar-host-renderer-x96a.snf)\n\nThe clock's records, pending counts, methods and deps take SessionId; the\nverb context's clickLanded, closeIdleMenus and the renderer's closeIdle\npass it through. Every caller already held a checked id, so nothing parses\nanew, and closeByTurn's cast and its parse-dont-validate exception go. The\nverb layer's wider sid: string stays: it reads ids, and SessionId narrows\nto string there.\n\n* test(click-order): both fixture sessions are checked SessionIds (candybar-host-renderer-x96a.snf)\n\n* refactor(verbs): journaled takes the checked SessionId its callers already pass (candybar-host-renderer-x96a.snf)"
+          "timestamp": "2026-11-11T19:53:32-07:00",
+          "message": "refactor(daemon): the checked SessionId travels from its door to every unit that keys by it (candybar-host-renderer-x96a.6ql) (#720)\n\n* test(daemon-log): the dispose-mid-flush case counts only the log file's own opens (candybar-host-renderer-x96a.jg5)\n\n* refactor(daemon): the checked SessionId travels from its door to every unit that keys by it (candybar-host-renderer-x96a.6ql)\n\n* test: session ids in tests are built by the checkpoint, and a stored key it refuses is reported and not loaded (candybar-host-renderer-x96a.6ql)\n\n* refactor(daemon): the hook's session_id is the checked SessionId, so a request carries its session once (candybar-host-renderer-x96a.6ql)\n\nFrom the high review of #720:\n- the request and payload inputs drop their second session field; hookData.session_id is typed SessionId at the checkpoint\n- Subscriptions.sources is a Map keyed by session, so no session is listed twice\n- the doctor's sighting parsers brand a session id only through the checkpoint\n- the transcript folds, effect sessions, lane-setup queue and pane lookup key by SessionId\n- tests build session ids by the checkpoint, with no casts\n\n* refactor(daemon): a stored session key crosses the checkpoint through one loader (candybar-host-renderer-x96a.6ql)\n\nFrom the medium review of #720: the state and history files share one keyed loader; the doctor's client read leaves the session id to the checkpoint alone."
         }
       ]
     }
