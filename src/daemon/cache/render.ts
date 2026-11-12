@@ -4,7 +4,13 @@ import { inspect } from "node:util";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import { chainName } from "../../config-hint.js";
 import type { RichText } from "@promptctl/rich-js";
-import { compareShallow, observable, reaction, runInAction } from "mobx";
+import {
+  compareShallow,
+  observable,
+  reaction,
+  runInAction,
+  type IObservableValue,
+} from "mobx";
 import type { DeclaredSources, ViewFacts } from "../render-payload.js";
 import type { Subscription, Subscriptions } from "../../renderer/interface.js";
 import type { ManagedStorage, StorageKey } from "./managed-storage.js";
@@ -62,6 +68,7 @@ import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import { UNREAD_RUN } from "../../facts/world-state.js";
+import type { Run } from "../../facts/source-identity.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateRW } from "../session-state.js";
 import {
@@ -546,6 +553,12 @@ export interface SessionHold<
   F extends ViewFacts = ViewFacts,
 > extends Hold {
   readonly view: SessionView<S, F>;
+  // The runs a render holding the view waits on: the ones its view names
+  // while the view is its session's bar, and none once it is retired. A
+  // retired view's runs are no output's subscriptions, so the host drops them
+  // and they would read unread until the client's deadline. Observable, so a
+  // wait ends in the turn of the retire.
+  awaited(): Iterable<Run>;
 }
 
 // What opened a view: a request, a reload's successor, or a click that moved
@@ -564,7 +577,13 @@ interface ViewHold {
   // (`retire`), so a served view's entry is this one.
   readonly entry: CacheEntry;
   holders: number;
-  retired: { readonly reason: ViewClose; readonly held: number } | null;
+  // [LAW:one-source-of-truth] The one record of the view's retire: its
+  // teardown reads it, and so does a render's wait (`awaited`), which is why it
+  // is observable.
+  readonly retired: IObservableValue<{
+    readonly reason: ViewClose;
+    readonly held: number;
+  } | null>;
 }
 
 // [LAW:nothing-unseen] The states renders are drawing with now, and those
@@ -1606,6 +1625,8 @@ export class RenderCache<
       entry: held.entry,
       state: held.state,
       view,
+      awaited: () =>
+        lease.retired.get() === null ? view.registry.namedRuns().values() : [],
       [Symbol.dispose]: () => {
         if (released) throw new Error("render-cache view hold released twice");
         released = true;
@@ -1722,7 +1743,11 @@ export class RenderCache<
     }
     this.openFailures.delete(sessionId);
     this.views.set(sessionId, view);
-    this.viewHolds.set(view, { entry, holders: 0, retired: null });
+    this.viewHolds.set(view, {
+      entry,
+      holders: 0,
+      retired: observable.box(null, { deep: false }),
+    });
     this.log(
       "info",
       `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.cwd} views=${this.views.size}`,
@@ -1747,17 +1772,19 @@ export class RenderCache<
     if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
     view.retire();
     const lease = this.leaseOf(view);
-    lease.retired = { reason, held: lease.holders };
+    const retired = { reason, held: lease.holders };
+    runInAction(() => lease.retired.set(retired));
     this.reclaimView(view, lease);
   }
 
   // [LAW:single-enforcer] The one place a view is disposed: retired and unheld.
   private reclaimView(view: SessionView<S, F>, lease: ViewHold): void {
-    if (lease.retired === null || lease.holders > 0) return;
+    const retired = lease.retired.get();
+    if (retired === null || lease.holders > 0) return;
     this.viewHolds.delete(view);
     this.log(
       "info",
-      `session view closed sid=${JSON.stringify(view.sessionId)} reason=${lease.retired.reason} released=${view.dispose()} held=${lease.retired.held} views=${this.views.size}`,
+      `session view closed sid=${JSON.stringify(view.sessionId)} reason=${retired.reason} released=${view.dispose()} held=${retired.held} views=${this.views.size}`,
     );
   }
 
@@ -1843,7 +1870,7 @@ export class RenderCache<
     }
     let retiredViews = 0;
     for (const lease of this.viewHolds.values()) {
-      if (lease.retired !== null) retiredViews++;
+      if (lease.retired.get() !== null) retiredViews++;
     }
     return {
       size: this.entries.size,

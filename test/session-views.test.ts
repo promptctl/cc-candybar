@@ -5,7 +5,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runInAction } from "mobx";
+import { runInAction, when } from "mobx";
 import {
   SOURCES_NOTHING,
   RenderCache,
@@ -313,6 +313,26 @@ test("a view held by a render in flight is disposed only when the render returns
       /^session view closed sid="s-a" reason=reload .* held=1 /,
     ),
   );
+});
+
+// A request waits on the runs its view names, and a retired view's are no
+// output's subscriptions: the host drops them, so a wait still reading them
+// would read them unread until its deadline. The wait ends at the retire.
+test("a held view's awaited runs are the ones it names until it is retired, and none from the retire on", async () => {
+  configure(dir);
+  const other = path.join(dir, "sub");
+  fs.mkdirSync(other);
+  configure(other);
+  const { cache } = makeCache();
+  using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
+  const named = [...held.view.registry.namedRuns().values()];
+  expect(named.length).toBeGreaterThan(0);
+  expect([...held.awaited()]).toEqual(named);
+  const ended = when(() => [...held.awaited()].length === 0);
+  // Another request moves the session to another directory's entry.
+  await render(cache, "s-a", other);
+  await ended;
+  expect([...held.awaited()]).toEqual([]);
 });
 
 // [LAW:no-ambient-temporal-coupling] The instant is the draw's, and a

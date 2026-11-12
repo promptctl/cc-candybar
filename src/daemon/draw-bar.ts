@@ -58,6 +58,7 @@ import {
 import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
 import type { WorldState } from "../facts/world-state.js";
+import type { Run } from "../facts/source-identity.js";
 import type { WorldStates } from "../renderer/world-states.js";
 import { isPending } from "../utils/outcome.js";
 import {
@@ -316,6 +317,8 @@ interface RenderSetup extends Disposable {
   readonly hintsError: string | null;
   // What the request's refresh and wait read (settleWorld).
   readonly payloadInputs: PayloadInputs;
+  // The runs the request's wait reads: none once its view is retired.
+  readonly awaited: () => Iterable<Run>;
 }
 
 // What a render notes of the context it draws by.
@@ -515,6 +518,7 @@ function setUpDraw(
       view,
       hintsError,
       payloadInputs,
+      awaited: hold.awaited,
       [Symbol.dispose]: () => hold[Symbol.dispose](),
     };
   } catch (e) {
@@ -1097,7 +1101,7 @@ export async function answerRequest(
         at,
         refreshed,
         () => parts.worldStates.of(setup.sessionId),
-        () => setup.view.registry.namedRuns().values(),
+        setup.awaited,
         signal,
       ),
     budget,
