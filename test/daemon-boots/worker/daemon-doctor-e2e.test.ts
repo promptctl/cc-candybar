@@ -219,12 +219,6 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
   );
   const daemon = startDaemon(env);
   try {
-    const request = (body: Record<string, unknown>) =>
-      sendDaemonRequest(
-        daemon,
-        { v: PROTOCOL_VERSION, ...body } as never,
-        5000,
-      );
     // As the URL handler app forwards: one frame, then hang up, reading no
     // answer. The daemon writes none. Each click's event is awaited before
     // the next frame, so the events below come in the order sent.
@@ -244,13 +238,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     };
 
     const nonce = "123e4567-e89b-42d3-a456-426614174000";
-    expect(
-      await request({
-        kind: "click",
-        verb: VERB_DOCTOR_PROBE,
-        value: nonce,
-      }),
-    ).toMatchObject({ ok: true });
+    await click(daemon, `cc-candybar://${VERB_DOCTOR_PROBE}/${nonce}`);
     clicks += 1;
     const forwardedNonce = "223e4567-e89b-42d3-a456-426614174000";
     await forwarded({
@@ -289,13 +277,10 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
 
     const SID = "doctor-e2e-2";
     await render(daemon, SID, projectDir);
-    expect(
-      await request({
-        kind: "click",
-        verb: VERB_DOCTOR_RUN,
-        value: SID,
-      }),
-    ).toMatchObject({ ok: true });
+    // [LAW:no-ambient-temporal-coupling] The run's probes spawn, so its reply
+    // can outlast the daemon's guard; the helper reads a TIMEOUT's outcome
+    // from the click's own event.
+    await click(daemon, `cc-candybar://${VERB_DOCTOR_RUN}/${SID}`);
     await click(
       daemon,
       urlWriting(
