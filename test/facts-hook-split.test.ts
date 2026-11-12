@@ -127,7 +127,7 @@ function inputsOf(hookData: ClaudeHookData): PayloadInputs {
     metricsProvider: new MetricsProvider({ clock: systemTimekeeper }),
     log: () => {},
   } as unknown as RenderPayloadDeps;
-  return { hookData, deps, cwd: "/tmp", hints: {} };
+  return { hookData, deps, cwd: "/tmp", hints: {}, sessionId: SID };
 }
 
 test("two hooks that differ only in their instantaneous fields read one document and compose two payloads", async () => {
@@ -162,6 +162,7 @@ test("two hooks that differ only in their instantaneous fields read one document
         hookData: inputs.hookData,
         hints: inputs.hints,
         home: inputs.deps.home,
+        sessionId: inputs.sessionId,
       },
       DRAW,
     );

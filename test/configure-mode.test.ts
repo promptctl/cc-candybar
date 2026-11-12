@@ -56,9 +56,10 @@ import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { picked, selectionFor } from "./helpers/selection";
 import { MENU_PAGE_NS } from "../src/config/reserved-names";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-const SID = "s1";
+const SID = sessionIdOf("s1");
 
 // One segment declaring a setting of each domain shape, placed twice — once
 // bare, once with an id and a value of its own — beside a segment declaring

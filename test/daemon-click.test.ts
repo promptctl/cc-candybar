@@ -12,62 +12,71 @@ import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click
 import { recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const ABC_123 = sessionIdOf("abc-123");
+const SESSION_A = sessionIdOf("session-a");
+const SESSION_B = sessionIdOf("session-b");
+const A_2 = sessionIdOf("a");
+const B = sessionIdOf("b");
+const C = sessionIdOf("c");
+const S1 = sessionIdOf("s1");
 
 // --- SessionState unit tests ---
 
 describe("SessionState", () => {
   test("get returns null for unknown session/key", () => {
     const state = new SessionState();
-    expect(state.get("abc-123", "theme")).toBeNull();
+    expect(state.get(ABC_123, "theme")).toBeNull();
   });
 
   test("set/get round-trips a value", () => {
     const state = new SessionState();
-    state.set("abc-123", "theme", "ocean");
-    expect(state.get("abc-123", "theme")).toBe("ocean");
+    state.set(ABC_123, "theme", "ocean");
+    expect(state.get(ABC_123, "theme")).toBe("ocean");
   });
 
   test("different sessions are independent", () => {
     const state = new SessionState();
-    state.set("session-a", "theme", "ocean");
-    state.set("session-b", "theme", "ember");
-    expect(state.get("session-a", "theme")).toBe("ocean");
-    expect(state.get("session-b", "theme")).toBe("ember");
+    state.set(SESSION_A, "theme", "ocean");
+    state.set(SESSION_B, "theme", "ember");
+    expect(state.get(SESSION_A, "theme")).toBe("ocean");
+    expect(state.get(SESSION_B, "theme")).toBe("ember");
   });
 
   test("clear removes a key", () => {
     const state = new SessionState();
-    state.set("abc-123", "theme", "ocean");
-    state.clear("abc-123", "theme");
-    expect(state.get("abc-123", "theme")).toBeNull();
+    state.set(ABC_123, "theme", "ocean");
+    state.clear(ABC_123, "theme");
+    expect(state.get(ABC_123, "theme")).toBeNull();
   });
 
   test("multiple keys per session are independent", () => {
     const state = new SessionState();
-    state.set("abc-123", "theme", "ocean");
-    state.set("abc-123", "style", "surface");
-    expect(state.get("abc-123", "theme")).toBe("ocean");
-    expect(state.get("abc-123", "style")).toBe("surface");
+    state.set(ABC_123, "theme", "ocean");
+    state.set(ABC_123, "style", "surface");
+    expect(state.get(ABC_123, "theme")).toBe("ocean");
+    expect(state.get(ABC_123, "style")).toBe("surface");
   });
 
   test("prune removes sessions not in the active set", () => {
     const state = new SessionState();
-    state.set("a", "theme", "ocean");
-    state.set("b", "theme", "ember");
-    state.set("c", "theme", "forest");
-    state.prune(new Set(["a", "c"]));
-    expect(state.get("a", "theme")).toBe("ocean");
-    expect(state.get("b", "theme")).toBeNull();
-    expect(state.get("c", "theme")).toBe("forest");
+    state.set(A_2, "theme", "ocean");
+    state.set(B, "theme", "ember");
+    state.set(C, "theme", "forest");
+    state.prune(new Set([A_2, C]));
+    expect(state.get(A_2, "theme")).toBe("ocean");
+    expect(state.get(B, "theme")).toBeNull();
+    expect(state.get(C, "theme")).toBe("forest");
   });
 
   test("toolbar-expanded key works for toggle semantics", () => {
     const state = new SessionState();
-    expect(state.get("s1", "toolbar-expanded")).toBeNull();
-    state.set("s1", "toolbar-expanded", "1");
-    expect(state.get("s1", "toolbar-expanded")).toBe("1");
-    state.clear("s1", "toolbar-expanded");
-    expect(state.get("s1", "toolbar-expanded")).toBeNull();
+    expect(state.get(S1, "toolbar-expanded")).toBeNull();
+    state.set(S1, "toolbar-expanded", "1");
+    expect(state.get(S1, "toolbar-expanded")).toBe("1");
+    state.clear(S1, "toolbar-expanded");
+    expect(state.get(S1, "toolbar-expanded")).toBeNull();
   });
 });
 
@@ -203,7 +212,7 @@ describe("toolbar toggle dataflow", () => {
     // [LAW:one-source-of-truth] The SessionState is the daemon's in-memory
     // source of truth. No file reads needed.
     const state = new SessionState();
-    const sessionId = "toggle-test-session";
+    const sessionId = sessionIdOf("toggle-test-session");
 
     // Initially not expanded.
     expect(state.get(sessionId, "toolbar-expanded")).toBeNull();
@@ -238,7 +247,7 @@ describe("step-state handler", () => {
   // A session rendering `config`, and its step click.
   function session(config: DslConfig) {
     const sessionState = new SessionState();
-    recordRender(sessionState, "s1");
+    recordRender(sessionState, S1);
     const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
     const step = VERBS.get(VERB_STEP_STATE)!;
     const click = async (by: number): Promise<void> =>
@@ -249,9 +258,9 @@ describe("step-state handler", () => {
 
   test("an unset key steps from its config's default, not min", async () => {
     const { sessionState, click } = setup();
-    expect(sessionState.get("s1", KEY)).toBeNull();
+    expect(sessionState.get(S1, KEY)).toBeNull();
     await click(2);
-    expect(sessionState.get("s1", KEY)).toBe("16"); // 14 + 2, NOT 0 + 2
+    expect(sessionState.get(S1, KEY)).toBe("16"); // 14 + 2, NOT 0 + 2
   });
 
   test("N identical clicks accumulate N steps (idempotency gone)", async () => {
@@ -259,21 +268,21 @@ describe("step-state handler", () => {
     await click(2);
     await click(2);
     await click(2);
-    expect(sessionState.get("s1", KEY)).toBe("20"); // 14 → 16 → 18 → 20
+    expect(sessionState.get(S1, KEY)).toBe("20"); // 14 → 16 → 18 → 20
   });
 
   test("stepping past a bound WRAPS to the other end", async () => {
     const { sessionState, click } = setup();
-    sessionState.set("s1", KEY, "60"); // max
+    sessionState.set(S1, KEY, "60"); // max
     await click(2);
-    expect(sessionState.get("s1", KEY)).toBe("0"); // wrapped, not clamped to 60
+    expect(sessionState.get(S1, KEY)).toBe("0"); // wrapped, not clamped to 60
   });
 
   test("a negative delta steps down", async () => {
     const { sessionState, click } = setup();
-    sessionState.set("s1", KEY, "10");
+    sessionState.set(S1, KEY, "10");
     await click(-2);
-    expect(sessionState.get("s1", KEY)).toBe("8");
+    expect(sessionState.get(S1, KEY)).toBe("8");
   });
 
   test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", async () => {
@@ -291,7 +300,7 @@ describe("step-state handler", () => {
     const stepIn = async (dflt: string): Promise<string | null> => {
       const { sessionState, click } = session(stepper(dflt));
       await click(2);
-      return sessionState.get("s1", KEY);
+      return sessionState.get(S1, KEY);
     };
     expect(await stepIn("14")).toBe("16");
     expect(await stepIn("30")).toBe("32");
@@ -300,13 +309,13 @@ describe("step-state handler", () => {
   test("a step wraps at the bounds of the config ITS session renders with", async () => {
     const narrow = session(stepper("2", 0, 2));
     const wide = session(stepper("2", 0, 8));
-    for (const s of [narrow, wide]) s.sessionState.set("s1", KEY, "2");
+    for (const s of [narrow, wide]) s.sessionState.set(S1, KEY, "2");
     await wide.click(2);
     await narrow.click(2);
     // From its own max, the narrow session wraps to its min; the wide one,
     // whose config declares room above 2, steps on.
-    expect(narrow.sessionState.get("s1", KEY)).toBe("0");
-    expect(wide.sessionState.get("s1", KEY)).toBe("4");
+    expect(narrow.sessionState.get(S1, KEY)).toBe("0");
+    expect(wide.sessionState.get(S1, KEY)).toBe("4");
   });
 
   test("one key a word list in one config and a range in another gates each session by its own", async () => {
@@ -317,9 +326,9 @@ describe("step-state handler", () => {
     const range = session(stepper("14"));
     const set = VERBS.get("set-state")!;
     await set(encodeSegments(["s1", KEY, "cool"]), words.ctx);
-    expect(words.sessionState.get("s1", KEY)).toBe("cool");
+    expect(words.sessionState.get(S1, KEY)).toBe("cool");
     await range.click(2);
-    expect(range.sessionState.get("s1", KEY)).toBe("16");
+    expect(range.sessionState.get(S1, KEY)).toBe("16");
     // Each refuses what only the other's config declares.
     await expect(words.click(2)).rejects.toThrow(/not a bounded \(range\) state key/);
     await expect(set(encodeSegments(["s1", KEY, "cool"]), range.ctx),
@@ -331,7 +340,7 @@ describe("step-state handler", () => {
     await expect(click(2)).rejects.toThrow(
       /"step-test-hue" shows "wide" before any click/,
     );
-    expect(sessionState.get("s1", KEY)).toBeNull();
+    expect(sessionState.get(S1, KEY)).toBeNull();
   });
 
   test("a key the session's config declares no range for is rejected, not silently stepped", async () => {

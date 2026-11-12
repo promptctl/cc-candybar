@@ -40,6 +40,8 @@ import {
 import { sessionBar } from "./helpers/session-bar";
 import { until } from "./helpers/until";
 
+const SID = sessionIdOf(SESSION);
+
 let dir: string;
 let cleanups: Array<() => void>;
 beforeEach(() => {
@@ -63,7 +65,7 @@ describe("one turn", () => {
     // A pick and a history move land in one action: the turn that follows
     // holds both, never one of them beside the other's old value.
     runInAction(() => {
-      rig.sessionState.set(SESSION, "preset", "compact");
+      rig.sessionState.set(SID, "preset", "compact");
       depth.set(2);
     });
     const payload = view.source.payload();
@@ -99,7 +101,7 @@ describe("one turn", () => {
         { fireImmediately: true },
       ),
     );
-    runInAction(() => rig.sessionState.set(SESSION, "preset", "git"));
+    runInAction(() => rig.sessionState.set(SID, "preset", "git"));
     expect(view.source.effective().preset).toBe("git");
     expect(declarations).toBe(declaredAtOpen);
     expect(seen).toEqual(["ok"]);
@@ -223,10 +225,11 @@ describe("what wakes a view", () => {
         deps: rig.providers as never,
         cwd: PROJECT,
         hints: requestOf(dir).hints,
+        sessionId: SID,
       },
       AT,
       new Map(),
-      () => rig.served.worldStates.of(sessionIdOf(SESSION)),
+      () => rig.served.worldStates.of(SID),
       new AbortController().signal,
     );
     expect(view.source.facts()).toBe(document);
@@ -271,7 +274,7 @@ describe("the all-pending document", () => {
       const effective = resolveEffectiveGlobals(config, picks, () => false);
       const document = assembleFacts(
         undefined,
-        sessionIdOf(SESSION),
+        SID,
         pendingReadings,
         pendingOf("unread"),
         instantOf(new Date(0)),
@@ -294,6 +297,7 @@ describe("the all-pending document", () => {
               hookData: requestOf(dir).hookData,
               hints: requestOf(dir).hints,
               home: "/home/tester",
+              sessionId: SID,
             },
             {
               sources: [],

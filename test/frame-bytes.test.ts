@@ -34,8 +34,9 @@ import type { RenderedLine } from "../src/dsl/node-registry";
 import type { BuildLineOptions } from "../src/render/strip";
 import type { Instant } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s1";
+const SID = sessionIdOf("s1");
 const START = 1_800_000_000;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
 

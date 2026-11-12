@@ -35,8 +35,9 @@ import { deriveActionValidators } from "../src/daemon/foundations/state-validato
 import { PRESET_FLOOR, presetGlobals, presetRoot } from "../src/config/presets";
 import { checkConfig } from "../src/check";
 import { daemonGates } from "../src/daemon/update-keys";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s-presets";
+const SID = sessionIdOf("s-presets");
 const THEME = "textual-dark";
 const ALLOWED = new Set([THEME]);
 

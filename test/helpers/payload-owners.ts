@@ -15,7 +15,6 @@ import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
 import { HOST } from "./host";
 import type { ClaudeHookData } from "../../src/utils/claude";
-import { sessionIdOf } from "../../src/daemon/session-id";
 import type { GitInfo } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
 import type { MetricsFold } from "../../src/segments/metrics";
@@ -63,6 +62,7 @@ import { Holds as HoldsClass } from "../../src/utils/holds";
 import { CacheExpiryProvider } from "../../src/segments/cache";
 import { RefreshFaults } from "../../src/daemon/refresh-faults";
 import { systemTimekeeper } from "../../src/time";
+import { sessionIdOf } from "../../src/daemon/session-id";
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
 
@@ -143,7 +143,7 @@ export interface LanedInputs extends PayloadInputs {
 export function documentOf(inputs: LanedInputs) {
   return assembleFacts(
     undefined,
-    sessionIdOf(inputs.hookData.session_id),
+    inputs.sessionId,
     readingsOf(inputs, inputs.lanes()),
     pendingOf("unread"),
     instantOf(new Date(0)),
@@ -183,6 +183,7 @@ export function payloadOf(
     documentOf(inputs),
     {
       hookData: inputs.hookData,
+      sessionId: inputs.sessionId,
       hints: inputs.hints,
       home: inputs.deps.home,
     },
@@ -378,14 +379,16 @@ export async function requestPayload(
   hints: ClientHints,
   configFacts: ConfigFileFacts,
 ): Promise<DrawnPayload> {
+  const sessionId = sessionIdOf(hookData.session_id);
   using home = openHome(deps, {
-    sessionId: sessionIdOf(hookData.session_id),
+    sessionId,
     hookData,
     cwd,
     hints,
   });
   const inputs: LanedInputs = {
     hookData,
+    sessionId,
     cwd,
     hints,
     deps,

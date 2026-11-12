@@ -133,6 +133,7 @@ function counted(pr: unknown = ABSENT) {
     cleanups,
   );
   const inputs = (): LanedInputs => ({
+    sessionId: sessionIdOf(HOOK.session_id),
     hookData: HOOK,
     deps,
     cwd: undefined,
@@ -233,7 +234,7 @@ describe("a frame's payload", () => {
     const { inputs, reads, request, deps } = counted();
     await request();
     const before = reads["today"];
-    deps.faults.refreshed(HOOK.session_id, "today", "scan threw");
+    deps.faults.refreshed(sessionIdOf(HOOK.session_id), "today", "scan threw");
     expect(todayReadingOf(inputs())).toEqual(failed("scan threw", "read"));
     expect(reads["today"]).toBe(before);
   });
@@ -243,7 +244,11 @@ describe("a frame's payload", () => {
     // session's frame has the one answered and not the other.
     const { inputs, request } = counted();
     await request();
-    const other = { ...inputs(), hookData: { ...HOOK, session_id: "other" } };
+    const other = {
+      ...inputs(),
+      sessionId: sessionIdOf("other"),
+      hookData: { ...HOOK, session_id: "other" },
+    };
     expect(payloadOf(other, DRAW).autocompact).toEqual(pendingOf("unread"));
     expect(payloadOf(inputs(), DRAW).autocompact).not.toEqual(
       pendingOf("unread"),
@@ -295,7 +300,7 @@ describe("a frame's payload", () => {
     }
     deps.contextProvider.refresh = refresh;
     await request();
-    expect(deps.faults.of(HOOK.session_id, "context")).toBeUndefined();
+    expect(deps.faults.of(sessionIdOf(HOOK.session_id), "context")).toBeUndefined();
   });
 
   // [LAW:no-silent-failure] A failed lane was logged by the refresh that

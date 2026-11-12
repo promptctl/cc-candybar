@@ -38,6 +38,11 @@ import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const SID_S = sessionIdOf("s");
+const T = sessionIdOf("t");
+
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
 // The instant the middle placement's `when` turns true.
@@ -293,13 +298,13 @@ describe("nothing fades in where the frame is drawn from another source", () => 
       on.render({ shown: true, when: at(S) }, fx, { transitions: true });
       expect(fx.lastFrame().fades).toEqual([{ placement: "middle", t: 0 }]);
       // Mid-fade, a click opens the group.
-      on.session.set("s", "groups.more", "more");
+      on.session.set(SID_S, "groups.more", "more");
       const frame = { shown: true, when: at(S + 5) };
       const opened = on.render(frame, fx, { transitions: true });
       expect(textOf(opened)).toContain("EXTRA");
       expect(fx.lastFrame()).toMatchObject({
         basis: "fresh",
-        revision: on.session.revision("s"),
+        revision: on.session.revision(SID_S),
         fades: [],
       });
       expect(opened.rows).toEqual(
@@ -316,13 +321,13 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     try {
       const history = new SettingsHistory(on.session, () => {});
       const journal = history.begin();
-      journal.sessionState.set("s", "theme", "nord");
+      journal.sessionState.set(SID_S, "theme", "nord");
       journal.commit();
       const fx = new SessionEffects<RenderedLine>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       on.render({ shown: false, when: at(1) }, fx, { transitions: true });
       expect(fx.lastFrame().basis).toBe("compared");
-      history.undo("s");
+      history.undo(SID_S);
       on.render({ shown: false, when: at(2) }, fx, { transitions: true });
       expect(fx.lastFrame().basis).toBe("fresh");
     } finally {
@@ -373,9 +378,9 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const on = renderer(ROW);
     try {
       const fx = new SessionEffects<RenderedLine>("s");
-      on.session.set("s", "edit.mode", "arrange");
+      on.session.set(SID_S, "edit.mode", "arrange");
       on.render({ shown: true, when: at(0) }, fx, { transitions: true });
-      on.session.set("s", "edit.mode", "closed");
+      on.session.set(SID_S, "edit.mode", "closed");
       on.render({ shown: true, when: at(1) }, fx, { transitions: true });
       expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
     } finally {
@@ -456,51 +461,51 @@ describe("a render that throws leaves the last drawn frame to compare against", 
 describe("a session's state revision moves with every change to it, whoever writes it", () => {
   test("a write of a value it did not hold moves it; one it held does not", () => {
     const state = new SessionState();
-    expect(state.revision("s")).toBe(0);
-    state.set("s", "theme", "nord");
-    const set = state.revision("s");
+    expect(state.revision(SID_S)).toBe(0);
+    state.set(SID_S, "theme", "nord");
+    const set = state.revision(SID_S);
     expect(set).toBeGreaterThan(0);
-    state.set("s", "theme", "nord");
-    state.setBatch("s", [{ key: "theme", value: "nord" }]);
-    expect(state.revision("s")).toBe(set);
-    state.setBatch("s", [
+    state.set(SID_S, "theme", "nord");
+    state.setBatch(SID_S, [{ key: "theme", value: "nord" }]);
+    expect(state.revision(SID_S)).toBe(set);
+    state.setBatch(SID_S, [
       { key: "theme", value: "nord" },
       { key: "style", value: "dim" },
     ]);
-    expect(state.revision("s")).toBeGreaterThan(set);
+    expect(state.revision(SID_S)).toBeGreaterThan(set);
   });
 
   test("a clear of a key it held moves it; of one it did not, does not", () => {
     const state = new SessionState();
-    state.set("s", "theme", "nord");
-    state.set("s", "style", "dim");
-    const before = state.revision("s");
-    state.clear("s", "endcaps");
-    expect(state.revision("s")).toBe(before);
-    state.clear("s", "style");
-    expect(state.revision("s")).toBeGreaterThan(before);
+    state.set(SID_S, "theme", "nord");
+    state.set(SID_S, "style", "dim");
+    const before = state.revision(SID_S);
+    state.clear(SID_S, "endcaps");
+    expect(state.revision(SID_S)).toBe(before);
+    state.clear(SID_S, "style");
+    expect(state.revision(SID_S)).toBeGreaterThan(before);
   });
 
   test("another session's write leaves it alone; an emptied session reads 0, and never repeats a revision", () => {
     const state = new SessionState();
-    state.set("s", "theme", "nord");
-    const mine = state.revision("s");
-    state.set("t", "theme", "nord");
-    expect(state.revision("s")).toBe(mine);
-    state.clear("s", "theme");
-    expect(state.revision("s")).toBe(0);
-    state.set("s", "theme", "nord");
-    expect(state.revision("s")).toBeGreaterThan(state.revision("t"));
+    state.set(SID_S, "theme", "nord");
+    const mine = state.revision(SID_S);
+    state.set(T, "theme", "nord");
+    expect(state.revision(SID_S)).toBe(mine);
+    state.clear(SID_S, "theme");
+    expect(state.revision(SID_S)).toBe(0);
+    state.set(SID_S, "theme", "nord");
+    expect(state.revision(SID_S)).toBeGreaterThan(state.revision(T));
   });
 
   test("the settings history's undo moves it, though it writes past the click's journal", () => {
     const state = new SessionState();
     const history = new SettingsHistory(state, () => {});
     const journal = history.begin();
-    journal.sessionState.set("s", "theme", "nord");
+    journal.sessionState.set(SID_S, "theme", "nord");
     journal.commit();
-    const before = state.revision("s");
-    history.undo("s");
-    expect(state.revision("s")).not.toBe(before);
+    const before = state.revision(SID_S);
+    history.undo(SID_S);
+    expect(state.revision(SID_S)).not.toBe(before);
   });
 });

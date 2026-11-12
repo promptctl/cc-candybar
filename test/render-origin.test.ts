@@ -6,6 +6,9 @@ import { BadVerbArgs } from "../src/daemon/verb-error";
 import { parseRenderOrigin, sessionRenderOrigin } from "../src/daemon/verbs/index";
 import { SESSION_CONFIG_OVERRIDE_KEY } from "../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
 
 const AT = { projectDir: "/p", cwd: "/p/sub" };
 
@@ -85,7 +88,7 @@ describe("sessionRenderOrigin", () => {
   });
 
   test("with no pick, the request's target stands", () => {
-    expect(sessionRenderOrigin(requested, state({}), "s1")).toEqual(requested);
+    expect(sessionRenderOrigin(requested, state({}), S1)).toEqual(requested);
   });
 
   test("a pick replaces the target, and is what names the file", () => {
@@ -93,7 +96,7 @@ describe("sessionRenderOrigin", () => {
       sessionRenderOrigin(
         requested,
         state({ [SESSION_CONFIG_OVERRIDE_KEY]: "/pick.json5" }),
-        "s1",
+        S1,
       ),
     ).toEqual({ ...AT, target: { source: "pick", path: "/pick.json5" } });
   });

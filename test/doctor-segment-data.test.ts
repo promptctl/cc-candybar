@@ -26,6 +26,12 @@ import { RuntimeStats } from "../src/daemon/stats";
 import type { StatsSnapshot } from "../src/daemon/stats";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
+const S2 = sessionIdOf("s2");
+const S3 = sessionIdOf("s3");
+
 const segmentData = checkByName("segmentData")!;
 
 const withData = (data: Partial<SegmentDataFacts>): DoctorFacts => ({
@@ -234,9 +240,9 @@ describe("the command's rate-limit sightings", () => {
   const sightings = {
     kind: "ok",
     value: [
-      { rateLimits: "carried", claudeConfigDir: "/a", sessionId: "s1", ago: 1 },
-      { rateLimits: "missing", claudeConfigDir: "/zai", sessionId: "s2", ago: 1 },
-      { rateLimits: "missing", claudeConfigDir: "/a", sessionId: "s3", ago: 100000 },
+      { rateLimits: "carried", claudeConfigDir: "/a", sessionId: S1, ago: 1 },
+      { rateLimits: "missing", claudeConfigDir: "/zai", sessionId: S2, ago: 1 },
+      { rateLimits: "missing", claudeConfigDir: "/a", sessionId: S3, ago: 100000 },
     ],
   } as const;
 
@@ -251,7 +257,7 @@ describe("the command's rate-limit sightings", () => {
   // (brandon-doctor-v62x.y5d).
   test("in a session, that session's renders alone", async () => {
     expect(
-      rateLimitsOf({ kind: "shell", sessionId: "s3" }, sightings, "/a"),
+      rateLimitsOf({ kind: "shell", sessionId: S3 }, sightings, "/a"),
     ).toEqual({ kind: "ok", value: ["missing"] });
   });
 

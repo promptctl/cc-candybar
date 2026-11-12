@@ -48,8 +48,9 @@ import {
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s-theme-expr";
+const SID = sessionIdOf("s-theme-expr");
 // Four visibly different installed themes: the floor, plus three the expression
 // picks between. Every one is in ALLOWED so the by-name reference configs load.
 const NAMED = ["nord", "solarized-light", "dracula"] as const;

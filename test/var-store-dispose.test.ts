@@ -20,8 +20,9 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { instantOf } from "../src/utils/instant";
 import { configDisposeLine } from "../src/daemon/cache/render";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s1";
+const SID = sessionIdOf("s1");
 
 const OPTS = {
   endcaps: "powerline" as const,

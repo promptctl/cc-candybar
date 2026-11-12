@@ -46,6 +46,8 @@ import {
 } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
+const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -250,8 +252,8 @@ describe("a global the menu has never seen gets its control from the generator",
     const high = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === "zoom" && e.args[2] === "high"),
     );
-    recordRender(sessionState, "s1");
+    recordRender(sessionState, S1);
     await clickUrl(high!, testVerbContext(sessionState, undefined, config));
-    expect(sessionState.get("s1", "zoom")).toBe("high");
+    expect(sessionState.get(S1, "zoom")).toBe("high");
   });
 });

@@ -71,6 +71,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -262,7 +263,11 @@ let durable: DurableConfig;
 // `dflt` is what the file merges over: the empty default by default, the
 // bundled DEFAULT_DSL_CONFIG when a test's subject is a segment the FILE does
 // not author but the bar still renders (the production cascade).
-function persistBar(src: string, sessionId = "s1", dflt?: DslConfig) {
+function persistBar(
+  src: string,
+  sessionId = sessionIdOf("s1"),
+  dflt?: DslConfig,
+) {
   if (durable.text() === null) durable.write(src);
   // The session's render origin is the file's, not the rig's own recorded one.
   const sessionState = new SessionState();
@@ -388,7 +393,7 @@ describe("segment-palette persist action click → the config file", () => {
     }`;
     const { render, click } = persistBar(
       SRC_BUNDLED,
-      "s1",
+      sessionIdOf("s1"),
       DEFAULT_DSL_CONFIG,
     );
     expect(fileSegments(durable).directory).toBeUndefined();

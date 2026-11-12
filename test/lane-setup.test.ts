@@ -38,8 +38,9 @@ import { holdClickError } from "../src/daemon/click-error";
 import { instantOf } from "../src/utils/instant";
 import type { Lane, LaneSwitches } from "../src/config/lanes";
 import type { TmuxHint } from "../src/tmux-hint";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "1f6e0c2a-0d0e-4a52-9d1b-2b0b0f0e0a11";
+const SID = sessionIdOf("1f6e0c2a-0d0e-4a52-9d1b-2b0b0f0e0a11");
 const TMUX: TmuxHint = { socket: "/tmp/tmux-1/default", pane: "%7", truecolor: null };
 const READY_SCREEN = ["─".repeat(30), "❯ ", "─".repeat(30)];
 
@@ -791,7 +792,7 @@ describe("the production edge's readers", () => {
   test("the claude CLI runs under the session's directory, never the daemon's", async () => {
     // The session's process environment (src/daemon/session-env.ts) the
     // edge's `claude` spawns with.
-    const facts = { sessionId: "s1", projectDir: "/p" };
+    const facts = { sessionId: sessionIdOf("s1"), projectDir: "/p" };
     // Unset in the overlay, so the daemon's own (whichever shell spawned it)
     // is removed from what the child inherits.
     expect(sessionEnv({ ...facts, claudeConfigDir: undefined })).toHaveProperty(
@@ -947,7 +948,7 @@ describe("LaneSetups", () => {
     const { edge } = fakeEdge();
     const { setups, logs } = owner(edge);
     for (let i = 0; i <= 1024; i++)
-      setups.clicked(`s${i}`, null, switches({}), switches({ pane: true }));
+      setups.clicked(sessionIdOf(`s${i}`), null, switches({}), switches({ pane: true }));
     expect(logs.filter((l) => l.startsWith("warn"))).toEqual([
       `warn lane: owed dropped sid="s0" lanes=pane`,
     ]);

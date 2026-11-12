@@ -112,6 +112,7 @@ function rig(git?: Outcome<unknown>) {
   const held = owners(git);
   const deps = held as unknown as RenderPayloadDeps;
   const inputs: LanedInputs = {
+    sessionId: SID,
     hookData: HOOK,
     deps,
     cwd: undefined,

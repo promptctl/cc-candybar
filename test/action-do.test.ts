@@ -24,6 +24,9 @@ import {
 } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -55,7 +58,7 @@ function runtime(src: string) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
   const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
-  recordRender(sessionState, "s1");
+  recordRender(sessionState, S1);
   return {
     sessionState,
     render: () => drawPayload(cfg, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame,
@@ -85,8 +88,8 @@ describe("do: several declared actions, one click", () => {
       { verb: "set-state", args: ["s1", "panel", "closed"] },
     ]);
     await rt.click(url!);
-    expect(rt.sessionState.get("s1", "focus")).toBe("on");
-    expect(rt.sessionState.get("s1", "panel")).toBe("closed");
+    expect(rt.sessionState.get(S1, "focus")).toBe("on");
+    expect(rt.sessionState.get(S1, "panel")).toBe("closed");
     // The head's current state drives the next display and the next write.
     const next = rt.render();
     expect(textOf(next)).toContain("◉ unfocus");
@@ -114,8 +117,8 @@ describe("do: several declared actions, one click", () => {
       { verb: "set-state", args: ["s1", "panel", "closed"] },
     ]);
     await rt.click(dracula!);
-    expect(rt.sessionState.get("s1", "theme")).toBe("dracula");
-    expect(rt.sessionState.get("s1", "panel")).toBe("closed");
+    expect(rt.sessionState.get(S1, "theme")).toBe("dracula");
+    expect(rt.sessionState.get(S1, "panel")).toBe("closed");
   });
 });
 

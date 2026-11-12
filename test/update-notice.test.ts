@@ -17,6 +17,7 @@ import type { ActState } from "../src/daemon/update-act";
 import type { BuildCurrency, SourceStamp } from "../src/daemon/build-currency";
 import type { Currency } from "../src/install/currency";
 import { effectsOf as decode } from "./helpers/click";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 // A span's click, decoded; a plain span has none.
 const clicksOf = (link: string | null) => (link === null ? [] : decode(link));
@@ -61,7 +62,7 @@ const STALE_RELEASE: Currency = {
 };
 const CURRENT_RELEASE: Currency = { kind: "current", installed: [1, 2, 3] };
 
-const SID = "sess-1";
+const SID = sessionIdOf("sess-1");
 const ctx = (over: Partial<Parameters<typeof updateNotice>[2]> = {}) => ({
   sessionId: SID,
   dismissed: null,

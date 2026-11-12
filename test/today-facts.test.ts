@@ -23,6 +23,7 @@ import {
   type Outcome,
 } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const NOON = instantOf(new Date(2031, 0, 2, 12, 0, 0));
 const NEXT_DAY = instantOf(new Date(2031, 0, 3, 12, 0, 0));
@@ -79,7 +80,7 @@ describe("projectToday", () => {
 });
 
 describe("todayReading", () => {
-  const SID = "s1";
+  const SID = sessionIdOf("s1");
   const own = { [key(NOON)]: day(0.5, 5) };
   // A usage store that answers `days`, and says which roots it was asked about.
   const usage = (days: Outcome<Readonly<Record<string, DayUsage>>>) => {

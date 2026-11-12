@@ -6,6 +6,9 @@ import { effectsUrl, VERB_RESET_CONFIG } from "../../src/click/wire";
 import { laneSwitches } from "../../src/config/effective-globals";
 import type { EffectiveGlobals } from "../../src/config/effective-globals";
 import { HANDOFF_BUTTON, laneHandoff } from "../../src/daemon/lane-handoff";
+import { sessionIdOf } from "../../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
 
 const effective = (
   globals: Partial<Record<string, unknown>>,
@@ -46,13 +49,13 @@ describe("laneSwitches", () => {
 
 describe("laneHandoff", () => {
   test("is one row holding the button alone", () => {
-    const row = laneHandoff("s1", ["tmuxStatus"]);
+    const row = laneHandoff(S1, ["tmuxStatus"]);
     expect(row.lines).toHaveLength(1);
     expect(row.lines[0]!.map((span) => span.text)).toEqual([HANDOFF_BUTTON]);
   });
 
   test("its button resets the switch of each lane it hands off to: the renderer, and a 🧪 toggle", () => {
-    const row = laneHandoff("s1", ["band", "tmuxStatus"]);
+    const row = laneHandoff(S1, ["band", "tmuxStatus"]);
     expect(row.lines[0]![0]!.link).toBe(
       effectsUrl([
         {

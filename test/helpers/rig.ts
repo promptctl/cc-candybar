@@ -35,6 +35,7 @@ import {
 } from "../../src/dsl/render";
 import type { LinkSigner } from "../../src/click/link-signer";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
+import { sessionIdOf, type SessionId } from "../../src/daemon/session-id";
 import type { VerbContext } from "../../src/daemon/verbs";
 import type { SettingsHistory } from "../../src/daemon/settings-history";
 import type { Host } from "../../src/host";
@@ -53,7 +54,7 @@ import { selectionFor } from "./selection";
 
 export { DEFAULT_DSL_CONFIG, EMPTY_DEFAULT };
 
-const SESSION_ID = "s1";
+const SESSION_ID = sessionIdOf("s1");
 const CWD = "/tmp/proj";
 const ALL_PALETTES: ReadonlySet<string> = new Set(listResolvablePaletteNames());
 
@@ -79,7 +80,7 @@ export interface RigInit {
   /** The environment an `env` source reads. */
   readonly env?: Readonly<Record<string, string>>;
   /** The session the rig draws and clicks as, and its state (a test sharing one across rigs hands it in). */
-  readonly sessionId?: string;
+  readonly sessionId?: SessionId;
   readonly sessionState?: SessionState;
   /** What the click path is built with beyond the config: the history and host a durable-config test owns. */
   readonly history?: SettingsHistory;
@@ -103,7 +104,7 @@ export interface Rig {
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly sessionState: SessionState;
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   /** The context a click runs in: a test that overrides a field spreads it. */
   readonly ctx: VerbContext;
   /** The frame the session draws now. */

@@ -25,12 +25,15 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 // Same real-spine harness as dsl-actions: real loader, real render, clicks
 // dispatched through the real daemon verb handlers against the derived gate.
-function groupsBar(source: string, sessionId = "s1") {
+function groupsBar(source: string, sessionId = S1) {
   const rig = buildRig({ source, sessionId });
   const render = (): Frame => rig.draw().frame;
   const { click } = rig;
@@ -76,7 +79,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
     const { render, clickToggle, sessionState } =
       groupsBar(DETAILS_SRC);
     await clickToggle(render(), "groups.details", "details");
-    expect(sessionState.get("s1", "groups.details")).toBe("details");
+    expect(sessionState.get(S1, "groups.details")).toBe("details");
     const open = textOf(render());
     expect(open).toContain("details ▾");
     expect(open).toContain("METRICS-BODY");

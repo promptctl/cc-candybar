@@ -6,6 +6,9 @@ import { productionLaneEdge } from "../src/daemon/lane-edge";
 import { processProbe } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S = sessionIdOf("s");
 
 describe("the lane edge after its daemon closes", () => {
   const edgeOver = (closing: AbortController) =>
@@ -13,7 +16,7 @@ describe("the lane edge after its daemon closes", () => {
 
   test("a wait for a subscriber ends at once, before its deadline", async () => {
     const closing = new AbortController();
-    const waiting = edgeOver(closing).followed("s", "pane", 30_000);
+    const waiting = edgeOver(closing).followed(S, "pane", 30_000);
     closing.abort();
     await expect(waiting).rejects.toMatchObject({ name: "AbortError" });
   });

@@ -43,6 +43,10 @@ import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const SID_1 = sessionIdOf("sid-1");
+
 let root: string;
 let project: string;
 let host: Host;
@@ -328,7 +332,7 @@ test("the question offers each answer as a link signed for its session, director
       unproven: [],
       unread: null,
     },
-    "sid-1",
+    SID_1,
     signer,
   );
   expect(rest).toEqual([]);
@@ -349,10 +353,10 @@ test("the question offers each answer as a link signed for its session, director
       "approved",
       string,
     ];
-    expect(signer.verify(repoAnswerFields(sid, dir, answer), mac)).toBe(true);
+    expect(signer.verify(repoAnswerFields(sessionIdOf(sid), dir, answer), mac)).toBe(true);
     // The mac answers for this answer only.
     const other = answer === "approved" ? "declined" : "approved";
-    expect(signer.verify(repoAnswerFields(sid, dir, other), mac)).toBe(false);
+    expect(signer.verify(repoAnswerFields(sessionIdOf(sid), dir, other), mac)).toBe(false);
   }
 });
 

@@ -6,23 +6,27 @@
 import { autorun } from "mobx";
 import { SessionState } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
+import { sessionIdOf, type SessionId } from "../../src/daemon/session-id";
+
+const A = sessionIdOf("a");
+const B = sessionIdOf("b");
 
 test("one session's step moves its own depth and no other session's", () => {
   const sessionState = new SessionState();
   const history = new SettingsHistory(sessionState, () => {});
-  const pick = (sessionId: string, theme: string): void => {
+  const pick = (sessionId: SessionId, theme: string): void => {
     const journal = history.begin();
     journal.sessionState.set(sessionId, "theme", theme);
     journal.commit();
   };
-  pick("b", "nord");
+  pick(B, "nord");
   const seen: Record<string, number[]> = { a: [], b: [] };
-  const stops = ["a", "b"].map((sid) =>
+  const stops = [A, B].map((sid) =>
     autorun(() => seen[sid]!.push(history.depth(sid).undo)),
   );
   try {
-    pick("a", "nord");
-    pick("a", "dracula");
+    pick(A, "nord");
+    pick(A, "dracula");
     expect(seen).toEqual({ a: [0, 1, 2], b: [1] });
   } finally {
     for (const stop of stops) stop();

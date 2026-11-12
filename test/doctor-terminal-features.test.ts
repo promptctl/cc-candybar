@@ -15,6 +15,10 @@ import { scopeOf } from "../src/doctor/sightings";
 import type { StatsSnapshot } from "../src/daemon/stats";
 import { DEFAULT_TERMINAL_WIDTH } from "../src/render/strip";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
+const S2 = sessionIdOf("s2");
 
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
 
@@ -159,9 +163,9 @@ describe("widthOf", () => {
   const sightings = {
     kind: "ok",
     value: [
-      { sessionId: "s1", ago: 1, role: "frames", termCols: 60 },
-      { sessionId: "s1", ago: 1, role: "statusline", termCols: 148 },
-      { sessionId: "s2", ago: 1, role: "statusline", termCols: null },
+      { sessionId: S1, ago: 1, role: "frames", termCols: 60 },
+      { sessionId: S1, ago: 1, role: "statusline", termCols: 148 },
+      { sessionId: S2, ago: 1, role: "statusline", termCols: null },
     ],
   } as const;
 

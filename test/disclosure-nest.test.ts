@@ -15,8 +15,9 @@ import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
 import { closingView } from "../src/daemon/closing-view";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s1";
+const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";
 const PICKERS = "menus.candybar_pickers";
 const GEAR_PICKERS = "menus.candybar_gearPickers";

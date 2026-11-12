@@ -17,6 +17,9 @@ import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { UPDATE_DISMISSED_KEY } from "../src/daemon/update-keys";
 import { NavigationHistory } from "../src/daemon/navigation-history";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
 
 const MENU = "nav-test.menu";
 const TAB = "nav-test.tab";
@@ -37,7 +40,7 @@ const configWithTabs = (...tabs: string[]): DslConfig => ({
 function setup() {
   const sessionState = new SessionState();
   let config = configWithTabs("a", "b");
-  recordRender(sessionState, "s1");
+  recordRender(sessionState, S1);
   const ctx = {
     ...testVerbContext(sessionState),
     configFor: () => config,
@@ -53,7 +56,7 @@ function setup() {
     // What the bar's ◁ counts: measured against the gate of the config the
     // session renders now.
     depth: (): number =>
-      ctx.navigation.depth("s1", sessionState, ctx.gates.state.gateFor(config)),
+      ctx.navigation.depth(S1, sessionState, ctx.gates.state.gateFor(config)),
     // The session's config reloads as `next`.
     reload: (next: DslConfig): void => {
       config = next;
@@ -76,20 +79,20 @@ describe("back", () => {
     await set(MENU, "open");
     await set(MENU, "closed", ARMED, "disarmed");
     await back();
-    expect(sessionState.get("s1", MENU)).toBe("open");
-    expect(sessionState.get("s1", ARMED)).toBe("disarmed");
-    expect(sessionState.get("s1", UPDATE_DISMISSED_KEY)).toBe("1.2.3");
+    expect(sessionState.get(S1, MENU)).toBe("open");
+    expect(sessionState.get(S1, ARMED)).toBe("disarmed");
+    expect(sessionState.get(S1, UPDATE_DISMISSED_KEY)).toBe("1.2.3");
     dispose();
   });
 
   test("a step buried under the newest is counted only if going back would still restore it", async () => {
     const { sessionState, depth, set, back, dispose } = setup();
     await set(MENU, "open");
-    sessionState.clear("s1", MENU);
+    sessionState.clear(S1, MENU);
     await set(TAB, "b");
     expect(depth()).toBe(1);
     await back();
-    expect(sessionState.get("s1", TAB)).toBeNull();
+    expect(sessionState.get(S1, TAB)).toBeNull();
     expect(depth()).toBe(0);
     dispose();
   });
@@ -104,7 +107,7 @@ describe("back", () => {
     // under it opened `a`, which the key no longer holds.
     expect(depth()).toBe(0);
     await expect(back).rejects.toThrow(BadVerbArgs);
-    expect(sessionState.get("s1", TAB)).toBe("b");
+    expect(sessionState.get(S1, TAB)).toBe("b");
     dispose();
   });
 
@@ -112,11 +115,11 @@ describe("back", () => {
     const store = new SessionState();
     const history = new NavigationHistory();
     const journal = history.begin(store);
-    journal.sessionState.set("s1", MENU, "open");
-    journal.sessionState.set("s1", MENU, "closed");
+    journal.sessionState.set(S1, MENU, "open");
+    journal.sessionState.set(S1, MENU, "closed");
     journal.commit();
-    history.back("s1", store, stateGate(EMPTY_DEFAULT));
-    expect(store.get("s1", MENU)).toBeNull();
+    history.back(S1, store, stateGate(EMPTY_DEFAULT));
+    expect(store.get(S1, MENU)).toBeNull();
   });
 
   test("a step over state something else has since rewritten is discarded, not replayed", async () => {
@@ -124,11 +127,11 @@ describe("back", () => {
     await set(MENU, "open");
     await set(TAB, "b");
     // Not a navigating click: a layout edit releasing what the tab opened.
-    sessionState.clear("s1", TAB);
+    sessionState.clear(S1, TAB);
     // ◁ counts only what a click on it restores.
     expect(depth()).toBe(1);
     await back();
-    expect(sessionState.get("s1", MENU)).toBeNull();
+    expect(sessionState.get(S1, MENU)).toBeNull();
     await expect(back()).rejects.toThrow(BadVerbArgs);
     dispose();
   });
@@ -139,10 +142,10 @@ describe("back", () => {
     await set(TAB, "b");
     expect(depth()).toBe(2);
     await back();
-    expect(sessionState.get("s1", TAB)).toBeNull();
-    expect(sessionState.get("s1", MENU)).toBe("open");
+    expect(sessionState.get(S1, TAB)).toBeNull();
+    expect(sessionState.get(S1, MENU)).toBe("open");
     await back();
-    expect(sessionState.get("s1", MENU)).toBeNull();
+    expect(sessionState.get(S1, MENU)).toBeNull();
     expect(depth()).toBe(0);
     dispose();
   });
@@ -152,8 +155,8 @@ describe("back", () => {
     await set(MENU, "open", TAB, "a");
     expect(depth()).toBe(1);
     await back();
-    expect(sessionState.get("s1", MENU)).toBeNull();
-    expect(sessionState.get("s1", TAB)).toBeNull();
+    expect(sessionState.get(S1, MENU)).toBeNull();
+    expect(sessionState.get(S1, TAB)).toBeNull();
     dispose();
   });
 
@@ -161,10 +164,10 @@ describe("back", () => {
     const { sessionState, set, back, undo, dispose } = setup();
     await set(MENU, "open", "theme", "gruvbox");
     await back();
-    expect(sessionState.get("s1", MENU)).toBeNull();
-    expect(sessionState.get("s1", "theme")).toBe("gruvbox");
+    expect(sessionState.get(S1, MENU)).toBeNull();
+    expect(sessionState.get(S1, "theme")).toBe("gruvbox");
     await undo();
-    expect(sessionState.get("s1", "theme")).toBeNull();
+    expect(sessionState.get(S1, "theme")).toBeNull();
     dispose();
   });
 

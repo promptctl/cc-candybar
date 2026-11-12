@@ -24,8 +24,9 @@ import { VariableStore } from "../../src/var-system/store";
 import { TEST_SIGNER } from "./link-signer";
 import { parseAndValidate } from "./parse-and-validate";
 import { systemTimekeeper } from "../../src/time";
+import { sessionIdOf } from "../../src/daemon/session-id";
 
-const SID = "bar00a1b-2c3d-4e5f-8a7b-8c9d0e1f2a3b";
+const SID = sessionIdOf("bar00a1b-2c3d-4e5f-8a7b-8c9d0e1f2a3b");
 
 /** A payload's values: what a render's templates read. */
 export type Payload = Record<string, unknown>;

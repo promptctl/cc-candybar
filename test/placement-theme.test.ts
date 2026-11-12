@@ -41,9 +41,10 @@ import {
 } from "../src/config/loader/edit-mode";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-const SID = "s1";
+const SID = sessionIdOf("s1");
 const PIN = "nord";
 const BAR_A = "gruvbox";
 const BAR_B = "dracula";

@@ -26,6 +26,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import JSON5 from "json5";
 import type { SessionStateRW } from "../../src/daemon/session-state";
+import { sessionIdOf, type SessionId } from "../../src/daemon/session-id";
 import {
   SettingsHistory,
   fileHistoryStorage,
@@ -52,7 +53,7 @@ export interface DurableConfig {
   /** The file parsed as JSON5 (throws when absent). */
   parsed(): Record<string, unknown>;
   /** Session `sessionId`'s history as the file holds it — empty until its first step. */
-  history(sessionId?: string): SessionHistory;
+  history(sessionId?: SessionId): SessionHistory;
   /** A settings history over `sessionState`, stored in this fixture's state dir. */
   historyFor(sessionState: SessionStateRW): SettingsHistory;
   /** The one-change step a single write to `file` (default `configPath`) records. */
@@ -63,7 +64,7 @@ export interface DurableConfig {
    */
   seedOrigin(
     sessionState: SessionStateRW,
-    sessionId: string,
+    sessionId: SessionId,
     configFile?: string,
   ): void;
   dispose(): void;
@@ -99,7 +100,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
     // The history file itself is created by the first step, so before one an
     // absent file and an absent entry both read as the empty stack.
-    history: (sessionId = "s1") =>
+    history: (sessionId = sessionIdOf("s1")) =>
       (
         JSON.parse(readOrNull(settingsHistoryPath(host)) ?? "{}") as Record<
           string,

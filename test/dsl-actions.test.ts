@@ -41,6 +41,8 @@ import {
 } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import { CHECKS } from "../src/doctor/checks";
+import { sessionIdOf } from "../src/daemon/session-id";
+const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -113,7 +115,7 @@ describe("2de.12 — literal set action", () => {
       { verb: "set-state", args: ["s1", "flavor", "chocolate"] },
     ]);
     await click(urls[0]!);
-    expect(sessionState.get("s1", "flavor")).toBe("chocolate");
+    expect(sessionState.get(S1, "flavor")).toBe("chocolate");
     // The next render reflects the mutated state (the cross-process loop in one process).
     expect(textOf(render())).toContain("chocolate 🍫");
   });
@@ -127,7 +129,7 @@ describe("2de.12 — literal set action", () => {
 
   test("marks the region active when the key already holds the literal value", () => {
     const { render, sessionState } = actionBar(SRC);
-    sessionState.set("s1", "flavor", "chocolate");
+    sessionState.set(S1, "flavor", "chocolate");
     const out = render();
     expect(boldUrls(out).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: ["s1", "flavor", "chocolate"] }],
@@ -164,7 +166,7 @@ describe("2de.12 — set on a baseline key derives nothing", () => {
     const { render, click, sessionState } = actionBar(SRC);
     const url = ownUrls(render())[0]!;
     await click(url);
-    expect(sessionState.get("s1", "theme")).toBe("nord");
+    expect(sessionState.get(S1, "theme")).toBe("nord");
   });
 });
 
@@ -205,12 +207,12 @@ describe("2de.12 — option set action", () => {
       effectsOf(u).some((e) => e.args[2] === target),
     )!;
     await click(url);
-    expect(sessionState.get("s1", "sel")).toBe(target);
+    expect(sessionState.get(S1, "sel")).toBe(target);
   });
 
   test("marks exactly the currently-selected option active", () => {
     const { render, sessionState } = actionBar(SRC);
-    sessionState.set("s1", "sel", THEMES[2]!);
+    sessionState.set(S1, "sel", THEMES[2]!);
     expect(boldUrls(render()).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: ["s1", "sel", THEMES[2]!] }],
     ]);
@@ -239,7 +241,7 @@ describe("2de.12 — option set action", () => {
       { verb: "set-state", args: ["s1", "sel", target] },
     ]);
     await click(url);
-    expect(sessionState.get("s1", "sel")).toBe(target);
+    expect(sessionState.get(S1, "sel")).toBe(target);
   });
 });
 
@@ -290,7 +292,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
       effectsOf(u).some((e) => e.args[2] === "desc"),
     )!;
     await click(url);
-    expect(sessionState.get("s1", "sort-order")).toBe("desc");
+    expect(sessionState.get(S1, "sort-order")).toBe("desc");
   });
 
   test("a value outside the inline domain is rejected loudly at the wire", () => {
@@ -370,7 +372,7 @@ describe("71o.1 — a newly-registered domain needs no engine edits", () => {
         effectsOf(u).some((e) => e.args[2] === "green"),
       )!;
       await click(url);
-      expect(sessionState.get("s1", "fruit")).toBe("green");
+      expect(sessionState.get(S1, "fruit")).toBe("green");
     } finally {
       unregister();
     }
@@ -418,7 +420,7 @@ describe("2de.12 — bounded set action", () => {
   test("the step-state link is byte-identical across renders at different current values", () => {
     const { render, sessionState } = actionBar(SRC);
     const at14 = ownUrls(render());
-    sessionState.set("s1", "level", "58");
+    sessionState.set(S1, "level", "58");
     const at58 = ownUrls(render());
     expect(textOf(render())).toContain("◀ 58 ▶");
     expect(at58).toEqual(at14); // identical link strings despite 14 → 58
@@ -432,21 +434,21 @@ describe("2de.12 — bounded set action", () => {
     await click(up);
     await click(up);
     await click(up); // same URL string, three times, no render between
-    expect(sessionState.get("s1", "level")).toBe("20"); // 14 → 16 → 18 → 20
+    expect(sessionState.get(S1, "level")).toBe("20"); // 14 → 16 → 18 → 20
   });
 
   test("the first click seeds from the variable default (14), not from min", async () => {
     const { render, click, sessionState } = actionBar(SRC);
-    expect(sessionState.get("s1", "level")).toBeNull(); // unset
+    expect(sessionState.get(S1, "level")).toBeNull(); // unset
     await click(ownUrls(render())[1]!); // ▶ from a never-written key
-    expect(sessionState.get("s1", "level")).toBe("16"); // 14+2, NOT 0+2
+    expect(sessionState.get(S1, "level")).toBe("16"); // 14+2, NOT 0+2
   });
 
   test("navigation WRAPS past a bound to the other end at apply time", async () => {
     const { render, click, sessionState } = actionBar(SRC);
-    sessionState.set("s1", "level", "60"); // max
+    sessionState.set(S1, "level", "60"); // max
     await click(ownUrls(render())[1]!); // ▶: 60 +2 wraps to min, not clamped to 60
-    expect(sessionState.get("s1", "level")).toBe("0");
+    expect(sessionState.get(S1, "level")).toBe("0");
   });
 
   test("two bounded actions on one key merge to a single range gate", () => {
@@ -502,7 +504,7 @@ describe("brandon-menus-bn5.3 I3 — bare set-int action requires a numeric disp
   test("a NUMERIC bare display writes the page index (the manual open-at-page pattern)", async () => {
     const { render, click, sessionState } = actionBar(SRC);
     await click(urlWriting(render(), "0"));
-    expect(sessionState.get("s1", "theme-page")).toBe("0");
+    expect(sessionState.get(S1, "theme-page")).toBe("0");
   });
 
   test("a NON-numeric bare display is rejected LOUDLY at the wire (must be an integer)", async () => {
@@ -512,7 +514,7 @@ describe("brandon-menus-bn5.3 I3 — bare set-int action requires a numeric disp
     // gate rejects it at apply time — the verb throws BAD_REQUEST, not a silent no-op.
     await expect(click(bad)).rejects.toThrow(/must be an integer/);
     // And state is untouched — the rejection is loud, never a silent corruption.
-    expect(sessionState.get("s1", "theme-page")).toBeNull();
+    expect(sessionState.get(S1, "theme-page")).toBeNull();
   });
 
   test("the derived int gate rejects a non-integer directly (clear reason)", () => {
@@ -838,7 +840,7 @@ describe("2de.4 — cycle set action", () => {
       { verb: "set-state", args: ["s1", "details-open", "1"] },
     ]);
     await click(urls[0]!);
-    expect(sessionState.get("s1", "details-open")).toBe("1");
+    expect(sessionState.get(S1, "details-open")).toBe("1");
     // Next render flips display AND write target (the toggle round trip).
     const out2 = render();
     expect(textOf(out2)).toContain("▾ details");
@@ -850,7 +852,7 @@ describe("2de.4 — cycle set action", () => {
   test("a current value outside the domain counts as the first member", () => {
     const { render, sessionState } = actionBar(SRC);
     // Bypass the gate to simulate a foreign/legacy stored value.
-    sessionState.set("s1", "details-open", "garbage");
+    sessionState.set(S1, "details-open", "garbage");
     const out = render();
     expect(textOf(out)).toContain("▸ details");
     expect(effectsOf(ownUrls(out)[0]!)).toEqual([
@@ -864,7 +866,7 @@ describe("2de.4 — cycle set action", () => {
     const out = render();
     expect(textOf(out)).toContain("⊕");
     await click(ownUrls(out)[0]!);
-    expect(sessionState.get("s1", "details-open")).toBe("1");
+    expect(sessionState.get(S1, "details-open")).toBe("1");
     expect(textOf(render())).toContain("⊕");
   });
 
@@ -955,7 +957,7 @@ describe("2de.4 — cycle set action", () => {
       const out = render();
       expect(textOf(out)).toContain(display);
       await click(ownUrls(out)[0]!);
-      expect(sessionState.get("s1", "mode")).toBe(written);
+      expect(sessionState.get(S1, "mode")).toBe(written);
     }
   });
 
@@ -988,14 +990,14 @@ describe("2de.4 — cycle set action", () => {
     const { render, click, sessionState } = actionBar(src);
     // Open A.
     await click(ownUrls(render())[0]!);
-    expect(sessionState.get("s1", "menu")).toBe("a");
+    expect(sessionState.get(S1, "menu")).toBe("a");
     // A renders open; B renders closed (current "a" is outside B's domain) and
     // B's click writes "b" — expand B, auto-closing A.
     const out = render();
     expect(textOf(out)).toContain("▾A");
     expect(textOf(out)).toContain("▸B");
     await click(ownUrls(out)[1]!);
-    expect(sessionState.get("s1", "menu")).toBe("b");
+    expect(sessionState.get(S1, "menu")).toBe("b");
     expect(textOf(render())).toContain("▸A");
     expect(textOf(render())).toContain("▾B");
   });

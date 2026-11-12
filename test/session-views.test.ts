@@ -25,6 +25,9 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { sessionIdOf } from "../src/daemon/session-id";
+const S_A = sessionIdOf("s-a");
+const S_COPY = sessionIdOf("s-copy");
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
 // directory's store holds the sources no session value reaches; each session
@@ -240,7 +243,7 @@ test("a session the host retired has its view closed, and its next render opens 
   const { cache, lines } = makeCache();
   await render(cache, "s-a");
   await render(cache, "s-b");
-  cache.retireSession("s-a");
+  cache.retireSession(S_A);
   expect(cache.stats.views).toBe(1);
   expect(lines).toContainEqual(
     expect.stringMatching(/^session view closed sid="s-a" reason=idle /),
@@ -477,30 +480,30 @@ test("a copy click reads the frame its own renderer last delivered, not another'
   await render(cache, "s-copy");
   // One key, two surfaces whose frames list it with different text: the
   // statusline's answer from before a fix, the feed's from after.
-  cache.delivered("s-copy", "request", new Map([["7", "before the fix"]]));
-  cache.delivered("s-copy", "feed", new Map([["7", "after the fix"]]));
-  expect(cache.drawnCopy("s-copy", "request", "7")).toBe("before the fix");
-  expect(cache.drawnCopy("s-copy", "feed", "7")).toBe("after the fix");
-  expect(cache.drawnCopy("s-copy", "request", "8")).toBeUndefined();
+  cache.delivered(S_COPY, "request", new Map([["7", "before the fix"]]));
+  cache.delivered(S_COPY, "feed", new Map([["7", "after the fix"]]));
+  expect(cache.drawnCopy(S_COPY, "request", "7")).toBe("before the fix");
+  expect(cache.drawnCopy(S_COPY, "feed", "7")).toBe("after the fix");
+  expect(cache.drawnCopy(S_COPY, "request", "8")).toBeUndefined();
   // A feed that stops drawing takes its list with it.
-  cache.stopDrawing("s-copy", "feed");
-  expect(cache.drawnCopy("s-copy", "feed", "7")).toBeUndefined();
-  expect(cache.drawnCopy("s-copy", "request", "7")).toBe("before the fix");
+  cache.stopDrawing(S_COPY, "feed");
+  expect(cache.drawnCopy(S_COPY, "feed", "7")).toBeUndefined();
+  expect(cache.drawnCopy(S_COPY, "request", "7")).toBe("before the fix");
 });
 
 test("a frame on screen stays copyable across a reload's successor view, and goes when the session closes", async () => {
   configure(dir);
   const { cache } = makeCache();
   await render(cache, "s-copy");
-  cache.delivered("s-copy", "request", new Map([["7", "the message"]]));
+  cache.delivered(S_COPY, "request", new Map([["7", "the message"]]));
   configure(dir, 1);
   cache.reload(dir, dir, undefined, { kind: "write" });
-  expect(cache.drawnCopy("s-copy", "request", "7")).toBe("the message");
+  expect(cache.drawnCopy(S_COPY, "request", "7")).toBe("the message");
   // The host retires the session: its view closes, and its frames.
-  cache.retireSession("s-copy");
+  cache.retireSession(S_COPY);
   expect(cache.stats.views).toBe(0);
-  expect(cache.drawnCopy("s-copy", "request", "7")).toBeUndefined();
+  expect(cache.drawnCopy(S_COPY, "request", "7")).toBeUndefined();
   // A session with no view keeps nothing it delivers.
-  cache.delivered("s-copy", "request", new Map([["7", "the message"]]));
-  expect(cache.drawnCopy("s-copy", "request", "7")).toBeUndefined();
+  cache.delivered(S_COPY, "request", new Map([["7", "the message"]]));
+  expect(cache.drawnCopy(S_COPY, "request", "7")).toBeUndefined();
 });

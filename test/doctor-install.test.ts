@@ -25,6 +25,12 @@ import { parseClientHints } from "../src/daemon/protocol";
 import type { Instant } from "../src/utils/instant";
 import { HEALTHY_FACTS, HEALTHY_INSTALL_EDGE, renderSaid } from "./helpers/doctor-facts";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
+const S2 = sessionIdOf("s2");
+const RESTARTED_UNDER_ME = sessionIdOf("restarted-under-me");
+
 const BUNDLE = "/opt/cc/dist/index.mjs";
 const ROOT = "/src/cc";
 const CHECKOUT_BUNDLE = `${ROOT}/dist/index.mjs`;
@@ -377,8 +383,8 @@ describe("installOf: the clients the command judges", () => {
       value: {
         bundle: BUNDLE,
         clients: [
-          { client: stale, sessionId: "s1", ago: RECENT_CLIENT_S + 1 },
-          { client: current, sessionId: "s2", ago: RECENT_CLIENT_S },
+          { client: stale, sessionId: S1, ago: RECENT_CLIENT_S + 1 },
+          { client: current, sessionId: S2, ago: RECENT_CLIENT_S },
         ],
       },
     });
@@ -443,9 +449,9 @@ describe("RenderSightings: each session's latest client", () => {
 
   test("a session's next render replaces its client at once", () => {
     const sightings = new RenderSightings();
-    sightings.see("s1", renderSaid(client("/old/dist/index.mjs")), at(100), 100);
-    sightings.see("s1", renderSaid(client(BUNDLE)), at(105), 105);
-    sightings.see("s2", renderSaid(undefined), at(103), 103);
+    sightings.see(S1, renderSaid(client("/old/dist/index.mjs")), at(100), 100);
+    sightings.see(S1, renderSaid(client(BUNDLE)), at(105), 105);
+    sightings.see(S2, renderSaid(undefined), at(103), 103);
     expect(sightings.list(at(110))).toEqual([
       { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 5 },
       { ...renderSaid(null), role: "statusline", sessionId: "s2", ago: 7 },
@@ -454,28 +460,28 @@ describe("RenderSightings: each session's latest client", () => {
 
   test("a click reads its own session's sighting, and none this process has not seen", () => {
     const sightings = new RenderSightings();
-    sightings.see("s1", renderSaid(client(BUNDLE)), at(100), 100);
-    sightings.see("s2", renderSaid(undefined), at(104), 104);
-    expect(sightings.ofSession("s1", at(110))).toEqual([
+    sightings.see(S1, renderSaid(client(BUNDLE)), at(100), 100);
+    sightings.see(S2, renderSaid(undefined), at(104), 104);
+    expect(sightings.ofSession(S1, at(110))).toEqual([
       { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 10 },
     ]);
-    expect(sightings.ofSession("restarted-under-me", at(110))).toEqual([]);
+    expect(sightings.ofSession(RESTARTED_UNDER_ME, at(110))).toEqual([]);
   });
 
   test("two clients drawing one session are both kept: the last to render hides neither", () => {
     const sightings = new RenderSightings();
     const frames = { kind: "frames", bundle: BUNDLE, source: null } as const;
-    sightings.see("s1", renderSaid(client("/stale/dist/index.mjs")), at(100), 100);
-    sightings.see("s1", renderSaid(frames), at(101), 101);
-    sightings.see("s1", renderSaid(frames), at(102), 102);
-    expect(sightings.ofSession("s1", at(110))).toMatchObject([
+    sightings.see(S1, renderSaid(client("/stale/dist/index.mjs")), at(100), 100);
+    sightings.see(S1, renderSaid(frames), at(101), 101);
+    sightings.see(S1, renderSaid(frames), at(102), 102);
+    expect(sightings.ofSession(S1, at(110))).toMatchObject([
       { ...renderSaid(client("/stale/dist/index.mjs")), role: "statusline" },
       { ...renderSaid(frames), role: "frames" },
     ]);
     expect(sightings.list(at(110))).toHaveLength(2);
     // A rebuilt statusline client replaces the old one in the same role.
-    sightings.see("s1", renderSaid(undefined), at(103), 103);
-    expect(sightings.ofSession("s1", at(110))).toMatchObject([
+    sightings.see(S1, renderSaid(undefined), at(103), 103);
+    expect(sightings.ofSession(S1, at(110))).toMatchObject([
       { ...renderSaid(frames), role: "frames" },
       { ...renderSaid(null), role: "statusline" },
     ]);
@@ -484,7 +490,7 @@ describe("RenderSightings: each session's latest client", () => {
   test("the sessions longest without a render are the ones dropped", () => {
     const sightings = new RenderSightings();
     for (let i = 0; i <= SIGHTINGS_KEPT; i++) {
-      sightings.see(`s${i}`, renderSaid(undefined), at(i), i);
+      sightings.see(sessionIdOf(`s${i}`), renderSaid(undefined), at(i), i);
     }
     const kept = sightings.list(at(1000));
     expect(kept).toHaveLength(SIGHTINGS_KEPT);
@@ -495,8 +501,8 @@ describe("RenderSightings: each session's latest client", () => {
   // is not the session's latest, and leaves the newer sighting in place.
   test("a request that settles after a newer one does not replace it", () => {
     const sightings = new RenderSightings();
-    sightings.see("s1", renderSaid(client(BUNDLE)), at(105), 2);
-    sightings.see("s1", renderSaid(client("/old/dist/index.mjs")), at(100), 1);
+    sightings.see(S1, renderSaid(client(BUNDLE)), at(105), 2);
+    sightings.see(S1, renderSaid(client("/old/dist/index.mjs")), at(100), 1);
     expect(sightings.list(at(110))).toEqual([
       { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 5 },
     ]);

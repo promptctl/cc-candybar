@@ -16,8 +16,9 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SESSION = "s1";
+const SESSION = sessionIdOf("s1");
 
 // The instant every case is drawn at.
 const AT_SEC = 1_700_000_000;

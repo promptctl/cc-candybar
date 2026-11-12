@@ -276,7 +276,7 @@ describe("the world state the host hands in", () => {
       session: SESSION as SessionId,
     });
     expect(viewOf(t.rig)).toBeNull();
-    expect(subscriptions.sources).toEqual({});
+    expect(subscriptions.sources).toEqual([]);
     expect(() => t.rig.served.worldStates.of(SESSION as SessionId)).toThrow(
       /no world state for session/,
     );
@@ -313,13 +313,16 @@ describe("the world state the host hands in", () => {
     const t = renderer();
     const { subscriptions } = await request(t);
     const view = viewOf(t.rig)!;
-    expect(subscriptions.sources).toEqual({
-      [SESSION]: [...view.state.sources].map(([source, storage]) => ({
-        kind: "plugin",
-        source,
-        storage,
-      })),
-    });
+    expect(subscriptions.sources).toEqual([
+      {
+        session: SESSION,
+        subscriptions: [...view.state.sources].map(([source, storage]) => ({
+          kind: "plugin",
+          source,
+          storage,
+        })),
+      },
+    ]);
   });
 });
 
@@ -329,13 +332,16 @@ describe("the session's config, ahead of its request", () => {
     const { effects, subscriptions } = await configure(t, checked());
     expect(effects).toEqual([]);
     const view = viewOf(t.rig)!;
-    expect(subscriptions.sources).toEqual({
-      [SESSION]: [...view.state.sources].map(([source, storage]) => ({
-        kind: "plugin",
-        source,
-        storage,
-      })),
-    });
+    expect(subscriptions.sources).toEqual([
+      {
+        session: SESSION,
+        subscriptions: [...view.state.sources].map(([source, storage]) => ({
+          kind: "plugin",
+          source,
+          storage,
+        })),
+      },
+    ]);
     expect(presentOf((await request(t)).effects)).toMatchObject({
       kind: "present",
       request: REQUEST,
@@ -504,10 +510,10 @@ describe("a click", () => {
       t.rig.cache.retireSession(SESSION);
     };
     const before = await request(t);
-    expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
+    expect(before.subscriptions.sources.map((s) => s.session)).toEqual([SESSION]);
     const { effects, subscriptions, record } = await handIn(t.r, click("act"));
     expect(effects).toEqual([]);
-    expect(subscriptions.sources).toEqual({});
+    expect(subscriptions.sources).toEqual([]);
     // The host records what it knows of the click; this act waited on nothing.
     expect(record).toEqual([]);
   });
@@ -523,10 +529,10 @@ describe("a click", () => {
       throw new Error("a later step broke");
     };
     const before = await request(t);
-    expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
+    expect(before.subscriptions.sources.map((s) => s.session)).toEqual([SESSION]);
     const thrown = await handIn(t.r, click("act")).catch((e: TurnThrew) => e);
     expect(thrown).toBeInstanceOf(TurnThrew);
-    expect(thrown.subscriptions.sources).toEqual({});
+    expect(thrown.subscriptions.sources).toEqual([]);
   });
 
   test("of a verb the renderer does not have is its bad request", async () => {

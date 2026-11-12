@@ -24,6 +24,7 @@ import { recordRender, testVerbContext } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { textOf, type Frame } from "../src/render/frame";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -298,7 +299,7 @@ describe("a kept part keeps nothing of where it was first asked", () => {
 // terminal and new data draws, at every step, the rows a view made fresh for
 // that step draws: nothing a part reads escapes what it tracks.
 describe("a kept view draws what a fresh one draws", () => {
-  const SID = "parts";
+  const SID = sessionIdOf("parts");
   const config = parseAndValidate(
     "<user>",
     "{}",

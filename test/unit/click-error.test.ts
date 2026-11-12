@@ -12,8 +12,9 @@ import {
 } from "../../src/daemon/click-error";
 import { SessionState } from "../../src/daemon/session-state";
 import type { Instant } from "../../src/utils/instant";
+import { sessionIdOf } from "../../src/daemon/session-id";
 
-const SID = "s";
+const SID = sessionIdOf("s");
 const at = (seconds: number): Instant => seconds as Instant;
 const END = 100 + CLICK_ERROR_HOLD_S;
 const error = { text: "set-state: refused", at: at(100), answered: false };

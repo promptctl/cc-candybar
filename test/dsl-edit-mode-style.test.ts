@@ -26,8 +26,9 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { ConfigError } from "../src/config/dsl-loader";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s-edit-look";
+const SID = sessionIdOf("s-edit-look");
 const BASE_THEME = "textual-dark";
 const ALLOWED = new Set([BASE_THEME]);
 
