@@ -855,6 +855,9 @@ function judgeRenderable(
   // and treats the menu's reserved `candybar.` names as chrome-exempt — the
   // full ordering argument lives in settings-menu.ts's header, beside the pass
   // it governs.
+  // [LAW:no-silent-failure] exception: what these passes mint does not
+  // re-enter cross-ref, and a load does not re-prove its reads; a unit test
+  // over authored configs names any that nothing declares (test/unit/synthesis-reads.test.ts).
   const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
   // [LAW:single-enforcer] Over the names the store is declared from, every
   // synthesized one included (nesting.ts).

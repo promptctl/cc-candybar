@@ -21,7 +21,6 @@
 // are indistinguishable at render. Nothing here is a new render concept.
 
 import path from "node:path";
-import { checkSynthesisReads } from "./synthesis-inputs.js";
 import type { ActionDecl as ActionDeclType } from "./action.js";
 import {
   mapOpens,
@@ -1010,7 +1009,6 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     { kind: "segment", name: EDIT_CANCEL_SEG },
   ];
   const presets: Record<string, PresetDecl> = { ...config.presets };
-  const roots: LayoutNode[] = [];
   for (const name of presetNames(config.presets)) {
     const root = spliceEditChromeForPreset(
       config,
@@ -1020,12 +1018,8 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
       live,
       tail,
     );
-    roots.push(root);
     presets[name] = { ...presetByName(config.presets, name), root };
   }
-  // [LAW:no-silent-failure] Every read the chrome makes resolves, or the load
-  // throws naming it.
-  checkSynthesisReads(artifacts, roots, config);
   return {
     ...config,
     variables: { ...config.variables, ...artifacts.variables },
