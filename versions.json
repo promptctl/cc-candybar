@@ -4,15 +4,22 @@
     {
       "version": "pr-734",
       "ref": "refs/pull/734/merge",
-      "sha": "e34e87a2782578959ce43dab0c319e15a77f0def",
-      "timestamp": "2026-11-12T10:34:14.548Z",
+      "sha": "c1d822b26f3de1b036f2adc51fff45e42473956c",
+      "timestamp": "2026-11-12T10:38:04.126Z",
       "commits": [
         {
-          "sha": "e34e87a2782578959ce43dab0c319e15a77f0def",
+          "sha": "c1d822b26f3de1b036f2adc51fff45e42473956c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T03:33:20-07:00",
-          "message": "Merge f6cbf780c92698264498367a7d3f026adaee20e3 into 9f8a1ff895c95ddf3966ca346dcf1e5bb107df3c\n"
+          "timestamp": "2026-11-12T10:36:55Z",
+          "message": "Merge 981b30a0e0ba1e31d6f9142ba4436b2b6a9f5e35 into 9f8a1ff895c95ddf3966ca346dcf1e5bb107df3c\n"
+        },
+        {
+          "sha": "981b30a0e0ba1e31d6f9142ba4436b2b6a9f5e35",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T03:36:36-07:00",
+          "message": "test(statusline): the request's hold covers its config turn too and names the session its document was read for (candybar-host-renderer-x96a.pww)\n"
         },
         {
           "sha": "f6cbf780c92698264498367a7d3f026adaee20e3",
