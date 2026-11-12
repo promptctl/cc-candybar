@@ -5,7 +5,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runInAction } from "mobx";
+import { reaction, runInAction } from "mobx";
 import {
   SOURCES_NOTHING,
   RenderCache,
@@ -279,6 +279,41 @@ test("a session the host retired has its view closed, and its next render opens 
   );
   expect((await render(cache, "s-a")).text).toContain("who=s-a");
   expect(cache.stats.views).toBe(2);
+});
+
+// A request's wait reads its session's subscribed runs, so what it waits on
+// follows the view: a reload's successor carries it on, a move never shows it
+// the session between views, and a retire ends it in the turn.
+test("a session's subscribed runs follow its view through a reload, a move and a retire", async () => {
+  configure(dir);
+  const other = path.join(dir, "sub");
+  fs.mkdirSync(other);
+  configure(other);
+  const { cache } = makeCache();
+  await render(cache, "s-a");
+  const digests = () =>
+    [...cache.subscribedRuns(S_A)].map((run) => run.digest).sort();
+  expect(digests()).toHaveLength(2);
+  const seen: string[][] = [];
+  const stop = reaction(digests, (now) => seen.push(now));
+  try {
+    configure(dir, 1);
+    cache.reload(dir, dir, undefined, { kind: "write" });
+    // The wait reads what the successor names, not the retired view's runs.
+    const successor = cache.latestView()!;
+    expect(digests()).toEqual(
+      [...successor.registry.namedRuns().values()].map((r) => r.digest).sort(),
+    );
+    expect(digests().length).toBeGreaterThan(0);
+    await render(cache, "s-a", other);
+    cache.retireSession(S_A);
+    expect(digests()).toEqual([]);
+    // No turn saw the session with no view until the retire.
+    expect(seen.slice(0, -1).every((d) => d.length > 0)).toBe(true);
+    expect(seen.at(-1)).toEqual([]);
+  } finally {
+    stop();
+  }
 });
 
 // [LAW:no-ambient-temporal-coupling] MobX holds a reaction created inside a

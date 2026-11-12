@@ -1097,7 +1097,7 @@ export async function answerRequest(
         at,
         refreshed,
         () => parts.worldStates.of(setup.sessionId),
-        () => setup.view.registry.namedRuns().values(),
+        () => parts.renderCache.subscribedRuns(setup.sessionId),
         signal,
       ),
     budget,

@@ -62,6 +62,7 @@ import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import { UNREAD_RUN } from "../../facts/world-state.js";
+import type { Run } from "../../facts/source-identity.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateRW } from "../session-state.js";
 import {
@@ -1369,8 +1370,13 @@ export class RenderCache<
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
-  // render resolved to. A render from another entry replaces it.
-  private readonly views = new Map<SessionId, SessionView<S, F>>();
+  // render resolved to. A render from another entry replaces it. Observable,
+  // so a request's wait follows the view a move, a reload or a retire leaves
+  // (`subscribedRuns`).
+  private readonly views = observable.map<SessionId, SessionView<S, F>>(
+    undefined,
+    { deep: false },
+  );
   // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
   // delivered copies, by the key its copy click names (src/render/
   // diagnostics.ts), one map per renderer, since a request and a feed frame
@@ -1687,13 +1693,16 @@ export class RenderCache<
     // most recently used, as a kept view moves there. The old view is retired
     // whether or not the new one opens: the session's render resolved to
     // another entry either way.
-    this.views.delete(sessionId);
-    let view: SessionView<S, F>;
-    try {
-      view = this.opened(entry, state, facts, by);
-    } finally {
-      if (current !== undefined) this.retireView(current, "moved");
-    }
+    // One action, so a wait never reads the session between the old view's
+    // leaving and the new one's entering.
+    const view = runInAction(() => {
+      this.views.delete(sessionId);
+      try {
+        return this.opened(entry, state, facts, by);
+      } finally {
+        if (current !== undefined) this.retireView(current, "moved");
+      }
+    });
     // A view is charged to the budget like an entry.
     this.fit(entry);
     return view;
@@ -1767,6 +1776,14 @@ export class RenderCache<
     this.openFailures.delete(sessionId);
     const view = this.views.get(sessionId);
     if (view !== undefined) this.retireView(view, "idle");
+  }
+
+  // [LAW:one-source-of-truth] The runs a request of the session waits on: the
+  // ones its view names now, which are its subscriptions, so the host keeps
+  // reading them. A successor that names the same runs carries the wait on; a
+  // retire that leaves the session no view ends it.
+  subscribedRuns(sessionId: SessionId): Iterable<Run> {
+    return this.views.get(sessionId)?.registry.namedRuns().values() ?? [];
   }
 
   // [LAW:one-source-of-truth] What every session's open view needs read: the
