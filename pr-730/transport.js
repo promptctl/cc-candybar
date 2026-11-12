@@ -66375,25 +66375,22 @@ function todayReading(lane, usage, sessionId2) {
   if (own2.kind === "failed") return own2;
   return ok({ sums: set2.value.sums, own: own2.kind === "ok" ? own2.value : {} });
 }
-function awaitsReading({
-  builtins,
-  sources,
-  runs
-}) {
+function awaitsReading({ builtins, sources, runs }, named3) {
   return [
     builtins.git,
     builtins.tmux,
     builtins.hostName,
     builtins.hostUser,
     ...Object.values(sources),
-    ...Object.values(runs).map((run3) => run3.reading)
+    ...Object.values(runs).map((run3) => run3.reading),
+    ...[...named3].map((run3) => (runs[run3.digest] ?? UNREAD_RUN).reading)
   ].some(awaitedReading);
 }
 var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
-async function settleWorld(inputs, at, refreshed, worldState, signal) {
+async function settleWorld(inputs, at, refreshed, worldState, named3, signal) {
   await refreshPayload(inputs, at, refreshed);
   try {
-    await when(() => !awaitsReading(worldState()), { signal });
+    await when(() => !awaitsReading(worldState(), named3()), { signal });
   } catch (e) {
     if (!signal.aborted) throw e;
   }
@@ -77060,6 +77057,7 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
         at,
         refreshed,
         () => parts.worldStates.of(setup.sessionId),
+        () => setup.view.registry.namedRuns().values(),
         signal
       ),
       budget,

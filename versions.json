@@ -4,15 +4,22 @@
     {
       "version": "pr-730",
       "ref": "refs/pull/730/merge",
-      "sha": "18382e3ad1983820c0c97a6e0325530b8a4811a3",
-      "timestamp": "2026-11-12T08:47:48.058Z",
+      "sha": "c012895f0b49227e2af94fac930a7ce5bd5169ad",
+      "timestamp": "2026-11-12T09:09:34.919Z",
       "commits": [
         {
-          "sha": "18382e3ad1983820c0c97a6e0325530b8a4811a3",
+          "sha": "c012895f0b49227e2af94fac930a7ce5bd5169ad",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T01:46:54-07:00",
-          "message": "Merge 57fa022dcbd29434d9454f7ca77fe07bd0686a42 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+          "timestamp": "2026-11-12T09:08:33Z",
+          "message": "Merge 8140078f3b9ad0b2c4359cee24ce322029b27445 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+        },
+        {
+          "sha": "8140078f3b9ad0b2c4359cee24ce322029b27445",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T02:08:23-07:00",
+          "message": "fix(renderer): a request waits on every run its view names, so a run whose key lands after the request arrived is waited on (candybar-host-renderer-x96a.8e9)\n\nThe world state carries only runs the host has subscribed, and the host\nsubscribes a moved key's run a turn after the world state that moved it.\nThe wait now reads the view's named runs too, and the test host hands\nsubscriptions back after the answer settles, as the real host does.\n"
         },
         {
           "sha": "57fa022dcbd29434d9454f7ca77fe07bd0686a42",
