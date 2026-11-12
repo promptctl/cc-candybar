@@ -11,6 +11,7 @@
 
 import { debug } from "../utils/logger";
 import {
+  compareStructural,
   computed,
   observable,
   observe,
@@ -1056,7 +1057,9 @@ export class SourceRegistry {
     name: string,
     reads: () => Reading<string>,
   ): () => RunRefresh | undefined {
-    const answer = computed(reads);
+    // Equal by value, so an input that moved without moving what the policy
+    // read hashes nothing and names the run it named.
+    const answer = computed(reads, { equals: compareStructural });
     this.cleanups.push(
       reaction(
         () => answer.get(),
