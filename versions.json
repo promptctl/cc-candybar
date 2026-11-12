@@ -4,15 +4,22 @@
     {
       "version": "pr-738",
       "ref": "refs/pull/738/merge",
-      "sha": "3ae628fd76e30a0e034d2293590fda48a6718cbb",
-      "timestamp": "2026-11-12T17:51:55.913Z",
+      "sha": "a2f32551848aa443700c988989b8ad870d30bba4",
+      "timestamp": "2026-11-12T17:55:33.793Z",
       "commits": [
         {
-          "sha": "3ae628fd76e30a0e034d2293590fda48a6718cbb",
+          "sha": "a2f32551848aa443700c988989b8ad870d30bba4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T17:50:57Z",
-          "message": "Merge 5cde375c48a4e7197bd325f223a4260fc64584b6 into 303a122503d2659aa2d923221bd1480aa8858f00\n"
+          "timestamp": "2026-11-12T17:54:44Z",
+          "message": "Merge 731cdef019da6f675156a29dc3e499f604c39ba9 into 303a122503d2659aa2d923221bd1480aa8858f00\n"
+        },
+        {
+          "sha": "731cdef019da6f675156a29dc3e499f604c39ba9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T10:54:33-07:00",
+          "message": "docs(judge): keep only the judge's edits in the authoring docs and check tests, dropping a formatter's reflow (candybar-host-renderer-x96a.jmi)\n"
         },
         {
           "sha": "5cde375c48a4e7197bd325f223a4260fc64584b6",
