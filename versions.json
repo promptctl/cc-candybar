@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "cc2d992b5cd1f84f725f441ef665e582efabd1b6",
+      "timestamp": "2026-11-12T06:22:09.505Z",
+      "commits": [
+        {
+          "sha": "cc2d992b5cd1f84f725f441ef665e582efabd1b6",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-12T06:21:15Z",
+          "message": "chore(release): set `package.json` to 1.218.3\n\n## [1.218.3](https://github.com/promptctl/cc-candybar/compare/v1.218.2...v1.218.3) (2026-11-12)\n\n### Performance Improvements\n\n* **config:** a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg) ([#723](https://github.com/promptctl/cc-candybar/issues/723)) ([a454d2f](https://github.com/promptctl/cc-candybar/commit/a454d2f2ed6d81675e56ae6c45bef77b1db7007f))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-725",
       "ref": "refs/pull/725/merge",
       "sha": "dc2c5030605cf0824a0d966888e5f5d5790352b9",
@@ -34,21 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T23:14:07-07:00",
           "message": "refactor(usage): a test refreshes today through the request path the daemon takes, so the store keeps no method production never calls (candybar-host-renderer-x96a.3vg)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "cd25df0cf0cb1088bd2b4a19deac4d21858b1823",
-      "timestamp": "2026-11-12T06:13:43.369Z",
-      "commits": [
-        {
-          "sha": "cd25df0cf0cb1088bd2b4a19deac4d21858b1823",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T23:12:45-07:00",
-          "message": "test(config): synthesis-reads covers a rendering plugin and a beneath layer (candybar-host-renderer-x96a.01x) (#724)\n\n* test(config): the synthesis-reads test loads a rendering plugin and a beneath layer through the chain, so the names they make the chrome mint are proven to resolve (candybar-host-renderer-x96a.01x)\n\n* test(config): the chain cases load over the setup's isolated host, name their layers in order, and prove the load raised no advisory (candybar-host-renderer-x96a.01x)\n\n* test(config): the chain cases live in the worker tier, since they write a config to disk, and an insert is held to the root as well as the preset (candybar-host-renderer-x96a.01x)\n\n* test(config): the chain cases show the chrome minted for the plugin's settings and the inserted cell, so an empty unresolved list is over real reads (candybar-host-renderer-x96a.01x)"
         }
       ]
     }
