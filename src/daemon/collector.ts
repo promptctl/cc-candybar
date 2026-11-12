@@ -12,8 +12,8 @@
 // request, and every later stamp that moved is handed in alone, from here.
 //
 // [LAW:no-ambient-temporal-coupling] The collector owns the session's
-// lifetime: a session idle across a whole sweep, with no open feed, is
-// retired, and its record goes once the retire settles.
+// lifetime: a session idle across a whole sweep, with no open feed and no
+// click in flight, is retired, and its record goes once the retire settles.
 
 import { inspect } from "node:util";
 import {
@@ -128,8 +128,12 @@ interface SessionRecord {
   readonly session: SessionId;
   readonly stamped: Stamped;
   subscriptions: DeclaredSources;
-  // Whether a request named the session since the last sweep.
-  requested: boolean;
+  // Whether an input named the session since the last sweep: a request, or
+  // a click that settled.
+  active: boolean;
+  // The clicks on the session the host still awaits: each holds the session
+  // as an open feed does.
+  clicks: number;
   phase: Phase;
 }
 
@@ -192,7 +196,7 @@ export class Collector {
         this.records.set(req.sessionId, opened);
         return opened.stamped.document;
       }
-      held.requested = true;
+      held.active = true;
       const { phase } = held;
       if (phase.kind === "live")
         phase.declared.set(this.declared({ ...held, locator }, phase.holds));
@@ -237,12 +241,27 @@ export class Collector {
     });
   }
 
+  // [LAW:no-ambient-temporal-coupling] A click holds its session for as long
+  // as the host awaits its turn, however long that is, and its release names
+  // the session as a request does, so the next sweep keeps it too. Only a
+  // live session is kept: a retiring one has released its reads, and its
+  // record goes once the retire settles, as one with no record has gone.
+  holding(session: SessionId): () => void {
+    const record = this.records.get(session);
+    if (record?.phase.kind !== "live") return () => {};
+    record.clicks++;
+    return () => {
+      record.clicks--;
+      record.active = true;
+    };
+  }
+
   // One sweep. Public so a test can run it at an instant it chose.
   sweep(): void {
     for (const record of this.records.values()) {
       if (record.phase.kind !== "live") continue;
-      if (record.requested) record.requested = false;
-      else if (!this.deps.watched(record.session))
+      if (record.active) record.active = false;
+      else if (record.clicks === 0 && !this.deps.watched(record.session))
         this.retire(record, record.phase);
     }
   }
@@ -288,7 +307,8 @@ export class Collector {
       session,
       stamped,
       subscriptions,
-      requested: true,
+      active: true,
+      clicks: 0,
       phase: this.watch(session, stamped, reader),
     };
   }

@@ -7,6 +7,7 @@ import { JournalTurns } from "../src/daemon/journal-turns";
 import { HOST, locs } from "./helpers/host";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
+import { clickParts } from "./helpers/click-parts";
 import { replyTo } from "../src/daemon/reply";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS, type VerbContext, type VerbHandler } from "../src/daemon/verbs";
@@ -506,7 +507,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
     menuIdle: idle,
     payloadProviders: {},
     log: (_level: string, line: string) => events.push(line),
-    verbCtx,
+    ...clickParts(verbCtx, idle),
   } as unknown as DaemonParts;
   const send = (gone: () => boolean) =>
     replyTo(
@@ -526,6 +527,74 @@ test("the click path counts a click pending from arrival, through a refusal, and
   await send(() => true);
   expect(idle.getStats().pending).toBe(0);
   idle.dispose();
+});
+
+test("the click path holds its session in the collector while the turn runs, and lets go whether it lands or is refused", async () => {
+  const { ctx, held } = setup();
+  const idle = new MenuIdle({ clock: systemTimekeeper,
+    now: () => instantOf(new Date()),
+    close: async () => {},
+    failed: () => {},
+  });
+  const { arrival: _a, turnWaited: _t, placeWaited: _p, gatherTook: _g, clientGone: _c, ...verbCtx } = ctx;
+  // The collector's holds, as the sweep reads them: how many are taken and
+  // not yet let go, per session.
+  const holds = new Map<string, number>();
+  let taken = 0;
+  const collector = {
+    holding: (session: string) => {
+      taken++;
+      holds.set(session, (holds.get(session) ?? 0) + 1);
+      return () => holds.set(session, holds.get(session)! - 1);
+    },
+  };
+  const parts = {
+    clock: { monotonic: () => performance.now(), now: () => Date.now() },
+    menuIdle: idle,
+    payloadProviders: {},
+    log: () => {},
+    ...clickParts(verbCtx, idle),
+    collector,
+  } as unknown as DaemonParts;
+  const send = (gone: () => boolean) =>
+    replyTo(
+      parts,
+      { kind: "click", verb: VERB_DOCTOR_RUN, value: encodeURIComponent(A) } as Parameters<typeof replyTo>[1],
+      () => false,
+      systemTimekeeper.monotonic(),
+      gone,
+    );
+  const sent = send(() => false);
+  await drain();
+  expect(holds.get(A)).toBe(1);
+  held.open();
+  await sent;
+  expect(holds.get(A)).toBe(0);
+  await send(() => true);
+  expect(taken).toBe(2);
+  expect(holds.get(A)).toBe(0);
+  idle.dispose();
+});
+
+test("a click whose session will not decode is a bad request whose event still names its verb", async () => {
+  const { ctx } = setup();
+  const { arrival: _a, turnWaited: _t, placeWaited: _p, gatherTook: _g, clientGone: _c, ...verbCtx } = ctx;
+  const events: string[] = [];
+  const parts = {
+    clock: { monotonic: () => performance.now(), now: () => Date.now() },
+    payloadProviders: {},
+    log: (_level: string, line: string) => events.push(line),
+    ...clickParts(verbCtx, { clickArrived: () => {}, clickSettled: () => {} }),
+  } as unknown as DaemonParts;
+  const { resp } = await replyTo(
+    parts,
+    { kind: "click", verb: VERB_DOCTOR_RUN, value: "%ZZ" } as Parameters<typeof replyTo>[1],
+    () => false,
+    systemTimekeeper.monotonic(),
+    () => false,
+  );
+  expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+  expect(events).toEqual([expect.stringMatching(new RegExp(` verb=${VERB_DOCTOR_RUN} `))]);
 });
 
 test("tsc refuses `ctx.launcher` in a VerbHandler", () => {

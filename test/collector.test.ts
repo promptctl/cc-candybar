@@ -332,6 +332,30 @@ describe("the sweep", () => {
     expect(collector.stats()).toEqual({ sessions: 1, retiring: 0 });
   });
 
+  test("keeps a session a click holds for as long as it holds it, and the sweep after the click settles keeps it too", () => {
+    const { owners } = handLanded();
+    const { collector, clock, handedIn } = collectorOver(owners);
+    collector.requested(requestAt("/a"));
+    const release = collector.holding(SID);
+    clock.advance(5 * SESSION_SWEEP_MS);
+    expect(handedIn).toEqual([]);
+    release();
+    // The settled click names the session, as a request does.
+    clock.advance(SESSION_SWEEP_MS);
+    expect(handedIn).toEqual([]);
+    clock.advance(SESSION_SWEEP_MS);
+    expect(handedIn).toEqual([{ kind: "retire", session: SID }]);
+  });
+
+  test("a click on a session it holds no record of holds nothing", () => {
+    const { owners } = handLanded();
+    const { collector, clock, handedIn } = collectorOver(owners);
+    collector.holding(SID)();
+    expect(collector.stats()).toEqual({ sessions: 0, retiring: 0 });
+    clock.advance(2 * SESSION_SWEEP_MS);
+    expect(handedIn).toEqual([]);
+  });
+
   test("a retiring session takes outputs naming it without holding, and a request makes it live again, which the late answer leaves alone", async () => {
     const { owners, held } = handLanded();
     const { retired, answer } = heldRetires();

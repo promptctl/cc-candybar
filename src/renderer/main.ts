@@ -6,16 +6,18 @@
 // present's `effect-done` records what the frame showed, once the host says
 // whether its client took it. A world state the host hands in, with a
 // `config` or alone, is what the session's views draw from, and a retire ends
-// what the renderer holds of the session. Every output says what the open
-// views need read.
+// what the renderer holds of the session. A click, and the idle clock's close
+// of a session's menus, act in their turn. Every output says what the open
+// views need read, as they stand once the turn's act has landed.
 
 import {
   answerRequest,
   configureSession,
   retireSession,
-  type RendererParts,
 } from "../daemon/draw-bar.js";
 import type { RequestFacts } from "../daemon/request-event.js";
+import { clickTurn } from "./click.js";
+import type { MainRendererParts } from "./verbs.js";
 import type { Instant } from "../utils/instant.js";
 import {
   TurnThrew,
@@ -25,7 +27,7 @@ import {
   type RendererOutput,
 } from "./interface.js";
 
-export function mainRenderer(parts: RendererParts): Renderer {
+export function mainRenderer(parts: MainRendererParts): Renderer {
   // [LAW:single-enforcer] What each present's frame records once it reached
   // its client, held from the turn that returned it until its one
   // `effect-done`: the host settles every present it is handed, so this
@@ -95,6 +97,12 @@ export function mainRenderer(parts: RendererParts): Renderer {
         if (event.outcome.kind === "ok") delivered();
         return answered([], record);
       }
+      case "click":
+        await clickTurn(parts, event, record);
+        return answered([], record);
+      case "menu-idle":
+        await parts.verbs.closeIdle(event.session, event.idle);
+        return answered([], record);
     }
   };
 
@@ -104,7 +112,7 @@ export function mainRenderer(parts: RendererParts): Renderer {
       try {
         return await turn(event, at, record);
       } catch (thrown) {
-        throw new TurnThrew(record, thrown);
+        throw new TurnThrew(record, thrown, parts.renderCache.subscriptions());
       }
     },
   };

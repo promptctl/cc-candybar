@@ -37,6 +37,8 @@ import {
 import { ok } from "../src/utils/outcome";
 import { fakeTmux } from "./helpers/payload-owners";
 import { rendererHost } from "../src/daemon/renderer-host";
+import type { RendererVerbs } from "../src/renderer/verbs";
+import { BadVerbArgs } from "../src/daemon/verb-error";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { WorldState } from "../src/facts/world-state";
 import type { SessionId } from "../src/daemon/session-id";
@@ -57,7 +59,7 @@ const NO_STATS = { size: 0, hits: 0, misses: 0 };
 // The renderer over the rig's render cache and owners, the copies each
 // delivered frame recorded in that cache, in the order they were recorded,
 // and every line the daemon's log was handed.
-function renderer(): {
+function renderer(verbs?: RendererVerbs): {
   readonly r: Renderer;
   readonly recorded: string[][];
   readonly logged: string[];
@@ -77,6 +79,7 @@ function renderer(): {
       gitProvider: { ...providers.gitProvider, getStats: () => NO_STATS },
       usageStore: { ...providers.usageStore, getStats: () => NO_STATS },
     },
+    verbs,
   });
   // The cache's record of a delivered frame, heard on its way in.
   const recorded: string[][] = [];
@@ -347,6 +350,7 @@ describe("the session's config, ahead of its request", () => {
     const kinds: string[] = [];
     const host = rendererHost(
       "main",
+      systemTimekeeper,
       {
         answer: (input) => {
           kinds.push(input.event.kind);
@@ -425,6 +429,7 @@ describe("two requests of one session at different keys", () => {
     const requests: WorldState[] = [];
     const host = rendererHost(
       "main",
+      systemTimekeeper,
       {
         answer: (input) => {
           if (input.event.kind === "config")
@@ -472,5 +477,89 @@ describe("two requests of one session at different keys", () => {
       kind: "ok",
       value: { session: "on %2" },
     });
+  });
+});
+
+describe("a click", () => {
+  // A click on the rig's session's link, delivered by the CLI.
+  const click = (verb: string): Event => ({
+    kind: "click",
+    verb,
+    value: "",
+    session: { ok: true, id: SESSION as SessionId },
+    arrival: { via: "link", delivery: { kind: "cli" } },
+    gone: () => false,
+  });
+
+  test("answers with what the open views read once its act has landed", async () => {
+    // The act closes the session's view after a turn of the loop, so an
+    // output read before it landed would still name the view's sources.
+    let act = async (): Promise<void> => {};
+    const t = renderer({
+      handler: (verb) => (verb === "act" ? () => act() : undefined),
+      closeIdle: () => Promise.reject(new Error("no idle close here")),
+    });
+    act = async () => {
+      await Promise.resolve();
+      t.rig.cache.retireSession(SESSION);
+    };
+    const before = await request(t);
+    expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
+    const { effects, subscriptions, record } = await handIn(t.r, click("act"));
+    expect(effects).toEqual([]);
+    expect(subscriptions.sources).toEqual({});
+    // The host records what it knows of the click; this act waited on nothing.
+    expect(record).toEqual([]);
+  });
+
+  test("that throws once its act has landed names what the open views read then", async () => {
+    let act = async (): Promise<void> => {};
+    const t = renderer({
+      handler: (verb) => (verb === "act" ? () => act() : undefined),
+      closeIdle: () => Promise.reject(new Error("no idle close here")),
+    });
+    act = async () => {
+      t.rig.cache.retireSession(SESSION);
+      throw new Error("a later step broke");
+    };
+    const before = await request(t);
+    expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
+    const thrown = await handIn(t.r, click("act")).catch((e: TurnThrew) => e);
+    expect(thrown).toBeInstanceOf(TurnThrew);
+    expect(thrown.subscriptions.sources).toEqual({});
+  });
+
+  test("of a verb the renderer does not have is its bad request", async () => {
+    const t = renderer();
+    const answered = handIn(t.r, click("nope"));
+    await expect(answered).rejects.toThrow(TurnThrew);
+    const thrown = await answered.catch((e: TurnThrew) => e.thrown);
+    expect(thrown).toBeInstanceOf(BadVerbArgs);
+    expect((thrown as Error).message).toBe("unknown click verb: nope");
+  });
+});
+
+describe("the idle close", () => {
+  test("closes the session's menus in its own turn, with no effect", async () => {
+    const closed: string[] = [];
+    const t = renderer({
+      handler: () => undefined,
+      closeIdle: async (sessionId) => {
+        closed.push(sessionId);
+      },
+    });
+    const idle = {
+      idleS: 30,
+      timeoutS: 30,
+      stillIdle: () => true,
+      closed: () => {},
+    };
+    const { effects } = await handIn(t.r, {
+      kind: "menu-idle",
+      session: SESSION as SessionId,
+      idle,
+    });
+    expect(effects).toEqual([]);
+    expect(closed).toEqual([SESSION]);
   });
 });

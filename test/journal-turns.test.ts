@@ -5,6 +5,7 @@
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
+import { clickParts } from "./helpers/click-parts";
 import { replyTo } from "../src/daemon/reply";
 import { DaemonClosing } from "../src/daemon/verb-error";
 import { SessionState } from "../src/daemon/session-state";
@@ -301,15 +302,16 @@ describe("the click path", () => {
   function parts(ctx: VerbContext, linkUrl = "") {
     const { arrival: _a, turnWaited: _t, clientGone: _g, ...verbCtx } = ctx;
     const events: string[] = [];
+    const menuIdle = { clickArrived: () => {}, clickSettled: () => {} };
     const given = {
       clock: { monotonic: () => performance.now(), now: () => Date.now() },
-      menuIdle: { clickArrived: () => {}, clickSettled: () => {} },
+      menuIdle,
       payloadProviders: {},
       log: (_level: string, line: string) => events.push(line),
       tmuxStatusLines: {
         linkAt: () => ({ kind: "link", url: linkUrl }),
       },
-      verbCtx,
+      ...clickParts(verbCtx, menuIdle),
     } as unknown as DaemonParts;
     const send = (verb: string, value: string, gone = () => false) =>
       replyTo(
