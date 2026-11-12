@@ -106,6 +106,7 @@ async function answer(
   holds: { count: number; sessions: string[] } = { count: 0, sessions: [] },
 ) {
   const facts: RequestFacts = [];
+  const named = new Set<string>();
   const answered = await answerStatusline(
     rendererHost(
       "main",
@@ -114,9 +115,14 @@ async function answer(
       (_level, line) => logged.push(line),
       (subscriptions) => subscribed.push(subscriptions),
     ),
+    // Mirrors the collector: only a session a request has named is held.
     {
-      requested: () => WORLD,
+      requested: (req) => {
+        named.add(req.hookData.session_id);
+        return WORLD;
+      },
       holding: (session) => {
+        if (!named.has(session)) return () => {};
         holds.count++;
         holds.sessions.push(session);
         return () => holds.count--;

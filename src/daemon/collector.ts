@@ -129,7 +129,7 @@ interface SessionRecord {
   readonly stamped: Stamped;
   subscriptions: Subscribed;
   // Whether an input named the session since the last sweep: a request, or
-  // a click that settled.
+  // a turn, a request's or a click's, that settled.
   active: boolean;
   // The turns on the session the host still awaits, a request's or a click's:
   // each holds the session as an open feed does.
