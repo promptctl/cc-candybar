@@ -281,8 +281,8 @@ export async function click(
     throw new Error(`click failed: ${resp.error} (${resp.code})`);
   }
   let event = "";
-  // The event is the click's answer by another road, so it has the budget
-  // the click's reply had.
+  // The event is the click's answer by another road, so its wait gets the
+  // reply's budget again, counted from the TIMEOUT.
   await until(
     () => (event = timedOutClicks(log)[before] ?? "") !== "",
     `the click event of a click answered TIMEOUT (${url})`,

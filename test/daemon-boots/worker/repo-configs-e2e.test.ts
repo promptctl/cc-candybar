@@ -65,7 +65,8 @@ function repoConfig(marker: string, label: string): string {
 // An answer's click reloads the session's config before it replies, as
 // save's does, so the next render draws the answered config: approving
 // compiles the repository's config first, which the source daemon can take
-// seconds over on a loaded machine.
+// seconds over on a loaded machine. Such a click is answered TIMEOUT, so
+// this bounds click()'s wait for the click's event.
 const ANSWER_REPLY_MS = 20_000;
 
 // The question the bar asks of a session, read in the viewer its indicator
