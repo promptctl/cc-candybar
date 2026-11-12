@@ -72078,8 +72078,10 @@ var SourceRegistry = class _SourceRegistry {
           runOf3({ read: read2, parse: parserIdOf(parse3), refresh: refresh.value })
         ) : refresh;
       },
+      // A failure is a failure whatever it says: its text is the variable's
+      // standing fault, so a key throwing a moving message moves no run.
       {
-        equals: (a, b) => a.kind === "ok" && b.kind === "ok" ? a.value.digest === b.value.digest : compareStructural(a, b)
+        equals: (a, b) => a.kind === "ok" && b.kind === "ok" ? a.value.digest === b.value.digest : a.kind === b.kind
       }
     );
     runInAction(() => {

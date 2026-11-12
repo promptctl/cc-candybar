@@ -4,15 +4,22 @@
     {
       "version": "pr-736",
       "ref": "refs/pull/736/merge",
-      "sha": "026f222c0310829727d92eec74a3e637ed3506c5",
-      "timestamp": "2026-11-12T17:02:24.356Z",
+      "sha": "d0357a5976a0bdb6b26b2653908ec8e5a7a07fac",
+      "timestamp": "2026-11-12T17:05:03.531Z",
       "commits": [
         {
-          "sha": "026f222c0310829727d92eec74a3e637ed3506c5",
+          "sha": "d0357a5976a0bdb6b26b2653908ec8e5a7a07fac",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T17:01:24Z",
-          "message": "Merge 0f1c026cb32642a65abefe90bd7b598fbfe2deac into f02693a9bd83176c9126d9473453ca4bd96fda85\n"
+          "timestamp": "2026-11-12T17:04:06Z",
+          "message": "Merge cbaa4ba9c2932a672d15c4fe37c8b4af6a37ec87 into f02693a9bd83176c9126d9473453ca4bd96fda85\n"
+        },
+        {
+          "sha": "cbaa4ba9c2932a672d15c4fe37c8b4af6a37ec87",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T10:03:55-07:00",
+          "message": "refactor(sources): a source's run is a Present reading, and a failure moves no run by its text (candybar-host-renderer-x96a.z7t)\n"
         },
         {
           "sha": "0f1c026cb32642a65abefe90bd7b598fbfe2deac",
