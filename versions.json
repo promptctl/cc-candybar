@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-718",
+      "ref": "refs/pull/718/merge",
+      "sha": "320d88445a65beb96eda6b34f9d3a28197b8b920",
+      "timestamp": "2026-11-12T00:56:47.266Z",
+      "commits": [
+        {
+          "sha": "320d88445a65beb96eda6b34f9d3a28197b8b920",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T17:55:52-07:00",
+          "message": "Merge 4a4078bbd73a86f6c34858d0263acfd451e0f4c9 into ef62dc27975021a4aedb20614df8ab62ea63b6e7\n"
+        },
+        {
+          "sha": "4a4078bbd73a86f6c34858d0263acfd451e0f4c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T17:55:30-07:00",
+          "message": "refactor(daemon): the idle clock keys sessions by the checked SessionId, so its menu-idle turn names its session with no cast (candybar-host-renderer-x96a.snf)\n\nThe clock's records, pending counts, methods and deps take SessionId; the\nverb context's clickLanded, closeIdleMenus and the renderer's closeIdle\npass it through. Every caller already held a checked id, so nothing parses\nanew, and closeByTurn's cast and its parse-dont-validate exception go. The\nverb layer's wider sid: string stays: it reads ids, and SessionId narrows\nto string there.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ef62dc27975021a4aedb20614df8ab62ea63b6e7",
