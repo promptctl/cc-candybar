@@ -190,9 +190,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   //   • state — per-session daemon state
   variables: {
     ...COMMAND_TRAY.variables,
-    // [LAW:one-source-of-truth] The payload inputs the synthesized settings
-    // menu and edit chrome read, spelled once in payload-inputs.ts.
-    ...PAYLOAD_INPUTS,
     // From hookData, pass-through.
     current_dir: {
       kind: "input",
@@ -1696,7 +1693,12 @@ const AUTHORED_PALETTE_NAMES = new Set(
 // literal. Round-tripping through JSON is exactly what
 // test/default-dsl-config.test.ts's SERIALIZED-based tests already exercise,
 // so this is the same well-tested path, run once here instead of skipped.
-export const DEFAULT_DSL_CONFIG: DslConfig = mergeWithDefault(
+//
+// [LAW:one-source-of-truth] The payload inputs (payload-inputs.ts) are placed
+// here, beneath the parsed default, rather than authored in it: they are the
+// daemon's, so no parsed source declares one and the loader refuses any that
+// tries. Every chain merges over this constant, so every config reads them.
+const PARSED_DEFAULT: DslConfig = mergeWithDefault(
   parseDslConfig(
     "<default>",
     JSON.stringify(RAW_DEFAULT_DSL_CONFIG),
@@ -1704,3 +1706,7 @@ export const DEFAULT_DSL_CONFIG: DslConfig = mergeWithDefault(
   ),
   RAW_DEFAULT_DSL_CONFIG,
 );
+export const DEFAULT_DSL_CONFIG: DslConfig = {
+  ...PARSED_DEFAULT,
+  variables: { ...PAYLOAD_INPUTS, ...PARSED_DEFAULT.variables },
+};

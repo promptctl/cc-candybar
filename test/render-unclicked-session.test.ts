@@ -37,10 +37,6 @@ const SRC = `{
   presets: {
     alt: { root: { h: ['altLabel'] }, globals: { style: 'hot' } },
   },
-  variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-    'style.effective': { kind: 'input', path: 'style.effective', default: '' },
-  },
   segments: {
     label: { template: 'P=floor S={{ .style.effective }}', bg: 'primary', fg: 'foreground' },
     altLabel: { template: 'P=alt S={{ .style.effective }}', bg: 'primary', fg: 'foreground' },

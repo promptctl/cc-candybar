@@ -36,7 +36,7 @@ A group is just another way to write a container with a toggle. Sibling groups t
 
 ## The settings menu
 
-The menu's door appears in every preset root. It's declared once and referenced from each preset, so N presets don't mean N declarations. It's visible under every condition: by default it gets its own ungated row, and an authored placement under a gate or inside a body is a load error. It has no precondition. Anything it reads that the config doesn't declare is supplied from the payload inputs, merged under the config so the user's own declaration wins.
+The menu's door appears in every preset root. It's declared once and referenced from each preset, so N presets don't mean N declarations. It's visible under every condition: by default it gets its own ungated row, and an authored placement under a gate or inside a body is a load error. It has no precondition. What it reads is the payload's: those values sit beneath the bundled default rather than in it, so every config reads them, the default's own parse included, and the loader can refuse any file that declares one with no exception for the default.
 
 ◁ back undoes navigation only, never a decision. Decisions include a setting, a dismissal, and an armed confirm, which is one click away from firing.
 

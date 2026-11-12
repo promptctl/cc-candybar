@@ -46,13 +46,6 @@ function configFor(env: NodeJS.ProcessEnv): string {
     configPath,
     JSON.stringify({
       globals: { palette: RULE },
-      variables: {
-        "theme.effective": {
-          kind: "input",
-          path: "theme.effective",
-          default: "",
-        },
-      },
       segments: {
         mark: { template: " ◆ mark ", bg: "surface", fg: "foreground" },
         label: {

@@ -50,10 +50,12 @@ row you rearranged is something you read back rather than guess at
 A user config **merges onto the bundled default** by name (globals per-field;
 variables/segments/actions/styles/helpers/`root.rows` per-name; a whole tree at
 `root` replaces every row).
-Declare only what differs. The bundled default already declares `session.id`,
-`theme.effective`, `style.effective`, `term.cols`, every built-in segment, and a
-styles stdlib (`none`, `vivid`, `muted`, `dim`, `bright`, `inverted`) — never
-re-declare them.
+Declare only what differs. The bundled default already declares every
+built-in segment and a styles stdlib (`none`, `vivid`, `muted`, `dim`,
+`bright`, `inverted`). The daemon supplies the values its own chrome reads —
+`session.id`, `project_dir`, `config_path`, `theme.effective`,
+`style.effective`, `term.cols` and the rest — to every config, and a config
+that declares one of them does not load.
 
 ## The decision rule
 
@@ -144,7 +146,6 @@ toolbar:
   variables: {
     workMode: { kind: "state", key: "work-mode", default: "focus" },
     detail: { kind: "state", key: "detail", default: "1" },
-    project_dir: { kind: "input", path: "workspace.project_dir", default: "" },
   },
   actions: {
     cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] },
@@ -184,7 +185,6 @@ exactly the same over it:
 ```json5 check:pass
 {
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     sortOrder: { kind: 'state', key: 'sort-order', default: 'asc' },
   },
   actions: {
@@ -274,7 +274,7 @@ always undoable from the bar itself:
 `applyThemeForever` needs no matching `state` variable: reading a value back
 is required for `set` (through `{ kind: "state" }`), never for `persist`. The
 click still carries the session id, for error-surfacing: the session the bar
-draws for, whatever a config declares as `session.id`.
+draws for.
 
 ### Drafts and `save`
 
@@ -673,7 +673,6 @@ one as your default with `globals: { preset: "compact" }`.
 ```json5 check:pass
 {
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     activePreset: { kind: 'state', key: 'preset', default: 'default' },
   },
   actions: {
@@ -760,7 +759,6 @@ free number) when it is not.
 
 ```json5 check:pass
 {
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
     dropModel: { persist: "presets.compact.root", removeSegment: "model" },
     addGitPr: { persist: "presets.compact.root", insertSegment: "gitPr", anchor: "directory", relation: "after" },
@@ -823,7 +821,6 @@ drive a structural edit the same way it drives an ordinary `persist … from`:
 
 ```json5 check:pass
 {
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
     addAfterGit: { persist: "presets.compact.root", insertSegmentFrom: ["gitPr", "model"], anchor: "gitaculous", relation: "after" },
   },
@@ -862,7 +859,6 @@ each shown only while it has a step to take.
 
 ```json5 check:pass
 {
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
     pinDracula: { persist: 'palette', to: 'dracula' },
     back: { undo: true },
@@ -921,7 +917,6 @@ derives, so nothing a `do` fires could not be clicked alone.
 ```json5 check:pass
 {
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     panel: { kind: 'state', key: 'panel', default: 'closed' },
     focus: { kind: 'state', key: 'focus', default: 'off' },
   },
@@ -971,7 +966,6 @@ your own project slash command included — is one `slash` action and one
 ```json5 check:pass
 {
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
   },
   actions: {
     review: { slash: '/review' },
@@ -1125,7 +1119,6 @@ your trigger toggles.
 
 ```json5 check:pass
 {
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   segments: {
     directory: { template: '~/project' },
     git: { template: '⎇ main' },
@@ -1217,7 +1210,6 @@ The bundled default stages plain joiners with a visible separator:
 ```json5 check:pass
 {
   editGlobals: { endcaps: 'plain', default_separator: ' | ' },
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   segments: {
     directory: { template: '~/project' },
     editControl: { template: '{{ action "edit.toggle" "✎" }}' },
@@ -1294,7 +1286,6 @@ already writable the moment any structural-edit action targets it).
   // addresses `presets.compact.root` — a preset with no root of its own
   // would send both the clicks and the reset to this config's `root`.
   globals: { preset: "compact" },
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
     dropModel: { persist: "presets.compact.root", removeSegment: "model" },
     resetCompactLayout: { reset: "presets.compact.root" },
@@ -1590,10 +1581,9 @@ anchor may not sit under a `when` or inside a group's body:
 the menu is visible under every condition, so its placement may not be gated
 ```
 
-**Every config gets the menu.** It needs nothing from yours: whatever it reads
-that your config does not declare — `session.id`, the `.effective` settings,
-`project_dir` — it declares itself, and your own declaration of any of those
-names wins.
+**Every config gets the menu.** It needs nothing from yours: what it reads —
+`session.id`, the `.effective` settings, `project_dir` — the daemon supplies
+to every config.
 
 Everything the menu synthesizes lives under the reserved `candybar.` namespace
 — a variable, action, or segment of your own under that prefix is a load error,
@@ -2556,7 +2546,6 @@ member that writes a template-bound value would have nothing to write:
 
 ```json5 check:fail
 {
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
     close: { set: 'panel', to: 'closed' },
     pickTheme: { set: 'theme', from: 'themes' },
@@ -2573,7 +2562,6 @@ actions.broken do: "pickTheme" takes its value from the template (from/int/inser
 
 ```json5 check:fail
 {
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
     a: { set: 'x', to: '1' },
     b: { set: 'y', to: '1' },

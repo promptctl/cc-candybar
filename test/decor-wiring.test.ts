@@ -144,7 +144,6 @@ const IDENTITY_KEY: ThemeKey = {
 const SRC = `{
   globals: { palette: '${THEME}' },
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     show: { kind: 'input', path: 'show', type: 'boolean', default: true },
   },
   segments: {
@@ -175,7 +174,6 @@ const FIVE = ["a", "b", "c", "d", "e"];
 const groupedRow = (cells: string, fields = ""): string => `{
   globals: { palette: '${THEME}' },
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     ${[...FIVE, "g"].map((g) => `s${g}: { kind: 'input', path: 's${g}', type: 'boolean', default: true }`).join(",\n    ")},
   },
   segments: {
@@ -254,7 +252,6 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     const rowTwoFirst = (rowOne: string): string => {
       const rt = build(`{
         globals: { palette: '${THEME}' },
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         segments: {
           a: { template: 'A' }, x: { template: 'X' }, y: { template: 'Y' },
           probe: { template: 'P' },
@@ -345,7 +342,6 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     // last the `(?)`, either of which would make a one-cell row two cells.
     const rt = build(`{
       globals: { palette: '${THEME}' },
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: { a: { template: 'A' }, b: { template: 'B' }, solo: { template: 'S' }, c: { template: 'C' } },
       root: { v: [ { h: ['a', 'b'] }, 'solo', { h: ['c'] } ] },
     }`);
@@ -495,7 +491,6 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
   const CELLS = ["a", "b", "c", "d"] as const;
   const tree = (rowField: string, rootField = ""): string => `{
     globals: { palette: '${THEME}' },
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     segments: {
       a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' }, d: { template: 'D' },
     },
@@ -581,7 +576,6 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
   test("a distribution inside a row is a load error, one message wherever it sits there: the row places every cell along its line", () => {
     const bar = (row: string): string => `{
       globals: { palette: '${THEME}' },
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: { a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' } },
       root: { v: [ { h: ${row} } ] },
     }`;
@@ -610,7 +604,6 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     const bar = (gate: string): string => `{
       globals: { palette: '${THEME}' },
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         x: { kind: 'input', path: 'x', type: 'boolean', default: true },
       },
       segments: { a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' } },
@@ -628,7 +621,6 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
   test("on the bar, a distribution on a vertical container whose rows stack further in is a load error", () => {
     const bar = (tree: string): string => `{
       globals: { palette: '${THEME}' },
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: { a: { template: 'A' }, b: { template: 'B' } },
       root: ${tree},
     }`;
@@ -645,7 +637,6 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
   test("in a body, a distribution is refused where nothing reads it: inside a row, or on a vertical container", () => {
     const body = (tree: string): string => `{
       globals: { palette: '${THEME}' },
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: { a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' } },
       root: { v: [
         { kind: 'group', name: 'more', label: 'more', open: true, children: [ ${tree} ] },
@@ -672,7 +663,6 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
   test("a group carries the same field for its body", () => {
     const group = (field: string): string => `{
       globals: { palette: '${THEME}' },
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: { a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' } },
       root: { v: [
         { kind: 'group', name: 'more', label: 'more', open: true, direction: 'horizontal'${field},

@@ -123,13 +123,6 @@ function segmentNamesOf(root: RootFragment): string[] {
 // carries the config's own root.
 const BASE = `{
   globals: {},
-  variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-    // The insert chrome's \`{{ menu }}\` bodies paginate by term.cols
-    // (paged=true is the default) — declared here exactly as every other
-    // menu/picker test declares it (see dsl-menus.test.ts).
-    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-  },
   segments: {
     directory: { template: 'd', bg: 'surface', fg: 'foreground' },
     git: { template: 'g', bg: 'surface', fg: 'foreground' },
@@ -208,7 +201,6 @@ function buildEditRuntime(src: string, sessionId = S1) {
 describe("insertSegmentFrom loader shape", () => {
   const base = (actions: string, presets = "{}") => `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     actions: ${actions},
     segments: {
       directory: { template: 'd', bg: 'surface', fg: 'foreground' },

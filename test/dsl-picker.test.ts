@@ -40,10 +40,8 @@ function pickerConfig(closeOnPick: boolean, paged: boolean): string {
   return `{
     globals: {},
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       themePick: { kind: 'state', key: 'theme-pick', default: '${THEMES[0]}' },
       page: { kind: 'state', key: 'theme-page', default: '-1' },
-      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
     },
     actions: {
       openMenu: { set: 'theme-page', to: '0' },
@@ -241,7 +239,6 @@ describe("2de.13 — picker loader validation", () => {
   test("rejects a picker referencing an undeclared action", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme-pick', from: 'themes' } },
       segments: { menu: { template: '{{ picker "applyTheme" "nope" true true }}', bg: 'surface', fg: 'foreground' } },
       root: 'menu',

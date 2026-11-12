@@ -61,7 +61,6 @@ function ownUrls(rendered: Frame): string[] {
 describe("undo/redo loader shape", () => {
   const base = (actions: string) => `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     actions: ${actions},
     segments: { bar: { template: 'b', bg: 'surface', fg: 'foreground' } },
     root: 'bar',
@@ -119,7 +118,6 @@ describe("deriveConfigActionValidators over undo/redo actions", () => {
     const config = parseAndValidate(
       "<test>",
       `{
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         segments: { bar: { template: 'b', bg: 'surface', fg: 'foreground' } },
         actions: { back: { undo: true }, fwd: { redo: true } },
         root: 'bar',
@@ -191,7 +189,6 @@ const ACTION_ORDER = [
 
 const SRC = `{
   globals: {},
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
     pinDracula: { persist: 'palette', to: 'dracula' },
     pinNord: { persist: 'palette', to: 'nord' },

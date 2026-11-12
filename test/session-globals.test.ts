@@ -45,7 +45,6 @@ const ALLOWED = new Set([BASE_THEME]);
 const src = (padding: number): string => `{
   globals: { palette: '${BASE_THEME}', padding: ${padding}, autoWrap: true },
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     sessionPadding: { kind: 'state', key: 'padding', default: '' },
     sessionWrap: { kind: 'state', key: 'autoWrap', default: '' },
   },

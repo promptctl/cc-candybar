@@ -623,24 +623,21 @@ describe("the menu in a config that declares no variables", () => {
     );
   });
 
-  test("a user's own declaration of an ensured name is kept", () => {
-    const own = {
-      kind: "input",
-      path: "workspace.somewhere_else",
-      default: "mine",
-    } as const;
-    const config = parseAndValidate(
-      "<user>",
-      `{
+  test("a user's own declaration of a name the menu reads does not load", () => {
+    expect(() =>
+      parseAndValidate(
+        "<user>",
+        `{
         globals: {},
-        variables: { project_dir: ${JSON.stringify(own)} },
+        variables: { project_dir: { kind: 'input', path: 'workspace.somewhere_else', default: 'mine' } },
         segments: { hello: { template: 'hi' } },
         root: { h: ['hello'] },
       }`,
-      ALLOWED,
-    );
-    expect(config.variables.project_dir).toEqual(own);
+        ALLOWED,
+      ),
+    ).toThrow(`"project_dir" is supplied by the daemon's payload`);
   });
+
 });
 
 // ─── 5. Structural: edit mode cannot delete its own door ─────────────────────
@@ -655,7 +652,6 @@ describe("the menu in a config that declares no variables", () => {
 describe("a user menu cannot join a synthesized accordion", () => {
   // A real declared action, so the only thing a case can fail on is the key.
   const withKey = (key: string): string => `{
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     actions: { pickTheme: { set: 'theme', from: 'themes' } },
     segments: {
       hello: { template: 'hi {{ menu "pickTheme" "▸" "▾" (dict "key" "${key}") }}' },
@@ -740,7 +736,6 @@ describe("a user menu cannot join a synthesized accordion", () => {
     const config = parseAndValidate(
       "<user>",
       `{
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         segments: { hello: { template: 'hi' } },
         root: { h: ['hello'] },
       }`,

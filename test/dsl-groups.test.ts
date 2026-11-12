@@ -53,7 +53,6 @@ function groupsBar(source: string, sessionId = S1) {
 
 const DETAILS_SRC = `{
   globals: {},
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   segments: {
     metrics: { template: 'METRICS-BODY', bg: 'surface', fg: 'foreground' },
   },
@@ -134,7 +133,6 @@ describe("2de.4 — group sugar: toggle round trip", () => {
 
 const ACCORDION_SRC = `{
   globals: {},
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   segments: {
     filesBody: { template: 'FILES-BODY', bg: 'surface', fg: 'foreground' },
     toolsBody: { template: 'TOOLS-BODY', bg: 'surface', fg: 'foreground' },
@@ -186,7 +184,6 @@ describe("2de.4 — accordion (shared key)", () => {
 describe("2de.4 — nested groups (distinct keys)", () => {
   const SRC = `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     segments: {
       leaf: { template: 'LEAF-BODY', bg: 'surface', fg: 'foreground' },
     },
@@ -248,7 +245,6 @@ describe("2de.4 — loader proves the group invariants", () => {
 
   const withGroups = (groups: string, extraSections = "") => `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     segments: { body: { template: 'B', bg: 'surface', fg: 'foreground' } },
     ${extraSections}
     root: { kind: 'container', direction: 'vertical', children: [${groups}] },
@@ -291,10 +287,7 @@ describe("2de.4 — loader proves the group invariants", () => {
       withGroups(
         group(`name: 'g', label: 'x'`),
         `// reserved-namespace squatter
-        `,
-      ).replace(
-        "'session.id': { kind: 'input', path: 'session_id', default: '' }",
-        "'session.id': { kind: 'input', path: 'session_id', default: '' }, 'groups.mine': { kind: 'literal', value: 'v' }",
+        variables: { 'groups.mine': { kind: 'literal', value: 'v' } },`,
       ),
       /reserved "groups\." namespace/,
     );

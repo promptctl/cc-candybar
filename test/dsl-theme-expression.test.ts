@@ -75,9 +75,7 @@ const RULE =
 const src = (palette: string, extra = ""): string => `{
   globals: { palette: '${palette}' },
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     'ctx.pct': { kind: 'input', path: 'ctx.pct', type: 'number', default: 0 },
-    'theme.effective': { kind: 'input', path: 'theme.effective', default: '' },
   },
   ${extra}
   segments: {
@@ -510,10 +508,7 @@ describe("a rule inside a preset's globals", () => {
     styles: { none: {}, hot: { hueShift: 180 } },
     presets: { ruled: { globals: { palette: '${palette}', style: '${look}' } } },
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       'ctx.pct': { kind: 'input', path: 'ctx.pct', type: 'number', default: 0 },
-      'theme.effective': { kind: 'input', path: 'theme.effective', default: '' },
-      'style.effective': { kind: 'input', path: 'style.effective', default: '' },
     },
     segments: {
       plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground' },

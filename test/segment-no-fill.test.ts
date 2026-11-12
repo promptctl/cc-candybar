@@ -28,9 +28,6 @@ const THEME = "textual-dark";
 
 const SRC = `{
   globals: { palette: '${THEME}' },
-  variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-  },
   segments: {
     filled: { template: 'F' },
     bare: { template: 'B', bg: '${NO_FILL}' },

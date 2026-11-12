@@ -897,8 +897,8 @@ export class SourceRegistry {
     const sessionState = this.sessionState;
     const fallback = opts.varDefault ?? this.stringInitial(undefined);
     this.store.defineComputed(name, "string", () => {
-      // [LAW:parse-dont-validate] The view's checked session, never the
-      // `session.id` variable a config can redeclare.
+      // [LAW:parse-dont-validate] The view's checked session, the same one
+      // the payload hands `session.id`.
       const value = sessionState.get(this.session(), opts.key);
       return value !== null ? value : fallback;
     });

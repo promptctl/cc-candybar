@@ -725,7 +725,7 @@ export function readVar(store: VariableStore, name: string): string {
 }
 
 // [LAW:parse-dont-validate] The session a click names: the view's checked id,
-// never the `session.id` variable a config can redeclare.
+// the same one the payload hands `session.id`.
 export function clickSession(
   runtime: ActionRuntime,
   reader: string,

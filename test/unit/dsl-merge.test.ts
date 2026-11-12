@@ -4,6 +4,7 @@
 // renderer accepts only ValidatedConfig, so the chain proven here is the chain
 // used in production.
 
+import { PAYLOAD_INPUTS } from "../../src/config/payload-inputs";
 import { validateConfig } from "../helpers/parse-and-validate";
 import {
   mergeWithDefault,
@@ -39,6 +40,7 @@ const vert = (...rows: string[][]): LayoutNode => ({
 const DFLT: DslConfig = {
   globals: { default_separator: " ", default_empty_value: "-", palette: "textual-dark" },
   variables: {
+    ...PAYLOAD_INPUTS,
     foo: { kind: "literal", value: "default-foo" },
     bar: { kind: "literal", value: "default-bar" },
   },

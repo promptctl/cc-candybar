@@ -34,11 +34,7 @@ const ALLOWED = new Set<string>([THEME_FLOOR, "nord"]);
 const src = (slot: string, rule: string): string => `{
   globals: { ${slot}: '${rule}' },
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     'ctx.pct': { kind: 'input', path: 'ctx.pct', type: 'number', default: 0 },
-    'theme.effective': { kind: 'input', path: 'theme.effective', default: '' },
-    'style.effective': { kind: 'input', path: 'style.effective', default: '' },
-    'effect.effective': { kind: 'input', path: 'effect.effective', default: '' },
   },
   segments: {
     label: {

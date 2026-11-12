@@ -970,7 +970,6 @@ describe("RenderCache", () => {
         cfg,
         JSON.stringify({
           variables: {
-            "session.id": { kind: "input", path: "session_id", default: "" },
             "s.v": { kind: "literal", value: "top" },
             k: { kind: "state", key: "k", default: "0" },
           },
@@ -1335,7 +1334,6 @@ describe("RenderCache", () => {
         join(dir, ".cc-candybar.json5"),
         JSON.stringify({
           variables: {
-            "session.id": { kind: "input", path: "session_id", default: "" },
             k: { kind: "state", key: "k", default: "1" },
           },
           actions,

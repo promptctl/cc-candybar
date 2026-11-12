@@ -376,7 +376,6 @@ describe("checkConfig — explicit target", () => {
       "standalone-picker.json5",
       `{
         variables: {
-          "session.id": { kind: "input", path: "session_id", default: "" },
           themePageCursor: { kind: "state", key: "theme-page", default: "-1" },
         },
         actions: {

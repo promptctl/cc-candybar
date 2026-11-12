@@ -179,10 +179,6 @@ function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
 // themselves, exactly like the pagination harness).
 const MENU_SRC = `{
   globals: {},
-  variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-  },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
   },
@@ -229,7 +225,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("a user menus.* name is rejected even when NO menu is placed (unconditional reservation)", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, 'menus.mine': { kind: 'literal', value: 'v' } },
+      variables: { 'menus.mine': { kind: 'literal', value: 'v' } },
       segments: { plain: { template: 'X', bg: 'surface', fg: 'foreground' } },
       root: { h: ['plain'] },
     }`;
@@ -247,7 +243,6 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test('a {{ menu }} whose apply action is named "closed" is rejected (sentinel collision)', () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { closed: { set: 'theme', from: 'themes' } },
       segments: { s: { template: '{{ menu "closed" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
@@ -264,7 +259,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("a {{ menu }} with a non-literal apply action is rejected (cannot gate at load)", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, applyVar: { kind: 'literal', value: 'applyTheme' } },
+      variables: { applyVar: { kind: 'literal', value: 'applyTheme' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
       segments: { s: { template: '{{ menu .applyVar }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
@@ -284,7 +279,6 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     // state (an unintended accordion). It must be a loud load error.
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: {
         'a-b': { set: 'theme', from: 'themes' },
         'a_b': { set: 'endcaps', from: 'endcaps' },
@@ -306,7 +300,6 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("a {{ menu }} with an empty apply name is rejected (member aliases absent sentinel)", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: { s: { template: '{{ menu "" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
@@ -324,7 +317,6 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     // missing action at load, not defer to renderPicker.requireKind on open.
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: { s: { template: '{{ menu "noSuchApply" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
@@ -342,7 +334,6 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("a {{ menu }} with an empty accordion key is rejected (bare menus. key)", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
       segments: { s: { template: '{{ menu "applyTheme" "▸" "▾" (dict "key" "") }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
@@ -359,7 +350,6 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("a {{ menu }} in a segment bg/fg/when field is rejected (template-only seam)", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
       segments: { s: { template: 'X', bg: '{{ menu "applyTheme" "▸" "▾" }}', fg: 'foreground' } },
       root: { h: ['s'] },
@@ -378,7 +368,6 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("a {{ menu }} in a rows-form row's `when` is rejected (the fragment is lowered before the walk)", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
       segments: { s: { template: 'X', bg: 'surface', fg: 'foreground' } },
       root: { rows: { r: { h: ['s'], when: '{{ menu "applyTheme" "▸" "▾" }}' } } },
@@ -397,7 +386,6 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("a menu-bearing segment placed twice under one id is rejected (one id, one open state)", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
       segments: { m: { template: 'M {{ menu "applyTheme" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { v: [ { h: ['m'] }, { h: ['m'] } ] },
@@ -456,7 +444,6 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("a {{ menu }} inside a helper is rejected at load (no per-segment identity)", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
       helpers: { mkMenu: '{{ menu "applyTheme" "▸" "▾" }}' },
       segments: { s: { template: '{{ template "mkMenu" . }}', bg: 'surface', fg: 'foreground' } },
@@ -482,7 +469,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
 // spelling proven to load is proven to render from the same source.
 const srcFor = (segTemplate: string, extraVars = ""): string => `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, 'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 }${extraVars} },
+      variables: { ${extraVars} },
       actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
       segments: { s: { template: '${segTemplate}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
@@ -559,7 +546,7 @@ describe("bn5.6 — old spellings and bad option dicts are migration-pointing LO
     expect(
       load(
         '{{ menu "applyTheme" "▸" "▾" (dict "key" .someVar) }}',
-        ", someVar: { kind: 'literal', value: 'k' }",
+        "someVar: { kind: 'literal', value: 'k' }",
       ),
     ).toThrow(/not fully literal/);
   });
@@ -743,10 +730,6 @@ describe("toggle round trip + drop stacking", () => {
 describe("a {{ menu }} under a style wrapper still drops its body", () => {
   const wrapped = (template: string): string => `{
     globals: {},
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-    },
     actions: { applyTheme: { set: 'theme', from: 'themes' } },
     segments: {
       label: { template: 'PICK' },
@@ -795,10 +778,6 @@ describe("a segment that throws after its {{ menu }} evaluated", () => {
 // Two menus in ONE row, neither naming a key ⇒ INDEPENDENT.
 const INDEPENDENT_SRC = `{
   globals: {},
-  variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-  },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
     applyEndcaps: { set: 'endcaps', from: 'endcaps' },
@@ -841,10 +820,6 @@ describe("independent default (no shared key)", () => {
 // Two menus in ONE row sharing the key "pickers" (the dict option) ⇒ ACCORDION.
 const ACCORDION_SRC = `{
   globals: {},
-  variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-  },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
     applyEndcaps: { set: 'endcaps', from: 'endcaps' },
@@ -898,7 +873,6 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
   test("two menus sharing a key with the SAME apply action are rejected (identity clash)", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
       segments: {
         a: { template: 'A {{ menu "applyTheme" "▸" "▾" (dict "key" "k") }}', bg: 'surface', fg: 'foreground' },
@@ -919,10 +893,6 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
 // THE "theme tester": three menus in ONE segment, with content between/after.
 const TESTER_SRC = `{
   globals: {},
-  variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-  },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
     applyEndcaps: { set: 'endcaps', from: 'endcaps' },
@@ -989,7 +959,6 @@ describe("compose substrate (drops stack, single-line rows unchanged)", () => {
   // A genuinely 2-line segment (authored "\n") beside a single-line neighbor.
   const TWOLINE_SRC = `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     segments: {
       one: { template: 'ONE', bg: 'surface', fg: 'foreground' },
       two: { template: 'TOP{{ "\\\\n" }}DROP', bg: 'surface', fg: 'foreground' },
@@ -1010,7 +979,6 @@ describe("compose substrate (drops stack, single-line rows unchanged)", () => {
   test("an all-single-line horizontal row stays one line with every segment", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: {
         a: { template: 'AAA', bg: 'surface', fg: 'foreground' },
         b: { template: 'BBB', bg: 'surface', fg: 'foreground' },
@@ -1049,8 +1017,6 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
   const SRC = `{
     globals: {},
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
       soundEffects: { kind: 'state', key: 'sound-effects', default: 'chime' },
     },
     actions: {
@@ -1123,10 +1089,6 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
 describe("aok.4 — group and menu resolve their trigger display by one rule", () => {
   const BOTH = (groupDisplays: string, menuDisplays: string) => `{
     globals: {},
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-    },
     actions: { applyTheme: { set: 'theme', from: 'themes' } },
     segments: {
       body: { template: 'BODY', bg: 'surface', fg: 'foreground' },
@@ -1295,10 +1257,6 @@ describe("a picker over a colour-valued domain paints what picking would apply",
       dim: { lightnessScale: 0.7 },
       vivid: { chromaScale: 1.6 },
     },
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-    },
     actions: {
       applyTheme: { set: 'theme', from: 'themes' },
       applyStyle: { set: 'style', from: 'styles' },
@@ -1443,8 +1401,6 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     const PICKER_SRC = `{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
-        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
         'theme-page': { kind: 'state', key: 'theme-page' },
       },
       actions: {

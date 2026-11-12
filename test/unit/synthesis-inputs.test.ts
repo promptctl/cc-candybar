@@ -1,23 +1,23 @@
-// What a synthesis pass reads, ensured from PAYLOAD_INPUTS when the config
-// does not declare it (brandon-settings-menu-d6f.6j4).
+// What a synthesis pass reads resolves against what the config and the pass
+// declare; a read nothing declares is a load error (brandon-settings-menu-d6f.6j4).
 
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import type { DslConfig, LayoutNode } from "../../src/config/dsl-types";
-import { PAYLOAD_INPUTS } from "../../src/config/payload-inputs";
-import { synthesisInputs } from "../../src/config/synthesis-inputs";
+import { checkSynthesisReads } from "../../src/config/synthesis-inputs";
 
 const BARE: DslConfig = { ...DEFAULT_DSL_CONFIG, variables: {} };
 const NONE = { variables: {}, actions: {}, segments: {} };
 
-describe("synthesisInputs", () => {
-  test("a read in a `when` of a returned tree is ensured", () => {
+describe("checkSynthesisReads", () => {
+  test("a read in a `when` of a returned tree that nothing declares throws, naming it", () => {
     const tree: LayoutNode = {
       kind: "container",
       direction: "vertical",
       children: [{ kind: "segment", name: "a", when: "{{ .project_dir }}" }],
     };
-    const ensured = synthesisInputs(NONE, [tree], BARE);
-    expect(ensured["project_dir"]).toEqual(PAYLOAD_INPUTS["project_dir"]);
+    expect(() => checkSynthesisReads(NONE, [tree], BARE)).toThrow(
+      '".project_dir"',
+    );
   });
 
   test("a field read of the config's own json document resolves", () => {
@@ -37,6 +37,6 @@ describe("synthesisInputs", () => {
       name: "a",
       when: "{{ gt .budget.spent 1 }}",
     };
-    expect(synthesisInputs(NONE, [tree], config)).toEqual({});
+    expect(() => checkSynthesisReads(NONE, [tree], config)).not.toThrow();
   });
 });

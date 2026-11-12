@@ -108,7 +108,6 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
         { kind: 'group', name: 'details', label: 'details', open: true, key: 'menu',
           children: [{ kind: 'segment', name: 'm' }] },
       ]},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     }`,
   ],
   // ── Option A shape grammar (2de.15) ─────────────────────────────────────
@@ -162,7 +161,6 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
         kind: 'group', name: 'g', label: 'G',
         children: [{ h: ["m", "n"] }],
       },
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     }`,
   ],
   // ── A delta over a bundled segment omits its template (brandon-config-ph5)

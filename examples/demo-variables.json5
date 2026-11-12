@@ -254,8 +254,6 @@
     // this variable is a typed read-only view of it.
     //
     // The "demo-work-mode" key is written by the cycleMode action below.
-    // session.id must be declared for any config with `set` actions.
-    "session.id": { kind: "input", path: "session_id", default: "" },
     "demo.workMode": {
       kind: "state",
       key: "demo-work-mode",

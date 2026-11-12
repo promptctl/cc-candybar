@@ -180,7 +180,6 @@ describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain",
 // three rows, one of them a nested horizontal row.
 const GROUPS = `{
   globals: { palette: '${THEME}' },
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   segments: {
     a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' }, d: { template: 'D' },
   },
@@ -223,7 +222,6 @@ describe("brandon-disclosure-43z — a group body", () => {
 // a body whose only child is hidden.
 const DROPS = `{
   globals: { palette: '${THEME}' },
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   segments: {
     a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' }, d: { template: 'D' },
     m: { template: 'M1\\nM2\\nM3' },

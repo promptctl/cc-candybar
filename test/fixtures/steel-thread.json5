@@ -8,9 +8,7 @@
   globals: {},
   variables: {
     current_dir: { kind: 'input', path: 'workspace.current_dir', default: '' },
-    project_dir: { kind: 'input', path: 'workspace.project_dir', default: '' },
     home: { kind: 'env', name: 'HOME', default: '' },
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
   },
   segments: {
     directory: {

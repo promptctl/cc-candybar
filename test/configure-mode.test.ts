@@ -67,10 +67,6 @@ const SID = sessionIdOf("s1");
 // it renders with.
 const SRC = `{
   globals: {},
-  variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 200 },
-  },
   segments: {
     vcs: {
       template: '{{ if .settings.detail }}D{{ else }}d{{ end }}-{{ .settings.form }}-{{ .settings.depth }}',
@@ -462,9 +458,6 @@ describe("configure mode survives what a placement's settings do to it", () => {
   // A setting that hides its own placement: the gate reads the very value the
   // toggle writes.
   const HIDING = `{
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-    },
     segments: {
       tag: {
         template: 'TAG',

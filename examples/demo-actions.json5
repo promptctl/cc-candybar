@@ -41,11 +41,7 @@
   },
 
   // ── Variables ─────────────────────────────────────────────────────────────
-  // session.id is required by every `set` action (SessionState is keyed by it).
-  // term.cols is required by the paged picker (knows the available terminal width).
   variables: {
-    "session.id":  { kind: "input", path: "session_id",         default: "" },
-    "term.cols":   { kind: "input", path: "term.cols", type: "number", default: 80 },
     "current_dir": { kind: "input", path: "workspace.current_dir", default: "" },
     "session_id":  { kind: "input", path: "session_id",         default: "" },
 

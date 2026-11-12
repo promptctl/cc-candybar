@@ -51,10 +51,8 @@ function pickerConfig(): string {
   return `{
     globals: {},
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       themePick: { kind: 'state', key: 'theme-pick', default: '${THEMES[0]}' },
       page: { kind: 'state', key: 'theme-page', default: '-1' },
-      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
     },
     actions: {
       applyTheme: { set: 'theme-pick', from: 'themes' },
@@ -242,10 +240,6 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   function menuRowConfig(): string {
     return `{
       globals: {},
-      variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
-        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-      },
       actions: {
         applyTheme: { set: 'theme', from: 'themes' },
         applyEndcaps: { set: 'endcaps', from: 'endcaps' },
