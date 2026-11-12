@@ -9,7 +9,9 @@
 // and something consumes; each later step adds its own.
 
 import type { StorageKey } from "../daemon/cache/managed-storage";
-import type { SessionId } from "../daemon/session-id";
+import type { ParsedSessionId, SessionId } from "../daemon/session-id";
+import type { IdleClose } from "../daemon/verbs";
+import type { ClickArrival } from "../doctor/sightings";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
@@ -86,6 +88,34 @@ export type Event =
       readonly kind: "effect-done";
       readonly of: EffectId;
       readonly outcome: EffectOutcome;
+    }
+  | {
+      // A click on a link the bar drew: the renderer decides what it means
+      // and acts on it in this turn, so the output names what the act moved.
+      readonly kind: "click";
+      readonly verb: string;
+      readonly value: string;
+      // The click's session as it crossed the host's session-id checkpoint:
+      // null when the click names none.
+      readonly session: ParsedSessionId | null;
+      readonly arrival: ClickArrival;
+      // [LAW:no-ambient-temporal-coupling] exception: whether the click's
+      // client left or its deadline passed, read while the turn waits inside
+      // itself for the click's place and its journal turn, as a request's
+      // turn waits on its world state. It goes once the mailbox refuses an
+      // abandoned click before delivering it.
+      readonly gone: () => boolean;
+    }
+  | {
+      // The session's idle clock ran out: the turn closes its menus as the
+      // ✕ does.
+      readonly kind: "menu-idle";
+      readonly session: SessionId;
+      // [LAW:no-ambient-temporal-coupling] exception: whether the session is
+      // still idle, read in the close's journal turn, and the clock's record
+      // of the close. They go once the renderer schedules its own close with
+      // a `schedule` effect and is woken by `due`.
+      readonly idle: IdleClose;
     };
 
 export type EffectOutcome =

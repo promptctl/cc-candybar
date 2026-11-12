@@ -20,7 +20,6 @@ import type { SessionSource } from "./session-source.js";
 import type { SessionState } from "./session-state";
 import type { TmuxStatusLines } from "./tmux-status.js";
 import type { UpdateWatch } from "./update-notice";
-import type { VerbContext } from "./verbs";
 import type { DoctorStores } from "../doctor/edge";
 import type { JournalTurns } from "./journal-turns";
 import type { RendererHost } from "./renderer-host.js";
@@ -76,8 +75,4 @@ export interface DaemonParts {
   // The world states handed to the main renderer, which its views read: the
   // renderer's own, here while it runs in process (RendererParts).
   readonly worldStates: WorldStates;
-  readonly verbCtx: Omit<
-    VerbContext,
-    "arrival" | "placeWaited" | "gatherTook" | "turnWaited" | "clientGone"
-  >;
 }

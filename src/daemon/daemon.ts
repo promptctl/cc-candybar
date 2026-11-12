@@ -49,7 +49,6 @@ import { makeLimits, type LimitsDeps } from "./limits";
 import { SessionState } from "./session-state";
 import { SettingsHistory } from "./settings-history";
 import { NavigationHistory } from "./navigation-history";
-import { closeIdleMenus } from "./verbs";
 import type { DoctorEdge, DoctorStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
@@ -79,7 +78,8 @@ import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
 import { rendererHost } from "./renderer-host.js";
 import { mainRenderer } from "../renderer/main.js";
-import { MenuIdle } from "./menu-idle.js";
+import { verbsOver } from "../renderer/verbs.js";
+import { closeByTurn, MenuIdle } from "./menu-idle.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -374,11 +374,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const effectSessions = new EffectSessions<RenderedLine>();
   // [LAW:single-enforcer] Each session's idle clock and the timer that closes
   // its menus (src/daemon/menu-idle.ts): a click restarts the clock, and the
-  // close is the journaled write a ✕ makes.
+  // close is a `menu-idle` turn of the renderer, the journaled write a ✕ makes,
+  // through the host's one path to it, which the parts below hold: no close is
+  // due before a frame has drawn a menu, so the parts exist by then.
   const menuIdle = new MenuIdle({
     clock,
     now: instant,
-    close: (sessionId, idle) => closeIdleMenus(sessionId, idle, verbCtx),
+    close: (sessionId, idle) =>
+      closeByTurn(parts.renderer, instant, sessionId, idle),
     failed: (sessionId, error) =>
       log(
         error instanceof DaemonClosing ? "info" : "error",
@@ -773,7 +776,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     renderCache,
     updateWatch,
     limits,
-    verbCtx,
     // [LAW:one-way-deps] exception: the main renderer, in process, over the
     // host parts its side still reaches (RendererParts, src/daemon/draw-bar.ts).
     collector,
@@ -797,6 +799,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         launcher,
         laneSetups,
         tmuxStatusLines,
+        verbs: verbsOver(verbCtx),
       }),
       log,
       (subscriptions) => collector.subscribed(subscriptions),

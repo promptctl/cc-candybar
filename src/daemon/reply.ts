@@ -23,7 +23,6 @@ import type {
 import { parseSessionId, type SessionId } from "./session-id";
 import { type SourceSnapshots } from "./stats";
 import {
-  VERBS,
   CLICK_PROGRAM_TIMEOUT_MS,
   clickHandoff,
   clickSessionOf,
@@ -709,22 +708,14 @@ async function clickRan(
   }
 }
 
-// [LAW:dataflow-not-control-flow] The dispatcher is a table lookup. The verb
-// table (src/daemon/verbs/index.ts) is the single canonical list of supported
-// verbs — handlers live there, the dispatcher only routes.
-//
-// [LAW:types-are-the-program] The error class on the throw determines the
-// response code: BadVerbArgs (invalid input shape) becomes BAD_REQUEST; any
-// other Error (operational failure) becomes RENDER_FAILED. No string matching.
-
-// [LAW:dataflow-not-control-flow] The field a click records the verb it runs
-// under, by how it arrived: a status-line click has already recorded its own
-// verb, so the one its link runs is `linkVerb`.
-const VERB_FACT: Readonly<Record<ClickArrival["via"], string>> = {
-  link: "verb",
-  "tmux-status": "linkVerb",
-};
-
+// [LAW:single-enforcer] A click that runs a verb is one turn of the renderer,
+// which decides what it means and acts on it (src/renderer/click.ts); the
+// host parses its session at the one session-id checkpoint, holds the session
+// for as long as the turn runs, and records the turn on the click's event.
+// [LAW:types-are-the-program] A turn that threw is the click's outcome by the
+// class of what it threw, never by its message: BadVerbArgs (an unknown verb,
+// invalid arguments) is a bad request, anything else the daemon's failure
+// (`clickRan`).
 async function handleClick(
   parts: DaemonParts,
   verb: string,
@@ -733,39 +724,29 @@ async function handleClick(
   facts: RequestFacts,
   clientGone: () => boolean,
 ): Promise<RequestOutcome> {
-  const { menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
-  const handler = VERBS.get(verb);
-  if (!handler) {
-    return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
-  }
-  noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
-  // The click's session, as it crossed the one session-id checkpoint: one
-  // that passed is recorded and is pending on its idle clock until it settles,
-  // one that failed is never recorded, and a click naming none records `sid=-`.
   const session = clickSessionOf(verb, value);
-  const pending = session?.ok ? session.id : null;
-  if (session === null) noteFacts(facts, { sid: "-" });
-  else if (pending !== null) {
-    noteFacts(facts, { sid: pending });
-    menuIdle.clickArrived(pending);
-  }
+  const release = session?.ok ? parts.collector.holding(session.id) : () => {};
   try {
-    await handler(value, {
-      ...verbCtx,
-      arrival,
-      placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-      gatherTook: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
-      turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-      clientGone,
+    const delivered = await parts.renderer.answer({
+      kind: "event",
+      at: instantOf(new Date(parts.clock.now())),
+      event: { kind: "click", verb, value, session, arrival, gone: clientGone },
     });
+    switch (delivered.kind) {
+      case "answered":
+        facts.push(...delivered.output.record);
+        return { kind: "ok" };
+      case "threw":
+        facts.push(...delivered.record);
+        throw delivered.error;
+    }
   } finally {
-    if (pending !== null) menuIdle.clickSettled(pending);
+    release();
   }
-  return { kind: "ok" };
 }
 
 // [LAW:single-enforcer] The reply a click's outcome is answered with.

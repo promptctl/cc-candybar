@@ -7,6 +7,7 @@ import { JournalTurns } from "../src/daemon/journal-turns";
 import { HOST, locs } from "./helpers/host";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
+import { clickParts } from "./helpers/click-parts";
 import { replyTo } from "../src/daemon/reply";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS, type VerbContext, type VerbHandler } from "../src/daemon/verbs";
@@ -506,7 +507,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
     menuIdle: idle,
     payloadProviders: {},
     log: (_level: string, line: string) => events.push(line),
-    verbCtx,
+    ...clickParts(verbCtx, idle),
   } as unknown as DaemonParts;
   const send = (gone: () => boolean) =>
     replyTo(

@@ -31,7 +31,9 @@ import {
   flashBegins,
   litAt,
 } from "../src/config/menu-timeout";
-import { MenuIdle } from "../src/daemon/menu-idle";
+import { closeByTurn, MenuIdle } from "../src/daemon/menu-idle";
+import type { Delivered } from "../src/daemon/renderer-host";
+import type { RendererInput } from "../src/renderer/interface";
 import { selectionFor } from "./helpers/selection";
 import { textOf, type Frame, type Row } from "../src/render/frame";
 import { systemTimekeeper } from "../src/time";
@@ -218,6 +220,83 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     await jest.advanceTimersByTimeAsync(0);
     expect(failures).toHaveLength(2);
     failing.dispose();
+  });
+});
+
+describe("the close as a renderer turn", () => {
+  let now = 1000;
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  const advance = (s: number): void => {
+    now += s;
+    jest.advanceTimersByTime(s * 1000);
+  };
+  // A host whose every turn answers `delivered`, and the inputs it was handed.
+  const hostAnswering = (delivered: Delivered) => {
+    const inputs: RendererInput[] = [];
+    return {
+      inputs,
+      host: {
+        answer: async (input: RendererInput) => {
+          inputs.push(input);
+          return delivered;
+        },
+      },
+    };
+  };
+
+  test("is a menu-idle turn for the session, at the clock's instant", async () => {
+    const { host, inputs } = hostAnswering({
+      kind: "answered",
+      output: { effects: [], subscriptions: { sources: {} }, record: [] },
+    });
+    const idle = {
+      idleS: 30,
+      timeoutS: 30,
+      stillIdle: () => true,
+      closed: () => {},
+    };
+    await closeByTurn(host, () => at(now), "s", idle);
+    expect(inputs).toEqual([
+      {
+        kind: "event",
+        at: at(now),
+        event: { kind: "menu-idle", session: "s", idle },
+      },
+    ]);
+  });
+
+  test("a turn that threw is reported once, and retried a timeout after the next render that draws the menu, not at once", async () => {
+    const { host, inputs } = hostAnswering({
+      kind: "threw",
+      error: new Error("the close threw"),
+      record: [],
+    });
+    const failures: string[] = [];
+    const idle = new MenuIdle({
+      clock: systemTimekeeper,
+      now: () => at(now),
+      close: (sid, i) => closeByTurn(host, () => at(now), sid, i),
+      failed: (sid, e) => failures.push(`${sid}: ${(e as Error).message}`),
+    });
+    idle.observe("s", at(now), true, 30);
+    advance(30);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(failures).toEqual(["s: the close threw"]);
+    // No close re-armed at once: the turn's throw reached the clock's catch.
+    expect(idle.getStats().armed).toBe(0);
+    advance(5);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inputs).toHaveLength(1);
+    idle.observe("s", at(now), true, 30);
+    advance(29.9);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inputs).toHaveLength(1);
+    advance(0.1);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inputs).toHaveLength(2);
+    expect(failures).toHaveLength(2);
+    idle.dispose();
   });
 });
 

@@ -137,7 +137,10 @@ export interface RendererParts {
   >;
   readonly updateWatch: Pick<UpdateWatch, "notice" | "error">;
   readonly fileEvents: Pick<FileEventDelivery, "delivery">;
-  readonly menuIdle: Pick<MenuIdle, "observe" | "since">;
+  readonly menuIdle: Pick<
+    MenuIdle,
+    "observe" | "since" | "clickArrived" | "clickSettled"
+  >;
   readonly launcher: Pick<Launcher, "launcherWarnings" | "answeredPipeEvent">;
   readonly laneSetups: Pick<LaneSetups, "noted">;
   readonly tmuxStatusLines: Pick<TmuxStatusLines, "observe">;

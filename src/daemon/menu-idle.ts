@@ -16,7 +16,29 @@
 import { closesAt } from "../config/menu-timeout.js";
 import type { Instant } from "../utils/instant.js";
 import type { IdleClose } from "./verbs/index.js";
+import type { RendererHost } from "./renderer-host.js";
+import type { SessionId } from "./session-id.js";
 import type { Timekeeper } from "../time";
+
+// [LAW:no-silent-failure] The idle close as a `menu-idle` turn of the
+// renderer. The clock hears a close that failed as a rejection: it then waits
+// a timeout before trying again, and its `failed` writes the one line. So a
+// turn that threw rejects with what it threw, and nothing else is logged here.
+// The session ids the clock holds are the ones its observers passed: checked
+// requests' and clicks' sessions.
+export async function closeByTurn(
+  host: Pick<RendererHost, "answer">,
+  at: () => Instant,
+  sessionId: string,
+  idle: IdleClose,
+): Promise<void> {
+  const delivered = await host.answer({
+    kind: "event",
+    at: at(),
+    event: { kind: "menu-idle", session: sessionId as SessionId, idle },
+  });
+  if (delivered.kind === "threw") throw delivered.error;
+}
 
 interface Idle {
   since: Instant;
@@ -42,7 +64,8 @@ export interface MenuIdleDeps {
   // The instant now, on the clock renders are drawn by.
   readonly now: () => Instant;
   // Close the session's menus: the journaled write a ✕ makes
-  // (`closeIdleMenus`, src/daemon/verbs/index.ts).
+  // (`closeIdleMenus`, src/daemon/verbs/index.ts), as a renderer turn
+  // (`closeByTurn`).
   readonly close: (sessionId: string, idle: IdleClose) => Promise<void>;
   // [LAW:no-silent-failure] A close that rejected: a timer has no caller to
   // reject to, and an unhandled rejection would end the daemon.
