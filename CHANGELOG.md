@@ -1,3 +1,9 @@
+## [1.218.2](https://github.com/promptctl/cc-candybar/compare/v1.218.1...v1.218.2) (2026-11-12)
+
+### Bug Fixes
+
+* **config:** a payload input is the daemon's, so no config can redeclare the session, file or setting the bar's own acts read (candybar-host-renderer-x96a.5e0) ([#722](https://github.com/promptctl/cc-candybar/issues/722)) ([0414cd9](https://github.com/promptctl/cc-candybar/commit/0414cd9074150ff566b34b41a0172ea94b7ec30c))
+
 ## [1.218.1](https://github.com/promptctl/cc-candybar/compare/v1.218.0...v1.218.1) (2026-11-12)
 
 ### Bug Fixes
