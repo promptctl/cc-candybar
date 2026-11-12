@@ -1484,27 +1484,41 @@ export const sourceFactOf = (
 
 // [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
 // how many plugin, `shell` and `file` sources the view's config declares, and
-// those not answered yet (a source whose key has not answered among them) as the draw reads them, each
-// by variable with why (`<name>:unread` or `<name>:superseded`; `-` for none),
-// so a source that never lands is told from one nothing declared, and a run's
-// superseded source from a wait that left one out.
+// those not answered as the draw reads them, each by variable with why
+// (`<name>:unread`, `<name>:superseded`, or `<name>:failed` for a reading that
+// failed or a key that failed and so names no run; `-` for none), so a source
+// that never lands is told from one nothing declared, a run's superseded
+// source from a wait that left one out, and a failure from a wait.
 export function sourcesFactOf(
   names: readonly string[],
   runs: ReadonlyMap<string, Run | undefined>,
+  // The variables whose cache policy cannot fire: a key among them failed.
+  keyFaults: ReadonlyMap<string, unknown>,
   facts: Pick<WorldState, "sources" | "runs">,
 ): {
   readonly sources: string;
   readonly sourcesPending: string;
 } {
+  // Why each declared source is not answered, or null when it is: a failed
+  // reading says so by the variable's name, which the host's own line, keyed
+  // by run digest, cannot.
+  const why = (fact: Fact<unknown>): string | null =>
+    fact.kind === "pending"
+      ? fact.why
+      : fact.kind === "failed"
+        ? "failed"
+        : null;
   const named = [
-    ...names.map((name) => [name, sourceFactOf(facts, name)] as const),
+    ...names.map((name) => [name, why(sourceFactOf(facts, name))] as const),
     ...[...runs].map(
       ([name, run]) =>
         [
           name,
-          run === undefined
-            ? UNREAD_RUN.reading
-            : (facts.runs[run.digest] ?? UNREAD_RUN).reading,
+          run !== undefined
+            ? why((facts.runs[run.digest] ?? UNREAD_RUN).reading)
+            : keyFaults.has(name)
+              ? "failed"
+              : why(UNREAD_RUN.reading),
         ] as const,
     ),
   ];
@@ -1512,8 +1526,8 @@ export function sourcesFactOf(
     sources: String(named.length),
     sourcesPending:
       named
-        .flatMap(([name, fact]) =>
-          fact.kind === "pending" ? [`${name}:${fact.why}`] : [],
+        .flatMap(([name, reason]) =>
+          reason === null ? [] : [`${name}:${reason}`],
         )
         .join(",") || "-",
   };
