@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "5e6bce6dfd01f43eca1c1503452bc4699f03ff91",
+      "timestamp": "2026-11-12T05:23:33.106Z",
+      "commits": [
+        {
+          "sha": "5e6bce6dfd01f43eca1c1503452bc4699f03ff91",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-12T05:22:35Z",
+          "message": "chore(release): set `package.json` to 1.218.2\n\n## [1.218.2](https://github.com/promptctl/cc-candybar/compare/v1.218.1...v1.218.2) (2026-11-12)\n\n### Bug Fixes\n\n* **config:** a payload input is the daemon's, so no config can redeclare the session, file or setting the bar's own acts read (candybar-host-renderer-x96a.5e0) ([#722](https://github.com/promptctl/cc-candybar/issues/722)) ([0414cd9](https://github.com/promptctl/cc-candybar/commit/0414cd9074150ff566b34b41a0172ea94b7ec30c))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-723",
       "ref": "refs/pull/723/merge",
       "sha": "074f26b9cd8d8a4fed3a030ce1608ba8ea19f8c5",
@@ -20,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T22:20:04-07:00",
           "message": "perf(config): a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "0414cd9074150ff566b34b41a0172ea94b7ec30c",
-      "timestamp": "2026-11-12T05:17:22.895Z",
-      "commits": [
-        {
-          "sha": "0414cd9074150ff566b34b41a0172ea94b7ec30c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:16:33-07:00",
-          "message": "fix(config): a payload input is the daemon's, so no config can redeclare the session, file or setting the bar's own acts read (candybar-host-renderer-x96a.5e0) (#722)\n\n* fix(config): a payload input is the daemon's, so no config can redeclare the session, file or setting the bar's own acts read (candybar-host-renderer-x96a.5e0)\n\nThe bundled default authored the payload inputs (session.id, project_dir,\nconfig_path, every *.effective, term.cols, ...) by spreading them into its\nvariables, so any config file could redeclare one: `{{ .session.id }}`,\ncopySession and a plugin `run` then named another session.\n\nThe rows now sit beneath the parsed default instead of in it, so every\nconfig reads them and no parsed source declares one. The loader's one\nownership check (plugin scopes) also owns the payload inputs, and refuses a\nfile's declaration of one, top-level or as a segment var. Synthesis no\nlonger supplies inputs; it only checks that its reads resolve.\n\nFixtures, docs and examples drop their redundant declarations; the test\nfloor carries the payload rows, as production does.\n\n* fix(config): a file's own payload-input declaration is dropped with a warning, and the merge lays the payload floor beneath every base (candybar-host-renderer-x96a.5e0)\n\nRefusing the file cost an upgrading user every other line of a config the\ndocs once told them to write. The floor now lives in the merge, so no base a\ncaller builds can lack it.\n\n* fix(config): the merge gives the payload inputs the last word, so a file's own declaration is only a warning (candybar-host-renderer-x96a.5e0)\n\nLaying them last enforces precedence for every layer, programmatic ones\nincluded, in the one place layers meet. The loader no longer rebuilds the\nparsed file; it only names the redundant lines. A segment var under a payload\nname stays refused: it stores beside the payload's input, where the merge has\nno say.\n\n* fix(config): a refused file carries its payload-declaration warnings, and the comments name the merge's last word (candybar-host-renderer-x96a.5e0)"
         }
       ]
     }
