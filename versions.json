@@ -4,15 +4,22 @@
     {
       "version": "pr-727",
       "ref": "refs/pull/727/merge",
-      "sha": "67675107ce4b0bbb095d569dc56eaead109190bd",
-      "timestamp": "2026-11-12T07:07:13.209Z",
+      "sha": "24963f3447e10e0d22e928299b91eed150c16978",
+      "timestamp": "2026-11-12T07:10:33.954Z",
       "commits": [
         {
-          "sha": "67675107ce4b0bbb095d569dc56eaead109190bd",
+          "sha": "24963f3447e10e0d22e928299b91eed150c16978",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T07:06:29Z",
-          "message": "Merge 2e869aabb7c492fe677f0afe22440fa20e336988 into 12a2dfd7a5a6af31a086f546f452c9b9dbddee21\n"
+          "timestamp": "2026-11-12T07:09:42Z",
+          "message": "Merge c3433d340d81ac8ace935c670c2b36542135372a into 12a2dfd7a5a6af31a086f546f452c9b9dbddee21\n"
+        },
+        {
+          "sha": "c3433d340d81ac8ace935c670c2b36542135372a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T00:09:30-07:00",
+          "message": "test(clicks): a click answered TIMEOUT settles to landed, refused or dropped unrun, and a dropped one fails loudly rather than reading as a refusal (candybar-host-renderer-x96a.iml)\n"
         },
         {
           "sha": "2e869aabb7c492fe677f0afe22440fa20e336988",
