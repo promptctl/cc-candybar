@@ -76058,10 +76058,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
         // [LAW:one-source-of-truth] The row ✕ names the session every other
         // affordance's URL does.
-        closeDisclosure: (key) => disclosureCloseFragment(
-          clickSession(compiled.menuRuntime.action, "row \u2715"),
-          key
-        ),
+        closeDisclosure: (key) => disclosureCloseFragment(registry.session(), key),
         placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
         lastDrawn: (id2) => last2?.placements.get(id2),
         waited: (variable) => waited.add(variable),

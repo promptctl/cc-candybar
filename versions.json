@@ -4,15 +4,22 @@
     {
       "version": "pr-721",
       "ref": "refs/pull/721/merge",
-      "sha": "c37f0235079e49ff7314764babd4310211c2a76a",
-      "timestamp": "2026-11-12T03:24:33.260Z",
+      "sha": "44d3c23cea62bde1e0ca68f19973d530a89373c0",
+      "timestamp": "2026-11-12T03:30:58.069Z",
       "commits": [
         {
-          "sha": "c37f0235079e49ff7314764babd4310211c2a76a",
+          "sha": "44d3c23cea62bde1e0ca68f19973d530a89373c0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T03:23:35Z",
-          "message": "Merge 440f92a5da6e89a279882fb0b60989dec0170090 into 6c654604baf9e9029c99910f667305f85dd79ae8\n"
+          "timestamp": "2026-11-12T03:29:58Z",
+          "message": "Merge f0c8ff5a5fb40a693d89a861058adcf08f1d858c into 6c654604baf9e9029c99910f667305f85dd79ae8\n"
+        },
+        {
+          "sha": "f0c8ff5a5fb40a693d89a861058adcf08f1d858c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T20:29:45-07:00",
+          "message": "fix(renderer): the row ✕ reads the session from its registry, and a click's session is typed SessionId to its URL (candybar-host-renderer-x96a.k4k)\n"
         },
         {
           "sha": "440f92a5da6e89a279882fb0b60989dec0170090",
