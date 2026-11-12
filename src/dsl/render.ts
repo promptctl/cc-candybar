@@ -268,7 +268,7 @@ function toSourceParse(
     case "regex":
       return {
         kind: "regex",
-        regex: new RegExp((parse as { regex: string }).regex),
+        pattern: (parse as { regex: string }).regex,
         default: dflt as string | undefined,
       };
     case "text":

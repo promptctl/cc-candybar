@@ -57,6 +57,7 @@ import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { shortDigest } from "../source-digest.js";
 import type { Timekeeper } from "../time";
+import { judgeRun, type AcceptedRun } from "./judge-run.js";
 import {
   jsonParser,
   regexParser,
@@ -172,7 +173,7 @@ function parserOf(parse: ParserId): Parser<JsonValue> {
     case "text":
       return textParser;
     case "regex":
-      return regexParser(new RegExp(parse.source, parse.flags));
+      return regexParser(new RegExp(parse.pattern));
     case "json":
       return (text) => (text.trim() === "" ? ABSENT : jsonParser(text));
   }
@@ -351,6 +352,12 @@ class PathWatches {
 const derived = (filePath: string): PathsWatch =>
   watchTargetsOf({ named: [filePath], whole: [filePath] });
 
+// A run the judge refused, and why.
+interface Refused {
+  readonly digest: string;
+  readonly reason: string;
+}
+
 // ─── SourceRuns ──────────────────────────────────────────────────────────────
 
 // [LAW:types-are-the-program] What a declaration holds: the run's reading as
@@ -391,8 +398,14 @@ export interface SourceRunsStats {
 
 export class SourceRuns {
   private readonly byKind: Readonly<
-    Record<SourceRead["kind"], KeyedSource<Run, JsonValue>>
+    Record<SourceRead["kind"], KeyedSource<AcceptedRun, JsonValue>>
   >;
+  // [LAW:dataflow-not-control-flow] A refused run is a run like any other:
+  // one entry per digest, held and released by the same holds, whose one read
+  // answers its refusal. It has no period and no watch, so the ledger records
+  // that read once for as long as the run is held, and a set that keeps it
+  // logs nothing more.
+  private readonly refused: KeyedSource<Refused, JsonValue>;
   private readonly watchMgr: PathWatches;
   // Each watching entry's fault, by digest, for the lanes that read it.
   private readonly faults = observable.map<string, string>(undefined, {
@@ -411,7 +424,7 @@ export class SourceRuns {
     // share it. A record per digest would grow with every key value a bar
     // ever had.
     const source = (kind: SourceRead["kind"]) =>
-      new KeyedSource<Run, JsonValue>({
+      new KeyedSource<AcceptedRun, JsonValue>({
         name: `source.${kind}`,
         scope: "daemon",
         keyOf: (run) => run.digest,
@@ -457,18 +470,43 @@ export class SourceRuns {
         clock: deps.clock,
       });
     this.byKind = { shell: source("shell"), file: source("file") };
+    this.refused = new KeyedSource<Refused, JsonValue>({
+      name: "source.refused",
+      scope: "daemon",
+      keyOf: (run) => run.digest,
+      fields: ({ digest, reason }, holders) =>
+        `digest=${shortDigest(digest)} reason=${valueOf(reason)} sharedBy=${holders}`,
+      // Why is the lane's fault; the reading says only that it failed.
+      read: async () => failed("refused", "read"),
+      every: () => null,
+      watch: () => NO_WATCH(),
+      maxEntries: 0,
+      logger,
+      ledger,
+      clock: deps.clock,
+    });
   }
 
   // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
   // the run's digest, created and read once on its first hold, and the lane
   // reads it as it stands.
+  // [LAW:single-enforcer] Every run is judged here, where it is declared,
+  // so the collector and check's holder judge alike with nothing of their own.
   declare(holds: Holds, run: Run): SourceLane {
     const { digest } = run;
-    const lane = this.byKind[run.identity.read.kind].declare(holds, run);
+    const judged = judgeRun(run);
+    const lane =
+      judged.kind === "accepted"
+        ? this.byKind[run.identity.read.kind].declare(holds, judged.run)
+        : this.refused.declare(holds, { digest, reason: judged.reason });
+    // A refusal is the run's standing fault, so the bar draws the source's
+    // fallback beside a ⚠ that says why, as it does for a deaf watch.
+    const refusal =
+      judged.kind === "refused" ? `refused: ${judged.reason}` : null;
     return {
       digest,
       current: () => lane.current(),
-      fault: () => this.faults.get(digest) ?? null,
+      fault: () => refusal ?? this.faults.get(digest) ?? null,
     };
   }
 
@@ -484,6 +522,7 @@ export class SourceRuns {
   close(): void {
     this.byKind.shell.close();
     this.byKind.file.close();
+    this.refused.close();
     this.watchMgr.dispose();
   }
 }

@@ -11,7 +11,6 @@ import {
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
-  absolutePathProblem,
   describeValue,
   oneOfPresent,
   oneOfPresentJson,
@@ -82,19 +81,17 @@ const CACHE_SCHEMA: OneOfPresentSchema<CacheDecl> = {
             ),
     },
     watch_file: {
-      json: { type: "string", pattern: "^/" },
-      parse: (ctx, path, value) => {
-        if (typeof value !== "string")
-          return reject(
-            ctx,
-            path,
-            `cache.watch_file must be a path string, got ${describeValue(value)}`,
-          );
-        const problem = absolutePathProblem("cache.watch_file", value);
-        return problem === null
+      json: { type: "string" },
+      // [LAW:single-enforcer] That the path is absolute is the host's to
+      // judge (src/daemon/judge-run.ts).
+      parse: (ctx, path, value) =>
+        typeof value === "string"
           ? { watch_file: value }
-          : reject(ctx, path, problem);
-      },
+          : reject(
+              ctx,
+              path,
+              `cache.watch_file must be a path string, got ${describeValue(value)}`,
+            ),
     },
     depends_on: {
       json: { type: "array", items: { type: "string" } },

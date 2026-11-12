@@ -401,14 +401,14 @@ describe("loadDslConfig — variable source kinds", () => {
       path: "variables.x.path",
       message: "variables.x.path must be a string",
     });
-    expectIssue(
-      `{ variables: { x: { kind: "file", path: "status.json", cache: { never: true } } } }`,
-      {
-        path: "variables.x.path",
-        message:
-          'variables.x.path must be an absolute path (`~` and relative paths are not expanded), got "status.json"',
-      },
-    );
+    // The loader parses a path and does not judge it: the host refuses a
+    // relative one where the run is declared (src/daemon/judge-run.ts).
+    expect(
+      parseAndValidate(
+        FILE,
+        `{ variables: { x: { kind: "file", path: "status.json", cache: { never: true } } } }`,
+      ).variables.x,
+    ).toMatchObject({ path: "status.json" });
     const ok = parseAndValidate(
       FILE,
       `{ variables: { x: { kind: "file", path: "/etc/hostname", readMode: "first-line", cache: { watch_file: "/etc/hostname" } } } }`,
@@ -893,25 +893,20 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
     ).toContain("must be a string");
   });
 
-  test("a regex must compile and must carry the capture group the runtime reads", () => {
-    expectIssue(shell(`parse: { regex: "(" }`), {
-      path: "variables.x.parse.regex",
-      message: "parse.regex is not a valid regular expression",
-    });
-    // A trailing backslash compiles ONLY when something follows it — the
-    // proof is the pattern alone, never the pattern piped for its group count.
-    expectIssue(shell(`parse: { regex: "(a)\\\\" }`), {
-      path: "variables.x.parse.regex",
-      message: "parse.regex is not a valid regular expression",
-    });
-    expectIssue(shell(`parse: { regex: "v[0-9]+" }`), {
-      path: "variables.x.parse.regex",
-      message: "parse.regex must contain a capture group",
-    });
+  test("a regex is a pattern string, parsed and not judged", () => {
     expectIssue(shell(`parse: { regex: 42 }`), {
       path: "variables.x.parse.regex",
       message: "parse.regex must be a pattern string",
     });
+    // Its compile and its capture group are the host's to judge
+    // (src/daemon/judge-run.ts), so a pattern failing either loads.
+    for (const pattern of ["(", "v[0-9]+"])
+      expect(
+        parseAndValidate(
+          FILE,
+          shell(`parse: { regex: ${JSON.stringify(pattern)} }`),
+        ).variables.x,
+      ).toMatchObject({ parse: { regex: pattern } });
   });
 
   test("default lives in the arm's output domain: a string under text/regex", () => {
@@ -1029,19 +1024,17 @@ describe("loadDslConfig — cache policies", () => {
     });
   });
 
-  test("watch_file: an absolute path", () => {
+  test("watch_file: a path string, parsed and not judged", () => {
     expectIssue(base(`{ watch_file: 7 }`), {
       path: "variables.x.cache.watch_file",
       message: "cache.watch_file must be a path string",
     });
-    // A relative path would name the daemon's cwd for the watcher and the
-    // session's for a shell command — refused, as `~` (not expanded) is.
-    for (const rel of ["", ".budget.json", "~/.cache/b.json"]) {
-      expectIssue(base(`{ watch_file: ${JSON.stringify(rel)} }`), {
-        path: "variables.x.cache.watch_file",
-        message: `cache.watch_file must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(rel)}`,
-      });
-    }
+    // That the path is absolute is the host's to judge
+    // (src/daemon/judge-run.ts), so a relative one loads.
+    expect(
+      parseAndValidate(FILE, base(`{ watch_file: ".budget.json" }`)).variables
+        .x,
+    ).toMatchObject({ cache: { watch_file: ".budget.json" } });
   });
 
   test("depends_on: array of strings", () => {

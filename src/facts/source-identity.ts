@@ -27,11 +27,11 @@ export type SourceRead =
     };
 
 // [LAW:types-are-the-program] The parser without its default: the identity
-// arm, a capture over a pattern, or a document. A `RegExp` is not JSON, so the
-// identity carries its source and flags.
+// arm, a capture over a pattern, or a document. The pattern is the author's
+// string, judged by the host before any reader compiles it.
 export type ParserId =
   | { readonly kind: "text" }
-  | { readonly kind: "regex"; readonly source: string; readonly flags: string }
+  | { readonly kind: "regex"; readonly pattern: string }
   | { readonly kind: "json" };
 
 // The cache policy as a run sees it: a period, a watched path, or none, the

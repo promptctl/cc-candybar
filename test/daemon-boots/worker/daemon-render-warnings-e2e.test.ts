@@ -44,12 +44,15 @@ const GLOBALS = `globals: { palette: '${RULE}', style: '${STYLE_RULE}' }`;
 // `dup` repeats a key, which loads (last wins) but earns the load's warning that
 // the settings menu cannot edit the file; `clean` is the same config without it.
 // `stuck` declares a variable whose cache key always throws, so it can never
-// refresh (brandon-var-system-7wl9).
+// refresh (brandon-var-system-7wl9). `refused` declares a file source at a
+// relative path, which loads and which the host refuses where it is declared,
+// so the bar draws the source's fallback.
 const CONFIGS = {
   clean: `{ ${GLOBALS}, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
   dup: `{ ${GLOBALS}, segments: { mark: { template: 'mark', template: 'mark' } }, root: { h: ['mark'] } }`,
   clock: `{ globals: { palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
   stuck: `{ ${GLOBALS}, variables: { stamp: { kind: "shell", command: "echo hi", cache: { key: '{{ fail "no key" }}' } } }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
+  refused: `{ ${GLOBALS}, variables: { rel: { kind: "file", path: "status.json", default: "fallback", cache: { never: true } } }, segments: { mark: { template: 'mark {{ .rel }}' } }, root: { h: ['mark'] } }`,
 };
 
 const fieldOf =
@@ -129,6 +132,14 @@ describe("a daemon render's event names every warning, and the indicator offers 
       sessionId: "stuck-bad",
       warn: "rule:palette,refresh:stamp",
       shown: ["no-such-theme", "refresh"],
+    },
+    {
+      config: "refused",
+      sessionId: "refused-good",
+      warn: "refresh:rel",
+      shown: [
+        'cannot refresh: refused: file.path must be an absolute path (`~` and relative paths are not expanded), got "status.json"',
+      ],
     },
   ] as const)(
     "$config config, session $sessionId: the viewer shows $shown and the event says warn=$warn",

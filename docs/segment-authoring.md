@@ -1302,7 +1302,10 @@ cache.key reads "hour", which is a time variable: it reads the instant a frame i
 
 ### A `parse.regex` with no capture group
 
-Group 1 is the value; a pattern without one could only ever fail to match:
+Group 1 is the value; a pattern without one could only ever fail to match.
+The config loads, and the daemon refuses the source where it is declared:
+the bar draws its `default` with a ⚠ that says why, and `cc-candybar check`
+fails naming the variable:
 
 ```json5 check:fail
 {
@@ -1321,7 +1324,7 @@ Group 1 is the value; a pattern without one could only ever fail to match:
 ```
 
 ```error
-parse.regex must contain a capture group — its group 1 is the value; got "spentPct[^0-9]*[0-9.]+"
+variable "budgetPct": cannot refresh: refused: parse.regex must contain a capture group — its group 1 is the value; got "spentPct[^0-9]*[0-9.]+"
 ```
 
 ### Two parse arms in one `parse:`
@@ -1391,9 +1394,11 @@ Template references unknown variable ".budget.spentPct"
 
 ### A `~` in a file path
 
-Paths are absolute and `~` is not expanded. The loader refuses the path
+Paths are absolute and `~` is not expanded. The daemon refuses the source
 rather than read a file nobody meant — a relative path would name one
-directory for the daemon and another for the session's shell commands:
+directory for the daemon and another for the session's shell commands. The
+bar draws the source's fallback with a ⚠ that says why, and `cc-candybar
+check` fails naming the variable:
 
 ```json5 check:fail
 {
@@ -1411,7 +1416,7 @@ directory for the daemon and another for the session's shell commands:
 ```
 
 ```error
-variables.budget.path must be an absolute path (`~` and relative paths are not expanded), got "~/.cache/budget/status.json"
+variable "budget": cannot refresh: refused: file.path must be an absolute path (`~` and relative paths are not expanded), got "~/.cache/budget/status.json"
 ```
 
 ### A `json` source whose script prints something that is not JSON

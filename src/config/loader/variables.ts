@@ -34,7 +34,6 @@ import {
   optionalStringSpec,
   optionalTypedDefault,
   reject,
-  requireAbsolutePathSpec,
   requireStringSpec,
   optionalEnumSpec,
   taggedUnion,
@@ -154,7 +153,9 @@ const PARSE_SCHEMA: OneOfPresentSchema<ParseDecl> = {
       json: { type: "string" },
       parse: (ctx, path, value) =>
         typeof value === "string"
-          ? capturingPattern(ctx, path, value)
+          ? // [LAW:single-enforcer] A pattern's compile and its capture
+            // group are the host's to judge (src/daemon/judge-run.ts).
+            { regex: value }
           : reject(
               ctx,
               path,
@@ -174,35 +175,6 @@ const PARSE_SCHEMA: OneOfPresentSchema<ParseDecl> = {
     },
   },
 };
-
-function capturingPattern(
-  ctx: ValidateCtx,
-  path: string,
-  pattern: string,
-): { regex: string } | null {
-  let groups: number;
-  try {
-    // The compile proof is the pattern ALONE (`(a)\\` does not compile, but
-    // `(a)\\|` does — the backslash would escape the alternation). Then the
-    // standard group count: a compiling pattern alternated with the empty
-    // pattern always matches, and every group is a (non-participating) slot.
-    new RegExp(pattern);
-    groups = new RegExp(`${pattern}|`).exec("")!.length - 1;
-  } catch (e) {
-    return reject(
-      ctx,
-      path,
-      `parse.regex is not a valid regular expression: ${(e as Error).message}`,
-    );
-  }
-  return groups >= 1
-    ? { regex: pattern }
-    : reject(
-        ctx,
-        path,
-        `parse.regex must contain a capture group — its group 1 is the value; got ${JSON.stringify(pattern)}`,
-      );
-}
 
 // [LAW:one-source-of-truth] The `parse` field: absent means the text arm, and
 // that default is spelled ONCE, in declareOne's lowering — the decl records
@@ -316,7 +288,7 @@ const ENV_FIELDS: FieldSpecMap<Omit<EnvVarDecl, "kind">> = {
   default: optionalStringSpec(),
 };
 const FILE_FIELDS: FieldSpecMap<Omit<FileVarDecl, "kind">> = {
-  path: requireAbsolutePathSpec(),
+  path: requireStringSpec(),
   readMode: optionalEnumSpec(["whole", "first-line"] as const),
   parse: parseSpec(),
   cache: requireCacheSpec("file"),

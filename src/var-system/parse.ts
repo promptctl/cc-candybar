@@ -21,7 +21,7 @@ export type SourceParse =
   | { readonly kind: "text"; readonly default: string | undefined }
   | {
       readonly kind: "regex";
-      readonly regex: RegExp;
+      readonly pattern: string;
       readonly default: string | undefined;
     }
   | { readonly kind: "json"; readonly default: JsonValue | undefined };

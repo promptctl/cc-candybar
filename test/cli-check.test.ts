@@ -484,6 +484,29 @@ describe("checkConfig — explicit target", () => {
     );
   });
 
+  // The loader parses a declaration and the host judges it, so check fails
+  // its verdict on a run the host refuses, naming each variable and why.
+  it("reports each source the host refuses as fatal, naming the variable", async () => {
+    const p = write(
+      "refused.json5",
+      `{
+        variables: {
+          rel: { kind: "file", path: "status.json", cache: { never: true } },
+          groupless: { kind: "shell", command: "echo v1", parse: { regex: "v[0-9]+" }, cache: { never: true } },
+        },
+        segments: { x: { template: "[{{ .rel }}][{{ .groupless }}]" } },
+        root: { h: ['x'] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
+    expect(message).toContain(
+      'variable "rel": cannot refresh: refused: file.path must be an absolute path',
+    );
+    expect(message).toContain(
+      'variable "groupless": cannot refresh: refused: parse.regex must contain a capture group',
+    );
+  });
+
   // brandon-menu-ia-q30.ge5 review: the toolbar's `⎘ resume` and `↗ config`
   // are gated on their values, so check's fixture supplies both and a broken
   // override of either action is caught rather than hidden behind its gate.
