@@ -21,7 +21,6 @@
 // a bar to its theme.
 
 import { drawPayload } from "../test/helpers/draw-payload";
-import { unscriptedRuns } from "../test/helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, truecolorOf } from "../test/helpers/frame";
 import { TEST_SIGNER } from "../test/helpers/link-signer";

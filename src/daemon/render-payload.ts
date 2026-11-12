@@ -1167,9 +1167,10 @@ export function todayReading(
 // world state. A fact the daemon itself superseded (a click's move) is not
 // waited on either: it draws its loading cell, and its landing reaches the
 // next frame.
-// The runs it waits on are the ones its view names as well as the ones the
-// world state carries: a run whose key or dependency moved is named before
-// the host subscribes it, and until then the world state has no entry for it.
+// The runs it waits on are the ones its view names, read in the world state:
+// a run whose key or dependency moved is named before the host subscribes
+// it, and until then the world state has no entry for it, while a run the
+// view stopped naming stays there until the host drops it, read by nothing.
 export function awaitsReading(
   { builtins, sources, runs }: WorldState,
   named: Iterable<Run>,
@@ -1180,7 +1181,6 @@ export function awaitsReading(
     builtins.hostName,
     builtins.hostUser,
     ...Object.values(sources),
-    ...Object.values(runs).map((run) => run.reading),
     ...[...named].map((run) => (runs[run.digest] ?? UNREAD_RUN).reading),
   ].some(awaitedReading);
 }

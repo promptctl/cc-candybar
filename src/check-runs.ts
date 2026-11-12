@@ -6,13 +6,7 @@
 // once `check` draws through `Renderer.answer` with a collector in process, as
 // the demo does, the collector holds these runs.
 
-import {
-  compareStructural,
-  observable,
-  reaction,
-  runInAction,
-  when,
-} from "mobx";
+import { observable, reaction, runInAction, when } from "mobx";
 import {
   declareRuns,
   type SourceLane,
@@ -22,6 +16,8 @@ import { awaitedReading } from "./daemon/render-payload.js";
 import { restamp } from "./facts/fact.js";
 import { UNREAD_RUN, type RunFact } from "./facts/world-state.js";
 import { Holds } from "./utils/holds.js";
+import type { Current } from "./utils/reading.js";
+import type { JsonValue } from "./var-system/types.js";
 import type { Instant } from "./utils/instant.js";
 import type { SourceRegistry } from "./var-system/sources.js";
 
@@ -32,9 +28,20 @@ export class CheckRuns {
   private readonly lanes = observable.map<string, SourceLane>(undefined, {
     deep: false,
   });
-  // The fact each run last answered, by digest, so a run that moved nothing
-  // answers the same object: the registry's publish compares by reference.
-  private readonly answered = new Map<string, RunFact>();
+  // The fact each run last answered, by digest, beside the lane's answer it
+  // was made from: a lane holds one object until its answer moves, so a run
+  // that moved nothing answers the same fact, and the registry's publish,
+  // which compares by reference, publishes nothing again.
+  private readonly answered = new Map<
+    string,
+    { readonly from: Current<JsonValue>; readonly fact: RunFact }
+  >();
+  // [LAW:no-silent-failure] A run whose declaration threw, which a reaction
+  // would only log: the wait throws it, failing the check.
+  private readonly thrown = observable.box<{ readonly error: unknown } | null>(
+    null,
+    { deep: false },
+  );
   private readonly stop: () => void;
 
   constructor(
@@ -58,7 +65,10 @@ export class CheckRuns {
           if (!result.has(digest)) this.answered.delete(digest);
         runInAction(() => this.lanes.replace([...result]));
       },
-      { fireImmediately: true },
+      {
+        fireImmediately: true,
+        onError: (error) => runInAction(() => this.thrown.set({ error })),
+      },
     );
   }
 
@@ -67,14 +77,12 @@ export class CheckRuns {
   run(digest: string): RunFact {
     const lane = this.lanes.get(digest);
     if (lane === undefined) return UNREAD_RUN;
+    const from = lane.current();
+    const fault = lane.fault();
     const prior = this.answered.get(digest);
-    const next: RunFact = {
-      reading: restamp(undefined, lane.current(), this.at),
-      fault: lane.fault(),
-    };
-    const fact =
-      prior !== undefined && compareStructural(prior, next) ? prior : next;
-    this.answered.set(digest, fact);
+    if (prior?.from === from && prior.fact.fault === fault) return prior.fact;
+    const fact: RunFact = { reading: restamp(undefined, from, this.at), fault };
+    this.answered.set(digest, { from, fact });
     return fact;
   }
 
@@ -98,6 +106,8 @@ export class CheckRuns {
   }
 
   private awaited(): string[] {
+    const thrown = this.thrown.get();
+    if (thrown !== null) throw thrown.error;
     return [...this.registry.namedRuns()]
       .filter(([, run]) => awaitedReading(this.run(run.digest).reading))
       .map(([name]) => name);

@@ -74,6 +74,7 @@ import type { CheckedHookData } from "../renderer/request-context.js";
 import { debug, setDebug } from "../utils/logger.js";
 import { instantOf } from "../utils/instant.js";
 import { SourceRuns } from "../daemon/source-runs.js";
+import type { Subscriptions } from "../renderer/interface.js";
 
 const FRAMES = 4;
 const FRAME_INTERVAL_MS = 450;
@@ -189,6 +190,10 @@ async function renderFrames(): Promise<void> {
   // collector over the demo's providers and handed straight to the store its
   // view reads, as the daemon's renderer takes it.
   const worldStates = new WorldStates();
+  // What the view needs read, handed back after every world state as the
+  // host hands back every turn's output: a run named once a fact landed is
+  // subscribed by the turn that landed it. Nothing until the view opens.
+  let subscriptions = (): Subscriptions => ({ sources: new Map() });
   const collector = new Collector({
     owners: providers,
     update: () => updateFact.get(),
@@ -197,6 +202,7 @@ async function renderFrames(): Promise<void> {
     watched: () => true,
     deliver: async (event) => {
       if (event.kind === "world-state") worldStates.take(event.worldState);
+      collector.subscribed(subscriptions());
       return { kind: "answered" };
     },
     log,
@@ -221,9 +227,10 @@ async function renderFrames(): Promise<void> {
     });
     // [LAW:one-source-of-truth] The view's subscriptions reach the collector as
     // a turn's output takes them to the daemon's.
-    collector.subscribed({
+    subscriptions = () => ({
       sources: new Map([[sessionId, subscriptionsOf(view)]]),
     });
+    collector.subscribed(subscriptions());
     try {
       const effective = view.source.effective();
 

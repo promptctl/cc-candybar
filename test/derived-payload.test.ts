@@ -280,3 +280,32 @@ describe("a policy or rule over what the draw answers is refused at load", () =>
     );
   });
 });
+
+// A reaction only logs what throws in it, so the holder carries the throw to
+// the wait, which fails the check with it.
+test("a run whose declaration throws fails the check's wait with it", async () => {
+  const store = new VariableStore(systemTimekeeper);
+  const registry = new SourceRegistry(store);
+  registry.declareShell("probe", "echo hi", {
+    cwd: os.tmpdir(),
+    parse: { kind: "text", default: undefined },
+    cache: { kind: "never" },
+  });
+  const held = new CheckRuns(
+    {
+      declare: () => {
+        throw new Error("watch bug");
+      },
+    },
+    registry,
+    AT,
+  );
+  try {
+    await expect(held.settled(AbortSignal.timeout(1000))).rejects.toThrow(
+      "watch bug",
+    );
+  } finally {
+    held.close();
+    registry.dispose();
+  }
+});
