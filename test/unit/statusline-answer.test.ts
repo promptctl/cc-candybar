@@ -103,6 +103,7 @@ async function answer(
   renderer: Renderer,
   logged: string[] = [],
   subscribed: Subscriptions[] = [],
+  holds: { count: number } = { count: 0 },
 ) {
   const facts: RequestFacts = [];
   const answered = await answerStatusline(
@@ -113,7 +114,13 @@ async function answer(
       (_level, line) => logged.push(line),
       (subscriptions) => subscribed.push(subscriptions),
     ),
-    { requested: () => WORLD },
+    {
+      requested: () => WORLD,
+      holding: () => {
+        holds.count++;
+        return () => holds.count--;
+      },
+    },
     CLOCK,
     REQ,
     REQUEST,
@@ -287,4 +294,25 @@ test("the session's config reaches the renderer first, with the world state read
     { kind: "request", id: REQUEST, context: REQ, waitEndsAt: 0 },
   ]);
   expect(subscribed).toEqual([opened, drawn]);
+});
+
+test("the session is held while its request turn is out, and let go once it answers or throws", async () => {
+  for (const request of [
+    output([present(1)]),
+    new TurnThrew([], new Error("x"), NO_SUBSCRIPTIONS),
+  ]) {
+    const holds = { count: 0 };
+    let heldDuringTurn = 0;
+    const renderer: Renderer = {
+      answer: async ({ event }) => {
+        if (event.kind !== "request") return output([]);
+        heldDuringTurn = holds.count;
+        if (request instanceof TurnThrew) throw request;
+        return request;
+      },
+    };
+    await answer(renderer, [], [], holds);
+    expect(heldDuringTurn).toBe(1);
+    expect(holds.count).toBe(0);
+  }
 });
