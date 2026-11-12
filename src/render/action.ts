@@ -21,6 +21,7 @@
 // FuncMap in as data). The generic engine never imports this module.
 
 import type { PlacedSegment } from "../dsl/node-registry.js";
+import type { SessionId } from "../daemon/session-id.js";
 import { RichText, Style } from "@promptctl/rich-js";
 import type { Palette } from "@promptctl/rich-js";
 import type { FuncMap, Template } from "@promptctl/go-template-js";
@@ -716,18 +717,20 @@ function parseActionTemplate(
 
 // [LAW:one-source-of-truth] Exported so the picker reads SessionState through the
 // SAME boundary (has() discriminates "never written" → "").
-// [LAW:parse-dont-validate] The session a click names: the view's checked id,
-// never the `session.id` variable a config can redeclare. A fixed payload's
-// draw (check, the demo) names none, and the verbs' door refuses the empty id.
-export function clickSession(runtime: ActionRuntime, reader: string): string {
-  return renderBinding(runtime, reader).registry.session() ?? "";
-}
-
 export function readVar(store: VariableStore, name: string): string {
   // [LAW:no-defensive-null-guards] "current value may not exist" is a legitimate
   // state (the key was never written) — guard the store lookup, not a downstream
   // operation. has() is the discriminator; absence yields "".
   return store.has(name) ? varToString(store.read(name)) : "";
+}
+
+// [LAW:parse-dont-validate] The session a click names: the view's checked id,
+// never the `session.id` variable a config can redeclare.
+export function clickSession(
+  runtime: ActionRuntime,
+  reader: string,
+): SessionId {
+  return renderBinding(runtime, reader).registry.session();
 }
 
 function evalTemplate(tpl: Template<RichText>, scope: object): string {

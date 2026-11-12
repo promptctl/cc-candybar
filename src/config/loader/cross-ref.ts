@@ -1,9 +1,9 @@
 // [LAW:single-enforcer] All cross-reference resolution on the MERGED config:
 // layout nodes name declared segments, every template-bearing field references
 // only existing variables/actions, and depends_on points at declared variables.
-// Runs after merge so a
-// user surface can reference default-provided segments/actions. This file changes
-// when the visibility/scoping rules between config parts change.
+// Runs after merge so a user surface can reference default-provided
+// segments/actions. This file changes when the visibility/scoping rules between
+// config parts change.
 
 import {
   describeSettingDomain,

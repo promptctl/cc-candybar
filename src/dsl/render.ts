@@ -1297,7 +1297,7 @@ export type RenderSelection = DrawSelection & Selections;
 // view reads: a source keyed on an input starts its run inside this bind, and
 // a caller that waits for that run before it draws (`cc-candybar check`)
 // draws the very object the key read. `session` is the one the view draws
-// for, or none for a draw no session asked for (`cc-candybar check`).
+// for: `cc-candybar check` names the one session it fakes.
 export function bindPayload(
   compiled: CompiledConfig,
   store: VariableStore,
@@ -1305,7 +1305,7 @@ export function bindPayload(
   payload: unknown,
   opts: BuildLineOptions,
   selection: RenderSelection,
-  session: SessionId | null,
+  session: SessionId,
 ): unknown {
   const drawn = {
     ...(payload as object),

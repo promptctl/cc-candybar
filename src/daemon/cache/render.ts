@@ -1231,9 +1231,10 @@ export interface SourcedView {
 
 export type SourceOf<S extends ViewSource> = (view: SourcedView) => S;
 
-// A source answering nothing yet: every input of the view pending, and the
-// selections the config declares — what a test's views draw from until it
-// binds a payload of its own.
+// A source answering nothing yet: every input of the view pending, its
+// session the view's own (so `state` reads answer), and the selections the
+// config declares — what a test's views draw from until it binds a payload of
+// its own.
 export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ sessionId, state }) =>
   fixedSource(
     pendingOf("unread"),

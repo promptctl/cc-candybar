@@ -209,7 +209,7 @@ export interface Published {
 // floor reads. A read is tracked, so an input moves in the turn its value
 // does, and nothing else moves it.
 export interface InputSource {
-  session(): SessionId | null;
+  session(): SessionId;
   read(path: string): Resolved;
   drawnAt(): ColorDepth;
 }
@@ -221,7 +221,7 @@ export interface InputSource {
 const UNBOUND: InputSource = {
   session: () => {
     throw new PendingValueError(
-      "session.id",
+      "session_id",
       "the view's session has no value yet: no view source is bound",
     );
   },
@@ -899,9 +899,7 @@ export class SourceRegistry {
     this.store.defineComputed(name, "string", () => {
       // [LAW:parse-dont-validate] The view's checked session, never the
       // `session.id` variable a config can redeclare.
-      const sessionId = this.session();
-      if (sessionId === null) return fallback;
-      const value = sessionState.get(sessionId, opts.key);
+      const value = sessionState.get(this.session(), opts.key);
       return value !== null ? value : fallback;
     });
   }
@@ -909,18 +907,16 @@ export class SourceRegistry {
   // [LAW:one-source-of-truth] The revision of the session state this render's
   // `state` variables read (SessionStateReader.revision), found the way they
   // find it: through the session id the render was handed. A registry with no
-  // session state, or a render naming no session, reads none — one state that
-  // never changes.
+  // session state reads none — one state that never changes.
   stateRevision(): number {
-    const sessionId = this.session();
-    return this.sessionState !== undefined && sessionId !== null
-      ? this.sessionState.revision(sessionId)
+    return this.sessionState !== undefined
+      ? this.sessionState.revision(this.session())
       : 0;
   }
 
-  // The session the bound view draws for (InputSource.session): none for a
-  // fixed payload; pending, as every input is, before a view is bound.
-  session(): SessionId | null {
+  // The session the bound view draws for (InputSource.session): pending, as
+  // every input is, before a view is bound.
+  session(): SessionId {
     return this.inputs.get().session();
   }
 

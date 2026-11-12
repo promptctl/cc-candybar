@@ -38,6 +38,13 @@ describe("a view's session", () => {
     expect(textOf(rig.draw().frame)).toContain("pick=own");
   });
 
+  test("a write to the view's own session moves its next draw", () => {
+    const rig = buildRig({ source: CONFIG, palettes: new Set(["textual-dark"]), sessionId: OWN });
+    expect(textOf(rig.draw().frame)).toContain("pick=(unset)");
+    rig.sessionState.set(OWN, "pick", "own");
+    expect(textOf(rig.draw().frame)).toContain("pick=own");
+  });
+
   test("a redeclared session.id does not move which session a click names", () => {
     const rig = buildRig({ source: CONFIG, palettes: new Set(["textual-dark"]), sessionId: OWN });
     const urls = linkUrls(rig.draw().frame).filter((u) => u.includes("pick"));

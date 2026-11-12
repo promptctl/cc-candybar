@@ -14,9 +14,9 @@ export type Selections = Pick<EffectiveGlobals, "theme" | "style" | "effect">;
 
 export interface ViewSource {
   // [LAW:parse-dont-validate] The session the view draws for, as the hook
-  // door checked it, or none for a fixed payload: every `state` read and
-  // every click URL keys by this, never by a variable a config can redeclare.
-  readonly session: SessionId | null;
+  // door checked it: every `state` read and every click URL keys by this,
+  // never by a variable a config can redeclare.
+  readonly session: SessionId;
   readonly payload: () => unknown;
   readonly selections: () => Selections;
 }
@@ -27,7 +27,7 @@ export interface ViewSource {
 export function fixedSource(
   payload: unknown,
   selections: Selections,
-  session: SessionId | null,
+  session: SessionId,
 ): ViewSource {
   return {
     session,

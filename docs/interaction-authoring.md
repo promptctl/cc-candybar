@@ -274,7 +274,7 @@ always undoable from the bar itself:
 `applyThemeForever` needs no matching `state` variable: reading a value back
 is required for `set` (through `{ kind: "state" }`), never for `persist`. The
 click still carries the session id, for error-surfacing: the session the bar
-draws for, which no variable can redeclare.
+draws for, whatever a config declares as `session.id`.
 
 ### Drafts and `save`
 
