@@ -1,3 +1,9 @@
+## [1.218.1](https://github.com/promptctl/cc-candybar/compare/v1.218.0...v1.218.1) (2026-11-12)
+
+### Bug Fixes
+
+* **renderer:** a view hands its checked SessionId to its registry and its click URLs, so no config can redeclare which session a bar reads or writes (candybar-host-renderer-x96a.k4k) ([#721](https://github.com/promptctl/cc-candybar/issues/721)) ([f654b90](https://github.com/promptctl/cc-candybar/commit/f654b902297dc4e6fa4e12fa108c517e21d7a838))
+
 ## [1.218.0](https://github.com/promptctl/cc-candybar/compare/v1.217.1...v1.218.0) (2026-11-12)
 
 ### Features
