@@ -71674,7 +71674,7 @@ function parserIdOf(parse3) {
 var UNBOUND = {
   session: () => {
     throw new PendingValueError(
-      "session.id",
+      "session_id",
       "the view's session has no value yet: no view source is bound"
     );
   },
@@ -72190,23 +72190,19 @@ var SourceRegistry = class _SourceRegistry {
     const sessionState = this.sessionState;
     const fallback = opts.varDefault ?? this.stringInitial(void 0);
     this.store.defineComputed(name, "string", () => {
-      const sessionId2 = this.session();
-      if (sessionId2 === null) return fallback;
-      const value = sessionState.get(sessionId2, opts.key);
+      const value = sessionState.get(this.session(), opts.key);
       return value !== null ? value : fallback;
     });
   }
   // [LAW:one-source-of-truth] The revision of the session state this render's
   // `state` variables read (SessionStateReader.revision), found the way they
   // find it: through the session id the render was handed. A registry with no
-  // session state, or a render naming no session, reads none — one state that
-  // never changes.
+  // session state reads none — one state that never changes.
   stateRevision() {
-    const sessionId2 = this.session();
-    return this.sessionState !== void 0 && sessionId2 !== null ? this.sessionState.revision(sessionId2) : 0;
+    return this.sessionState !== void 0 ? this.sessionState.revision(this.session()) : 0;
   }
-  // The session the bound view draws for (InputSource.session): none for a
-  // fixed payload; pending, as every input is, before a view is bound.
+  // The session the bound view draws for (InputSource.session): pending, as
+  // every input is, before a view is bound.
   session() {
     return this.inputs.get().session();
   }
@@ -72883,11 +72879,11 @@ function parseActionTemplate(parse3, src, name) {
     );
   }
 }
-function clickSession(runtime, reader) {
-  return renderBinding(runtime, reader).registry.session() ?? "";
-}
 function readVar(store, name) {
   return store.has(name) ? toString(store.read(name)) : "";
+}
+function clickSession(runtime, reader) {
+  return renderBinding(runtime, reader).registry.session();
 }
 function evalTemplate(tpl, scope) {
   return tpl.evaluate(scope).map((f) => f.plain).join("");

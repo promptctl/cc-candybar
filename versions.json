@@ -4,15 +4,22 @@
     {
       "version": "pr-721",
       "ref": "refs/pull/721/merge",
-      "sha": "eb03918bde625cde286a14ca51bf5ab69a90e5d7",
-      "timestamp": "2026-11-12T03:10:09.593Z",
+      "sha": "c37f0235079e49ff7314764babd4310211c2a76a",
+      "timestamp": "2026-11-12T03:24:33.260Z",
       "commits": [
         {
-          "sha": "eb03918bde625cde286a14ca51bf5ab69a90e5d7",
+          "sha": "c37f0235079e49ff7314764babd4310211c2a76a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T20:09:21-07:00",
-          "message": "Merge e43fc6ae984fef75d066304761ac979a1e4dc1ac into 6c654604baf9e9029c99910f667305f85dd79ae8\n"
+          "timestamp": "2026-11-12T03:23:35Z",
+          "message": "Merge 440f92a5da6e89a279882fb0b60989dec0170090 into 6c654604baf9e9029c99910f667305f85dd79ae8\n"
+        },
+        {
+          "sha": "440f92a5da6e89a279882fb0b60989dec0170090",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T20:21:22-07:00",
+          "message": "fix(renderer): a view always draws for a session, so check's clicks name the session it fakes and no click falls back to an empty id (candybar-host-renderer-x96a.k4k)\n\ncheck binds CHECK_SESSION, so a view source's session is a SessionId and\nthe empty-id fallback and the no-session branches in state reads and the\nrevision are gone. A test payload naming no session draws for the test's\nown, from one helper. The unbound session's pending names its payload\npath, and the no-mode-explosion marker returns to the state declaration.\n"
         },
         {
           "sha": "e43fc6ae984fef75d066304761ac979a1e4dc1ac",
