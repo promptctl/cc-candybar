@@ -61,7 +61,11 @@ import { bindView } from "../../dsl/parts.js";
 import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
-import { UNREAD_RUN } from "../../facts/world-state.js";
+import {
+  SUPERSEDED_RUN,
+  UNREAD_RUN,
+  type RunFact,
+} from "../../facts/world-state.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateRW } from "../session-state.js";
 import {
@@ -546,6 +550,11 @@ export interface SessionHold<
   F extends ViewFacts = ViewFacts,
 > extends Hold {
   readonly view: SessionView<S, F>;
+  // What a run the view names reads as while the world state carries no entry
+  // for it: unread while the view is served, since the host subscribes it on
+  // the next turn, and superseded once it is retired, since no turn names it
+  // again. Observable, so a wait on the view's runs ends at the retire.
+  absentRun(): RunFact;
 }
 
 // What opened a view: a request, a reload's successor, or a click that moved
@@ -564,6 +573,8 @@ interface ViewHold {
   // (`retire`), so a served view's entry is this one.
   readonly entry: CacheEntry;
   holders: number;
+  // [LAW:one-source-of-truth] The one record of the view's retirement:
+  // observable, so a request's wait reads it (`absentRun`).
   retired: { readonly reason: ViewClose; readonly held: number } | null;
 }
 
@@ -1606,6 +1617,7 @@ export class RenderCache<
       entry: held.entry,
       state: held.state,
       view,
+      absentRun: () => (lease.retired === null ? UNREAD_RUN : SUPERSEDED_RUN),
       [Symbol.dispose]: () => {
         if (released) throw new Error("render-cache view hold released twice");
         released = true;
@@ -1722,7 +1734,11 @@ export class RenderCache<
     }
     this.openFailures.delete(sessionId);
     this.views.set(sessionId, view);
-    this.viewHolds.set(view, { entry, holders: 0, retired: null });
+    const lease: ViewHold = { entry, holders: 0, retired: null };
+    this.viewHolds.set(
+      view,
+      observable(lease, { entry: false, holders: false }),
+    );
     this.log(
       "info",
       `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.cwd} views=${this.views.size}`,
@@ -1747,7 +1763,9 @@ export class RenderCache<
     if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
     view.retire();
     const lease = this.leaseOf(view);
-    lease.retired = { reason, held: lease.holders };
+    runInAction(() => {
+      lease.retired = { reason, held: lease.holders };
+    });
     this.reclaimView(view, lease);
   }
 

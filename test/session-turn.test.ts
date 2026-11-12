@@ -25,7 +25,7 @@ import { sessionIdOf } from "../src/daemon/session-id";
 import { instantOf } from "../src/utils/instant";
 import { ok, pendingOf } from "../src/utils/outcome";
 import type { Fact } from "../src/facts/fact";
-import type { UpdateNotice } from "../src/facts/world-state";
+import { UNREAD_RUN, type UpdateNotice } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -239,6 +239,7 @@ describe("what wakes a view", () => {
       new Map(),
       () => rig.served.worldStates.of(SID),
       () => view.registry.namedRuns().values(),
+      () => UNREAD_RUN,
       new AbortController().signal,
     );
     expect(view.source.facts()).toBe(document);

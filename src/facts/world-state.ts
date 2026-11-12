@@ -44,6 +44,14 @@ export const UNREAD_RUN: RunFact = {
   fault: null,
 };
 
+// [LAW:types-are-the-program] A run a retired view names that the world state
+// no longer carries: its successor named another, and no host reads it again,
+// so it draws loading and nothing waits on it (`awaitedReading`).
+export const SUPERSEDED_RUN: RunFact = {
+  reading: pendingOf("superseded"),
+  fault: null,
+};
+
 // The tmux session the pane belongs to.
 export interface TmuxFacts {
   readonly session: string;

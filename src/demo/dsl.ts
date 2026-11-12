@@ -61,6 +61,7 @@ import {
 } from "../daemon/render-payload.js";
 import { Collector } from "../daemon/collector.js";
 import { WorldStates } from "../renderer/world-states.js";
+import { UNREAD_RUN } from "../facts/world-state.js";
 import { sessionIdOf } from "../daemon/session-id.js";
 import { sessionSource } from "../daemon/session-source.js";
 import { SessionState } from "../daemon/session-state.js";
@@ -253,6 +254,7 @@ async function renderFrames(): Promise<void> {
           new Map(),
           () => worldStates.of(sessionId),
           () => view.registry.namedRuns().values(),
+          () => UNREAD_RUN,
           // The demo's frames have no client to hang up.
           new AbortController().signal,
         );

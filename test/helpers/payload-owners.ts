@@ -1,3 +1,4 @@
+import { UNREAD_RUN } from "../../src/facts/world-state";
 // Fake owners of the payload's lanes (src/daemon/render-payload.ts), each over a
 // reader a test writes: what the lane's source answers for the arguments the
 // payload reads it with.
@@ -172,6 +173,7 @@ export async function settleLanes(
     refreshed,
     () => documentOf(inputs),
     () => [],
+    () => UNREAD_RUN,
     new AbortController().signal,
   );
 }
@@ -423,12 +425,10 @@ function openHome(
   facts: Parameters<typeof declareLanes>[2],
 ): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
   const holds = new HoldsClass();
-  const { lanes, faults } = declareLanes(
-    owners as KeyedOwners,
-    holds,
-    facts,
-    { plugins: new Map(), runs: new Map() },
-  );
+  const { lanes, faults } = declareLanes(owners as KeyedOwners, holds, facts, {
+    plugins: new Map(),
+    runs: new Map(),
+  });
   // [LAW:no-silent-failure] An owner whose declaration throws is a broken
   // fixture, failed here with its stack, as the daemon logs it as an error.
   if (faults.length > 0) {

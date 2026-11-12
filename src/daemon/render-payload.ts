@@ -103,6 +103,7 @@ import {
 import type { Fact } from "../facts/fact.js";
 import {
   UNREAD_RUN,
+  type RunFact,
   type LaneDiagnostic,
   type WorldState,
   type SourceValue,
@@ -1171,9 +1172,12 @@ export function todayReading(
 // a run whose key or dependency moved is named before the host subscribes
 // it, and until then the world state has no entry for it, while a run the
 // view stopped naming stays there until the host drops it, read by nothing.
+// An absent run reads as `absent`: unread while the view is served, and
+// superseded once it is retired, since no turn will name it again.
 export function awaitsReading(
   { builtins, sources, runs }: WorldState,
   named: Iterable<Run>,
+  absent: RunFact,
 ): boolean {
   return [
     builtins.git,
@@ -1181,7 +1185,7 @@ export function awaitsReading(
     builtins.hostName,
     builtins.hostUser,
     ...Object.values(sources),
-    ...[...named].map((run) => (runs[run.digest] ?? UNREAD_RUN).reading),
+    ...[...named].map((run) => (runs[run.digest] ?? absent).reading),
   ].some(awaitedReading);
 }
 
@@ -1205,11 +1209,14 @@ export async function settleWorld(
   refreshed: Refreshed,
   worldState: () => WorldState,
   named: () => Iterable<Run>,
+  absent: () => RunFact,
   signal: AbortSignal,
 ): Promise<void> {
   await refreshPayload(inputs, at, refreshed);
   try {
-    await when(() => !awaitsReading(worldState(), named()), { signal });
+    await when(() => !awaitsReading(worldState(), named(), absent()), {
+      signal,
+    });
   } catch (e) {
     // The signal's abort is the one rejection the wait expects.
     if (!signal.aborted) throw e;

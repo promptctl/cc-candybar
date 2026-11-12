@@ -5,17 +5,18 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runInAction } from "mobx";
+import { runInAction, when } from "mobx";
 import {
   SOURCES_NOTHING,
   RenderCache,
   type SessionView,
 } from "../src/daemon/cache/render";
-import type { ViewFacts } from "../src/daemon/render-payload";
+import { awaitsReading, type ViewFacts } from "../src/daemon/render-payload";
+import type { WorldState } from "../src/facts/world-state";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { instantOf } from "../src/utils/instant";
-import { ABSENT } from "../src/utils/outcome";
+import { ABSENT, pendingOf } from "../src/utils/outcome";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { systemLauncher } from "../src/proc/system-launcher";
@@ -313,6 +314,86 @@ test("a view held by a render in flight is disposed only when the render returns
       /^session view closed sid="s-a" reason=reload .* held=1 /,
     ),
   );
+});
+
+// A world state whose every fact but the runs has answered or will never be
+// waited on, carrying `runs` as given: what a request's wait reads of it is
+// its view's runs alone.
+const worldWith = (runs: WorldState["runs"]): WorldState => {
+  const settled = pendingOf("superseded");
+  return {
+    v: 1,
+    session: S_A,
+    seq: 0,
+    // The builtins the wait reads (`awaitsReading`); it reads no other.
+    builtins: {
+      git: settled,
+      pr: settled,
+      tmux: settled,
+      hostName: settled,
+      hostUser: settled,
+    } as WorldState["builtins"],
+    sources: {},
+    runs,
+    update: settled,
+    diagnostics: [],
+  };
+};
+
+// candybar-host-renderer-x96a.479: a request waits on the runs its own view
+// names. One the world state no longer carries, after the view is retired,
+// is a run no turn names again, so the wait ends at the retire; one a
+// successor still names stays in the world state and keeps it waiting.
+describe.each([
+  [
+    "a reload",
+    (cache: RenderCache) => {
+      configure(dir, 1);
+      cache.reload(dir, dir, undefined, { kind: "write" });
+    },
+  ],
+  [
+    "a move",
+    (cache: RenderCache) => {
+      const other = path.join(dir, "sub");
+      fs.mkdirSync(other);
+      configure(other);
+      cache
+        .holdSession(other, other, undefined, viewFacts(other, "s-a"))
+        [Symbol.dispose]();
+    },
+  ],
+  ["an idle retire", (cache: RenderCache) => cache.retireSession(S_A)],
+])("a request's wait over %s of its view", (_, retire) => {
+  test("ends at the retire on the runs nobody reads again", async () => {
+    configure(dir);
+    const { cache } = makeCache();
+    using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
+    const named = [...held.view.registry.namedRuns().values()];
+    expect(named.length).toBeGreaterThan(0);
+    const waits = () => awaitsReading(worldWith({}), named, held.absentRun());
+    expect(waits()).toBe(true);
+    const ended = when(() => !waits());
+    retire(cache);
+    await ended;
+  });
+
+  test("keeps waiting on a run the world state still carries unread", () => {
+    configure(dir);
+    const { cache } = makeCache();
+    using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
+    const named = [...held.view.registry.namedRuns().values()];
+    retire(cache);
+    const world = worldWith(
+      Object.fromEntries(
+        named.map((run) => [
+          run.digest,
+          { reading: pendingOf("unread"), fault: null },
+        ]),
+      ),
+    );
+    expect(awaitsReading(world, named, held.absentRun())).toBe(true);
+  });
 });
 
 // [LAW:no-ambient-temporal-coupling] The instant is the draw's, and a
