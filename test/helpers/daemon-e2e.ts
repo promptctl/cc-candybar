@@ -61,11 +61,6 @@ const REPLY_BUDGET_MS = 5000;
 // condition as a hard failure.
 const TIMEOUT_RETRY_BUDGET = 5;
 
-// A click past its TIMEOUT is bounded by its own work, not by a reply: a
-// doctor run spawns probes that each have a timeout of several seconds. This
-// budget is the click's work plus room, below a test's own timeout.
-const CLICK_WORK_BUDGET_MS = 20_000;
-
 // [LAW:no-ambient-temporal-coupling] The same contract for an answer drawn at
 // its deadline: a request is answered by its client's deadline, and a source
 // still reading then draws as pending (src/daemon/request-deadline.ts) — a
@@ -265,32 +260,26 @@ export function sendClick(
 // as `timedOut=Y`). A render may be asked again on TIMEOUT because it is a
 // read; a click is a write, so sending it again applies it twice, and a second
 // apply-update is refused as already running. On TIMEOUT the click's outcome
-// is read from the daemon's own click event instead. A click still waiting for
-// its turn when the guard fired is refused before it applies anything
-// (`outcome=abandoned`), so that one alone is sent again.
+// is read from the daemon's own click event instead.
 export async function click(target: DaemonTarget, url: string): Promise<void> {
   const { log } = endpointOf(target);
-  for (let attempt = 0; attempt < TIMEOUT_RETRY_BUDGET; attempt++) {
-    const before = timedOutClicks(log).length;
-    const resp = await sendClick(target, url);
-    if (resp.ok) return;
-    if (resp.code !== "TIMEOUT") {
-      throw new Error(`click failed: ${resp.error} (${resp.code})`);
-    }
-    let event = "";
-    await until(
-      () => (event = timedOutClicks(log)[before] ?? "") !== "",
-      `the click event of a click answered TIMEOUT (${url})`,
-      CLICK_WORK_BUDGET_MS,
-    );
-    if (/ outcome=ok(?: |$)/.test(event)) return;
-    if (!/ outcome=abandoned(?: |$)/.test(event)) {
-      throw new Error(`click failed once it ran past its TIMEOUT: ${event}`);
-    }
+  const before = timedOutClicks(log).length;
+  const resp = await sendClick(target, url);
+  if (resp.ok) return;
+  if (resp.code !== "TIMEOUT") {
+    throw new Error(`click failed: ${resp.error} (${resp.code})`);
   }
-  throw new Error(
-    `click abandoned ${TIMEOUT_RETRY_BUDGET} times before its turn: ${url}`,
+  let event = "";
+  // The event is the click's answer by another road, so it has the budget
+  // the click's reply had.
+  await until(
+    () => (event = timedOutClicks(log)[before] ?? "") !== "",
+    `the click event of a click answered TIMEOUT (${url})`,
+    REPLY_BUDGET_MS,
   );
+  if (!/ outcome=ok(?: |$)/.test(event)) {
+    throw new Error(`click failed once it ran past its TIMEOUT: ${event}`);
+  }
 }
 
 // [LAW:no-ambient-temporal-coupling] Render until the daemon's own state
