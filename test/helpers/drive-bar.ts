@@ -38,7 +38,7 @@ import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
 import { BAR_SESSION_ID, hookData } from "../../scripts/lib/hook-data";
 import { withStamp } from "../../scripts/version-stamp.cjs";
 import { textOf, type Frame } from "../../src/render/frame";
-import { frameRequest, sendClick } from "./daemon-e2e";
+import { frameRequest, landedClick } from "./daemon-e2e";
 import type { DaemonTarget } from "./daemon-wire";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
 import {
@@ -205,12 +205,8 @@ export async function startBar(
     if (effectsOf(hit.url).some(({ verb }) => HOST_VERBS.has(verb))) {
       return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
     }
-    const resp = await sendClick(daemon.target, hit.url, REPLY_BUDGET_MS);
-    if (!resp.ok && resp.code === "TIMEOUT") {
-      throw new Error(`"${hit.text}" timed out: whether it landed is unknown (${resp.error})`);
-    }
     return {
-      refused: resp.ok ? null : `${resp.error} (${resp.code})`,
+      refused: await landedClick(daemon.target, hit.url, REPLY_BUDGET_MS),
       rendered: await render(),
     };
   };

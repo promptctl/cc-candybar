@@ -231,28 +231,30 @@ export function render(
   return frameRequest(target, renderBody(sessionId, cwd, hints, args));
 }
 
-// A click, decoded the same way `cc-candybar url-handle` decodes it, then sent
-// as the wire request the URL handler app sends. The daemon's answer is
+// A click, decoded the same way `cc-candybar url-handle` decodes it, as the
+// wire request the URL handler app sends.
+export function clickBody(url: string): {
+  v: typeof PROTOCOL_VERSION;
+  kind: "click";
+  verb: string;
+  value: string;
+} {
+  const { verb, value } = linkClick(url);
+  return { v: PROTOCOL_VERSION, kind: "click", verb, value };
+}
+
+// A click sent as the URL handler app sends it. The daemon's answer is
 // returned as it came, refusal included.
 export function sendClick(
   target: DaemonTarget,
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<Response> {
-  const { verb, value } = linkClick(url);
-  return sendDaemonRequest(
-    target,
-    {
-      v: PROTOCOL_VERSION,
-      kind: "click",
-      verb,
-      value,
-    },
-    replyBudgetMs,
-  );
+  return sendDaemonRequest(target, clickBody(url), replyBudgetMs);
 }
 
-// `sendClick`, for a test whose click must land.
+// `sendClick`, for a click whose landing is the question: the refusal it
+// became, or null once it landed, a TIMEOUT settled by what the click became.
 //
 // [LAW:no-ambient-temporal-coupling] A TIMEOUT is not the click's outcome. The
 // daemon's 200 ms guard abandons a request's reply, never its work, so a click
@@ -260,26 +262,42 @@ export function sendClick(
 // as `timedOut=Y`). A render may be asked again on TIMEOUT because it is a
 // read; a click is a write, so sending it again applies it twice, and a second
 // apply-update is refused as already running. On TIMEOUT the click's outcome
-// is read from the daemon's own click event instead.
-export async function click(target: DaemonTarget, url: string): Promise<void> {
+// is read from the daemon's own click event instead, the first one past the
+// send that carries this click's verb (the event records no value).
+export async function landedClick(
+  target: DaemonTarget,
+  url: string,
+  replyBudgetMs = REPLY_BUDGET_MS,
+): Promise<string | null> {
   const { log } = endpointOf(target);
-  const before = timedOutClicks(log).length;
-  const resp = await sendClick(target, url);
-  if (resp.ok) return;
-  if (resp.code !== "TIMEOUT") {
-    throw new Error(`click failed: ${resp.error} (${resp.code})`);
-  }
+  const { verb } = linkClick(url);
+  const mine = (): string[] =>
+    timedOutClicks(log).filter((l) => l.includes(` verb=${verb} `));
+  const before = mine().length;
+  const resp = await sendClick(target, url, replyBudgetMs);
+  if (resp.ok) return null;
+  if (resp.code !== "TIMEOUT") return `${resp.error} (${resp.code})`;
   let event = "";
   // The event is the click's answer by another road, so it has the budget
   // the click's reply had.
   await until(
-    () => (event = timedOutClicks(log)[before] ?? "") !== "",
+    () => (event = mine()[before] ?? "") !== "",
     `the click event of a click answered TIMEOUT (${url})`,
-    REPLY_BUDGET_MS,
+    replyBudgetMs,
   );
-  if (!/ outcome=ok(?: |$)/.test(event)) {
-    throw new Error(`click failed once it ran past its TIMEOUT: ${event}`);
-  }
+  return / outcome=ok(?: |$)/.test(event)
+    ? null
+    : `failed once it ran past its TIMEOUT: ${event}`;
+}
+
+// A click a test needs to land, failing loudly when it does not.
+export async function click(
+  target: DaemonTarget,
+  url: string,
+  replyBudgetMs = REPLY_BUDGET_MS,
+): Promise<void> {
+  const refused = await landedClick(target, url, replyBudgetMs);
+  if (refused !== null) throw new Error(`click failed: ${refused}`);
 }
 
 // [LAW:no-ambient-temporal-coupling] Render until the daemon's own state

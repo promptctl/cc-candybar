@@ -174,13 +174,15 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       .join("/");
     const statusClick = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/${at}`;
     // Refused until the status line has drawn its first frame, which runs
-    // nothing; the first click it answers runs the link.
+    // nothing; the first click it answers runs the link. A click answered
+    // TIMEOUT was accepted and still runs, so it is never sent again: the
+    // event below is its outcome.
     let refusal = "";
     await until(
       async () => {
         const resp = await sendClick(daemon, statusClick);
         refusal = resp.ok ? "" : resp.error;
-        return resp.ok;
+        return resp.ok || resp.code === "TIMEOUT";
       },
       () => `the status-line click's acceptance (refused: ${refusal})`,
     );

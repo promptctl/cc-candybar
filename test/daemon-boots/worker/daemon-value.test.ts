@@ -37,10 +37,9 @@ import {
   type Response,
 } from "../../../src/daemon/protocol";
 import type { SessionStorage } from "../../../src/daemon/session-state";
-import { linkClick } from "../../helpers/click";
 import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
-import { hookData } from "../../helpers/daemon-e2e";
+import { clickBody, hookData } from "../../helpers/daemon-e2e";
 import { linkUrls } from "../../helpers/frame";
 import { buildDaemon, bundleAt, statsOf } from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
@@ -170,15 +169,8 @@ describe("the daemon is a value", () => {
     return parseFrame(resp.frame);
   };
 
-  const clickLink = (daemon: Daemon, url: string): Promise<Response> => {
-    const { verb, value } = linkClick(url);
-    return reply(daemon, {
-      v: PROTOCOL_VERSION,
-      kind: "click",
-      verb,
-      value,
-    });
-  };
+  const clickLink = (daemon: Daemon, url: string): Promise<Response> =>
+    reply(daemon, clickBody(url));
 
   const writeConfig = (text: string): void => writeFileSync(config, text);
 

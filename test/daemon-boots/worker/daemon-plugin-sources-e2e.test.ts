@@ -235,7 +235,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     const before = await statsOf(daemon.daemon);
 
     const refused = await sendClick(daemon, forged);
-    expect(refused).toMatchObject({ ok: false });
+    expect(refused).toMatchObject({ ok: false, code: "BAD_REQUEST" });
     expect((await statsOf(daemon.daemon)).runs).toMatchObject({
       started: before.runs.started,
       refused: before.runs.refused + 1,
