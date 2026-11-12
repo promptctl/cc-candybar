@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-731",
+      "ref": "refs/pull/731/merge",
+      "sha": "74b17251b94881c0acbecd31b0693f63bf2365f7",
+      "timestamp": "2026-11-12T10:08:56.467Z",
+      "commits": [
+        {
+          "sha": "74b17251b94881c0acbecd31b0693f63bf2365f7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T03:07:54-07:00",
+          "message": "Merge 583aed0b9012d80a583a22e74f573bd9f87cd5a6 into 9f8a1ff895c95ddf3966ca346dcf1e5bb107df3c\n"
+        },
+        {
+          "sha": "583aed0b9012d80a583a22e74f573bd9f87cd5a6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T03:07:43-07:00",
+          "message": "fix(cache): a request whose view is retired mid-wait ends its wait at the retire, because a retired view awaits no runs (candybar-host-renderer-x96a.479)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "9f8a1ff895c95ddf3966ca346dcf1e5bb107df3c",
