@@ -4,15 +4,22 @@
     {
       "version": "pr-723",
       "ref": "refs/pull/723/merge",
-      "sha": "a879c2daf86e5d64b7b6716d90c9e9cb267edf45",
-      "timestamp": "2026-11-12T05:27:36.138Z",
+      "sha": "d520a809f5a6bc75cfccc21591c41fc7859a118c",
+      "timestamp": "2026-11-12T05:31:45.568Z",
       "commits": [
         {
-          "sha": "a879c2daf86e5d64b7b6716d90c9e9cb267edf45",
+          "sha": "d520a809f5a6bc75cfccc21591c41fc7859a118c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T05:26:49Z",
-          "message": "Merge c7b3d78572fc578c9436361f9e5e5d6ba79540b9 into 5e6bce6dfd01f43eca1c1503452bc4699f03ff91\n"
+          "timestamp": "2026-11-12T05:30:41Z",
+          "message": "Merge dd780f79ee21b76d8690cb37ba23238077bf00b0 into 5e6bce6dfd01f43eca1c1503452bc4699f03ff91\n"
+        },
+        {
+          "sha": "dd780f79ee21b76d8690cb37ba23238077bf00b0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:30:29-07:00",
+          "message": "test(config): the chrome-reads check runs over every shipped example and an authored config with presets and settings; the load names its exception (candybar-host-renderer-x96a.dbg)\n"
         },
         {
           "sha": "c7b3d78572fc578c9436361f9e5e5d6ba79540b9",
