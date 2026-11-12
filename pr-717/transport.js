@@ -77246,7 +77246,7 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
   const done2 = (effect, reason) => void host.deliver(
     {
       kind: "event",
-      at: instantOf(new Date(clock.now())),
+      at: instantAt(clock),
       event: {
         kind: "effect-done",
         of: effect.id,
@@ -78102,18 +78102,25 @@ async function clickRan(click3) {
     return { kind: "threw", error };
   }
 }
+var VERB_FACT = {
+  link: "verb",
+  "tmux-status": "linkVerb"
+};
 async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
+  noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const session = clickSessionOf(verb, value);
+  if (session === null) noteFacts(facts, { sid: "-" });
+  else if (session.ok) noteFacts(facts, { sid: session.id });
   const release4 = session?.ok ? parts.collector.holding(session.id) : () => {
   };
   try {
     const delivered = await parts.renderer.answer({
       kind: "event",
-      at: instantOf(new Date(parts.clock.now())),
+      at: instantAt(parts.clock),
       event: { kind: "click", verb, value, session, arrival, gone: clientGone }
     });
     switch (delivered.kind) {
@@ -84746,18 +84753,14 @@ var TurnThrew = class extends Error {
 };
 
 // src/daemon/renderer-host.ts
-function rendererHost(name, renderer, log, subscribed) {
+function rendererHost(name, clock, renderer, log, subscribed) {
   const turn = async (input) => {
     try {
       const output = await renderer.answer(input);
       subscribed(output.subscriptions);
       if (input.event.kind !== "request")
         for (const effect of output.effects)
-          refuse4(
-            input,
-            effect,
-            `a ${input.event.kind} turn answers no request`
-          );
+          refuse4(effect, `a ${input.event.kind} turn answers no request`);
       return { kind: "answered", output };
     } catch (e) {
       if (!(e instanceof TurnThrew))
@@ -84766,10 +84769,10 @@ function rendererHost(name, renderer, log, subscribed) {
       return { kind: "threw", error: e.thrown, record: e.record };
     }
   };
-  const refuse4 = (input, effect, reason) => void deliver(
+  const refuse4 = (effect, reason) => void deliver(
     {
       kind: "event",
-      at: input.at,
+      at: instantAt(clock),
       event: {
         kind: "effect-done",
         of: effect.id,
@@ -84816,21 +84819,12 @@ init_globals();
 
 // src/renderer/click.ts
 init_globals();
-var VERB_FACT = {
-  link: "verb",
-  "tmux-status": "linkVerb"
-};
 async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, gone }, record2) {
   const handler = verbs.handler(verb);
   if (handler === void 0)
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
-  noteFacts(record2, { [VERB_FACT[arrival.via]]: verb });
   const pending2 = session?.ok ? session.id : null;
-  if (session === null) noteFacts(record2, { sid: "-" });
-  else if (pending2 !== null) {
-    noteFacts(record2, { sid: pending2 });
-    menuIdle.clickArrived(pending2);
-  }
+  if (pending2 !== null) menuIdle.clickArrived(pending2);
   try {
     await handler(value, {
       arrival,
@@ -85500,6 +85494,7 @@ function createDaemon(inputs) {
     worldStates,
     renderer: rendererHost(
       "main",
+      clock,
       mainRenderer({
         clock,
         log,
