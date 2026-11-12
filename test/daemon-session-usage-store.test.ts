@@ -164,7 +164,7 @@ describe("SessionUsageStore — session projection", () => {
       const hd = hook("A", t);
       await Promise.all([
         usageFold(store, SID_A, hd.transcript_path),
-        store.observeSpeed(SID_A, t, Date.now()),
+        store.request(SID_A, t).speed(Date.now()),
       ]);
       expect(usage()).toMatchObject({ refreshes: { request: 1 }, failures: 0 });
 
@@ -174,7 +174,7 @@ describe("SessionUsageStore — session projection", () => {
       const hb = hook("B", broken);
       await Promise.all([
         usageFold(store, SID_B, hb.transcript_path),
-        store.observeSpeed(SID_B, broken, Date.now()),
+        store.request(SID_B, broken).speed(Date.now()),
       ]);
       expect(usage()).toMatchObject({ refreshes: { request: 2 }, failures: 1 });
       expect(lines.filter((l) => l.startsWith("warn usage refresh"))).toEqual([
@@ -367,14 +367,14 @@ describe("SessionUsageStore — session projection", () => {
       logger: (_level, msg) => lines.push(msg),
     });
     try {
-      await store.observeSpeed(SID_R, undefined, 1_000);
+      await store.request(SID_R, undefined).speed(1_000);
       expect(store.getStats()).toMatchObject({ size: 1 });
       now += 2;
       expect(store.sweepStale()).toBe(1);
       expect(store.getStats()).toMatchObject({ size: 0 });
       expect(lines).toContain("usageStore sweep dropped=1 noRecord=1 held=0");
       // The ring went with it: the next observation starts a new baseline.
-      const next = await store.observeSpeed(SID_R, undefined, 2_000);
+      const next = await store.request(SID_R, undefined).speed(2_000);
       expect(next.kind).toBe("ok");
       if (next.kind !== "ok") return;
       expect(next.value.prev).toBeUndefined();

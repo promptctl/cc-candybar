@@ -13,6 +13,7 @@
 
 import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
+import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-store";
 import { HOST } from "./host";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import type { CheckedHookData } from "../../src/renderer/request-context";
@@ -213,7 +214,10 @@ export function fakeUsage(
       nowMs: number,
     ) => Loose;
   } = {},
-) {
+): Pick<
+  SessionUsageStore,
+  "request" | "usageOf" | "declareToday" | "daysOutside" | "speedOf"
+> {
   const usage = refreshed<TranscriptUsage>();
   // The sessions whose request refreshed `today`: before one has, a draw
   // reads it as not answered yet.
@@ -263,7 +267,6 @@ export function fakeUsage(
       };
     },
     daysOutside: (): Outcome<never> => ABSENT,
-    observeSpeed,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
       speed.read(sessionId),
   };

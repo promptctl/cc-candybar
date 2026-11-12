@@ -151,7 +151,7 @@ interface SessionSlot {
   // (oldest→newest). tok/s is a derivative of the SAME token totals the record
   // owns; the baseline (prior counts + time) is the ring's last element, not a
   // parallel counter. The burn-rate sparkline folds over the whole ring; tok/s
-  // folds over its final pair. One call to observeSpeed appends; the pure delta
+  // folds over its final pair. One request's speed sample appends; the pure delta
   // math is render-payload's.
   readonly ring: SpeedSample[];
   // What the session's last request's refreshes answered, which a draw reads
@@ -620,7 +620,7 @@ export class SessionUsageStore {
   // off where its transcript lives: a sum over every directory seen so far, or
   // over the sessions that had asked, would move with which other sessions
   // happened to have rendered.
-  //
+
   // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
@@ -674,15 +674,7 @@ export class SessionUsageStore {
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
   // clock instant — the store never reads the clock for tok/s timing itself.
-  observeSpeed(
-    sessionId: SessionId,
-    transcriptPath: string | undefined,
-    nowMs: number,
-  ): Promise<Outcome<SpeedObservation>> {
-    return this.request(sessionId, transcriptPath).speed(nowMs);
-  }
-
-  // A request's speed sample, over the request's one refresh of the session.
+  // It runs over the request's one refresh of the session.
   private async observed(
     sessionId: SessionId,
     refresh: () => SessionRefresh,
