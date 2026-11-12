@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-735",
+      "ref": "refs/pull/735/merge",
+      "sha": "ec542ccdeb61eb829fdd0d68429109416c42f88b",
+      "timestamp": "2026-11-12T11:00:23.547Z",
+      "commits": [
+        {
+          "sha": "ec542ccdeb61eb829fdd0d68429109416c42f88b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T03:59:20-07:00",
+          "message": "Merge 953d60968908c23cb6fd1bbf3d860838add164db into 3983a91c21a0618069a1511472a7828dab676511\n"
+        },
+        {
+          "sha": "953d60968908c23cb6fd1bbf3d860838add164db",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T03:59:09-07:00",
+          "message": "refactor(host): every renderer turn holds the session its event names, so no caller pairs the hold by hand (candybar-host-renderer-x96a.111)\n\nThe host's one turn path reads each event's session through one derivation,\nwhich both the hold and the turn line's sid use. A hold only counts the turn;\nactivity is a request's alone, so a turn the collector's own deliveries start\nnever keeps a session nobody draws. effect-done names its effect's session.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3983a91c21a0618069a1511472a7828dab676511",
