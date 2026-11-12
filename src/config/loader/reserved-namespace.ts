@@ -11,9 +11,10 @@
 import { ident } from "../ident.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type { RawDslConfig } from "../dsl-types.js";
-import { findKeyLine } from "./diagnostics.js";
+import { findKeyLine, keyLocator } from "./diagnostics.js";
 import { scopeOf } from "./plugin-scope.js";
 import { RESERVED_NAMESPACES } from "../reserved-names.js";
+import { PAYLOAD_INPUTS } from "../payload-inputs.js";
 
 // [LAW:one-source-of-truth] The same reservation, asked in `ident()` SPACE — the
 // question an authored name that never becomes a declaration has to answer. A
@@ -62,18 +63,19 @@ export function reservedNamespaceCollisions(
   }
 }
 
-// [LAW:single-enforcer] A plugin scope (`plugins`, `repo`) is a root plugins
-// own: every name under it is declared by a plugin's own definition, and the
-// payload carries its sources there. A config file's own declaration there —
-// a variable named `repo`, an action `plugins.x.go`, a segment no plugin
-// declares — would shadow a plugin or the payload, so it is refused by every
-// config file alike, whichever scope that file's plugins load under. Only a
-// variable can shadow the payload's root itself; a segment, action or helper
-// named just `repo` sits beside every plugin's names — but a segment's own
-// `vars` are variables named under it, so a segment `repo`'s var `lit` is
-// `repo.lit`, a plugin's namespace, and is refused as one. A segment a plugin
-// beneath already declares is the exception: a file retunes it by field, as
-// it retunes any inherited segment.
+// [LAW:single-enforcer] A name whose owner is not the config file declaring
+// it, refused by every config file alike. A plugin scope (`plugins`, `repo`) is
+// a root plugins own: every name under it is declared by a plugin's own
+// definition, and the payload carries its sources there. A config file's own
+// declaration there — a variable named `repo`, an action `plugins.x.go`, a
+// segment no plugin declares — would shadow a plugin or the payload, whichever
+// scope that file's plugins load under. Only a variable can shadow the
+// payload's root itself; a segment, action or helper named just `repo` sits
+// beside every plugin's names — but a segment's own `vars` are variables named
+// under it, so a segment `repo`'s var `lit` is `repo.lit`, a plugin's
+// namespace, and is refused as one. A segment a plugin beneath already
+// declares is the exception: a file retunes it by field, as it retunes any
+// inherited segment.
 export function pluginScopeCollisions(
   ctx: ValidateCtx,
   out: Mutable<RawDslConfig>,
@@ -100,13 +102,50 @@ export function pluginScopeCollisions(
   for (const [segment, decl] of Object.entries(out.segments ?? {})) {
     for (const v of Object.keys(decl.vars ?? {})) {
       const name = `${segment}.${v}`;
+      const at = () => ({
+        path: `segments.${segment}.vars.${v}`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
+      });
+      // A segment var stores under its full name beside the payload's own
+      // input, so the merge cannot give the payload the last word here.
+      if (isPayloadInput(name)) {
+        ctx.issues.push({
+          ...at(),
+          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} — rename the var or the segment`,
+        });
+        continue;
+      }
       const scope = scopeOf(name);
       if (scope === undefined || inherited.has(segment)) continue;
       ctx.issues.push({
-        path: `segments.${segment}.vars.${v}`,
+        ...at(),
         message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own — rename the var or the segment`,
-        line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
       });
     }
   }
+}
+
+const PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
+
+// A payload input (payload-inputs.ts) is the daemon's: the session a copy or
+// `run` names, the file `↗ config` opens, the setting a picker marks current.
+// The merge gives it the last word, so a file's own top-level declaration of
+// one changes nothing and is a warning, not a refusal: refusing would cost the
+// file every other line for one that is redundant [LAW:no-silent-failure].
+export function payloadDeclarationNotices(
+  filePath: string,
+  source: string,
+  // The names the file's `variables` section declares.
+  declared: readonly string[],
+): readonly string[] {
+  const lineOf = keyLocator(source);
+  return declared.filter(isPayloadInput).map((name) => {
+    const line = lineOf(["variables", name]);
+    const at = line === undefined ? filePath : `${filePath}:${line}`;
+    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored — remove it`;
+  });
+}
+
+function isPayloadInput(name: string): boolean {
+  return Object.hasOwn(PAYLOAD_INPUTS, name);
 }

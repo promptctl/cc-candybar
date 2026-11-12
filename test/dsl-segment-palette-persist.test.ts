@@ -133,7 +133,6 @@ describe("loader: segment-palette persist/reset target validation", () => {
   const base = (actions: string) =>
     `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: { sidebar: { template: 'x', bg: 'surface', fg: 'foreground' } },
       actions: ${actions},
       root: 'sidebar',
@@ -214,7 +213,6 @@ describe("config-validators: segment-palette persist keys", () => {
       "<test>",
       `{
         globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         segments: { sidebar: { template: 'x', bg: 'surface', fg: 'foreground' } },
         actions: { applySidebarPalette: { persist: 'segments.sidebar.palette', from: 'themes' } },
         root: 'sidebar',
@@ -237,7 +235,6 @@ describe("config-validators: segment-palette persist keys", () => {
         "<test>",
         `{
           globals: {},
-          variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
           segments: { sidebar: { template: 'x', bg: 'surface', fg: 'foreground' } },
           actions: { applySidebarPalette: { persist: 'segments.sidebar.palette', from: 'themes' } },
           root: 'sidebar',
@@ -301,9 +298,6 @@ describe("segment-palette persist action click → the config file", () => {
     "// the sidebar's own declaration — a pin lands INSIDE it";
   const SRC = `{
     globals: {},
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-    },
     actions: {
       applySidebarPalette: { persist: 'segments.sidebar.palette', from: 'themes' },
       forgetSidebarPalette: { reset: 'segments.sidebar.palette' },
@@ -379,9 +373,6 @@ describe("segment-palette persist action click → the config file", () => {
   test("pinning a segment the file does not declare writes exactly `directory: { palette }`; reset restores the file byte-for-byte", async () => {
     const SRC_BUNDLED = `{
       globals: {},
-      variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
-      },
       actions: {
         applyDirectoryPalette: { persist: 'segments.directory.palette', from: 'themes' },
         forgetDirectoryPalette: { reset: 'segments.directory.palette' },

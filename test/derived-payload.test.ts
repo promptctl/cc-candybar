@@ -96,7 +96,6 @@ describe("a cache policy over the view's payload", () => {
         styles: { vivid: { chromaScale: 1.4 } },
         variables: {
           hot: { kind: "input", path: "hot", type: "boolean", default: false },
-          'style.effective': { kind: "input", path: "style.effective", default: "" },
           probe: {
             kind: "shell",
             command: "echo run >> ${runs}; ${gate.hold}; echo ran",

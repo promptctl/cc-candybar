@@ -392,7 +392,6 @@ describe("a fill segment fills wherever the walk places it", () => {
     const config = parseAndValidate(
       "<test>",
       `{
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         segments: {
           a: { template: 'A' },
           b: { template: 'B' },

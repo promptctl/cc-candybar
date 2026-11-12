@@ -34,12 +34,9 @@ function placementBar(src: string) {
   return { ...rig, sink, render, textOf };
 }
 
-const SESSION = `'session.id': { kind: 'input', path: 'session_id', default: '' }`;
-
 // One definition, three placements: the bare one reads every default, the
 // other two set their own values.
 const CLOCK_SRC = `{
-  variables: { ${SESSION} },
   segments: {
     clock: {
       template: '{{ if .settings.seconds }}hh:mm:ss{{ else }}hh:mm{{ end }} {{ .settings.zone }} x{{ .settings.width }}',
@@ -68,7 +65,6 @@ describe("a placement renders with its own settings", () => {
 
   test("a setting reaches the segment's `when`, `bg:` and `fg:` too", () => {
     const rt = placementBar(`{
-      variables: { ${SESSION} },
       segments: {
         tag: {
           template: 'tag',
@@ -98,7 +94,6 @@ describe("a placement renders with its own settings", () => {
 describe("a setting named like an Object member", () => {
   test("an unset one reads its declared default, never the inherited member", () => {
     const rt = placementBar(`{
-      variables: { ${SESSION} },
       segments: {
         tag: {
           template: '{{ if .settings.toString }}yes{{ else }}no{{ end }}',
@@ -117,10 +112,6 @@ describe("a setting named like an Object member", () => {
 
 describe("two placements of a menu-hosting segment open independently", () => {
   const SRC = `{
-    variables: {
-      ${SESSION},
-      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-    },
     actions: { applyTheme: { set: 'theme', from: 'themes' } },
     segments: { picker: { template: 'T {{ menu "applyTheme" "▸" "▾" }}' } },
     root: { h: ['picker', { seg: 'picker', id: 'second' }] },
@@ -159,7 +150,6 @@ describe("two placements of a menu-hosting segment open independently", () => {
 describe("a placement is named by its id", () => {
   test("a placement whose settings break its template is the one the error names", () => {
     const rt = placementBar(`{
-      variables: { ${SESSION} },
       segments: {
         tag: {
           template: '{{ if .settings.boom }}{{ ramp 1 "step" 5 "#ff0000" 1 "#0000ff" }}{{ end }}ok',
@@ -177,10 +167,6 @@ describe("a placement is named by its id", () => {
     const config = parseAndValidate(
       "<test>",
       `{
-        variables: {
-          ${SESSION},
-          'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-        },
         actions: { applyTheme: { set: 'theme', from: 'themes' } },
         segments: {
           menuA: { template: 'A {{ menu "applyTheme" "▸" "▾" }}' },
@@ -200,10 +186,6 @@ describe("a placement is named by its id", () => {
     const config = parseAndValidate(
       "<test>",
       `{
-        variables: {
-          ${SESSION},
-          'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-        },
         actions: { applyTheme: { set: 'theme', from: 'themes' } },
         segments: { picker: { template: 'T {{ menu "applyTheme" "▸" "▾" (dict "key" "k") }}' } },
         root: { h: ['picker', { seg: 'picker', id: 'picker-2' }] },
@@ -224,7 +206,6 @@ describe("a placement is named by its id", () => {
 // Every refusal names what is wrong and where.
 describe("load errors", () => {
   const withSegment = (settings: string, root: string, template = "x") => `{
-    variables: { ${SESSION} },
     segments: { s: { template: '${template}', settings: { ${settings} } } },
     root: ${root},
   }`;
@@ -300,7 +281,7 @@ describe("load errors", () => {
   test("a variable stored under `settings`", () => {
     expect(
       refusal(`{
-        variables: { ${SESSION}, 'settings.x': { kind: 'literal', value: 'v' } },
+        variables: { 'settings.x': { kind: 'literal', value: 'v' } },
         segments: { s: { template: 'x' } },
         root: { h: ['s'] },
       }`),
@@ -310,7 +291,6 @@ describe("load errors", () => {
   test("the settings menu's retired anchor name points at its successor", () => {
     expect(
       refusal(`{
-        variables: { ${SESSION} },
         segments: { s: { template: 'x' } },
         root: { h: ['settings.menu', 's'] },
       }`),

@@ -23,7 +23,6 @@ const ALLOWED_PALETTES = new Set(["textual-dark"]);
 const CONFIG_SRC = `{
   globals: {},
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     themePick: { kind: 'state', key: 'theme', default: '(unset)' },
   },
   segments: {
@@ -73,9 +72,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // `palette:` follows the live base theme.
     const { draw, ctx } = cascadeBar(`{
       globals: { palette: 'textual-dark' },
-      variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
-      },
       segments: {
         seg: { template: ' x ', bg: 'primary', fg: 'foreground' },
       },
@@ -165,7 +161,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { store, registry, sessionState, ctx } = cascadeBar(`{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         themePick: { kind: 'state', key: 'theme', default: '(unset)' },
         expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
       },
@@ -352,7 +347,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { store, registry, sessionState, ctx } = cascadeBar(`{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         themePick: { kind: 'state', key: 'theme', default: '(unset)' },
         expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
       },
@@ -474,7 +468,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { render, ctx } = cascadeBar(`{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
       },
       segments: {

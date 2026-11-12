@@ -87,7 +87,7 @@ import {
   type SettingName,
   type SettingProjection,
 } from "./setting-projections.js";
-import { synthesisInputs } from "./synthesis-inputs.js";
+import { checkSynthesisReads } from "./synthesis-inputs.js";
 import {
   PLACE,
   SUBMENUS,
@@ -1135,10 +1135,8 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
 // and every name now declares one.
 //
 // There is no precondition (brandon-settings-menu-d6f: "The settings menu
-// should always be visible no matter what"): whatever the menu reads that the
-// config does not declare, it ensures — merged UNDER the config, so a user's
-// own declaration of the same name wins, exactly as edit chrome's ensured
-// inputs do.
+// should always be visible no matter what"): what the menu reads is the
+// payload's, which every merged config carries and no config can redeclare.
 export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
   const artifacts = settingsArtifacts(config.globals.menuGlyph ?? DOOR_GLYPH);
   ensureEditToggle(artifacts);
@@ -1150,10 +1148,10 @@ export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
     roots.push(root);
     presets[name] = { ...presetByName(config.presets, name), root };
   }
-  const ensured = synthesisInputs(artifacts, roots, config);
+  checkSynthesisReads(artifacts, roots, config);
   return {
     ...config,
-    variables: { ...ensured, ...config.variables, ...artifacts.variables },
+    variables: { ...config.variables, ...artifacts.variables },
     actions: { ...config.actions, ...artifacts.actions },
     segments: { ...config.segments, ...artifacts.segments },
     presets,

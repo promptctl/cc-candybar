@@ -34,7 +34,6 @@ import { confirmStep } from "./confirm-step.js";
 import { parseDslConfig } from "./dsl-loader.js";
 import { mergeWithDefault } from "./loader/merge.js";
 import { BUNDLED_THEME_DEFAULTS } from "./bundled-theme-defaults.js";
-import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
 import { autocompactControl } from "./autocompact-control.js";
@@ -190,9 +189,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   //   • state — per-session daemon state
   variables: {
     ...COMMAND_TRAY.variables,
-    // [LAW:one-source-of-truth] The payload inputs the synthesized settings
-    // menu and edit chrome read, spelled once in payload-inputs.ts.
-    ...PAYLOAD_INPUTS,
     // From hookData, pass-through.
     current_dir: {
       kind: "input",

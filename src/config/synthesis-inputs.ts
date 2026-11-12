@@ -1,13 +1,15 @@
 // [LAW:one-source-of-truth] What a synthesis pass depends on rather than owns.
 // The settings menu and edit chrome mint segments, actions and variables into
 // every config (brandon-settings-menu-d6f), and those artifacts read payload
-// inputs the config may not declare. Each pass hands over its artifacts and the
-// trees it RETURNS — the author's nodes inside them included, whose reads
-// cross-ref has already resolved against the same scope, so reading the trees
-// the bar renders costs nothing and misses nothing the pass minted — and gets
-// back the declarations to merge UNDER the config. They are derived from what
-// the artifacts read, never a hand-kept list, so a read a later control adds
-// is ensured with no second place to update.
+// inputs. Every merged config carries those (the merge gives them the last
+// word over every layer), so a pass owns nothing it reads. Each pass hands
+// over its artifacts and the trees it RETURNS — the author's nodes inside
+// them included, whose reads cross-ref has already resolved against the same
+// scope, so reading the trees the bar renders costs nothing and misses
+// nothing the pass minted — and every read is checked
+// against what the config and the artifacts declare. The reads are derived
+// from the artifacts, never a hand-kept list, so a read a later control adds
+// is checked with no second place to update.
 
 import { actionTemplates, type ActionDecl } from "./action.js";
 import {
@@ -18,7 +20,6 @@ import {
   type VariableDecl,
 } from "./dsl-types.js";
 import { templateReads, refResolves, templateScopeOf } from "./loader/refs.js";
-import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import {
   CONFIG_KEY_TO_EFFECTIVE_VAR,
   SESSION_KEY_TO_EFFECTIVE_VAR,
@@ -86,32 +87,24 @@ function synthesisReads(
   return reads;
 }
 
-// [LAW:no-silent-failure] The declarations for every read that neither the
-// artifacts nor `config` resolve (the scope cross-ref resolves against),
-// supplied from the one PAYLOAD_INPUTS table. A read the table cannot supply
-// is a defect in the synthesis — its chrome would render a ⚠ in every config
-// that lacks the name — so it throws at load, naming the ref, rather than
-// minting a guess.
-export function synthesisInputs(
+// [LAW:no-silent-failure] A read that neither the artifacts nor `config`
+// resolve (the scope cross-ref resolves against) is a defect in the synthesis
+// — its chrome would render a ⚠ in every config — so it throws at load, naming
+// the ref.
+export function checkSynthesisReads(
   artifacts: SynthesisArtifacts,
   trees: readonly LayoutNode[],
   config: DslConfig,
-): Record<string, VariableDecl> {
+): void {
   const own = templateScopeOf({
     ...config,
     variables: { ...config.variables, ...artifacts.variables },
     segments: { ...config.segments, ...artifacts.segments },
   });
-  const ensured: Record<string, VariableDecl> = {};
   for (const ref of synthesisReads(artifacts, trees, config.helpers)) {
     if (refResolves(ref, own)) continue;
-    const decl = PAYLOAD_INPUTS[ref];
-    if (decl === undefined) {
-      throw new Error(
-        `synthesized chrome reads ".${ref}", which it does not declare and PAYLOAD_INPUTS does not supply`,
-      );
-    }
-    ensured[ref] = decl;
+    throw new Error(
+      `synthesized chrome reads ".${ref}", which neither it nor the config declares`,
+    );
   }
-  return ensured;
 }

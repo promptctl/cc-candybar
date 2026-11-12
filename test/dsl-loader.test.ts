@@ -748,11 +748,9 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       `{ kind: "state", key: "theme" }`,
     ]) {
       expect(
-        // `state` demands a global session.id (declareState reads that box), so
-        // every decl is checked in a config that carries one.
         parseAndValidate(
           FILE,
-          `{ variables: { "session.id": { kind: "input", path: "session_id" }, x: ${decl} } }`,
+          `{ variables: { x: ${decl} } }`,
         ).variables.x,
       ).toMatchObject({ kind: expect.any(String) });
     }
@@ -1560,7 +1558,6 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
           kind: "group", name: "g", label: "G",
           children: [{ h: ["m", "n"] }],
         },
-        variables: { "session.id": { kind: "input", path: "session_id", default: "" } },
       }`,
     );
     // The group lowers to its toggle segment with the body hung on it; the
@@ -1750,40 +1747,40 @@ describe("loadDslConfig — cross-references", () => {
     expect(cfg.segments.d!.template).toBe("{{ .cwd }}");
   });
 
-  test("dotted ref resolves to namespace prefix (.session matches session.id)", () => {
+  test("dotted ref resolves to namespace prefix (.cell matches cell.id)", () => {
     const cfg = parseAndValidate(
       FILE,
-      `{ variables: { "session.id": { kind: "input", path: "session.id" } },
-         segments: { s: { template: "{{ .session.id }}" } } }`,
+      `{ variables: { "cell.id": { kind: "input", path: "cell.id" } },
+         segments: { s: { template: "{{ .cell.id }}" } } }`,
     );
-    expect(cfg.segments.s!.template).toContain(".session.id");
+    expect(cfg.segments.s!.template).toContain(".cell.id");
   });
 
   test("dotted ref is rejected when only a scalar prefix is declared", () => {
-    // .session.id where only `session` is declared: runtime would try to
+    // .cell.id where only `cell` is declared: runtime would try to
     // field-access a scalar and throw MissingFieldError. Loader rejects
     // ahead of time. Mirrors the scope-proxy's leaf-vs-namespace dispatch
     // in src/template-engine/scope.ts.
     expectIssue(
-      `{ variables: { session: { kind: "input", path: "session" } },
-         segments: { s: { template: "{{ .session.id }}" } } }`,
+      `{ variables: { cell: { kind: "input", path: "cell" } },
+         segments: { s: { template: "{{ .cell.id }}" } } }`,
       {
         path: "segments.s.template",
-        message: 'Template references unknown variable ".session.id"',
+        message: 'Template references unknown variable ".cell.id"',
       },
     );
   });
 
   test("bare reference to a namespace prefix passes (matches scope.has)", () => {
-    // .session where only `session.id` is declared: scope proxy returns a
+    // .cell where only `cell.id` is declared: scope proxy returns a
     // sub-proxy. Loader treats this as a valid ref because the rendering
     // failure (if any) is the template engine's job, not the loader's.
     const cfg = parseAndValidate(
       FILE,
-      `{ variables: { "session.id": { kind: "input", path: "session.id" } },
-         segments: { s: { template: "{{ if .session }}x{{ end }}" } } }`,
+      `{ variables: { "cell.id": { kind: "input", path: "cell.id" } },
+         segments: { s: { template: "{{ if .cell }}x{{ end }}" } } }`,
     );
-    expect(cfg.segments.s!.template).toContain(".session");
+    expect(cfg.segments.s!.template).toContain(".cell");
   });
 
   test("string literals inside templates are NOT scanned for refs", () => {

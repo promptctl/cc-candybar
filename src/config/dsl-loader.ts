@@ -75,6 +75,7 @@ import { synthesizeEditChrome } from "./edit-chrome.js";
 import { synthesizeSettingsMenu } from "./settings-menu.js";
 import {
   pluginScopeCollisions,
+  payloadDeclarationNotices,
   reservedNamespaceCollisions,
 } from "./loader/reserved-namespace.js";
 import { SETTINGS_NS } from "./reserved-names.js";
@@ -1052,7 +1053,17 @@ function parseDslFile<L>(
   // passes that need a parsed structure to inspect.
   const json = parseJson5OrThrow(filePath, source);
   const notice = editabilityNotice(filePath, source);
-  const warnings = notice === null ? [] : [notice];
+  // Named before structural validation, so a refusal carries them too.
+  const warnings = [
+    ...(notice === null ? [] : [notice]),
+    ...payloadDeclarationNotices(
+      filePath,
+      source,
+      isPlainObject(json) && isPlainObject(json.variables)
+        ? Object.keys(json.variables)
+        : [],
+    ),
+  ];
 
   const issues: ConfigIssue[] = [];
   const ctx: ValidateCtx = {

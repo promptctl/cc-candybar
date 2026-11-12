@@ -292,7 +292,6 @@ describe("styles block — normalization and merge", () => {
 describe('from: "styles" — rendered options and the derived gate share the config', () => {
   const SRC = `{
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       look: { kind: 'state', key: 'style', default: 'none' },
     },
     actions: { applyStyle: { set: 'style', from: 'styles' } },
@@ -340,7 +339,6 @@ describe("style click — live whole-bar recolor over the active theme", () => {
   const SRC = `{
     globals: { palette: '${THEME}' },
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       look: { kind: 'state', key: 'style', default: 'none' },
     },
     actions: { applyStyle: { set: 'style', from: 'styles' } },
@@ -435,13 +433,11 @@ describe("globals.style as an expression — a style chosen by data", () => {
       style: '{{ if ge (int .ctx.pct) 80 }}inverted{{ else if ge (int .ctx.pct) 40 }}washed{{ else }}none{{ end }}',
     },
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       // No \`style\` state var here on purpose: a SCALAR at \`style\` would shadow the
       // \`style.*\` namespace the label below reads, the same way a json document
       // owns its dotted prefix. The bundled config avoids it by namespacing the
       // synthesized picks under \`candybar.\`.
       'ctx.pct': { kind: 'input', path: 'ctx.pct', type: 'number', default: 0 },
-      'style.effective': { kind: 'input', path: 'style.effective', default: '' },
     },
     styles: {
       none: {},

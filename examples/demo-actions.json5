@@ -41,13 +41,8 @@
   },
 
   // ── Variables ─────────────────────────────────────────────────────────────
-  // session.id is required by every `set` action (SessionState is keyed by it).
-  // term.cols is required by the paged picker (knows the available terminal width).
   variables: {
-    "session.id":  { kind: "input", path: "session_id",         default: "" },
-    "term.cols":   { kind: "input", path: "term.cols", type: "number", default: 80 },
     "current_dir": { kind: "input", path: "workspace.current_dir", default: "" },
-    "session_id":  { kind: "input", path: "session_id",         default: "" },
 
     // ── State vars: each written by one or more actions ────────────────────
     // The `key` field names the SessionState slot.
@@ -55,7 +50,7 @@
 
     // No state var for the active theme or endcaps: applyTheme/applyEndcaps write
     // the session's `theme`/`endcaps`, and the themeControl/endcapsControl labels
-    // read `theme.effective`/`endcaps.effective` (bundled default) — the values
+    // read `theme.effective`/`endcaps.effective` (the daemon's payload) — the values
     // the bar is drawn in, which the pickers' current-option marks read too.
 
     // Detail level (0..3). Written by detailUp/detailDown (bounded).
@@ -128,7 +123,7 @@
     // ── 7. copy ───────────────────────────────────────────────────────────
     // Evaluates a Go template at click time and copies the result to the
     // clipboard. The template has access to the same variables as any segment.
-    copySessionId: { copy: "{{ .session_id }}" },
+    copySessionId: { copy: "{{ .session.id }}" },
     copyDir:       { copy: "{{ .current_dir }}" },
 
     // ── 8. open ───────────────────────────────────────────────────────────

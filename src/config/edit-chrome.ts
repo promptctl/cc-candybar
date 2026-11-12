@@ -21,7 +21,7 @@
 // are indistinguishable at render. Nothing here is a new render concept.
 
 import path from "node:path";
-import { synthesisInputs } from "./synthesis-inputs.js";
+import { checkSynthesisReads } from "./synthesis-inputs.js";
 import type { ActionDecl as ActionDeclType } from "./action.js";
 import {
   mapOpens,
@@ -171,9 +171,9 @@ function inNamesView(
 // text "false" (evaluateWhen's documented contract), and `and` yields the
 // last argument when every term is truthy — so the conjunction reads back
 // exactly as the boolean does.
-// [LAW:one-source-of-truth] Exported: test/helpers/ambient-chrome.ts filters this
-// ensured name out of "what did the AUTHOR declare" assertions and must read the
-// same string, never a second copy that a rename here would leave behind.
+// [LAW:one-source-of-truth] Exported: a payload input (payload-inputs.ts), and
+// tests read the same string, never a second copy a rename here would leave
+// behind.
 export const PRESET_CUSTOMIZED_VAR = "preset.customized";
 const CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
 
@@ -1023,17 +1023,12 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     roots.push(root);
     presets[name] = { ...presetByName(config.presets, name), root };
   }
-  // [LAW:no-silent-failure] What the chrome reads and the config does not
-  // declare (the banner's `.preset.customized`), merged UNDER the config so a
-  // user's own declaration wins.
-  const ensured = synthesisInputs(artifacts, roots, config);
+  // [LAW:no-silent-failure] Every read the chrome makes resolves, or the load
+  // throws naming it.
+  checkSynthesisReads(artifacts, roots, config);
   return {
     ...config,
-    variables: {
-      ...ensured,
-      ...config.variables,
-      ...artifacts.variables,
-    },
+    variables: { ...config.variables, ...artifacts.variables },
     actions: { ...config.actions, ...artifacts.actions },
     segments: { ...config.segments, ...artifacts.segments },
     presets,

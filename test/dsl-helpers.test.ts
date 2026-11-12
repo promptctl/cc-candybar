@@ -6,6 +6,7 @@
 // output, a malformed helper fails LOUDLY (not silently), and an absent `helpers`
 // key is a no-op (an inherited define emits nothing).
 
+import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -33,21 +34,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// A minimal default to merge onto: an empty config so each test exercises only
-// its own helper slice (the production cascade is tested separately via the
-// mergeWithDefault unit test below).
-const EMPTY_DEFAULT: DslConfig = {
-  globals: {},
-  variables: {},
-  segments: {},
-  root: { rows: {} },
-  actions: {},
-  styles: {},
-  presets: {},
-  helpers: {},
-  editGlobals: {},
-  themeDefaults: {},
-};
 
 function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   const raw = parseDslConfig("<test>", source);

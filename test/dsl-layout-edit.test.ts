@@ -140,7 +140,6 @@ function ownUrls(rendered: Frame): string[] {
 describe("removeSegment/insertSegment loader shape", () => {
   const base = (actions: string, presets = "{}") => `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     actions: ${actions},
     segments: {
       directory: { template: 'd', bg: 'surface', fg: 'foreground' },
@@ -244,7 +243,6 @@ describe("removeSegment/insertSegment loader shape", () => {
 describe("cross-ref: presets.<name>.root target", () => {
   const base = (actions: string) => `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     actions: ${actions},
     segments: {
       directory: { template: 'd', bg: 'surface', fg: 'foreground' },
@@ -421,7 +419,6 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
       "<test>",
       `{
         globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         actions: { rm: { persist: 'presets.default.root', removeSegment: 'directory' } },
         segments: {
           directory: { template: 'd', bg: 'surface', fg: 'foreground' },
@@ -448,7 +445,6 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
       "<test>",
       `{
         globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         actions: {
           rm: { persist: 'presets.default.root', removeSegment: 'directory' },
           ins: { persist: 'presets.default.root', insertSegment: 'git', anchor: 'directory', relation: 'after' },
@@ -484,7 +480,6 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
       "<test>",
       `{
         globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         actions: { rm: { persist: 'presets.default.root', removeSegment: 'directory' } },
         segments: {
           directory: { template: 'd', bg: 'surface', fg: 'foreground' },
@@ -521,7 +516,6 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
       "<test>",
       `{
         globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         actions: { undoIt: { reset: 'presets.empty.root' } },
         segments: { directory: { template: 'd', bg: 'surface', fg: 'foreground' } },
         root: { h: ['directory'] },
@@ -620,7 +614,6 @@ describe("apply-layout-op click → the config file", () => {
   const ROOT_COMMENT = "// identity row over the edit bar";
   const SRC = `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     actions: {
       removeDirectory: { persist: 'presets.default.root', removeSegment: 'directory' },
       insertGitPrAfterGit: { persist: 'presets.default.root', insertSegment: 'gitPr', anchor: 'git', relation: 'after' },
@@ -740,7 +733,6 @@ describe("apply-layout-op click → the config file", () => {
     const ROOT = "{ v: [ { h: ['directory', 'git'] }, 'bar' ] }";
     const SRC_CUSTOM = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: {
         removeDirectory: { persist: 'presets.mine.root', removeSegment: 'directory' },
         resetMine: { reset: 'presets.mine.root' },
@@ -784,7 +776,6 @@ describe("apply-layout-op click → the config file", () => {
     const ROOT = "{ v: [ { h: ['directory', 'git'] }, 'bar' ] }";
     const SRC_PLACED = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: {
         resetMine: { reset: 'presets.mine.root' },
       },
@@ -875,10 +866,6 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
       "<test>",
       `{
         globals: {},
-        variables: {
-          'session.id': { kind: 'input', path: 'session_id', default: '' },
-          'preset.customized': { kind: 'input', path: 'preset.customized', type: 'boolean', default: false },
-        },
         segments: {
           directory: { template: 'd', bg: 'surface', fg: 'foreground' },
           editControl: { template: '{{ action "edit.toggle" "e" }}', bg: 'surface', fg: 'foreground' },
@@ -936,10 +923,6 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
       "<test>",
       `{
         globals: {},
-        variables: {
-          'session.id': { kind: 'input', path: 'session_id', default: '' },
-          'preset.customized': { kind: 'input', path: 'preset.customized', type: 'boolean', default: false },
-        },
         segments: {
           directory: { template: 'GATED_CONTENT', bg: 'surface', fg: 'foreground' },
           editControl: { template: '{{ action "edit.toggle" "e" }}', bg: 'surface', fg: 'foreground' },

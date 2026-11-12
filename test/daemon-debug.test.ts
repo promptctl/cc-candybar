@@ -59,7 +59,6 @@ const TEST_CONFIG_SOURCE = `{
   globals: {},
   variables: {
     greeting: { kind: 'literal', value: 'hello' },
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     user_path: { kind: 'env', name: '${UNSET_ENV_VAR}', default: '(unset)' },
     derived: { kind: 'template', template: '{{ .greeting }}, world' },
   },

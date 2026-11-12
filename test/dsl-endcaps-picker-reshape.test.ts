@@ -29,7 +29,6 @@ const BASE_THEME = "textual-dark";
 const SRC = `{
   globals: { palette: '${BASE_THEME}' },
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
     activeStyle: { kind: 'state', key: 'endcaps', default: '' },
   },
   actions: {

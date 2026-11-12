@@ -54,10 +54,8 @@
 
     // ── Quick-action targets (copy / open) ──────────────────────────────────
     // Projected straight off the hook payload, read by the toolbar's copy/open
-    // actions. session.id is already declared by the bundled default.
+    // actions. session.id and project_dir come from the daemon.
     current_dir: { kind: "input", path: "workspace.current_dir", default: "" },
-    project_dir: { kind: "input", path: "workspace.project_dir", default: "" },
-    transcript_path: { kind: "input", path: "transcript_path", default: "" },
   },
 
   // Decoupled, named actions — the sole interaction surface. The clickable

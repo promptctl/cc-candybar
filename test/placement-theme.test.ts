@@ -51,9 +51,6 @@ const BAR_B = "dracula";
 
 // Two placements of one segment: one follows the bar, one wears its own.
 const configWith = (segment: string, placements: string): string => `{
-  variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-  },
   segments: { tag: ${segment} },
   root: { v: [{ h: [${placements}] }] },
 }`;
@@ -307,9 +304,6 @@ describe("configure mode over a placement several presets share", () => {
   // on that one declaration, or the last preset synthesized wins it.
   test("configuring it in the floor preset shows its controls", () => {
     const rt = themeBar(`{
-      variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
-      },
       segments: { tag: { template: 'x' } },
       root: { v: [{ h: ['tag'] }] },
       presets: { zzz: { root: { v: [{ h: ['tag'] }] } } },

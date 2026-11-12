@@ -306,8 +306,6 @@ function regionAddress(rt: ReturnType<typeof build>, name: string) {
 const MENU_SRC = (row2: string): string => `{
   globals: { palette: '${THEME}' },
   variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
     show: { kind: 'input', path: 'show', type: 'boolean', default: true },
   },
   actions: { applyTheme: { set: 'theme', from: 'themes' } },
@@ -346,7 +344,6 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
 
 const GROUP_SRC = `{
   globals: { palette: '${THEME}' },
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   segments: {
     a: { template: 'A' },
     b: { template: 'B', fg: 'error' },

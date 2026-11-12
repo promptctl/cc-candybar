@@ -20,6 +20,7 @@
 //   5. reset-config is gated by key membership and deletes the key's path
 //      from the file, so the next reload falls back to the bundled default.
 
+import type { ColorCompatibility } from "../src/themes/policy";
 import { drawPayload } from "./helpers/draw-payload";
 import { locations } from "../src/daemon/paths";
 import { HOST, locs } from "./helpers/host";
@@ -76,7 +77,7 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 function opts(width = Number.POSITIVE_INFINITY) {
   return {
     endcaps: "powerline" as const,
-    colorCompatibility: "truecolor" as const,
+    colorCompatibility: "truecolor" as ColorCompatibility,
     wrap: true,
     padding: 0,
     width,
@@ -191,7 +192,6 @@ describe("config-validators gate", () => {
         "<test>",
         `{
           globals: {},
-          variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
           actions: ${actions},
           segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
           root: 's',
@@ -210,7 +210,6 @@ describe("config-validators gate", () => {
       "<test>",
       `{
         globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         actions: {
           sessionOnly: { set: 'theme', from: 'themes' },
           persistent: { persist: 'palette', from: 'themes' },
@@ -273,7 +272,6 @@ describe("config-validators gate", () => {
       "<test>",
       `{
         globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
         root: 's',
       }`,
@@ -296,7 +294,6 @@ describe("config-validators gate", () => {
 describe("persist/reset action loader shape", () => {
   const base = (actions: string) => `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     actions: ${actions},
     segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
     root: 's',
@@ -416,6 +413,7 @@ function buildPersistRuntime(
   src: string,
   sessionId = S1,
   dflt: DslConfig = EMPTY_DEFAULT,
+  drawOpts: Partial<ReturnType<typeof opts>> = {},
 ) {
   durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
@@ -434,9 +432,12 @@ function buildPersistRuntime(
       compiled,
       store,
       registry,
-      { session_id: sessionId, project_dir: "/tmp/proj" },
+      {
+        session_id: sessionId,
+        workspace: { project_dir: "/tmp/proj" },
+      },
       instantOf(new Date()),
-      opts(width),
+      { ...opts(width), ...drawOpts },
     ).frame;
   const ctx: VerbContext = testVerbContext(
     sessionState,
@@ -467,10 +468,6 @@ describe("persist action click → the config file", () => {
   const SRC = `{
     ${GLOBALS_COMMENT}
     globals: {},
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-      'theme.effective': { kind: 'literal', value: 'textual-dark' },
-    },
     actions: {
       applyTheme: { persist: 'palette', from: 'themes' },
       undoTheme: { reset: 'palette' },
@@ -516,9 +513,6 @@ describe("persist action click → the config file", () => {
   // "zero engine edits" promise held for the persistence half too).
   const SRC_PRESET = `{
     globals: {},
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-    },
     actions: {
       applyPresetForever: { persist: 'preset', from: 'presets' },
       forgetPreset: { reset: 'preset' },
@@ -562,11 +556,6 @@ describe("persist action click → the config file", () => {
   test("a persist-option action bound via {{ menu }} opens and its option click writes set-config, not set-state", async () => {
     const src = `{
       globals: {},
-      variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
-        'colorCompatibility.effective': { kind: 'literal', value: 'truecolor' },
-        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-      },
       actions: { applyDepthForever: { persist: 'colorCompatibility', from: 'colorCompatibilities' } },
       segments: {
         bar: { template: '{{ .colorCompatibility.effective }} {{ menu "applyDepthForever" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
@@ -594,7 +583,7 @@ describe("persist action click → the config file", () => {
         compiled,
         store,
         registry,
-        { session_id: "s1", project_dir: "/tmp/proj" },
+        { session_id: "s1", workspace: { project_dir: "/tmp/proj" } },
         instantOf(new Date()),
         opts(),
       ).frame;
@@ -652,9 +641,6 @@ describe("persist action click → the config file", () => {
   // their own and need the same real-daemon-handler coverage.
   const SRC2 = `{
     globals: {},
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-    },
     actions: {
       applyStyleForever: { persist: 'style', to: 'vivid' },
       cycleColorDepth: { persist: 'colorCompatibility', cycle: ['truecolor', '256'] },
@@ -705,9 +691,6 @@ describe("persist action click → the config file", () => {
   // globals — where a save lands — or the bar never changes.
   const SRC_UNDER_PRESET = `{
     globals: { padding: 2, autoWrap: true },
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-    },
     actions: {
       bumpPadding: { persist: 'padding', min: 0, max: 16, by: 1 },
       toggleWrap: { persist: 'autoWrap', cycle: ['true', 'false'] },
@@ -780,10 +763,6 @@ describe("persist action click → the config file", () => {
   test("a persist-option action over a newly-exposed field (colorCompatibility) marks the matching link active via its *.effective projection", () => {
     const { render } = buildPersistRuntime(`{
       globals: {},
-      variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
-        'colorCompatibility.effective': { kind: 'literal', value: '256' },
-      },
       actions: { applyDepth: { persist: 'colorCompatibility', from: 'colorCompatibilities' } },
       segments: {
         bar: {
@@ -792,7 +771,7 @@ describe("persist action click → the config file", () => {
         },
       },
       root: 'bar',
-    }`);
+    }`, S1, EMPTY_DEFAULT, { colorCompatibility: "256" });
     const active = boldUrls(render()).map(effectsOf);
     expect(active).toHaveLength(1);
     expect(active[0]![0]!.args[2]).toBe("256");
@@ -806,7 +785,6 @@ describe("persist action click → the config file", () => {
   test("clicking a persist-cycle action over the boolean autoWrap field writes a real boolean", async () => {
     const { render, click } = buildPersistRuntime(`{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { toggleWrap: { persist: 'autoWrap', cycle: ['true', 'false'] } },
       segments: { bar: { template: '{{ action "toggleWrap" "wrap" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
@@ -821,7 +799,6 @@ describe("persist action click → the config file", () => {
       "<test>",
       `{
         globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         actions: {},
         segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
         root: 's',
@@ -902,7 +879,6 @@ describe("a durable click lands in the file the next reload reads", () => {
     const config = parseAndValidate(
       "<test>",
       `{
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         actions: { pin: { persist: "palette", from: "themes" } },
       }`,
       ALLOWED,
@@ -942,7 +918,6 @@ describe("a durable click lands in the file the next reload reads", () => {
     const config = parseAndValidate(
       "<test>",
       `{
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         actions: { pin: { persist: "palette", from: "themes" } },
       }`,
       ALLOWED,

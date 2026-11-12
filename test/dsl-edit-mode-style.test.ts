@@ -38,9 +38,6 @@ const ALLOWED = new Set([BASE_THEME]);
 function src(extra = ""): string {
   return `{
   globals: { palette: '${BASE_THEME}', endcaps: 'powerline' },
-  variables: {
-    'session.id': { kind: 'input', path: 'session_id', default: '' },
-  },
   actions: {
     padTo: { set: 'padding', min: 0, max: 8, by: 1 },
     wrapToggle: { set: 'autoWrap', cycle: ['true', 'false'] },

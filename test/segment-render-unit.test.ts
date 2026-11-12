@@ -115,9 +115,6 @@ describe("segment is the rendering unit (2de.10)", () => {
     // one ground, the joiner lifts the arrow's ink off it.
     const src = `{
       globals: { palette: 'textual-dark' },
-      variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
-      },
       segments: {
         a: { template: 'AAA', bg: 'surface', fg: 'foreground' },
         b: { template: 'BBB', bg: 'surface', fg: 'foreground' },

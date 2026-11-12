@@ -6,6 +6,7 @@
 // function (a computed name) is a separate, upstream-blocked follow-up
 // (candybar-templates-zh8b.ph5) and is not exercised here.
 
+import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -34,18 +35,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-const EMPTY_DEFAULT: DslConfig = {
-  globals: {},
-  variables: {},
-  segments: {},
-  root: { rows: {} },
-  actions: {},
-  styles: {},
-  presets: {},
-  helpers: {},
-  editGlobals: {},
-  themeDefaults: {},
-};
 
 function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   const raw = parseDslConfig(

@@ -97,7 +97,6 @@ describe("2de.12 — literal set action", () => {
   const SRC = `{
     globals: {},
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       flavor: { kind: 'state', key: 'flavor', default: 'vanilla' },
     },
     actions: { pick: { set: 'flavor', to: 'chocolate' } },
@@ -151,7 +150,6 @@ describe("2de.12 — literal set action", () => {
 describe("2de.12 — set on a baseline key derives nothing", () => {
   const SRC = `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     actions: { dark: { set: 'theme', to: 'nord' } },
     segments: { bar: { template: '{{ action "dark" "🌙" }}', bg: 'surface', fg: 'foreground' } },
     root: 'bar',
@@ -176,7 +174,6 @@ describe("2de.12 — option set action", () => {
   const SRC = `{
     globals: {},
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       sel: { kind: 'state', key: 'sel', default: '' },
     },
     actions: { choose: { set: 'sel', from: 'themes' } },
@@ -226,7 +223,6 @@ describe("2de.12 — option set action", () => {
     const src = `{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         sel: { kind: 'state', key: 'sel', default: '' },
       },
       actions: { choose: { set: 'sel', from: 'themes' } },
@@ -254,7 +250,6 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
   const SRC = `{
     globals: {},
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       sortOrder: { kind: 'state', key: 'sort-order', default: 'asc' },
     },
     actions: { applySort: { set: 'sort-order', from: ['asc', 'desc'] } },
@@ -311,7 +306,6 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
     const src = `{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         k: { kind: 'state', key: 'k', default: '' },
       },
       actions: { a: { set: 'k', from: ['x', 'y', 'x'] } },
@@ -348,7 +342,6 @@ describe("71o.1 — a newly-registered domain needs no engine edits", () => {
       const src = `{
         globals: {},
         variables: {
-          'session.id': { kind: 'input', path: 'session_id', default: '' },
           fruit: { kind: 'state', key: 'fruit', default: 'red' },
         },
         actions: { pickFruit: { set: 'fruit', from: 'fruitColors' } },
@@ -391,7 +384,6 @@ describe("2de.12 — bounded set action", () => {
   const SRC = `{
     globals: {},
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       level: { kind: 'state', key: 'level', default: '14' },
     },
     actions: {
@@ -478,7 +470,6 @@ describe("brandon-menus-bn5.3 I3 — bare set-int action requires a numeric disp
   const SRC = `{
     globals: {},
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       page: { kind: 'state', key: 'theme-page', default: '-1' },
     },
     actions: {
@@ -530,10 +521,6 @@ describe("brandon-menus-bn5.3 I3 — bare set-int action requires a numeric disp
 describe("2de.12 — copy / open actions derive no gate", () => {
   const SRC = `{
     globals: {},
-    variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
-      project_dir: { kind: 'input', path: 'project_dir', default: '' },
-    },
     actions: {
       copyId: { copy: '{{.session.id}}' },
       openDir: { open: '{{.project_dir}}' },
@@ -570,7 +557,6 @@ describe("2de.12 — same-key specs merge, daemon-wide and derived", () => {
       "<test>",
       `{
         globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
         segments: { bar: { template: 'x', bg: 'surface', fg: 'foreground' } },
         root: 'bar',
       }`,
@@ -600,7 +586,6 @@ describe("2de.12 — same-key specs merge, daemon-wide and derived", () => {
     const src = `{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         wv: { kind: 'state', key: 'w', default: '' },
         av: { kind: 'state', key: 'a', default: '' },
         sv: { kind: 'state', key: 'shared', default: '' },
@@ -633,7 +618,7 @@ describe("2de.12 — same-key specs merge, daemon-wide and derived", () => {
 describe("2de.12 — loader proves the ActionDecl invariants", () => {
   const base = (actions: string, extra = "") => `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, k: { kind: 'state', key: 'k', default: '' } },
+    variables: { k: { kind: 'state', key: 'k', default: '' } },
     actions: ${actions},
     segments: { bar: { template: '{{ action "a" "x" }}${extra}', bg: 'surface', fg: 'foreground' } },
     root: 'bar',
@@ -652,7 +637,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
   test("all five shapes parse", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, k: { kind: 'state', key: 'k', default: '' } },
+      variables: { k: { kind: 'state', key: 'k', default: '' } },
       actions: {
         lit: { set: 'k', to: 'v' },
         opt: { set: 'k', from: 'endcaps' },
@@ -797,7 +782,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     expectIssue(
       `{
         globals: {},
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, k: { kind: 'state', key: 'k', default: '' } },
+        variables: { k: { kind: 'state', key: 'k', default: '' } },
         actions: { a: { set: 'k', to: 'v' } },
         segments: { bar: { template: 'x' } },
         root: { v: [{ h: ['bar'], when: '{{ $a := action "ghost" "?" }}true' }] },
@@ -822,7 +807,6 @@ describe("2de.4 — cycle set action", () => {
   const SRC = `{
     globals: {},
     variables: {
-      'session.id': { kind: 'input', path: 'session_id', default: '' },
       open: { kind: 'state', key: 'details-open', default: '0' },
     },
     actions: { toggle: { set: 'details-open', cycle: ['0', '1'] } },
@@ -874,7 +858,6 @@ describe("2de.4 — cycle set action", () => {
     const src = `{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         mode: { kind: 'state', key: 'mode', default: 'a' },
       },
       actions: { next: { set: 'mode', cycle: ['a', 'b', 'c'] } },
@@ -892,7 +875,6 @@ describe("2de.4 — cycle set action", () => {
     const src = `{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         mode: { kind: 'state', key: 'mode', default: 'a' },
       },
       actions: { next: { set: 'mode', cycle: ['a', 'b', 'c'] } },
@@ -912,7 +894,6 @@ describe("2de.4 — cycle set action", () => {
   test("a multi-line error message stays one cell of its row", () => {
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       segments: {
         bar: { template: '{{ cascade 1 "FIRST\\\\nSECOND" }}', bg: 'surface', fg: 'foreground' },
         ok: { template: 'NEIGHBOUR', bg: 'surface', fg: 'foreground' },
@@ -941,7 +922,6 @@ describe("2de.4 — cycle set action", () => {
     const src = `{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         mode: { kind: 'state', key: 'mode', default: 'off' },
       },
       actions: { next: { set: 'mode', cycle: ['off', 'low', 'high'] } },
@@ -970,7 +950,6 @@ describe("2de.4 — cycle set action", () => {
     const src = `{
       globals: {},
       variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
         menu: { kind: 'state', key: 'menu', default: 'closed' },
       },
       actions: {
@@ -1008,7 +987,7 @@ describe("2de.4 — cycle set action", () => {
 describe("2de.4 — loader proves the cycle invariants", () => {
   const base = (actions: string) => `{
     globals: {},
-    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, k: { kind: 'state', key: 'k', default: '' } },
+    variables: { k: { kind: 'state', key: 'k', default: '' } },
     actions: ${actions},
     segments: { bar: { template: '{{ action "a" "x" }}', bg: 'surface', fg: 'foreground' } },
     root: 'bar',
