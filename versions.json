@@ -4,15 +4,22 @@
     {
       "version": "pr-728",
       "ref": "refs/pull/728/merge",
-      "sha": "d1894d9f9caea38e0683cba40fb889cb8d1d7e8f",
-      "timestamp": "2026-11-12T07:17:18.464Z",
+      "sha": "ec8ecc65e078ea2f5b38de80fcc86b646b6a4148",
+      "timestamp": "2026-11-12T07:21:43.666Z",
       "commits": [
         {
-          "sha": "d1894d9f9caea38e0683cba40fb889cb8d1d7e8f",
+          "sha": "ec8ecc65e078ea2f5b38de80fcc86b646b6a4148",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:16:18-07:00",
-          "message": "Merge b17bb4abcb38d8715566fc13e1049c60433832aa into 12a2dfd7a5a6af31a086f546f452c9b9dbddee21\n"
+          "timestamp": "2026-11-12T07:20:51Z",
+          "message": "Merge 210a0366077fe9e48cfde48aee32c03881165a44 into 12a2dfd7a5a6af31a086f546f452c9b9dbddee21\n"
+        },
+        {
+          "sha": "210a0366077fe9e48cfde48aee32c03881165a44",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T00:20:32-07:00",
+          "message": "test(clicks): the click helper reads its event's fields through logfmt, and its comment says outcome tells landed from dropped (candybar-host-renderer-x96a.iml)\n"
         },
         {
           "sha": "b17bb4abcb38d8715566fc13e1049c60433832aa",
