@@ -65920,7 +65920,6 @@ var jsonParser = (text4) => {
 
 // src/daemon/source-runs.ts
 var SHELL_READ_TIMEOUT_MS = 1e4;
-var MAX_UNHELD_RUNS = 64;
 var whereOf = (read2) => read2.kind === "shell" ? `output of "${read2.command}" in ${read2.cwd}` : `"${read2.path}"`;
 function shellReader(launcher, command, cwd2, signal) {
   return {
@@ -66139,7 +66138,10 @@ var SourceRuns = class {
           runInAction(() => this.faults.delete(digest2));
         };
       },
-      maxEntries: deps.maxUnheld ?? MAX_UNHELD_RUNS,
+      // [LAW:no-ambient-temporal-coupling] A run lives while it is held:
+      // the last release drops it, ending its child, its period and its
+      // watch, so a key that moves every tick leaves no child behind.
+      maxEntries: 0,
       logger,
       ledger,
       clock: deps.clock
@@ -85702,8 +85704,8 @@ function createDaemon(inputs) {
         ["tmuxService close", () => tmuxService.close()],
         ["hostService close", () => hostService.close()],
         ["runs close", () => runs.close()],
-        // After the render cache: its states' registries release their holds
-        // first, so this close drops nothing a registry still reads.
+        // After the collector, which holds every session's runs: its close
+        // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],

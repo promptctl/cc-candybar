@@ -4,15 +4,22 @@
     {
       "version": "pr-730",
       "ref": "refs/pull/730/merge",
-      "sha": "2ca6778f1ef8b1a14d90fb6ca52bdffdad244592",
-      "timestamp": "2026-11-12T09:35:48.610Z",
+      "sha": "3f69e9c920150abb274118b58a5423107a12c4ec",
+      "timestamp": "2026-11-12T09:51:11.844Z",
       "commits": [
         {
-          "sha": "2ca6778f1ef8b1a14d90fb6ca52bdffdad244592",
+          "sha": "3f69e9c920150abb274118b58a5423107a12c4ec",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:34:52Z",
-          "message": "Merge c1246d2507c8ed13ec51b4370394327a05ad6f7d into 717218f3277b68494d6138b7195debffd0a866d0\n"
+          "timestamp": "2026-11-12T09:50:11Z",
+          "message": "Merge 809256e1535a511d4ebd4a84e8fa21261dda4dd3 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+        },
+        {
+          "sha": "809256e1535a511d4ebd4a84e8fa21261dda4dd3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T02:50:01-07:00",
+          "message": "fix(source-runs): a run lives while it is held, so its last release ends its child, period and watch (candybar-host-renderer-x96a.8e9)\n\nA key that moves every tick named a new run per tick, and keeping the\nruns it left let each one's child run on. The collector holds a\nsession's runs across each whole set of subscriptions, so a reopened\nview keeps its runs without an unheld bound.\n"
         },
         {
           "sha": "c1246d2507c8ed13ec51b4370394327a05ad6f7d",
