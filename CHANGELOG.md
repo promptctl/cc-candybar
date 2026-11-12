@@ -1,3 +1,9 @@
+## [1.220.0](https://github.com/promptctl/cc-candybar/compare/v1.219.2...v1.220.0) (2026-11-12)
+
+### Features
+
+* **judge:** the host judges each shell and file run once, where its set arrives, and a refusal stands as the run's fault (candybar-host-renderer-x96a.jmi) ([#738](https://github.com/promptctl/cc-candybar/issues/738)) ([b6d03df](https://github.com/promptctl/cc-candybar/commit/b6d03dff468ab270253e97ec293b10ccfad5e970))
+
 ## [1.219.2](https://github.com/promptctl/cc-candybar/compare/v1.219.1...v1.219.2) (2026-11-12)
 
 ### Bug Fixes
