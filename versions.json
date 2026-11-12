@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-719",
+      "ref": "refs/pull/719/merge",
+      "sha": "1f37b39bfa28a1f43a8232b900e986f663732813",
+      "timestamp": "2026-11-12T01:21:05.930Z",
+      "commits": [
+        {
+          "sha": "1f37b39bfa28a1f43a8232b900e986f663732813",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T18:20:09-07:00",
+          "message": "Merge 131495a0c5565347b6f3073b50fbad915a80fbb5 into 23abb3a1cc2bd8b7b5c9a71d0fdef270db785dbc\n"
+        },
+        {
+          "sha": "131495a0c5565347b6f3073b50fbad915a80fbb5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T18:19:57-07:00",
+          "message": "test(daemon-log): the dispose-mid-flush case counts only the log file's own opens (candybar-host-renderer-x96a.jg5)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "23abb3a1cc2bd8b7b5c9a71d0fdef270db785dbc",
