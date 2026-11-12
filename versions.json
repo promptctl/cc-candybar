@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "cd0295020dccaffce2a127a63aa99318563b8276",
-      "timestamp": "2026-11-12T17:11:40.473Z",
+      "sha": "303a122503d2659aa2d923221bd1480aa8858f00",
+      "timestamp": "2026-11-12T17:22:52.157Z",
       "commits": [
         {
-          "sha": "cd0295020dccaffce2a127a63aa99318563b8276",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T10:10:44-07:00",
-          "message": "fix(render-event): a source that failed, or whose key failed, is named failed by its variable (candybar-host-renderer-x96a.z7t) (#736)\n\n* fix(render-event): a source that failed, or whose key failed, is named failed by its variable (candybar-host-renderer-x96a.z7t)\n\n* fix(render-event): a source's run names its key's failure, and failed sources get their own field (candybar-host-renderer-x96a.z7t)\n\nThe run each shell and file source names is Pending | Ok<Run> | Failed, so\nthe render event reads a key that failed before answering from the run\nitself, not from a second map of policy faults rebuilt every render.\nsourcesPending= keeps meaning not answered yet; sourcesFailed= names each\nfailed source by variable.\n\n* refactor(sources): a source's run is a Present reading, and a failure moves no run by its text (candybar-host-renderer-x96a.z7t)"
+          "sha": "303a122503d2659aa2d923221bd1480aa8858f00",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-12T17:21:52Z",
+          "message": "chore(release): set `package.json` to 1.219.2\n\n## [1.219.2](https://github.com/promptctl/cc-candybar/compare/v1.219.1...v1.219.2) (2026-11-12)\n\n### Bug Fixes\n\n* **render-event:** a source that failed, or whose key failed, is named failed by its variable (candybar-host-renderer-x96a.z7t) ([#736](https://github.com/promptctl/cc-candybar/issues/736)) ([cd02950](https://github.com/promptctl/cc-candybar/commit/cd0295020dccaffce2a127a63aa99318563b8276))\n"
         }
       ]
     }
