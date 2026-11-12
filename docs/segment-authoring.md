@@ -36,11 +36,11 @@ config is sound, and `--render` for what it puts on screen:
 edit config  →  cc-candybar check --render <path>  →  read exit code + stderr + bar  →  repeat
 ```
 
-| exit | meaning                                                                                                                                  |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | config loads and renders — warnings (advisory only) on stderr                                                                            |
-| 1    | config is invalid, or a segment's template throws at evaluation (the daemon would render a `⚠` cell) — stderr names the path and the fix |
-| 2    | usage error / the named file could not be read                                                                                           |
+| exit | meaning |
+|------|---------|
+| 0 | config loads and renders — warnings (advisory only) on stderr |
+| 1 | config is invalid, or a segment's template throws at evaluation (the daemon would render a `⚠` cell) — stderr names the path and the fix |
+| 2 | usage error / the named file could not be read |
 
 `check` runs the daemon's exact pipeline (parse → merge on the bundled
 default → validate → register → render against a representative payload). It
@@ -109,9 +109,7 @@ what that failure renders as depends on the `default` you declare (Step 2).
     },
   },
   segments: {
-    budget: {
-      template: "{{ .budget.period }} · {{ .budget.spentPct }}% spent",
-    },
+    budget: { template: "{{ .budget.period }} · {{ .budget.spentPct }}% spent" },
   },
   root: { rows: { status: { h: ["model", "context", "budget"] } } },
 }
@@ -136,13 +134,13 @@ daemon does — so what you read there is the whole bar, chrome included.
 
 The complete shape of a `shell` variable:
 
-| field     | value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`    | `"shell"`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `command` | the command line, run by `/bin/sh -c`. A run is ended after 10 s and fails as `timed out after 10 s`; a cell is a glance, and a program that takes longer belongs in a file another process writes, one started outside the command: the run's whole process group ends with it, so a helper the command backgrounds is ended too                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `parse`   | absent or `{ text: true }` → the trimmed text, line breaks folded to spaces; `{ regex: "…" }` → capture group 1 of the text; `{ json: true }` → the text parsed once as a document. Exactly one key.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `cache`   | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is refused: the command never runs, the variable draws its `default`, the bar's `⚠` says why, and `cc-candybar check` fails on it), `{ watch_file: "/abs/path" }` (re-run when that file changes, or a symlink on the way to it is re-pointed; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below, and while the OS delivers no file events at all the bar's `⚠` counts the same warning), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
-| `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| field | value |
+|---|---|
+| `kind` | `"shell"` |
+| `command` | the command line, run by `/bin/sh -c`. A run is ended after 10 s and fails as `timed out after 10 s`; a cell is a glance, and a program that takes longer belongs in a file another process writes, one started outside the command: the run's whole process group ends with it, so a helper the command backgrounds is ended too |
+| `parse` | absent or `{ text: true }` → the trimmed text, line breaks folded to spaces; `{ regex: "…" }` → capture group 1 of the text; `{ json: true }` → the text parsed once as a document. Exactly one key. |
+| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is refused: the command never runs, the variable draws its `default`, the bar's `⚠` says why, and `cc-candybar check` fails on it), `{ watch_file: "/abs/path" }` (re-run when that file changes, or a symlink on the way to it is re-pointed; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below, and while the OS delivers no file events at all the bar's `⚠` counts the same warning), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
+| `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
 A run's identity is what it needs: the command (or the path and read mode),
 the directory it runs in, the parser, the cache policy and the value its
@@ -186,9 +184,7 @@ the parser sees. A file that does not exist yet reads as its `default`:
     },
   },
   segments: {
-    budget: {
-      template: "{{ .budget.period }} · {{ .budget.spentPct }}% spent",
-    },
+    budget: { template: "{{ .budget.period }} · {{ .budget.spentPct }}% spent" },
   },
   root: { rows: { status: { h: ["model", "context", "budget"] } } },
 }
@@ -214,7 +210,7 @@ never a variable named `budget.spentPct`. Two rules follow.
 
 Every field is a read, not a variable — you declare no `budget.spent` and no
 `budget.limit`. The loader knows which variables are documents, so a
-dotted path on a variable that is _not_ one (`.budget.spentPct` when
+dotted path on a variable that is *not* one (`.budget.spentPct` when
 `budget` is a literal, or undeclared) is a load error naming the path.
 
 A knob that belongs with the document lives **outside** its namespace. The
@@ -408,7 +404,10 @@ you still spell every space and newline you want, across more lines:
   },
   segments: {
     gauge: {
-      template: ["{{ .pct }}%", "{{ if gt .pct 90 }} ⚑{{ end }}"],
+      template: [
+        "{{ .pct }}%",
+        '{{ if gt .pct 90 }} ⚑{{ end }}',
+      ],
     },
   },
   root: "gauge",
@@ -431,7 +430,10 @@ another segment's partial):
     gauge: {
       template: '{{ template "bar" .pct }}',
       partials: {
-        bar: ["{{ . }}%", "{{ if gt . 90 }} ⚑{{ end }}"],
+        bar: [
+          "{{ . }}%",
+          '{{ if gt . 90 }} ⚑{{ end }}',
+        ],
       },
     },
   },
@@ -564,13 +566,7 @@ rose-pine's `warning`):
       when: "{{ gt .budget.limit 0 }}",
     },
   },
-  root: {
-    rows: {
-      status: {
-        h: ["model", "context", "cacheTimer", "block", "weekly", "budget"],
-      },
-    },
-  },
+  root: { rows: { status: { h: ["model", "context", "cacheTimer", "block", "weekly", "budget"] } } },
 }
 ```
 
@@ -616,17 +612,17 @@ a `cycle` action (`gitDetail`) over a per-session `state` variable
 (`git.detail`), so each Claude session keeps its own choice. Both forms
 compose these named `helpers`, each called as `{{ template "<name>" . }}`:
 
-| helper           | renders                                            |
-| ---------------- | -------------------------------------------------- |
-| `gitBranch`      | `⎇ main` — present whenever git names a branch     |
-| `gitRepo`        | ` cc-candybar`                                     |
-| `gitOperation`   | ` [rebase]`                                        |
-| `gitSha`         | ` abc1234`                                         |
-| `gitFlags`       | ` SU?!1` — staged, unstaged, untracked, conflicts  |
-| `gitAheadBehind` | ` +2/-1`                                           |
-| `gitUpstream`    | ` [origin/main +2/-1]` — includes `gitAheadBehind` |
-| `gitStash`       | ` (1 stashed)`                                     |
-| `gitAge`         | ` ◷ 13m` — time since the last commit              |
+| helper | renders |
+|--------|---------|
+| `gitBranch` | `⎇ main` — present whenever git names a branch |
+| `gitRepo` | ` cc-candybar` |
+| `gitOperation` | ` [rebase]` |
+| `gitSha` | ` abc1234` |
+| `gitFlags` | ` SU?!1` — staged, unstaged, untracked, conflicts |
+| `gitAheadBehind` | ` +2/-1` |
+| `gitUpstream` | ` [origin/main +2/-1]` — includes `gitAheadBehind` |
+| `gitStash` | ` (1 stashed)` |
+| `gitAge` | ` ◷ 13m` — time since the last commit |
 
 `gitaculous` is the git state alone — the checkout's path is the `directory`
 segment's own job (the main checkout, the subdirectory, and a linked
@@ -703,16 +699,7 @@ it does not):
 
 ```json5 check:pass
 {
-  root: {
-    h: [
-      "gitaculous",
-      {
-        seg: "gitaculous",
-        id: "gitLean",
-        settings: { flags: false, aheadBehind: false },
-      },
-    ],
-  },
+  root: { h: ["gitaculous", { seg: "gitaculous", id: "gitLean", settings: { flags: false, aheadBehind: false } }] },
 }
 ```
 
@@ -726,9 +713,7 @@ or re-spell it by overriding its piece:
 ```json5 check:pass
 {
   variables: { "git.color.behind": { kind: "literal", value: "error" } },
-  helpers: {
-    gitBranch: 'on {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}',
-  },
+  helpers: { gitBranch: 'on {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}' },
   root: { h: ["gitaculous"] },
 }
 ```
@@ -771,16 +756,7 @@ as `.settings.<name>`:
       },
     },
   },
-  root: {
-    h: [
-      "modelTag",
-      {
-        seg: "modelTag",
-        id: "shortTag",
-        settings: { length: "short", icon: true },
-      },
-    ],
-  },
+  root: { h: ["modelTag", { seg: "modelTag", id: "shortTag", settings: { length: "short", icon: true } }] },
 }
 ```
 
@@ -810,16 +786,10 @@ reads either as `.settings.theme` / `.settings.effect` like any other setting.
   segments: {
     modelTag: { template: "{{ .model.display_name }}", palette: "nord" },
   },
-  root: {
-    h: [
-      "modelTag",
-      {
-        seg: "modelTag",
-        id: "barTag",
-        settings: { theme: "bar", effect: "pulse" },
-      },
-    ],
-  },
+  root: { h: [
+    "modelTag",
+    { seg: "modelTag", id: "barTag", settings: { theme: "bar", effect: "pulse" } },
+  ] },
 }
 ```
 
@@ -850,25 +820,12 @@ retunes one copy.
       template: "{{ .session.cost }}",
       bg: '{{ ramp .session.cost "step" 0 (tint) .settings.warnAt "warning" .settings.errorAt "error" }}',
       settings: {
-        warnAt: {
-          label: "warning at $",
-          domain: { min: 0, max: 100, step: 5 },
-          default: 10,
-        },
-        errorAt: {
-          label: "error at $",
-          domain: { min: 0, max: 100, step: 5, atLeast: "warnAt" },
-          default: 20,
-        },
+        warnAt: { label: "warning at $", domain: { min: 0, max: 100, step: 5 }, default: 10 },
+        errorAt: { label: "error at $", domain: { min: 0, max: 100, step: 5, atLeast: "warnAt" }, default: 20 },
       },
     },
   },
-  root: {
-    h: [
-      "spend",
-      { seg: "spend", id: "tightSpend", settings: { warnAt: 5, errorAt: 5 } },
-    ],
-  },
+  root: { h: ["spend", { seg: "spend", id: "tightSpend", settings: { warnAt: 5, errorAt: 5 } }] },
 }
 ```
 
@@ -908,9 +865,7 @@ places its segment like any other:
 ```json5 check:pass
 {
   plugins: ["./deploy/plugin.json5"],
-  root: {
-    rows: { status: { h: ["model", "context", "plugins.deploy.status"] } },
-  },
+  root: { rows: { status: { h: ["model", "context", "plugins.deploy.status"] } } },
 }
 ```
 
@@ -1003,17 +958,13 @@ plugin's folder:
 ```json5 file:focus/plugin.json5
 {
   sources: {
-    status: {
-      scope: "session",
-      refresh: { watch: true },
-      read: { file: { json: true } },
-    },
+    status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
   },
   segments: {
     ticket: {
       description: "The ticket this session works on",
       when: '{{ hasKey .self "status" }}',
-      template: "◎ {{ .self.status.ticket }}",
+      template: '◎ {{ .self.status.ticket }}',
     },
   },
 }
@@ -1022,9 +973,7 @@ plugin's folder:
 ```json5 check:pass
 {
   plugins: ["./focus/plugin.json5"],
-  root: {
-    rows: { status: { h: ["model", "context", "plugins.focus.ticket"] } },
-  },
+  root: { rows: { status: { h: ["model", "context", "plugins.focus.ticket"] } } },
 }
 ```
 
@@ -1064,14 +1013,10 @@ plugin's folder:
 ```json5 file:bare/plugin.json5
 {
   sources: {
-    status: {
-      scope: "session",
-      refresh: { watch: true },
-      read: { file: { json: true } },
-    },
+    status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
   },
   segments: {
-    ticket: { template: "◎ {{ .self.status.ticket }}" },
+    ticket: { template: '◎ {{ .self.status.ticket }}' },
   },
 }
 ```
@@ -1090,18 +1035,10 @@ segment "plugins.bare.ticket": field "plugins.bare.status.ticket" not found on r
 ```json5 file:twice/plugin.json5
 {
   sources: {
-    ticket: {
-      scope: "session",
-      refresh: { watch: true },
-      read: { file: { json: true } },
-    },
-    title: {
-      scope: "session",
-      refresh: { watch: true },
-      read: { file: { json: true } },
-    },
+    ticket: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+    title: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
   },
-  segments: { ticket: { template: "◎ {{ .self.ticket.id }}" } },
+  segments: { ticket: { template: '◎ {{ .self.ticket.id }}' } },
 }
 ```
 
@@ -1536,11 +1473,7 @@ field name (`.budget.spentPercent`) prints the same text:
       default: { spentPct: 0 },
     },
   },
-  segments: {
-    budget: {
-      template: "{{ .budget.period }} · {{ .budget.spentPct }}% spent",
-    },
-  },
+  segments: { budget: { template: "{{ .budget.period }} · {{ .budget.spentPct }}% spent" } },
   root: { rows: { status: { h: ["model", "budget"] } } },
 }
 ```
@@ -1705,10 +1638,7 @@ the segment's `bg:` and read the document field there:
     },
   },
   segments: {
-    budget: {
-      template: "{{ .budget.spentPct }}% spent",
-      bg: "{{ .budgetColor }}",
-    },
+    budget: { template: "{{ .budget.spentPct }}% spent", bg: "{{ .budgetColor }}" },
   },
   root: { rows: { status: { h: ["model", "budget"] } } },
 }
@@ -1732,19 +1662,10 @@ In a layout node's `when` the call itself is refused, naming the reason:
     },
   },
   segments: { budget: { template: "{{ .budget.spentPct }}% spent" } },
-  root: {
-    rows: {
-      status: {
-        h: [
-          "model",
-          {
-            seg: "budget",
-            when: '{{ ne (ramp .budget.spentPct "step" 0 "panel") "" }}',
-          },
-        ],
-      },
-    },
-  },
+  root: { rows: { status: { h: [
+    "model",
+    { seg: "budget", when: '{{ ne (ramp .budget.spentPct "step" 0 "panel") "" }}' },
+  ] } } },
 }
 ```
 
@@ -1772,9 +1693,7 @@ root has 2 placements with the id "modelTag"
   segments: {
     modelTag: {
       template: "{{ .model.display_name }}",
-      settings: {
-        length: { label: "Length", domain: ["full", "short"], default: "full" },
-      },
+      settings: { length: { label: "Length", domain: ["full", "short"], default: "full" } },
     },
   },
   root: { h: [{ seg: "modelTag", settings: { length: "tiny" } }] },
@@ -1789,11 +1708,7 @@ placement "modelTag" of segment "modelTag" sets "length" to "tiny", but it must 
 
 ```json5 check:fail
 {
-  segments: {
-    modelTag: {
-      template: "{{ if .settings.icon }}◆ {{ end }}{{ .model.display_name }}",
-    },
-  },
+  segments: { modelTag: { template: '{{ if .settings.icon }}◆ {{ end }}{{ .model.display_name }}' } },
   root: { h: ["modelTag"] },
 }
 ```
@@ -1809,9 +1724,7 @@ Template reads ".settings.icon", but segment "modelTag" has no setting "icon" (i
   segments: {
     modelTag: {
       template: "{{ .model.display_name }}",
-      settings: {
-        theme: { label: "Theme", domain: ["nord", "dracula"], default: "nord" },
-      },
+      settings: { theme: { label: "Theme", domain: ["nord", "dracula"], default: "nord" } },
     },
   },
   root: { h: ["modelTag"] },
