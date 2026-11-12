@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-734",
-      "ref": "refs/pull/734/merge",
-      "sha": "3ce9a121326a497f1df82524f2c5e07f8c0a60ea",
-      "timestamp": "2026-11-12T10:39:54.403Z",
-      "commits": [
-        {
-          "sha": "3ce9a121326a497f1df82524f2c5e07f8c0a60ea",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T10:38:51Z",
-          "message": "Merge a975e687078f3319b237422d9f8af7775281d177 into 9f8a1ff895c95ddf3966ca346dcf1e5bb107df3c\n"
-        },
-        {
-          "sha": "a975e687078f3319b237422d9f8af7775281d177",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T03:38:40-07:00",
-          "message": "test(statusline): the fake collector holds only a session a request named, and the retire rule names the turn in flight (candybar-host-renderer-x96a.pww)\n"
-        },
-        {
-          "sha": "981b30a0e0ba1e31d6f9142ba4436b2b6a9f5e35",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T03:36:36-07:00",
-          "message": "test(statusline): the request's hold covers its config turn too and names the session its document was read for (candybar-host-renderer-x96a.pww)\n"
-        },
-        {
-          "sha": "f6cbf780c92698264498367a7d3f026adaee20e3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T03:33:09-07:00",
-          "message": "fix(collector): a request turn holds its session as a click's does, so no sweep retires it while its wait is out (candybar-host-renderer-x96a.pww)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "9f8a1ff895c95ddf3966ca346dcf1e5bb107df3c",
-      "timestamp": "2026-11-12T10:06:35.397Z",
+      "sha": "9bf2fb3ecbfd8acdf5eb0ee20826b372202773da",
+      "timestamp": "2026-11-12T10:45:40.564Z",
       "commits": [
         {
-          "sha": "9f8a1ff895c95ddf3966ca346dcf1e5bb107df3c",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-12T10:05:40Z",
-          "message": "chore(release): set `package.json` to 1.219.0\n\n## [1.219.0](https://github.com/promptctl/cc-candybar/compare/v1.218.4...v1.219.0) (2026-11-12)\n\n### Features\n\n* **host:** the host runs shell and file sources from the renderer's subscriptions, and their readings come back in the world state (candybar-host-renderer-x96a.8e9) ([#730](https://github.com/promptctl/cc-candybar/issues/730)) ([9148e02](https://github.com/promptctl/cc-candybar/commit/9148e02f16de59ebceccf9638f7aab3a3ad46b12))\n"
+          "sha": "9bf2fb3ecbfd8acdf5eb0ee20826b372202773da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T03:44:43-07:00",
+          "message": "fix(collector): a request turn holds its session as a click's does, so no sweep retires it while its wait is out (candybar-host-renderer-x96a.pww) (#734)\n\n* fix(collector): a request turn holds its session as a click's does, so no sweep retires it while its wait is out (candybar-host-renderer-x96a.pww)\n\n* test(statusline): the request's hold covers its config turn too and names the session its document was read for (candybar-host-renderer-x96a.pww)\n\n* test(statusline): the fake collector holds only a session a request named, and the retire rule names the turn in flight (candybar-host-renderer-x96a.pww)"
         }
       ]
     }

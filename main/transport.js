@@ -77299,29 +77299,36 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
       ["effect", String(effect.id)]
     ]
   );
-  const configured = await host.answer({
-    kind: "event",
-    at,
-    event: {
-      kind: "config",
-      context: req,
-      worldState: collector.requested(req)
+  const worldState = collector.requested(req);
+  const release4 = collector.holding(req.hookData.session_id);
+  let delivered;
+  try {
+    const configured = await host.answer({
+      kind: "event",
+      at,
+      event: {
+        kind: "config",
+        context: req,
+        worldState
+      }
+    });
+    recorded(facts, configured);
+    if (configured.kind === "threw") {
+      noteFacts(facts, { renderer: host.name });
+      return failed2(host, configured.error, "its config turn: ");
     }
-  });
-  recorded(facts, configured);
-  if (configured.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed2(host, configured.error, "its config turn: ");
-  }
-  const delivered = await host.answer({
-    kind: "event",
-    at,
-    event: { kind: "request", id: id2, context: req, waitEndsAt }
-  });
-  recorded(facts, delivered);
-  if (delivered.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed2(host, delivered.error);
+    delivered = await host.answer({
+      kind: "event",
+      at,
+      event: { kind: "request", id: id2, context: req, waitEndsAt }
+    });
+    recorded(facts, delivered);
+    if (delivered.kind === "threw") {
+      noteFacts(facts, { renderer: host.name });
+      return failed2(host, delivered.error);
+    }
+  } finally {
+    release4();
   }
   const { effects } = delivered.output;
   noteFacts(facts, {
@@ -82886,18 +82893,19 @@ var Collector = class {
       }
     });
   }
-  // [LAW:no-ambient-temporal-coupling] A click holds its session for as long
-  // as the host awaits its turn, however long that is, and its release names
-  // the session as a request does, so the next sweep keeps it too. Only a
+  // [LAW:no-ambient-temporal-coupling] A turn, a request's or a click's, holds
+  // its session for as long as the host awaits it, however long that is, so
+  // no sweep retires the session under a turn still drawing it. Its release
+  // names the session as a request does, so the next sweep keeps it too. Only a
   // live session is kept: a retiring one has released its reads, and its
   // record goes once the retire settles, as one with no record has gone.
   holding(session) {
     const record2 = this.records.get(session);
     if (record2?.phase.kind !== "live") return () => {
     };
-    record2.clicks++;
+    record2.turns++;
     return () => {
-      record2.clicks--;
+      record2.turns--;
       record2.active = true;
     };
   }
@@ -82906,7 +82914,7 @@ var Collector = class {
     for (const record2 of this.records.values()) {
       if (record2.phase.kind !== "live") continue;
       if (record2.active) record2.active = false;
-      else if (record2.clicks === 0 && !this.deps.watched(record2.session))
+      else if (record2.turns === 0 && !this.deps.watched(record2.session))
         this.retire(record2, record2.phase);
     }
   }
@@ -82948,7 +82956,7 @@ var Collector = class {
       stamped,
       subscriptions,
       active: true,
-      clicks: 0,
+      turns: 0,
       phase: this.watch(session, stamped, reader)
     };
   }
