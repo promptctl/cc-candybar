@@ -4,15 +4,22 @@
     {
       "version": "pr-726",
       "ref": "refs/pull/726/merge",
-      "sha": "cf852593b2aec606a8cf574f14877ad25b523432",
-      "timestamp": "2026-11-12T06:47:59.655Z",
+      "sha": "2ab940e933daec0c8ff4ed561277870ee230fb48",
+      "timestamp": "2026-11-12T06:50:48.423Z",
       "commits": [
         {
-          "sha": "cf852593b2aec606a8cf574f14877ad25b523432",
+          "sha": "2ab940e933daec0c8ff4ed561277870ee230fb48",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T06:47:03Z",
-          "message": "Merge 9edd9c94272071dd6f36c0ee56e8299945d0467a into 893a911cb4f02622eaaab14bf90b882bf7f344a2\n"
+          "timestamp": "2026-11-12T06:49:48Z",
+          "message": "Merge bc2f6f00f4d35629d6d64c941ca81a64c78bcc85 into 893a911cb4f02622eaaab14bf90b882bf7f344a2\n"
+        },
+        {
+          "sha": "bc2f6f00f4d35629d6d64c941ca81a64c78bcc85",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:49:37-07:00",
+          "message": "test(daemon-e2e): a click abandoned before its turn is sent again, and a click past its TIMEOUT is waited on for its work (candybar-host-renderer-x96a.twu)\n"
         },
         {
           "sha": "9edd9c94272071dd6f36c0ee56e8299945d0467a",
