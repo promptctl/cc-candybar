@@ -46,12 +46,12 @@ export function mergeWithDefault(
 ): DslConfig {
   return {
     globals: { ...dflt.globals, ...(raw.globals ?? {}) },
-    // [LAW:single-enforcer] The daemon's payload inputs lie beneath every
-    // base, so no caller can build a base that lacks them.
+    // [LAW:single-enforcer] The daemon's payload inputs have the last word
+    // over every base and every layer, so no config reads another value.
     variables: {
-      ...PAYLOAD_INPUTS,
       ...dflt.variables,
       ...(raw.variables ?? {}),
+      ...PAYLOAD_INPUTS,
     },
     segments: overlayByName(
       dflt.segments,

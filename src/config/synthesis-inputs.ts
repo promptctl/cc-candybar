@@ -1,11 +1,12 @@
 // [LAW:one-source-of-truth] What a synthesis pass depends on rather than owns.
 // The settings menu and edit chrome mint segments, actions and variables into
 // every config (brandon-settings-menu-d6f), and those artifacts read payload
-// inputs. Every merged config carries those, beneath everything authored (the
-// merge lays them beneath every base), so a pass owns nothing it reads. Each pass hands over its artifacts and the trees it RETURNS — the
-// author's nodes inside them included, whose reads cross-ref has already
-// resolved against the same scope, so reading the trees the bar renders costs
-// nothing and misses nothing the pass minted — and every read is checked
+// inputs. Every merged config carries those (the merge gives them the last
+// word over every layer), so a pass owns nothing it reads. Each pass hands
+// over its artifacts and the trees it RETURNS — the author's nodes inside
+// them included, whose reads cross-ref has already resolved against the same
+// scope, so reading the trees the bar renders costs nothing and misses
+// nothing the pass minted — and every read is checked
 // against what the config and the artifacts declare. The reads are derived
 // from the artifacts, never a hand-kept list, so a read a later control adds
 // is checked with no second place to update.

@@ -11,7 +11,7 @@
 import { ident } from "../ident.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type { RawDslConfig } from "../dsl-types.js";
-import { findKeyLine } from "./diagnostics.js";
+import { findKeyLine, keyLocator } from "./diagnostics.js";
 import { scopeOf } from "./plugin-scope.js";
 import { RESERVED_NAMESPACES } from "../reserved-names.js";
 import { PAYLOAD_INPUTS } from "../payload-inputs.js";
@@ -102,65 +102,51 @@ export function pluginScopeCollisions(
   for (const [segment, decl] of Object.entries(out.segments ?? {})) {
     for (const v of Object.keys(decl.vars ?? {})) {
       const name = `${segment}.${v}`;
+      const at = {
+        path: `segments.${segment}.vars.${v}`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
+      };
+      // A segment var stores under its full name beside the payload's own
+      // input, so the merge cannot give the payload the last word here.
+      if (isPayloadInput(name)) {
+        ctx.issues.push({
+          ...at,
+          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} — rename the var or the segment`,
+        });
+        continue;
+      }
       const scope = scopeOf(name);
       if (scope === undefined || inherited.has(segment)) continue;
       ctx.issues.push({
-        path: `segments.${segment}.vars.${v}`,
-        line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
+        ...at,
         message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own — rename the var or the segment`,
       });
     }
   }
 }
 
+const PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
+
 // A payload input (payload-inputs.ts) is the daemon's: the session a copy or
 // `run` names, the file `↗ config` opens, the setting a picker marks current.
-// Every config reads it from beneath the bundled default, so a file's own
-// variable of that name — top-level or a segment var — would make the bar's
-// own acts read another value. The declaration is dropped and the drop is a
-// warning, not a refusal: configs written before the daemon owned these names
-// declare them, and refusing the file would cost the user every other line of
-// it for one line that is now redundant [LAW:no-silent-failure].
-export function withoutPayloadDeclarations(
+// The merge gives it the last word, so a file's own top-level declaration of
+// one changes nothing and is a warning, not a refusal: refusing would cost the
+// file every other line for one that is redundant [LAW:no-silent-failure].
+export function payloadDeclarationNotices(
   filePath: string,
   source: string,
   raw: RawDslConfig,
-): { raw: RawDslConfig; notices: readonly string[] } {
-  const notices: string[] = [];
-  const drop = (name: string, keyPath: readonly string[]): boolean => {
-    if (!Object.hasOwn(PAYLOAD_INPUTS, name)) return false;
-    notices.push(
-      `${filePath}:${findKeyLine(source, keyPath)}: "${name}" is supplied by the daemon's payload to every config, so this declaration is ignored — remove it`,
-    );
-    return true;
-  };
-  const keep = <T>(
-    record: Readonly<Record<string, T>>,
-    dropped: (key: string) => boolean,
-  ): Record<string, T> =>
-    Object.fromEntries(Object.entries(record).filter(([k]) => !dropped(k)));
-  return {
-    raw: {
-      ...raw,
-      ...(raw.variables && {
-        variables: keep(raw.variables, (n) => drop(n, ["variables", n])),
-      }),
-      ...(raw.segments && {
-        segments: Object.fromEntries(
-          Object.entries(raw.segments).map(([segment, decl]) => [
-            segment,
-            decl.vars === undefined
-              ? decl
-              : {
-                  ...decl,
-                  vars: keep(decl.vars, (v) =>
-                    drop(`${segment}.${v}`, ["segments", segment, "vars", v]),
-                  ),
-                },
-          ]),
-        ),
-      }),
-    },
-    notices,
-  };
+): readonly string[] {
+  const lineOf = keyLocator(source);
+  return Object.keys(raw.variables ?? {})
+    .filter(isPayloadInput)
+    .map((name) => {
+      const line = lineOf(["variables", name]);
+      const at = line === undefined ? filePath : `${filePath}:${line}`;
+      return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored — remove it`;
+    });
+}
+
+function isPayloadInput(name: string): boolean {
+  return Object.hasOwn(PAYLOAD_INPUTS, name);
 }

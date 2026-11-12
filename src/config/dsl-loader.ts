@@ -75,7 +75,7 @@ import { synthesizeEditChrome } from "./edit-chrome.js";
 import { synthesizeSettingsMenu } from "./settings-menu.js";
 import {
   pluginScopeCollisions,
-  withoutPayloadDeclarations,
+  payloadDeclarationNotices,
   reservedNamespaceCollisions,
 } from "./loader/reserved-namespace.js";
 import { SETTINGS_NS } from "./reserved-names.js";
@@ -1089,7 +1089,7 @@ function parseDslFile<L>(
       : (validatePluginRefs({ ...ctx, issues: [] }, json.plugins) ?? []),
     isPlainObject(json.segments) ? Object.keys(json.segments) : [],
   );
-  const validated = validateTopLevel(
+  const raw = validateTopLevel(
     ctx,
     json,
     inherited,
@@ -1101,12 +1101,14 @@ function parseDslFile<L>(
     throw new ConfigError(filePath, issues, warnings);
   }
 
-  const { raw, notices } = withoutPayloadDeclarations(
-    filePath,
-    source,
-    validated,
-  );
-  return { raw, warnings: [...warnings, ...notices], layer };
+  return {
+    raw,
+    warnings: [
+      ...warnings,
+      ...payloadDeclarationNotices(filePath, source, raw),
+    ],
+    layer,
+  };
 }
 
 // ─── Internals ───────────────────────────────────────────────────────────────

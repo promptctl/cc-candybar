@@ -81,7 +81,7 @@ describe("a view's session", () => {
     expect(textOf(rig.draw().frame)).toContain(`sid=${OWN}`);
   });
 
-  test("a config's own session.id is dropped with a warning, and the bar draws the view's session", () => {
+  test("a config's own session.id is ignored with a warning, and the bar draws the view's session", () => {
     const declared = CONFIG.replace(
       "variables: {",
       `variables: { 'session.id': { kind: 'literal', value: '${OTHER}' },`,
@@ -106,16 +106,17 @@ describe("a view's session", () => {
     expect(textOf(rig.draw().frame)).toContain(`sid=${OWN}`);
   });
 
-  test("a segment var named into session.id is dropped with a warning", () => {
-    const raw = parseDslConfig(
-      "t.json5",
-      `{ segments: { session: { template: 'x', vars: { id: { kind: 'literal', value: 'x' }, own: { kind: 'literal', value: 'y' } } } } }`,
-    );
-    expect(Object.keys(raw.segments?.session?.vars ?? {})).toEqual(["own"]);
+  test("a segment var named into session.id does not load", () => {
+    expect(() =>
+      parseDslConfig(
+        "t.json5",
+        `{ segments: { session: { template: 'x', vars: { id: { kind: 'literal', value: 'x' } } } } }`,
+      ),
+    ).toThrow(`segment "session"'s var "id" is named "session.id"`);
   });
 
   test.each(Object.keys(PAYLOAD_INPUTS))(
-    "a config's own declaration of the payload input %s is dropped with a warning",
+    "a config's own declaration of the payload input %s is ignored with a warning",
     (name) => {
       const loaded = loadConfigSource(
         "t.json5",
