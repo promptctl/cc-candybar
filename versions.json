@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-722",
+      "ref": "refs/pull/722/merge",
+      "sha": "545ff2ad48012f50fabb34007118ad9cc62b5697",
+      "timestamp": "2026-11-12T04:20:53.758Z",
+      "commits": [
+        {
+          "sha": "545ff2ad48012f50fabb34007118ad9cc62b5697",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T21:19:58-07:00",
+          "message": "Merge 2f732c9a6e299ddd5060132f2c810bb9efc97d3b into e3e73c6b78a8776b63461d4fcab107abbec5184f\n"
+        },
+        {
+          "sha": "2f732c9a6e299ddd5060132f2c810bb9efc97d3b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T21:19:46-07:00",
+          "message": "fix(config): a payload input is the daemon's, so no config can redeclare the session, file or setting the bar's own acts read (candybar-host-renderer-x96a.5e0)\n\nThe bundled default authored the payload inputs (session.id, project_dir,\nconfig_path, every *.effective, term.cols, ...) by spreading them into its\nvariables, so any config file could redeclare one: `{{ .session.id }}`,\ncopySession and a plugin `run` then named another session.\n\nThe rows now sit beneath the parsed default instead of in it, so every\nconfig reads them and no parsed source declares one. The loader's one\nownership check (plugin scopes) also owns the payload inputs, and refuses a\nfile's declaration of one, top-level or as a segment var. Synthesis no\nlonger supplies inputs; it only checks that its reads resolve.\n\nFixtures, docs and examples drop their redundant declarations; the test\nfloor carries the payload rows, as production does.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "e3e73c6b78a8776b63461d4fcab107abbec5184f",
