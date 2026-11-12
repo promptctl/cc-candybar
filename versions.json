@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-737",
+      "ref": "refs/pull/737/merge",
+      "sha": "907b4587609e057181f34d538d6650a68c52ed0f",
+      "timestamp": "2026-11-12T17:30:36.209Z",
+      "commits": [
+        {
+          "sha": "907b4587609e057181f34d538d6650a68c52ed0f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T10:29:38-07:00",
+          "message": "Merge 7c230d40a06859eb91ed5f0774644e7ae6cfdd1f into 303a122503d2659aa2d923221bd1480aa8858f00\n"
+        },
+        {
+          "sha": "7c230d40a06859eb91ed5f0774644e7ae6cfdd1f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T10:29:21-07:00",
+          "message": "feat(collector): the host judges each shell and file run where it is declared, and a refusal is the run's standing fault (candybar-host-renderer-x96a.jmi)\n\nThe loader parses a source's path, regex and ttl and no longer judges them.\nSourceRuns.declare judges every run (an absolute file.path and\ncache.watch_file, a regex that compiles with a capture group, a shell ttl\nat least the floor), so the collector and check's holder judge alike. An\naccepted run is the only thing the readers take; a refused one is held as\nan entry that reads nothing and answers failed, and its lane's fault says\nwhy. The registry turns every source's run fault, not only watch_file's,\ninto the variable's standing fault, so a refusal reaches the bar's warning\nindicator and check's verdict through the refresh warning. A shell ttl\nbelow the floor is refused, not silently clamped. The schema drops its\n\"^/\" patterns.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "303a122503d2659aa2d923221bd1480aa8858f00",
