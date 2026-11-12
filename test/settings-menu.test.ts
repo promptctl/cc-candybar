@@ -623,8 +623,8 @@ describe("the menu in a config that declares no variables", () => {
     );
   });
 
-  test("a user's own declaration of a name the menu reads does not load", () => {
-    expect(() =>
+  test("a user's own declaration of a name the menu reads is dropped, so the menu reads the payload's", () => {
+    expect(
       parseAndValidate(
         "<user>",
         `{
@@ -634,8 +634,8 @@ describe("the menu in a config that declares no variables", () => {
         root: { h: ['hello'] },
       }`,
         ALLOWED,
-      ),
-    ).toThrow(`"project_dir" is supplied by the daemon's payload`);
+      ).variables.project_dir,
+    ).toEqual(PAYLOAD_INPUTS.project_dir);
   });
 
 });

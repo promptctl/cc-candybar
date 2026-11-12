@@ -76,12 +76,6 @@ export function reservedNamespaceCollisions(
 // namespace, and is refused as one. A segment a plugin beneath already
 // declares is the exception: a file retunes it by field, as it retunes any
 // inherited segment.
-//
-// A payload input (payload-inputs.ts) is the daemon's: the session a copy or
-// `run` names, the file `↗ config` opens, the setting a picker marks current.
-// Every config reads it from beneath the bundled default, so a variable of
-// that name — top-level or a segment var — would make the bar's own acts read
-// another value, and is refused.
 export function pluginScopeCollisions(
   ctx: ValidateCtx,
   out: Mutable<RawDslConfig>,
@@ -95,14 +89,6 @@ export function pluginScopeCollisions(
   ] as const) {
     for (const name of Object.keys(out[section] ?? {})) {
       const scope = scopeOf(name);
-      if (section === "variables" && isPayloadInput(name)) {
-        ctx.issues.push({
-          path: `${section}.${name}`,
-          message: `"${name}" is ${PAYLOAD_OWNED} — remove this declaration`,
-          line: findKeyLine(ctx.source, [section, name]),
-        });
-        continue;
-      }
       if (scope === undefined) continue;
       if (section !== "variables" && name === scope) continue;
       if (section === "segments" && inherited.has(name)) continue;
@@ -116,29 +102,65 @@ export function pluginScopeCollisions(
   for (const [segment, decl] of Object.entries(out.segments ?? {})) {
     for (const v of Object.keys(decl.vars ?? {})) {
       const name = `${segment}.${v}`;
-      const at = {
-        path: `segments.${segment}.vars.${v}`,
-        line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
-      };
-      if (isPayloadInput(name)) {
-        ctx.issues.push({
-          ...at,
-          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} — rename the var or the segment`,
-        });
-        continue;
-      }
       const scope = scopeOf(name);
       if (scope === undefined || inherited.has(segment)) continue;
       ctx.issues.push({
-        ...at,
+        path: `segments.${segment}.vars.${v}`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
         message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own — rename the var or the segment`,
       });
     }
   }
 }
 
-const PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
-
-function isPayloadInput(name: string): boolean {
-  return Object.hasOwn(PAYLOAD_INPUTS, name);
+// A payload input (payload-inputs.ts) is the daemon's: the session a copy or
+// `run` names, the file `↗ config` opens, the setting a picker marks current.
+// Every config reads it from beneath the bundled default, so a file's own
+// variable of that name — top-level or a segment var — would make the bar's
+// own acts read another value. The declaration is dropped and the drop is a
+// warning, not a refusal: configs written before the daemon owned these names
+// declare them, and refusing the file would cost the user every other line of
+// it for one line that is now redundant [LAW:no-silent-failure].
+export function withoutPayloadDeclarations(
+  filePath: string,
+  source: string,
+  raw: RawDslConfig,
+): { raw: RawDslConfig; notices: readonly string[] } {
+  const notices: string[] = [];
+  const drop = (name: string, keyPath: readonly string[]): boolean => {
+    if (!Object.hasOwn(PAYLOAD_INPUTS, name)) return false;
+    notices.push(
+      `${filePath}:${findKeyLine(source, keyPath)}: "${name}" is supplied by the daemon's payload to every config, so this declaration is ignored — remove it`,
+    );
+    return true;
+  };
+  const keep = <T>(
+    record: Readonly<Record<string, T>>,
+    dropped: (key: string) => boolean,
+  ): Record<string, T> =>
+    Object.fromEntries(Object.entries(record).filter(([k]) => !dropped(k)));
+  return {
+    raw: {
+      ...raw,
+      ...(raw.variables && {
+        variables: keep(raw.variables, (n) => drop(n, ["variables", n])),
+      }),
+      ...(raw.segments && {
+        segments: Object.fromEntries(
+          Object.entries(raw.segments).map(([segment, decl]) => [
+            segment,
+            decl.vars === undefined
+              ? decl
+              : {
+                  ...decl,
+                  vars: keep(decl.vars, (v) =>
+                    drop(`${segment}.${v}`, ["segments", segment, "vars", v]),
+                  ),
+                },
+          ]),
+        ),
+      }),
+    },
+    notices,
+  };
 }

@@ -7,7 +7,12 @@ import { buildRig } from "./helpers/rig";
 import { linkUrls } from "./helpers/frame";
 import { effectsOf } from "./helpers/click";
 import { sessionIdOf } from "../src/daemon/session-id";
-import { parseDslConfig } from "../src/config/dsl-loader";
+import {
+  loadConfigSource,
+  noProject,
+  parseDslConfig,
+} from "../src/config/dsl-loader";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 
 const OWN = sessionIdOf("s-own");
@@ -76,33 +81,52 @@ describe("a view's session", () => {
     expect(textOf(rig.draw().frame)).toContain(`sid=${OWN}`);
   });
 
-  test("a config declaring session.id does not load", () => {
-    expect(() =>
-      parseDslConfig(
-        "t.json5",
-        `{ variables: { 'session.id': { kind: 'literal', value: '${OTHER}' } } }`,
+  test("a config's own session.id is dropped with a warning, and the bar draws the view's session", () => {
+    const declared = CONFIG.replace(
+      "variables: {",
+      `variables: { 'session.id': { kind: 'literal', value: '${OTHER}' },`,
+    );
+    const loaded = loadConfigSource(
+      "t.json5",
+      declared,
+      DEFAULT_DSL_CONFIG,
+      noProject("/home"),
+      new Set(["textual-dark"]),
+    );
+    expect(loaded.warnings).toEqual([
+      expect.stringMatching(
+        /^t\.json5:\d+: "session\.id" is supplied by the daemon's payload/,
       ),
-    ).toThrow("\"session.id\" is supplied by the daemon's payload");
+    ]);
+    const rig = buildRig({
+      source: declared,
+      palettes: new Set(["textual-dark"]),
+      sessionId: OWN,
+    });
+    expect(textOf(rig.draw().frame)).toContain(`sid=${OWN}`);
   });
 
-  test("a segment var named into session.id does not load", () => {
-    expect(() =>
-      parseDslConfig(
-        "t.json5",
-        `{ segments: { session: { template: 'x', vars: { id: { kind: 'literal', value: 'x' } } } } }`,
-      ),
-    ).toThrow(`segment "session"'s var "id" is named "session.id"`);
+  test("a segment var named into session.id is dropped with a warning", () => {
+    const raw = parseDslConfig(
+      "t.json5",
+      `{ segments: { session: { template: 'x', vars: { id: { kind: 'literal', value: 'x' }, own: { kind: 'literal', value: 'y' } } } } }`,
+    );
+    expect(Object.keys(raw.segments?.session?.vars ?? {})).toEqual(["own"]);
   });
 
   test.each(Object.keys(PAYLOAD_INPUTS))(
-    "a config declaring the payload input %s does not load",
+    "a config's own declaration of the payload input %s is dropped with a warning",
     (name) => {
-      expect(() =>
-        parseDslConfig(
-          "t.json5",
-          `{ variables: { ${JSON.stringify(name)}: { kind: 'literal', value: 'x' } } }`,
-        ),
-      ).toThrow(`"${name}" is supplied by the daemon's payload`);
+      const loaded = loadConfigSource(
+        "t.json5",
+        `{ variables: { ${JSON.stringify(name)}: { kind: 'literal', value: 'x' } } }`,
+        DEFAULT_DSL_CONFIG,
+        noProject("/home"),
+      );
+      expect(loaded.config.variables[name]).toEqual(PAYLOAD_INPUTS[name]);
+      expect(loaded.warnings).toEqual([
+        expect.stringContaining(`"${name}" is supplied by the daemon's payload`),
+      ]);
     },
   );
 });

@@ -34,7 +34,6 @@ import { confirmStep } from "./confirm-step.js";
 import { parseDslConfig } from "./dsl-loader.js";
 import { mergeWithDefault } from "./loader/merge.js";
 import { BUNDLED_THEME_DEFAULTS } from "./bundled-theme-defaults.js";
-import { PAYLOAD_INPUTS } from "./payload-inputs.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
 import { autocompactControl } from "./autocompact-control.js";
@@ -1693,12 +1692,7 @@ const AUTHORED_PALETTE_NAMES = new Set(
 // literal. Round-tripping through JSON is exactly what
 // test/default-dsl-config.test.ts's SERIALIZED-based tests already exercise,
 // so this is the same well-tested path, run once here instead of skipped.
-//
-// [LAW:one-source-of-truth] The payload inputs (payload-inputs.ts) are placed
-// here, beneath the parsed default, rather than authored in it: they are the
-// daemon's, so no parsed source declares one and the loader refuses any that
-// tries. Every chain merges over this constant, so every config reads them.
-const PARSED_DEFAULT: DslConfig = mergeWithDefault(
+export const DEFAULT_DSL_CONFIG: DslConfig = mergeWithDefault(
   parseDslConfig(
     "<default>",
     JSON.stringify(RAW_DEFAULT_DSL_CONFIG),
@@ -1706,7 +1700,3 @@ const PARSED_DEFAULT: DslConfig = mergeWithDefault(
   ),
   RAW_DEFAULT_DSL_CONFIG,
 );
-export const DEFAULT_DSL_CONFIG: DslConfig = {
-  ...PARSED_DEFAULT,
-  variables: { ...PAYLOAD_INPUTS, ...PARSED_DEFAULT.variables },
-};

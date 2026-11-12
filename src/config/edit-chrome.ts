@@ -1023,6 +1023,8 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     roots.push(root);
     presets[name] = { ...presetByName(config.presets, name), root };
   }
+  // [LAW:no-silent-failure] Every read the chrome makes resolves, or the load
+  // throws naming it.
   checkSynthesisReads(artifacts, roots, config);
   return {
     ...config,

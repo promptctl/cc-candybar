@@ -20,6 +20,7 @@ import {
   type SegmentDecl,
 } from "../dsl-types.js";
 import { EMPTY_ROWS, mergeRoot } from "../root.js";
+import { PAYLOAD_INPUTS } from "../payload-inputs.js";
 
 /**
  * Merge a RawDslConfig on top of a default DslConfig. Pure function.
@@ -45,7 +46,13 @@ export function mergeWithDefault(
 ): DslConfig {
   return {
     globals: { ...dflt.globals, ...(raw.globals ?? {}) },
-    variables: { ...dflt.variables, ...(raw.variables ?? {}) },
+    // [LAW:single-enforcer] The daemon's payload inputs lie beneath every
+    // base, so no caller can build a base that lacks them.
+    variables: {
+      ...PAYLOAD_INPUTS,
+      ...dflt.variables,
+      ...(raw.variables ?? {}),
+    },
     segments: overlayByName(
       dflt.segments,
       segmentDeltas(dflt.segments, raw.segments ?? {}),

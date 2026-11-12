@@ -54,8 +54,8 @@ Declare only what differs. The bundled default already declares every
 built-in segment and a styles stdlib (`none`, `vivid`, `muted`, `dim`,
 `bright`, `inverted`). The daemon supplies the values its own chrome reads —
 `session.id`, `project_dir`, `config_path`, `theme.effective`,
-`style.effective`, `term.cols` and the rest — to every config, and a config
-that declares one of them does not load.
+`style.effective`, `term.cols` and the rest — to every config. A config's own
+declaration of one is ignored, with a warning naming it and its line.
 
 ## The decision rule
 
@@ -965,8 +965,6 @@ your own project slash command included — is one `slash` action and one
 
 ```json5 check:pass
 {
-  variables: {
-  },
   actions: {
     review: { slash: '/review' },
     compactKeepApi: { slash: '/compact keep the API design' },

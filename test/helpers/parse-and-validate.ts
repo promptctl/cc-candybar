@@ -15,13 +15,11 @@ import {
   type AuthoredConfig,
 } from "../../src/config/dsl-loader";
 import type { DslConfig, ValidatedConfig } from "../../src/config/dsl-types";
-import { PAYLOAD_INPUTS } from "../../src/config/payload-inputs";
 
-// A test's own slice alone, over the floor every production config has: the
-// daemon's payload inputs, which no config declares.
+// A test's own slice alone.
 export const EMPTY_DEFAULT: DslConfig = {
   globals: {},
-  variables: { ...PAYLOAD_INPUTS },
+  variables: {},
   segments: {},
   root: { rows: {} },
   actions: {},

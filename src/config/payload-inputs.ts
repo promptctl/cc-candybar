@@ -1,14 +1,10 @@
-// [LAW:one-source-of-truth] The payload inputs the synthesized chrome reads —
-// the settings menu's tray, controls and carousels, and edit chrome's
-// customized banner — declared ONCE. The bundled default spreads this table
-// into its variables; the synthesis passes ensure from it whatever their
-// artifacts read that the config did not declare (brandon-settings-menu-d6f),
-// so a config declaring nothing still gets a menu that renders, and a
-// declaration here cannot drift from the one the default ships.
+// [LAW:one-source-of-truth] The payload inputs: the values the daemon supplies
+// to every config — the session a copy or `run` names, the file `↗ config`
+// opens, the setting a picker marks current — and that the synthesized chrome
+// reads, declared ONCE. The merge lays them beneath every base, and the loader
+// drops a file's own declaration of one, so no config reads another value.
 //
-// [LAW:one-way-deps] It lives below both readers: default-dsl-config.ts
-// imports the loader, and the loader runs the synthesis, so the synthesis
-// cannot import the default without a cycle.
+// [LAW:one-way-deps] It lives below the merge and the loader that read it.
 
 import type { VariableDecl } from "./dsl-types.js";
 import type { DiagnosticsProjection } from "../render/diagnostics.js";
