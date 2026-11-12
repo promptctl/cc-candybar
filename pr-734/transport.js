@@ -64831,10 +64831,6 @@ var UNREAD_RUN = {
   reading: pendingOf("unread"),
   fault: null
 };
-var SUPERSEDED_RUN = {
-  reading: pendingOf("superseded"),
-  fault: null
-};
 
 // src/daemon/source-runs.ts
 init_globals();
@@ -66486,23 +66482,21 @@ function todayReading(lane, usage, sessionId2) {
   if (own2.kind === "failed") return own2;
   return ok({ sums: set2.value.sums, own: own2.kind === "ok" ? own2.value : {} });
 }
-function awaitsReading({ builtins, sources, runs }, named3, absent) {
+function awaitsReading({ builtins, sources, runs }, named3) {
   return [
     builtins.git,
     builtins.tmux,
     builtins.hostName,
     builtins.hostUser,
     ...Object.values(sources),
-    ...[...named3].map((run3) => (runs[run3.digest] ?? absent).reading)
+    ...[...named3].map((run3) => (runs[run3.digest] ?? UNREAD_RUN).reading)
   ].some(awaitedReading);
 }
 var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
-async function settleWorld(inputs, at, refreshed, worldState, named3, absent, signal) {
+async function settleWorld(inputs, at, refreshed, worldState, named3, signal) {
   await refreshPayload(inputs, at, refreshed);
   try {
-    await when(() => !awaitsReading(worldState(), named3(), absent()), {
-      signal
-    });
+    await when(() => !awaitsReading(worldState(), named3()), { signal });
   } catch (e) {
     if (!signal.aborted) throw e;
   }
@@ -76842,7 +76836,6 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
       view,
       hintsError,
       payloadInputs,
-      absentRun: () => hold2.absentRun(),
       [Symbol.dispose]: () => hold2[Symbol.dispose]()
     };
   } catch (e) {
@@ -77186,7 +77179,6 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
         refreshed,
         () => parts.worldStates.of(setup.sessionId),
         () => setup.view.registry.namedRuns().values(),
-        () => setup.absentRun(),
         signal
       ),
       budget,
@@ -77307,29 +77299,36 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
       ["effect", String(effect.id)]
     ]
   );
-  const configured = await host.answer({
-    kind: "event",
-    at,
-    event: {
-      kind: "config",
-      context: req,
-      worldState: collector.requested(req)
+  const worldState = collector.requested(req);
+  const release4 = collector.holding(req.hookData.session_id);
+  let delivered;
+  try {
+    const configured = await host.answer({
+      kind: "event",
+      at,
+      event: {
+        kind: "config",
+        context: req,
+        worldState
+      }
+    });
+    recorded(facts, configured);
+    if (configured.kind === "threw") {
+      noteFacts(facts, { renderer: host.name });
+      return failed2(host, configured.error, "its config turn: ");
     }
-  });
-  recorded(facts, configured);
-  if (configured.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed2(host, configured.error, "its config turn: ");
-  }
-  const delivered = await host.answer({
-    kind: "event",
-    at,
-    event: { kind: "request", id: id2, context: req, waitEndsAt }
-  });
-  recorded(facts, delivered);
-  if (delivered.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed2(host, delivered.error);
+    delivered = await host.answer({
+      kind: "event",
+      at,
+      event: { kind: "request", id: id2, context: req, waitEndsAt }
+    });
+    recorded(facts, delivered);
+    if (delivered.kind === "threw") {
+      noteFacts(facts, { renderer: host.name });
+      return failed2(host, delivered.error);
+    }
+  } finally {
+    release4();
   }
   const { effects } = delivered.output;
   noteFacts(facts, {
@@ -82088,7 +82087,6 @@ var RenderCache = class {
       entry: held.entry,
       state: held.state,
       view,
-      absentRun: () => lease.retired === null ? UNREAD_RUN : SUPERSEDED_RUN,
       [Symbol.dispose]: () => {
         if (released) throw new Error("render-cache view hold released twice");
         released = true;
@@ -82182,11 +82180,7 @@ var RenderCache = class {
     }
     this.openFailures.delete(sessionId2);
     this.views.set(sessionId2, view);
-    const lease = { entry, holders: 0, retired: null };
-    this.viewHolds.set(
-      view,
-      observable(lease, { entry: false, holders: false })
-    );
+    this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
       `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
@@ -82206,9 +82200,7 @@ var RenderCache = class {
     if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
     view.retire();
     const lease = this.leaseOf(view);
-    runInAction(() => {
-      lease.retired = { reason, held: lease.holders };
-    });
+    lease.retired = { reason, held: lease.holders };
     this.reclaimView(view, lease);
   }
   // [LAW:single-enforcer] The one place a view is disposed: retired and unheld.
@@ -82901,18 +82893,19 @@ var Collector = class {
       }
     });
   }
-  // [LAW:no-ambient-temporal-coupling] A click holds its session for as long
-  // as the host awaits its turn, however long that is, and its release names
-  // the session as a request does, so the next sweep keeps it too. Only a
+  // [LAW:no-ambient-temporal-coupling] A turn, a request's or a click's, holds
+  // its session for as long as the host awaits it, however long that is, so
+  // no sweep retires the session under a turn still drawing it. Its release
+  // names the session as a request does, so the next sweep keeps it too. Only a
   // live session is kept: a retiring one has released its reads, and its
   // record goes once the retire settles, as one with no record has gone.
   holding(session) {
     const record2 = this.records.get(session);
     if (record2?.phase.kind !== "live") return () => {
     };
-    record2.clicks++;
+    record2.turns++;
     return () => {
-      record2.clicks--;
+      record2.turns--;
       record2.active = true;
     };
   }
@@ -82921,7 +82914,7 @@ var Collector = class {
     for (const record2 of this.records.values()) {
       if (record2.phase.kind !== "live") continue;
       if (record2.active) record2.active = false;
-      else if (record2.clicks === 0 && !this.deps.watched(record2.session))
+      else if (record2.turns === 0 && !this.deps.watched(record2.session))
         this.retire(record2, record2.phase);
     }
   }
@@ -82963,7 +82956,7 @@ var Collector = class {
       stamped,
       subscriptions,
       active: true,
-      clicks: 0,
+      turns: 0,
       phase: this.watch(session, stamped, reader)
     };
   }
