@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-728",
-      "ref": "refs/pull/728/merge",
-      "sha": "20cfab1231640e225e1f751c467dfbfa3c446ec0",
-      "timestamp": "2026-11-12T07:24:16.593Z",
-      "commits": [
-        {
-          "sha": "20cfab1231640e225e1f751c467dfbfa3c446ec0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T07:23:20Z",
-          "message": "Merge f1bf50cabf0ef6bfbccb6166eef264be12fcd889 into 12a2dfd7a5a6af31a086f546f452c9b9dbddee21\n"
-        },
-        {
-          "sha": "f1bf50cabf0ef6bfbccb6166eef264be12fcd889",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:23:07-07:00",
-          "message": "test(clicks): the answer budget's and the event wait's comments say what they bound (candybar-host-renderer-x96a.iml)\n"
-        },
-        {
-          "sha": "210a0366077fe9e48cfde48aee32c03881165a44",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:20:32-07:00",
-          "message": "test(clicks): the click helper reads its event's fields through logfmt, and its comment says outcome tells landed from dropped (candybar-host-renderer-x96a.iml)\n"
-        },
-        {
-          "sha": "b17bb4abcb38d8715566fc13e1049c60433832aa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:14:41-07:00",
-          "message": "test(clicks): the repository answers land through the click helper, and one builder spells the click request (candybar-host-renderer-x96a.iml)\n"
-        },
-        {
-          "sha": "ab9828cc3aca51432d959425ed3470abe619cb14",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:01:04-07:00",
-          "message": "test(plugins): a click the plugin tests need to land goes through the click helper (candybar-host-renderer-x96a.iml)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "12a2dfd7a5a6af31a086f546f452c9b9dbddee21",
-      "timestamp": "2026-11-12T07:02:28.252Z",
+      "sha": "7c43611a9831800d0c61d84c0a4dbcebc50c6fda",
+      "timestamp": "2026-11-12T07:32:25.619Z",
       "commits": [
         {
-          "sha": "12a2dfd7a5a6af31a086f546f452c9b9dbddee21",
+          "sha": "7c43611a9831800d0c61d84c0a4dbcebc50c6fda",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:01:30-07:00",
-          "message": "test(doctor): the doctor-run click reads its outcome from its event when its reply outlasts the guard (candybar-host-renderer-x96a.twu) (#726)\n\n* test(doctor): the doctor-run click reads its outcome from its event when its reply outlasts the guard (candybar-host-renderer-x96a.twu)\n\n* test(doctor): drop the imports and the comment the helper's contract made dead (candybar-host-renderer-x96a.twu)\n\n* test(daemon-e2e): a click abandoned before its turn is sent again, and a click past its TIMEOUT is waited on for its work (candybar-host-renderer-x96a.twu)\n\n* Revert the abandoned-click resend: it makes the helper match events by position for a second send, and a refused click already fails loudly with its event (candybar-host-renderer-x96a.twu)"
+          "timestamp": "2026-11-12T00:31:24-07:00",
+          "message": "test(clicks): must-land clicks in the plugin and repository tests go through the click helper (candybar-host-renderer-x96a.iml) (#728)\n\n* test(plugins): a click the plugin tests need to land goes through the click helper (candybar-host-renderer-x96a.iml)\n\n* test(clicks): the repository answers land through the click helper, and one builder spells the click request (candybar-host-renderer-x96a.iml)\n\n* test(clicks): the click helper reads its event's fields through logfmt, and its comment says outcome tells landed from dropped (candybar-host-renderer-x96a.iml)\n\n* test(clicks): the answer budget's and the event wait's comments say what they bound (candybar-host-renderer-x96a.iml)"
         }
       ]
     }
