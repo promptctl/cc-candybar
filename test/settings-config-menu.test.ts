@@ -123,7 +123,7 @@ function rig(
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // What the render cache reads off the file's raw parse (render.ts).
     const fileHeld = fileHeldSettings(

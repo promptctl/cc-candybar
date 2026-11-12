@@ -260,6 +260,7 @@ describe("the all-pending document", () => {
       speed: pendingOf("unread"),
       autoCompact: pendingOf("unread"),
       sources: new Map(),
+      runs: new Map(),
     },
     today: waiting,
     faults: [],

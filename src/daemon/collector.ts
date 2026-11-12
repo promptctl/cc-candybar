@@ -47,7 +47,7 @@ import {
   readingsOf,
   settledLanes,
   type DeclaredLanes,
-  type DeclaredSources,
+  type Subscribed,
   type Readings,
   type RenderPayloadDeps,
   type ViewFacts,
@@ -95,7 +95,7 @@ interface Declared {
 interface DeclaredFor {
   readonly session: SessionId;
   readonly locator: ViewFacts;
-  readonly subscriptions: DeclaredSources;
+  readonly subscriptions: Subscribed;
 }
 
 // The session's latest document, which its stamps replace and its `config`
@@ -127,7 +127,7 @@ type Phase = Live | { readonly kind: "retiring" };
 interface SessionRecord {
   readonly session: SessionId;
   readonly stamped: Stamped;
-  subscriptions: DeclaredSources;
+  subscriptions: Subscribed;
   // Whether an input named the session since the last sweep: a request, or
   // a click that settled.
   active: boolean;
@@ -159,15 +159,29 @@ const locatorOf = (req: ViewFacts): ViewFacts => ({
   hints: req.hints,
 });
 
-const sourcesOf = (subscriptions: readonly Subscription[]): DeclaredSources =>
-  new Map(subscriptions.map((s) => [s.source, s.storage]));
+const sourcesOf = (subscriptions: readonly Subscription[]): Subscribed => ({
+  plugins: new Map(
+    subscriptions.flatMap((s) =>
+      s.kind === "plugin" ? [[s.source, s.storage] as const] : [],
+    ),
+  ),
+  runs: new Map(
+    subscriptions.flatMap((s) =>
+      s.kind === "run" ? [[s.run.digest, s.run] as const] : [],
+    ),
+  ),
+});
 
-const sameSources = (a: DeclaredSources, b: DeclaredSources): boolean =>
-  a.size === b.size &&
-  [...a].every(([name, key]) => {
-    const other: StorageKey | undefined = b.get(name);
+// [LAW:one-source-of-truth] A run is its digest, so two sets naming the same
+// digests are the same set.
+const sameSources = (a: Subscribed, b: Subscribed): boolean =>
+  a.plugins.size === b.plugins.size &&
+  [...a.plugins].every(([name, key]) => {
+    const other: StorageKey | undefined = b.plugins.get(name);
     return other !== undefined && sameKey(key, other);
-  });
+  }) &&
+  a.runs.size === b.runs.size &&
+  [...a.runs.keys()].every((digest) => b.runs.has(digest));
 
 // A live session's reads stop and its holds close.
 function release({ stop, holds }: Live): void {
@@ -283,7 +297,7 @@ export class Collector {
   }
 
   private open(session: SessionId, locator: ViewFacts): SessionRecord {
-    const subscriptions: DeclaredSources = new Map();
+    const subscriptions: Subscribed = { plugins: new Map(), runs: new Map() };
     const reader = this.reader({ session, locator, subscriptions });
     const first = reader.inputs.get();
     // [LAW:no-silent-failure] A session's first stamp has no document to keep:
@@ -403,7 +417,7 @@ export class Collector {
         locator,
         lanes: settledLanes(
           failed(`session declaration threw: ${String(e)}`, "read"),
-          [...subscriptions.keys()],
+          subscriptions,
         ),
       };
     }

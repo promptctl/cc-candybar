@@ -44,7 +44,8 @@ import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
+import { CheckRuns } from "../src/check-runs";
 
 let dir: string;
 // The machine a test runs on: this worker's own unless its describe states another.
@@ -590,7 +591,6 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     stateDir: stateDir(host),
     locations: locations(host),
     env: host.env,
-    runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
     storage: NO_PLUGIN_STORAGE,
     signer: TEST_SIGNER,
     gates: bareGates(),
@@ -652,7 +652,6 @@ describe("a plugin's own variables", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -702,7 +701,6 @@ describe("a plugin's own variables", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -762,7 +760,6 @@ describe("a plugin's own variables", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -783,7 +780,6 @@ describe("a plugin's own variables", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -937,7 +933,6 @@ describe("an installed plugin", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -998,7 +993,6 @@ describe("an installed plugin", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1008,6 +1002,11 @@ describe("an installed plugin", () => {
       },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );
+    // The runs each view's sources name, held as the host holds a session's.
+    const sourceRuns = new SourceRuns({
+      launcher: processLauncher,
+      clock: systemTimekeeper,
+    });
     try {
       const main = path.join(dir, "main");
       const cwds = [
@@ -1030,24 +1029,36 @@ describe("an installed plugin", () => {
           using held = cache.holdSession(main, cwd, p, viewFacts(cwd, `s${i}`));
           const s = held.state;
           expect(s).toBe(states[i]);
-          expect(await s.registry.settled(5000)).toEqual([]);
-          return textOf(
-            drawPayload(
-              s.config,
-              s.compiled,
-              held.view.store,
-              held.view.registry,
-              { session_id: `s${i}`, project_dir: main },
-              instantOf(new Date()),
-              {
-                endcaps: "powerline",
-                colorCompatibility: "truecolor",
-                wrap: true,
-                padding: 1,
-                width: 200,
-              },
-            ).frame,
+          const runs = new CheckRuns(
+            sourceRuns,
+            held.view.registry,
+            instantOf(new Date()),
           );
+          try {
+            expect(await runs.settled(AbortSignal.timeout(5000))).toEqual([]);
+            return textOf(
+              drawPayload(
+                s.config,
+                s.compiled,
+                held.view.store,
+                held.view.registry,
+                { session_id: `s${i}`, project_dir: main },
+                instantOf(new Date()),
+                {
+                  endcaps: "powerline",
+                  colorCompatibility: "truecolor",
+                  wrap: true,
+                  padding: 1,
+                  width: 200,
+                },
+                undefined,
+                undefined,
+                (digest) => runs.run(digest),
+              ).frame,
+            );
+          } finally {
+            runs.close();
+          }
         }),
       );
       expect(drawn[0]).toContain("#main-1");
@@ -1055,6 +1066,7 @@ describe("an installed plugin", () => {
       expect(drawn[2]).toContain("#main-1");
     } finally {
       cache.close();
+      sourceRuns.close();
       watchers.closeAll();
     }
   });
@@ -1081,7 +1093,6 @@ describe("an installed plugin", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1627,7 +1638,6 @@ describe("an installed plugin", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -1667,7 +1677,6 @@ describe("an installed plugin", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1773,7 +1782,6 @@ describe("an installed plugin", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -1856,7 +1864,6 @@ describe("an installed plugin", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -2020,7 +2027,6 @@ describe("a repo's plugin beside an installed one of its name", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

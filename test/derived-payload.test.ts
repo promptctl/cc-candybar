@@ -27,7 +27,8 @@ import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry, VariableStore } from "../src/var-system";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
+import { CheckRuns } from "../src/check-runs";
 
 const AT = instantOf(new Date(2026, 9, 25, 12, 0, 0));
 const RUN_WITHIN_MS = 5_000;
@@ -40,17 +41,23 @@ const OPTS = {
   width: 160,
 };
 
-// A view of `config` whose source answers the payload a test moves, and the
-// count of the runs its `probe` shell made.
+// A view of `config` whose source answers the payload a test moves and the
+// runs its holder holds, as the host holds a session's, and the count of the
+// runs its `probe` shell made.
 function viewOver(
   config: ValidatedConfig,
   payload: Record<string, unknown>,
   runs: string,
 ) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: os.tmpdir() });
   const answer = observable.box(payload, { deep: false });
+  const sourceRuns = new SourceRuns({
+    launcher: processLauncher,
+    clock: systemTimekeeper,
+  });
+  const held = new CheckRuns(sourceRuns, registry, AT);
   const selections = resolveEffectiveGlobals(
     config,
     () => null,
@@ -59,10 +66,14 @@ function viewOver(
   bindView(compiled, store, registry, {
     session: TEST_SESSION,
     payload: () => answer.get(),
+    run: (digest) => held.run(digest),
     selections: () => selections,
   });
   return {
-    registry,
+    // The stragglers once every run the view names answered, or `withinMs`
+    // passed.
+    settled: (withinMs: number) =>
+      held.settled(AbortSignal.timeout(withinMs)),
     // A request's arrival: the payload moves, in one turn.
     arrive: (next: Record<string, unknown>) =>
       runInAction(() => answer.set(next)),
@@ -74,7 +85,11 @@ function viewOver(
       fs.existsSync(runs)
         ? fs.readFileSync(runs, "utf8").split("\n").filter(Boolean).length
         : 0,
-    dispose: () => registry.dispose(),
+    dispose: () => {
+      registry.dispose();
+      held.close();
+      sourceRuns.close();
+    },
   };
 }
 
@@ -108,23 +123,23 @@ describe("a cache policy over the view's payload", () => {
     );
     const view = viewOver(config, { hot: false }, runs);
     try {
-      expect(await view.registry.settled(RUN_WITHIN_MS)).toEqual([]);
+      expect(await view.settled(RUN_WITHIN_MS)).toEqual([]);
       expect(view.runs()).toBe(1);
       view.draw();
       view.draw();
-      expect(await view.registry.settled(RUN_WITHIN_MS)).toEqual([]);
+      expect(await view.settled(RUN_WITHIN_MS)).toEqual([]);
       expect(view.runs()).toBe(1);
       // The data the rule reads moves: the rule settles on another name, and
       // the key's run starts in that turn, before any draw.
       gate.close();
       view.arrive({ hot: true });
-      expect(await view.registry.settled(0)).toEqual(["probe"]);
+      expect(await view.settled(0)).toEqual(["probe"]);
       gate.open();
-      expect(await view.registry.settled(RUN_WITHIN_MS)).toEqual([]);
+      expect(await view.settled(RUN_WITHIN_MS)).toEqual([]);
       expect(view.runs()).toBe(2);
       view.draw();
       view.draw();
-      expect(await view.registry.settled(RUN_WITHIN_MS)).toEqual([]);
+      expect(await view.settled(RUN_WITHIN_MS)).toEqual([]);
       expect(view.runs()).toBe(2);
     } finally {
       view.dispose();
@@ -152,9 +167,9 @@ describe("a cache policy over the view's payload", () => {
       runs,
     );
     try {
-      expect(await view.registry.settled(RUN_WITHIN_MS)).toEqual([]);
+      expect(await view.settled(RUN_WITHIN_MS)).toEqual([]);
       for (let frame = 0; frame < 3; frame++) view.draw();
-      expect(await view.registry.settled(RUN_WITHIN_MS)).toEqual([]);
+      expect(await view.settled(RUN_WITHIN_MS)).toEqual([]);
       expect(view.runs()).toBe(1);
     } finally {
       view.dispose();

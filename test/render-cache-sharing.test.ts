@@ -45,7 +45,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
 
 // brandon-unfiled-3248.8yp: the render cache held one 9.3 MB state per
 // directory a session rendered from, and released one only past 256 of them,
@@ -86,7 +86,6 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -158,8 +157,7 @@ const drawAlone = (
   compiled: CompiledConfig,
 ): VariableStore => {
   const store = new ProbeStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(),
-    store,
+  const registry = new SourceRegistry(store,
     "",
     new SessionState(),
   );

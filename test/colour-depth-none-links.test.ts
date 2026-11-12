@@ -51,7 +51,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   recordRender(sessionState, S1);
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });

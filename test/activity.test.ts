@@ -631,8 +631,7 @@ describe("the bundled activity segment renders the payload", () => {
       "activity",
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(),
-      store,
+    const registry = new SourceRegistry(store,
       "",
       new SessionState(),
     );

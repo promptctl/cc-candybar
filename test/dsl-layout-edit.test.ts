@@ -111,7 +111,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/session-id";
 
 const S1 = sessionIdOf("s1");
@@ -550,7 +550,7 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),
@@ -882,8 +882,7 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
     // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
     sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const registry = new SourceRegistry(unscriptedRuns(),
-      store,
+    const registry = new SourceRegistry(store,
       "",
       sessionState,
     );
@@ -940,8 +939,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
     sessionState.set(S1, EDIT_LIVE_KEY, "open");
-    const registry = new SourceRegistry(unscriptedRuns(),
-      store,
+    const registry = new SourceRegistry(store,
       "",
       sessionState,
     );
@@ -1015,7 +1013,6 @@ function makeCache(reloads?: ReloadSignal): {
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
       env: durable.host.env,
-      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -1233,7 +1230,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         stateDir: stateDir(durable.host),
         locations: locations(durable.host),
         env: durable.host.env,
-        runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),

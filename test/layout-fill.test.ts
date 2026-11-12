@@ -402,8 +402,7 @@ describe("a fill segment fills wherever the walk places it", () => {
       new Set(listResolvablePaletteNames()),
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(),
-      store,
+    const registry = new SourceRegistry(store,
       "",
       new SessionState(),
     );

@@ -66,7 +66,7 @@ import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/session-id";
 
 const S1 = sessionIdOf("s1");
@@ -420,7 +420,7 @@ function buildPersistRuntime(
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),
@@ -567,8 +567,7 @@ describe("persist action click → the config file", () => {
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, S1);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(),
-      store,
+    const registry = new SourceRegistry(store,
       "",
       sessionState,
     );
@@ -853,7 +852,6 @@ function makeCache(): {
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
       env: durable.host.env,
-      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

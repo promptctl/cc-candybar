@@ -34,7 +34,8 @@ import { lastBinding } from "./helpers/render-binding";
 import { selectionFor } from "./helpers/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
+import { CheckRuns } from "../src/check-runs";
 import { sessionIdOf } from "../src/daemon/session-id";
 const S = sessionIdOf("s");
 
@@ -72,12 +73,16 @@ function renderer(cfg: ValidatedConfig) {
   spawner.program(shell("sleep 0.2; printf ''"), runsFor(200, exits(0)));
   const store = new VariableStore(clock);
   const session = new SessionState();
-  const registry = new SourceRegistry(new SourceRuns({ launcher: launcher, clock: systemTimekeeper }), store, "", session);
+  const registry = new SourceRegistry(store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
+  // The runs its sources name, held as the host holds a session's.
+  const sourceRuns = new SourceRuns({ launcher, clock });
+  const runs = new CheckRuns(sourceRuns, registry, AT);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {
     store,
     registry,
+    runs,
     session,
     // Lets the clock pass, and the children it ends report.
     pass: async (ms: number) => {
@@ -110,6 +115,7 @@ function renderer(cfg: ValidatedConfig) {
           onRenderWarning: (warning) => warnings.push(warning),
         },
         selectionFor(cfg),
+        (digest) => runs.run(digest),
       );
       return {
         frame,
@@ -118,7 +124,11 @@ function renderer(cfg: ValidatedConfig) {
         warnings,
       };
     },
-    dispose: () => registry.dispose(),
+    dispose: () => {
+      registry.dispose();
+      runs.close();
+      sourceRuns.close();
+    },
   };
 }
 
@@ -386,7 +396,7 @@ describe("a json source with no default", () => {
       expect(cellBetween(on.draw().text, "L", "R")).toBe(
         `  ${LOADING_GLYPH}  `,
       );
-      const waiting = on.registry.settled(5000);
+      const waiting = on.runs.settled(AbortSignal.timeout(5000));
       await on.pass(200);
       expect(await waiting).toEqual([]);
       const { text, errors, frame } = on.draw();

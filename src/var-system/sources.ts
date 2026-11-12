@@ -15,8 +15,7 @@ import {
   observable,
   reaction,
   runInAction,
-  when,
-  type IReactionDisposer,
+  type IComputedValue,
 } from "mobx";
 import type { ColorDepth } from "@promptctl/rich-js";
 import {
@@ -45,20 +44,18 @@ import type { SourceParse } from "./parse.js";
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import type { SessionId } from "../daemon/session-id.js";
-import { Holds } from "../utils/holds.js";
-import { timeoutSignal } from "../time";
 import {
   keyHashOf,
+  runOf,
   type ParserId,
   type ReadMode,
+  type Run,
   type RunRefresh,
-  type SourceIdentity,
-  type SourceLane,
   type SourceRead,
-  type SourceRuns,
-} from "./source-runs.js";
+} from "../facts/source-identity.js";
+import { UNREAD_RUN, type RunFact } from "../facts/world-state.js";
 
-export { SHELL_READ_TIMEOUT_MS, type ReadMode } from "./source-runs.js";
+export type { ReadMode } from "../facts/source-identity.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -205,12 +202,14 @@ export interface Published {
 
 // [LAW:types-are-the-program] What a view's inputs are derived from: the value
 // at each payload path as it stands — pending while its source has not
-// answered — and the depth the view's renders draw at, which every contrast
-// floor reads. A read is tracked, so an input moves in the turn its value
-// does, and nothing else moves it.
+// answered — the reading of each run the view's sources name, by digest, as
+// the host last read it, and the depth the view's renders draw at, which every
+// contrast floor reads. A read is tracked, so an input moves in the turn its
+// value does, and nothing else moves it.
 export interface InputSource {
   session(): SessionId;
   read(path: string): Resolved;
+  run(digest: string): RunFact;
   drawnAt(): ColorDepth;
 }
 
@@ -226,6 +225,7 @@ const UNBOUND: InputSource = {
     );
   },
   read: () => pendingOf("unread"),
+  run: () => UNREAD_RUN,
   drawnAt: () => {
     throw new PendingValueError(
       "colorCompatibility.effective",
@@ -345,28 +345,46 @@ export class SourceRegistry {
   // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
   // tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
-  // [LAW:single-enforcer] What this registry holds of the daemon's source
-  // runs (source-runs.ts): one hold per entry however many of its sources
-  // read it, declared again whenever any source's identity moves, so the
-  // entry a moved key names is held before the one it leaves is released.
-  // The session's built-in entries are held by the host's collector
-  // (src/daemon/collector.ts), which declares on requests and subscriptions,
-  // not on a source's identity moving.
-  private readonly holds = new Holds();
-  // Each source's identity as its policy last named it. A policy over the
-  // source's own values names none until they answer.
-  private readonly identities = new Map<string, SourceIdentity>();
-  // [LAW:no-ambient-temporal-coupling] The lane each source reads, by name:
-  // observable, so a source's publish is a reaction over the entry it holds
-  // now, and `inFlight()` a reaction over which of them has not answered —
-  // the explicit "the runs a wait is for have ended" state a caller (a
-  // statusline request, `cc-candybar check`) awaits instead of guessing a
-  // delay, and one its deadline can stop listening to. A re-read keeps its
-  // answer standing, so no wait is for it; a new identity has none, so a
-  // wait is for it alone.
-  private readonly lanes = observable.map<string, SourceLane>(undefined, {
-    deep: false,
-  });
+  // [LAW:one-source-of-truth] The run each `shell` and `file` source names,
+  // by variable name: a derivation of its identity's inputs, none while a
+  // policy over values has nothing answered to name. A derivation, never a
+  // value a reaction writes, so whoever reads the runs inside a batch — a
+  // turn handed a world state from within the host's reaction — reads them as
+  // the turn's input moved them. The host runs them (src/daemon/source-runs.ts),
+  // and their readings come back through the view's input source.
+  private readonly runs = observable.map<
+    string,
+    IComputedValue<Run | undefined>
+  >(undefined, { deep: false });
+  private readonly namedNow = computed(
+    (): ReadonlyMap<string, Run> =>
+      new Map(
+        [...this.runs].flatMap(([name, run]) => {
+          const named = run.get();
+          return named === undefined ? [] : [[name, named] as const];
+        }),
+      ),
+  );
+  // The run each source names, by variable name: what names a pending run on
+  // the render event and among `check`'s stragglers.
+  namedRuns(): ReadonlyMap<string, Run> {
+    return this.namedNow.get();
+  }
+  // [LAW:one-source-of-truth] What this registry needs run, deduped by
+  // digest, in digest order, so an output is the same whatever order a config
+  // declares in. Computed, so a turn in which nothing moved sorts nothing.
+  private readonly subscriptionsNow = computed((): readonly Run[] =>
+    [
+      ...new Map(
+        [...this.namedNow.get().values()].map((run) => [run.digest, run]),
+      ),
+    ]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([, run]) => run),
+  );
+  subscriptions(): readonly Run[] {
+    return this.subscriptionsNow.get();
+  }
   // [LAW:one-source-of-truth] What this registry's inputs are derived from
   // (`bindInputs`), and so the depth the terminal draws this view's renders at
   // — the one depth every contrast floor reads, in this registry's variable
@@ -416,9 +434,6 @@ export class SourceRegistry {
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
   constructor(
-    // [LAW:single-enforcer] The daemon's one owner of every declared source's
-    // runs, which this registry's `shell` and `file` sources hold entries of.
-    private readonly runs: SourceRuns,
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
     sessionState?: SessionStateReader,
@@ -442,7 +457,6 @@ export class SourceRegistry {
   // own: a session leaving the directory disposes nothing of it.
   view(): SourceRegistry {
     return new SourceRegistry(
-      this.runs,
       new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
@@ -593,16 +607,17 @@ export class SourceRegistry {
   }
 
   // [LAW:single-enforcer] THE user-source declaration: the source's node, and
-  // the one reaction that publishes into it what the entry it holds has read
-  // (source-runs.ts runs it: read → parse). The cache policy names WHICH
-  // entry, through the identity it holds (registerCachePolicy), never whether
-  // the node exists [LAW:dataflow-not-control-flow].
+  // the one reaction that publishes into it the reading of the run it names,
+  // as the view's input source has it (the host runs it: read → parse). The
+  // cache policy names WHICH run, through the identity it names
+  // (registerCachePolicy), never whether the node exists
+  // [LAW:dataflow-not-control-flow].
   //
   // [LAW:types-are-the-program] Only an answered reading is published: the
-  // node holds its fallback until the first entry answers, and on a key's
-  // move it holds the old entry's answer until the new entry's lands — the
-  // old `ok` is simply not overwritten yet, so a key change draws no pending
-  // flash (spec section 19).
+  // node holds its fallback until the first run answers, and on a key's move
+  // it holds the old run's answer until the new run's lands — the old `ok` is
+  // simply not overwritten yet, so a key change draws no pending flash (spec
+  // section 19).
   private declareSource(
     name: string,
     read: SourceRead,
@@ -610,40 +625,43 @@ export class SourceRegistry {
     parse: SourceParse,
   ): void {
     const publish = this.publisherFor(name, parse);
-    runInAction(() => this.sourceNames.push(name));
+    const refreshOf = this.registerCachePolicy(name, cache);
+    // [LAW:single-enforcer] The one place a source's run is named: its digest
+    // is taken here, as its identity moves. Equal by digest, so a source whose
+    // run did not move keeps it, and its publish reaction is untouched.
+    const run = computed(
+      (): Run | undefined => {
+        const refresh = refreshOf();
+        return refresh === undefined
+          ? undefined
+          : runOf({ read, parse: parserIdOf(parse), refresh });
+      },
+      { equals: (a, b) => a?.digest === b?.digest },
+    );
+    runInAction(() => {
+      this.sourceNames.push(name);
+      this.runs.set(name, run);
+    });
     this.cleanups.push(
       reaction(
-        () => this.lanes.get(name)?.current(),
+        () => this.runFact(name)?.reading,
         (reading) => {
           if (reading === undefined || reading.kind === "pending") return;
-          publish(reading);
+          // The instant the reading first differed is the world state's; the
+          // store holds what the run answered.
+          const { at: _at, ...outcome } = reading;
+          publish(outcome);
         },
         { fireImmediately: true },
       ),
     );
-    this.registerCachePolicy(name, cache, (refresh) =>
-      this.hold(name, { read, parse: parserIdOf(parse), refresh }),
-    );
   }
 
-  // [LAW:single-enforcer] The one declaration of what this registry holds:
-  // every source's current identity, taken in one body so the entry a moved
-  // identity names is held before the entry it leaves is released (Holds).
-  // A source whose entry did not move keeps its lane, so its publish reaction
-  // is untouched; the lanes are set outside the body, where a publish they
-  // start cannot nest a declaration.
-  private hold(name: string, identity: SourceIdentity): void {
-    this.identities.set(name, identity);
-    const { result: taken } = this.holds.declare(() =>
-      [...this.identities].map(([n, id]) => {
-        const lane = this.runs.declare(this.holds, id);
-        const prior = this.lanes.get(n);
-        return [n, prior?.digest === lane.digest ? prior : lane] as const;
-      }),
-    );
-    runInAction(() => {
-      for (const [n, lane] of taken) this.lanes.set(n, lane);
-    });
+  // The reading of the run `name` names, or nothing while its policy names
+  // none (one over values not answered yet).
+  private runFact(name: string): RunFact | undefined {
+    const run = this.runs.get(name)?.get();
+    return run === undefined ? undefined : this.inputs.get().run(run.digest);
   }
 
   // [LAW:one-type-per-behavior] One total projection of the parser arm onto
@@ -726,48 +744,6 @@ export class SourceRegistry {
         show();
       }
     };
-  }
-
-  // [LAW:no-ambient-temporal-coupling] Resolves when none of the runs a wait
-  // is for is out (`awaited`), or when `signal` aborts — and then holds
-  // nothing, so a run that never ends keeps no waiter behind it. Resolves
-  // to the names still awaited: empty when all settled, the stragglers when
-  // the signal ended the wait. A signal already aborted ends it at once, so a
-  // caller holding one deadline over many waits pays it once.
-  //
-  // Asked again until it holds at this wait's own continuation: a landing
-  // that answers a key (a `depends_on` or `key` over the value that landed)
-  // holds the next lane in a reaction of the same batch, which can run after
-  // the one this wait is, so one evaluation can see nothing pending between
-  // the answer and the hold it causes.
-  async inFlight(signal: AbortSignal): Promise<readonly string[]> {
-    while (!signal.aborted && this.awaited().length > 0) {
-      try {
-        await when(() => this.awaited().length === 0, { signal });
-      } catch (e) {
-        // The signal's abort is the one rejection the wait expects.
-        if (!signal.aborted) throw e;
-      }
-    }
-    return this.awaited();
-  }
-
-  // The sources a wait on this registry is for: those whose held entry, here
-  // and in the home it reads through to, has not answered (rule 2's first
-  // value, or a key its facts moved). A re-read keeps the answer it has
-  // standing, so no wait is for it, whoever's period or watch started it.
-  private awaited(): string[] {
-    const here = [...this.lanes]
-      .filter(([, lane]) => lane.current().kind === "pending")
-      .map(([name]) => name);
-    return [...here, ...(this.parent?.awaited() ?? [])];
-  }
-
-  // The names still awaited once every run has ended or `withinMs` has
-  // passed: empty when all settled. The state a one-shot render awaits so it
-  // renders what those sources yielded, never a guessed delay.
-  settled(withinMs: number): Promise<readonly string[]> {
-    return this.inFlight(timeoutSignal(this.store.clock, withinMs));
   }
 
   // template: a variable whose value is derived by evaluating a go-template
@@ -975,9 +951,6 @@ export class SourceRegistry {
   dispose(): number {
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups.length = 0;
-    // [LAW:single-enforcer] Every entry this registry held is released: the
-    // last holder's release ends its run, its period and its watch.
-    this.holds.close();
     // The store's computeds are the last handles outward: a keepAlive computed
     // stays subscribed to the daemon-wide SessionState atom until released, and
     // that subscription held every disposed config's store for the life of the
@@ -989,33 +962,28 @@ export class SourceRegistry {
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   // [LAW:single-enforcer] One place that maps every CachePolicy kind to the
-  // identity the source holds: a period, a watched path or nothing is the
-  // run's own refresh and is held at declaration; a policy over what the
-  // source reads names the hash of what that answered, held when it first
-  // answers and again whenever the answer moves. Adding a new policy kind
-  // means adding one case here.
+  // refresh of the identity the source names: a period, a watched path or
+  // nothing is the run's own refresh, fixed at declaration; a policy over what
+  // the source reads is the hash of what that answered, none until it first
+  // answers. Adding a new policy kind means adding one case here.
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
-    hold: (refresh: RunRefresh) => void,
-  ): void {
+  ): () => RunRefresh | undefined {
     switch (policy.kind) {
       case "never":
-        hold({ kind: "never" });
-        break;
+        return () => ({ kind: "never" });
 
       case "ttl":
-        hold({ kind: "ttl", durationMs: policy.durationMs });
-        break;
+        return () => ({ kind: "ttl", durationMs: policy.durationMs });
 
       case "watch_file": {
-        hold({ kind: "watch_file", path: policy.path });
-        // The watch's fault is the entry's (source-runs.ts); here it is the
-        // variable's standing fault, for as long as this source holds that
-        // entry.
+        // The watch's fault is the run's, as the host reads it; here it is
+        // the variable's standing fault, for as long as this source names
+        // that run.
         this.cleanups.push(
           reaction(
-            () => this.lanes.get(name)?.fault() ?? null,
+            () => this.runFact(name)?.fault ?? null,
             (fault) =>
               this.notePolicy(
                 name,
@@ -1024,7 +992,7 @@ export class SourceRegistry {
             { fireImmediately: true },
           ),
         );
-        break;
+        return () => ({ kind: "watch_file", path: policy.path });
       }
 
       case "key": {
@@ -1038,75 +1006,68 @@ export class SourceRegistry {
         // source keeps what its last run yielded. Folding the throw into a
         // key value made a key that always throws a constant one — the
         // source never ran again and nothing said why.
-        this.onReads(
-          name,
-          () => {
-            try {
-              return ok(
-                parsedKey
-                  .evaluate(buildScope(this.store))
-                  .map((f) => f.plain)
-                  .join(""),
-              );
-            } catch (e) {
-              return readPending(e) !== undefined
-                ? pendingOf("unread")
-                : failed(
-                    `cache key: ${e instanceof Error ? e.message : String(e)}`,
-                    "read",
-                  );
-            }
-          },
-          (value) => hold({ kind: "key", hash: keyHashOf(value) }),
-        );
-        break;
+        return this.answeredUnder(name, () => {
+          try {
+            return ok(
+              parsedKey
+                .evaluate(buildScope(this.store))
+                .map((f) => f.plain)
+                .join(""),
+            );
+          } catch (e) {
+            return readPending(e) !== undefined
+              ? pendingOf("unread")
+              : failed(
+                  `cache key: ${e instanceof Error ? e.message : String(e)}`,
+                  "read",
+                );
+          }
+        });
       }
 
       case "depends_on": {
         // [LAW:dataflow-not-control-flow] The source re-reads whenever any
         // named variable changes. Variability lives in the dep values, not in
         // whether the update executes.
-        this.onReads(
-          name,
-          (): Reading<string> => {
-            const keys = policy.varNames.map((n) => this.store.changeKey(n));
-            return keys.every((key) => key.kind === "ok")
-              ? ok(keys.map((key) => key.value).join(","))
-              : pendingOf("unread");
-          },
-          (value) => hold({ kind: "key", hash: keyHashOf(value) }),
-        );
-        break;
+        return this.answeredUnder(name, (): Reading<string> => {
+          const keys = policy.varNames.map((n) => this.store.changeKey(n));
+          return keys.every((key) => key.kind === "ok")
+            ? ok(keys.map((key) => key.value).join(","))
+            : pendingOf("unread");
+        });
       }
     }
   }
 
   // [LAW:one-type-per-behavior] Both policies over what a source reads — its
-  // key, the variables it depends on — hold an identity when what they read
-  // answers, and another whenever that answer differs from the one last
-  // held. Over a value not answered yet (a view's inputs before its first
-  // payload) it waits rather than reading, so its first value is one read,
-  // not a read under no value and another when the value arrives
-  // (brandon-unfiled-3248.8ro6). Measured against the last answer held
-  // rather than the previous evaluation, so one that throws for a moment and
-  // comes back unchanged holds nothing new.
-  private onReads(
+  // key, the variables it depends on — name the hash of the last value what
+  // they read answered. Over a value not answered yet (a view's inputs before
+  // its first payload) they name nothing rather than reading, so a first value
+  // is one read, not a read under no value and another when the value arrives
+  // (brandon-unfiled-3248.8ro6). One that throws, or reads a value not
+  // answered, keeps the last answer, so a key failing for a moment and coming
+  // back unchanged names nothing new; what it failed with is the variable's
+  // standing fault (notePolicy).
+  private answeredUnder(
     name: string,
     reads: () => Reading<string>,
-    hold: (value: string) => void,
-  ): void {
-    let heldUnder: string | undefined;
-    const disposer: IReactionDisposer = reaction(
-      reads,
-      (answer) => {
-        this.notePolicy(name, answer);
-        if (answer.kind !== "ok" || answer.value === heldUnder) return;
-        heldUnder = answer.value;
-        hold(answer.value);
-      },
-      { fireImmediately: true },
+  ): () => RunRefresh | undefined {
+    const answer = computed(reads);
+    this.cleanups.push(
+      reaction(
+        () => answer.get(),
+        (now) => this.notePolicy(name, now),
+        { fireImmediately: true },
+      ),
     );
-    this.cleanups.push(disposer);
+    let last: string | undefined;
+    return () => {
+      const now = answer.get();
+      if (now.kind === "ok") last = now.value;
+      return last === undefined
+        ? undefined
+        : { kind: "key", hash: keyHashOf(last) };
+    };
   }
 
   // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.

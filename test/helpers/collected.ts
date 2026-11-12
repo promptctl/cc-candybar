@@ -3,7 +3,7 @@
 // src/renderer/main.ts) with no renderer built: a world state the collector
 // hands in is taken into the store, a retire closes the session's view and
 // drops its document, and every turn's subscriptions go back to the
-// collector.
+// collector, as the host hands back every output's (src/daemon/renderer-host.ts).
 
 import { Collector, type CollectorDeps } from "../../src/daemon/collector";
 import { retireSession } from "../../src/daemon/draw-bar";
@@ -49,6 +49,7 @@ export function collected(
     deliver: async (event) => {
       if (event.kind === "world-state") {
         worldStates.take(event.worldState);
+        collector.subscribed(cache().subscriptions());
         return { kind: "answered" };
       }
       retireSession({ renderCache: cache(), worldStates }, event.session);

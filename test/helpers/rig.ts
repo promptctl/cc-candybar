@@ -207,9 +207,7 @@ export function buildRig(init: RigInit = {}): Rig {
   );
   const sessionState = init.sessionState ?? new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(
-    unscriptedRuns(),
-    store,
+  const registry = new SourceRegistry(store,
     "",
     sessionState,
     null,

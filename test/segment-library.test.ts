@@ -75,7 +75,7 @@ function rig(width: number, userSegments = "") {
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   sessionState.set(SID, EDIT_MODE_KEY, "arrange");
   const render = (): Frame =>

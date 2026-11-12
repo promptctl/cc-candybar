@@ -29,8 +29,6 @@ import { ABSENT, failed, ok, pendingOf } from "../../src/utils/outcome";
 import { settledLane } from "../../src/utils/reading";
 import { bareGates } from "./gates";
 import { locs } from "./host";
-import { SourceRuns } from "../../src/var-system/source-runs";
-import { unscriptedLauncher } from "./fake-launcher";
 import { TEST_SIGNER } from "./link-signer";
 import { NO_PLUGIN_STORAGE } from "./plugin-storage";
 import {
@@ -159,18 +157,12 @@ export function sessionRig(
     clock: systemTimekeeper,
     logger: () => {},
   });
-  const runs = new SourceRuns({
-    launcher: unscriptedLauncher,
-    clock: systemTimekeeper,
-  });
-  cleanups.push(() => runs.close());
   const cache = new RenderCache<SessionSource>(
     {
       clock: systemTimekeeper,
       stateDir: stateDir({ env: {}, home: dir, tmp: dir }),
       locations: locs(),
       env: {},
-      runs,
       sessionState,
       watchers,
       storage: NO_PLUGIN_STORAGE,

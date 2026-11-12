@@ -39,7 +39,7 @@ function registerStdlib() {
     "<default>",
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   return { registry, compiled: registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" }) };
 }
 

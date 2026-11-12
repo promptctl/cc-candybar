@@ -56,7 +56,7 @@ function runtime(src: string) {
   const cfg = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   recordRender(sessionState, S1);
   return {

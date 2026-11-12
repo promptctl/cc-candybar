@@ -532,7 +532,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   // The git hold an earlier declaration took goes with the one that threw.
   holds.declare(() => take("git"));
   const declared = holds.declare(() =>
-    declareLanes(owners, holds, facts, new Map()),
+    declareLanes(owners, holds, facts, { plugins: new Map(), runs: new Map() }),
   );
   expect(declared.result.faults).toEqual([
     expect.stringMatching(/^git: .*resolver bug/),

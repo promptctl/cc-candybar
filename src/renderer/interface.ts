@@ -12,6 +12,7 @@ import type { StorageKey } from "../daemon/cache/managed-storage";
 import type { ParsedSessionId, SessionId } from "../daemon/session-id";
 import type { IdleClose } from "../daemon/verbs";
 import type { ClickArrival } from "../doctor/sightings";
+import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
@@ -139,13 +140,16 @@ export type Effect = Present;
 // the host writes beside the input's event.
 export type TurnRecord = readonly Field[];
 
-// A source the renderer's state needs read for one session: today a plugin
-// source, at its folder's storage key, named by the variable that reads it.
-export interface Subscription {
-  readonly kind: "plugin";
-  readonly source: SourceId;
-  readonly storage: StorageKey;
-}
+// [LAW:types-are-the-program] A source the renderer's state needs read for
+// one session: a plugin source, at its folder's storage key, named by the
+// variable that reads it; or a `shell` or `file` run, named by its digest.
+export type Subscription =
+  | {
+      readonly kind: "plugin";
+      readonly source: SourceId;
+      readonly storage: StorageKey;
+    }
+  | { readonly kind: "run"; readonly run: Run };
 
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
 // renderer holds needs read. The host diffs it; nothing is declared by

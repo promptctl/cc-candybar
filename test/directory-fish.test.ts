@@ -82,7 +82,7 @@ function renderDirRaw(paths: DirPaths): Frame {
     root: dirOnlyRoot,
   };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, {
       signer: TEST_SIGNER,
@@ -234,7 +234,7 @@ describe("configurability seam: user template override restores full path", () =
       }),
     };
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+    const registry = new SourceRegistry(store, "", new SessionState());
     try {
       const compiled = registerDslConfig(overridden, registry, {
         signer: TEST_SIGNER,

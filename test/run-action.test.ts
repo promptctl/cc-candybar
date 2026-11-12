@@ -64,7 +64,7 @@ import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { pendingOf } from "../src/utils/outcome";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
 
 const S2 = sessionIdOf("s2");
 const S9 = sessionIdOf("s9");
@@ -214,6 +214,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     }),
     logger: log,
     ledger: new RefreshLedger(log),
+    sourceRuns: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
   });
   const sessionState = new SessionState();
   const served = collected(
@@ -226,7 +227,6 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState,
       watchers,
       storage: providers.managedStorage,
@@ -426,7 +426,6 @@ describe("a run's declaration", () => {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
@@ -457,7 +456,6 @@ describe("a run's declaration", () => {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      runs: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
       signer: TEST_SIGNER,

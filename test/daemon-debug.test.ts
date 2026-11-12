@@ -87,8 +87,7 @@ function buildPopulatedState(): DaemonDslState {
     new Set<string>(), // no palette validation needed — segments don't set one
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(),
-    store,
+  const registry = new SourceRegistry(store,
     "",
     new SessionState(),
   );

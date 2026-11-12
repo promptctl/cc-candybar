@@ -25,7 +25,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
+import { SourceRuns } from "../src/daemon/source-runs";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const EXAMPLES_DIR = join(__dirname, "..", "examples");
@@ -67,7 +67,7 @@ describe("shipped examples load and render through the real cascade", () => {
     // it is to the real launcher until a process answers.
     const { launcher, spawner } = fakeLauncher(systemTimekeeper);
     spawner.program(() => true, hangs());
-    const registry = new SourceRegistry(new SourceRuns({ launcher: launcher, clock: systemTimekeeper }), store, "", sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     // [LAW:no-silent-failure] A variable that fails to declare is collected, not
     // thrown — surface it here so a broken example var fails the test loudly.

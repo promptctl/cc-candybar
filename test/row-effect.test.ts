@@ -86,7 +86,7 @@ function renderer(
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

@@ -7,12 +7,10 @@
 import fs from "node:fs";
 import { HOST, locs } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { heldRuns } from "./helpers/held-runs";
 import os from "node:os";
 import path from "node:path";
-import {
-  SOURCES_NOTHING,
-  RenderCache,
-} from "../src/daemon/cache/render";
+import { RenderCache } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -23,7 +21,6 @@ import { until } from "./helpers/until";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
-import { SourceRuns } from "../src/var-system/source-runs";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -76,6 +73,7 @@ function setUp() {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
+  const runs = heldRuns(unscriptedLauncher, cleanups);
   const changed: string[] = [];
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];
@@ -85,13 +83,12 @@ function setUp() {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      runs: new SourceRuns({ launcher: unscriptedLauncher, clock: systemTimekeeper }),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
       watchers,
-      source: SOURCES_NOTHING,
+      source: runs.source,
     },
     {
       budgetBytes: () => Number.MAX_SAFE_INTEGER,
@@ -102,8 +99,12 @@ function setUp() {
     },
   );
   cleanups.push(() => cache.close());
-  const open = (sid: string) =>
-    cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
+  // A session's request: its view, whose runs the host holds from here on.
+  const open = (sid: string) => {
+    const held = cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
+    runs.hold(held.view);
+    return held;
+  };
   const reload = (): void =>
     cache.reload(dir, dir, configFile, { kind: "write" });
   return { status, changed, reloads, writeConfig, reload, open };
@@ -124,8 +125,7 @@ test("a source re-read that finds what it stored wakes nothing; a new value wake
     () => held.view.store.read("status") === "green",
     "the source's first read",
   );
-  // Its first read is a change from the default the view opened with: the
-  // directory's source, read through the view.
+  // Its first read is a change from the default the view opened with.
   const settled = changed.length;
   expect(changed).toEqual(["s", "s"]);
   // Twenty periods of re-reads of the same text.

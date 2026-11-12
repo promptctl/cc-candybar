@@ -14,7 +14,7 @@ import type { RenderPayloadDeps } from "./render-payload";
 import type { RenderSightings } from "./render-sightings";
 import type { RenderWarningRecords } from "./render-warnings.js";
 import type { Runs } from "./runs.js";
-import type { SourceRuns } from "../var-system/source-runs.js";
+import type { SourceRuns } from "./source-runs.js";
 import type { RuntimeStats } from "./stats";
 import type { SessionSource } from "./session-source.js";
 import type { SessionState } from "./session-state";

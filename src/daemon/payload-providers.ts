@@ -30,6 +30,7 @@ import { AutoCompactProvider } from "../segments/autocompact-provider.js";
 import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
 import { ManagedStorage } from "./cache/managed-storage.js";
+import type { SourceRuns } from "./source-runs.js";
 
 // [LAW:single-enforcer] Every provider records its refreshes in the caller's
 // one ledger, so its stats read every source in one place.
@@ -47,6 +48,9 @@ export function createPayloadProviders(opts: {
   readonly clock: Timekeeper;
   readonly logger: DaemonLogger;
   readonly ledger: RefreshLedger;
+  // The caller's one owner of every `shell` and `file` run, whose stats and
+  // close are the caller's.
+  readonly sourceRuns: SourceRuns;
 }): RenderPayloadDeps {
   const { launcher, clock, logger, ledger } = opts;
   return {
@@ -78,6 +82,7 @@ export function createPayloadProviders(opts: {
       logger,
       ledger,
     }),
+    sourceRuns: opts.sourceRuns,
     faults: new RefreshFaults(),
     log: opts.logger,
     clock,

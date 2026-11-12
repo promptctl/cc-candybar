@@ -53,7 +53,7 @@ function render(src: string, hookData: Record<string, unknown>): Frame {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   return drawPayload(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS).frame;
 }

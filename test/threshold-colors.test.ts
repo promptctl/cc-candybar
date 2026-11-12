@@ -220,7 +220,7 @@ function renderOne(
     : narrowed.segments;
   const one = { ...narrowed, segments };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(unscriptedRuns(), store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(one, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     return drawPayload(

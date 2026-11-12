@@ -2,6 +2,7 @@ import { compareStructural } from "mobx";
 import { restamp, type Fact } from "../facts/fact";
 import type {
   BuiltinFacts,
+  RunFact,
   WorldState,
   SourceValue,
   UpdateNotice,
@@ -14,7 +15,7 @@ import type { Readings } from "./render-payload";
 
 // The shape of a facts document on the wire; a document of another version is
 // not this one.
-export const FACTS_VERSION = 1;
+export const FACTS_VERSION = 2;
 
 // A reading's value carried through `project`; every other arm as it stands.
 const over = <T, U>(
@@ -96,16 +97,38 @@ export function assembleFacts(
     ]),
   );
 
-  const parts = { builtins, sources, update, diagnostics: readings.faults };
+  // Each run by digest; an entry whose reading and fault are both the prior's
+  // is the prior entry itself, so `sameFacts` finds it unmoved.
+  const runs: Record<string, RunFact> = Object.fromEntries(
+    [...lanes.runs].map(([digest, { reading, fault }]) => {
+      const held = prior?.runs[digest];
+      const fact = stamp(held?.reading, reading);
+      return [
+        digest,
+        held !== undefined && held.reading === fact && held.fault === fault
+          ? held
+          : { reading: fact, fault },
+      ];
+    }),
+  );
+
+  const parts = {
+    builtins,
+    sources,
+    runs,
+    update,
+    diagnostics: readings.faults,
+  };
   // [LAW:single-enforcer] `restamp` is the one judge of whether a fact moved,
   // and it returns the prior fact itself when not, so the document is
-  // unmoved when every fact is the prior's own. The builtins and sources are
+  // unmoved when every fact is the prior's own. The builtins, sources and runs are
   // compared by that identity, never walked again (a source's value can be
   // large JSON); the update and diagnostics are small and not restamped here.
   if (
     prior !== undefined &&
     sameFacts(builtins, prior.builtins) &&
     sameFacts(sources, prior.sources) &&
+    sameFacts(runs, prior.runs) &&
     compareStructural(
       { update, diagnostics: readings.faults },
       { update: prior.update, diagnostics: prior.diagnostics },

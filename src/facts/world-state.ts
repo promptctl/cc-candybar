@@ -10,6 +10,7 @@ import type { MetricsFold } from "../segments/metrics";
 import type { TranscriptUsage } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
 import type { Fact } from "./fact";
+import { pendingOf } from "../utils/outcome";
 
 // [LAW:types-are-the-program] The seam between the host and a renderer: one
 // total document per session. Every field exists on every document; a fact
@@ -23,9 +24,25 @@ import type { Fact } from "./fact";
 // payload a template reads is composed from these, the hook, the hints and the
 // renderer's own state.
 
-// What the declared `shell`, `file` and plugin sources read, by their ids.
+// What the declared plugin sources read, by their variables' names.
 export type SourceId = string;
 export type SourceValue = JsonValue;
+
+// [LAW:types-are-the-program] What a `shell` or `file` run read, and why its
+// watch may be missing changes (`null` when it hears every place its path can
+// change, or watches nothing). Keyed apart from the plugin sources, by the
+// run's digest, so two variables naming one run read one entry.
+export interface RunFact {
+  readonly reading: Fact<SourceValue>;
+  readonly fault: string | null;
+}
+
+// [LAW:types-are-the-program] A run no world state carries yet: never read,
+// with no watch to fault.
+export const UNREAD_RUN: RunFact = {
+  reading: pendingOf("unread"),
+  fault: null,
+};
 
 // The tmux session the pane belongs to.
 export interface TmuxFacts {
@@ -79,6 +96,7 @@ export interface WorldState {
   readonly seq: number;
   readonly builtins: BuiltinFacts;
   readonly sources: Readonly<Record<SourceId, Fact<SourceValue>>>;
+  readonly runs: Readonly<Record<string, RunFact>>;
   readonly update: Fact<UpdateNotice>;
   readonly diagnostics: readonly FactsDiagnostic[];
 }
