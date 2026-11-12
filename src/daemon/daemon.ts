@@ -77,7 +77,7 @@ import type { LinkSigner } from "../click/link-signer.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
-import { rendererHost } from "./renderer-host.js";
+import { effectInterpreter, rendererHost } from "./renderer-host.js";
 import { mainRenderer } from "../renderer/main.js";
 import { verbsOver } from "../renderer/verbs.js";
 import { closeByTurn, MenuIdle } from "./menu-idle.js";
@@ -662,6 +662,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       menuIdle.clicked(sessionId, instant()),
     log,
     launcher,
+    perform: effectInterpreter(launcher),
     now: instant,
     applyUpdate: () => updateWatch.act(),
     // The load the session's bar is drawn from: its cache entry's load

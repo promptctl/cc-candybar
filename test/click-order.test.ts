@@ -192,8 +192,8 @@ describe("a gather holds no turn", () => {
   test("doctor-probe answers at once with the turn held", async () => {
     const { ctx, turns } = setup();
     const parked = gate();
-    const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
+    const perform = () => parked.wait.then(() => LAUNCHED);
+    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, perform });
     await drain();
     expect(turns.getStats().holder).toBe(VERB_COPY);
     await VERBS.get(VERB_DOCTOR_PROBE)!(NONCE, {
@@ -265,8 +265,8 @@ describe("one session's order", () => {
     const { held, doDoctorThen, ctx, toggled, reports } = setup();
     const parked = gate();
     let gone = false;
-    const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
+    const perform = () => parked.wait.then(() => LAUNCHED);
+    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, perform });
     await drain();
     const a = doDoctorThen({ ...ctx, clientGone: () => gone });
     held.open();
@@ -416,10 +416,10 @@ test("a watcher reload during a parked pbcopy starts no `by=click` setup", async
   const moved = { band: true } as never as typeof quiet;
   let now = quiet;
   const moves: unknown[][] = [];
-  const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
+  const perform = () => parked.wait.then(() => LAUNCHED);
   const copying = VERBS.get(VERB_COPY_DIAGNOSTIC)!(encodeSegments([A, "request", "k"]), {
     ...ctx,
-    launcher,
+    perform,
     diagnosticCopy: () => "text",
     lanes: { of: () => now, clicked: (...args) => moves.push(args) },
   });

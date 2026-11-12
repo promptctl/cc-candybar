@@ -11,6 +11,7 @@
 import type { StorageKey } from "../daemon/cache/managed-storage";
 import type { ParsedSessionId, SessionId } from "../daemon/session-id";
 import type { IdleClose } from "../daemon/verbs";
+import type { LaunchResult } from "../proc/launch";
 import type { ClickArrival } from "../doctor/sightings";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
@@ -137,6 +138,22 @@ export interface Present {
 }
 
 export type Effect = Present;
+
+// An act a turn asks the host to perform and waits out inside itself: a
+// click's clipboard write, which the host's one interpreter runs.
+// [LAW:no-ambient-temporal-coupling] exception: the turn waits on its own
+// act, because a click's order (its session's place, the daemon-wide journal
+// turn, the close that cuts it off) is taken inside its turn while the other
+// verbs act in place. It is returned whole once the journal turn is the
+// host's.
+export interface Copy {
+  readonly kind: "copy";
+  readonly text: string;
+}
+
+// [LAW:effects-at-boundaries] The host's interpreter of what a turn performs:
+// it says how the act ended, and the verb decides what that does to the click.
+export type Perform = (effect: Copy) => Promise<LaunchResult>;
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
 // the host writes beside the input's event.

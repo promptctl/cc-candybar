@@ -30,6 +30,7 @@ import {
 import type { Locations } from "../paths";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
+import type { Copy, Perform } from "../../renderer/interface";
 import type { Instant } from "../../utils/instant";
 import { sleep } from "../../time";
 import { stateKeySeed } from "./key-seeds";
@@ -202,6 +203,9 @@ export interface DaemonContext {
   readonly log: (level: "info" | "warn" | "error", msg: string) => void;
   // Who a click's programs belong to.
   readonly launcher: Launcher;
+  // [LAW:effects-at-boundaries] The host's interpreter (src/daemon/renderer-host.ts),
+  // which performs a click's clipboard write.
+  readonly perform: Perform;
   // The state directory whose answers book a click reads and records in.
   readonly stateDir: string;
   // Where the user's config and installed plugins live: a click's write
@@ -306,7 +310,12 @@ export interface VerbContext extends DaemonContext {
 // What only the turn may wait on: a handler reaches a launch through `launch`,
 // `typing`, `gather` or `applyUpdate`, each bound to the turn, so it cannot await one the
 // daemon's close would not stop it after.
-type TurnBound = "launcher" | "doctor" | "claudeInput" | "applyUpdate";
+type TurnBound =
+  | "launcher"
+  | "perform"
+  | "doctor"
+  | "claudeInput"
+  | "applyUpdate";
 
 // What a helper reads, from either side of the turn.
 type Unbound = Omit<VerbContext, TurnBound>;
@@ -315,12 +324,13 @@ type Unbound = Omit<VerbContext, TurnBound>;
 export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
   readonly journal: Journal;
   readonly navigating: SessionStateRW;
-  // [LAW:single-enforcer] Every await of a handler is one of these four: the
+  // [LAW:single-enforcer] Every await of a handler is one of these five: the
   // click's turn answers whether it may go on (JournalTurn.landed).
   readonly launch: (
     opts: Omit<LaunchOpts, "timeoutMs">,
     what: string,
   ) => Promise<void>;
+  readonly perform: (effect: Copy) => Promise<void>;
   readonly typing: (
     hint: ClientHints["tmux"],
     line: SlashLine,
@@ -529,17 +539,10 @@ export async function clickHandoff(
   }
 }
 
-// One clipboard primitive, no decode — both the `copy` verb (decodes a wire
+// One clipboard act, no decode — both the `copy` verb (decodes a wire
 // segment) and the diagnostic verbs (already hold a plain message) funnel here.
 function pbcopy(text: string, ctx: ClickContext): Promise<void> {
-  return ctx.launch(
-    {
-      bin: "/usr/bin/pbcopy",
-      stdinInput: text,
-      category: "click.pbcopy",
-    },
-    "pbcopy",
-  );
+  return ctx.perform({ kind: "copy", text });
 }
 
 const copy: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
@@ -2242,10 +2245,14 @@ async function journaled<C extends DaemonContext>(
   };
   const launches: Pick<
     Journaled<DaemonContext>,
-    "launch" | "typing" | "applyUpdate"
+    "launch" | "perform" | "typing" | "applyUpdate"
   > = {
     launch: (opts, what) =>
       turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
+    perform: async (effect) => {
+      const result = await turn.landed(ctx.perform(effect));
+      if (!result.ok) clickFailed(result, effect.kind, ctx.log);
+    },
     typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
     applyUpdate: () => turn.landed(ctx.applyUpdate()),
   };

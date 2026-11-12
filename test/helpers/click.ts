@@ -6,6 +6,7 @@
 import { bareGates } from "./gates";
 import { HOST } from "./host";
 import { unscriptedLauncher } from "./fake-launcher";
+import { effectInterpreter } from "../../src/daemon/renderer-host";
 import type { Host } from "../../src/host";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
@@ -88,6 +89,7 @@ export function testVerbContext(
     turnWaited: () => {},
     log: () => {},
     launcher: unscriptedLauncher,
+    perform: effectInterpreter(unscriptedLauncher),
     now: () => instantOf(new Date()),
     applyUpdate: async () => {
       throw new Error("apply-update: no update watch in this test");

@@ -11,6 +11,7 @@ import {
   TurnThrew,
   type Effect,
   type Event,
+  type Perform,
   type Renderer,
   type RendererInput,
   type RendererOutput,
@@ -22,6 +23,8 @@ import { instantAt } from "../utils/instant.js";
 import type { Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 import type { SessionId } from "./session-id.js";
+import type { Launcher } from "../proc/launch.js";
+import { CLICK_PROGRAM_TIMEOUT_MS } from "./verbs/index.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";
@@ -157,4 +160,21 @@ function sessionOf(event: Event): SessionId | null {
     case "menu-idle":
       return event.session;
   }
+}
+
+// [LAW:single-enforcer] The one interpreter of the acts a turn performs: the
+// clipboard write is the host's, never the verb's, bounded as every click's
+// program is, so the turn that waits on it gets its journal turn back.
+export function effectInterpreter(launcher: Launcher): Perform {
+  return (effect) => {
+    switch (effect.kind) {
+      case "copy":
+        return launcher.launch({
+          bin: "/usr/bin/pbcopy",
+          stdinInput: effect.text,
+          category: "click.pbcopy",
+          timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
+        });
+    }
+  };
 }
