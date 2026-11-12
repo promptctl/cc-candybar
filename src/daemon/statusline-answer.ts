@@ -109,6 +109,10 @@ export async function answerStatusline(
         ["effect", String(effect.id)],
       ],
     );
+  // [LAW:no-ambient-temporal-coupling] The session is held from its document
+  // to the request turn's answer, so no sweep retires it while its wait is out.
+  const worldState = collector.requested(req);
+  const release = collector.holding(req.hookData.session_id);
   // [LAW:no-ambient-temporal-coupling] The host owns the order: the session's
   // config goes first, with the world state read at the request's keys, and
   // its output's subscriptions reach the collector as the turn answers. A set
@@ -117,10 +121,6 @@ export async function answerStatusline(
   // In process the config turn answers at once, so nothing that opens or
   // closes a view runs between it and the request; out of process, the
   // router's mailbox is what keeps the two adjacent.
-  // [LAW:no-ambient-temporal-coupling] The session is held from its document
-  // to the request turn's answer, so no sweep retires it while its wait is out.
-  const worldState = collector.requested(req);
-  const release = collector.holding(req.hookData.session_id);
   let delivered: Delivered;
   try {
     const configured = await host.answer({

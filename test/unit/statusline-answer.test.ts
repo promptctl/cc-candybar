@@ -103,7 +103,7 @@ async function answer(
   renderer: Renderer,
   logged: string[] = [],
   subscribed: Subscriptions[] = [],
-  holds: { count: number } = { count: 0 },
+  holds: { count: number; sessions: string[] } = { count: 0, sessions: [] },
 ) {
   const facts: RequestFacts = [];
   const answered = await answerStatusline(
@@ -116,8 +116,9 @@ async function answer(
     ),
     {
       requested: () => WORLD,
-      holding: () => {
+      holding: (session) => {
         holds.count++;
+        holds.sessions.push(session);
         return () => holds.count--;
       },
     },
@@ -296,23 +297,29 @@ test("the session's config reaches the renderer first, with the world state read
   expect(subscribed).toEqual([opened, drawn]);
 });
 
-test("the session is held while its request turn is out, and let go once it answers or throws", async () => {
-  for (const request of [
-    output([present(1)]),
-    new TurnThrew([], new Error("x"), NO_SUBSCRIPTIONS),
-  ]) {
-    const holds = { count: 0 };
-    let heldDuringTurn = 0;
+test("the session is held across its config and request turns, and let go once either answers or throws", async () => {
+  const threw = () => new TurnThrew([], new Error("x"), NO_SUBSCRIPTIONS);
+  for (const [config, request] of [
+    [output([]), output([present(1)])],
+    [output([]), threw()],
+    [threw(), output([])],
+  ] as const) {
+    const holds = { count: 0, sessions: [] as string[] };
+    const heldDuring: string[] = [];
     const renderer: Renderer = {
       answer: async ({ event }) => {
-        if (event.kind !== "request") return output([]);
-        heldDuringTurn = holds.count;
-        if (request instanceof TurnThrew) throw request;
-        return request;
+        const turn = event.kind === "config" ? config : request;
+        heldDuring.push(`${event.kind}:${holds.count}`);
+        if (turn instanceof TurnThrew) throw turn;
+        return turn;
       },
     };
     await answer(renderer, [], [], holds);
-    expect(heldDuringTurn).toBe(1);
+    expect(heldDuring).toEqual(
+      config instanceof TurnThrew ? ["config:1"] : ["config:1", "request:1"],
+    );
+    // The hold names the session the request's document was read for.
+    expect(holds.sessions).toEqual([REQ.hookData.session_id]);
     expect(holds.count).toBe(0);
   }
 });
