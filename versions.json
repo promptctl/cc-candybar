@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-724",
+      "ref": "refs/pull/724/merge",
+      "sha": "d8a8e4d873dea85a100be1622cbd3006a942a649",
+      "timestamp": "2026-11-12T05:54:34.545Z",
+      "commits": [
+        {
+          "sha": "d8a8e4d873dea85a100be1622cbd3006a942a649",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:53:28-07:00",
+          "message": "Merge eefa81ad7fa861cb796367ac1f8de3bbd703d7da into a454d2f2ed6d81675e56ae6c45bef77b1db7007f\n"
+        },
+        {
+          "sha": "eefa81ad7fa861cb796367ac1f8de3bbd703d7da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:53:17-07:00",
+          "message": "test(config): the synthesis-reads test loads a rendering plugin and a beneath layer through the chain, so the names they make the chrome mint are proven to resolve (candybar-host-renderer-x96a.01x)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "a454d2f2ed6d81675e56ae6c45bef77b1db7007f",
