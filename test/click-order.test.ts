@@ -3,6 +3,7 @@
 // clicks here are real verbs over a fake doctor edge whose process probe parks
 // on a gate; the click-path cases drive `replyTo`, the daemon's real click arm.
 
+import { RuntimeStats } from "../src/daemon/stats";
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { HOST, locs } from "./helpers/host";
 import { MenuIdle } from "../src/daemon/menu-idle";
@@ -517,7 +518,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
       parts,
       { kind: "click", verb: VERB_DOCTOR_RUN, value: encodeURIComponent(A) } as Parameters<typeof replyTo>[1],
       () => false,
-      systemTimekeeper.monotonic(),
+      new RuntimeStats(systemTimekeeper).accept(),
       gone,
     );
   const sent = send(() => false);
@@ -564,7 +565,7 @@ test("the click path holds its session in the collector while the turn runs, and
       parts,
       { kind: "click", verb: VERB_DOCTOR_RUN, value: encodeURIComponent(A) } as Parameters<typeof replyTo>[1],
       () => false,
-      systemTimekeeper.monotonic(),
+      new RuntimeStats(systemTimekeeper).accept(),
       gone,
     );
   const sent = send(() => false);
@@ -593,7 +594,7 @@ test("a click whose session will not decode is a bad request whose event still n
     parts,
     { kind: "click", verb: VERB_DOCTOR_RUN, value: "%ZZ" } as Parameters<typeof replyTo>[1],
     () => false,
-    systemTimekeeper.monotonic(),
+    new RuntimeStats(systemTimekeeper).accept(),
     () => false,
   );
   expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });

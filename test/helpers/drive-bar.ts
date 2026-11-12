@@ -26,8 +26,8 @@
 // whose verb acts on the developer's machine
 // (src/click/read HOST_VERBS: the clipboard, VS Code, a rebuild of this
 // checkout) is never sent: it comes back as not sent, naming its effects, and
-// the bar renders as it was. A click the
-// daemon answers TIMEOUT stops the run: it may or may not have landed.
+// the bar renders as it was. A click the daemon answers TIMEOUT is told by
+// its own click event, which says whether it landed.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -38,7 +38,7 @@ import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
 import { BAR_SESSION_ID, hookData } from "../../scripts/lib/hook-data";
 import { withStamp } from "../../scripts/version-stamp.cjs";
 import { textOf, type Frame } from "../../src/render/frame";
-import { frameRequest, sendClick } from "./daemon-e2e";
+import { clickAnswer, frameRequest, saidOf, toldOf } from "./daemon-e2e";
 import type { DaemonTarget } from "./daemon-wire";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
 import {
@@ -205,12 +205,9 @@ export async function startBar(
     if (effectsOf(hit.url).some(({ verb }) => HOST_VERBS.has(verb))) {
       return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
     }
-    const resp = await sendClick(daemon.target, hit.url, REPLY_BUDGET_MS);
-    if (!resp.ok && resp.code === "TIMEOUT") {
-      throw new Error(`"${hit.text}" timed out: whether it landed is unknown (${resp.error})`);
-    }
+    const answer = await clickAnswer(daemon.target, hit.url, REPLY_BUDGET_MS);
     return {
-      refused: resp.ok ? null : `${resp.error} (${resp.code})`,
+      refused: toldOf(answer) === "ok" ? null : saidOf(answer),
       rendered: await render(),
     };
   };

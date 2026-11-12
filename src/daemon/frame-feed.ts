@@ -321,7 +321,8 @@ export class FrameFeeds<Req> {
 
   constructor(private readonly deps: FeedDeps<Req>) {}
 
-  // A valid render request the daemon received `order`-th. The latest request
+  // A valid render request the daemon accepted `order`-th, among requests of
+  // every kind. The latest request
   // a session sent is where the feeds find the session: whether its pane is
   // shown, and which sessions a wake or a lookup matches. Its frames draw by
   // the request its view is declared with. One that arrived before it — a

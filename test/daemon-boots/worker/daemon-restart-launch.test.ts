@@ -170,7 +170,7 @@ esac
       .handle(
         classifyInbound(renderOf(sid) as unknown as Request),
         () => false,
-        first.daemon.clock.monotonic(),
+        first.daemon.stats.accept(),
         () => false,
       )
       .catch(() => null);

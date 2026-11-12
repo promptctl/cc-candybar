@@ -35,9 +35,10 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // the daemon's side ends with it, before any answer. Said here, so no stream
   // a connection runs over has to be built to say it.
   sock.allowHalfOpen = false;
-  // [LAW:effects-at-boundaries] When the connection was accepted, on the
-  // monotonic clock: a render says how long it waited from here to begin.
-  const accepted = daemon.clock.monotonic();
+  // [LAW:effects-at-boundaries] Which request this is and when it was
+  // accepted, on the monotonic clock: a render says how long it waited from
+  // here to begin.
+  const accepted = daemon.stats.accept();
   daemon.stats.inFlight++;
   let responded = false;
   // A connection is in flight until it is answered and closes, or until it
@@ -131,6 +132,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
         code: "TIMEOUT",
         daemonV: PROTOCOL_VERSION,
+        request: accepted.id,
       },
       null,
       NOTHING_TO_SETTLE,

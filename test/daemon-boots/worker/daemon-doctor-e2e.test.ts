@@ -221,7 +221,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     // answer. The daemon writes none. Each click's event is awaited before
     // the next frame, so the events below come in the order sent.
     const clickEvents = (lines: readonly string[]) =>
-      lines.filter((l) => / click queued=/.test(l));
+      lines.filter((l) => / click req=\d+ queued=/.test(l));
     let clicks = 0;
     const forwarded = async (frame: Record<string, unknown>) => {
       daemon.connect().end(encodeFrame({ kind: URL_FRAME_KIND, ...frame }));

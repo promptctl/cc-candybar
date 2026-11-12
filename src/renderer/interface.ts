@@ -19,7 +19,7 @@ import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest } from "./request-context";
 
 // Which request a statusline frame answers: the host's count of the requests
-// it received, in arrival order.
+// of every kind it accepted, in arrival order, so renders' ids have gaps.
 declare const REQUEST_ID: unique symbol;
 export type RequestId = number & { readonly [REQUEST_ID]: true };
 

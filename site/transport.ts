@@ -178,7 +178,7 @@ function hookData(): ClaudeHookData {
 async function daemon(request: ReaderRenderRequest | ClickRequest): Promise<Extract<Response, { ok: true }>> {
   // In the page there is no socket, so no reply timer to have fired, and the
   // answer in hand is the one the page draws.
-  const { resp, settled } = await pageDaemon.reply(request, () => false, pageDaemon.clock.monotonic(), () => false);
+  const { resp, settled } = await pageDaemon.reply(request, () => false, pageDaemon.stats.accept(), () => false);
   settled(true);
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return resp;

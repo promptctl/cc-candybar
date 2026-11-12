@@ -14,7 +14,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { click, findUrl, render, renderUntil, sendClick } from "../../helpers/daemon-e2e";
+import { click, findUrl, render, renderUntil, refusedClick } from "../../helpers/daemon-e2e";
 import type { DaemonTarget } from "../../helpers/daemon-wire";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
@@ -151,8 +151,7 @@ describe("a repository's config waits for the user's one answer", () => {
     const approve = answerUrl(rendered, "approved");
     const forged = approve.replace(/[0-9a-f]{64}/, "0".repeat(64));
     expect(forged).not.toBe(approve);
-    const refused = await sendClick(daemon, forged);
-    expect(refused.ok).toBe(false);
+    await refusedClick(daemon, forged, "bad-request");
     expect(fs.existsSync(repoConfigsPath(stateDir(hostOf(isolated.env))))).toBe(false);
     expect(fs.existsSync(marker)).toBe(false);
   });

@@ -78,10 +78,15 @@ export function answeredEvents(log: string, sessionId: string): string[] {
   return renderEventsOf(logLines(log), sessionId).filter(answeredRender);
 }
 
-// The click events whose client had already been told TIMEOUT, in log order.
-function timedOutClicks(log: string): string[] {
-  return logLines(log).filter(
-    (l) => l.includes("] click ") && fieldsOf(l).get("timedOut") === "Y",
+// The click event of the request the daemon accepted as `id`, or "" while
+// none is written. Ids count from one in each daemon's life and the log
+// outlives a daemon, so only lines past `from` (the log's line count when the
+// click was sent) can be this click's.
+export function clickEventOf(log: string, id: number, from: number): string {
+  return (
+    logLines(log).slice(from).find(
+      (l) => l.includes("] click ") && fieldsOf(l).get("req") === String(id),
+    ) ?? ""
   );
 }
 
@@ -255,42 +260,83 @@ export function sendClick(
   return sendDaemonRequest(target, clickBody(url), replyBudgetMs);
 }
 
-// `sendClick`, for a test whose click must land.
+// What a click became, as the daemon tells it: its reply, or, for a click
+// answered TIMEOUT, its own click event.
 //
 // [LAW:no-ambient-temporal-coupling] A TIMEOUT is not the click's outcome. The
 // daemon's 200 ms guard abandons a request's reply: a click already running
 // still lands, and one still waiting for its turn is dropped unrun
-// (`abandoned`). reply.ts marks the click's event `timedOut=Y` either way,
-// and its `outcome` says which: `abandoned` for one dropped unrun.
-// A render may be asked again on TIMEOUT because it is a read; a click is a
-// write, so sending it again can apply it twice, and a second apply-update is
-// refused as already running. On TIMEOUT the click's outcome is read from the
-// daemon's own click event instead. The event carries no click identity, so
-// it is taken by order, which holds while this is the test's one click in
-// flight.
+// (`abandoned`). A render may be asked again on TIMEOUT because it is a read;
+// a click is a write, so sending it again can apply it twice. The TIMEOUT
+// names its request and the click's event records it, so the event read here
+// is this click's whatever else is in flight.
+export type ClickAnswer =
+  | { readonly kind: "replied"; readonly resp: Response }
+  | { readonly kind: "timed-out"; readonly outcome: string; readonly event: string };
+
+export async function clickAnswer(
+  target: DaemonTarget,
+  url: string,
+  replyBudgetMs = REPLY_BUDGET_MS,
+): Promise<ClickAnswer> {
+  const { log } = endpointOf(target);
+  const from = logLines(log).length;
+  const resp = await sendClick(target, url, replyBudgetMs);
+  if (resp.ok || resp.code !== "TIMEOUT") return { kind: "replied", resp };
+  let event = "";
+  // The event is the click's answer by another road, so its wait gets the
+  // reply's budget again, counted from the TIMEOUT.
+  await until(
+    () => (event = clickEventOf(log, resp.request, from)) !== "",
+    `the click event of request ${resp.request} (${url})`,
+    replyBudgetMs,
+  );
+  return { kind: "timed-out", outcome: fieldOf(event, "outcome"), event };
+}
+
+// What the daemon told of the click: the reply's code (`ok` for an ok reply),
+// or the outcome its event records.
+export const toldOf = (answer: ClickAnswer): string =>
+  answer.kind === "timed-out"
+    ? answer.outcome
+    : answer.resp.ok
+      ? "ok"
+      : answer.resp.code;
+
+// What the daemon said of the click, in full: its reply, or its event.
+export const saidOf = (answer: ClickAnswer): string =>
+  answer.kind === "timed-out"
+    ? answer.event
+    : answer.resp.ok
+      ? "ok"
+      : `${answer.resp.error} (${answer.resp.code})`;
+
+// `clickAnswer`, for a test whose click must land.
 export async function click(
   target: DaemonTarget,
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<void> {
-  const { log } = endpointOf(target);
-  const before = timedOutClicks(log).length;
-  const resp = await sendClick(target, url, replyBudgetMs);
-  if (resp.ok) return;
-  if (resp.code !== "TIMEOUT") {
-    throw new Error(`click failed: ${resp.error} (${resp.code})`);
-  }
-  let event = "";
-  // The event is the click's answer by another road, so its wait gets the
-  // reply's budget again, counted from the TIMEOUT.
-  await until(
-    () => (event = timedOutClicks(log)[before] ?? "") !== "",
-    `the click event of a click answered TIMEOUT (${url})`,
-    replyBudgetMs,
+  const answer = await clickAnswer(target, url, replyBudgetMs);
+  if (toldOf(answer) !== "ok") throw new Error(`click failed: ${saidOf(answer)}`);
+}
+
+// The reply code a refused click's outcome reaches its client as: the test's
+// own statement of the wire, kept apart from the daemon's mapping so the two
+// check each other.
+const REPLY_CODE = { "bad-request": "BAD_REQUEST", threw: "RENDER_FAILED" } as const;
+
+// `clickAnswer`, for a test whose click the daemon must refuse: a forged link
+// is a bad request, and a click whose verb fails threw.
+export async function refusedClick(
+  target: DaemonTarget,
+  url: string,
+  outcome: keyof typeof REPLY_CODE,
+): Promise<void> {
+  const answer = await clickAnswer(target, url);
+  expect(toldOf(answer)).toBe(
+    answer.kind === "timed-out" ? outcome : REPLY_CODE[outcome],
   );
-  if (fieldOf(event, "outcome") !== "ok") {
-    throw new Error(`click answered TIMEOUT did not land: ${event}`);
-  }
 }
 
 // [LAW:no-ambient-temporal-coupling] Render until the daemon's own state

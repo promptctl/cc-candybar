@@ -19,18 +19,20 @@ import {
   PROTOCOL_VERSION,
   type Response,
 } from "../../src/daemon/protocol";
+import type { RequestId } from "../../src/renderer/interface";
 
 const HINT = "daemon may not be running";
 
 // A daemon's own TIMEOUT proves it is up: a click's client must tell it from
 // a wait it gave up itself, or it kicks a live daemon mid-click.
 test("the daemon's TIMEOUT reads as busy, not as a client timeout", () => {
-  const resp = {
+  const resp: Response = {
     ok: false,
     error: "request exceeded 200ms",
     code: "TIMEOUT",
     daemonV: PROTOCOL_VERSION,
-  } as Response;
+    request: 1 as RequestId,
+  };
   expect(interpretResponse("click", resp, () => undefined)).toEqual({
     kind: "busy",
     phase: "deadline",

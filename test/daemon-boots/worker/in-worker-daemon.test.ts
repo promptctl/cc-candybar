@@ -3,6 +3,7 @@
 // gets, stopped with nothing of it left serving, and started again over the same
 // state. Its cases hold what a migrated file would otherwise find out by failing.
 
+import type { RequestId } from "../../../src/renderer/interface";
 import {
   mkdirSync,
   mkdtempSync,
@@ -28,7 +29,7 @@ import {
 } from "../../../src/daemon/protocol";
 import { DRAW_RESERVE_MS, REQUEST_TIMEOUT_MS } from "../../../src/daemon/request-deadline";
 import { textOf, type Frame } from "../../../src/render/frame";
-import { click, frameRequest, render, renderBody, renderRequest, renderUntil, sendClick } from "../../helpers/daemon-e2e";
+import { click, frameRequest, render, renderBody, renderRequest, renderUntil, refusedClick } from "../../helpers/daemon-e2e";
 import { renderLines } from "../../helpers/daemon-log";
 import { linkUrls } from "../../helpers/frame";
 import {
@@ -120,11 +121,11 @@ describe("a daemon in this worker", () => {
       clock: { ...systemTimekeeper, now: () => now },
     });
     await render(daemon, sid, projectDir);
-    const refused = await sendClick(
+    await refusedClick(
       daemon,
       effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "no-such-key", "x"] }]),
+      "bad-request",
     );
-    expect(refused.ok).toBe(false);
     await render(daemon, sid, projectDir);
 
     now += (CLICK_ERROR_HOLD_S + 1) * 1000;
@@ -179,7 +180,12 @@ describe("a daemon in this worker", () => {
         now,
         send: (req, budgetMs) =>
           ++asked === 1
-            ? Promise.resolve({ ok: false, error: "slow", code: "TIMEOUT" })
+            ? Promise.resolve({
+                ok: false,
+                error: "slow",
+                code: "TIMEOUT",
+                request: 1 as RequestId,
+              })
             : send(req, budgetMs),
       },
       renderBody("in-worker-timeout", projectDir),

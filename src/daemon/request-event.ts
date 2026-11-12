@@ -1,10 +1,21 @@
 import { inspect } from "node:util";
 
+import type { RequestId } from "../renderer/interface.js";
+import type { Monotonic } from "../time.js";
 import type { LogLevel } from "../utils/logger";
 import { eventLine, type Field } from "../utils/logfmt.js";
 
 // The requests that each write one event: a statusline render and a click.
 export type RequestKind = "render" | "click";
+
+// [LAW:nothing-unseen] A request as its connection accepted it: which one, in
+// the order the daemon accepted them, and when, on the monotonic clock. The id
+// is the request's correlation id: its event records it, and a TIMEOUT reply
+// carries it, so a client told TIMEOUT finds what its own request became.
+export interface Acceptance {
+  readonly id: RequestId;
+  readonly at: Monotonic;
+}
 
 // How one request ended. A request the daemon refused and one whose handler
 // threw are outcomes of the same unit of work as one that succeeded, so the
