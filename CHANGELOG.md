@@ -1,3 +1,9 @@
+## [1.219.0](https://github.com/promptctl/cc-candybar/compare/v1.218.4...v1.219.0) (2026-11-12)
+
+### Features
+
+* **host:** the host runs shell and file sources from the renderer's subscriptions, and their readings come back in the world state (candybar-host-renderer-x96a.8e9) ([#730](https://github.com/promptctl/cc-candybar/issues/730)) ([9148e02](https://github.com/promptctl/cc-candybar/commit/9148e02f16de59ebceccf9638f7aab3a3ad46b12))
+
 ## [1.218.4](https://github.com/promptctl/cc-candybar/compare/v1.218.3...v1.218.4) (2026-11-12)
 
 ### Bug Fixes
