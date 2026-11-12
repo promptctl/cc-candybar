@@ -65860,25 +65860,6 @@ function crateDigest(crateDir) {
 var SHORT_DIGEST_LENGTH = 7;
 var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
 
-// src/var-system/parse.ts
-init_globals();
-var LINE_BREAK = /\r\n|\r|\n/g;
-var textParser = (text4) => ok(text4.replace(LINE_BREAK, " ").trim());
-function regexParser(regex) {
-  return (text4) => {
-    const m = regex.exec(text4);
-    const group = m?.[1];
-    return group === void 0 ? failed("regex no-match", "parse") : ok(group.replace(LINE_BREAK, " "));
-  };
-}
-var jsonParser = (text4) => {
-  try {
-    return ok(JSON.parse(text4));
-  } catch (e) {
-    return failed(`JSON parse failed: ${e.message}`, "parse");
-  }
-};
-
 // src/daemon/source-runs.ts
 var SHELL_READ_TIMEOUT_MS = 1e4;
 var whereOf = (read2) => read2.kind === "shell" ? `output of "${read2.command}" in ${read2.cwd}` : `"${read2.path}"`;
@@ -65927,16 +65908,6 @@ function readerOf(launcher, read2, signal) {
       return shellReader(launcher, read2.command, read2.cwd, signal);
     case "file":
       return fileReader(read2.path, read2.readMode, signal);
-  }
-}
-function parserOf(parse3) {
-  switch (parse3.kind) {
-    case "text":
-      return textParser;
-    case "regex":
-      return regexParser(new RegExp(parse3.pattern));
-    case "json":
-      return (text4) => text4.trim() === "" ? ABSENT2 : jsonParser(text4);
   }
 }
 function parsed(read2, parser, where) {
@@ -66075,13 +66046,9 @@ var SourceRuns = class {
       // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
       // readers through this one function; text/regex/json are three
       // parsers through it.
-      read: async ({ identity: identity2 }, signal) => {
+      read: async ({ identity: identity2, parser }, signal) => {
         const reader = readerOf(deps.launcher, identity2.read, signal);
-        return parsed(
-          await reader.read(),
-          parserOf(identity2.parse),
-          reader.where
-        );
+        return parsed(await reader.read(), parser, reader.where);
       },
       every: ({ identity: { refresh } }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
       watch: ({ digest: digest2, identity: identity2 }, changed) => {
@@ -72255,7 +72222,7 @@ var SourceRegistry = class _SourceRegistry {
     const read2 = this.lastErrors.get(name);
     const fault = this.standingFault(name);
     if (fault === void 0) return read2;
-    return read2 === void 0 ? fault : {
+    return read2 === void 0 || read2.message === fault.message ? fault : {
       timestamp: read2.timestamp,
       message: `${fault.message}; ${read2.message}`
     };
@@ -80968,6 +80935,27 @@ function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
 // src/daemon/cache/managed-storage.ts
 init_globals();
 var import_node_path37 = __toESM(require_path_browserify(), 1);
+
+// src/var-system/parse.ts
+init_globals();
+var LINE_BREAK = /\r\n|\r|\n/g;
+var textParser = (text4) => ok(text4.replace(LINE_BREAK, " ").trim());
+function regexParser(regex) {
+  return (text4) => {
+    const m = regex.exec(text4);
+    const group = m?.[1];
+    return group === void 0 ? failed("regex no-match", "parse") : ok(group.replace(LINE_BREAK, " "));
+  };
+}
+var jsonParser = (text4) => {
+  try {
+    return ok(JSON.parse(text4));
+  } catch (e) {
+    return failed(`JSON parse failed: ${e.message}`, "parse");
+  }
+};
+
+// src/daemon/cache/managed-storage.ts
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS;
 var STORAGE_SWEEP_EVERY_MS = DAY_MS;
@@ -82787,24 +82775,40 @@ init_globals();
 var import_node_path39 = __toESM(require_path_browserify(), 1);
 var MIN_SHELL_TTL_MS = 500;
 function judgeRun(run3) {
-  const reason = refusalOf2(run3);
-  return reason === null ? { kind: "accepted", digest: run3.digest, run: run3 } : { kind: "refused", digest: run3.digest, reason };
+  const parser = parserOf(run3.identity.parse);
+  const reason = typeof parser === "string" ? parser : refusalOf2(run3);
+  return reason === null ? {
+    kind: "accepted",
+    digest: run3.digest,
+    run: { ...run3, parser }
+  } : { kind: "refused", digest: run3.digest, reason };
 }
-function refusalOf2({ identity: { read: read2, parse: parse3, refresh } }) {
-  return (read2.kind === "file" ? absolute("file.path", read2.path) : null) ?? (refresh.kind === "watch_file" ? absolute("cache.watch_file", refresh.path) : null) ?? (parse3.kind === "regex" ? capturing(parse3.pattern) : null) ?? (read2.kind === "shell" && refresh.kind === "ttl" && refresh.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh.durationMs}ms` : null);
+function parserOf(parse3) {
+  switch (parse3.kind) {
+    case "text":
+      return textParser;
+    case "regex":
+      return capturing(parse3.pattern);
+    case "json":
+      return (text4) => text4.trim() === "" ? ABSENT2 : jsonParser(text4);
+  }
+}
+function refusalOf2({ identity: { read: read2, refresh } }) {
+  return (read2.kind === "file" ? absolute("file.path", read2.path) : null) ?? (refresh.kind === "watch_file" ? absolute("cache.watch_file", refresh.path) : null) ?? (read2.kind === "shell" && refresh.kind === "ttl" && refresh.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh.durationMs}ms` : null);
 }
 function absolute(where, path42) {
   return (0, import_node_path39.isAbsolute)(path42) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path42)}`;
 }
 function capturing(pattern2) {
+  let regex;
   let groups;
   try {
-    new RegExp(pattern2);
+    regex = new RegExp(pattern2);
     groups = new RegExp(`${pattern2}|`).exec("").length - 1;
   } catch (e) {
     return `parse.regex is not a valid regular expression: ${e.message}`;
   }
-  return groups > 0 ? null : `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`;
+  return groups > 0 ? regexParser(regex) : `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`;
 }
 
 // src/daemon/collector.ts
@@ -82903,7 +82907,7 @@ var Collector = class {
           if (judged.kind === "refused" && !record2.subscriptions.runs.has(digest2))
             this.deps.log(
               "warn",
-              `run refused sid=${JSON.stringify(record2.session)} digest=${shortDigest(digest2)} reason=${judged.reason}`
+              `run refused sid=${JSON.stringify(record2.session)} digest=${shortDigest(digest2)} reason=${valueOf(judged.reason)}`
             );
         record2.subscriptions = next;
         const { phase } = record2;

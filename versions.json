@@ -4,15 +4,22 @@
     {
       "version": "pr-738",
       "ref": "refs/pull/738/merge",
-      "sha": "42de3fdc83d4fe7f1a45bfa0b64e73bd07b373bf",
-      "timestamp": "2026-11-12T17:44:41.010Z",
+      "sha": "3ae628fd76e30a0e034d2293590fda48a6718cbb",
+      "timestamp": "2026-11-12T17:51:55.913Z",
       "commits": [
         {
-          "sha": "42de3fdc83d4fe7f1a45bfa0b64e73bd07b373bf",
+          "sha": "3ae628fd76e30a0e034d2293590fda48a6718cbb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T10:43:37-07:00",
-          "message": "Merge c6916231659955e8d65b96a1c1a8f2202d5d9551 into 303a122503d2659aa2d923221bd1480aa8858f00\n"
+          "timestamp": "2026-11-12T17:50:57Z",
+          "message": "Merge 5cde375c48a4e7197bd325f223a4260fc64584b6 into 303a122503d2659aa2d923221bd1480aa8858f00\n"
+        },
+        {
+          "sha": "5cde375c48a4e7197bd325f223a4260fc64584b6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T10:50:38-07:00",
+          "message": "fix(judge): the judge hands its compiled parser to the run, a refusal is said once, and its log reason is quoted (candybar-host-renderer-x96a.jmi)\n"
         },
         {
           "sha": "c6916231659955e8d65b96a1c1a8f2202d5d9551",
