@@ -358,17 +358,26 @@ export class SourceRegistry {
     string,
     IComputedValue<Run | undefined>
   >(undefined, { deep: false });
+  private readonly runSourcesNow = computed(
+    (): ReadonlyMap<string, Run | undefined> =>
+      new Map([...this.runs].map(([name, run]) => [name, run.get()] as const)),
+  );
   private readonly namedNow = computed(
     (): ReadonlyMap<string, Run> =>
       new Map(
-        [...this.runs].flatMap(([name, run]) => {
-          const named = run.get();
-          return named === undefined ? [] : [[name, named] as const];
-        }),
+        [...this.runSourcesNow.get()].flatMap(([name, run]) =>
+          run === undefined ? [] : [[name, run] as const],
+        ),
       ),
   );
-  // The run each source names, by variable name: what names a pending run on
-  // the render event and among `check`'s stragglers.
+  // Every `shell` and `file` source by variable name, with the run it names
+  // or none while its policy has nothing answered to name: what the render
+  // event counts, so a source whose key never answers is still told.
+  runSources(): ReadonlyMap<string, Run | undefined> {
+    return this.runSourcesNow.get();
+  }
+  // The run each source names, by variable name: what a request waits on and
+  // what names `check`'s stragglers.
   namedRuns(): ReadonlyMap<string, Run> {
     return this.namedNow.get();
   }

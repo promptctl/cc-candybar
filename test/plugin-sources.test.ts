@@ -158,7 +158,10 @@ interface Rig {
   ): ReturnType<RenderCache<SessionSource>["holdSession"]>;
   // What the turn that opens session s1's view reads of it, before that
   // turn's subscriptions reach the collector.
-  inTurn<T>(configFile: string, read: (view: SessionView<SessionSource>) => T): T;
+  inTurn<T>(
+    configFile: string,
+    read: (view: SessionView<SessionSource>) => T,
+  ): T;
 }
 
 // The daemon's own composition of a render cache (src/daemon/daemon.ts).
@@ -192,7 +195,10 @@ function rig(): Rig {
     }),
     logger: log,
     ledger: new RefreshLedger(log),
-    sourceRuns: new SourceRuns({ launcher: world.launcher, clock: systemTimekeeper }),
+    sourceRuns: new SourceRuns({
+      launcher: world.launcher,
+      clock: systemTimekeeper,
+    }),
   });
   const sessionState = new SessionState();
   const updateFact = newUpdateFact();
@@ -915,7 +921,13 @@ describe("the session subscribes to every source the config declares", () => {
     const at = instantOf(new Date(0));
     expect(
       sourcesFactOf(
-        ["plugins.a.s", "plugins.b.s", "plugins.c.s", "plugins.d.s", "plugins.e.s"],
+        [
+          "plugins.a.s",
+          "plugins.b.s",
+          "plugins.c.s",
+          "plugins.d.s",
+          "plugins.e.s",
+        ],
         new Map(),
         {
           runs: {},
@@ -935,6 +947,14 @@ describe("the session subscribes to every source the config declares", () => {
       sourcesPending:
         "plugins.b.s:unread,plugins.d.s:superseded,plugins.e.s:unread",
     });
+    // A shell source whose key has not answered names no run, and is counted
+    // and pending all the same.
+    expect(
+      sourcesFactOf([], new Map([["probe", undefined]]), {
+        runs: {},
+        sources: {},
+      }),
+    ).toEqual({ sources: "1", sourcesPending: "probe:unread" });
   });
 });
 

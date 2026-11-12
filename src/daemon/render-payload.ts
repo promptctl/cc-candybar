@@ -1483,14 +1483,14 @@ export const sourceFactOf = (
 ): Fact<SourceValue> => facts.sources[name] ?? pendingOf("unread");
 
 // [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
-// how many plugin sources the view's config declares and runs its `shell` and
-// `file` sources name, and those not answered yet as the draw reads them, each
+// how many plugin, `shell` and `file` sources the view's config declares, and
+// those not answered yet (a source whose key has not answered among them) as the draw reads them, each
 // by variable with why (`<name>:unread` or `<name>:superseded`; `-` for none),
 // so a source that never lands is told from one nothing declared, and a run's
 // superseded source from a wait that left one out.
 export function sourcesFactOf(
   names: readonly string[],
-  runs: ReadonlyMap<string, Run>,
+  runs: ReadonlyMap<string, Run | undefined>,
   facts: Pick<WorldState, "sources" | "runs">,
 ): {
   readonly sources: string;
@@ -1500,7 +1500,12 @@ export function sourcesFactOf(
     ...names.map((name) => [name, sourceFactOf(facts, name)] as const),
     ...[...runs].map(
       ([name, run]) =>
-        [name, (facts.runs[run.digest] ?? UNREAD_RUN).reading] as const,
+        [
+          name,
+          run === undefined
+            ? UNREAD_RUN.reading
+            : (facts.runs[run.digest] ?? UNREAD_RUN).reading,
+        ] as const,
     ),
   ];
   return {

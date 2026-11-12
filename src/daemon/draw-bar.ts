@@ -709,7 +709,7 @@ export function drawRender(
     facts,
     sourcesFactOf(
       [...view.state.sources.keys()],
-      view.registry.namedRuns(),
+      view.registry.runSources(),
       document,
     ),
   );
