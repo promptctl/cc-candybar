@@ -4,39 +4,39 @@
     {
       "version": "pr-723",
       "ref": "refs/pull/723/merge",
-      "sha": "a6e3465cd73dc843457ce2b8aea141af534d5bf4",
-      "timestamp": "2026-11-12T05:37:00.685Z",
+      "sha": "a62ad519b8bd4495d0822aaacba709337d4b61b6",
+      "timestamp": "2026-11-12T05:45:40.796Z",
       "commits": [
         {
-          "sha": "a6e3465cd73dc843457ce2b8aea141af534d5bf4",
+          "sha": "a62ad519b8bd4495d0822aaacba709337d4b61b6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T05:36:06Z",
-          "message": "Merge fdf270552f3e8e87c28722ca7afde6d20dab7e66 into 5e6bce6dfd01f43eca1c1503452bc4699f03ff91\n"
+          "timestamp": "2026-11-11T22:44:34-07:00",
+          "message": "Merge 7bf37c2975b3dbf4c8f381c538b17869ae382d8c into 5e6bce6dfd01f43eca1c1503452bc4699f03ff91\n"
         },
         {
-          "sha": "fdf270552f3e8e87c28722ca7afde6d20dab7e66",
+          "sha": "7bf37c2975b3dbf4c8f381c538b17869ae382d8c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T22:35:47-07:00",
           "message": "test(config): the chrome-reads corpus authors a menu, the helpers share one authored-config builder, and unrelated helper formatting is restored (candybar-host-renderer-x96a.dbg)\n"
         },
         {
-          "sha": "dd780f79ee21b76d8690cb37ba23238077bf00b0",
+          "sha": "f616ba93808c71e721615f64651358b0a89802c5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T22:30:29-07:00",
           "message": "test(config): the chrome-reads check runs over every shipped example and an authored config with presets and settings; the load names its exception (candybar-host-renderer-x96a.dbg)\n"
         },
         {
-          "sha": "c7b3d78572fc578c9436361f9e5e5d6ba79540b9",
+          "sha": "d659722691555c32a2c11d84b6f6ff93d3119ba8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T22:26:39-07:00",
           "message": "test(config): the chrome-reads check lives in test helpers, runs over authored configs, and checks a replaced declaration by identity (candybar-host-renderer-x96a.dbg)\n"
         },
         {
-          "sha": "1b20943467f6fae486dbb97e9c503ad814eccfd9",
+          "sha": "fc25ae186688e767ef6b9939760e02354c02d6de",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-11T22:20:04-07:00",
