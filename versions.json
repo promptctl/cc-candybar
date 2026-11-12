@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-736",
-      "ref": "refs/pull/736/merge",
-      "sha": "d0357a5976a0bdb6b26b2653908ec8e5a7a07fac",
-      "timestamp": "2026-11-12T17:05:03.531Z",
-      "commits": [
-        {
-          "sha": "d0357a5976a0bdb6b26b2653908ec8e5a7a07fac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T17:04:06Z",
-          "message": "Merge cbaa4ba9c2932a672d15c4fe37c8b4af6a37ec87 into f02693a9bd83176c9126d9473453ca4bd96fda85\n"
-        },
-        {
-          "sha": "cbaa4ba9c2932a672d15c4fe37c8b4af6a37ec87",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T10:03:55-07:00",
-          "message": "refactor(sources): a source's run is a Present reading, and a failure moves no run by its text (candybar-host-renderer-x96a.z7t)\n"
-        },
-        {
-          "sha": "0f1c026cb32642a65abefe90bd7b598fbfe2deac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T10:01:12-07:00",
-          "message": "fix(render-event): a source's run names its key's failure, and failed sources get their own field (candybar-host-renderer-x96a.z7t)\n\nThe run each shell and file source names is Pending | Ok<Run> | Failed, so\nthe render event reads a key that failed before answering from the run\nitself, not from a second map of policy faults rebuilt every render.\nsourcesPending= keeps meaning not answered yet; sourcesFailed= names each\nfailed source by variable.\n"
-        },
-        {
-          "sha": "08dcb6b29ad10d5f53114fa793ad9e952ed4b1da",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:55:14-07:00",
-          "message": "fix(render-event): a source that failed, or whose key failed, is named failed by its variable (candybar-host-renderer-x96a.z7t)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f02693a9bd83176c9126d9473453ca4bd96fda85",
-      "timestamp": "2026-11-12T16:47:28.925Z",
+      "sha": "cd0295020dccaffce2a127a63aa99318563b8276",
+      "timestamp": "2026-11-12T17:11:40.473Z",
       "commits": [
         {
-          "sha": "f02693a9bd83176c9126d9473453ca4bd96fda85",
+          "sha": "cd0295020dccaffce2a127a63aa99318563b8276",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:46:35-07:00",
-          "message": "refactor(host): every renderer turn holds the session its event names (candybar-host-renderer-x96a.111) (#735)\n\n* refactor(host): every renderer turn holds the session its event names, so no caller pairs the hold by hand (candybar-host-renderer-x96a.111)\n\nThe host's one turn path reads each event's session through one derivation,\nwhich both the hold and the turn line's sid use. A hold only counts the turn;\nactivity is a request's alone, so a turn the collector's own deliveries start\nnever keeps a session nobody draws. effect-done names its effect's session.\n\n* test(plugin-sources): an ask waits for its delivered turns to settle, and the hold cites its timing law (candybar-host-renderer-x96a.111)\n\n* fix(collector): a click marks its session active as a request does, so the next sweep keeps a session someone just clicked (candybar-host-renderer-x96a.111)"
+          "timestamp": "2026-11-12T10:10:44-07:00",
+          "message": "fix(render-event): a source that failed, or whose key failed, is named failed by its variable (candybar-host-renderer-x96a.z7t) (#736)\n\n* fix(render-event): a source that failed, or whose key failed, is named failed by its variable (candybar-host-renderer-x96a.z7t)\n\n* fix(render-event): a source's run names its key's failure, and failed sources get their own field (candybar-host-renderer-x96a.z7t)\n\nThe run each shell and file source names is Pending | Ok<Run> | Failed, so\nthe render event reads a key that failed before answering from the run\nitself, not from a second map of policy faults rebuilt every render.\nsourcesPending= keeps meaning not answered yet; sourcesFailed= names each\nfailed source by variable.\n\n* refactor(sources): a source's run is a Present reading, and a failure moves no run by its text (candybar-host-renderer-x96a.z7t)"
         }
       ]
     }
