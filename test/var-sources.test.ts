@@ -17,7 +17,6 @@ import {
   VariableStore,
   SourceRegistry,
   parseDuration,
-  MIN_SHELL_TTL_MS,
   type Published,
   type SourceParse,
   type VarValue,
@@ -28,6 +27,7 @@ import {
   type SourceRunsDeps,
 } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
+import { MIN_SHELL_TTL_MS } from "../src/daemon/judge-run";
 import { PendingValueError } from "../src/var-system/types";
 import { instantOf } from "../src/utils/instant";
 import { timeoutSignal } from "../src/time";
@@ -69,7 +69,7 @@ const TEXT: SourceParse = { kind: "text", default: undefined };
 const text = (dflt: string): SourceParse => ({ kind: "text", default: dflt });
 const regex = (pattern: string, dflt?: string): SourceParse => ({
   kind: "regex",
-  regex: new RegExp(pattern),
+  pattern,
   default: dflt,
 });
 
@@ -746,7 +746,7 @@ describe("SourceRegistry — shell: basic", () => {
       });
       registry.declareShell("miss", "echo x", {
         cwd: b,
-        parse: { kind: "regex", regex: /(y)/, default: undefined },
+        parse: { kind: "regex", pattern: "(y)", default: undefined },
         cache: { kind: "never" },
       });
       registry.declareShell("gone", "echo x", {
@@ -845,39 +845,27 @@ describe("SourceRegistry — shell: basic", () => {
 
 // ─── shell — TTL floor ───────────────────────────────────────────────────────
 
-// [LAW:single-enforcer] declareShell clamps user-requested TTLs at the floor
-// to prevent unbounded subprocess churn from a misconfigured `ttl: 50ms`.
+// [LAW:single-enforcer] The host refuses a shell ttl below the floor, where the
+// run is subscribed: the command never runs, the variable draws its fallback,
+// and the refusal is its standing fault.
 describe("SourceRegistry — shell: TTL floor", () => {
-  it("TTL below floor is clamped (no refresh within sub-floor window)", async () => {
+  it("a ttl below the floor is refused: the command never runs, and the refusal stands as the variable's fault", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
-      const f = path.join(dir, "v");
-      fs.writeFileSync(f, "v1");
+      const marker = path.join(dir, "ran");
       const { store, registry } = make();
-      // Request 50ms — well below the floor. The floor must clamp the
-      // effective TTL, so a sub-floor settle window must NOT see the refresh.
-      // The interval starts at the declaration, so the window is measured from
-      // there, not from when the first read lands.
-      const declaredAt = Date.now();
-      registry.declareShell("val", `cat ${f}`, {
+      registry.declareShell("val", `touch ${marker}`, {
         cwd: process.cwd(),
-        parse: TEXT,
+        parse: text("fallback"),
         cache: { kind: "ttl", durationMs: 50 },
       });
 
-      await ran(registry);
-      expect(store.read("val")).toBe("v1");
-
-      fs.writeFileSync(f, "v2");
-      // Sleep less than MIN_SHELL_TTL_MS — refresh has NOT fired yet even
-      // though the user's requested 50ms has elapsed many times over.
-      await elapse(declaredAt + MIN_SHELL_TTL_MS - 150 - Date.now());
-      expect(store.read("val")).toBe("v1");
-
-      // Sleep enough to cross the floor (plus buffer) — refresh now fires.
       await elapse(TTL_TICK_WAIT_MS);
-      await ran(registry);
-      expect(store.read("val")).toBe("v2");
+      expect(fs.existsSync(marker)).toBe(false);
+      expect(store.read("val")).toBe("fallback");
+      expect(registry.cachePolicyFaults().get("val")?.message).toBe(
+        `refused: a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got 50ms`,
+      );
     } finally {
       cleanup();
     }

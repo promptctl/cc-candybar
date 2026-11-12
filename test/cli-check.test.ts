@@ -484,6 +484,31 @@ describe("checkConfig — explicit target", () => {
     );
   });
 
+  // A run the host's judge refuses draws its fallback, so nothing on the bar
+  // breaks; check fails on it by the variable's name and the judge's reason.
+  it("reports each run the host refuses as fatal, naming the variable and why", async () => {
+    const p = write(
+      "refused-runs.json5",
+      `{
+        variables: {
+          rel: { kind: "file", path: "status.json", cache: { never: true }, default: "-" },
+          bare: { kind: "shell", command: "echo v1", parse: { regex: "v[0-9]" }, cache: { never: true }, default: "-" },
+        },
+        segments: { x: { template: "[{{ .rel }}][{{ .bare }}]" } },
+        root: { h: ['x'] },
+      }`,
+    );
+    const message = expectFatal(
+      await checkConfig(world, daemonGates(), p, dir),
+    );
+    expect(message).toMatch(
+      /variable "rel": cannot refresh: refused: file\.path must be an absolute path/,
+    );
+    expect(message).toMatch(
+      /variable "bare": cannot refresh: refused: parse\.regex must contain a capture group/,
+    );
+  });
+
   // brandon-menu-ia-q30.ge5 review: the toolbar's `⎘ resume` and `↗ config`
   // are gated on their values, so check's fixture supplies both and a broken
   // override of either action is caught rather than hidden behind its gate.

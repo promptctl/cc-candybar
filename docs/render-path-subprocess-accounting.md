@@ -47,7 +47,7 @@ Spawns originate from cache-policy callbacks registered against the MobX store a
 
 | Source kind | Cache trigger | When it spawns |
 |---|---|---|
-| `kind: "shell"` | `ttl` | TTL timer fires (interval-driven; clamped to ≥500ms by `MIN_SHELL_TTL_MS`) |
+| `kind: "shell"` | `ttl` | TTL timer fires (interval-driven; a ttl below 500ms is refused by the host's judge, so the command never runs) |
 | `kind: "shell"` | `watch_file` | fs.watch event on the named path |
 | `kind: "shell"` | `depends_on` | MobX reaction: any listed var changes |
 | `kind: "shell"` | `key` | MobX reaction: rendered key template changes |
@@ -77,7 +77,7 @@ subprocesses
 
 ### Rate limits
 
-`src/proc/launch.ts:RATE_LIMITS` caps click verbs at 1 spawn/sec each. No other categories have per-spawn floors at the launch layer; `kind: "shell"` with `cache: { ttl: ... }` is clamped to 500ms inside the var-system (`MIN_SHELL_TTL_MS`).
+`src/proc/launch.ts:RATE_LIMITS` caps click verbs at 1 spawn/sec each. No other categories have per-spawn floors at the launch layer; `kind: "shell"` with `cache: { ttl: ... }` below 500ms is refused where the run is subscribed (`src/daemon/judge-run.ts`), so it never spawns.
 
 ## Known gaps (not regressions, just things the type system doesn't enforce)
 

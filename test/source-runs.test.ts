@@ -94,7 +94,7 @@ describe("runOf", () => {
       { ...base, read: { kind: "shell", command: "uptime", cwd: "/other" } },
       { ...base, read: { kind: "shell", command: "w", cwd: "/work" } },
       { ...base, parse: { kind: "json" } },
-      { ...base, parse: { kind: "regex", source: "(.*)", flags: "" } },
+      { ...base, parse: { kind: "regex", pattern: "(.*)" } },
       { ...base, refresh: { kind: "ttl", durationMs: 1000 } },
       { ...base, refresh: { kind: "watch_file", path: "/work/f" } },
       { ...base, refresh: { kind: "key", hash: "abc" } },

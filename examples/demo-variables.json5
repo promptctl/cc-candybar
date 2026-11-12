@@ -120,7 +120,8 @@
     // ── 5. shell ────────────────────────────────────────────────────────────
     // Spawns a subprocess in /bin/sh. stdout is the text the parse step sees
     // (absent parse: trimmed text is the value). The minimum shell TTL is
-    // 500 ms — shorter ttl values are clamped up.
+    // 500 ms — a shorter ttl is refused: the variable draws its
+    // default beside a ⚠ naming why.
     //
     // Same cache and parse vocabulary as file. watch_file and ttl are most
     // common.

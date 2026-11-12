@@ -139,7 +139,7 @@ The complete shape of a `shell` variable:
 | `kind` | `"shell"` |
 | `command` | the command line, run by `/bin/sh -c`. A run is ended after 10 s and fails as `timed out after 10 s`; a cell is a glance, and a program that takes longer belongs in a file another process writes, one started outside the command: the run's whole process group ends with it, so a helper the command backgrounds is ended too |
 | `parse` | absent or `{ text: true }` → the trimmed text, line breaks folded to spaces; `{ regex: "…" }` → capture group 1 of the text; `{ json: true }` → the text parsed once as a document. Exactly one key. |
-| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes, or a symlink on the way to it is re-pointed; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below, and while the OS delivers no file events at all the bar's `⚠` counts the same warning), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
+| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is refused: the command never runs, the variable draws its `default`, the bar's `⚠` says why, and `cc-candybar check` fails on it), `{ watch_file: "/abs/path" }` (re-run when that file changes, or a symlink on the way to it is re-pointed; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below, and while the OS delivers no file events at all the bar's `⚠` counts the same warning), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
 | `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
 A run's identity is what it needs: the command (or the path and read mode),
@@ -166,8 +166,9 @@ asked for each (its first run, its period, a change, a request), its
 failures, and how long its last run took.
 
 A `file` variable is the same declaration with `path` (absolute — `~` and
-relative paths are refused at load, like a relative `watch_file`; write the
-full path) in place of `command`, plus an
+relative paths are refused when the run is subscribed, like a relative
+`watch_file`, and draw the `default` beside a `⚠`; write the full path) in
+place of `command`, plus an
 optional `readMode: "whole" | "first-line"` selecting how much of the file
 the parser sees. A file that does not exist yet reads as its `default`:
 
@@ -1302,7 +1303,8 @@ cache.key reads "hour", which is a time variable: it reads the instant a frame i
 
 ### A `parse.regex` with no capture group
 
-Group 1 is the value; a pattern without one could only ever fail to match:
+Group 1 is the value; a pattern without one could only ever fail to match, so
+the run is refused, and the variable draws its `default` beside a `⚠`:
 
 ```json5 check:fail
 {
@@ -1321,7 +1323,7 @@ Group 1 is the value; a pattern without one could only ever fail to match:
 ```
 
 ```error
-parse.regex must contain a capture group — its group 1 is the value; got "spentPct[^0-9]*[0-9.]+"
+refused: parse.regex must contain a capture group — its group 1 is the value; got "spentPct[^0-9]*[0-9.]+"
 ```
 
 ### Two parse arms in one `parse:`
@@ -1391,8 +1393,8 @@ Template references unknown variable ".budget.spentPct"
 
 ### A `~` in a file path
 
-Paths are absolute and `~` is not expanded. The loader refuses the path
-rather than read a file nobody meant — a relative path would name one
+Paths are absolute and `~` is not expanded. The run is refused rather than
+read a file nobody meant — a relative path would name one
 directory for the daemon and another for the session's shell commands:
 
 ```json5 check:fail
@@ -1411,7 +1413,7 @@ directory for the daemon and another for the session's shell commands:
 ```
 
 ```error
-variables.budget.path must be an absolute path (`~` and relative paths are not expanded), got "~/.cache/budget/status.json"
+refused: file.path must be an absolute path (`~` and relative paths are not expanded), got "~/.cache/budget/status.json"
 ```
 
 ### A `json` source whose script prints something that is not JSON

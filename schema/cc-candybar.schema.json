@@ -235,8 +235,7 @@
                 "const": "file"
               },
               "path": {
-                "type": "string",
-                "pattern": "^/"
+                "type": "string"
               },
               "readMode": {
                 "enum": [
@@ -302,8 +301,7 @@
                     "type": "object",
                     "properties": {
                       "watch_file": {
-                        "type": "string",
-                        "pattern": "^/"
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -437,8 +435,7 @@
                     "type": "object",
                     "properties": {
                       "watch_file": {
-                        "type": "string",
-                        "pattern": "^/"
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -1797,8 +1794,7 @@
                     "const": "file"
                   },
                   "path": {
-                    "type": "string",
-                    "pattern": "^/"
+                    "type": "string"
                   },
                   "readMode": {
                     "enum": [
@@ -1864,8 +1860,7 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string",
-                            "pattern": "^/"
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -1999,8 +1994,7 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string",
-                            "pattern": "^/"
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -2398,8 +2392,7 @@
                     "const": "file"
                   },
                   "path": {
-                    "type": "string",
-                    "pattern": "^/"
+                    "type": "string"
                   },
                   "readMode": {
                     "enum": [
@@ -2465,8 +2458,7 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string",
-                            "pattern": "^/"
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -2600,8 +2592,7 @@
                         "type": "object",
                         "properties": {
                           "watch_file": {
-                            "type": "string",
-                            "pattern": "^/"
+                            "type": "string"
                           }
                         },
                         "required": [
