@@ -45985,401 +45985,6 @@ function editModeArtifacts() {
 init_globals();
 var import_node_path5 = __toESM(require_path_browserify(), 1);
 
-// src/config/synthesis-inputs.ts
-init_globals();
-
-// src/config/action.ts
-init_globals();
-var ACTION_KEYS = [
-  "set",
-  "persist",
-  "copy",
-  "open",
-  "reset",
-  "undo",
-  "redo",
-  "back",
-  "rewind",
-  "save",
-  "preset",
-  "themeDefault",
-  "doctor",
-  "slash",
-  "run",
-  "do"
-];
-function runDeclaration(a) {
-  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
-}
-function* actionTemplates(a) {
-  const found2 = [];
-  mapActionTemplates(a, (source, field) => {
-    found2.push([field, source]);
-    return source;
-  });
-  yield* found2;
-}
-function mapActionTemplates(a, f) {
-  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
-  if ("open" in a) return { ...a, open: f(a.open, "open") };
-  if ("preset" in a && a.preset === "delete")
-    return { ...a, name: f(a.name, "name") };
-  if ("run" in a) {
-    const run3 = a.run.map((item, i) => f(item, `run.${i}`));
-    return {
-      ...a,
-      run: run3,
-      env: Object.fromEntries(
-        Object.entries(a.env).map(([name, value]) => [
-          name,
-          f(value, `env.${name}`)
-        ])
-      )
-    };
-  }
-  return a;
-}
-function actionBindsTemplateValue(a) {
-  return "from" in a || "int" in a || "insertSegmentFrom" in a;
-}
-
-// src/config/loader/refs.ts
-init_globals();
-var STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
-function* templateBlocks(template) {
-  let open2 = template.indexOf("{{");
-  while (open2 !== -1) {
-    let block = "";
-    let i = open2 + 2;
-    const spans = [[0, i]];
-    while (i < template.length && !template.startsWith("}}", i)) {
-      if (template.startsWith("/*", i)) {
-        const close = template.indexOf("*/", i + 2);
-        i = close === -1 ? template.length : close + 2;
-        spans.push([block.length, i]);
-        continue;
-      }
-      const start = i;
-      const quote2 = template[i];
-      i += 1;
-      if (quote2 === '"' || quote2 === "'" || quote2 === "`") {
-        while (i < template.length && template[i] !== quote2) {
-          i += template[i] === "\\" && quote2 !== "`" ? 2 : 1;
-        }
-        i += 1;
-      }
-      block += template.slice(start, i);
-    }
-    if (i >= template.length) return;
-    yield {
-      text: block,
-      at: (index) => {
-        let [from, to] = spans[0];
-        for (const [b, t2] of spans) if (b <= index) [from, to] = [b, t2];
-        return to + index - from;
-      }
-    };
-    open2 = template.indexOf("{{", i + 2);
-  }
-}
-var PATH = "[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*";
-var OPERAND_RE = new RegExp(
-  `^(?:(\\$)(?:\\.(${PATH}))?|\\.(${PATH})?)(?=[\\s)]|$)`
-);
-function operandAt(text4, dot, root) {
-  const m = OPERAND_RE.exec(text4.trimStart());
-  if (m === null) return null;
-  const [base, field] = m[1] !== void 0 ? [root, m[2]] : [dot, m[3]];
-  if (base === null) return null;
-  return field === void 0 ? base : `${base}${field}.`;
-}
-var KEYWORD_RE = /^(\w+)\b\s*([\s\S]*)$/;
-function* scopedBlocks(template, root) {
-  const stack = [root];
-  for (const block of templateBlocks(template)) {
-    const code = block.text.replace(/^-(?=\s)/, "").trim();
-    const [, keyword = "", rest2 = ""] = KEYWORD_RE.exec(code) ?? [];
-    const top = stack[stack.length - 1];
-    const outer = stack.length > 1 ? stack[stack.length - 2] : top;
-    if (keyword === "end") {
-      if (stack.length > 1) stack.pop();
-      continue;
-    }
-    if (keyword === "else") {
-      yield { code, dot: outer, block };
-      const chained = /^with\b([\s\S]*)$/.exec(rest2);
-      stack[stack.length - 1] = chained === null ? outer : operandAt(chained[1], outer, root);
-      continue;
-    }
-    yield { code, dot: top, block };
-    if (keyword === "if") stack.push(top);
-    if (keyword === "with") stack.push(operandAt(rest2, top, root));
-    if (keyword === "range" || keyword === "define" || keyword === "block")
-      stack.push(null);
-  }
-}
-var TEMPLATE_KEYWORD_RE = /(?<![.$])\btemplate\s+$/;
-function* helperCalls(code, dot, root) {
-  let cursor = 0;
-  for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
-    const end = s.index + s[0].length;
-    if (TEMPLATE_KEYWORD_RE.test(code.slice(cursor, s.index))) {
-      yield {
-        name: s[0].slice(1, -1),
-        at: operandAt(code.slice(end), dot, root),
-        index: s.index
-      };
-    }
-    cursor = end;
-  }
-}
-function* callGraphBlocks(template, helpers) {
-  const walked = /* @__PURE__ */ new Set();
-  function* walk3(src, root, via, chain2) {
-    for (const { code, dot } of [...scopedBlocks(src, root)]) {
-      yield { code, dot, root, via };
-      for (const call of [...helperCalls(code, dot, root)]) {
-        const body = Object.hasOwn(helpers, call.name) ? helpers[call.name] : void 0;
-        const key = `${call.name}\0${call.at ?? "\0"}`;
-        if (body === void 0 || chain2.has(call.name) || walked.has(key))
-          continue;
-        walked.add(key);
-        yield* walk3(body, call.at, call.name, /* @__PURE__ */ new Set([...chain2, call.name]));
-      }
-    }
-  }
-  yield* walk3(template, "", null, /* @__PURE__ */ new Set());
-}
-function perTemplate(answer2) {
-  const answers = /* @__PURE__ */ new Map();
-  return (template) => {
-    if (!answers.has(template)) answers.set(template, answer2(template));
-    return answers.get(template);
-  };
-}
-var WALKS = /* @__PURE__ */ new WeakMap();
-function callGraph(template, helpers) {
-  let walks = WALKS.get(helpers);
-  if (walks === void 0) {
-    walks = perTemplate((t2) => [...callGraphBlocks(t2, helpers)]);
-    WALKS.set(helpers, walks);
-  }
-  return walks(template);
-}
-var REF_RE = new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.(${PATH})`, "g");
-function* dotRefs({ code, dot, root }) {
-  const text4 = code.replace(STRING_LITERAL_RE, "");
-  for (const r of [...text4.matchAll(REF_RE)]) {
-    const base = r[1] === "$" ? root : dot;
-    if (base !== null) yield `${base}${r[2]}`;
-  }
-}
-function templateReads(template, helpers) {
-  const reads = /* @__PURE__ */ new Map();
-  for (const block of callGraph(template, helpers)) {
-    for (const ref of dotRefs(block)) {
-      if (!reads.has(ref)) reads.set(ref, block.via);
-    }
-  }
-  return reads;
-}
-var BINDING_KEYWORD_RE = /(?<![.$])\b(action|picker|menu|carousel|swatches|swatch|themePreview)\s+$/;
-var NAME_ARGS = {
-  action: 1,
-  picker: 2,
-  menu: 1,
-  carousel: 2,
-  swatch: 1,
-  swatches: 2,
-  themePreview: 1
-};
-function* actionBindings(code) {
-  let cursor = 0;
-  let pending2 = 0;
-  let site = "action";
-  for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
-    const between = code.slice(cursor, s.index);
-    const kw = BINDING_KEYWORD_RE.exec(between);
-    if (kw !== null) {
-      pending2 = NAME_ARGS[kw[1]];
-      site = kw[1] === "action" ? "action" : "options";
-    } else if (between.trim() !== "") {
-      pending2 = 0;
-    }
-    if (pending2 > 0) {
-      yield { name: s[0].slice(1, -1), site, index: s.index };
-      pending2--;
-    }
-    cursor = s.index + s[0].length;
-  }
-}
-function templateActionRefs(template, helpers) {
-  const refs = /* @__PURE__ */ new Map();
-  for (const { code, via } of callGraph(template, helpers)) {
-    for (const { name, site } of actionBindings(code)) {
-      const key = `${name}\0${via ?? "\0"}`;
-      if (!refs.has(key)) refs.set(key, { name, site, via });
-    }
-  }
-  return [...refs.values()];
-}
-var namesTaking = (min2) => Object.keys(NAME_ARGS).filter((keyword) => NAME_ARGS[keyword] >= min2).join("|");
-var COMPUTED_BINDING_RE = new RegExp(
-  `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`
-);
-function bindsComputedAction(template, helpers) {
-  for (const { code } of callGraph(template, helpers)) {
-    if (COMPUTED_BINDING_RE.test(code.replace(STRING_LITERAL_RE, '""'))) {
-      return true;
-    }
-  }
-  return false;
-}
-var BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
-function templateFunctions(template, helpers) {
-  const called = /* @__PURE__ */ new Set();
-  for (const { code } of callGraph(template, helpers)) {
-    for (const [name] of code.replace(STRING_LITERAL_RE, "").matchAll(BARE_NAME_RE)) {
-      called.add(name);
-    }
-  }
-  return called;
-}
-function templateHelperRefs(template, helpers) {
-  return new Set(
-    [...templateHelperCalls(template, helpers)].filter(
-      (name) => Object.hasOwn(helpers, name)
-    )
-  );
-}
-function templateHelperCalls(template, helpers) {
-  const called = /* @__PURE__ */ new Set();
-  for (const { code, dot, root } of callGraph(template, helpers)) {
-    for (const { name } of helperCalls(code, dot, root)) called.add(name);
-  }
-  return called;
-}
-var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
-function bindSelf(template, self2, ns) {
-  const refRe = SELF_REF_RE(self2);
-  const named3 = ownedBy(self2);
-  const starts = [];
-  for (const { dot, block } of scopedBlocks(template, "")) {
-    const code = block.text.replace(
-      STRING_LITERAL_RE,
-      (s) => " ".repeat(s.length)
-    );
-    for (const r of code.matchAll(refRe)) {
-      const base = r[1] === "$" ? "" : dot;
-      if (base === "") starts.push(block.at(r.index + r[1].length + 1));
-    }
-    for (const { name, index } of [
-      ...helperCalls(block.text, dot, ""),
-      ...actionBindings(block.text)
-    ]) {
-      if (named3(name)) starts.push(block.at(index + 1));
-    }
-  }
-  return [...new Set(starts)].sort((a, b) => b - a).reduce(
-    (t2, start) => t2.slice(0, start) + ns + t2.slice(start + self2.length),
-    template
-  );
-}
-function* declarationsAt(config2) {
-  for (const [name, decl] of Object.entries(config2.variables)) {
-    yield [name, decl, ["variables", name]];
-  }
-  for (const [segName, seg2] of Object.entries(config2.segments)) {
-    for (const [varName, decl] of Object.entries(seg2.vars ?? {})) {
-      yield [
-        `${segName}.${varName}`,
-        decl,
-        ["segments", segName, "vars", varName]
-      ];
-    }
-  }
-}
-function* declaredVariables(config2) {
-  for (const [name, decl] of declarationsAt(config2)) yield [name, decl];
-}
-function variableRead(path42, names) {
-  const parts = path42.split(".");
-  for (let n = parts.length; n > 0; n--) {
-    const name = parts.slice(0, n).join(".");
-    if (names.has(name)) return [name];
-  }
-  const namespace = `${path42}.`;
-  return [...names].filter((name) => name.startsWith(namespace));
-}
-function refResolves(ref, scope) {
-  return variableRead(ref, scope.names).some(
-    (name) => !ref.startsWith(`${name}.`) || scope.documents.has(name)
-  );
-}
-function templateScopeOf(cfg) {
-  const names = /* @__PURE__ */ new Set();
-  const documents = /* @__PURE__ */ new Set();
-  const declare = (name, v) => {
-    names.add(name);
-    if (isDocumentDecl(v)) documents.add(name);
-  };
-  for (const [name, v] of declaredVariables(cfg)) declare(name, v);
-  return { names, documents, helpers: cfg.helpers };
-}
-function isDocumentDecl(v) {
-  return v.kind === "dropped" || v.kind === "source" || (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json";
-}
-
-// src/config/synthesis-inputs.ts
-function synthesisReads(artifacts, trees, helpers) {
-  const reads = /* @__PURE__ */ new Set();
-  const add2 = (template, scope = helpers) => {
-    for (const ref of templateReads(template ?? "", scope).keys())
-      reads.add(ref);
-  };
-  for (const seg2 of Object.values(artifacts.segments)) {
-    const segScope = seg2.partials === void 0 ? helpers : { ...helpers, ...seg2.partials };
-    add2(seg2.template, segScope);
-    add2(seg2.bg, segScope);
-    add2(seg2.fg, segScope);
-    add2(seg2.when, segScope);
-    for (const body of Object.values(seg2.partials ?? {})) add2(body, segScope);
-  }
-  for (const tree of trees) {
-    for (const node of walkNodes(tree)) {
-      add2(node.when);
-      if (node.kind === "segment") {
-        add2(node.lead);
-        add2(node.trail);
-      }
-    }
-  }
-  for (const v of Object.values(artifacts.variables)) {
-    if (v.kind === "template") add2(v.template);
-  }
-  for (const a of Object.values(artifacts.actions)) {
-    for (const [, source] of actionTemplates(a)) add2(source);
-    const setBack = "set" in a ? SESSION_KEY_TO_EFFECTIVE_VAR.get(a.set) : void 0;
-    const persistBack = "persist" in a ? CONFIG_KEY_TO_EFFECTIVE_VAR.get(a.persist) : void 0;
-    if (setBack !== void 0) reads.add(setBack);
-    if (persistBack !== void 0) reads.add(persistBack);
-  }
-  return reads;
-}
-function checkSynthesisReads(artifacts, trees, config2) {
-  const own2 = templateScopeOf({
-    ...config2,
-    variables: { ...config2.variables, ...artifacts.variables },
-    segments: { ...config2.segments, ...artifacts.segments }
-  });
-  for (const ref of synthesisReads(artifacts, trees, config2.helpers)) {
-    if (refResolves(ref, own2)) continue;
-    throw new Error(
-      `synthesized chrome reads ".${ref}", which neither it nor the config declares`
-    );
-  }
-}
-
 // src/config/option-domain.ts
 init_globals();
 
@@ -50215,14 +49820,11 @@ function synthesizeSettingsMenu(config2) {
   const artifacts = settingsArtifacts(config2.globals.menuGlyph ?? DOOR_GLYPH);
   ensureEditToggle(artifacts);
   const presets = { ...config2.presets };
-  const roots = [];
   for (const name of presetNames(config2.presets)) {
     const { node } = presetRoot(config2, name);
     const root = expandAnchor(withAnchor(node));
-    roots.push(root);
     presets[name] = { ...presetByName(config2.presets, name), root };
   }
-  checkSynthesisReads(artifacts, roots, config2);
   return {
     ...config2,
     variables: { ...config2.variables, ...artifacts.variables },
@@ -50668,7 +50270,6 @@ function synthesizeEditChrome(config2) {
     { kind: "segment", name: EDIT_CANCEL_SEG }
   ];
   const presets = { ...config2.presets };
-  const roots = [];
   for (const name of presetNames(config2.presets)) {
     const root = spliceEditChromeForPreset(
       config2,
@@ -50678,10 +50279,8 @@ function synthesizeEditChrome(config2) {
       live,
       tail
     );
-    roots.push(root);
     presets[name] = { ...presetByName(config2.presets, name), root };
   }
-  checkSynthesisReads(artifacts, roots, config2);
   return {
     ...config2,
     variables: { ...config2.variables, ...artifacts.variables },
@@ -50693,6 +50292,63 @@ function synthesizeEditChrome(config2) {
 
 // src/config/loader/actions.ts
 init_globals();
+
+// src/config/action.ts
+init_globals();
+var ACTION_KEYS = [
+  "set",
+  "persist",
+  "copy",
+  "open",
+  "reset",
+  "undo",
+  "redo",
+  "back",
+  "rewind",
+  "save",
+  "preset",
+  "themeDefault",
+  "doctor",
+  "slash",
+  "run",
+  "do"
+];
+function runDeclaration(a) {
+  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
+}
+function* actionTemplates(a) {
+  const found2 = [];
+  mapActionTemplates(a, (source, field) => {
+    found2.push([field, source]);
+    return source;
+  });
+  yield* found2;
+}
+function mapActionTemplates(a, f) {
+  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
+  if ("open" in a) return { ...a, open: f(a.open, "open") };
+  if ("preset" in a && a.preset === "delete")
+    return { ...a, name: f(a.name, "name") };
+  if ("run" in a) {
+    const run3 = a.run.map((item, i) => f(item, `run.${i}`));
+    return {
+      ...a,
+      run: run3,
+      env: Object.fromEntries(
+        Object.entries(a.env).map(([name, value]) => [
+          name,
+          f(value, `env.${name}`)
+        ])
+      )
+    };
+  }
+  return a;
+}
+function actionBindsTemplateValue(a) {
+  return "from" in a || "int" in a || "insertSegmentFrom" in a;
+}
+
+// src/config/loader/actions.ts
 var import_node_path6 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
@@ -56532,6 +56188,293 @@ function createCcCandybarEngine(opts) {
       ...extraFuncs ?? {}
     }
   });
+}
+
+// src/config/loader/refs.ts
+init_globals();
+var STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
+function* templateBlocks(template) {
+  let open2 = template.indexOf("{{");
+  while (open2 !== -1) {
+    let block = "";
+    let i = open2 + 2;
+    const spans = [[0, i]];
+    while (i < template.length && !template.startsWith("}}", i)) {
+      if (template.startsWith("/*", i)) {
+        const close = template.indexOf("*/", i + 2);
+        i = close === -1 ? template.length : close + 2;
+        spans.push([block.length, i]);
+        continue;
+      }
+      const start = i;
+      const quote2 = template[i];
+      i += 1;
+      if (quote2 === '"' || quote2 === "'" || quote2 === "`") {
+        while (i < template.length && template[i] !== quote2) {
+          i += template[i] === "\\" && quote2 !== "`" ? 2 : 1;
+        }
+        i += 1;
+      }
+      block += template.slice(start, i);
+    }
+    if (i >= template.length) return;
+    yield {
+      text: block,
+      at: (index) => {
+        let [from, to] = spans[0];
+        for (const [b, t2] of spans) if (b <= index) [from, to] = [b, t2];
+        return to + index - from;
+      }
+    };
+    open2 = template.indexOf("{{", i + 2);
+  }
+}
+var PATH = "[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*";
+var OPERAND_RE = new RegExp(
+  `^(?:(\\$)(?:\\.(${PATH}))?|\\.(${PATH})?)(?=[\\s)]|$)`
+);
+function operandAt(text4, dot, root) {
+  const m = OPERAND_RE.exec(text4.trimStart());
+  if (m === null) return null;
+  const [base, field] = m[1] !== void 0 ? [root, m[2]] : [dot, m[3]];
+  if (base === null) return null;
+  return field === void 0 ? base : `${base}${field}.`;
+}
+var KEYWORD_RE = /^(\w+)\b\s*([\s\S]*)$/;
+function* scopedBlocks(template, root) {
+  const stack = [root];
+  for (const block of templateBlocks(template)) {
+    const code = block.text.replace(/^-(?=\s)/, "").trim();
+    const [, keyword = "", rest2 = ""] = KEYWORD_RE.exec(code) ?? [];
+    const top = stack[stack.length - 1];
+    const outer = stack.length > 1 ? stack[stack.length - 2] : top;
+    if (keyword === "end") {
+      if (stack.length > 1) stack.pop();
+      continue;
+    }
+    if (keyword === "else") {
+      yield { code, dot: outer, block };
+      const chained = /^with\b([\s\S]*)$/.exec(rest2);
+      stack[stack.length - 1] = chained === null ? outer : operandAt(chained[1], outer, root);
+      continue;
+    }
+    yield { code, dot: top, block };
+    if (keyword === "if") stack.push(top);
+    if (keyword === "with") stack.push(operandAt(rest2, top, root));
+    if (keyword === "range" || keyword === "define" || keyword === "block")
+      stack.push(null);
+  }
+}
+var TEMPLATE_KEYWORD_RE = /(?<![.$])\btemplate\s+$/;
+function* helperCalls(code, dot, root) {
+  let cursor = 0;
+  for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
+    const end = s.index + s[0].length;
+    if (TEMPLATE_KEYWORD_RE.test(code.slice(cursor, s.index))) {
+      yield {
+        name: s[0].slice(1, -1),
+        at: operandAt(code.slice(end), dot, root),
+        index: s.index
+      };
+    }
+    cursor = end;
+  }
+}
+function* callGraphBlocks(template, helpers) {
+  const walked = /* @__PURE__ */ new Set();
+  function* walk3(src, root, via, chain2) {
+    for (const { code, dot } of [...scopedBlocks(src, root)]) {
+      yield { code, dot, root, via };
+      for (const call of [...helperCalls(code, dot, root)]) {
+        const body = Object.hasOwn(helpers, call.name) ? helpers[call.name] : void 0;
+        const key = `${call.name}\0${call.at ?? "\0"}`;
+        if (body === void 0 || chain2.has(call.name) || walked.has(key))
+          continue;
+        walked.add(key);
+        yield* walk3(body, call.at, call.name, /* @__PURE__ */ new Set([...chain2, call.name]));
+      }
+    }
+  }
+  yield* walk3(template, "", null, /* @__PURE__ */ new Set());
+}
+function perTemplate(answer2) {
+  const answers = /* @__PURE__ */ new Map();
+  return (template) => {
+    if (!answers.has(template)) answers.set(template, answer2(template));
+    return answers.get(template);
+  };
+}
+var WALKS = /* @__PURE__ */ new WeakMap();
+function callGraph(template, helpers) {
+  let walks = WALKS.get(helpers);
+  if (walks === void 0) {
+    walks = perTemplate((t2) => [...callGraphBlocks(t2, helpers)]);
+    WALKS.set(helpers, walks);
+  }
+  return walks(template);
+}
+var REF_RE = new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.(${PATH})`, "g");
+function* dotRefs({ code, dot, root }) {
+  const text4 = code.replace(STRING_LITERAL_RE, "");
+  for (const r of [...text4.matchAll(REF_RE)]) {
+    const base = r[1] === "$" ? root : dot;
+    if (base !== null) yield `${base}${r[2]}`;
+  }
+}
+function templateReads(template, helpers) {
+  const reads = /* @__PURE__ */ new Map();
+  for (const block of callGraph(template, helpers)) {
+    for (const ref of dotRefs(block)) {
+      if (!reads.has(ref)) reads.set(ref, block.via);
+    }
+  }
+  return reads;
+}
+var BINDING_KEYWORD_RE = /(?<![.$])\b(action|picker|menu|carousel|swatches|swatch|themePreview)\s+$/;
+var NAME_ARGS = {
+  action: 1,
+  picker: 2,
+  menu: 1,
+  carousel: 2,
+  swatch: 1,
+  swatches: 2,
+  themePreview: 1
+};
+function* actionBindings(code) {
+  let cursor = 0;
+  let pending2 = 0;
+  let site = "action";
+  for (const s of [...code.matchAll(STRING_LITERAL_RE)]) {
+    const between = code.slice(cursor, s.index);
+    const kw = BINDING_KEYWORD_RE.exec(between);
+    if (kw !== null) {
+      pending2 = NAME_ARGS[kw[1]];
+      site = kw[1] === "action" ? "action" : "options";
+    } else if (between.trim() !== "") {
+      pending2 = 0;
+    }
+    if (pending2 > 0) {
+      yield { name: s[0].slice(1, -1), site, index: s.index };
+      pending2--;
+    }
+    cursor = s.index + s[0].length;
+  }
+}
+function templateActionRefs(template, helpers) {
+  const refs = /* @__PURE__ */ new Map();
+  for (const { code, via } of callGraph(template, helpers)) {
+    for (const { name, site } of actionBindings(code)) {
+      const key = `${name}\0${via ?? "\0"}`;
+      if (!refs.has(key)) refs.set(key, { name, site, via });
+    }
+  }
+  return [...refs.values()];
+}
+var namesTaking = (min2) => Object.keys(NAME_ARGS).filter((keyword) => NAME_ARGS[keyword] >= min2).join("|");
+var COMPUTED_BINDING_RE = new RegExp(
+  `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`
+);
+function bindsComputedAction(template, helpers) {
+  for (const { code } of callGraph(template, helpers)) {
+    if (COMPUTED_BINDING_RE.test(code.replace(STRING_LITERAL_RE, '""'))) {
+      return true;
+    }
+  }
+  return false;
+}
+var BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
+function templateFunctions(template, helpers) {
+  const called = /* @__PURE__ */ new Set();
+  for (const { code } of callGraph(template, helpers)) {
+    for (const [name] of code.replace(STRING_LITERAL_RE, "").matchAll(BARE_NAME_RE)) {
+      called.add(name);
+    }
+  }
+  return called;
+}
+function templateHelperRefs(template, helpers) {
+  return new Set(
+    [...templateHelperCalls(template, helpers)].filter(
+      (name) => Object.hasOwn(helpers, name)
+    )
+  );
+}
+function templateHelperCalls(template, helpers) {
+  const called = /* @__PURE__ */ new Set();
+  for (const { code, dot, root } of callGraph(template, helpers)) {
+    for (const { name } of helperCalls(code, dot, root)) called.add(name);
+  }
+  return called;
+}
+var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
+function bindSelf(template, self2, ns) {
+  const refRe = SELF_REF_RE(self2);
+  const named3 = ownedBy(self2);
+  const starts = [];
+  for (const { dot, block } of scopedBlocks(template, "")) {
+    const code = block.text.replace(
+      STRING_LITERAL_RE,
+      (s) => " ".repeat(s.length)
+    );
+    for (const r of code.matchAll(refRe)) {
+      const base = r[1] === "$" ? "" : dot;
+      if (base === "") starts.push(block.at(r.index + r[1].length + 1));
+    }
+    for (const { name, index } of [
+      ...helperCalls(block.text, dot, ""),
+      ...actionBindings(block.text)
+    ]) {
+      if (named3(name)) starts.push(block.at(index + 1));
+    }
+  }
+  return [...new Set(starts)].sort((a, b) => b - a).reduce(
+    (t2, start) => t2.slice(0, start) + ns + t2.slice(start + self2.length),
+    template
+  );
+}
+function* declarationsAt(config2) {
+  for (const [name, decl] of Object.entries(config2.variables)) {
+    yield [name, decl, ["variables", name]];
+  }
+  for (const [segName, seg2] of Object.entries(config2.segments)) {
+    for (const [varName, decl] of Object.entries(seg2.vars ?? {})) {
+      yield [
+        `${segName}.${varName}`,
+        decl,
+        ["segments", segName, "vars", varName]
+      ];
+    }
+  }
+}
+function* declaredVariables(config2) {
+  for (const [name, decl] of declarationsAt(config2)) yield [name, decl];
+}
+function variableRead(path42, names) {
+  const parts = path42.split(".");
+  for (let n = parts.length; n > 0; n--) {
+    const name = parts.slice(0, n).join(".");
+    if (names.has(name)) return [name];
+  }
+  const namespace = `${path42}.`;
+  return [...names].filter((name) => name.startsWith(namespace));
+}
+function refResolves(ref, scope) {
+  return variableRead(ref, scope.names).some(
+    (name) => !ref.startsWith(`${name}.`) || scope.documents.has(name)
+  );
+}
+function templateScopeOf(cfg) {
+  const names = /* @__PURE__ */ new Set();
+  const documents = /* @__PURE__ */ new Set();
+  const declare = (name, v) => {
+    names.add(name);
+    if (isDocumentDecl(v)) documents.add(name);
+  };
+  for (const [name, v] of declaredVariables(cfg)) declare(name, v);
+  return { names, documents, helpers: cfg.helpers };
+}
+function isDocumentDecl(v) {
+  return v.kind === "dropped" || v.kind === "source" || (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json";
 }
 
 // src/config/loader/value-reads.ts

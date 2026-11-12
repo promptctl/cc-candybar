@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-723",
-      "ref": "refs/pull/723/merge",
-      "sha": "a62ad519b8bd4495d0822aaacba709337d4b61b6",
-      "timestamp": "2026-11-12T05:45:40.796Z",
-      "commits": [
-        {
-          "sha": "a62ad519b8bd4495d0822aaacba709337d4b61b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:44:34-07:00",
-          "message": "Merge 7bf37c2975b3dbf4c8f381c538b17869ae382d8c into 5e6bce6dfd01f43eca1c1503452bc4699f03ff91\n"
-        },
-        {
-          "sha": "7bf37c2975b3dbf4c8f381c538b17869ae382d8c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:35:47-07:00",
-          "message": "test(config): the chrome-reads corpus authors a menu, the helpers share one authored-config builder, and unrelated helper formatting is restored (candybar-host-renderer-x96a.dbg)\n"
-        },
-        {
-          "sha": "f616ba93808c71e721615f64651358b0a89802c5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:30:29-07:00",
-          "message": "test(config): the chrome-reads check runs over every shipped example and an authored config with presets and settings; the load names its exception (candybar-host-renderer-x96a.dbg)\n"
-        },
-        {
-          "sha": "d659722691555c32a2c11d84b6f6ff93d3119ba8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:26:39-07:00",
-          "message": "test(config): the chrome-reads check lives in test helpers, runs over authored configs, and checks a replaced declaration by identity (candybar-host-renderer-x96a.dbg)\n"
-        },
-        {
-          "sha": "fc25ae186688e767ef6b9939760e02354c02d6de",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:20:04-07:00",
-          "message": "perf(config): a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "5e6bce6dfd01f43eca1c1503452bc4699f03ff91",
-      "timestamp": "2026-11-12T05:23:33.106Z",
+      "sha": "a454d2f2ed6d81675e56ae6c45bef77b1db7007f",
+      "timestamp": "2026-11-12T05:51:27.353Z",
       "commits": [
         {
-          "sha": "5e6bce6dfd01f43eca1c1503452bc4699f03ff91",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-12T05:22:35Z",
-          "message": "chore(release): set `package.json` to 1.218.2\n\n## [1.218.2](https://github.com/promptctl/cc-candybar/compare/v1.218.1...v1.218.2) (2026-11-12)\n\n### Bug Fixes\n\n* **config:** a payload input is the daemon's, so no config can redeclare the session, file or setting the bar's own acts read (candybar-host-renderer-x96a.5e0) ([#722](https://github.com/promptctl/cc-candybar/issues/722)) ([0414cd9](https://github.com/promptctl/cc-candybar/commit/0414cd9074150ff566b34b41a0172ea94b7ec30c))\n"
+          "sha": "a454d2f2ed6d81675e56ae6c45bef77b1db7007f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:50:25-07:00",
+          "message": "perf(config): a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg) (#723)\n\n* perf(config): a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg)\n\n* test(config): the chrome-reads check lives in test helpers, runs over authored configs, and checks a replaced declaration by identity (candybar-host-renderer-x96a.dbg)\n\n* test(config): the chrome-reads check runs over every shipped example and an authored config with presets and settings; the load names its exception (candybar-host-renderer-x96a.dbg)\n\n* test(config): the chrome-reads corpus authors a menu, the helpers share one authored-config builder, and unrelated helper formatting is restored (candybar-host-renderer-x96a.dbg)"
         }
       ]
     }
