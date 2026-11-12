@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { textOf, type Frame } from "../../../src/render/frame";
-import { frameRequest, hookData, sendClick } from "../../helpers/daemon-e2e";
+import { click, frameRequest, hookData } from "../../helpers/daemon-e2e";
 import { barOf } from "../../helpers/drawn-frame";
 import { linkUrls } from "../../helpers/frame";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
@@ -245,7 +245,7 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
         env: { GAUGE_HOME: gaugeHome },
       });
 
-      expect(await sendClick(daemon, url)).toMatchObject({ ok: true });
+      await click(daemon, url);
       await renderUntil((b) => calls().length > before && b.includes(shows), `${action}'s write`);
 
       expect(calls().slice(before)).toEqual([
