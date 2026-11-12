@@ -1,3 +1,9 @@
+## [1.218.0](https://github.com/promptctl/cc-candybar/compare/v1.217.1...v1.218.0) (2026-11-12)
+
+### Features
+
+* **renderer:** a click is a turn through answer, and its output carries what its act moved (candybar-host-renderer-x96a.8se) ([#717](https://github.com/promptctl/cc-candybar/issues/717)) ([ef62dc2](https://github.com/promptctl/cc-candybar/commit/ef62dc27975021a4aedb20614df8ab62ea63b6e7))
+
 ## [1.217.1](https://github.com/promptctl/cc-candybar/compare/v1.217.0...v1.217.1) (2026-11-11)
 
 ### Bug Fixes
