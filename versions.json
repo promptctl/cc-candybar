@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-732",
-      "ref": "refs/pull/732/merge",
-      "sha": "2e104e6331324b8b29e02c944cceac8d0d2e4ebf",
-      "timestamp": "2026-11-12T10:17:02.224Z",
+      "version": "pr-733",
+      "ref": "refs/pull/733/merge",
+      "sha": "fc4921c3ca5ffc547cbfc3aa9b22843b88800d25",
+      "timestamp": "2026-11-12T10:27:37.082Z",
       "commits": [
         {
-          "sha": "2e104e6331324b8b29e02c944cceac8d0d2e4ebf",
+          "sha": "fc4921c3ca5ffc547cbfc3aa9b22843b88800d25",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T03:16:12-07:00",
-          "message": "Merge 35082d92d696c08eeb7fff530a0b69ee2c3ce72f into 9f8a1ff895c95ddf3966ca346dcf1e5bb107df3c\n"
+          "timestamp": "2026-11-12T03:26:40-07:00",
+          "message": "Merge 19279212ef1455bc58e2415b8649538b6697f678 into 9f8a1ff895c95ddf3966ca346dcf1e5bb107df3c\n"
         },
         {
-          "sha": "35082d92d696c08eeb7fff530a0b69ee2c3ce72f",
+          "sha": "19279212ef1455bc58e2415b8649538b6697f678",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T03:15:55-07:00",
-          "message": "fix(cache): a request's wait reads the runs its session's view names now, so a retire that leaves no view ends it and a successor carries it on (candybar-host-renderer-x96a.479)\n"
+          "timestamp": "2026-11-12T03:26:14-07:00",
+          "message": "fix(renderer): a run a retired view names that the world state no longer carries is superseded, so a request's wait ends at the retire (candybar-host-renderer-x96a.479)\n"
         }
       ]
     },

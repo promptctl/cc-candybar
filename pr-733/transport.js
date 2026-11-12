@@ -64831,6 +64831,10 @@ var UNREAD_RUN = {
   reading: pendingOf("unread"),
   fault: null
 };
+var SUPERSEDED_RUN = {
+  reading: pendingOf("superseded"),
+  fault: null
+};
 
 // src/daemon/source-runs.ts
 init_globals();
@@ -66482,21 +66486,23 @@ function todayReading(lane, usage, sessionId2) {
   if (own2.kind === "failed") return own2;
   return ok({ sums: set2.value.sums, own: own2.kind === "ok" ? own2.value : {} });
 }
-function awaitsReading({ builtins, sources, runs }, named3) {
+function awaitsReading({ builtins, sources, runs }, named3, absent) {
   return [
     builtins.git,
     builtins.tmux,
     builtins.hostName,
     builtins.hostUser,
     ...Object.values(sources),
-    ...[...named3].map((run3) => (runs[run3.digest] ?? UNREAD_RUN).reading)
+    ...[...named3].map((run3) => (runs[run3.digest] ?? absent).reading)
   ].some(awaitedReading);
 }
 var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
-async function settleWorld(inputs, at, refreshed, worldState, named3, signal) {
+async function settleWorld(inputs, at, refreshed, worldState, named3, absent, signal) {
   await refreshPayload(inputs, at, refreshed);
   try {
-    await when(() => !awaitsReading(worldState(), named3()), { signal });
+    await when(() => !awaitsReading(worldState(), named3(), absent()), {
+      signal
+    });
   } catch (e) {
     if (!signal.aborted) throw e;
   }
@@ -76836,6 +76842,7 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
       view,
       hintsError,
       payloadInputs,
+      absentRun: () => hold2.absentRun(),
       [Symbol.dispose]: () => hold2[Symbol.dispose]()
     };
   } catch (e) {
@@ -77178,7 +77185,8 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
         at,
         refreshed,
         () => parts.worldStates.of(setup.sessionId),
-        () => parts.renderCache.subscribedRuns(setup.sessionId),
+        () => setup.view.registry.namedRuns().values(),
+        () => setup.absentRun(),
         signal
       ),
       budget,
@@ -81907,13 +81915,8 @@ var RenderCache = class {
   // Every state the map serves or served, until reclaimed.
   holds = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
-  // render resolved to. A render from another entry replaces it. Observable,
-  // so a request's wait follows the view a move, a reload or a retire leaves
-  // (`subscribedRuns`).
-  views = observable.map(
-    void 0,
-    { deep: false }
-  );
+  // render resolved to. A render from another entry replaces it.
+  views = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
   // delivered copies, by the key its copy click names (src/render/
   // diagnostics.ts), one map per renderer, since a request and a feed frame
@@ -82085,6 +82088,7 @@ var RenderCache = class {
       entry: held.entry,
       state: held.state,
       view,
+      absentRun: () => lease.retired === null ? UNREAD_RUN : SUPERSEDED_RUN,
       [Symbol.dispose]: () => {
         if (released) throw new Error("render-cache view hold released twice");
         released = true;
@@ -82150,14 +82154,13 @@ var RenderCache = class {
       current.requested(facts);
       return current;
     }
-    const view = runInAction(() => {
-      this.views.delete(sessionId2);
-      try {
-        return this.opened(entry, state, facts, by);
-      } finally {
-        if (current !== void 0) this.retireView(current, "moved");
-      }
-    });
+    this.views.delete(sessionId2);
+    let view;
+    try {
+      view = this.opened(entry, state, facts, by);
+    } finally {
+      if (current !== void 0) this.retireView(current, "moved");
+    }
     this.fit(entry);
     return view;
   }
@@ -82179,7 +82182,11 @@ var RenderCache = class {
     }
     this.openFailures.delete(sessionId2);
     this.views.set(sessionId2, view);
-    this.viewHolds.set(view, { entry, holders: 0, retired: null });
+    const lease = { entry, holders: 0, retired: null };
+    this.viewHolds.set(
+      view,
+      observable(lease, { entry: false, holders: false })
+    );
     this.log(
       "info",
       `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
@@ -82199,7 +82206,9 @@ var RenderCache = class {
     if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
     view.retire();
     const lease = this.leaseOf(view);
-    lease.retired = { reason, held: lease.holders };
+    runInAction(() => {
+      lease.retired = { reason, held: lease.holders };
+    });
     this.reclaimView(view, lease);
   }
   // [LAW:single-enforcer] The one place a view is disposed: retired and unheld.
@@ -82217,13 +82226,6 @@ var RenderCache = class {
     this.openFailures.delete(sessionId2);
     const view = this.views.get(sessionId2);
     if (view !== void 0) this.retireView(view, "idle");
-  }
-  // [LAW:one-source-of-truth] The runs a request of the session waits on: the
-  // ones its view names now, which are its subscriptions, so the host keeps
-  // reading them. A successor that names the same runs carries the wait on; a
-  // retire that leaves the session no view ends it.
-  subscribedRuns(sessionId2) {
-    return this.views.get(sessionId2)?.registry.namedRuns().values() ?? [];
   }
   // [LAW:one-source-of-truth] What every session's open view needs read: the
   // plugin sources its config declares, at their folders' storage keys, and
