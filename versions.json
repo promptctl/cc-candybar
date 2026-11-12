@@ -2,34 +2,27 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-727",
-      "ref": "refs/pull/727/merge",
-      "sha": "24963f3447e10e0d22e928299b91eed150c16978",
-      "timestamp": "2026-11-12T07:10:33.954Z",
+      "version": "pr-728",
+      "ref": "refs/pull/728/merge",
+      "sha": "d1894d9f9caea38e0683cba40fb889cb8d1d7e8f",
+      "timestamp": "2026-11-12T07:17:18.464Z",
       "commits": [
         {
-          "sha": "24963f3447e10e0d22e928299b91eed150c16978",
+          "sha": "d1894d9f9caea38e0683cba40fb889cb8d1d7e8f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T07:09:42Z",
-          "message": "Merge c3433d340d81ac8ace935c670c2b36542135372a into 12a2dfd7a5a6af31a086f546f452c9b9dbddee21\n"
+          "timestamp": "2026-11-12T00:16:18-07:00",
+          "message": "Merge b17bb4abcb38d8715566fc13e1049c60433832aa into 12a2dfd7a5a6af31a086f546f452c9b9dbddee21\n"
         },
         {
-          "sha": "c3433d340d81ac8ace935c670c2b36542135372a",
+          "sha": "b17bb4abcb38d8715566fc13e1049c60433832aa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:09:30-07:00",
-          "message": "test(clicks): a click answered TIMEOUT settles to landed, refused or dropped unrun, and a dropped one fails loudly rather than reading as a refusal (candybar-host-renderer-x96a.iml)\n"
+          "timestamp": "2026-11-12T00:14:41-07:00",
+          "message": "test(clicks): the repository answers land through the click helper, and one builder spells the click request (candybar-host-renderer-x96a.iml)\n"
         },
         {
-          "sha": "2e869aabb7c492fe677f0afe22440fa20e336988",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:06:07-07:00",
-          "message": "test(clicks): every must-land click settles a TIMEOUT through one helper that matches its own event by verb (candybar-host-renderer-x96a.iml)\n"
-        },
-        {
-          "sha": "b940e7845060538b31e5ba78c25d643c78f56d55",
+          "sha": "ab9828cc3aca51432d959425ed3470abe619cb14",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-12T00:01:04-07:00",
