@@ -80,6 +80,7 @@ import { rendererHost } from "./renderer-host.js";
 import { mainRenderer } from "../renderer/main.js";
 import { verbsOver } from "../renderer/verbs.js";
 import { closeByTurn, MenuIdle } from "./menu-idle.js";
+import type { SessionId } from "./session-id.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -657,7 +658,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     stateDir: paths.state,
     locations: locs,
     journalTurns,
-    clickLanded: (sessionId: string) => menuIdle.clicked(sessionId, instant()),
+    clickLanded: (sessionId: SessionId) =>
+      menuIdle.clicked(sessionId, instant()),
     log,
     launcher,
     now: instant,

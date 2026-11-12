@@ -241,7 +241,7 @@ export interface DaemonContext {
   readonly journalTurns: Pick<JournalTurns, "take" | "click" | "gathering">;
   // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
   // turn: the session's idle clock restarts (src/daemon/menu-idle.ts).
-  readonly clickLanded: (sessionId: string) => void;
+  readonly clickLanded: (sessionId: SessionId) => void;
   // [LAW:effects-at-boundaries] The config a session renders with, looked up
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
@@ -2375,7 +2375,7 @@ export interface IdleClose {
 // `closed` to each menu open at the top, the write its ✕ makes. No URL names
 // it: it is not in VERBS.
 export function closeIdleMenus(
-  sid: string,
+  sid: SessionId,
   idle: IdleClose,
   ctx: DaemonContext,
 ): Promise<void> {

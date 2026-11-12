@@ -43,13 +43,15 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const RULE = "─".repeat(60);
 const IDLE_SCREEN = ["⏺ Done.", "", "", `${RULE} probe ─`, "❯ ", RULE, "  ⏸ manual mode on"];
 const NONCE = "01234567-89ab-cdef-0123-456789abcdef";
-const A = "session-a";
+const A = sessionIdOf("session-a");
 const B = "session-b";
+const S = sessionIdOf("s");
 const LAUNCHED = { ok: true, stdout: "", stderr: "", exitCode: 0 } as LaunchResult;
 type Load = ReturnType<DoctorEdge["loadConfig"]>;
 const LOAD = { layers: [], error: null, warning: null, unused: [], config: EMPTY_DEFAULT } as unknown as Load;
@@ -454,14 +456,14 @@ describe("the idle clock", () => {
 
   test("past the deadline no timer is armed and no close runs; the deadline returns as the click settles", async () => {
     const c = clock();
-    c.idle.observe("s", c.at(), true, 30);
-    c.idle.clickArrived("s");
+    c.idle.observe(S, c.at(), true, 30);
+    c.idle.clickArrived(S);
     expect(c.idle.getStats()).toMatchObject({ armed: 0, pending: 1 });
     await c.advance(60);
     expect(c.closes).toEqual([]);
     expect(c.idle.getStats().armed).toBe(0);
-    c.idle.clicked("s", c.at());
-    c.idle.clickSettled("s");
+    c.idle.clicked(S, c.at());
+    c.idle.clickSettled(S);
     expect(c.idle.getStats()).toMatchObject({ armed: 1, pending: 0 });
     await c.advance(30);
     expect(c.closes).toEqual(["s"]);
@@ -470,12 +472,12 @@ describe("the idle clock", () => {
 
   test("an abandoned click does not move the clock", async () => {
     const c = clock();
-    c.idle.observe("s", c.at(), true, 30);
+    c.idle.observe(S, c.at(), true, 30);
     await c.advance(20);
-    c.idle.clickArrived("s");
+    c.idle.clickArrived(S);
     await c.advance(5);
-    c.idle.clickSettled("s");
-    expect(c.idle.since("s", c.at())).toBe(1000);
+    c.idle.clickSettled(S);
+    expect(c.idle.since(S, c.at())).toBe(1000);
     await c.advance(5);
     expect(c.closes).toEqual(["s"]);
     c.idle.dispose();
@@ -483,11 +485,11 @@ describe("the idle clock", () => {
 
   test("eviction of an abandoned click's record leaves pending intact, and settling throws nothing", async () => {
     const c = clock();
-    c.idle.clicked("s", c.at());
-    c.idle.clickArrived("s");
-    for (let i = 0; i < 256; i++) c.idle.clicked(`other${i}`, c.at());
+    c.idle.clicked(S, c.at());
+    c.idle.clickArrived(S);
+    for (let i = 0; i < 256; i++) c.idle.clicked(sessionIdOf(`other${i}`), c.at());
     expect(c.idle.getStats().pending).toBe(1);
-    expect(() => c.idle.clickSettled("s")).not.toThrow();
+    expect(() => c.idle.clickSettled(S)).not.toThrow();
     expect(c.idle.getStats().pending).toBe(0);
     c.idle.dispose();
   });

@@ -6,6 +6,7 @@
 
 import type { RendererParts } from "../daemon/draw-bar.js";
 import type { MenuIdle } from "../daemon/menu-idle.js";
+import type { SessionId } from "../daemon/session-id.js";
 import {
   closeIdleMenus,
   VERBS,
@@ -32,7 +33,7 @@ export interface RendererVerbs {
   ): ((value: string, click: ClickFacts) => Promise<void>) | undefined;
   // The idle clock's close of the session's menus: the journaled write a ✕
   // makes.
-  closeIdle(sessionId: string, idle: IdleClose): Promise<void>;
+  closeIdle(sessionId: SessionId, idle: IdleClose): Promise<void>;
 }
 
 // The main renderer's parts: the draw's, which the host's own frames share,
