@@ -80233,7 +80233,8 @@ var SessionUsageStore = class {
       return record2;
     });
   }
-  // The `today` projection: cross-session sum of every record's today bucket.
+  // The `today` projection, which declareToday and daysOutside below answer
+  // together: the cross-session sum of every record's today bucket.
   // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
   // makes the whole projection `failed` — a total silently missing today's
   // main work would be a confident wrong number, worse than a loud gap.
@@ -80245,13 +80246,6 @@ var SessionUsageStore = class {
   // off where its transcript lives: a sum over every directory seen so far, or
   // over the sessions that had asked, would move with which other sessions
   // happened to have rendered.
-  //
-  // A request's refresh of `today`: the active session's own record, so
-  // `today` keeps up with the cost it was sent with. The directory set's
-  // scan is not waited for (`declareToday`).
-  refreshToday(sessionId2, transcriptPath) {
-    return this.request(sessionId2, transcriptPath).today();
-  }
   // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
@@ -80286,17 +80280,13 @@ var SessionUsageStore = class {
     }
     return ok(Object.fromEntries(record2.days));
   }
-  // Take one tok/s observation of the active session: ingest its current
+  // A request's speed sample, over its one refresh of the session: ingest its current
   // cumulative counts, return the prior sample alongside, and record this one as
   // the new baseline. [LAW:no-silent-failure] A failed transcript parse flows out
   // as `failed` (the boundary logs it and the segment reads "—"); an unknown
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
   // clock instant — the store never reads the clock for tok/s timing itself.
-  observeSpeed(sessionId2, transcriptPath, nowMs) {
-    return this.request(sessionId2, transcriptPath).speed(nowMs);
-  }
-  // A request's speed sample, over the request's one refresh of the session.
   async observed(sessionId2, refresh, nowMs) {
     const { stamp: stamp2, record: refreshed } = refresh();
     return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
