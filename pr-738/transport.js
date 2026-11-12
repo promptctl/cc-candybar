@@ -23837,7 +23837,7 @@ init_globals();
 
 // src/daemon/verbs/index.ts
 init_globals();
-var import_node_path30 = __toESM(require_path_browserify(), 1);
+var import_node_path29 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/click-error.ts
 init_globals();
@@ -39327,8 +39327,6 @@ var CACHE_SCHEMA = {
     },
     watch_file: {
       json: { type: "string" },
-      // [LAW:single-enforcer] That the path is absolute is the host's to
-      // judge (src/daemon/judge-run.ts).
       parse: (ctx, path42, value) => typeof value === "string" ? { watch_file: value } : reject(
         ctx,
         path42,
@@ -39537,11 +39535,7 @@ var PARSE_SCHEMA = {
     },
     regex: {
       json: { type: "string" },
-      parse: (ctx, path42, value) => typeof value === "string" ? (
-        // [LAW:single-enforcer] A pattern's compile and its capture
-        // group are the host's to judge (src/daemon/judge-run.ts).
-        { regex: value }
-      ) : reject(
+      parse: (ctx, path42, value) => typeof value === "string" ? { regex: value } : reject(
         ctx,
         path42,
         `parse.regex must be a pattern string, got ${describeValue(value)}`
@@ -63107,7 +63101,7 @@ var barsOf = (scope, sightings) => inScope(scope, sightings).map(
 // src/doctor/edge.ts
 init_globals();
 init_os();
-var import_node_path25 = __toESM(require_path_browserify(), 1);
+var import_node_path24 = __toESM(require_path_browserify(), 1);
 
 // src/proc/process-table.ts
 init_globals();
@@ -63977,7 +63971,7 @@ init_globals();
 
 // src/daemon/render-payload.ts
 init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
+var import_node_path21 = __toESM(require_path_browserify(), 1);
 
 // src/utils/terminal-width.ts
 init_globals();
@@ -65866,31 +65860,6 @@ function crateDigest(crateDir) {
 var SHORT_DIGEST_LENGTH = 7;
 var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
 
-// src/daemon/judge-run.ts
-init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
-var MIN_SHELL_TTL_MS = 500;
-function judgeRun(run3) {
-  const reason = refusalOf2(run3);
-  return reason === null ? { kind: "accepted", run: run3 } : { kind: "refused", reason };
-}
-function refusalOf2({ identity: { read: read2, parse: parse3, refresh } }) {
-  return (read2.kind === "file" ? absolute("file.path", read2.path) : null) ?? (refresh.kind === "watch_file" ? absolute("cache.watch_file", refresh.path) : null) ?? (parse3.kind === "regex" ? capturing(parse3.pattern) : null) ?? (read2.kind === "shell" && refresh.kind === "ttl" && refresh.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh.durationMs}ms` : null);
-}
-function absolute(where, path42) {
-  return (0, import_node_path21.isAbsolute)(path42) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path42)}`;
-}
-function capturing(pattern2) {
-  let groups;
-  try {
-    new RegExp(pattern2);
-    groups = new RegExp(`${pattern2}|`).exec("").length - 1;
-  } catch (e) {
-    return `parse.regex is not a valid regular expression: ${e.message}`;
-  }
-  return groups > 0 ? null : `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`;
-}
-
 // src/var-system/parse.ts
 init_globals();
 var LINE_BREAK = /\r\n|\r|\n/g;
@@ -66086,12 +66055,6 @@ var PathWatches = class {
 var derived2 = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
 var SourceRuns = class {
   byKind;
-  // [LAW:dataflow-not-control-flow] A refused run is a run like any other:
-  // one entry per digest, held and released by the same holds, whose one read
-  // answers its refusal. It has no period and no watch, so the ledger records
-  // that read once for as long as the run is held, and a set that keeps it
-  // logs nothing more.
-  refused;
   watchMgr;
   // Each watching entry's fault, by digest, for the lanes that read it.
   faults = observable.map(void 0, {
@@ -66145,35 +66108,25 @@ var SourceRuns = class {
       clock: deps.clock
     });
     this.byKind = { shell: source("shell"), file: source("file") };
-    this.refused = new KeyedSource({
-      name: "source.refused",
-      scope: "daemon",
-      keyOf: (run3) => run3.digest,
-      fields: ({ digest: digest2, reason }, holders) => `digest=${shortDigest(digest2)} reason=${valueOf(reason)} sharedBy=${holders}`,
-      // Why is the lane's fault; the reading says only that it failed.
-      read: async () => failed("refused", "read"),
-      every: () => null,
-      watch: () => NO_WATCH(),
-      maxEntries: 0,
-      logger,
-      ledger,
-      clock: deps.clock
-    });
   }
   // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
-  // the run's digest, created and read once on its first hold, and the lane
-  // reads it as it stands.
-  // [LAW:single-enforcer] Every run is judged here, where it is declared,
-  // so the collector and check's holder judge alike with nothing of their own.
-  declare(holds2, run3) {
-    const { digest: digest2 } = run3;
-    const judged = judgeRun(run3);
-    const lane = judged.kind === "accepted" ? this.byKind[run3.identity.read.kind].declare(holds2, judged.run) : this.refused.declare(holds2, { digest: digest2, reason: judged.reason });
-    const refusal = judged.kind === "refused" ? `refused: ${judged.reason}` : null;
+  // an accepted run's digest, created and read once on its first hold, and
+  // the lane reads it as it stands. A refused run reaches no reader: its lane
+  // answers its refusal for good, and the refusal is its standing fault, so
+  // the bar draws the source's fallback beside a ⚠ that says why.
+  declare(holds2, judged) {
+    const { digest: digest2 } = judged;
+    if (judged.kind === "refused") {
+      const refusal = `refused: ${judged.reason}`;
+      const lane2 = settledLane(failed(refusal, "read"));
+      return { digest: digest2, current: () => lane2.current(), fault: () => refusal };
+    }
+    const { run: run3 } = judged;
+    const lane = this.byKind[run3.identity.read.kind].declare(holds2, run3);
     return {
       digest: digest2,
       current: () => lane.current(),
-      fault: () => refusal ?? this.faults.get(digest2) ?? null
+      fault: () => this.faults.get(digest2) ?? null
     };
   }
   stats() {
@@ -66187,15 +66140,14 @@ var SourceRuns = class {
   close() {
     this.byKind.shell.close();
     this.byKind.file.close();
-    this.refused.close();
     this.watchMgr.dispose();
   }
 };
 function declareRuns(sourceRuns, holds2, runs, take) {
   return new Map(
-    [...runs].map(([digest2, run3]) => [
+    [...runs].map(([digest2, judged]) => [
       digest2,
-      take(digest2, () => sourceRuns.declare(holds2, run3))
+      take(digest2, () => sourceRuns.declare(holds2, judged))
     ])
   );
 }
@@ -66785,7 +66737,7 @@ function pickNonNull(src) {
 }
 function posixify(s) {
   if (s === void 0 || s.length === 0) return s;
-  if (import_node_path22.default.sep !== "\\") return s;
+  if (import_node_path21.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
 function projectGitInfo(info, pullRequest, pending2) {
@@ -66916,7 +66868,7 @@ function dataNeeds(config2, preset) {
 
 // src/doctor/font-edge.ts
 init_globals();
-var import_node_path23 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/index.js
 init_globals();
@@ -67889,12 +67841,12 @@ function coverage(launcher, ref, glyphs) {
   return process_default.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
 }
 function alacrittyConfigPaths(home, xdgConfigHome) {
-  const xdg = xdgConfigHome || import_node_path23.default.join(home, ".config");
+  const xdg = xdgConfigHome || import_node_path22.default.join(home, ".config");
   return [
-    import_node_path23.default.join(xdg, "alacritty", "alacritty.toml"),
-    import_node_path23.default.join(xdg, "alacritty.toml"),
-    import_node_path23.default.join(home, ".config", "alacritty", "alacritty.toml"),
-    import_node_path23.default.join(home, ".alacritty.toml")
+    import_node_path22.default.join(xdg, "alacritty", "alacritty.toml"),
+    import_node_path22.default.join(xdg, "alacritty.toml"),
+    import_node_path22.default.join(home, ".config", "alacritty", "alacritty.toml"),
+    import_node_path22.default.join(home, ".alacritty.toml")
   ];
 }
 function alacrittyDefaultFamily(platform3) {
@@ -67936,7 +67888,7 @@ function alacrittyFamilyIn(file, home, depth) {
   if (depth === 5) return { kind: "ok", value: null };
   let found2 = null;
   for (const imported of own2.imports) {
-    const target = imported.startsWith("~/") ? import_node_path23.default.join(home, imported.slice(2)) : import_node_path23.default.resolve(import_node_path23.default.dirname(file), imported);
+    const target = imported.startsWith("~/") ? import_node_path22.default.join(home, imported.slice(2)) : import_node_path22.default.resolve(import_node_path22.default.dirname(file), imported);
     if (!fs_default.existsSync(target)) continue;
     const inner = alacrittyFamilyIn(target, home, depth + 1);
     if (inner.kind === "failed") return inner;
@@ -67978,7 +67930,7 @@ function fontInUse(launcher, terminal, env2, glyphs, home) {
 
 // src/daemon/build-currency.ts
 init_globals();
-var import_node_path24 = __toESM(require_path_browserify(), 1);
+var import_node_path23 = __toESM(require_path_browserify(), 1);
 init_url();
 
 // src/version.ts
@@ -67992,8 +67944,8 @@ var PACKAGE_VERSION = "1.219.2";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
-  const root = import_node_path24.default.dirname(import_node_path24.default.dirname(bundlePath));
-  return fs_default.existsSync(import_node_path24.default.join(root, "src")) ? root : null;
+  const root = import_node_path23.default.dirname(import_node_path23.default.dirname(bundlePath));
+  return fs_default.existsSync(import_node_path23.default.join(root, "src")) ? root : null;
 }
 function bundleStamp(digest2) {
   if (digest2 === null) {
@@ -68005,11 +67957,11 @@ function bundleStamp(digest2) {
 }
 function checkoutVersion(root) {
   const raw = JSON.parse(
-    fs_default.readFileSync(import_node_path24.default.join(root, "package.json"), "utf8")
+    fs_default.readFileSync(import_node_path23.default.join(root, "package.json"), "utf8")
   );
   const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
   if (typeof version !== "string") {
-    throw new Error(`${import_node_path24.default.join(root, "package.json")} has no version string`);
+    throw new Error(`${import_node_path23.default.join(root, "package.json")} has no version string`);
   }
   return version;
 }
@@ -68018,7 +67970,7 @@ function assessBuild(entryUrl, runningStamp) {
     const root = sourceCheckoutOf(fileURLToPath(entryUrl));
     if (root === null) return { kind: "not-source-checkout" };
     const running = runningStamp();
-    const digest2 = sourceDigest(import_node_path24.default.join(root, "src"));
+    const digest2 = sourceDigest(import_node_path23.default.join(root, "src"));
     if (digest2 === running.digest)
       return { kind: "current", root, stamp: running };
     return {
@@ -68090,7 +68042,7 @@ function installFacts(edge, daemonBundle, clients) {
         bundle: bundle.value,
         checkout: root === null ? null : {
           root,
-          rustSource: edge.digest(import_node_path25.default.join(root, "rust-client"))
+          rustSource: edge.digest(import_node_path24.default.join(root, "rust-client"))
         }
       },
       nativeShipped: edge.nativeShipped,
@@ -68210,7 +68162,7 @@ function ownsEntry(entry) {
     return false;
   }
   const root = DAEMON_ENTRY.exec(real)?.[1];
-  return root !== void 0 && fs_default.existsSync(import_node_path25.default.join(root, "bin", "cc-candybar"));
+  return root !== void 0 && fs_default.existsSync(import_node_path24.default.join(root, "bin", "cc-candybar"));
 }
 async function daemons(launcher) {
   const run3 = await launcher.launch({
@@ -68592,25 +68544,25 @@ init_globals();
 // src/daemon/paths.ts
 init_globals();
 init_os();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
+var import_node_path25 = __toESM(require_path_browserify(), 1);
 function xdgEnv(env2, name) {
   const v = env2[name];
   return v && v.length > 0 ? v : void 0;
 }
 function stateDir(host) {
-  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path26.default.join(host.home, ".local", "state");
-  return import_node_path26.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path25.default.join(host.home, ".local", "state");
+  return import_node_path25.default.join(base, "cc-candybar");
 }
 function cacheDir(host) {
-  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path26.default.join(host.home, ".cache");
-  return import_node_path26.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path25.default.join(host.home, ".cache");
+  return import_node_path25.default.join(base, "cc-candybar");
 }
 function socketPath(host) {
   return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
 }
 function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
-  return import_node_path26.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+  return import_node_path25.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
 function leasePathFor(sockPath) {
   return `${sockPath}.lease`;
@@ -68619,26 +68571,26 @@ function leasePath(host) {
   return leasePathFor(socketPath(host));
 }
 function sessionStatePath(host) {
-  return import_node_path26.default.join(stateDir(host), "session-state.json");
+  return import_node_path25.default.join(stateDir(host), "session-state.json");
 }
 function settingsHistoryPath(host) {
-  return import_node_path26.default.join(stateDir(host), "settings-history.json");
+  return import_node_path25.default.join(stateDir(host), "settings-history.json");
 }
 function daemonRegistryDir(host) {
   const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
   if (override) return override;
   const uid = os_default.userInfo().uid;
-  return import_node_path26.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+  return import_node_path25.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
 }
 var SPAWN_BACKOFF_FILE = "spawn.backoff";
 function spawnBackoffPath(host) {
-  return import_node_path26.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+  return import_node_path25.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
 }
 function watchProbeDir(host) {
-  return import_node_path26.default.join(stateDir(host), "watch-probe");
+  return import_node_path25.default.join(stateDir(host), "watch-probe");
 }
 function logPath(host) {
-  return import_node_path26.default.join(stateDir(host), "daemon.log");
+  return import_node_path25.default.join(stateDir(host), "daemon.log");
 }
 function daemonPaths(host) {
   return {
@@ -68656,11 +68608,11 @@ function daemonPaths(host) {
 function locations(host) {
   const { env: env2 } = host;
   const xdgDefault = "/usr/local/share:/usr/share";
-  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path26.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path25.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
   return {
     home: host.home,
-    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path26.default.join(host.home, ".config"),
-    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path26.default.join(host.home, ".local", "share"),
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path25.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path25.default.join(host.home, ".local", "share"),
     dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
   };
 }
@@ -69005,17 +68957,17 @@ init_globals();
 
 // src/attach-launcher.ts
 init_globals();
-var import_node_path27 = __toESM(require_path_browserify(), 1);
+var import_node_path26 = __toESM(require_path_browserify(), 1);
 var ATTACH_DIR = "cc-extra";
 function attachLauncherOf(bundle) {
-  return import_node_path27.default.join(import_node_path27.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
+  return import_node_path26.default.join(import_node_path26.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
 }
 function moduleGraphReaderOf(launcher) {
-  return import_node_path27.default.join(import_node_path27.default.dirname(launcher), "bun-graph.js");
+  return import_node_path26.default.join(import_node_path26.default.dirname(launcher), "bun-graph.js");
 }
 var ATTACH_PRELOAD = "attach-preload.cjs";
 function attachPreloadOf(bundle) {
-  return import_node_path27.default.join(import_node_path27.default.dirname(bundle), ATTACH_PRELOAD);
+  return import_node_path26.default.join(import_node_path26.default.dirname(bundle), ATTACH_PRELOAD);
 }
 var PRELOAD_VARIABLE = "BUN_OPTIONS";
 function attachCommandLine(preload, command) {
@@ -69029,7 +68981,7 @@ function attachCommandLine(preload, command) {
 }
 
 // src/install/index.ts
-var import_node_path29 = __toESM(require_path_browserify(), 1);
+var import_node_path28 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/client.ts
 init_globals();
@@ -69059,7 +69011,7 @@ var CLICK_BUDGETS = {
 
 // src/daemon/acquire.ts
 init_globals();
-var import_node_path28 = __toESM(require_path_browserify(), 1);
+var import_node_path27 = __toESM(require_path_browserify(), 1);
 init_process();
 
 // src/install/currency.ts
@@ -69138,17 +69090,17 @@ function assessCurrency(stamp2, latest) {
 // src/install/index.ts
 function supportDir(host) {
   if (process_default.platform === "darwin") {
-    return import_node_path29.default.join(host.home, "Library", "Application Support", "CCCandybar");
+    return import_node_path28.default.join(host.home, "Library", "Application Support", "CCCandybar");
   }
-  return import_node_path29.default.join(locations(host).dataHome, "cc-candybar");
+  return import_node_path28.default.join(locations(host).dataHome, "cc-candybar");
 }
 function stagedDistPath(dir) {
-  return import_node_path29.default.join(dir, "dist", "index.mjs");
+  return import_node_path28.default.join(dir, "dist", "index.mjs");
 }
 function stableAttachPreload(runningBundle, host) {
   const checkout = sourceCheckoutOf(runningBundle);
   return attachPreloadOf(
-    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path29.default.join(checkout, "dist", "index.mjs")
+    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path28.default.join(checkout, "dist", "index.mjs")
   );
 }
 
@@ -69328,13 +69280,13 @@ async function clickLaunch(launcher, opts, what, log) {
 }
 var HANDOFF_POLL_MS = 50;
 async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
-  const dir = mkdtempSync(import_node_path30.default.join(tmp, "cc-candybar-handoff-"));
+  const dir = mkdtempSync(import_node_path29.default.join(tmp, "cc-candybar-handoff-"));
   try {
     const files = {
       // Unread, and a handed-off browser would write to it for its whole life.
       stdout: "/dev/null",
-      stderr: import_node_path30.default.join(dir, "stderr"),
-      status: import_node_path30.default.join(dir, "status")
+      stderr: import_node_path29.default.join(dir, "stderr"),
+      status: import_node_path29.default.join(dir, "status")
     };
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
@@ -70632,7 +70584,7 @@ init_globals();
 
 // src/daemon/runs.ts
 init_globals();
-var import_node_path31 = __toESM(require_path_browserify(), 1);
+var import_node_path30 = __toESM(require_path_browserify(), 1);
 var RUN_TIMEOUT_MS = 1e4;
 function outcomeOf(result) {
   if (result.ok) return "ok";
@@ -70688,7 +70640,7 @@ var Runs = class {
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
-      bin: program.includes("/") ? import_node_path31.default.resolve(run3.cwd, program) : program,
+      bin: program.includes("/") ? import_node_path30.default.resolve(run3.cwd, program) : program,
       args,
       envOverlay: run3.envOverlay,
       cwd: run3.cwd,
@@ -71831,18 +71783,17 @@ var SourceRegistry = class _SourceRegistry {
   lastErrors = /* @__PURE__ */ new Map();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
-  // source will ever run again, so no read outcome clears it. A watch that
-  // cannot hear every place its path changes lives until it can again (its
-  // own re-derive says so); a key template that throws lives
-  // until the key evaluates again. One map, since a variable has one policy.
-  // Observable, since the bar draws each fault as a refresh warning.
+  // source will ever run again, so no read outcome clears it. A key template
+  // that throws lives until the key evaluates again. One map, since a
+  // variable has one policy. Observable, since the bar draws each fault as a
+  // refresh warning.
   policyFaults = observable.map(void 0, {
     deep: false
   });
-  // [LAW:one-source-of-truth] What the host says a source's run cannot do,
-  // the second half of its standing fault: the policy's map is written by
-  // its policy, this one by the run's fault alone, so neither clears the
-  // other's.
+  // The run's own standing fault, as the host reads it: the judge refused
+  // the run, or its watch cannot hear every place its path changes. Its own
+  // map, written by the run's fault alone, so a policy's outcome and a run's
+  // never clear each other.
   runFaults = observable.map(void 0, {
     deep: false
   });
@@ -71925,7 +71876,7 @@ var SourceRegistry = class _SourceRegistry {
   publishedNow = computed(
     () => ({
       values: this.sourceNames.map((name) => this.store.stored(name)),
-      faults: [...this.standingFaults().values()]
+      faults: [...this.policyFaults.values(), ...this.runFaults.values()]
     })
   );
   published() {
@@ -72100,9 +72051,8 @@ var SourceRegistry = class _SourceRegistry {
       this.runs.set(name, run3);
     });
     this.cleanups.push(
-      // The run's fault, as the host reads it (a watch that cannot hear its
-      // path, a run the host refused), is the variable's standing fault for
-      // as long as this source names that run.
+      // The run's fault, as the host reads it, is the variable's standing
+      // fault for as long as this source names that run.
       reaction(
         () => this.runFact(name)?.fault ?? null,
         (fault) => this.noteFault(
@@ -72303,26 +72253,36 @@ var SourceRegistry = class _SourceRegistry {
   getLastError(name) {
     if (!this.declaredHere(name)) return this.parent?.getLastError(name);
     const read2 = this.lastErrors.get(name);
-    const fault = this.standingFaults().get(name);
+    const fault = this.standingFault(name);
     if (fault === void 0) return read2;
     return read2 === void 0 ? fault : {
       timestamp: read2.timestamp,
       message: `${fault.message}; ${read2.message}`
     };
   }
-  // Every variable whose cache policy cannot fire, with why: each render
-  // reports them (`RenderWarning` kind `refresh`), since the bar draws such a
-  // variable's last value with nothing of its own to say it has stopped.
+  // Every variable that cannot refresh, with why: its cache policy cannot
+  // fire, or the host refused or cannot hear its run. Each render reports
+  // them (`RenderWarning` kind `refresh`), since the bar draws such a
+  // variable's last value or fallback with nothing of its own to say so.
   cachePolicyFaults() {
+    const names = /* @__PURE__ */ new Set([
+      ...this.policyFaults.keys(),
+      ...this.runFaults.keys()
+    ]);
     return new Map([
       ...this.parent?.cachePolicyFaults() ?? [],
-      ...this.standingFaults()
+      ...[...names].map((name) => [name, this.standingFault(name)])
     ]);
   }
-  // Each variable's standing fault: its policy's, else its run's. A policy
-  // that cannot fire names no run, so the two never stand together.
-  standingFaults() {
-    return new Map([...this.runFaults, ...this.policyFaults]);
+  // A variable's standing fault: its policy's and its run's, joined when
+  // both stand, so neither hides the other.
+  standingFault(name) {
+    const policy = this.policyFaults.get(name);
+    const run3 = this.runFaults.get(name);
+    return policy === void 0 || run3 === void 0 ? policy ?? run3 : {
+      timestamp: policy.timestamp,
+      message: `${policy.message}; ${run3.message}`
+    };
   }
   // Whether `name` lives in this registry's own store, not its directory's.
   declaredHere(name) {
@@ -72428,8 +72388,8 @@ var SourceRegistry = class _SourceRegistry {
       message
     });
   }
-  // The one fold from an outcome — whether the policy can fire, whether the
-  // host can run the run — to the variable's standing fault in `faults`.
+  // The one fold from an outcome (whether the policy can fire, whether the
+  // host can run the run) to the variable's standing fault in `faults`.
   // A fault standing for the same reason keeps its record, so it moves
   // nothing that draws it.
   noteFault(faults, name, outcome) {
@@ -77281,7 +77241,7 @@ init_process();
 
 // src/daemon/statusline-answer.ts
 init_globals();
-var import_node_path32 = __toESM(require_path_browserify(), 1);
+var import_node_path31 = __toESM(require_path_browserify(), 1);
 var NOTHING_TO_SETTLE = (_delivered) => {
 };
 function failed2(host, error, doing = "") {
@@ -77302,7 +77262,7 @@ function located(req) {
     ...req,
     hookData: {
       ...req.hookData,
-      ...dir !== void 0 && import_node_path32.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
+      ...dir !== void 0 && import_node_path31.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
 }
@@ -77396,7 +77356,7 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
 
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path33 = __toESM(require_path_browserify(), 1);
+var import_node_path32 = __toESM(require_path_browserify(), 1);
 
 // src/utils/schema-validator.ts
 init_globals();
@@ -77540,7 +77500,7 @@ function checkRenderRequest(req, stats, log, home) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path33.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path32.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
@@ -78274,10 +78234,10 @@ var refusedRender = (problems) => ({
 // src/daemon/update-act.ts
 init_globals();
 init_os();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
+var import_node_path33 = __toESM(require_path_browserify(), 1);
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
-  return import_node_path34.default.join(stateDir2, "update-act", key);
+  return import_node_path33.default.join(stateDir2, "update-act", key);
 }
 var IDLE = { kind: "idle" };
 function judgeAct(facts) {
@@ -78297,11 +78257,11 @@ function judgeAct(facts) {
   return { kind: "failed", act, identity: record2.identity, reason };
 }
 var filesOf = (actDir) => ({
-  stdout: import_node_path34.default.join(actDir, "stdout"),
-  stderr: import_node_path34.default.join(actDir, "stderr"),
-  status: import_node_path34.default.join(actDir, "status")
+  stdout: import_node_path33.default.join(actDir, "stdout"),
+  stderr: import_node_path33.default.join(actDir, "stderr"),
+  status: import_node_path33.default.join(actDir, "status")
 });
-var recordOf2 = (actDir) => import_node_path34.default.join(actDir, "record.json");
+var recordOf2 = (actDir) => import_node_path33.default.join(actDir, "record.json");
 function actNumbers(dir) {
   let names;
   try {
@@ -78325,9 +78285,9 @@ function lastLineOf(file) {
   }
 }
 function removeAct(dir, act) {
-  const leaving = import_node_path34.default.join(dir, `.removed-${act}-${process_default.pid}`);
+  const leaving = import_node_path33.default.join(dir, `.removed-${act}-${process_default.pid}`);
   try {
-    fs_default.renameSync(import_node_path34.default.join(dir, String(act)), leaving);
+    fs_default.renameSync(import_node_path33.default.join(dir, String(act)), leaving);
   } catch (err) {
     if (err.code === "ENOENT") return;
     throw err;
@@ -78352,7 +78312,7 @@ var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf2(act) {
-    const actDir = import_node_path34.default.join(dir, String(act));
+    const actDir = import_node_path33.default.join(dir, String(act));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
     if (known === null || !sameJob(known.record, record2)) {
@@ -78380,7 +78340,7 @@ function makeActReader(dir, read2, jobs, clock) {
         if (act === void 0) return null;
         if (act === vanished) {
           throw new Error(
-            `${import_node_path34.default.join(dir, String(act))}: an act with no record`
+            `${import_node_path33.default.join(dir, String(act))}: an act with no record`
           );
         }
         const facts = await factsOf2(act);
@@ -78392,7 +78352,7 @@ function makeActReader(dir, read2, jobs, clock) {
 }
 function stakeClaim(dir, actDir, record2) {
   fs_default.mkdirSync(dir, { recursive: true });
-  const staging = fs_default.mkdtempSync(import_node_path34.default.join(dir, ".claim-"));
+  const staging = fs_default.mkdtempSync(import_node_path33.default.join(dir, ".claim-"));
   try {
     fs_default.writeFileSync(recordOf2(staging), JSON.stringify(record2));
     fs_default.renameSync(staging, actDir);
@@ -78407,7 +78367,7 @@ function stakeClaim(dir, actDir, record2) {
 }
 async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
   const act = (after ?? 0) + 1;
-  const actDir = import_node_path34.default.join(dir, String(act));
+  const actDir = import_node_path33.default.join(dir, String(act));
   const job = launcher.launchJobSync(command, filesOf(actDir));
   if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   let stood = false;
@@ -78440,7 +78400,7 @@ var CLAIMED_FIRST = {
   reason: "another act claimed this bundle first"
 };
 function endOverdue(dir, facts, jobs) {
-  const status = filesOf(import_node_path34.default.join(dir, String(facts.act))).status;
+  const status = filesOf(import_node_path33.default.join(dir, String(facts.act))).status;
   return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
 }
 
@@ -78916,7 +78876,7 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path35 = __toESM(require_path_browserify(), 1);
+var import_node_path34 = __toESM(require_path_browserify(), 1);
 
 // src/utils/trailing-edge.ts
 init_globals();
@@ -78997,7 +78957,7 @@ function holdKey(root) {
 function watchSpec(root, gitDir, commonDir) {
   const dirs = [
     { path: gitDir, filenames: ["HEAD", "index"] },
-    { path: import_node_path35.default.join(commonDir, "refs", "heads"), recursive: true }
+    { path: import_node_path34.default.join(commonDir, "refs", "heads"), recursive: true }
   ];
   const bounds = dirs.map((d) => boundOf(d.path));
   const named3 = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i])}`);
@@ -79446,7 +79406,7 @@ var GitDataProvider = class {
 
 // src/daemon/cache/session-usage-store.ts
 init_globals();
-var import_node_path37 = __toESM(require_path_browserify(), 1);
+var import_node_path36 = __toESM(require_path_browserify(), 1);
 
 // src/segments/pricing.ts
 init_globals();
@@ -79454,18 +79414,18 @@ init_url();
 
 // src/utils/cache.ts
 init_globals();
-var import_node_path36 = __toESM(require_path_browserify(), 1);
+var import_node_path35 = __toESM(require_path_browserify(), 1);
 var CacheManager = class {
   // [LAW:one-source-of-truth] Every method takes the cache's root directory
   // (the host's `cacheDir`), so the layout under it is derived here alone.
   static usageDir(root) {
-    return import_node_path36.default.join(root, "usage");
+    return import_node_path35.default.join(root, "usage");
   }
   static locksDir(root) {
-    return import_node_path36.default.join(root, "locks");
+    return import_node_path35.default.join(root, "locks");
   }
   static isLocked(root, name) {
-    const lockFile = import_node_path36.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path35.default.join(this.locksDir(root), name);
     if (!fs_default.existsSync(lockFile)) {
       return false;
     }
@@ -79498,7 +79458,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 50;
     const FILE_CREATE_FLAG = "wx";
     await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path36.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path35.default.join(this.locksDir(root), name);
     const startTime = clock.monotonic();
     const lockContent = String(process_default.pid);
     while (clock.monotonic() - startTime < timeout) {
@@ -79520,7 +79480,7 @@ var CacheManager = class {
     return false;
   }
   static async releaseLock(root, name) {
-    const lockFile = import_node_path36.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path35.default.join(this.locksDir(root), name);
     try {
       await fs_default.promises.unlink(lockFile);
       debug(`Lock released for ${name}`);
@@ -79549,7 +79509,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 75;
     const FILE_ENCODING = "utf-8";
     await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path36.default.join(this.usageDir(root), `${cacheType}.json`);
+    const cachePath = import_node_path35.default.join(this.usageDir(root), `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
     for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
       const isCurrentlyLocked = this.isLocked(root, lockName);
@@ -79604,7 +79564,7 @@ var CacheManager = class {
     }
     try {
       await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path36.default.join(this.usageDir(root), `${cacheType}.json`);
+      const cachePath = import_node_path35.default.join(this.usageDir(root), `${cacheType}.json`);
       const cacheTimestamp = latestMtime || clock.now();
       const cacheEntry = {
         data,
@@ -80477,7 +80437,7 @@ var SessionUsageStore = class {
     const key = claudePaths.join("\0");
     const known = this.daySets.get(key);
     if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path37.join)(dir, "projects") + import_node_path37.sep);
+    const roots = claudePaths.map((dir) => (0, import_node_path36.join)(dir, "projects") + import_node_path36.sep);
     const set2 = {
       roots,
       sums: new Kept(
@@ -80498,7 +80458,7 @@ var SessionUsageStore = class {
   async refold(sessionId2, transcriptPath, prior) {
     const agents = await findAgentTranscripts(
       sessionId2,
-      (0, import_node_path37.dirname)(transcriptPath),
+      (0, import_node_path36.dirname)(transcriptPath),
       prior === void 0 ? void 0 : new Set(prior.files.keys())
     );
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
@@ -80542,7 +80502,7 @@ var SessionUsageStore = class {
         const files = await unlessGone(readdir2(dir));
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path37.join)(dir, file);
+          const filePath2 = (0, import_node_path36.join)(dir, file);
           const st = await unlessGone(stat2(filePath2));
           if (st === void 0 || st.mtimeMs < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
@@ -81007,13 +80967,13 @@ function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
 
 // src/daemon/cache/managed-storage.ts
 init_globals();
-var import_node_path38 = __toESM(require_path_browserify(), 1);
+var import_node_path37 = __toESM(require_path_browserify(), 1);
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS;
 var STORAGE_SWEEP_EVERY_MS = DAY_MS;
 var MAX_ENTRIES2 = 256;
 var fileName = (sessionId2) => sessionFileName(sessionId2);
-var fileOf = (f) => import_node_path38.default.join(f.storage.folder, fileName(f.sessionId));
+var fileOf = (f) => import_node_path37.default.join(f.storage.folder, fileName(f.sessionId));
 var keyString = (key) => JSON.stringify([key.folder, key.generation]);
 var sameKey = (a, b) => a.folder === b.folder && a.generation === b.generation;
 var ManagedStorage = class {
@@ -81195,7 +81155,7 @@ var ManagedStorage = class {
         return;
       case "changed": {
         const { paths: paths2 } = invalidation;
-        if (paths2.has(import_node_path38.default.join(key.folder, import_node_path38.default.basename(key.folder)))) {
+        if (paths2.has(import_node_path37.default.join(key.folder, import_node_path37.default.basename(key.folder)))) {
           this.judged(watched, () => this.sessions.changed(inFolder));
         } else {
           this.sessions.changed((f) => inFolder(f) && paths2.has(fileOf(f)));
@@ -81332,7 +81292,7 @@ var ManagedStorage = class {
       for (const entry of entries) {
         if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
         scanned++;
-        const file = import_node_path38.default.join(key.folder, entry.name);
+        const file = import_node_path37.default.join(key.folder, entry.name);
         try {
           const { mtimeMs } = await fs_default.promises.stat(file);
           const held = this.sessions.isHeld(
@@ -81396,7 +81356,7 @@ function createPayloadProviders(opts) {
 
 // src/daemon/cache/render.ts
 init_globals();
-var import_node_path39 = __toESM(require_path_browserify(), 1);
+var import_node_path38 = __toESM(require_path_browserify(), 1);
 
 // src/config/unused.ts
 init_globals();
@@ -81578,7 +81538,7 @@ function watchTargetsFor(entry, locs) {
   const roots = [
     .../* @__PURE__ */ new Set([
       ...entry.state.plugins.roots,
-      import_node_path39.default.join(entry.projectDir, REPO_PLUGIN_DIR)
+      import_node_path38.default.join(entry.projectDir, REPO_PLUGIN_DIR)
     ])
   ];
   return watchTargetsOf({
@@ -82822,6 +82782,31 @@ function stampFailureOf(document) {
   return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
 }
 
+// src/daemon/judge-run.ts
+init_globals();
+var import_node_path39 = __toESM(require_path_browserify(), 1);
+var MIN_SHELL_TTL_MS = 500;
+function judgeRun(run3) {
+  const reason = refusalOf2(run3);
+  return reason === null ? { kind: "accepted", digest: run3.digest, run: run3 } : { kind: "refused", digest: run3.digest, reason };
+}
+function refusalOf2({ identity: { read: read2, parse: parse3, refresh } }) {
+  return (read2.kind === "file" ? absolute("file.path", read2.path) : null) ?? (refresh.kind === "watch_file" ? absolute("cache.watch_file", refresh.path) : null) ?? (parse3.kind === "regex" ? capturing(parse3.pattern) : null) ?? (read2.kind === "shell" && refresh.kind === "ttl" && refresh.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh.durationMs}ms` : null);
+}
+function absolute(where, path42) {
+  return (0, import_node_path39.isAbsolute)(path42) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path42)}`;
+}
+function capturing(pattern2) {
+  let groups;
+  try {
+    new RegExp(pattern2);
+    groups = new RegExp(`${pattern2}|`).exec("").length - 1;
+  } catch (e) {
+    return `parse.regex is not a valid regular expression: ${e.message}`;
+  }
+  return groups > 0 ? null : `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`;
+}
+
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
 var locatorOf = (req) => ({
@@ -82829,7 +82814,7 @@ var locatorOf = (req) => ({
   cwd: req.cwd,
   hints: req.hints
 });
-var sourcesOf2 = (subscriptions) => ({
+var sourcesOf2 = (subscriptions, prior) => ({
   plugins: new Map(
     subscriptions.flatMap(
       (s) => s.kind === "plugin" ? [[s.source, s.storage]] : []
@@ -82837,7 +82822,12 @@ var sourcesOf2 = (subscriptions) => ({
   ),
   runs: new Map(
     subscriptions.flatMap(
-      (s) => s.kind === "run" ? [[s.run.digest, s.run]] : []
+      (s) => s.kind === "run" ? [
+        [
+          s.run.digest,
+          prior.runs.get(s.run.digest) ?? judgeRun(s.run)
+        ]
+      ] : []
     )
   )
 });
@@ -82904,8 +82894,17 @@ var Collector = class {
     }
     runInAction(() => {
       for (const record2 of this.records.values()) {
-        const next = sourcesOf2(sources.get(record2.session) ?? []);
+        const next = sourcesOf2(
+          sources.get(record2.session) ?? [],
+          record2.subscriptions
+        );
         if (sameSources(next, record2.subscriptions)) continue;
+        for (const [digest2, judged] of next.runs)
+          if (judged.kind === "refused" && !record2.subscriptions.runs.has(digest2))
+            this.deps.log(
+              "warn",
+              `run refused sid=${JSON.stringify(record2.session)} digest=${shortDigest(digest2)} reason=${judged.reason}`
+            );
         record2.subscriptions = next;
         const { phase } = record2;
         if (phase.kind === "live")
