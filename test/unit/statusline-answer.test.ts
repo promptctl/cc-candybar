@@ -113,19 +113,21 @@ async function answer(
       CLOCK,
       renderer,
       (_level, line) => logged.push(line),
-      (subscriptions) => subscribed.push(subscriptions),
+      {
+        subscribed: (subscriptions) => void subscribed.push(subscriptions),
+        // Mirrors the collector: only a session a request has named is held.
+        holding: (session) => {
+          if (!named.has(session)) return () => {};
+          holds.count++;
+          holds.sessions.push(session);
+          return () => void holds.count--;
+        },
+      },
     ),
-    // Mirrors the collector: only a session a request has named is held.
     {
       requested: (req) => {
         named.add(req.hookData.session_id);
         return WORLD;
-      },
-      holding: (session) => {
-        if (!named.has(session)) return () => {};
-        holds.count++;
-        holds.sessions.push(session);
-        return () => holds.count--;
       },
     },
     CLOCK,
@@ -155,7 +157,7 @@ test("the request's present answers it, in the request's encoding, and its settl
   answered.settled(true);
   await drained();
   expect(heard).toEqual([
-    { kind: "effect-done", of: 1, outcome: { kind: "ok" } },
+    { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "ok" } },
   ]);
 });
 
@@ -174,7 +176,7 @@ test("a present its client never took settles failed", async () => {
   answered.settled(false);
   await drained();
   expect(heard).toMatchObject([
-    { kind: "effect-done", of: 1, outcome: { kind: "failed" } },
+    { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "failed" } },
   ]);
 });
 
@@ -191,7 +193,7 @@ test("a turn that presents no frame for the request is a failure naming the rend
   await drained();
   // The stray present is refused, not dropped.
   expect(heard).toMatchObject([
-    { kind: "effect-done", of: 1, outcome: { kind: "failed" } },
+    { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "failed" } },
   ]);
 });
 
@@ -201,7 +203,7 @@ test("a second frame for the request is refused, and the first answers it", asyn
   expect(answered.resp).toEqual({ ok: true, frame: FRAME });
   await drained();
   expect(heard).toMatchObject([
-    { kind: "effect-done", of: 2, outcome: { kind: "failed" } },
+    { kind: "effect-done", session: SESSION, of: 2, outcome: { kind: "failed" } },
   ]);
 });
 
@@ -303,7 +305,7 @@ test("the session's config reaches the renderer first, with the world state read
   expect(subscribed).toEqual([opened, drawn]);
 });
 
-test("the session is held across its config and request turns, and let go once either answers or throws", async () => {
+test("the host holds the session through each of its turns, with nothing held by the request's own code, and lets go once each answers or throws", async () => {
   const threw = () => new TurnThrew([], new Error("x"), NO_SUBSCRIPTIONS);
   for (const [config, request] of [
     [output([]), output([present(1)])],
@@ -324,8 +326,8 @@ test("the session is held across its config and request turns, and let go once e
     expect(heldDuring).toEqual(
       config instanceof TurnThrew ? ["config:1"] : ["config:1", "request:1"],
     );
-    // The hold names the session the request's document was read for.
-    expect(holds.sessions).toEqual([REQ.hookData.session_id]);
+    // Each turn's hold names the session the request's document was read for.
+    expect(new Set(holds.sessions)).toEqual(new Set([REQ.hookData.session_id]));
     expect(holds.count).toBe(0);
   }
 });

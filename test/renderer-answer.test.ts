@@ -17,7 +17,6 @@ import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import {
   TurnThrew,
   type Effect,
-  type EffectId,
   type Renderer,
   type Event,
   type RequestId,
@@ -166,12 +165,13 @@ function viewOf(rig: SessionRig) {
   return held.view;
 }
 
-const done = (r: Renderer, of: EffectId, ok: boolean) =>
+const done = (r: Renderer, { session, id: of }: Effect, ok: boolean) =>
   r.answer({
     kind: "event",
     at: AT,
     event: {
       kind: "effect-done",
+      session,
       of,
       outcome: ok ? { kind: "ok" } : { kind: "failed", reason: "left" },
     },
@@ -229,17 +229,17 @@ describe("a statusline request", () => {
     const { r, recorded, rig } = renderer();
     const { effects } = await request({ r, rig });
     expect(recorded).toEqual([]);
-    await done(r, presentOf(effects).id, true);
+    await done(r, presentOf(effects), true);
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
   });
 
   test("records nothing for a present its client never took, and hears of each present once", async () => {
     const { r, recorded, rig } = renderer();
-    const { id } = presentOf((await request({ r, rig })).effects);
-    await done(r, id, false);
+    const present = presentOf((await request({ r, rig })).effects);
+    await done(r, present, false);
     expect(recorded).toEqual([]);
-    await expect(done(r, id, true)).rejects.toThrow(TurnThrew);
-    await expect(done(r, id, true)).rejects.toThrow(
+    await expect(done(r, present, true)).rejects.toThrow(TurnThrew);
+    await expect(done(r, present, true)).rejects.toThrow(
       /not a present on its way/,
     );
   });
@@ -367,7 +367,7 @@ describe("the session's config, ahead of its request", () => {
         },
       },
       () => {},
-      (subscriptions) => t.rig.served.collector.subscribed(subscriptions),
+      t.rig.served.collector,
     );
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
@@ -447,7 +447,7 @@ describe("two requests of one session at different keys", () => {
         },
       },
       () => {},
-      (subscriptions) => t.rig.served.collector.subscribed(subscriptions),
+      t.rig.served.collector,
     );
     const ask = (pane: string, id: number) =>
       answerStatusline(

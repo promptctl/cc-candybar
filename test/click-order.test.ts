@@ -533,7 +533,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
   idle.dispose();
 });
 
-test("the click path holds its session in the collector while the turn runs, and lets go whether it lands or is refused", async () => {
+test("a click's turn holds its session in the collector while it runs, with nothing held by the click path, and lets go whether it lands or is refused", async () => {
   const { ctx, held } = setup();
   const idle = new MenuIdle({ clock: systemTimekeeper,
     now: () => instantOf(new Date()),
@@ -545,20 +545,17 @@ test("the click path holds its session in the collector while the turn runs, and
   // not yet let go, per session.
   const holds = new Map<string, number>();
   let taken = 0;
-  const collector = {
-    holding: (session: string) => {
-      taken++;
-      holds.set(session, (holds.get(session) ?? 0) + 1);
-      return () => holds.set(session, holds.get(session)! - 1);
-    },
+  const holding = (session: string) => {
+    taken++;
+    holds.set(session, (holds.get(session) ?? 0) + 1);
+    return () => void holds.set(session, holds.get(session)! - 1);
   };
   const parts = {
     clock: { monotonic: () => performance.now(), now: () => Date.now() },
     menuIdle: idle,
     payloadProviders: {},
     log: () => {},
-    ...clickParts(verbCtx, idle),
-    collector,
+    ...clickParts(verbCtx, idle, { holding, clicked: () => {} }),
   } as unknown as DaemonParts;
   const send = (gone: () => boolean) =>
     replyTo(
