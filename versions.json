@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-725",
+      "ref": "refs/pull/725/merge",
+      "sha": "7c2aeab7fe98ab960365386e56dfb7f11a5d261d",
+      "timestamp": "2026-11-12T06:17:03.459Z",
+      "commits": [
+        {
+          "sha": "7c2aeab7fe98ab960365386e56dfb7f11a5d261d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:14:18-07:00",
+          "message": "Merge 6548f252746a3180de2e7ff34b3e3a41ce583021 into cd25df0cf0cb1088bd2b4a19deac4d21858b1823\n"
+        },
+        {
+          "sha": "6548f252746a3180de2e7ff34b3e3a41ce583021",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:14:07-07:00",
+          "message": "refactor(usage): a test refreshes today through the request path the daemon takes, so the store keeps no method production never calls (candybar-host-renderer-x96a.3vg)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "cd25df0cf0cb1088bd2b4a19deac4d21858b1823",
