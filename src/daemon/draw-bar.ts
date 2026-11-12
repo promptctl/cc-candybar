@@ -710,7 +710,6 @@ export function drawRender(
     sourcesFactOf(
       [...view.state.sources.keys()],
       view.registry.runSources(),
-      view.registry.cachePolicyFaults(),
       document,
     ),
   );

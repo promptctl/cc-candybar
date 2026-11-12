@@ -116,6 +116,7 @@ import {
 } from "./source-runs.js";
 import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
+import type { SourceRun } from "../var-system/sources.js";
 import { elapsedMs, type Timekeeper } from "../time";
 import { shortDigest } from "../source-digest.js";
 
@@ -1482,43 +1483,33 @@ export const sourceFactOf = (
   name: string,
 ): Fact<SourceValue> => facts.sources[name] ?? pendingOf("unread");
 
-// [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
-// how many plugin, `shell` and `file` sources the view's config declares, and
-// those not answered as the draw reads them, each by variable with why
-// (`<name>:unread`, `<name>:superseded`, or `<name>:failed` for a reading that
-// failed or a key that failed and so names no run; `-` for none), so a source
-// that never lands is told from one nothing declared, a run's superseded
-// source from a wait that left one out, and a failure from a wait.
+// [LAW:nothing-unseen] The render event's `sources=`, `sourcesPending=` and
+// `sourcesFailed=`: how many plugin, `shell` and `file` sources the view's
+// config declares; those not answered yet as the draw reads them, each by
+// variable with why (`<name>:unread` or `<name>:superseded`); and those whose
+// reading, or whose key before it ever answered, failed, by variable (`-` for
+// none). So a source that never lands is told from one nothing declared, a
+// run's superseded source from a wait that left one out, and a failure from a
+// wait, by the variable's name, which the host's own line, keyed by run
+// digest, cannot give.
 export function sourcesFactOf(
   names: readonly string[],
-  runs: ReadonlyMap<string, Run | undefined>,
-  // The variables whose cache policy cannot fire: a key among them failed.
-  keyFaults: ReadonlyMap<string, unknown>,
+  runs: ReadonlyMap<string, SourceRun>,
   facts: Pick<WorldState, "sources" | "runs">,
 ): {
   readonly sources: string;
   readonly sourcesPending: string;
+  readonly sourcesFailed: string;
 } {
-  // Why each declared source is not answered, or null when it is: a failed
-  // reading says so by the variable's name, which the host's own line, keyed
-  // by run digest, cannot.
-  const why = (fact: Fact<unknown>): string | null =>
-    fact.kind === "pending"
-      ? fact.why
-      : fact.kind === "failed"
-        ? "failed"
-        : null;
-  const named = [
-    ...names.map((name) => [name, why(sourceFactOf(facts, name))] as const),
+  const named: ReadonlyArray<readonly [string, Reading<unknown>]> = [
+    ...names.map((name) => [name, sourceFactOf(facts, name)] as const),
     ...[...runs].map(
       ([name, run]) =>
         [
           name,
-          run !== undefined
-            ? why((facts.runs[run.digest] ?? UNREAD_RUN).reading)
-            : keyFaults.has(name)
-              ? "failed"
-              : why(UNREAD_RUN.reading),
+          run.kind === "ok"
+            ? (facts.runs[run.value.digest] ?? UNREAD_RUN).reading
+            : run,
         ] as const,
     ),
   ];
@@ -1526,9 +1517,13 @@ export function sourcesFactOf(
     sources: String(named.length),
     sourcesPending:
       named
-        .flatMap(([name, reason]) =>
-          reason === null ? [] : [`${name}:${reason}`],
+        .flatMap(([name, fact]) =>
+          fact.kind === "pending" ? [`${name}:${fact.why}`] : [],
         )
+        .join(",") || "-",
+    sourcesFailed:
+      named
+        .flatMap(([name, fact]) => (fact.kind === "failed" ? [name] : []))
         .join(",") || "-",
   };
 }

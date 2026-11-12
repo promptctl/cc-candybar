@@ -1575,10 +1575,16 @@ describe("SourceRegistry — shell: key: cache policy", () => {
         },
       ]);
 
-      // A key that throws is no key: the source does not run under it.
+      // A key that throws is no key: the source does not run under it, and
+      // having never answered, the run it names is the failure.
       await ran(registry);
       expect(store.read("val")).toBe("");
       expect(registry.getLastError("val")?.message).toMatch(fault);
+      expect(registry.runSources().get("val")).toEqual({
+        kind: "failed",
+        reason: expect.stringMatching(fault),
+        failedAt: "read",
+      });
 
       // A key that throws again is no key change: still nothing runs.
       fs.writeFileSync(dataFile, "v2");
@@ -1595,6 +1601,12 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       expect(registry.getLastError("val")).toBeUndefined();
       expect(registry.cachePolicyFaults().size).toBe(0);
       expect(published.at(-1)).toEqual({ values: ["v2"], faults: [] });
+
+      // A key that throws once it has answered keeps the run it named, so
+      // the source keeps its value; the fault stands as the variable's.
+      store.setBox("trigger", "bad later");
+      expect(registry.runSources().get("val")?.kind).toBe("ok");
+      expect(registry.getLastError("val")?.message).toMatch(fault);
       stop();
     } finally {
       cleanup();

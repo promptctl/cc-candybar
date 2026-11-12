@@ -37,6 +37,8 @@ import {
   orElse,
   isPending,
   pendingOf,
+  type Failed,
+  type Ok,
   type Outcome,
   type PayloadNode,
   type Pending,
@@ -58,6 +60,12 @@ import {
 import { UNREAD_RUN, type RunFact } from "../facts/world-state.js";
 
 export type { ReadMode } from "../facts/source-identity.js";
+
+// What a source's cache policy names: the value it names, pending while what
+// it reads has not answered, or failed while a key failed before answering.
+type Named<T> = Pending | Ok<T> | Failed;
+// The run a `shell` or `file` source names, or why it names none.
+export type SourceRun = Named<Run>;
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -348,32 +356,33 @@ export class SourceRegistry {
   // tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
   // [LAW:one-source-of-truth] The run each `shell` and `file` source names,
-  // by variable name: a derivation of its identity's inputs, none while a
-  // policy over values has nothing answered to name. A derivation, never a
+  // by variable name: a derivation of its identity's inputs, pending while a
+  // policy over values has nothing answered to name, failed while its key
+  // failed before ever answering. A derivation, never a
   // value a reaction writes, so whoever reads the runs inside a batch — a
   // turn handed a world state from within the host's reaction — reads them as
   // the turn's input moved them. The host runs them (src/daemon/source-runs.ts),
   // and their readings come back through the view's input source.
-  private readonly runs = observable.map<
-    string,
-    IComputedValue<Run | undefined>
-  >(undefined, { deep: false });
+  private readonly runs = observable.map<string, IComputedValue<SourceRun>>(
+    undefined,
+    { deep: false },
+  );
   private readonly runSourcesNow = computed(
-    (): ReadonlyMap<string, Run | undefined> =>
+    (): ReadonlyMap<string, SourceRun> =>
       new Map([...this.runs].map(([name, run]) => [name, run.get()] as const)),
   );
   private readonly namedNow = computed(
     (): ReadonlyMap<string, Run> =>
       new Map(
         [...this.runSourcesNow.get()].flatMap(([name, run]) =>
-          run === undefined ? [] : [[name, run] as const],
+          run.kind === "ok" ? [[name, run.value] as const] : [],
         ),
       ),
   );
   // Every `shell` and `file` source by variable name, with the run it names
-  // or none while its policy has nothing answered to name: what the render
-  // event counts, so a source whose key never answers is still told.
-  runSources(): ReadonlyMap<string, Run | undefined> {
+  // or why it names none: what the render event counts, so a source whose key
+  // never answers, or failed, is still told.
+  runSources(): ReadonlyMap<string, SourceRun> {
     return this.runSourcesNow.get();
   }
   // The run each source names, by variable name: what a request waits on and
@@ -644,13 +653,20 @@ export class SourceRegistry {
     // is taken here, as its identity moves. Equal by digest, so a source whose
     // run did not move keeps it, and its publish reaction is untouched.
     const run = computed(
-      (): Run | undefined => {
+      (): SourceRun => {
         const refresh = refreshOf();
-        return refresh === undefined
-          ? undefined
-          : runOf({ read, parse: parserIdOf(parse), refresh });
+        return refresh.kind === "ok"
+          ? ok(
+              runOf({ read, parse: parserIdOf(parse), refresh: refresh.value }),
+            )
+          : refresh;
       },
-      { equals: (a, b) => a?.digest === b?.digest },
+      {
+        equals: (a, b) =>
+          a.kind === "ok" && b.kind === "ok"
+            ? a.value.digest === b.value.digest
+            : compareStructural(a, b),
+      },
     );
     runInAction(() => {
       this.sourceNames.push(name);
@@ -675,7 +691,9 @@ export class SourceRegistry {
   // none (one over values not answered yet).
   private runFact(name: string): RunFact | undefined {
     const run = this.runs.get(name)?.get();
-    return run === undefined ? undefined : this.inputs.get().run(run.digest);
+    return run?.kind === "ok"
+      ? this.inputs.get().run(run.value.digest)
+      : undefined;
   }
 
   // [LAW:one-type-per-behavior] One total projection of the parser arm onto
@@ -978,18 +996,18 @@ export class SourceRegistry {
   // [LAW:single-enforcer] One place that maps every CachePolicy kind to the
   // refresh of the identity the source names: a period, a watched path or
   // nothing is the run's own refresh, fixed at declaration; a policy over what
-  // the source reads is the hash of what that answered, none until it first
-  // answers. Adding a new policy kind means adding one case here.
+  // the source reads is the hash of what that answered, pending until it
+  // first answers. Adding a new policy kind means adding one case here.
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
-  ): () => RunRefresh | undefined {
+  ): () => Named<RunRefresh> {
     switch (policy.kind) {
       case "never":
-        return () => ({ kind: "never" });
+        return () => ok({ kind: "never" });
 
       case "ttl":
-        return () => ({ kind: "ttl", durationMs: policy.durationMs });
+        return () => ok({ kind: "ttl", durationMs: policy.durationMs });
 
       case "watch_file": {
         // The watch's fault is the run's, as the host reads it; here it is
@@ -1006,7 +1024,7 @@ export class SourceRegistry {
             { fireImmediately: true },
           ),
         );
-        return () => ({ kind: "watch_file", path: policy.path });
+        return () => ok({ kind: "watch_file", path: policy.path });
       }
 
       case "key": {
@@ -1056,16 +1074,17 @@ export class SourceRegistry {
   // [LAW:one-type-per-behavior] Both policies over what a source reads — its
   // key, the variables it depends on — name the hash of the last value what
   // they read answered. Over a value not answered yet (a view's inputs before
-  // its first payload) they name nothing rather than reading, so a first value
+  // its first payload) they name nothing (pending) rather than reading, so a first value
   // is one read, not a read under no value and another when the value arrives
   // (brandon-unfiled-3248.8ro6). One that throws, or reads a value not
   // answered, keeps the last answer, so a key failing for a moment and coming
   // back unchanged names nothing new; what it failed with is the variable's
-  // standing fault (notePolicy).
+  // standing fault (notePolicy). One that has never answered names its
+  // failure, so the render event says failed rather than unread.
   private answeredUnder(
     name: string,
     reads: () => Reading<string>,
-  ): () => RunRefresh | undefined {
+  ): () => Named<RunRefresh> {
     // Equal by value, so an input that moved without moving what the policy
     // read hashes nothing and names the run it named.
     const answer = computed(reads, { equals: compareStructural });
@@ -1084,9 +1103,11 @@ export class SourceRegistry {
     return () => {
       const now = answer.get();
       if (now.kind === "ok") last = now.value;
-      return last === undefined
-        ? undefined
-        : { kind: "key", hash: keyHashOf(last) };
+      return last !== undefined
+        ? ok({ kind: "key", hash: keyHashOf(last) })
+        : now.kind === "failed"
+          ? now
+          : pendingOf("unread");
     };
   }
 
