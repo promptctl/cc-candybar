@@ -317,7 +317,7 @@ describe("the renderer's subscriptions", () => {
     collector.requested(requestAt("/a"));
     expect(logged.filter((line) => line.includes("run refused"))).toEqual([
       expect.stringMatching(
-        /^warn run refused .* reason=file\.path must be an absolute path/,
+        /^warn run refused .* reason="file\.path must be an absolute path/,
       ),
     ]);
     expect(handedIn.at(-1)).toMatchObject({

@@ -942,7 +942,8 @@ export class SourceRegistry {
     const read = this.lastErrors.get(name);
     const fault = this.standingFault(name);
     if (fault === undefined) return read;
-    return read === undefined
+    // A refused run's failed reading is its refusal: said once.
+    return read === undefined || read.message === fault.message
       ? fault
       : {
           timestamp: read.timestamp,

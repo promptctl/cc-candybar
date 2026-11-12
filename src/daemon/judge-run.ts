@@ -6,7 +6,15 @@
 // a command does.
 
 import { isAbsolute } from "node:path";
-import type { Run } from "../facts/source-identity.js";
+import type { ParserId, Run } from "../facts/source-identity.js";
+import {
+  jsonParser,
+  regexParser,
+  textParser,
+  type Parser,
+} from "../var-system/parse.js";
+import type { JsonValue } from "../var-system/types.js";
+import { ABSENT } from "../utils/outcome.js";
 
 // Shell runs are refused a period shorter than this: a `ttl: 50ms` against a
 // 200ms command would overlap and stack children. Refused rather than raised,
@@ -19,7 +27,12 @@ declare const ACCEPTED: unique symbol;
 // [LAW:parse-dont-validate] A run the judge accepted. Only `judgeRun` builds
 // one, and the readers take nothing else, so no run reaches the world
 // unjudged.
-export type AcceptedRun = Run & { readonly [ACCEPTED]: true };
+// It carries the parser the judge built, so a pattern is compiled once per
+// run, not once per read.
+export type AcceptedRun = Run & {
+  readonly [ACCEPTED]: true;
+  readonly parser: Parser<JsonValue>;
+};
 
 export type Judged =
   | {
@@ -34,20 +47,39 @@ export type Judged =
     };
 
 export function judgeRun(run: Run): Judged {
-  const reason = refusalOf(run);
+  const parser = parserOf(run.identity.parse);
+  const reason = typeof parser === "string" ? parser : refusalOf(run);
   return reason === null
-    ? { kind: "accepted", digest: run.digest, run: run as AcceptedRun }
+    ? {
+        kind: "accepted",
+        digest: run.digest,
+        run: { ...run, parser: parser as Parser<JsonValue> } as AcceptedRun,
+      }
     : { kind: "refused", digest: run.digest, reason };
 }
 
+// [LAW:one-type-per-behavior] The parser an identity names, or why it has
+// none. Blank text under the document parser is nothing to read — a command
+// that printed nothing, a file only touched — exactly as a missing file is; a
+// string arm reads blank text as the empty string it is.
+function parserOf(parse: ParserId): Parser<JsonValue> | string {
+  switch (parse.kind) {
+    case "text":
+      return textParser;
+    case "regex":
+      return capturing(parse.pattern);
+    case "json":
+      return (text) => (text.trim() === "" ? ABSENT : jsonParser(text));
+  }
+}
+
 // The first rule the run breaks, or `null` when it breaks none.
-function refusalOf({ identity: { read, parse, refresh } }: Run): string | null {
+function refusalOf({ identity: { read, refresh } }: Run): string | null {
   return (
     (read.kind === "file" ? absolute("file.path", read.path) : null) ??
     (refresh.kind === "watch_file"
       ? absolute("cache.watch_file", refresh.path)
       : null) ??
-    (parse.kind === "regex" ? capturing(parse.pattern) : null) ??
     (read.kind === "shell" &&
     refresh.kind === "ttl" &&
     refresh.durationMs < MIN_SHELL_TTL_MS
@@ -71,15 +103,16 @@ function absolute(where: string, path: string): string | null {
 // does: the backslash would escape the alternation). Then the group count:
 // the pattern alternated with the empty pattern always matches, and every
 // group is a (non-participating) slot.
-function capturing(pattern: string): string | null {
+function capturing(pattern: string): Parser<JsonValue> | string {
+  let regex: RegExp;
   let groups: number;
   try {
-    new RegExp(pattern);
+    regex = new RegExp(pattern);
     groups = new RegExp(`${pattern}|`).exec("")!.length - 1;
   } catch (e) {
     return `parse.regex is not a valid regular expression: ${(e as Error).message}`;
   }
   return groups > 0
-    ? null
+    ? regexParser(regex)
     : `parse.regex must contain a capture group — its group 1 is the value; got ${JSON.stringify(pattern)}`;
 }

@@ -24,11 +24,7 @@
 import { readFile as fsReadFile } from "node:fs/promises";
 import { observable, runInAction } from "mobx";
 import { failureText, type Launcher } from "../proc/launch";
-import type {
-  SourceRead,
-  ParserId,
-  ReadMode,
-} from "../facts/source-identity.js";
+import type { SourceRead, ReadMode } from "../facts/source-identity.js";
 import {
   WatcherRegistry,
   watchFault,
@@ -50,19 +46,14 @@ import {
   type KeyedSourceStats,
 } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
-import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
+import { failed, ok, type Outcome } from "../utils/outcome.js";
 import { settledLane, type Current } from "../utils/reading.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { shortDigest } from "../source-digest.js";
 import type { Timekeeper } from "../time";
 import type { AcceptedRun, Judged } from "./judge-run.js";
-import {
-  jsonParser,
-  regexParser,
-  textParser,
-  type Parser,
-} from "../var-system/parse.js";
+import type { Parser } from "../var-system/parse.js";
 import type { JsonValue } from "../var-system/types.js";
 
 // [LAW:no-silent-failure] How long one run of a shell source may take. The
@@ -160,21 +151,6 @@ function readerOf(
       return shellReader(launcher, read.command, read.cwd, signal);
     case "file":
       return fileReader(read.path, read.readMode, signal);
-  }
-}
-
-// [LAW:one-type-per-behavior] The parser an identity names. Blank text under
-// the document parser is nothing to read — a command that printed nothing, a
-// file only touched — exactly as a missing file is; a string arm reads blank
-// text as the empty string it is.
-function parserOf(parse: ParserId): Parser<JsonValue> {
-  switch (parse.kind) {
-    case "text":
-      return textParser;
-    case "regex":
-      return regexParser(new RegExp(parse.pattern));
-    case "json":
-      return (text) => (text.trim() === "" ? ABSENT : jsonParser(text));
   }
 }
 
@@ -421,13 +397,9 @@ export class SourceRuns {
         // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
         // readers through this one function; text/regex/json are three
         // parsers through it.
-        read: async ({ identity }, signal) => {
+        read: async ({ identity, parser }, signal) => {
           const reader = readerOf(deps.launcher, identity.read, signal);
-          return parsed(
-            await reader.read(),
-            parserOf(identity.parse),
-            reader.where,
-          );
+          return parsed(await reader.read(), parser, reader.where);
         },
         every: ({ identity: { refresh } }) =>
           refresh.kind === "ttl"

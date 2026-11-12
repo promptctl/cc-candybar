@@ -19,8 +19,8 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 
 | Policy | Validated | Evaluated (`src/var-system/sources.ts`, `registerCachePolicy`) | Reads | Fires |
 |---|---|---|---|---|
-| `ttl` | `src/config/loader/cache.ts`; lowered by `toCachePolicy` in `src/dsl/render.ts` | First read at declaration, then `TtlBucketManager` (one `setInterval` per duration). `clampShellCache` floors shell at 500 ms; `file` has no floor | Nothing | Period re-read |
-| `watch_file` | Same; path must be absolute | First read at declaration, then `PathWatches` over `WatcherRegistry` (`watchTargetsOf`) | Disk link chain; `catchUps` re-reads after a file-event gap | Change re-read, plus a standing watch fault |
+| `ttl` | `src/config/loader/cache.ts`; lowered by `toCachePolicy` in `src/dsl/render.ts` | First read at declaration, then `TtlBucketManager` (one `setInterval` per duration). the host's run judge refuses a shell ttl under 500 ms; `file` has no floor | Nothing | Period re-read |
+| `watch_file` | Same; the host's run judge refuses a relative path | First read at declaration, then `PathWatches` over `WatcherRegistry` (`watchTargetsOf`) | Disk link chain; `catchUps` re-reads after a file-event gap | Change re-read, plus a standing watch fault |
 | `key` | Same; non-empty; `checkPolicyInstant` in `src/config/loader/cross-ref.ts` refuses the instant | `engine.parse(policy.template)` once, then `onReads` (a MobX `reaction`, `fireImmediately`) evaluates over `buildScope(this.store)` | Any variable in the store, its parent, and drawn depth via `readableOn` | First answer, then a differing answer (`readUnder`) |
 | `depends_on` | Same; cross-ref refuses unknown names and projections | `onReads` over `store.changeKey(name)` joined with `,` | Named stores. Scalars use `String(value)`, a throw becomes ` failed:<msg>`, documents use `documentKey` | As `key`; any pending dependency holds it |
 | `never` | Same | One read at declaration | Nothing | Once per registry |
@@ -55,7 +55,7 @@ Caveats:
 - New exposure: if identity unifies sources across Draws, two configs can form a loop neither loader sees. Draw 1 keys X on Y, Draw 2 keys Y on X. It needs outputs that keep changing, and there is no floor.
 
 **Identity:**
-`digest(kind, command | (path, readMode), cwd, parse{kind, regex source}, policy normalised after clamp, keyValueHash or "")`
+`digest(kind, command | (path, readMode), cwd, parse{kind, regex source}, policy as declared, keyValueHash or "")`
 - Exclude `default` (see Q2).
 - Exclude the key template, because the value decides.
 - Hash the key value, because it may carry payload text.
@@ -124,8 +124,7 @@ Today the path is read → parse → publish, in `declareSource`.
 
 **Checks that assume the daemon loaded the config:**
 - `ApprovedRepo` is a compile-time stamp and does not survive a wire.
-- `ValidatedConfig` has `validateRenderable` as sole producer; wire data is not one. The regex capture, absolute path, instant and cycle checks all live in the loader.
-- `clampShellCache` sits in the registry.
+- `ValidatedConfig` has `validateRenderable` as sole producer; wire data is not one. The instant and cycle checks live in the loader; the regex capture and absolute path checks are the host's run judge.
 - `runOf` reads `ctx.configFor(origin).actions` to rebuild the signed declaration, and `ctx.sourcesFor(origin)` for storage keys (`src/daemon/verbs/index.ts`).
 - `stateGate` and `configGate` read `sessionConfig`.
 - `navigation` depth uses the session config's gate.

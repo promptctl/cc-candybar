@@ -55,6 +55,7 @@ import {
 import type { SessionId } from "./session-id.js";
 import { judgeRun } from "./judge-run.js";
 import { shortDigest } from "../source-digest.js";
+import { valueOf } from "../utils/logfmt.js";
 
 // [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
 // first session and stopped with the last: every interval it retires each
@@ -276,7 +277,7 @@ export class Collector {
           )
             this.deps.log(
               "warn",
-              `run refused sid=${JSON.stringify(record.session)} digest=${shortDigest(digest)} reason=${judged.reason}`,
+              `run refused sid=${JSON.stringify(record.session)} digest=${shortDigest(digest)} reason=${valueOf(judged.reason)}`,
             );
         record.subscriptions = next;
         const { phase } = record;
