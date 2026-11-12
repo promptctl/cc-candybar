@@ -134,10 +134,6 @@ export async function answerStatusline(
     noteFacts(facts, { renderer: host.name });
     return failed(host, configured.error, "its config turn: ");
   }
-  // [LAW:types-are-the-program] A config turn answers no request, so every
-  // effect it returned is refused, and none is left owed its `effect-done`.
-  for (const effect of configured.output.effects)
-    done(effect, "a config turn answers no request");
   const delivered = await host.answer({
     kind: "event",
     at,

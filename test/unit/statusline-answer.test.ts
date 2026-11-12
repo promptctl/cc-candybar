@@ -211,7 +211,11 @@ test("a config turn's effects are refused, each owed its effect-done, and the re
 
 test("a turn that throws is a failure naming the renderer, with what it learned on the request's event", async () => {
   const { renderer } = scripted(
-    new TurnThrew([["lanes", "-"]], new Error("the draw broke")),
+    new TurnThrew(
+      [["lanes", "-"]],
+      new Error("the draw broke"),
+      NO_SUBSCRIPTIONS,
+    ),
   );
   const { answered, facts } = await answer(renderer);
   expect(answered.resp).toMatchObject({
@@ -223,13 +227,23 @@ test("a turn that throws is a failure naming the renderer, with what it learned 
   expect(facts.get("lanes")).toBe("-");
 });
 
+test("a turn that throws still hands the host what its open views read", async () => {
+  const left: Subscriptions = { sources: { [SESSION]: [] } };
+  const subscribed: Subscriptions[] = [];
+  const { renderer } = scripted(
+    new TurnThrew([], new Error("the draw broke"), left),
+  );
+  await answer(renderer, [], subscribed);
+  expect(subscribed).toEqual([NO_SUBSCRIPTIONS, left]);
+});
+
 test("a failed effect-done turn is said on a turn line naming the renderer and the session", async () => {
   const logged: string[] = [];
   const renderer: Renderer = {
     answer: async ({ event }) => {
       if (event.kind === "config") return output([]);
       if (event.kind === "request") return output([present(1)]);
-      throw new TurnThrew([], new Error("no such present"));
+      throw new TurnThrew([], new Error("no such present"), NO_SUBSCRIPTIONS);
     },
   };
   const { answered } = await answer(renderer, logged);

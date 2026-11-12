@@ -24,8 +24,9 @@ import type { Timekeeper } from "../time";
 // renderer. The clock hears a close that failed as a rejection: it then waits
 // a timeout before trying again, and its `failed` writes the one line. So a
 // turn that threw rejects with what it threw, and nothing else is logged here.
-// The session ids the clock holds are the ones its observers passed: checked
-// requests' and clicks' sessions.
+// [LAW:parse-dont-validate] exception: the clock, like the verbs, keys
+// sessions by string, so its id is cast back to the checked one its observers
+// passed (checked requests' and clicks' sessions) until both key by it.
 export async function closeByTurn(
   host: Pick<RendererHost, "answer">,
   at: () => Instant,

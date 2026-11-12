@@ -243,11 +243,12 @@ export class Collector {
 
   // [LAW:no-ambient-temporal-coupling] A click holds its session for as long
   // as the host awaits its turn, however long that is, and its release names
-  // the session as a request does, so the next sweep keeps it too. A session
-  // the collector holds no record of has nothing to keep.
+  // the session as a request does, so the next sweep keeps it too. Only a
+  // live session is kept: a retiring one has released its reads, and its
+  // record goes once the retire settles, as one with no record has gone.
   holding(session: SessionId): () => void {
     const record = this.records.get(session);
-    if (record === undefined) return () => {};
+    if (record?.phase.kind !== "live") return () => {};
     record.clicks++;
     return () => {
       record.clicks--;

@@ -512,6 +512,23 @@ describe("a click", () => {
     ]);
   });
 
+  test("that throws once its act has landed names what the open views read then", async () => {
+    let act = async (): Promise<void> => {};
+    const t = renderer({
+      handler: (verb) => (verb === "act" ? () => act() : undefined),
+      closeIdle: () => Promise.reject(new Error("no idle close here")),
+    });
+    act = async () => {
+      t.rig.cache.retireSession(SESSION);
+      throw new Error("a later step broke");
+    };
+    const before = await request(t);
+    expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
+    const thrown = await handIn(t.r, click("act")).catch((e: TurnThrew) => e);
+    expect(thrown).toBeInstanceOf(TurnThrew);
+    expect(thrown.subscriptions.sources).toEqual({});
+  });
+
   test("of a verb the renderer does not have is its bad request", async () => {
     const t = renderer();
     const answered = handIn(t.r, click("nope"));

@@ -112,7 +112,7 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
       try {
         return await turn(event, at, record);
       } catch (thrown) {
-        throw new TurnThrew(record, thrown);
+        throw new TurnThrew(record, thrown, parts.renderCache.subscriptions());
       }
     },
   };

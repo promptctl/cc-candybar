@@ -162,10 +162,14 @@ export interface RendererOutput {
 
 // [LAW:no-silent-failure] A turn that threw, with the record it reached, so the
 // host still writes what the turn learned before it stopped.
+// [LAW:one-source-of-truth] It names the open views' subscriptions as they
+// stand after the throw too: an act can land before its turn throws (a click
+// that committed and followed its view), and its view is read all the same.
 export class TurnThrew extends Error {
   constructor(
     readonly record: TurnRecord,
     readonly thrown: unknown,
+    readonly subscriptions: Subscriptions,
   ) {
     super(thrown instanceof Error ? thrown.message : String(thrown));
     this.name = "TurnThrew";
