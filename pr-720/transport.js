@@ -67559,7 +67559,8 @@ function refreshedFact(refreshed) {
   return [...refreshed].map(([lane, ms]) => `${lane}:${ms === null ? "\u2026" : `${ms}ms`}`).join(",") || "-";
 }
 async function refreshPayload(inputs, at, refreshed) {
-  const { hookData: hookData2, deps, hints, sessionId: sessionId2 } = inputs;
+  const { hookData: hookData2, deps, hints } = inputs;
+  const sessionId2 = hookData2.session_id;
   const session = deps.usageStore.request(sessionId2, hookData2.transcript_path);
   const lane = async (name, run3) => {
     const startedAt = deps.clock.monotonic();
@@ -67655,7 +67656,11 @@ function declareLanes(owners, holds2, facts, sources) {
         name,
         declare(
           name,
-          () => owners.managedStorage.declare(holds2, storage, facts.sessionId)
+          () => owners.managedStorage.declare(
+            holds2,
+            storage,
+            facts.hookData.session_id
+          )
         )
       ])
     )
@@ -67663,7 +67668,8 @@ function declareLanes(owners, holds2, facts, sources) {
   return { lanes, faults };
 }
 function readingsOf(inputs, lanes) {
-  const { deps, sessionId: sessionId2 } = inputs;
+  const { deps } = inputs;
+  const sessionId2 = inputs.hookData.session_id;
   const read2 = (lane, value) => {
     const fault = deps.faults.of(sessionId2, lane);
     if (fault !== void 0) return fault;
@@ -67749,7 +67755,8 @@ var unstamped = (fact) => {
   }
 };
 function composePayload(facts, inputs, draw2) {
-  const { hookData: hookData2, hints, sessionId: sessionId2 } = inputs;
+  const { hookData: hookData2, hints } = inputs;
+  const sessionId2 = hookData2.session_id;
   const { effective, configFacts: configFacts2 } = draw2;
   const { configPath, ...settingCounts2 } = configFacts2;
   const built = facts.builtins;
@@ -76718,7 +76725,7 @@ function lanesAt(parts, origin, sessionId2) {
 }
 function contextFacts(req, at, facts) {
   noteFacts(facts, {
-    sid: req.sessionId,
+    sid: req.hookData.session_id,
     at: at.toFixed(3)
   });
   const { hints } = req;
@@ -76755,7 +76762,7 @@ function holdSessionAt(parts, req) {
   const origin = sessionRenderOrigin(
     req.requested,
     parts.sessionState,
-    req.sessionId
+    req.hookData.session_id
   );
   return parts.renderCache.holdSession(
     origin.projectDir,
@@ -76792,10 +76799,9 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
   const { payloadProviders } = parts;
   try {
     const { entry, state, view } = hold2;
-    const { sessionId: sessionId2, hints } = req;
+    const { hints } = req;
     const payloadInputs = {
       hookData: req.hookData,
-      sessionId: sessionId2,
       deps: payloadProviders,
       cwd: req.cwd,
       hints
@@ -76804,7 +76810,7 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
       req,
       at,
       facts,
-      sessionId: sessionId2,
+      sessionId: req.hookData.session_id,
       entry,
       state,
       view,
@@ -77080,7 +77086,7 @@ function drawRender(parts, setup, drawing2) {
 }
 function recordRequest(parts, req) {
   const { sessionState } = parts;
-  const sessionId2 = req.sessionId;
+  const sessionId2 = req.hookData.session_id;
   const { client: _client, ...recorded2 } = req.hints;
   const hintRecord = JSON.stringify(recorded2);
   if (sessionState.get(sessionId2, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
@@ -77094,15 +77100,22 @@ function recordRequest(parts, req) {
 function arrived2(parts, req, lanes) {
   const { laneSetups, tmuxStatusLines } = parts;
   laneSetups.noted(laneSessionOf(parts, req), lanes);
-  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
+  tmuxStatusLines.observe(
+    req.hookData.session_id,
+    req.hints.tmux,
+    lanes.tmuxStatus
+  );
 }
 function laneSessionOf(parts, req) {
   const { sessionState } = parts;
-  const { sessionId: sessionId2 } = req;
   return {
-    sessionId: sessionId2,
+    sessionId: req.hookData.session_id,
     hints: req.hints,
-    origin: sessionRenderOrigin(req.requested, sessionState, sessionId2),
+    origin: sessionRenderOrigin(
+      req.requested,
+      sessionState,
+      req.hookData.session_id
+    ),
     transcript: req.hookData.transcript_path,
     answered: answeredOf(req.hookData)
   };
@@ -77166,7 +77179,7 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
       setup,
       ANSWERING
     );
-    const sessionId2 = req.sessionId;
+    const sessionId2 = req.hookData.session_id;
     const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId2));
     const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
     const frame2 = toStatusline ? statuslineOf(sessionId2, drawn, elsewhere) : drawn.body;
@@ -77260,7 +77273,7 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
       }
     },
     [
-      ["sid", req.sessionId],
+      ["sid", req.hookData.session_id],
       ["effect", String(effect.id)]
     ]
   );
@@ -77510,9 +77523,9 @@ function checkRenderRequest(req, stats, log, home) {
     ok: true,
     req: {
       ...req,
+      hookData: { ...req.hookData, session_id: sessionId2.id },
       deadline,
       encoding: encoding.encoding,
-      sessionId: sessionId2.id,
       hints,
       rateLimits: rateLimitsSeen(req.hookData),
       requested: {
@@ -77849,7 +77862,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const order2 = ++stats.requestsTotal;
     const checked = checkRenderRequest(req, stats, parts.log, parts.home);
     const sighted = (req2, frame2) => renderSightings.see(
-      req2.sessionId,
+      req2.hookData.session_id,
       {
         client: req2.hints.client ?? null,
         termCols: req2.hints.termCols ?? null,
@@ -77867,7 +77880,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     );
     if (checked.ok) {
       sighted(checked.req, "drawing");
-      frameFeeds.note(checked.req.sessionId, checked.req, order2);
+      frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
     }
     const recorded2 = (rendered) => {
       if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
@@ -81795,7 +81808,7 @@ function fallbackState(cwd2, repo2, deps) {
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
 function openView(state, cwd2, facts, { source: sourceOf, changed, log }) {
-  const { sessionId: sessionId2 } = facts;
+  const sessionId2 = facts.hookData.session_id;
   const registry = state.registry.view();
   declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
   const requested = observable.box(facts, { deep: false });
@@ -82105,7 +82118,7 @@ var RenderCache = class {
   }
   // The session's view of `state`: the one it has, or a new one replacing it.
   viewOf(entry, state, facts, by) {
-    const { sessionId: sessionId2 } = facts;
+    const sessionId2 = facts.hookData.session_id;
     const current = this.views.get(sessionId2);
     if (current?.state === state) {
       this.views.delete(sessionId2);
@@ -82127,7 +82140,7 @@ var RenderCache = class {
   // `facts` from this turn (openView) and entered. Its caller charges it to
   // the budget, once however many it opens.
   opened(entry, state, facts, by) {
-    const { sessionId: sessionId2 } = facts;
+    const sessionId2 = facts.hookData.session_id;
     let view;
     try {
       view = openView(state, entry.cwd, facts, {
@@ -82186,10 +82199,12 @@ var RenderCache = class {
   // next output's.
   subscriptions() {
     return {
-      sources: [...this.views].map(([session, view]) => ({
-        session,
-        subscriptions: subscriptionsOf(view.state)
-      }))
+      sources: new Map(
+        [...this.views].map(([session, view]) => [
+          session,
+          subscriptionsOf(view.state)
+        ])
+      )
     };
   }
   // The cache's teardown: every entry is dropped, so its state is disposed now
@@ -82699,8 +82714,7 @@ var SESSION_SWEEP_MS = 15e4;
 var locatorOf = (req) => ({
   hookData: req.hookData,
   cwd: req.cwd,
-  hints: req.hints,
-  sessionId: req.sessionId
+  hints: req.hints
 });
 var sourcesOf2 = (subscriptions) => new Map(subscriptions.map((s) => [s.source, s.storage]));
 var sameSources = (a, b) => a.size === b.size && [...a].every(([name, key]) => {
@@ -82726,10 +82740,10 @@ var Collector = class {
   requested(req) {
     const locator = locatorOf(req);
     const document = runInAction(() => {
-      const held = this.records.get(req.sessionId);
+      const held = this.records.get(req.hookData.session_id);
       if (held === void 0) {
-        const opened = this.open(req.sessionId, locator);
-        this.records.set(req.sessionId, opened);
+        const opened = this.open(req.hookData.session_id, locator);
+        this.records.set(req.hookData.session_id, opened);
         return opened.stamped.document;
       }
       held.active = true;
@@ -82749,19 +82763,16 @@ var Collector = class {
   // no plugin sources. A retiring session takes its set too, and holds none
   // of it.
   subscribed({ sources }) {
-    for (const { session } of sources) {
+    for (const session of sources.keys()) {
       if (!this.records.has(session))
         this.deps.log(
           "error",
           `subscriptions name session ${JSON.stringify(session)}, which the collector has no record of`
         );
     }
-    const bySession = new Map(
-      sources.map((e) => [e.session, e.subscriptions])
-    );
     runInAction(() => {
       for (const record2 of this.records.values()) {
-        const next = sourcesOf2(bySession.get(record2.session) ?? []);
+        const next = sourcesOf2(sources.get(record2.session) ?? []);
         if (sameSources(next, record2.subscriptions)) continue;
         record2.subscriptions = next;
         const { phase } = record2;
@@ -83063,8 +83074,8 @@ function sessionSource(deps) {
       "session.compose",
       "computed",
       () => {
-        const { hookData: hookData2, hints, sessionId: sessionId3 } = requested();
-        return { hookData: hookData2, hints, sessionId: sessionId3, home: deps.home };
+        const { hookData: hookData2, hints } = requested();
+        return { hookData: hookData2, hints, home: deps.home };
       }
     );
     const draw2 = store.derive(
@@ -84879,7 +84890,7 @@ function mainRenderer(parts) {
             {
               kind: "present",
               id: id2,
-              session: event.context.sessionId,
+              session: event.context.hookData.session_id,
               surface: "statusline",
               request: event.id,
               frame: frame2
