@@ -4,15 +4,22 @@
     {
       "version": "pr-730",
       "ref": "refs/pull/730/merge",
-      "sha": "957a7849edbacf0ba80b8d069238d0a952112735",
-      "timestamp": "2026-11-12T09:14:36.459Z",
+      "sha": "ed8c58b3a57322d5cc832fe9ad80d409af27d5c6",
+      "timestamp": "2026-11-12T09:17:15.241Z",
       "commits": [
         {
-          "sha": "957a7849edbacf0ba80b8d069238d0a952112735",
+          "sha": "ed8c58b3a57322d5cc832fe9ad80d409af27d5c6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:13:32Z",
-          "message": "Merge a925287ac6de01c3a74c57a0c6b08b9626d21ef3 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+          "timestamp": "2026-11-12T09:16:20Z",
+          "message": "Merge 77197423cbd3702aab45828f73ef09066520bda9 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+        },
+        {
+          "sha": "77197423cbd3702aab45828f73ef09066520bda9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T02:16:10-07:00",
+          "message": "fix(check): a prepared config closes its runs with its registry, so the gallery leaks no hold, period or watch past its draw (candybar-host-renderer-x96a.8e9)\n"
         },
         {
           "sha": "a925287ac6de01c3a74c57a0c6b08b9626d21ef3",
