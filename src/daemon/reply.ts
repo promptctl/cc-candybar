@@ -330,7 +330,7 @@ export async function replyTo(
     // frame drew — both stamped with the instant and order it arrived in.
     const sighted = (req: CheckedRenderRequest, frame: FrameSeen): void =>
       renderSightings.see(
-        req.sessionId,
+        req.hookData.session_id,
         {
           client: req.hints.client ?? null,
           termCols: req.hints.termCols ?? null,
@@ -354,7 +354,7 @@ export async function replyTo(
       // own client's, drawn for a request and never pushed: its `encoding`
       // says how that answer is spelled, and no feed reads it
       // (src/daemon/frame-feed.ts).
-      frameFeeds.note(checked.req.sessionId, checked.req, order);
+      frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
     }
     // The request's event, written on every exit, and its reply.
     const recorded = (rendered: {

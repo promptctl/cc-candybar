@@ -24,7 +24,7 @@ import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { ContextProvider } from "../src/segments/context";
 import { MetricsProvider } from "../src/segments/metrics";
 import { systemTimekeeper } from "../src/time";
-import type { ClaudeHookData } from "../src/utils/claude";
+import type { CheckedHookData } from "../src/renderer/request-context";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, pendingOf } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
@@ -70,7 +70,7 @@ function transcript(path: string): void {
 }
 
 // One session's hook, its instantaneous fields set from `n`.
-function hookAt(path: string, n: number): ClaudeHookData {
+function hookAt(path: string, n: number): CheckedHookData {
   return {
     hook_event_name: "Status",
     session_id: SID,
@@ -98,7 +98,7 @@ function hookAt(path: string, n: number): ClaudeHookData {
         cache_read_input_tokens: 0,
       },
     },
-  } as ClaudeHookData;
+  };
 }
 
 let dir: string;
@@ -113,7 +113,7 @@ afterEach(() => {
 
 // A request under `hookData` over owners of its own, so what one hook's
 // refresh stores cannot reach the other's document.
-function inputsOf(hookData: ClaudeHookData): PayloadInputs {
+function inputsOf(hookData: CheckedHookData): PayloadInputs {
   const usageStore = new SessionUsageStore({
     clock: systemTimekeeper,
     host: HOST,
@@ -127,7 +127,7 @@ function inputsOf(hookData: ClaudeHookData): PayloadInputs {
     metricsProvider: new MetricsProvider({ clock: systemTimekeeper }),
     log: () => {},
   } as unknown as RenderPayloadDeps;
-  return { hookData, deps, cwd: "/tmp", hints: {}, sessionId: SID };
+  return { hookData, deps, cwd: "/tmp", hints: {} };
 }
 
 test("two hooks that differ only in their instantaneous fields read one document and compose two payloads", async () => {
@@ -162,7 +162,6 @@ test("two hooks that differ only in their instantaneous fields read one document
         hookData: inputs.hookData,
         hints: inputs.hints,
         home: inputs.deps.home,
-        sessionId: inputs.sessionId,
       },
       DRAW,
     );

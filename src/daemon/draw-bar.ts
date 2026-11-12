@@ -325,7 +325,7 @@ function contextFacts(
   facts: RequestFacts,
 ): void {
   noteFacts(facts, {
-    sid: req.sessionId,
+    sid: req.hookData.session_id,
     at: at.toFixed(3),
   });
   const { hints } = req;
@@ -421,7 +421,7 @@ function holdSessionAt(
   const origin = sessionRenderOrigin(
     req.requested,
     parts.sessionState,
-    req.sessionId,
+    req.hookData.session_id,
   );
   return parts.renderCache.holdSession(
     origin.projectDir,
@@ -494,14 +494,13 @@ function setUpDraw(
   const { payloadProviders } = parts;
   try {
     const { entry, state, view } = hold;
-    const { sessionId, hints } = req;
+    const { hints } = req;
     // [LAW:dataflow-not-control-flow] One composition every render: the
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
     // and output = diagnostics + body, with no "did the config load" branch.
     const payloadInputs: PayloadInputs = {
       hookData: req.hookData,
-      sessionId,
       deps: payloadProviders,
       cwd: req.cwd,
       hints,
@@ -510,7 +509,7 @@ function setUpDraw(
       req,
       at,
       facts,
-      sessionId,
+      sessionId: req.hookData.session_id,
       entry,
       state,
       view,
@@ -958,7 +957,7 @@ interface DrawnBar {
 // state-driven computed each render.
 function recordRequest(parts: RendererParts, req: CheckedRenderRequest): void {
   const { sessionState } = parts;
-  const sessionId = req.sessionId;
+  const sessionId = req.hookData.session_id;
   // [LAW:one-source-of-truth] The STAMPED hints: a click arrives with no
   // hints of its own, so the doctor (verbs/index.ts) reads the facts of this
   // session's last request from here, re-parsed through the same checkpoint.
@@ -1007,7 +1006,11 @@ function arrived(
 ): void {
   const { laneSetups, tmuxStatusLines } = parts;
   laneSetups.noted(laneSessionOf(parts, req), lanes);
-  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
+  tmuxStatusLines.observe(
+    req.hookData.session_id,
+    req.hints.tmux,
+    lanes.tmuxStatus,
+  );
 }
 
 // [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
@@ -1017,11 +1020,14 @@ export function laneSessionOf(
   req: CheckedRenderRequest,
 ): LaneSession {
   const { sessionState } = parts;
-  const { sessionId } = req;
   return {
-    sessionId,
+    sessionId: req.hookData.session_id,
     hints: req.hints,
-    origin: sessionRenderOrigin(req.requested, sessionState, sessionId),
+    origin: sessionRenderOrigin(
+      req.requested,
+      sessionState,
+      req.hookData.session_id,
+    ),
     transcript: req.hookData.transcript_path,
     answered: answeredOf(req.hookData),
   };
@@ -1116,7 +1122,7 @@ export async function answerRequest(
     setup,
     ANSWERING,
   );
-  const sessionId = req.sessionId;
+  const sessionId = req.hookData.session_id;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.

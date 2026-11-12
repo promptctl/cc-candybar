@@ -15,6 +15,7 @@ import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
 import { HOST } from "./host";
 import type { ClaudeHookData } from "../../src/utils/claude";
+import type { CheckedHookData } from "../../src/renderer/request-context";
 import type { GitInfo } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
 import type { MetricsFold } from "../../src/segments/metrics";
@@ -143,7 +144,7 @@ export interface LanedInputs extends PayloadInputs {
 export function documentOf(inputs: LanedInputs) {
   return assembleFacts(
     undefined,
-    inputs.sessionId,
+    inputs.hookData.session_id,
     readingsOf(inputs, inputs.lanes()),
     pendingOf("unread"),
     instantOf(new Date(0)),
@@ -183,7 +184,6 @@ export function payloadOf(
     documentOf(inputs),
     {
       hookData: inputs.hookData,
-      sessionId: inputs.sessionId,
       hints: inputs.hints,
       home: inputs.deps.home,
     },
@@ -371,7 +371,7 @@ export function absentOwners() {
 // it projected are logged as the daemon's request logs them. The home lives
 // for this one request, where the daemon's view keeps it across requests.
 export async function requestPayload(
-  hookData: ClaudeHookData,
+  rawHookData: ClaudeHookData,
   at: Instant,
   deps: RenderPayloadDeps,
   cwd: string | undefined,
@@ -379,16 +379,19 @@ export async function requestPayload(
   hints: ClientHints,
   configFacts: ConfigFileFacts,
 ): Promise<DrawnPayload> {
-  const sessionId = sessionIdOf(hookData.session_id);
+  // [LAW:one-source-of-truth] The hook's session id is parsed by the checkpoint
+  // once here; the inputs read it from the checked hook alone.
+  const hookData: CheckedHookData = {
+    ...rawHookData,
+    session_id: sessionIdOf(rawHookData.session_id),
+  };
   using home = openHome(deps, {
-    sessionId,
     hookData,
     cwd,
     hints,
   });
   const inputs: LanedInputs = {
     hookData,
-    sessionId,
     cwd,
     hints,
     deps,

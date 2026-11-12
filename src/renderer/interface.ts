@@ -150,11 +150,9 @@ export interface Subscription {
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
 // renderer holds needs read. The host diffs it; nothing is declared by
 // message. A session absent from it needs nothing read.
+// [LAW:types-are-the-program] Keyed by session, so no session is listed twice.
 export interface Subscriptions {
-  readonly sources: ReadonlyArray<{
-    readonly session: SessionId;
-    readonly subscriptions: readonly Subscription[];
-  }>;
+  readonly sources: ReadonlyMap<SessionId, readonly Subscription[]>;
 }
 
 export interface RendererOutput {

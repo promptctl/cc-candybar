@@ -1265,7 +1265,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
 ): SessionView<S, F> {
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
-  const { sessionId } = facts;
+  const sessionId = facts.hookData.session_id;
   const registry = state.registry.view();
   // What fails to declare here failed in the load's probe (buildRenderState),
   // which reported it: a declaration reads only the config.
@@ -1675,7 +1675,7 @@ export class RenderCache<
     facts: F,
     by: ViewOpening,
   ): SessionView<S, F> {
-    const { sessionId } = facts;
+    const sessionId = facts.hookData.session_id;
     const current = this.views.get(sessionId);
     if (current?.state === state) {
       // Move to end (most recently used), as getOrCreate does an entry.
@@ -1711,7 +1711,7 @@ export class RenderCache<
     facts: F,
     by: ViewOpening,
   ): SessionView<S, F> {
-    const { sessionId } = facts;
+    const sessionId = facts.hookData.session_id;
     let view: SessionView<S, F>;
     try {
       view = openView(state, entry.cwd, facts, {
@@ -1778,10 +1778,12 @@ export class RenderCache<
   // next output's.
   subscriptions(): Subscriptions {
     return {
-      sources: [...this.views].map(([session, view]) => ({
-        session,
-        subscriptions: subscriptionsOf(view.state),
-      })),
+      sources: new Map(
+        [...this.views].map(([session, view]) => [
+          session,
+          subscriptionsOf(view.state),
+        ]),
+      ),
     };
   }
 

@@ -237,7 +237,7 @@ export const parseRateLimitSightings = (
     stats,
     (c): c is RateLimitSightings[number] =>
       typeof c.ago === "number" &&
-      typeof c.sessionId === "string" &&
+      parseSessionId(c.sessionId).ok &&
       typeof c.claudeConfigDir === "string" &&
       (RATE_LIMITS_SEEN as readonly unknown[]).includes(c.rateLimits),
     "the rate-limit windows they carried",
@@ -253,7 +253,7 @@ export const parseTranscriptSightings = (
       const t = c.transcript as Partial<Record<string, unknown>> | undefined;
       return (
         typeof c.ago === "number" &&
-        typeof c.sessionId === "string" &&
+        parseSessionId(c.sessionId).ok &&
         typeof t?.path === "string" &&
         typeof t.answered === "boolean"
       );
@@ -271,7 +271,7 @@ export const parseFrameSightings = (
       typeof c.ago === "number" &&
       typeof c.claudeConfigDir === "string" &&
       typeof c.projectDir === "string" &&
-      typeof c.sessionId === "string" &&
+      parseSessionId(c.sessionId).ok &&
       isRole(c) &&
       (FRAMES_SEEN as readonly unknown[]).includes(c.frame),
     "what they drew and from which project",
@@ -284,7 +284,7 @@ export const parseWidthSightings = (
   sightingHalf(
     stats,
     (c): c is WidthSightings[number] =>
-      typeof c.sessionId === "string" &&
+      parseSessionId(c.sessionId).ok &&
       typeof c.ago === "number" &&
       isRole(c) &&
       (c.termCols === null || typeof c.termCols === "number"),

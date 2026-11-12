@@ -225,7 +225,6 @@ describe("what wakes a view", () => {
         deps: rig.providers as never,
         cwd: PROJECT,
         hints: requestOf(dir).hints,
-        sessionId: SID,
       },
       AT,
       new Map(),
@@ -297,7 +296,6 @@ describe("the all-pending document", () => {
               hookData: requestOf(dir).hookData,
               hints: requestOf(dir).hints,
               home: "/home/tester",
-              sessionId: SID,
             },
             {
               sources: [],

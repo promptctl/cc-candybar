@@ -95,8 +95,8 @@ export function sessionSource(
       "session.compose",
       "computed",
       (): ComposeInputs => {
-        const { hookData, hints, sessionId } = requested();
-        return { hookData, hints, sessionId, home: deps.home };
+        const { hookData, hints } = requested();
+        return { hookData, hints, home: deps.home };
       },
     );
     const draw = store.derive(

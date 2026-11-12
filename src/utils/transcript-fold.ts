@@ -33,6 +33,7 @@ import { ObservableLru } from "./observable-lru";
 import { valueOf } from "./logfmt";
 import type { Refreshes } from "./refresh-ledger";
 import { elapsedMs, type Timekeeper } from "../time";
+import type { SessionId } from "../daemon/session-id";
 
 // [LAW:types-are-the-program] Never `absent`: a session with no transcript yet
 // is a real empty fold, so the caller has exactly two arms.
@@ -79,7 +80,7 @@ export class TranscriptFold<S> {
   // [LAW:effects-at-boundaries] The session's refresh: folds what was
   // appended since its last read, and stores what it answered.
   async read(
-    sessionId: string,
+    sessionId: SessionId,
     transcriptPath: string,
   ): Promise<FoldOutcome<S>> {
     const held = this.sessions.get(sessionId);
@@ -129,12 +130,12 @@ export class TranscriptFold<S> {
 
   // What the session's last read answered, as it stands: never read is
   // pending, its first read the next request's.
-  answer(sessionId: string): FoldOutcome<S> | Pending {
+  answer(sessionId: SessionId): FoldOutcome<S> | Pending {
     return this.sessions.get(sessionId)?.answer ?? pendingOf("unread");
   }
 
   private store(
-    sessionId: string,
+    sessionId: SessionId,
     folded: Folded<S> | undefined,
     answer: FoldOutcome<S>,
   ): FoldOutcome<S> {

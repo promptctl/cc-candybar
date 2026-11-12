@@ -171,7 +171,7 @@ function harness(ids: readonly string[] = ["$1"]) {
   const tmux = new FakeTmux(ids);
   const subs = new Map<string, Subscriber>();
   const unsubscribed: string[] = [];
-  const newest = new Map<string, string>();
+  const newest = new Map<string, SessionId>();
   const logs: string[] = [];
   const owner = new TmuxStatusLines({
     edge: tmux,
@@ -286,7 +286,7 @@ describe("TmuxStatusLines", () => {
   test("a pane another session now renders from is released", async () => {
     const h = harness();
     h.hold(S1, "%1");
-    h.newest.set("%1", "s2");
+    h.newest.set("%1", sessionIdOf("s2"));
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     expect(h.unsubscribed).toEqual(["s1"]);
   });

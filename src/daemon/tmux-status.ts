@@ -445,7 +445,7 @@ export interface TmuxStatusDeps {
   readonly subscribe: (sessionId: SessionId, sub: Subscriber) => () => void;
   // The session whose statusline last rendered from `pane`, as the daemon
   // holds it — a /clear or a new Claude Code in the pane takes it over.
-  readonly sessionInPane: (socket: string, pane: string) => string | null;
+  readonly sessionInPane: (socket: string, pane: string) => SessionId | null;
   // The shell words that deliver a `cc-candybar://` URL, the last argument, to
   // this daemon — what a click on one of its ranges runs.
   readonly handler: string;

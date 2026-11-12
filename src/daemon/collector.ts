@@ -157,7 +157,6 @@ const locatorOf = (req: ViewFacts): ViewFacts => ({
   hookData: req.hookData,
   cwd: req.cwd,
   hints: req.hints,
-  sessionId: req.sessionId,
 });
 
 const sourcesOf = (subscriptions: readonly Subscription[]): DeclaredSources =>
@@ -190,10 +189,10 @@ export class Collector {
   requested(req: ViewFacts): WorldState {
     const locator = locatorOf(req);
     const document = runInAction(() => {
-      const held = this.records.get(req.sessionId);
+      const held = this.records.get(req.hookData.session_id);
       if (held === undefined) {
-        const opened = this.open(req.sessionId, locator);
-        this.records.set(req.sessionId, opened);
+        const opened = this.open(req.hookData.session_id, locator);
+        this.records.set(req.hookData.session_id, opened);
         return opened.stamped.document;
       }
       held.active = true;
@@ -217,19 +216,16 @@ export class Collector {
     // [LAW:no-silent-failure] A renderer subscribes only for sessions the host
     // handed it, and the host keeps a session's record until its retire
     // settles: a session with no record is the host's bug.
-    for (const { session } of sources) {
+    for (const session of sources.keys()) {
       if (!this.records.has(session))
         this.deps.log(
           "error",
           `subscriptions name session ${JSON.stringify(session)}, which the collector has no record of`,
         );
     }
-    const bySession = new Map<SessionId, readonly Subscription[]>(
-      sources.map((e) => [e.session, e.subscriptions]),
-    );
     runInAction(() => {
       for (const record of this.records.values()) {
-        const next = sourcesOf(bySession.get(record.session) ?? []);
+        const next = sourcesOf(sources.get(record.session) ?? []);
         if (sameSources(next, record.subscriptions)) continue;
         record.subscriptions = next;
         const { phase } = record;

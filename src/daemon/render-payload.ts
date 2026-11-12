@@ -21,6 +21,7 @@ import type { HistoryDepth } from "./settings-history";
 import path from "node:path";
 import { inspect } from "node:util";
 import type { ClaudeHookData } from "../utils/claude.js";
+import type { CheckedHookData } from "../renderer/request-context.js";
 import type { ClientHints } from "./protocol.js";
 import {
   DEFAULT_TERMINAL_WIDTH,
@@ -749,10 +750,7 @@ export type ConfigFileFacts = SettingCounts & {
 // What every payload function reads of the render it serves: the request's
 // facts and the owners they are read from.
 export interface PayloadInputs {
-  readonly hookData: ClaudeHookData;
-  // [LAW:parse-dont-validate] The session as the checkpoint parsed it. The
-  // hook's own `session_id` is the raw string it came in as.
-  readonly sessionId: SessionId;
+  readonly hookData: CheckedHookData;
   readonly deps: RenderPayloadDeps;
   readonly cwd: string | undefined;
   // [LAW:locality-or-seam] The parsed client hints, NOT the raw request — this
@@ -824,7 +822,8 @@ export async function refreshPayload(
   at: Instant,
   refreshed: Refreshed,
 ): Promise<void> {
-  const { hookData, deps, hints, sessionId } = inputs;
+  const { hookData, deps, hints } = inputs;
+  const sessionId = hookData.session_id;
   // The request's one refresh of its session's record, which the session,
   // today and speed lanes share.
   const session = deps.usageStore.request(sessionId, hookData.transcript_path);
@@ -901,10 +900,8 @@ export interface Readings {
 }
 
 // What a session's declaration reads of its newest request: the keys every
-// keyed lane is read at, and the session as the checkpoint parsed it.
-export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints"> & {
-  readonly sessionId: SessionId;
-};
+// keyed lane is read at, the session among them.
+export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints">;
 
 // The owners of the keyed lanes, which a declaration takes its holds in.
 export type KeyedOwners = Pick<
@@ -1018,7 +1015,11 @@ export function declareLanes(
       [...sources].map(([name, storage]) => [
         name,
         declare(name, () =>
-          owners.managedStorage.declare(holds, storage, facts.sessionId),
+          owners.managedStorage.declare(
+            holds,
+            storage,
+            facts.hookData.session_id,
+          ),
         ),
       ]),
     ),
@@ -1035,7 +1036,8 @@ export function readingsOf(
   inputs: PayloadInputs,
   lanes: DeclaredLanes,
 ): Readings {
-  const { deps, sessionId } = inputs;
+  const { deps } = inputs;
+  const sessionId = inputs.hookData.session_id;
   // [LAW:no-silent-failure] A read that throws is a bug in its owner: logged
   // here, by the read that met it — a frame's included, whose failures go
   // nowhere else — and that lane's failure, so it costs its own cells, never
@@ -1158,10 +1160,7 @@ function firstPending(
 
 // What a payload is composed from besides the document: the hook's
 // instantaneous fields, the client's hints and the user's home.
-export type ComposeInputs = Pick<
-  PayloadInputs,
-  "hookData" | "hints" | "sessionId"
-> & {
+export type ComposeInputs = Pick<PayloadInputs, "hookData" | "hints"> & {
   readonly home: string | undefined;
 };
 
@@ -1193,7 +1192,8 @@ export function composePayload(
   inputs: ComposeInputs,
   draw: DrawInputs,
 ): ViewPayload {
-  const { hookData, hints, sessionId } = inputs;
+  const { hookData, hints } = inputs;
+  const sessionId = hookData.session_id;
   const { effective, configFacts } = draw;
   const { configPath, ...settingCounts } = configFacts;
   const built = facts.builtins;

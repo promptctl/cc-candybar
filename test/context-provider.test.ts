@@ -5,6 +5,7 @@
 // 1M-context variants where a hardcoded 200k would report wildly wrong "left"
 // percentages.
 
+import { sessionIdOf } from "../src/daemon/session-id";
 import { appendFileSync, mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -174,7 +175,7 @@ describe("ContextProvider transcript fallback", () => {
   it("reads the newest main-chain usage entry, skipping sidechains", async () => {
     const t = join(dir, "t.jsonl");
     writeFileSync(t, entry(1000) + entry(2000) + entry(9999, { isSidechain: true }));
-    const tokens = await new ContextProvider({ clock: systemTimekeeper }).refresh("fb", t);
+    const tokens = await new ContextProvider({ clock: systemTimekeeper }).refresh(sessionIdOf("fb"), t);
     expect(tokens).toEqual(ok(2015));
     // With no window from the hook, the ratio is against the 200k floor.
     expect(contextOver(tokens, baseHook())).toEqual({
@@ -191,7 +192,7 @@ describe("ContextProvider transcript fallback", () => {
   it("is absent for a transcript with no usage-bearing entry", async () => {
     const t = join(dir, "t.jsonl");
     writeFileSync(t, JSON.stringify({ timestamp: "2026-05-31T00:00:00.000Z", type: "user" }) + "\n");
-    const outcome = await new ContextProvider({ clock: systemTimekeeper }).refresh("fb", t);
+    const outcome = await new ContextProvider({ clock: systemTimekeeper }).refresh(sessionIdOf("fb"), t);
     expect(outcome.kind).toBe("absent");
   });
 
@@ -199,17 +200,17 @@ describe("ContextProvider transcript fallback", () => {
     const t = join(dir, "t.jsonl");
     writeFileSync(t, entry(1000));
     const provider = new ContextProvider({ clock: systemTimekeeper });
-    expect(await provider.refresh("fb", t)).toEqual(ok(1015));
+    expect(await provider.refresh(sessionIdOf("fb"), t)).toEqual(ok(1015));
 
     appendFileSync(t, entry(50_000));
     utimesSync(t, Date.now() / 1000 + 5, Date.now() / 1000 + 5);
-    expect(await provider.refresh("fb", t)).toEqual(ok(50_015));
+    expect(await provider.refresh(sessionIdOf("fb"), t)).toEqual(ok(50_015));
     // A draw reads what the last refresh left.
-    expect(provider.tokensOf("fb")).toEqual(ok(50_015));
+    expect(provider.tokensOf(sessionIdOf("fb"))).toEqual(ok(50_015));
   });
 
   it("is failed when the transcript cannot be read", async () => {
-    const outcome = await new ContextProvider({ clock: systemTimekeeper }).refresh("fb", dir);
+    const outcome = await new ContextProvider({ clock: systemTimekeeper }).refresh(sessionIdOf("fb"), dir);
     expect(outcome.kind).toBe("failed");
   });
 });

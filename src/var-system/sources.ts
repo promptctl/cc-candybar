@@ -176,9 +176,10 @@ export const SESSION_ID_VAR_NAME = "session.id";
 
 // [LAW:parse-dont-validate] exception: the session a `state` variable keys by
 // is read back from the `session.id` input, which a config can redeclare, so
-// the id the hook door checked arrives here unbranded and is checked again; a
-// value the checkpoint refuses reads as no session, as it did before the brand.
-// candybar-host-renderer-x96a.k4k hands the view's checked SessionId in instead.
+// the id the hook door checked arrives here unbranded and is checked again. A
+// value the checkpoint refuses (a non-string, or a name no file could carry)
+// reads as no session, with no warning: every `state` variable answers its
+// fallback. The fix is the view handing its checked SessionId in.
 function stateSessionOf(value: unknown): SessionId | null {
   const parsed = parseSessionId(value);
   return parsed.ok ? parsed.id : null;

@@ -1,3 +1,4 @@
+import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 // [LAW:behavior-not-structure] The gate for brandon-activity-ue7: what the bar
@@ -138,8 +139,8 @@ let seq = 0;
 
 // A fresh path per transcript: the provider keys its fold by session id, and a
 // reused path would let one test's mtime fast-path answer another's read.
-function transcript(...lines: string[]): { path: string; session: string } {
-  const session = `s${seq++}`;
+function transcript(...lines: string[]): { path: string; session: SessionId } {
+  const session = sessionIdOf(`s${seq++}`);
   const path = join(dir, `${session}.jsonl`);
   writeFileSync(path, lines.join("\n") + "\n");
   return { path, session };
@@ -507,7 +508,7 @@ describe("the fold reports what is happening now", () => {
   });
 
   test("a session with no transcript yet is an empty record, not a failure", async () => {
-    const session = "missing";
+    const session = sessionIdOf("missing");
     const outcome = await new ActivityProvider({ clock: systemTimekeeper }).getActivityInfo(
       session,
       hook(join(dir, "nope.jsonl"), session),

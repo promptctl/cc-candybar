@@ -21,7 +21,7 @@ import { sessionIdOf } from "../src/daemon/session-id";
 import { oneDay } from "../src/daemon/cache/today-facts";
 import { sumsOf } from "./helpers/today";
 import { claudeConfigDir, claudeSettingsPath } from "../src/claude-settings";
-import type { ClaudeHookData } from "../src/utils/claude";
+import type { CheckedHookData } from "../src/renderer/request-context";
 import type { ClientHints } from "../src/daemon/protocol";
 import { instantOf, type Instant } from "../src/utils/instant";
 import {
@@ -50,14 +50,14 @@ import {
 const SID = sessionIdOf("facts-assembly");
 const PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 const HINTS: ClientHints = { tmux: PANE };
-const HOOK = {
+const HOOK: CheckedHookData = {
   hook_event_name: "Status",
   session_id: SID,
   transcript_path: "/no/such/transcript.jsonl",
   cwd: "/tmp",
   model: { id: "claude-opus-4-7", display_name: "Opus" },
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
-} as unknown as ClaudeHookData;
+};
 
 const at = (seconds: number): Instant =>
   instantOf(new Date(1_700_000_000_000 + seconds * 1000));
@@ -112,14 +112,13 @@ function rig(git?: Outcome<unknown>) {
   const held = owners(git);
   const deps = held as unknown as RenderPayloadDeps;
   const inputs: LanedInputs = {
-    sessionId: SID,
     hookData: HOOK,
     deps,
     cwd: undefined,
     hints: HINTS,
     lanes: declaredLanes(
       held,
-      { sessionId: SID, hookData: HOOK, cwd: undefined, hints: HINTS },
+      { hookData: HOOK, cwd: undefined, hints: HINTS },
       cleanups,
     ),
   };

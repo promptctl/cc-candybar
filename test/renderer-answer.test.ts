@@ -41,7 +41,6 @@ import type { RendererVerbs } from "../src/renderer/verbs";
 import { BadVerbArgs } from "../src/daemon/verb-error";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { WorldState } from "../src/facts/world-state";
-import type { SessionId } from "../src/daemon/session-id";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
 let dir: string;
@@ -250,7 +249,7 @@ describe("the world state the host hands in", () => {
   test("is what the session's view draws from, and an older seq is refused", async () => {
     const t = renderer();
     await request(t);
-    const held = t.rig.served.worldStates.of(SESSION as SessionId);
+    const held = t.rig.served.worldStates.of(SESSION);
     const next = {
       ...held,
       seq: held.seq + 1,
@@ -273,11 +272,11 @@ describe("the world state the host hands in", () => {
     expect(viewOf(t.rig)).not.toBeNull();
     const { subscriptions } = await handIn(t.r, {
       kind: "retire",
-      session: SESSION as SessionId,
+      session: SESSION,
     });
     expect(viewOf(t.rig)).toBeNull();
-    expect(subscriptions.sources).toEqual([]);
-    expect(() => t.rig.served.worldStates.of(SESSION as SessionId)).toThrow(
+    expect(subscriptions.sources).toEqual(new Map());
+    expect(() => t.rig.served.worldStates.of(SESSION)).toThrow(
       /no world state for session/,
     );
     // The view stopped observing the document before it went.
@@ -287,7 +286,7 @@ describe("the world state the host hands in", () => {
   test("a retire whose session teardown throws still drops its world state, so the host's next record for the session is taken", async () => {
     const t = renderer();
     await request(t);
-    const held = t.rig.served.worldStates.of(SESSION as SessionId);
+    const held = t.rig.served.worldStates.of(SESSION);
     // A newer document held, so `held` is taken again only by a new record.
     await handIn(t.r, {
       kind: "world-state",
@@ -299,30 +298,32 @@ describe("the world state the host hands in", () => {
       throw new Error("the view's teardown threw");
     };
     await expect(
-      handIn(t.r, { kind: "retire", session: SESSION as SessionId }),
+      handIn(t.r, { kind: "retire", session: SESSION }),
     ).rejects.toThrow(TurnThrew);
-    expect(() => t.rig.served.worldStates.of(SESSION as SessionId)).toThrow(
+    expect(() => t.rig.served.worldStates.of(SESSION)).toThrow(
       /no world state for session/,
     );
     // A new record starts again below the seq the dropped document had.
     await handIn(t.r, { kind: "world-state", worldState: held });
-    expect(t.rig.served.worldStates.of(SESSION as SessionId)).toBe(held);
+    expect(t.rig.served.worldStates.of(SESSION)).toBe(held);
   });
 
   test("every output names each open view's plugin sources at their storage keys", async () => {
     const t = renderer();
     const { subscriptions } = await request(t);
     const view = viewOf(t.rig)!;
-    expect(subscriptions.sources).toEqual([
-      {
-        session: SESSION,
-        subscriptions: [...view.state.sources].map(([source, storage]) => ({
-          kind: "plugin",
-          source,
-          storage,
-        })),
-      },
-    ]);
+    expect(subscriptions.sources).toEqual(
+      new Map([
+        [
+          SESSION,
+          [...view.state.sources].map(([source, storage]) => ({
+            kind: "plugin",
+            source,
+            storage,
+          })),
+        ],
+      ]),
+    );
   });
 });
 
@@ -332,16 +333,18 @@ describe("the session's config, ahead of its request", () => {
     const { effects, subscriptions } = await configure(t, checked());
     expect(effects).toEqual([]);
     const view = viewOf(t.rig)!;
-    expect(subscriptions.sources).toEqual([
-      {
-        session: SESSION,
-        subscriptions: [...view.state.sources].map(([source, storage]) => ({
-          kind: "plugin",
-          source,
-          storage,
-        })),
-      },
-    ]);
+    expect(subscriptions.sources).toEqual(
+      new Map([
+        [
+          SESSION,
+          [...view.state.sources].map(([source, storage]) => ({
+            kind: "plugin",
+            source,
+            storage,
+          })),
+        ],
+      ]),
+    );
     expect(presentOf((await request(t)).effects)).toMatchObject({
       kind: "present",
       request: REQUEST,
@@ -492,7 +495,7 @@ describe("a click", () => {
     kind: "click",
     verb,
     value: "",
-    session: { ok: true, id: SESSION as SessionId },
+    session: { ok: true, id: SESSION },
     arrival: { via: "link", delivery: { kind: "cli" } },
     gone: () => false,
   });
@@ -510,10 +513,10 @@ describe("a click", () => {
       t.rig.cache.retireSession(SESSION);
     };
     const before = await request(t);
-    expect(before.subscriptions.sources.map((s) => s.session)).toEqual([SESSION]);
+    expect([...before.subscriptions.sources.keys()]).toEqual([SESSION]);
     const { effects, subscriptions, record } = await handIn(t.r, click("act"));
     expect(effects).toEqual([]);
-    expect(subscriptions.sources).toEqual([]);
+    expect(subscriptions.sources).toEqual(new Map());
     // The host records what it knows of the click; this act waited on nothing.
     expect(record).toEqual([]);
   });
@@ -529,10 +532,10 @@ describe("a click", () => {
       throw new Error("a later step broke");
     };
     const before = await request(t);
-    expect(before.subscriptions.sources.map((s) => s.session)).toEqual([SESSION]);
+    expect([...before.subscriptions.sources.keys()]).toEqual([SESSION]);
     const thrown = await handIn(t.r, click("act")).catch((e: TurnThrew) => e);
     expect(thrown).toBeInstanceOf(TurnThrew);
-    expect(thrown.subscriptions.sources).toEqual([]);
+    expect(thrown.subscriptions.sources).toEqual(new Map());
   });
 
   test("of a verb the renderer does not have is its bad request", async () => {
@@ -562,7 +565,7 @@ describe("the idle close", () => {
     };
     const { effects } = await handIn(t.r, {
       kind: "menu-idle",
-      session: SESSION as SessionId,
+      session: SESSION,
       idle,
     });
     expect(effects).toEqual([]);

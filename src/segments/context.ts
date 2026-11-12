@@ -11,6 +11,7 @@ import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import { debug, quietLogger, type DaemonLogger } from "../utils/logger";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import type { Timekeeper } from "../time";
+import type { SessionId } from "../daemon/session-id";
 
 export interface ContextInfo {
   totalTokens: number;
@@ -76,14 +77,14 @@ export class ContextProvider {
   // [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
   // boundary logs it); a transcript with no usable usage entry is `absent`.
   async refresh(
-    sessionId: string,
+    sessionId: SessionId,
     transcriptPath: string,
   ): Promise<Outcome<number>> {
     return tokensFrom(await this.fold.read(sessionId, transcriptPath));
   }
 
   // The session's context tokens as its last refresh left them, for a draw.
-  tokensOf(sessionId: string): Reading<number> {
+  tokensOf(sessionId: SessionId): Reading<number> {
     const answer = this.fold.answer(sessionId);
     return answer.kind === "pending" ? answer : tokensFrom(answer);
   }

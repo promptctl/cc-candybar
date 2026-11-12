@@ -80,7 +80,7 @@ import {
 import { assembleFacts } from "./daemon/facts-assembly.js";
 import { sessionIdOf } from "./daemon/session-id.js";
 import type { ClientHints } from "./daemon/protocol.js";
-import type { ClaudeHookData } from "./utils/claude.js";
+import type { CheckedHookData } from "./renderer/request-context.js";
 import type { GitInfo } from "./segments/git.js";
 import type { TranscriptUsage } from "./segments/session.js";
 import type { MetricsFold } from "./segments/metrics.js";
@@ -214,7 +214,7 @@ const CHECK_HINTS: ClientHints = {
   ssh: true,
 };
 
-function checkHook(at: Instant): ClaudeHookData {
+function checkHook(at: Instant): CheckedHookData {
   const nowSec = Math.floor(at);
   return {
     hook_event_name: "Status",
@@ -346,7 +346,6 @@ export function checkPayload(
   const { term: _term, ...payload } = composePayload(
     document,
     {
-      sessionId: CHECK_SESSION,
       hookData,
       hints: CHECK_HINTS,
       home: CHECK_HOME,

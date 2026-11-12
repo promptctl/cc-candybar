@@ -648,7 +648,7 @@ export class LaneSetups {
   // Each session's owed lanes, least recently owed first.
   private readonly owed = new Map<SessionId, Owed>();
   // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time.
-  private readonly setups = new KeyedSerialQueue<string>();
+  private readonly setups = new KeyedSerialQueue<SessionId>();
 
   constructor(
     private readonly deps: {

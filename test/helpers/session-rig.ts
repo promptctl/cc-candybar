@@ -256,7 +256,6 @@ export async function settledRequest(
   cleanups.push(() => held[Symbol.dispose]());
   await settleWorld(
     {
-      sessionId: request.sessionId,
       hookData: request.hookData,
       deps: rig.providers as never,
       cwd: PROJECT,
@@ -264,7 +263,7 @@ export async function settledRequest(
     },
     AT,
     refreshed,
-    () => rig.served.worldStates.of(request.sessionId),
+    () => rig.served.worldStates.of(request.hookData.session_id),
     new AbortController().signal,
   );
   return held.view;
