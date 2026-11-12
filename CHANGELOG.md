@@ -1,3 +1,9 @@
+## [1.219.2](https://github.com/promptctl/cc-candybar/compare/v1.219.1...v1.219.2) (2026-11-12)
+
+### Bug Fixes
+
+* **render-event:** a source that failed, or whose key failed, is named failed by its variable (candybar-host-renderer-x96a.z7t) ([#736](https://github.com/promptctl/cc-candybar/issues/736)) ([cd02950](https://github.com/promptctl/cc-candybar/commit/cd0295020dccaffce2a127a63aa99318563b8276))
+
 ## [1.219.1](https://github.com/promptctl/cc-candybar/compare/v1.219.0...v1.219.1) (2026-11-12)
 
 ### Bug Fixes
