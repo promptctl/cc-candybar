@@ -71,6 +71,10 @@ import type { Frame } from "../src/render/frame";
 import type { RequestId } from "../src/renderer/interface";
 import type { RequestFacts } from "../src/daemon/request-event";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
+
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
 
@@ -863,7 +867,7 @@ describe("a session's first bar", () => {
       () => r.collector.stats().sessions === 0,
       "the session's retire answered",
     );
-    expect(r.cache.holdView("s1")).toBeNull();
+    expect(r.cache.holdView(S1)).toBeNull();
     expect((await ask()).text).toContain("home=here");
   });
 });
@@ -879,7 +883,7 @@ describe("the session subscribes to every source the config declares", () => {
     await answered(view);
     expect(Object.keys(view.source.facts().sources)).toEqual([STATUS]);
     expect(r.providers.managedStorage.stats().held).toBe(1);
-    r.sessionState.set("s1", "preset", "bare");
+    r.sessionState.set(S1, "preset", "bare");
     expect(Object.keys(view.source.facts().sources)).toEqual([STATUS]);
     expect(r.providers.managedStorage.stats().held).toBe(1);
     expect(draw(view).text).toContain("mine");

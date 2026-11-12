@@ -22,6 +22,7 @@ import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 import type { VerbContext } from "../../src/daemon/verbs";
 import type { SessionStateRW } from "../../src/daemon/session-state";
+import type { SessionId } from "../../src/daemon/session-id";
 import { SettingsHistory } from "../../src/daemon/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { ProbeArrivals } from "../../src/doctor/handler-probe";
@@ -43,7 +44,7 @@ const NO_LANES = Object.fromEntries(
 // config from: a session only clicks links its own render drew.
 export function recordRender(
   sessionState: SessionStateRW,
-  sessionId: string,
+  sessionId: SessionId,
   dir = "/tmp/proj",
 ): void {
   sessionState.set(

@@ -32,6 +32,10 @@ import { BadVerbArgs, DaemonClosing } from "../src/daemon/verb-error";
 import { until } from "./helpers/until";
 import { systemTimekeeper } from "../src/time";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S = sessionIdOf("s");
+
 let scratch: string;
 beforeEach(() => {
   scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-act-"));
@@ -618,7 +622,7 @@ describe("claimAct: one act per bundle", () => {
 
     expect(admits("999.0.0")).toBe(false);
     expect(
-      watch.notice({ sessionId: "s", dismissed: null, enabled: true }),
+      watch.notice({ sessionId: S, dismissed: null, enabled: true }),
     ).toEqual({ offer: [], failure: [] });
   });
 
@@ -748,7 +752,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     });
     closers.push(() => watch.close());
     const notice = () =>
-      watch.notice({ sessionId: "s", dismissed: null, enabled: true });
+      watch.notice({ sessionId: S, dismissed: null, enabled: true });
     return {
       dir,
       ps,

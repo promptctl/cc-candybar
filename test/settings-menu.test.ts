@@ -58,6 +58,10 @@ import type { ActionDecl } from "../src/config/action";
 import { SETTINGS, SETTING_PROJECTIONS } from "../src/config/setting-projections";
 import { walkNodes } from "../src/config/dsl-types";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
+
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 // The lines an open menu stacks over the bar: its two door lines, then the
@@ -172,10 +176,10 @@ describe("the global settings menu is reachable from a user config", () => {
     );
     await clickWriting(render(), SETTINGS_ANCHOR, "open");
     await clickWriting(render(), EDIT_MODE_KEY, "arrange");
-    expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("arrange");
+    expect(sessionState.get(S1, EDIT_MODE_KEY)).toBe("arrange");
     // The menu stays as it was, so its tabs and ◁ back stay in reach while
     // the bar is arranged.
-    expect(sessionState.get("s1", SETTINGS_ANCHOR)).toBe("open");
+    expect(sessionState.get(S1, SETTINGS_ANCHOR)).toBe("open");
     // Edit mode being ON is what makes the `+`/`-` chrome visible. Asserted on the affordances' own verb, not on a bare "-" glyph that
     // any template could have produced.
     const editing = linkUrls(render()).filter((u) =>
@@ -185,7 +189,7 @@ describe("the global settings menu is reachable from a user config", () => {
     // Leaving needs no trip back into the menu: edit mode's own `✓ done`,
     // top left, lands on the plain bar.
     await clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
-    expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
+    expect(sessionState.get(S1, EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
   });
 
   test("the preset picker's click is admitted by the derived gate", async () => {
@@ -204,7 +208,7 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(pickerUrl).toBeDefined();
     await click(pickerUrl!);
     await clickWriting(render(), "preset", "compact");
-    expect(sessionState.get("s1", "preset")).toBe("compact");
+    expect(sessionState.get(S1, "preset")).toBe("compact");
   });
 });
 

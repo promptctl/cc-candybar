@@ -166,6 +166,8 @@ export class Runs {
   }
 
   // A link refused before anything ran: counted, and its one event.
+  // The link's id as it arrived: a link refused at the checkpoint never
+  // parsed, so it is not a SessionId.
   refused(sessionId: string, action: string, reason: string): void {
     this.refusals++;
     this.deps.log(

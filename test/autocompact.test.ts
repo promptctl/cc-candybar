@@ -40,6 +40,8 @@ import { projectAutoCompact } from "../src/daemon/render-payload";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
+const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -61,7 +63,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
   );
   const sessionState = new SessionState();
   sessionState.set(
-    "s1",
+    S1,
     SESSION_RENDER_ORIGIN_KEY,
     encodeRenderOrigin({
       projectDir: "/tmp/proj",
@@ -70,7 +72,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
     }),
   );
   sessionState.set(
-    "s1",
+    S1,
     SESSION_CLIENT_HINTS_KEY,
     JSON.stringify({ tmux: HINT }),
   );

@@ -4,7 +4,7 @@
 // verbs are here; the doors at a daemon are test/daemon-boots/worker/session-id-at-the-daemon.test.ts.
 
 import { randomUUID } from "node:crypto";
-import { parseSessionId } from "../src/daemon/session-id";
+import { parseSessionId, sessionIdOf } from "../src/daemon/session-id";
 import { SessionState } from "../src/daemon/session-state";
 import { BadVerbArgs, VERBS } from "../src/daemon/verbs";
 import { encodeSegments } from "../src/click/wire";
@@ -47,7 +47,7 @@ describe("a click's session id", () => {
 
   test("passes a UUID", async () => {
     const state = new SessionState();
-    const uuid = randomUUID();
+    const uuid = sessionIdOf(randomUUID());
     await toggle(encodeURIComponent(uuid), testVerbContext(state));
     expect(state.get(uuid, "toolbar-expanded")).toBe("1");
   });

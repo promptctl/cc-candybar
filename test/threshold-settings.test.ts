@@ -29,9 +29,10 @@ import { placementDraftKey } from "../src/config/edit-chrome";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { lastClickError } from "../src/daemon/click-error";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-const SID = "s1";
+const SID = sessionIdOf("s1");
 // A theme whose decoration never wears its `warning`: textual-dark's `accent`
 // IS its warning (#FEA62B), so a calm accent cell there draws the very colour
 // this test reads as "past the threshold".

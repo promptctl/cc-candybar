@@ -25,6 +25,10 @@ import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S = sessionIdOf("s");
+
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
 // Pulse breathes within its first minute; shimmer, a slow sweep, crosses a
@@ -75,7 +79,7 @@ function renderer(
 } {
   const store = new VariableStore(systemTimekeeper);
   const session = new SessionState();
-  for (const [key, value] of Object.entries(state)) session.set("s", key, value);
+  for (const [key, value] of Object.entries(state)) session.set(S, key, value);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", session);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const opts = {

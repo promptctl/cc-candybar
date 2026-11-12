@@ -66,11 +66,14 @@ import { systemTimekeeper } from "../src/time";
 import { pendingOf } from "../src/utils/outcome";
 import { SourceRuns } from "../src/var-system/source-runs";
 
+const S2 = sessionIdOf("s2");
+const S9 = sessionIdOf("s9");
+
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
 // The second plugin's source, which only a run's environment reads.
 const DOC = "plugins.q.doc";
-const SID = "s1";
+const SID = sessionIdOf("s1");
 
 let dir: string;
 let cleanups: Array<() => void>;
@@ -672,7 +675,7 @@ describe("a click on a run link", () => {
       // Another session that has rendered: what its link must prove is the
       // signature.
       r.sessionState.set(
-        "s2",
+        S2,
         SESSION_RENDER_ORIGIN_KEY,
         encodeRenderOrigin({
           projectDir: dir,
@@ -692,7 +695,7 @@ describe("a click on a run link", () => {
         ),
       );
       // The refusal is in the bar of the session the link names.
-      expect(lastClickError(r.sessionState, tampered.sid)?.text).toContain(
+      expect(lastClickError(r.sessionState, sessionIdOf(tampered.sid))?.text).toContain(
         "signature does not match",
       );
       expect(fs.existsSync(path.join(storage(), `${SID}.json`))).toBe(false);
@@ -1025,7 +1028,7 @@ describe("the session's process environment", () => {
     };
     expect(
       await childSees({
-        sessionId: "s9",
+        sessionId: S9,
         projectDir: "/p",
         claudeConfigDir: "/u/.claude-z",
       }),
@@ -1037,7 +1040,7 @@ describe("the session's process environment", () => {
     });
     // The default directory: the variable unset, as Claude Code reads it.
     const defaulted = await childSees({
-      sessionId: "s9",
+      sessionId: S9,
       projectDir: "/p",
       claudeConfigDir: undefined,
     });

@@ -43,6 +43,8 @@ import {
   healthyClient,
   renderSaid,
 } from "./helpers/doctor-facts";
+import { sessionIdOf } from "../src/daemon/session-id";
+const S1 = sessionIdOf("s1");
 
 const probe = checkByName("urlHandler")!.probe;
 const verdict = (urlHandler: UrlHandlerFacts) =>
@@ -356,7 +358,7 @@ describe("the daemon's side of the round trip", () => {
     // records, under the Claude Code directory its recorded hints name — so
     // its bar reads the click's own settings chain, never the host's.
     clients.see(
-      "s1",
+      S1,
       renderSaid(healthyClient(), {
         projectDir: "/tmp/proj",
         claudeConfigDir: process.env.CLAUDE_CONFIG_DIR!,
@@ -446,11 +448,11 @@ describe("the daemon's side of the round trip", () => {
   // In the bar, the doctor's own click is the link that came back.
   async function doctorRow(arrival: ClickArrival) {
     const d = daemon(arrival);
-    recordRender(d.sessionState, "s1");
+    recordRender(d.sessionState, S1);
     // The session's own Claude Code directory (test/setup.ts's empty one):
     // with none, the doctor reads ~/.claude, the host's real settings.
     d.sessionState.set(
-      "s1",
+      S1,
       SESSION_CLIENT_HINTS_KEY,
       JSON.stringify({
         tmux: null,
@@ -462,8 +464,8 @@ describe("the daemon's side of the round trip", () => {
     await d.click(VERB_DOCTOR_RUN, "s1");
     const keys = doctorReportKeys("urlHandler");
     return {
-      verdict: d.sessionState.get("s1", keys.verdict),
-      reason: d.sessionState.get("s1", keys.reason),
+      verdict: d.sessionState.get(S1, keys.verdict),
+      reason: d.sessionState.get(S1, keys.reason),
       logs: d.logs,
     };
   }

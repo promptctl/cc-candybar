@@ -11,8 +11,9 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { LANES, type Lane, type LaneSwitches } from "../src/config/lanes";
 import type { VerbContext } from "../src/daemon/verbs";
 import { clickUrl, recordRender, testVerbContext } from "./helpers/click";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "lane-click";
+const SID = sessionIdOf("lane-click");
 // The bundled bar, whose settings menu declares every lane's switch.
 const CONFIG = parseAndValidate(
   "<test>",

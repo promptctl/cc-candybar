@@ -13,6 +13,7 @@ import type {
 import type { ClientDeadline } from "../daemon/request-deadline";
 import type { RateLimitsSeen } from "../daemon/render-sightings";
 import type { SessionId } from "../daemon/session-id";
+import type { ClaudeHookData } from "../utils/claude";
 
 // A render request that crossed the checkpoint: its hookData carries every
 // required field with its declared type, its cwd is absolute, `hints` is its
@@ -23,14 +24,20 @@ import type { SessionId } from "../daemon/session-id";
 // client hangs up. Raw `req.*` hint fields and `req.args` are not read past
 // the checkpoint. `encoding` is how its answer is spelled. Only
 // checkRenderRequest makes one.
+// [LAW:one-source-of-truth] The hook's session id is the one the checkpoint
+// parsed, so the session a template reads is the session every store keys by.
+export type CheckedHookData = Omit<ClaudeHookData, "session_id"> & {
+  readonly session_id: SessionId;
+};
+
 declare const CHECKED: unique symbol;
 export type CheckedRenderRequest = Omit<
   ReaderRenderRequest,
-  "deadline" | "encoding"
+  "deadline" | "encoding" | "hookData"
 > & {
+  readonly hookData: CheckedHookData;
   readonly deadline: ClientDeadline;
   readonly encoding: RenderEncoding;
-  readonly sessionId: SessionId;
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
   readonly requested: RequestedOrigin;

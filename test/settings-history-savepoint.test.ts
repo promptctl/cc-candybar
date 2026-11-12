@@ -15,8 +15,9 @@ import {
 } from "../src/daemon/settings-history";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { readConfigText, writeConfigText } from "../src/daemon/config-file-store";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s1";
+const SID = sessionIdOf("s1");
 let dir: string;
 let file: string;
 
@@ -329,7 +330,7 @@ describe("the savepoint survives a restart", () => {
     );
     const logs: string[] = [];
     const storage = fileHistoryStorage(historyFile, (_level, m) => logs.push(m));
-    expect(storage.load()).toEqual({});
+    expect(Object.fromEntries(storage.load())).toEqual({});
     expect(logs.join("\n")).toMatch(/unexpected shape/);
   });
 
@@ -358,7 +359,7 @@ describe("the savepoint survives a restart", () => {
     );
     const logs: string[] = [];
     const storage = fileHistoryStorage(historyFile, (_level, m) => logs.push(m));
-    expect(storage.load()).toEqual({
+    expect(Object.fromEntries(storage.load())).toEqual({
       [SID]: {
         past: [[change("style")], [file]],
         future: [],

@@ -67,6 +67,8 @@ import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+const S1 = sessionIdOf("s1");
+const S2 = sessionIdOf("s2");
 
 // The machine the caches below load on: this worker's own unless a describe
 // states another for its tests.
@@ -1505,20 +1507,20 @@ describe("RenderCache frames and pins", () => {
   test("holdView opens nothing: no entry, no view, before or after a session's request", () => {
     const { cache, dirs, close, request, logs } = pinCache();
     try {
-      expect(cache.holdView("s1")).toBeNull();
+      expect(cache.holdView(S1)).toBeNull();
       expect(cache.size).toBe(0);
       expect(cache.stats.views).toBe(0);
       const view = request("s1", dirs[0]!);
       const before = logs.length;
       for (let i = 0; i < 5; i++) {
-        using hold = cache.holdView("s1");
+        using hold = cache.holdView(S1);
         expect(hold?.view).toBe(view);
         expect(hold?.entry.cwd).toBe(dirs[0]);
       }
       // A frame wrote no line: it opened no view, built no entry, declared
       // nothing.
       expect(logs.slice(before)).toEqual([]);
-      expect(cache.holdView("s2")).toBeNull();
+      expect(cache.holdView(S2)).toBeNull();
       expect(cache.size).toBe(1);
     } finally {
       close();
@@ -1529,22 +1531,22 @@ describe("RenderCache frames and pins", () => {
     const { cache, dirs, close, request } = pinCache();
     try {
       const view = request("s1", dirs[0]!);
-      const unpin = cache.pin("s1");
+      const unpin = cache.pin(S1);
       expect(cache.stats.pinned).toBe(1);
       // Other directories push the cache over its budget: the least recently
       // used entry is the pinned session's, and it is passed over.
       for (const dir of dirs.slice(1)) cache.getOrCreate(dir, dir, undefined);
       expect(cache.size).toBeLessThan(dirs.length);
       {
-        using hold = cache.holdView("s1");
+        using hold = cache.holdView(S1);
         expect(hold?.view).toBe(view);
         expect(hold?.entry.cwd).toBe(dirs[0]);
       }
       // The feed closed, and the host retired the session.
       unpin();
       expect(cache.stats.pinned).toBe(0);
-      cache.retireSession("s1");
-      expect(cache.holdView("s1")).toBeNull();
+      cache.retireSession(S1);
+      expect(cache.holdView(S1)).toBeNull();
       expect(() => unpin()).toThrow("render-cache pin released twice");
     } finally {
       close();
@@ -1556,7 +1558,7 @@ describe("RenderCache frames and pins", () => {
     try {
       request("s1", dirs[0]!);
       for (const dir of dirs.slice(1)) cache.getOrCreate(dir, dir, undefined);
-      expect(cache.holdView("s1")).toBeNull();
+      expect(cache.holdView(S1)).toBeNull();
     } finally {
       close();
     }
@@ -1567,26 +1569,26 @@ describe("RenderCache frames and pins", () => {
     try {
       const view = request("s1", dirs[0]!);
       request("s3", dirs[0]!);
-      cache.follow("s1", dirs[0]!, dirs[0]!, undefined);
+      cache.follow(S1, dirs[0]!, dirs[0]!, undefined);
       // Its origin did not move: nothing opened, and the click is no render,
       // so the latest rendered session is still the one that rendered.
       expect(opened()).toHaveLength(2);
-      expect(cache.holdView("s1")?.view).toBe(view);
+      expect(cache.holdView(S1)?.view).toBe(view);
       expect(cache.latestView()?.sessionId).toBe("s3");
-      cache.follow("s1", dirs[1]!, dirs[1]!, undefined);
+      cache.follow(S1, dirs[1]!, dirs[1]!, undefined);
       expect(opened().at(-1)).toMatch(
         /^session view opened sid="s1" by=click /,
       );
       {
-        using hold = cache.holdView("s1");
+        using hold = cache.holdView(S1);
         expect(hold?.entry.cwd).toBe(dirs[1]);
         // Declared with the request the view drew by.
         expect(hold?.view.facts()).toBe(view.facts());
       }
       // A session with no view has nothing to move, and gets no view.
       const size = cache.size;
-      cache.follow("s2", dirs[2]!, dirs[2]!, undefined);
-      expect(cache.holdView("s2")).toBeNull();
+      cache.follow(S2, dirs[2]!, dirs[2]!, undefined);
+      expect(cache.holdView(S2)).toBeNull();
       expect(cache.size).toBe(size);
     } finally {
       close();
@@ -1631,7 +1633,7 @@ describe("RenderCache frames and pins", () => {
           viewFacts(dir, "s1"),
         );
       }
-      const unpin = cache.pin("s1");
+      const unpin = cache.pin(S1);
       editProjectConfig(dir);
       cache.reload(dir, dir, undefined, { kind: "write" });
       expect(logs).toContainEqual(
@@ -1640,10 +1642,10 @@ describe("RenderCache frames and pins", () => {
         ),
       );
       // Frames find nothing, and open nothing; they find the error instead.
-      expect(cache.holdView("s1")).toBeNull();
-      expect(cache.holdView("s1")).toBeNull();
+      expect(cache.holdView(S1)).toBeNull();
+      expect(cache.holdView(S1)).toBeNull();
       expect(opens).toBe(2);
-      expect(String(cache.openFailure("s1")?.error)).toBe(
+      expect(String(cache.openFailure(S1)?.error)).toBe(
         "Error: the successor broke",
       );
       // The session's next request opens its view, and the error goes.
@@ -1655,8 +1657,8 @@ describe("RenderCache frames and pins", () => {
           viewFacts(dir, "s1"),
         );
       }
-      expect(cache.holdView("s1")).not.toBeNull();
-      expect(cache.openFailure("s1")).toBeNull();
+      expect(cache.holdView(S1)).not.toBeNull();
+      expect(cache.openFailure(S1)).toBeNull();
       unpin();
     } finally {
       cache.close();
@@ -1696,9 +1698,9 @@ describe("RenderCache frames and pins", () => {
       expect(() =>
         cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1")),
       ).toThrow("the view broke");
-      expect(cache.openFailure("s1")).not.toBeNull();
-      cache.retireSession("s1");
-      expect(cache.openFailure("s1")).toBeNull();
+      expect(cache.openFailure(S1)).not.toBeNull();
+      cache.retireSession(S1);
+      expect(cache.openFailure(S1)).toBeNull();
     } finally {
       cache.close();
       watchers.closeAll();
@@ -1742,14 +1744,14 @@ describe("RenderCache frames and pins", () => {
       expect(() =>
         cache.holdSession(first.dir, first.dir, undefined, facts),
       ).toThrow("the view broke");
-      const unpin = cache.pin("s1");
-      cache.follow("s1", second.dir, second.dir, undefined);
+      const unpin = cache.pin(S1);
+      cache.follow(S1, second.dir, second.dir, undefined);
       {
-        using hold = cache.holdView("s1");
+        using hold = cache.holdView(S1);
         expect(hold?.entry.cwd).toBe(second.dir);
         expect(hold?.view.facts()).toBe(facts);
       }
-      expect(cache.openFailure("s1")).toBeNull();
+      expect(cache.openFailure(S1)).toBeNull();
       unpin();
     } finally {
       cache.close();

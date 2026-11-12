@@ -250,7 +250,7 @@ export interface RenderCacheObservers {
   // throws is a caller bug surfaced loudly, never absorbed here.
   readonly onReload?: (
     entry: ReloadedEntry,
-    sessions: readonly string[],
+    sessions: readonly SessionId[],
     cause: LoadCause,
     // What the load did: built a state, kept the one served, or failed.
     settled: Settled,
@@ -258,7 +258,7 @@ export interface RenderCacheObservers {
   // Fires with a session's id when its view opens and whenever what the view
   // draws from moves (openView's `changed`): what a feed showing the session
   // wakes on.
-  readonly onViewChanged?: (sessionId: string) => void;
+  readonly onViewChanged?: (sessionId: SessionId) => void;
 }
 
 // [LAW:types-are-the-program] The observer's view of an entry: an ALLOW-LIST
@@ -1247,7 +1247,7 @@ export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ state }) =>
 // What a view draws from, and whom it tells that what it draws from moved.
 export interface ViewDeclaring<S extends ViewSource = ViewSource> {
   readonly source: SourceOf<S>;
-  readonly changed: (sessionId: string) => void;
+  readonly changed: (sessionId: SessionId) => void;
   readonly log: DaemonLogger;
 }
 
@@ -1265,7 +1265,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
 ): SessionView<S, F> {
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
-  const { sessionId } = facts;
+  const sessionId = facts.hookData.session_id;
   const registry = state.registry.view();
   // What fails to declare here failed in the load's probe (buildRenderState),
   // which reported it: a declaration reads only the config.
@@ -1373,7 +1373,7 @@ export class RenderCache<
   private readonly holds = new Map<DslRenderState, StateHold>();
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
-  private readonly views = new Map<string, SessionView<S, F>>();
+  private readonly views = new Map<SessionId, SessionView<S, F>>();
   // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
   // delivered copies, by the key its copy click names (src/render/
   // diagnostics.ts), one map per renderer, since a request and a feed frame
@@ -1382,7 +1382,7 @@ export class RenderCache<
   // was drawn from (a reload's successor); dropped when the session has no
   // view. No link carries the text it copies.
   private readonly copies = new Map<
-    string,
+    SessionId,
     Map<Drawing["by"], ReadonlyMap<string, string>>
   >();
   // Every view the cache serves or served, until reclaimed.
@@ -1391,14 +1391,14 @@ export class RenderCache<
   // how many pins each holds: their entries are never evicted (`fit`), for as
   // long as the feed is open. The collector asks the feeds themselves whether
   // a session is watched before it retires one.
-  private readonly pins = new Map<string, number>();
+  private readonly pins = new Map<SessionId, number>();
   // [LAW:no-silent-failure] Each session whose view last failed to open, by
   // the error and the request the opening was for, until a view opens for
   // it: a frame draws that error, never the last bar it pushed, and a click
   // that moves the origin retries by that request (`follow`). Written only by
   // `opened`, which sets either this or the session's view, never both.
   private readonly openFailures = new Map<
-    string,
+    SessionId,
     { readonly error: unknown; readonly facts: F }
   >();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
@@ -1583,7 +1583,7 @@ export class RenderCache<
   // nothing — no entry, no view, no declaration — so a frame performs no I/O
   // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
   // (ViewOpening).
-  holdView(sessionId: string): SessionHold<S, F> | null {
+  holdView(sessionId: SessionId): SessionHold<S, F> | null {
     const view = this.views.get(sessionId);
     if (view === undefined) return null;
     // Taken before the state hold, so a throw leaves nothing held.
@@ -1621,7 +1621,7 @@ export class RenderCache<
 
   // Why the session has no view, when its last opening threw: what a frame
   // draws in place of the view `holdView` found none of.
-  openFailure(sessionId: string): { readonly error: unknown } | null {
+  openFailure(sessionId: SessionId): { readonly error: unknown } | null {
     return this.openFailures.get(sessionId) ?? null;
   }
 
@@ -1636,7 +1636,7 @@ export class RenderCache<
   // its entry and changes nothing, its use order included, so the latest
   // rendered session stays the one that rendered.
   follow(
-    sessionId: string,
+    sessionId: SessionId,
     projectDir: string,
     cwd: string,
     configFile: string | undefined,
@@ -1656,7 +1656,7 @@ export class RenderCache<
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
   // session, so it follows the view wherever a request, a reload or a click
   // moves it.
-  pin(sessionId: string): () => void {
+  pin(sessionId: SessionId): () => void {
     this.pins.set(sessionId, (this.pins.get(sessionId) ?? 0) + 1);
     let released = false;
     return () => {
@@ -1675,7 +1675,7 @@ export class RenderCache<
     facts: F,
     by: ViewOpening,
   ): SessionView<S, F> {
-    const { sessionId } = facts;
+    const sessionId = facts.hookData.session_id;
     const current = this.views.get(sessionId);
     if (current?.state === state) {
       // Move to end (most recently used), as getOrCreate does an entry.
@@ -1711,7 +1711,7 @@ export class RenderCache<
     facts: F,
     by: ViewOpening,
   ): SessionView<S, F> {
-    const { sessionId } = facts;
+    const sessionId = facts.hookData.session_id;
     let view: SessionView<S, F>;
     try {
       view = openView(state, entry.cwd, facts, {
@@ -1766,7 +1766,7 @@ export class RenderCache<
 
   // [LAW:single-enforcer] The host ended the session (its collector's
   // sweep): its view closes, and the failure no feed shows goes with it.
-  retireSession(sessionId: string): void {
+  retireSession(sessionId: SessionId): void {
     this.openFailures.delete(sessionId);
     const view = this.views.get(sessionId);
     if (view !== undefined) this.retireView(view, "idle");
@@ -1778,9 +1778,9 @@ export class RenderCache<
   // next output's.
   subscriptions(): Subscriptions {
     return {
-      sources: Object.fromEntries(
-        [...this.views].map(([sessionId, view]) => [
-          sessionId,
+      sources: new Map(
+        [...this.views].map(([session, view]) => [
+          session,
           subscriptionsOf(view.state),
         ]),
       ),
@@ -1975,7 +1975,7 @@ export class RenderCache<
 
   // [LAW:one-source-of-truth] The sessions whose views draw from `entry`'s
   // state.
-  private sessionsOn(entry: CacheEntry): string[] {
+  private sessionsOn(entry: CacheEntry): SessionId[] {
     return [...this.views.values()]
       .filter((view) => view.state === entry.state)
       .map((view) => view.sessionId);
@@ -2168,7 +2168,7 @@ export class RenderCache<
   // The renderer `by` delivered a frame of the session's bar listing
   // `copies`. A session with no view is closed: nothing it delivers is kept.
   delivered(
-    sessionId: string,
+    sessionId: SessionId,
     by: Drawing["by"],
     copies: ReadonlyMap<string, string>,
   ): void {
@@ -2181,7 +2181,7 @@ export class RenderCache<
   // delivered for the session; undefined while that renderer's last frame
   // did not list it. Reads, never opens, like latestView.
   drawnCopy(
-    sessionId: string,
+    sessionId: SessionId,
     by: Drawing["by"],
     key: string,
   ): string | undefined {
@@ -2191,7 +2191,7 @@ export class RenderCache<
   // The renderer no longer draws the session's bar (its feed closed): what
   // its last frame listed is on no surface now, so a click naming it is
   // refused rather than copying a list gone stale.
-  stopDrawing(sessionId: string, by: Drawing["by"]): void {
+  stopDrawing(sessionId: SessionId, by: Drawing["by"]): void {
     this.copies.get(sessionId)?.delete(by);
   }
 }

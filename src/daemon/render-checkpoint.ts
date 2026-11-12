@@ -184,9 +184,9 @@ export function checkRenderRequest(
     ok: true,
     req: {
       ...req,
+      hookData: { ...req.hookData, session_id: sessionId.id },
       deadline,
       encoding: encoding.encoding,
-      sessionId: sessionId.id,
       hints,
       rateLimits: rateLimitsSeen(req.hookData),
       requested: {

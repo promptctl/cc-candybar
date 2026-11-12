@@ -5,6 +5,7 @@
 // /compact rewrites a transcript, and retention only shows itself when the file
 // a fold was built from goes away.
 
+import { sessionIdOf } from "../src/daemon/session-id";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import {
   chmodSync,
@@ -69,7 +70,7 @@ const valueOf = async (
   id: string,
   path: string,
 ) => {
-  const out = await fold.read(id, path);
+  const out = await fold.read(sessionIdOf(id), path);
   if (out.kind !== "ok") throw new Error(`expected ok, got ${out.reason}`);
   return out.value;
 };
@@ -147,17 +148,17 @@ test("a session with no transcript is a real zero, never a failure", async () =>
     );
     expect(await valueOf(warm, "s", path)).toBe(1);
     expect(steps).toBe(1);
-    expect(warm.answer("s").kind).toBe("ok");
+    expect(warm.answer(sessionIdOf("s")).kind).toBe("ok");
     chmodSync(sub, 0o000);
     try {
       for (const fold of [warm, counting()]) {
-        const out = await fold.read("s", path);
+        const out = await fold.read(sessionIdOf("s"), path);
         expect(out.kind).toBe("failed");
         // The open is what classifies, so the reason names it.
         if (out.kind === "failed")
           expect(out.reason).toMatch(/EACCES: permission denied, open /);
         // What a draw reads is the failure too, not the prior ok.
-        expect(fold.answer("s").kind).toBe("failed");
+        expect(fold.answer(sessionIdOf("s")).kind).toBe("failed");
       }
     } finally {
       chmodSync(sub, 0o755);
@@ -165,7 +166,7 @@ test("a session with no transcript is a real zero, never a failure", async () =>
     // Readable again: the warm fold's cursor still stands, nothing re-folded.
     expect(await valueOf(warm, "s", path)).toBe(1);
     expect(steps).toBe(1);
-    expect(warm.answer("s").kind).toBe("ok");
+    expect(warm.answer(sessionIdOf("s")).kind).toBe("ok");
   },
 );
 

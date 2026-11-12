@@ -10,6 +10,9 @@ import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
 
 // package.json is the version's sole authority; the tests read it the same way
 // the build does rather than restating the number.
@@ -151,7 +154,7 @@ describe("RuntimeStats.snapshot", () => {
       clients: [
         {
           client: null,
-          sessionId: "s1",
+          sessionId: S1,
           termCols: 148,
           rateLimits: "carried",
           claudeConfigDir: "/c",

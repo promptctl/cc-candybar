@@ -43,7 +43,8 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+const SESSION_C = sessionIdOf("session-c");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const RULE = "─".repeat(60);
@@ -107,7 +108,7 @@ function setup(over: Partial<DoctorEdge> = {}) {
       ...over,
     }),
   };
-  const toggled = (sid: string) => sessionState.get(sid, "toolbar-expanded");
+  const toggled = (sid: SessionId) => sessionState.get(sid, "toolbar-expanded");
   const doctor = (sid: string, c: VerbContext = ctx) =>
     VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(sid), c);
   const toggle = (sid: string, c: VerbContext = ctx) =>
@@ -146,7 +147,7 @@ describe("a gather holds no turn", () => {
     expect(gathers).toHaveLength(1);
     expect(turns.getStats().gathers).toBe(2);
     await toggle("session-c");
-    expect(toggled("session-c")).toBe("1");
+    expect(toggled(SESSION_C)).toBe("1");
     held.open();
     await Promise.all([a, b]);
     expect(reports()).toHaveLength(2);

@@ -39,9 +39,10 @@ import { effectsOf } from "./helpers/click";
 import { VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-const SID = "s1";
+const SID = sessionIdOf("s1");
 
 const PAYLOAD = {
   hook_event_name: "Status",

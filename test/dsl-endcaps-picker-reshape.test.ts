@@ -19,8 +19,9 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { ENDCAPS_SHAPES } from "../src/themes";
 import { globalsFor } from "./helpers/selection";
 import { buildRig } from "./helpers/rig";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s-reshape";
+const SID = sessionIdOf("s-reshape");
 const BASE_THEME = "textual-dark";
 
 // Two cells in one horizontal row, so the joiner runs BETWEEN them — that

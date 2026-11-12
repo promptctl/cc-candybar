@@ -37,6 +37,7 @@ import {
   type PlacementEffect,
 } from "../themes/policy.js";
 import type { AnimationTime, Instant } from "../utils/instant.js";
+import type { SessionId } from "../daemon/session-id.js";
 import { CLOSING_FLASH, flashBegins } from "../config/menu-timeout.js";
 import type {
   Drawing,
@@ -770,11 +771,11 @@ const MAX_SESSIONS = 256;
  * memory was evicted (or a restarted daemon) starts its effect again at t = 0.
  */
 export class EffectSessions<Line> {
-  private readonly sessions = new Map<string, SessionEffects<Line>>();
+  private readonly sessions = new Map<SessionId, SessionEffects<Line>>();
 
   constructor(private readonly maxSessions: number = MAX_SESSIONS) {}
 
-  of(sessionId: string): SessionEffects<Line> {
+  of(sessionId: SessionId): SessionEffects<Line> {
     const known =
       this.sessions.get(sessionId) ?? new SessionEffects<Line>(sessionId);
     this.sessions.delete(sessionId);

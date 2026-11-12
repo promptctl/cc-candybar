@@ -36,6 +36,10 @@ import {
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
+
 const SGR = /\x1b\[[0-9;]*m/g;
 
 test("colour depth none keeps every link the bar draws in colour", async () => {
@@ -48,7 +52,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
-  recordRender(sessionState, "s1");
+  recordRender(sessionState, S1);
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
     const ctx = testVerbContext(sessionState, undefined, config);
@@ -59,7 +63,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
     const effective = () =>
       resolveEffectiveGlobals(
         config,
-        (key) => sessionState.get("s1", key),
+        (key) => sessionState.get(S1, key),
         () => false,
       );
     const effectiveDepth = (): ColorCompatibility =>

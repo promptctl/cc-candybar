@@ -22,6 +22,10 @@ import { swatch } from "../src/render/swatch";
 import { menuPageKey } from "../src/config/menu-keys";
 import { buildRig } from "./helpers/rig";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
+
 const THEMES = listResolvablePaletteNames();
 
 const cw = (s: string): number => new RichText(s).cellLength;
@@ -74,7 +78,7 @@ function pickerConfig(): string {
 function pickerBar(style: Endcaps, padding = 0) {
   const rig = buildRig({ source: pickerConfig() });
   const renderPage = (width: number, page: number, wrap = true): Frame => {
-    rig.sessionState.set("s1", "theme-page", String(page));
+    rig.sessionState.set(S1, "theme-page", String(page));
     return rig.draw({ opts: { endcaps: style, wrap, width, padding } }).frame;
   };
   return { renderPage };
@@ -275,11 +279,11 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       themePage: number,
       openStyle = false,
     ): Frame => {
-      rig.sessionState.set("s1", THEME_OPEN, "applyTheme");
-      rig.sessionState.set("s1", THEME_PAGE, String(themePage));
+      rig.sessionState.set(S1, THEME_OPEN, "applyTheme");
+      rig.sessionState.set(S1, THEME_PAGE, String(themePage));
       if (openStyle) {
-        rig.sessionState.set("s1", ENDCAPS_OPEN, "applyEndcaps");
-        rig.sessionState.set("s1", STYLE_PAGE, "0");
+        rig.sessionState.set(S1, ENDCAPS_OPEN, "applyEndcaps");
+        rig.sessionState.set(S1, STYLE_PAGE, "0");
       }
       return rig.draw({ opts: { endcaps: style, width, padding } }).frame;
     };

@@ -8,6 +8,9 @@ import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
 import type { ServingDaemon } from "../../src/daemon/limits";
 import { memoryStateFile } from "./state-file";
 import type { ClientHint } from "../../src/client-hint";
+import { sessionIdOf } from "../../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
 
 // One published install: the daemon's bundle and the native client beside it.
 export const HEALTHY_BUNDLE = "/opt/cc/dist/index.mjs";
@@ -168,7 +171,7 @@ export const reportedFrame = (
   claudeConfigDir,
   projectDir,
   ago: 1,
-  sessionId,
+  sessionId: sessionIdOf(sessionId),
 });
 
 // That daemon, as `cc-candybar doctor` asks it: one session drawn a second
@@ -180,11 +183,11 @@ export const healthyDaemonIn = (
   Promise.resolve({
     rateLimits: {
       kind: "ok",
-      value: [{ rateLimits: "carried", claudeConfigDir, sessionId: "s1", ago: 1 }],
+      value: [{ rateLimits: "carried", claudeConfigDir, sessionId: S1, ago: 1 }],
     },
     transcripts: {
       kind: "ok",
-      value: [{ transcript: HEALTHY_TRANSCRIPT, sessionId: "s1", ago: 1 }],
+      value: [{ transcript: HEALTHY_TRANSCRIPT, sessionId: S1, ago: 1 }],
     },
     frames: {
       kind: "ok",
@@ -192,7 +195,7 @@ export const healthyDaemonIn = (
     },
     widths: {
       kind: "ok",
-      value: [{ sessionId: "s1", ago: 1, role: "statusline", termCols: 148 }],
+      value: [{ sessionId: S1, ago: 1, role: "statusline", termCols: 148 }],
     },
     clients: {
       kind: "ok",
@@ -201,7 +204,7 @@ export const healthyDaemonIn = (
         clients: [
           {
             client: { kind: "native", bundle: HEALTHY_BUNDLE, source: null },
-            sessionId: "s1",
+            sessionId: S1,
             ago: 1,
           },
         ],

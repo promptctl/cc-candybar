@@ -44,6 +44,7 @@ import {
 import type { SourceParse } from "./parse.js";
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
+import { parseSessionId, type SessionId } from "../daemon/session-id.js";
 import { Holds } from "../utils/holds.js";
 import { timeoutSignal } from "../time";
 import {
@@ -172,6 +173,17 @@ export interface StateOptions {
 // [LAW:no-mode-explosion] One axis of variability less; configs cannot
 // drift on which variable carries the session id.
 export const SESSION_ID_VAR_NAME = "session.id";
+
+// [LAW:parse-dont-validate] exception: the session a `state` variable keys by
+// is read back from the `session.id` input, which a config can redeclare, so
+// the id the hook door checked arrives here unbranded and is checked again. A
+// value the checkpoint refuses (a non-string, or a name no file could carry)
+// reads as no session, with no warning: every `state` variable answers its
+// fallback. The fix is the view handing its checked SessionId in.
+function stateSessionOf(value: unknown): SessionId | null {
+  const parsed = parseSessionId(value);
+  return parsed.ok ? parsed.id : null;
+}
 
 // ─── Private infrastructure ───────────────────────────────────────────────────
 
@@ -904,8 +916,8 @@ export class SourceRegistry {
       // value as a string here. A user who redeclares session.id as a
       // non-string variable receives empty state lookups — the failure
       // mode is loud-by-absence rather than silently coerced.
-      const sessionId = read(SESSION_ID_VAR_NAME);
-      if (typeof sessionId !== "string" || !sessionId) return fallback;
+      const sessionId = stateSessionOf(read(SESSION_ID_VAR_NAME));
+      if (sessionId === null) return fallback;
       const value = sessionState.get(sessionId, opts.key);
       return value !== null ? value : fallback;
     });
@@ -918,11 +930,9 @@ export class SourceRegistry {
   // never changes.
   stateRevision(): number {
     const sessionId = this.store.has(SESSION_ID_VAR_NAME)
-      ? this.store.read(SESSION_ID_VAR_NAME)
-      : "";
-    return this.sessionState !== undefined &&
-      typeof sessionId === "string" &&
-      sessionId !== ""
+      ? stateSessionOf(this.store.read(SESSION_ID_VAR_NAME))
+      : null;
+    return this.sessionState !== undefined && sessionId !== null
       ? this.sessionState.revision(sessionId)
       : 0;
   }

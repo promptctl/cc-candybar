@@ -28,6 +28,7 @@ import type { StoresRead } from "./edge.js";
 import { parseMarkBook } from "./mark-book.js";
 import { parseClickedTerminals } from "./clicked-terminals.js";
 import { parsePostMortemsRead } from "./post-mortems-read.js";
+import { parseSessionId } from "../daemon/session-id.js";
 
 export interface DaemonClients {
   readonly bundle: string;
@@ -88,27 +89,31 @@ export function parseDaemonClients(stats: StatsSnapshot): Asked<DaemonClients> {
     };
   }
   const sightings = sightingRecords(stats);
-  if (
-    !sightings.every(
-      (c) => typeof c.ago === "number" && typeof c.sessionId === "string",
-    )
-  ) {
+  if (!sightings.every((c) => typeof c.ago === "number")) {
     return {
       kind: "failed",
-      reason: `the running daemon (${stats.version}) reported clients without their age or session: ${JSON.stringify(stats.clients)}`,
+      reason: `the running daemon (${stats.version}) reported clients without their age: ${JSON.stringify(stats.clients)}`,
     };
   }
-  return {
-    kind: "ok",
-    value: {
-      bundle: stats.bundle,
-      clients: sightings.map((c) => ({
-        client: sanitizeClient(c.client) ?? null,
-        sessionId: c.sessionId as string,
-        ago: c.ago as number,
-      })),
-    },
-  };
+  const clients: Array<DaemonClients["clients"][number]> = [];
+  for (const c of sightings) {
+    // [LAW:parse-dont-validate] The session id crosses the same checkpoint a
+    // render's hook JSON does; a refused one fails the read as a malformed
+    // sighting does above.
+    const sessionId = parseSessionId(c.sessionId);
+    if (!sessionId.ok) {
+      return {
+        kind: "failed",
+        reason: `the running daemon (${stats.version}) reported a client whose session id ${sessionId.problem}: ${JSON.stringify(stats.clients)}`,
+      };
+    }
+    clients.push({
+      client: sanitizeClient(c.client) ?? null,
+      sessionId: sessionId.id,
+      ago: c.ago as number,
+    });
+  }
+  return { kind: "ok", value: { bundle: stats.bundle, clients } };
 }
 
 const isPostMortem = (m: unknown): m is PostMortem => {
@@ -228,7 +233,7 @@ export const parseRateLimitSightings = (
     stats,
     (c): c is RateLimitSightings[number] =>
       typeof c.ago === "number" &&
-      typeof c.sessionId === "string" &&
+      parseSessionId(c.sessionId).ok &&
       typeof c.claudeConfigDir === "string" &&
       (RATE_LIMITS_SEEN as readonly unknown[]).includes(c.rateLimits),
     "the rate-limit windows they carried",
@@ -244,7 +249,7 @@ export const parseTranscriptSightings = (
       const t = c.transcript as Partial<Record<string, unknown>> | undefined;
       return (
         typeof c.ago === "number" &&
-        typeof c.sessionId === "string" &&
+        parseSessionId(c.sessionId).ok &&
         typeof t?.path === "string" &&
         typeof t.answered === "boolean"
       );
@@ -262,7 +267,7 @@ export const parseFrameSightings = (
       typeof c.ago === "number" &&
       typeof c.claudeConfigDir === "string" &&
       typeof c.projectDir === "string" &&
-      typeof c.sessionId === "string" &&
+      parseSessionId(c.sessionId).ok &&
       isRole(c) &&
       (FRAMES_SEEN as readonly unknown[]).includes(c.frame),
     "what they drew and from which project",
@@ -275,7 +280,7 @@ export const parseWidthSightings = (
   sightingHalf(
     stats,
     (c): c is WidthSightings[number] =>
-      typeof c.sessionId === "string" &&
+      parseSessionId(c.sessionId).ok &&
       typeof c.ago === "number" &&
       isRole(c) &&
       (c.termCols === null || typeof c.termCols === "number"),

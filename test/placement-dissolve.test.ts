@@ -25,6 +25,8 @@ import { decideEffectName, type EffectName } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
+const S_ID = sessionIdOf("s");
 
 const START = 1_800_000_000 as Instant;
 const at = (seconds: number): Instant => (START + seconds) as Instant;
@@ -268,7 +270,7 @@ describe("a trigger replays its own row only while nothing hangs open under it",
     const on = renderer(cfg);
     const off = renderer(cfg, on.session);
     try {
-      if (open) on.session.set("s", "groups.more", "more");
+      if (open) on.session.set(S_ID, "groups.more", "more");
       const fx = new SessionEffects<RenderedLine>("s");
       on.render({ shown: true, when: at(0) }, fx, true);
       const drawn = textOf(on.render({ shown: true, when: at(1) }, fx, true));
@@ -328,7 +330,7 @@ describe("a write to the session's state ends every dissolve in flight", () => {
 
   test("a click: the next frame is byte-identical to no transitions", () => {
     const { on, off } = midDissolve((session) =>
-      session.set("s", "groups.more", "more"),
+      session.set(S_ID, "groups.more", "more"),
     );
     expect(textOf(on)).toContain("EXTRA");
     expect(textOf(on)).not.toContain("MIDDLE");
@@ -337,7 +339,7 @@ describe("a write to the session's state ends every dissolve in flight", () => {
 
   test("✎ arrange: the first frame after it is byte-identical to no transitions", () => {
     const { on, off } = midDissolve((session) =>
-      session.set("s", "edit.mode", "arrange"),
+      session.set(S_ID, "edit.mode", "arrange"),
     );
     expect(on.rows).toEqual(off.rows);
   });

@@ -41,8 +41,9 @@ import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { VERB_SET_STATE } from "../src/click/wire";
 import type { DslConfig } from "../src/config/dsl-types";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s1";
+const SID = sessionIdOf("s1");
 
 // Static effective values: this file only ever OPENS disclosures, never picks
 // an option, so the daemon-resolved labels stay fixed for the whole run and the

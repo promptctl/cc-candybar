@@ -62,6 +62,10 @@ import {
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { menuPageKey } from "../src/config/menu-keys";
 
+import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
+
 /** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
   const walk = (node: CompiledNode, address: Address): Address | undefined => {
@@ -140,7 +144,7 @@ function ownUrls(rendered: Frame): string[] {
   return ownLinks(urls);
 }
 
-function menuBar(src: string, sessionId = "s1", look?: string) {
+function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
   const rig = buildRig({ source: src, palettes: ALLOWED, sessionId });
   const palette = getThemePalette("textual-dark");
   const sink = new Map<string, readonly RichText[]>();
@@ -628,7 +632,7 @@ describe("toggle round trip + drop stacking", () => {
     const { render, clickToggle, sessionState } =
       menuBar(MENU_SRC);
     await clickToggle(render(), TKEY, "applyTheme");
-    expect(sessionState.get("s1", TKEY)).toBe("applyTheme");
+    expect(sessionState.get(S1, TKEY)).toBe("applyTheme");
     const lines = textOf(render()).split("\n");
     expect(lines).toHaveLength(2); // row 0 + the dropped body
     expect(lines[0]).toContain("PICK"); // neighbor unmoved on row 0
@@ -700,8 +704,8 @@ describe("toggle round trip + drop stacking", () => {
     );
     if (!closeUrl) throw new Error("no close write rendered");
     await click(closeUrl);
-    expect(sessionState.get("s1", TKEY)).toBe("closed");
-    expect(sessionState.get("s1", PKEY)).toBe("0");
+    expect(sessionState.get(S1, TKEY)).toBe("closed");
+    expect(sessionState.get(S1, PKEY)).toBe("0");
     expect(textOf(render()).split("\n")).toHaveLength(1); // body gone
   });
 
@@ -726,8 +730,8 @@ describe("toggle round trip + drop stacking", () => {
     // into one batch: [sessionId, stateKey, "closed", pageKey, "0"].
     expect(close!.args.slice(1)).toEqual([TKEY, "closed", PKEY, "0"]);
     await click(pickUrl);
-    expect(sessionState.get("s1", TKEY)).toBe("closed");
-    expect(sessionState.get("s1", "theme")).toBe(pick!.args[2]);
+    expect(sessionState.get(S1, TKEY)).toBe("closed");
+    expect(sessionState.get(S1, "theme")).toBe(pick!.args[2]);
     expect(textOf(render()).split("\n")).toHaveLength(1); // closed on pick
   });
 });
@@ -761,7 +765,7 @@ describe("a {{ menu }} under a style wrapper still drops its body", () => {
     const { render, sessionState } = menuBar(wrapped(template));
     expect(textOf(render()).split("\n")).toHaveLength(1);
     // `link` replaces the trigger's own URL, so open it the way a click would.
-    sessionState.set("s1", TKEY, "applyTheme");
+    sessionState.set(S1, TKEY, "applyTheme");
     const lines = textOf(render()).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain("PICK");
@@ -780,7 +784,7 @@ describe("a segment that throws after its {{ menu }} evaluated", () => {
     );
     expect(src).not.toBe(MENU_SRC);
     const { render, sessionState, compiled } = menuBar(src);
-    sessionState.set("s1", TKEY, "applyTheme");
+    sessionState.set(S1, TKEY, "applyTheme");
     const lines = textOf(render()).split("\n");
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("⚠ themepicker");
@@ -1094,7 +1098,7 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
     expect(buzzUrl).toBeDefined();
     await click(buzzUrl!);
 
-    expect(sessionState.get("s1", "sound-effects")).toBe("buzz");
+    expect(sessionState.get(S1, "sound-effects")).toBe("buzz");
 
     // The gate is the inline domain itself — an out-of-domain value is
     // rejected loudly, proving the click passed a REAL derived allow-list
@@ -1378,7 +1382,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
 
   test("every style option's swatch is the BASE palette under that style, not the bar's already-styled one", async () => {
     const { render, sink, config, palette, clickToggle } =
-      menuBar(BOTH_PICKERS_SRC, "s1", "dim");
+      menuBar(BOTH_PICKERS_SRC, S1, "dim");
     render();
     await clickToggle(render(), LKEY, "applyStyle");
     render();
@@ -1406,7 +1410,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     // style, so "the already-styled palette" below is a palette that differs from
     // the base. Without this the next two expectations are vacuous — which is
     // exactly how they first shipped, passing while the style never arrived.
-    const floor = menuBar(BOTH_PICKERS_SRC, "s1", "none");
+    const floor = menuBar(BOTH_PICKERS_SRC, S1, "none");
     floor.render();
     await floor.clickToggle(floor.render(), LKEY, "applyStyle");
     floor.render();
@@ -1476,7 +1480,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
         "{ set: 'theme', from: 'themes' }",
         `{ set: 'word', from: ${JSON.stringify(WORDS)} }`,
       ),
-      "s1",
+      S1,
       "none",
     );
     render();

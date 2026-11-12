@@ -62,9 +62,10 @@ import { presetNames } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-const SID = "ef6";
+const SID = sessionIdOf("ef6");
 
 function opts(
   width: number,

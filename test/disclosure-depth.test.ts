@@ -63,10 +63,11 @@ import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
-const SID = "s1";
+const SID = sessionIdOf("s1");
 
 const OPTS = {
   endcaps: "powerline" as const,

@@ -45,6 +45,10 @@ import { linkUrls } from "../../helpers/frame";
 import { buildDaemon, bundleAt, statsOf } from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
 import { until } from "../../helpers/until";
+import { sessionIdOf } from "../../../src/daemon/session-id";
+
+const VALUE_REFUSED = sessionIdOf("value-refused");
+const VALUE_CLOSE = sessionIdOf("value-close");
 
 jest.setTimeout(30_000);
 
@@ -242,7 +246,7 @@ describe("the daemon is a value", () => {
     expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
     const refused = jest.fn();
     expect(() =>
-      daemon.subscribe("value-refused", {
+      daemon.subscribe(VALUE_REFUSED, {
         lane: "band",
         frame: () => {},
         refused,
@@ -377,7 +381,7 @@ describe("the daemon is a value", () => {
     // A feed on the lane the click turned on: a refused subscription is no
     // feed, and would leave nothing here for the close to end.
     const refused = jest.fn();
-    daemon.subscribe("value-close", {
+    daemon.subscribe(VALUE_CLOSE, {
       lane: "band",
       frame: () => {},
       refused,

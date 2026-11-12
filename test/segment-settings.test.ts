@@ -16,6 +16,8 @@ import { arrangedSegment } from "../src/config/edit-chrome";
 import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
 import type { LayoutNode } from "../src/config/dsl-types";
 import { resolvedStyle } from "../src/render/rich-theme.js";
+import { sessionIdOf } from "../src/daemon/session-id";
+const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -136,7 +138,7 @@ describe("two placements of a menu-hosting segment open independently", () => {
       await rt.click(url);
     };
     await open("menus.second.applyTheme");
-    expect(rt.sessionState.get("s1", "menus.second.applyTheme")).toBe(
+    expect(rt.sessionState.get(S1, "menus.second.applyTheme")).toBe(
       "applyTheme",
     );
     rt.render();
@@ -145,10 +147,10 @@ describe("two placements of a menu-hosting segment open independently", () => {
       rt.sink.get("picker")!.length,
     );
     await open("menus.picker.applyTheme");
-    expect(rt.sessionState.get("s1", "menus.picker.applyTheme")).toBe(
+    expect(rt.sessionState.get(S1, "menus.picker.applyTheme")).toBe(
       "applyTheme",
     );
-    expect(rt.sessionState.get("s1", "menus.second.applyTheme")).toBe(
+    expect(rt.sessionState.get(S1, "menus.second.applyTheme")).toBe(
       "applyTheme",
     );
   });

@@ -26,8 +26,9 @@ import { buildRig } from "./helpers/rig";
 import { effectsOf } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s-recolor";
+const SID = sessionIdOf("s-recolor");
 const BASE_THEME = "textual-dark";
 const PICKED_THEME = "textual-light";
 

@@ -25,7 +25,7 @@ import { instantOf } from "../src/utils/instant";
 import { ABSENT, failed, pendingOf, ok } from "../src/utils/outcome";
 import type { ClientHints } from "../src/daemon/protocol";
 import { sessionIdOf } from "../src/daemon/session-id";
-import type { ClaudeHookData } from "../src/utils/claude";
+import type { CheckedHookData } from "../src/renderer/request-context";
 import type { GitRead } from "../src/segments/git";
 import {
   absentOwners,
@@ -55,9 +55,9 @@ const PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 const HINTS: ClientHints = { tmux: PANE };
 const AT = instantOf(new Date(1_700_000_000_000));
 
-const HOOK = {
+const HOOK: CheckedHookData = {
   hook_event_name: "Status",
-  session_id: "frame-payload",
+  session_id: sessionIdOf("frame-payload"),
   transcript_path: "/no/such/transcript.jsonl",
   cwd: "/tmp",
   model: { id: "claude-opus-4-7", display_name: "Opus" },
@@ -70,7 +70,7 @@ const HOOK = {
     total_lines_added: 0,
     total_lines_removed: 0,
   },
-} as unknown as ClaudeHookData;
+};
 
 const GIT: GitRead = {
   branch: "main",
@@ -125,7 +125,6 @@ function counted(pr: unknown = ABSENT) {
   const lanes = declaredLanes(
     owners,
     {
-      sessionId: sessionIdOf(HOOK.session_id),
       hookData: HOOK,
       cwd: undefined,
       hints: HINTS,
@@ -233,7 +232,7 @@ describe("a frame's payload", () => {
     const { inputs, reads, request, deps } = counted();
     await request();
     const before = reads["today"];
-    deps.faults.refreshed(HOOK.session_id, "today", "scan threw");
+    deps.faults.refreshed(sessionIdOf(HOOK.session_id), "today", "scan threw");
     expect(todayReadingOf(inputs())).toEqual(failed("scan threw", "read"));
     expect(reads["today"]).toBe(before);
   });
@@ -243,7 +242,10 @@ describe("a frame's payload", () => {
     // session's frame has the one answered and not the other.
     const { inputs, request } = counted();
     await request();
-    const other = { ...inputs(), hookData: { ...HOOK, session_id: "other" } };
+    const other = {
+      ...inputs(),
+      hookData: { ...HOOK, session_id: sessionIdOf("other") },
+    };
     expect(payloadOf(other, DRAW).autocompact).toEqual(pendingOf("unread"));
     expect(payloadOf(inputs(), DRAW).autocompact).not.toEqual(
       pendingOf("unread"),
@@ -295,7 +297,7 @@ describe("a frame's payload", () => {
     }
     deps.contextProvider.refresh = refresh;
     await request();
-    expect(deps.faults.of(HOOK.session_id, "context")).toBeUndefined();
+    expect(deps.faults.of(sessionIdOf(HOOK.session_id), "context")).toBeUndefined();
   });
 
   // [LAW:no-silent-failure] A failed lane was logged by the refresh that

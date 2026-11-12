@@ -50,6 +50,10 @@ import type { TmuxHint } from "../src/tmux-hint";
 import type { TerminalEnvHint } from "../src/terminal-hint";
 import { instantOf } from "../src/utils/instant";
 
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
+
 const ALLOWED = new Set(listResolvablePaletteNames());
 const TAB_KEY = `${SETTINGS_NS}tab`;
 
@@ -117,7 +121,7 @@ function doctorBar(
   const { config, sessionState } = rig;
   // What draw-bar.ts records on a render: the stamped hints, as JSON.
   sessionState.set(
-    "s1",
+    S1,
     SESSION_CLIENT_HINTS_KEY,
     JSON.stringify({
       tmux,
@@ -127,7 +131,7 @@ function doctorBar(
     }),
   );
   const clients = new RenderSightings();
-  clients.see("s1", renderSaid(client.hint, sessionAt()), instantOf(new Date()), 0);
+  clients.see(S1, renderSaid(client.hint, sessionAt()), instantOf(new Date()), 0);
   const renderRaw = (): Frame => rig.draw({ payload: PAYLOAD }).frame;
   const render = (): string => textOf(renderRaw());
   const settingsPath = path.join(dir, "settings.json");
@@ -290,7 +294,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // said — the record `cc-candybar doctor` reads too — not the persisted hints.
   test("the width row reads the session's latest render", async () => {
     const rt = doctorBar(null);
-    rt.clients.see("s1", { ...renderSaid(healthyClient(), sessionAt()), termCols: 97 }, instantOf(new Date()), 1);
+    rt.clients.see(S1, { ...renderSaid(healthyClient(), sessionAt()), termCols: 97 }, instantOf(new Date()), 1);
     await rt.openTools();
     await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.logs.at(-1)).toMatch(/ termWidth=ok .* cols=97 widthOf=session /);
@@ -415,7 +419,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       `{\n  "statusLine": { "type": "command", "command": "cc-candybar" }\n}\n`,
     );
     rt.clients.see(
-      "s1",
+      S1,
       { ...renderSaid(healthyClient(), sessionAt()), frame: "moves" },
       instantOf(new Date()),
       1,
@@ -597,7 +601,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     await rt.openTools();
     await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain("tmux truecolor");
-    rt.sessionState.set("s1", SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
+    rt.sessionState.set(S1, SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
     const closed = rt.render();
     expect(closed).not.toContain("🩺 doctor");
     expect(closed).not.toContain("tmux truecolor");

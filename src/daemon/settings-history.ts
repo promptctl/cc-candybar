@@ -33,6 +33,7 @@ import type { DaemonLogger } from "../utils/logger";
 import { recordingView, type SessionStateRW } from "./session-state";
 import { BadVerbArgs } from "./verb-error";
 import { writeAtomic } from "../utils/atomic-write.js";
+import { sessionKeyed, type SessionId } from "./session-id";
 
 // [LAW:types-are-the-program] What a change touched and the two states it
 // stepped between. `null` is absence on both kinds: an unset session key, a
@@ -96,16 +97,20 @@ export const EMPTY_HISTORY_DEPTH: HistoryDepth = {
 
 export type HistoryState = Readonly<Record<string, SessionHistory>>;
 
+// What a storage loads: each session's history, keyed by a session id the
+// storage has already checked.
+export type LoadedHistory = ReadonlyMap<SessionId, SessionHistory>;
+
 // [LAW:locality-or-seam] Persistence is the storage's property, as with
 // SessionStorage: the daemon binds a file, everything else keeps the ephemeral
 // default and never touches disk.
 export interface HistoryStorage {
-  load(): HistoryState;
+  load(): LoadedHistory;
   save(state: HistoryState): void;
 }
 
 export const EPHEMERAL_HISTORY_STORAGE: HistoryStorage = {
-  load: () => ({}),
+  load: () => new Map(),
   save: () => {},
 };
 
@@ -138,7 +143,7 @@ const EMPTY: SessionHistory = { past: [], future: [] };
 export interface Journal {
   readonly sessionState: SessionStateRW;
   file(
-    sessionId: string,
+    sessionId: SessionId,
     file: string,
     before: string | null,
     after: string,
@@ -152,7 +157,7 @@ export interface Journal {
 
 // A pending change, keyed by what it touched so a click that writes one target
 // twice records one change from its first `before` to its last `after`.
-type Pending = Map<string, Map<string, Change>>;
+type Pending = Map<SessionId, Map<string, Change>>;
 
 const identity = (c: Change): string =>
   c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
@@ -164,13 +169,13 @@ export class SettingsHistory {
   // whole next state is adopted by `replace`, which keeps its order (the
   // recency) and moves only the sessions whose history changed, so one
   // session's click recomputes no other session's payload.
-  private readonly held = observable.map<string, SessionHistory>(undefined, {
+  private readonly held = observable.map<SessionId, SessionHistory>(undefined, {
     deep: false,
   });
-  private get state(): ReadonlyMap<string, SessionHistory> {
+  private get state(): ReadonlyMap<SessionId, SessionHistory> {
     return this.held;
   }
-  private set state(next: Map<string, SessionHistory>) {
+  private set state(next: Map<SessionId, SessionHistory>) {
     runInAction(() => this.held.replace(next));
   }
 
@@ -179,10 +184,10 @@ export class SettingsHistory {
     private readonly logger: DaemonLogger,
     private readonly storage: HistoryStorage = EPHEMERAL_HISTORY_STORAGE,
   ) {
-    this.state = new Map(Object.entries(storage.load()));
+    this.state = new Map(storage.load());
   }
 
-  depth(sessionId: string): HistoryDepth {
+  depth(sessionId: SessionId): HistoryDepth {
     const { past, future, savepoint } = this.state.get(sessionId) ?? EMPTY;
     return {
       undo: past.length,
@@ -191,14 +196,14 @@ export class SettingsHistory {
     };
   }
 
-  history(sessionId: string): SessionHistory {
+  history(sessionId: SessionId): SessionHistory {
     return this.state.get(sessionId) ?? EMPTY;
   }
 
   begin(): Journal {
     const pending: Pending = new Map();
     let written = false;
-    const note = (sessionId: string, change: Change): void => {
+    const note = (sessionId: SessionId, change: Change): void => {
       written = true;
       const changes = pending.get(sessionId) ?? new Map<string, Change>();
       const earlier = changes.get(identity(change));
@@ -213,7 +218,7 @@ export class SettingsHistory {
     // released by whichever control moved the key — `✎ arrange`, a
     // hand-authored toggle, `✓ save`, `↩ cancel` — and no control has to
     // remember to. The key itself is navigation, never a step.
-    const toggles = new Map<string, EditToggle>();
+    const toggles = new Map<SessionId, EditToggle>();
     const sessionState = recordingView(
       this.sessionState,
       // Every key, since a write of any can move a lane: only settings are steps.
@@ -273,7 +278,7 @@ export class SettingsHistory {
   }
 
   // Returns the step it restored, so the caller can say what changed.
-  undo(sessionId: string): Step {
+  undo(sessionId: SessionId): Step {
     const history = this.history(sessionId);
     const step = history.past.at(-1);
     if (step === undefined) {
@@ -293,7 +298,7 @@ export class SettingsHistory {
   // refusal names what was kept, loudly. Edit mode stays where it is — the
   // click that cancels also leaves — so the savepoint is taken again at the
   // stack as it now stands. Returns what it put back.
-  rewind(sessionId: string): Step {
+  rewind(sessionId: SessionId): Step {
     const history = this.history(sessionId);
     const { savepoint } = history;
     if (savepoint === undefined) {
@@ -320,7 +325,7 @@ export class SettingsHistory {
     return putBack;
   }
 
-  redo(sessionId: string): Step {
+  redo(sessionId: SessionId): Step {
     const history = this.history(sessionId);
     const { past, future } = history;
     const step = future.at(-1);
@@ -344,7 +349,7 @@ export class SettingsHistory {
   // by name, and its now-unreachable changes leave both stacks (see the
   // header).
   private apply(
-    sessionId: string,
+    sessionId: SessionId,
     step: Step,
     to: "before" | "after",
     verb: "undo" | "redo" | "rewind",
@@ -398,13 +403,17 @@ export class SettingsHistory {
     }
   }
 
-  private read(sessionId: string, change: Change): string | null {
+  private read(sessionId: SessionId, change: Change): string | null {
     return change.kind === "session"
       ? this.sessionState.get(sessionId, change.key)
       : readConfigText(change.file);
   }
 
-  private write(sessionId: string, change: Change, value: string | null): void {
+  private write(
+    sessionId: SessionId,
+    change: Change,
+    value: string | null,
+  ): void {
     if (change.kind === "file") {
       writeConfigText(change.file, value, this.logger);
     } else if (value === null) {
@@ -417,7 +426,7 @@ export class SettingsHistory {
   // Move-to-end keeps insertion order as recency, so the bounds drop the
   // session that changed least recently. The new state is adopted only once
   // it is saved, so memory never holds a step the file could not.
-  private put(sessionId: string, history: SessionHistory): void {
+  private put(sessionId: SessionId, history: SessionHistory): void {
     const next = new Map(this.state);
     next.delete(sessionId);
     if (
@@ -447,7 +456,7 @@ export class SettingsHistory {
   }
 }
 
-function weight(state: ReadonlyMap<string, SessionHistory>): number {
+function weight(state: ReadonlyMap<SessionId, SessionHistory>): number {
   let bytes = 0;
   for (const { past, future, savepoint } of state.values()) {
     for (const step of [
@@ -702,6 +711,7 @@ export function fileHistoryStorage(
 ): HistoryStorage {
   return {
     load: () => {
+      const loaded = new Map<SessionId, SessionHistory>();
       let raw: string;
       try {
         raw = fs.readFileSync(file, "utf8");
@@ -713,7 +723,7 @@ export function fileHistoryStorage(
             `settings-history read failed (${code}); starting empty`,
           );
         }
-        return {};
+        return loaded;
       }
       try {
         const parsed: unknown = JSON.parse(raw);
@@ -724,25 +734,27 @@ export function fileHistoryStorage(
           Object.values(parsed).every(isSessionHistory)
         ) {
           const retired = new Set<string>();
-          const state = Object.fromEntries(
-            Object.entries(parsed as HistoryState).map(([sid, history]) => [
-              sid,
-              withoutRetiredKeys(history, retired),
-            ]),
+          const keyed = sessionKeyed(parsed as HistoryState, (key, problem) =>
+            logger(
+              "warn",
+              `settings-history load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
+            ),
           );
+          for (const [id, history] of keyed)
+            loaded.set(id, withoutRetiredKeys(history, retired));
           if (retired.size > 0) {
             logger(
               "warn",
               `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`,
             );
           }
-          return state;
+          return loaded;
         }
       } catch {
         // reported below
       }
       logger("warn", "settings-history load: unexpected shape, starting empty");
-      return {};
+      return loaded;
     },
     save: (state) => {
       try {

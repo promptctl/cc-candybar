@@ -5,6 +5,7 @@
 // [LAW:single-enforcer] Every spawn goes through src/proc/launch (tmux through
 // src/proc/tmux), under its own launch category.
 
+import type { SessionId } from "./session-id.js";
 import fs from "node:fs";
 import { sleep, type Timekeeper } from "../time";
 import {
@@ -262,7 +263,7 @@ const FOLLOW_POLL_MS = 200;
 // directly.
 export function productionLaneEdge(
   launcher: Launcher,
-  following: (sessionId: string) => ReadonlySet<Lane>,
+  following: (sessionId: SessionId) => ReadonlySet<Lane>,
   closing: AbortSignal,
   clock: Timekeeper,
   probe: Pick<ProcessProbe, "alive">,

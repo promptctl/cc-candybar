@@ -27,6 +27,7 @@ import { quietLogger, type DaemonLogger } from "../utils/logger";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import type { Timekeeper } from "../time";
 import { failed, ok, type Outcome, type Reading } from "../utils/outcome";
+import type { SessionId } from "../daemon/session-id";
 
 export type { TodoItem } from "../utils/transcript-activity";
 
@@ -174,7 +175,7 @@ export class ActivityProvider {
   // the payload projection drops every field of an empty one, so "nothing is
   // happening" reaches the templates as absence either way.
   async getActivityInfo(
-    sessionId: string,
+    sessionId: SessionId,
     hookData: ClaudeHookData,
   ): Promise<Outcome<ActivityInfo>> {
     return activityFrom(
@@ -184,14 +185,14 @@ export class ActivityProvider {
   }
 
   // The session's activity as its last refresh left it, for a draw.
-  activityOf(sessionId: string): Reading<ActivityInfo> {
+  activityOf(sessionId: SessionId): Reading<ActivityInfo> {
     const answer = this.fold.answer(sessionId);
     return answer.kind === "pending" ? answer : activityFrom(sessionId, answer);
   }
 }
 
 function activityFrom(
-  sessionId: string,
+  sessionId: SessionId,
   folded: FoldOutcome<ActivityState>,
 ): Outcome<ActivityInfo> {
   return folded.kind === "failed"

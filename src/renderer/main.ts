@@ -70,7 +70,7 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
             {
               kind: "present",
               id,
-              session: event.context.sessionId,
+              session: event.context.hookData.session_id,
               surface: "statusline",
               request: event.id,
               frame,

@@ -250,7 +250,7 @@ describe("the close as a renderer turn", () => {
   test("is a menu-idle turn for the session, at the clock's instant", async () => {
     const { host, inputs } = hostAnswering({
       kind: "answered",
-      output: { effects: [], subscriptions: { sources: {} }, record: [] },
+      output: { effects: [], subscriptions: { sources: new Map() }, record: [] },
     });
     const idle = {
       idleS: 30,

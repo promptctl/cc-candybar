@@ -27,6 +27,9 @@ import { stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -59,7 +62,7 @@ function pickerConfig(closeOnPick: boolean, paged: boolean): string {
   }`;
 }
 
-function pickerBar(source: string, sessionId = "s1") {
+function pickerBar(source: string, sessionId = S1) {
   const rig = buildRig({ source, sessionId });
   const { config, sessionState } = rig;
   const render = (width: number, wrap = true): Frame =>
@@ -72,7 +75,7 @@ function pickerBar(source: string, sessionId = "s1") {
       for (let i = 0; i < pairs.length; i += 2) {
         const result = gate.validate(pairs[i]!, pairs[i + 1]!);
         if (!result.ok) throw new Error(`click rejected: ${result.reason}`);
-        sessionState.set(sid!, pairs[i]!, result.value);
+        sessionState.set(sessionIdOf(sid!), pairs[i]!, result.value);
       }
     }
   };
@@ -97,7 +100,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     );
     expect(triggerUrl).toBeDefined();
     click(triggerUrl!);
-    expect(sessionState.get("s1", "theme-page")).toBe("0");
+    expect(sessionState.get(S1, "theme-page")).toBe("0");
 
     const open = render(80);
     expect(textOf(open)).toContain("✕");
@@ -109,7 +112,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     const { render, click, sessionState } = pickerBar(
       pickerConfig(true, true),
     );
-    sessionState.set("s1", "theme-page", "0");
+    sessionState.set(S1, "theme-page", "0");
     const open = render(80);
     const themeUrl = linkUrls(open).find((u) => {
       const e = effectsOf(u);
@@ -126,15 +129,15 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     expect(eff[0]!.args[1]).toBe("theme-pick");
     expect(eff[1]!.args.slice(-2)).toEqual(["theme-page", "-1"]);
     click(themeUrl!);
-    expect(sessionState.get("s1", "theme-pick")).toBe(eff[0]!.args[2]);
-    expect(sessionState.get("s1", "theme-page")).toBe("-1"); // closed
+    expect(sessionState.get(S1, "theme-pick")).toBe(eff[0]!.args[2]);
+    expect(sessionState.get(S1, "theme-page")).toBe("-1"); // closed
   });
 
   test("closeOnPick=false: a theme click applies only (no page reset)", () => {
     const { render, sessionState } = pickerBar(
       pickerConfig(false, true),
     );
-    sessionState.set("s1", "theme-page", "0");
+    sessionState.set(S1, "theme-page", "0");
     const themeUrl = linkUrls(render(80)).find((u) => {
       const e = effectsOf(u)[0]!;
       return e.verb === "set-state" && e.args.includes("theme-pick");
@@ -152,7 +155,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
       '{{ picker "applyTheme" "themePage" }}',
     );
     const { render, sessionState } = pickerBar(src);
-    sessionState.set("s1", "theme-page", "0");
+    sessionState.set(S1, "theme-page", "0");
     const open = render(80);
     expect(textOf(open)).toContain("✕"); // open: the close affordance is present
     const themeUrl = linkUrls(open).find((u) => {
@@ -168,7 +171,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     const { render, click, sessionState } = pickerBar(
       pickerConfig(true, true),
     );
-    sessionState.set("s1", "theme-page", "0");
+    sessionState.set(S1, "theme-page", "0");
     const open = render(30); // narrow → forces multiple pages
     const plain = textOf(open);
     expect(plain).toContain("→");
@@ -183,14 +186,14 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     );
     expect(nextUrl).toBeDefined();
     click(nextUrl!);
-    expect(sessionState.get("s1", "theme-page")).toBe("1");
+    expect(sessionState.get(S1, "theme-page")).toBe("1");
   });
 
   test("wrap (paged=false): one page of ALL themes, no ←/→ even when narrow", () => {
     const { render, sessionState } = pickerBar(
       pickerConfig(true, false),
     );
-    sessionState.set("s1", "theme-page", "0");
+    sessionState.set(S1, "theme-page", "0");
     const plain = textOf(render(30));
     expect(plain).toContain("✕");
     expect(plain).not.toContain("→");
@@ -202,7 +205,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
 
   test("wrap (paged=false) with autoWrap off keeps the row one unbounded line", () => {
     const { render, sessionState } = pickerBar(pickerConfig(true, false));
-    sessionState.set("s1", "theme-page", "0");
+    sessionState.set(S1, "theme-page", "0");
     const lines = textOf(render(30, false)).split("\n");
     expect(
       lines.filter((line) => THEMES.every((t) => line.includes(t))),

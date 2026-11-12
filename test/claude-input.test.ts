@@ -33,6 +33,8 @@ import { instantOf } from "../src/utils/instant";
 import { lastClickError } from "../src/daemon/click-error";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { sessionIdOf } from "../src/daemon/session-id";
+const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -218,11 +220,11 @@ function runtime(tmux: TmuxHint | null) {
   );
   const sessionState = new SessionState();
   sessionState.set(
-    "s1",
+    S1,
     SESSION_RENDER_ORIGIN_KEY,
     encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }),
   );
-  sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
+  sessionState.set(S1, SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
@@ -280,7 +282,7 @@ describe("a slash click", () => {
     const rt = runtime(HINT);
     await clickUrl(rt.urls[0]!, rt.ctx);
     await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(/typed a command moments ago/);
-    expect(lastClickError(rt.sessionState, "s1")?.text ?? null).toMatch(/\/compact was not typed/);
+    expect(lastClickError(rt.sessionState, S1)?.text ?? null).toMatch(/\/compact was not typed/);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer", "display"]);
   });
 
@@ -296,7 +298,7 @@ describe("a slash click", () => {
   test("outside tmux: refused in the bar, and tmux is never run", async () => {
     const rt = runtime(null);
     await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(/not running inside tmux/);
-    expect(lastClickError(rt.sessionState, "s1")?.text ?? null).toMatch(
+    expect(lastClickError(rt.sessionState, S1)?.text ?? null).toMatch(
       /\/compact was not typed: this Claude Code is not running inside tmux/,
     );
     expect(invocations()).toEqual([]);
@@ -352,11 +354,11 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   );
   const sessionState = new SessionState();
   sessionState.set(
-    "s1",
+    S1,
     SESSION_RENDER_ORIGIN_KEY,
     encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", target: { source: "search" } }),
   );
-  sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
+  sessionState.set(S1, SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
@@ -419,7 +421,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     ]);
     await clickUrl(confirm!.url, rt.ctx);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/clear");
-    expect(rt.sessionState.get("s1", "commands.clear.armed")).toBe("disarmed");
+    expect(rt.sessionState.get(S1, "commands.clear.armed")).toBe("disarmed");
     expect(typedLines(clearLinks().flatMap((l) => l.effects))).toEqual([]);
   });
 
@@ -440,10 +442,10 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
       rt.ctx,
     );
     await expect(clickUrl(armed()!.url, rt.ctx)).rejects.toThrow(/not running inside tmux/);
-    expect(lastClickError(rt.sessionState, "s1")?.text ?? null).toMatch(
+    expect(lastClickError(rt.sessionState, S1)?.text ?? null).toMatch(
       /\/clear was not typed: this Claude Code is not running inside tmux/,
     );
-    expect(rt.sessionState.get("s1", "commands.clear.armed")).toBe("disarmed");
+    expect(rt.sessionState.get(S1, "commands.clear.armed")).toBe("disarmed");
     expect(invocations()).toEqual([]);
   });
 

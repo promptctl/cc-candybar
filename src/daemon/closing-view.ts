@@ -13,17 +13,18 @@ import {
   type StateWrite,
 } from "../config/disclosure-nest";
 import type { SessionStateRW } from "./session-state";
+import type { SessionId } from "./session-id";
 
 export function closingView(
   store: SessionStateRW,
-  nestOf: (sessionId: string) => DisclosureNest,
+  nestOf: (sessionId: SessionId) => DisclosureNest,
   log: (line: string) => void,
 ): SessionStateRW {
   // [LAW:dataflow-not-control-flow] Every write lands with the clears it
   // implies, read before any of it lands; a write that closes nothing clears
   // an empty list.
   const write = (
-    sessionId: string,
+    sessionId: SessionId,
     writes: readonly StateWrite[],
     land: () => void,
   ): void => {
@@ -41,7 +42,7 @@ export function closingView(
       log(`close-nested: folded=${folds.join(",")} (session=${sessionId})`);
     }
   };
-  const setBatch = (sessionId: string, pairs: readonly StateWrite[]): void =>
+  const setBatch = (sessionId: SessionId, pairs: readonly StateWrite[]): void =>
     write(sessionId, pairs, () => store.setBatch(sessionId, pairs));
   return {
     get: (sessionId, key) => store.get(sessionId, key),

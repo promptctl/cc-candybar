@@ -105,7 +105,7 @@ export async function answerStatusline(
         },
       },
       [
-        ["sid", req.sessionId],
+        ["sid", req.hookData.session_id],
         ["effect", String(effect.id)],
       ],
     );

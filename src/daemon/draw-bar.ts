@@ -182,7 +182,7 @@ export const RENDER_ANSWERS: Readonly<
 // and an event, never a frame, opened the view it draws.
 export function renderFrame(
   parts: RendererParts,
-  sessionId: string,
+  sessionId: SessionId,
   fps: number,
   at: Instant,
 ): FeedFrame | null {
@@ -243,7 +243,7 @@ export function renderFrame(
 // the tree that actually rendered.
 function sessionGlobals(
   parts: RendererParts,
-  sessionId: string,
+  sessionId: SessionId,
   state: DslRenderState,
 ): EffectiveGlobals {
   const { sessionState } = parts;
@@ -259,7 +259,7 @@ function sessionGlobals(
 // opens nothing (`holdView`).
 export function viewLanes(
   parts: DaemonParts,
-  sessionId: string,
+  sessionId: SessionId,
 ): LaneSwitches | null {
   const { renderCache } = parts;
   using hold = renderCache.holdView(sessionId);
@@ -281,7 +281,7 @@ export function viewLanes(
 export function lanesAt(
   parts: DaemonParts,
   origin: RenderOrigin,
-  sessionId: string,
+  sessionId: SessionId,
 ): LaneSwitches {
   const { renderCache, frameFeeds } = parts;
   using hold = renderCache.hold(
@@ -325,7 +325,7 @@ function contextFacts(
   facts: RequestFacts,
 ): void {
   noteFacts(facts, {
-    sid: req.sessionId,
+    sid: req.hookData.session_id,
     at: at.toFixed(3),
   });
   const { hints } = req;
@@ -421,7 +421,7 @@ function holdSessionAt(
   const origin = sessionRenderOrigin(
     req.requested,
     parts.sessionState,
-    req.sessionId,
+    req.hookData.session_id,
   );
   return parts.renderCache.holdSession(
     origin.projectDir,
@@ -456,7 +456,7 @@ export function setUpRender(
 // session has no view. It opens nothing (`holdView`).
 function setUpFrame(
   parts: RendererParts,
-  sessionId: string,
+  sessionId: SessionId,
   at: Instant,
   facts: RequestFacts,
 ): RenderSetup | null {
@@ -494,7 +494,7 @@ function setUpDraw(
   const { payloadProviders } = parts;
   try {
     const { entry, state, view } = hold;
-    const { sessionId, hints } = req;
+    const { hints } = req;
     // [LAW:dataflow-not-control-flow] One composition every render: the
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
@@ -509,7 +509,7 @@ function setUpDraw(
       req,
       at,
       facts,
-      sessionId,
+      sessionId: req.hookData.session_id,
       entry,
       state,
       view,
@@ -957,7 +957,7 @@ interface DrawnBar {
 // state-driven computed each render.
 function recordRequest(parts: RendererParts, req: CheckedRenderRequest): void {
   const { sessionState } = parts;
-  const sessionId = req.sessionId;
+  const sessionId = req.hookData.session_id;
   // [LAW:one-source-of-truth] The STAMPED hints: a click arrives with no
   // hints of its own, so the doctor (verbs/index.ts) reads the facts of this
   // session's last request from here, re-parsed through the same checkpoint.
@@ -1039,7 +1039,7 @@ export function laneSessionOf(
 // took it since.
 export function laneClicked(
   parts: DaemonParts,
-  sessionId: string,
+  sessionId: SessionId,
   before: LaneSwitches,
   after: LaneSwitches,
 ): void {
@@ -1119,7 +1119,7 @@ export async function answerRequest(
     setup,
     ANSWERING,
   );
-  const sessionId = req.sessionId;
+  const sessionId = req.hookData.session_id;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
@@ -1177,7 +1177,7 @@ function answerDelivered(
 // one list, and its click opens the one viewer: while it is open the statusline
 // shows it, the same body the lanes draw.
 function statuslineOf(
-  sessionId: string,
+  sessionId: SessionId,
   drawn: DrawnBar,
   elsewhere: readonly Lane[],
 ): Frame {

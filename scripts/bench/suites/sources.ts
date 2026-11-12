@@ -10,6 +10,7 @@ import path from "node:path";
 import { processWorld } from "../../../src/host.js";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
+import { sessionIdOf } from "../../../src/daemon/session-id.js";
 import { GitService } from "../../../src/segments/git.js";
 import {
   appendTurn,
@@ -23,7 +24,7 @@ import { repeat } from "../measure.js";
 import { measured, type Benchmark } from "../types.js";
 import fs from "node:fs";
 
-const SESSION = "bench-usage";
+const SESSION = sessionIdOf("bench-usage");
 
 const REPOS: ReadonlyArray<readonly [string, RepoShape, number]> = [
   ["small", { files: 100, commits: 20, modified: 5, untracked: 3 }, 40],

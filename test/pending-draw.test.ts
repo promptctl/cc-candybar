@@ -35,6 +35,8 @@ import { selectionFor } from "./helpers/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { sessionIdOf } from "../src/daemon/session-id";
+const S = sessionIdOf("s");
 
 const AT = 1_800_000_000 as Instant;
 
@@ -191,8 +193,8 @@ describe("a placement whose value is not answered yet draws where it stood", () 
   test("with edit mode's buttons beside it, every row keeps the width it drew", () => {
     const on = renderer(config(ROW));
     try {
-      on.session.set("s", "edit.mode", "arrange");
-      on.session.set("s", "edit.live", "open");
+      on.session.set(S, "edit.mode", "arrange");
+      on.session.set(S, "edit.live", "open");
       on.answer({ label: "a wide value", show: true });
       const drew = textOf(on.draw().frame).split("\n");
       expect(drew.join("\n")).toContain("a wide value");

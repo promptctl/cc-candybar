@@ -29,6 +29,17 @@ import {
 import { instantOf, type Instant } from "../src/utils/instant";
 import { heldClock } from "./helpers/held-clock";
 
+import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+
+const C = sessionIdOf("c");
+const BEFORE_CLEAR = sessionIdOf("before-clear");
+const ELSEWHERE = sessionIdOf("elsewhere");
+const AFTER_CLEAR = sessionIdOf("after-clear");
+
+const S = sessionIdOf("s");
+const SID_A = sessionIdOf("a");
+const B = sessionIdOf("b");
+
 // Where every harness's held clock stands at the start, in wall ms: a boundary
 // of every beat and period the cases use, so a case counts turns from a known
 // place, and as late in the epoch as the real wall stands, so the float noise
@@ -185,7 +196,7 @@ function harness(opts: {
     log: (_level, line) => log.push(line),
   });
   const note = (
-    sessionId: string,
+    sessionId: SessionId,
     req: string,
     order = ++state.order,
   ): void => {
@@ -262,15 +273,15 @@ const outputOf = (resp: Response): string =>
 test("while a lane draws the bar elsewhere, the statusline lane is sent the handoff line once, and the band the moving bar", () => {
   const { feeds, note, state, clock } = harness({ motion: "moving" });
   state.handoff = "the bar is drawn in the band";
-  note("s", "bar");
+  note(S, "bar");
   const band: string[] = [];
   const statusline: string[] = [];
   const closeBand = feeds.subscribe(
-    "s",
+    S,
     sub((r) => band.push(outputOf(r))),
   );
   const closeLine = feeds.subscribe(
-    "s",
+    S,
     sub((r) => statusline.push(outputOf(r)), "statusline"),
   );
   clock.advance(200);
@@ -295,24 +306,24 @@ test("while a lane draws the bar elsewhere, the statusline lane is sent the hand
 // every session it holds, but draws only the one its status line shows.
 test("a lane follows a session only while one of its subscribers draws it", () => {
   const { feeds, note } = harness({ motion: "still" });
-  note("s", "bar");
+  note(S, "bar");
   let drawing = false;
-  const close = feeds.subscribe("s", {
+  const close = feeds.subscribe(S, {
     ...sub(() => {}, "tmuxStatus"),
     drawing: () => drawing,
   });
-  expect(feeds.following("s").has("tmuxStatus")).toBe(false);
+  expect(feeds.following(S).has("tmuxStatus")).toBe(false);
   drawing = true;
-  expect(feeds.following("s").has("tmuxStatus")).toBe(true);
+  expect(feeds.following(S).has("tmuxStatus")).toBe(true);
   close();
 });
 
 test("a moving bar is drawn a moving period apart, every new frame pushed", () => {
   const { feeds, note, clock } = harness({ motion: "moving" });
-  note("s", "bar");
+  note(S, "bar");
   const got: string[] = [];
   const close = feeds.subscribe(
-    "s",
+    S,
     sub((r) => got.push(outputOf(r))),
   );
   clock.advance(500);
@@ -324,10 +335,10 @@ test("a moving bar is drawn a moving period apart, every new frame pushed", () =
 
 test("a still bar is drawn a still period apart and pushed only when it changes", () => {
   const { feeds, note, state, changes, clock } = harness({ motion: "still" });
-  note("s", "bar");
+  note(S, "bar");
   const got: string[] = [];
   const close = feeds.subscribe(
-    "s",
+    S,
     sub((r) => got.push(outputOf(r))),
   );
   clock.advance(100);
@@ -344,11 +355,11 @@ test("a still bar is drawn a still period apart and pushed only when it changes"
 
 test("a frame's copies are recorded once it goes out to a follower, never while none follows", () => {
   const { feeds, note, state, clock } = harness({ motion: "still" });
-  note("s", "bar");
+  note(S, "bar");
   clock.advance(50);
   expect(state.delivered).toEqual([]);
   const close = feeds.subscribe(
-    "s",
+    S,
     sub(() => {}),
   );
   clock.advance(100);
@@ -361,17 +372,17 @@ test("a new request is drawn at once, and two subscribers share every frame", ()
   const a: string[] = [];
   const b: string[] = [];
   const closeA = feeds.subscribe(
-    "s",
+    S,
     sub((r) => a.push(outputOf(r))),
   );
   clock.advance(50);
   expect(state.renders).toBe(0);
-  note("s", "first");
+  note(S, "first");
   clock.advance(20);
   // The request's own answer is its client's: the feed draws its frame.
   expect(state.renders).toBe(1);
   const closeB = feeds.subscribe(
-    "s",
+    S,
     sub((r) => b.push(outputOf(r))),
   );
   // The newcomer gets the bar as it stands, before any new render, and the
@@ -380,7 +391,7 @@ test("a new request is drawn at once, and two subscribers share every frame", ()
   expect(b).toEqual(["first#0"]);
   clock.advance(30);
   expect(state.renders).toBe(2);
-  note("s", "second");
+  note(S, "second");
   clock.advance(30);
   expect(state.renders).toBe(3);
   expect(a).toEqual(["first#0", "second#0"]);
@@ -397,9 +408,9 @@ test("a render slower than the period is followed by the next at once, and a wak
     motion: "moving",
     renderMs: 60,
   });
-  note("s", "bar");
+  note(S, "bar");
   const close = feeds.subscribe(
-    "s",
+    S,
     sub(() => {}),
   );
   clock.advance(10);
@@ -421,9 +432,9 @@ test("the last subscriber leaving stops the feed and logs what it drew", () => {
   const { feeds, note, state, changes, log, clock } = harness({
     motion: "moving",
   });
-  note("s", "bar");
+  note(S, "bar");
   const close = feeds.subscribe(
-    "s",
+    S,
     sub(() => {}),
   );
   clock.advance(100);
@@ -437,16 +448,16 @@ test("the last subscriber leaving stops the feed and logs what it drew", () => {
     /^feed sid="s" closed subscribers=0 .* drawn=(\d+) noted=0 noView=0 moving=\1 unseen=0 failed=0 pushed=\d+/,
   );
   // A request noted for a session nobody watches draws nothing.
-  note("s", "again");
+  note(S, "again");
   clock.advance(50);
   expect(state.renders).toBe(drawn);
 });
 
 test("a bar that moves where nobody can see it is drawn at the still rate, and its feed counts it", () => {
   const { feeds, note, state, log, clock } = harness({ motion: "unseen" });
-  note("s", "bar");
+  note(S, "bar");
   const close = feeds.subscribe(
-    "s",
+    S,
     sub(() => {}),
   );
   clock.advance(500);
@@ -462,10 +473,10 @@ test("a noted request is drawn at once, and the next frame falls due a period af
   const { feeds, note, state, log, clock } = harness({ motion: "still" });
   const got: string[] = [];
   const close = feeds.subscribe(
-    "s",
+    S,
     sub((r) => got.push(outputOf(r))),
   );
-  note("s", "bar");
+  note(S, "bar");
   clock.advance(200);
   expect(state.renders).toBe(1);
   clock.advance(150);
@@ -481,11 +492,11 @@ test("a request that arrived before the one held is not the session's data, howe
   const { feeds, note, clock } = harness({ motion: "still" });
   const got: string[] = [];
   const close = feeds.subscribe(
-    "s",
+    S,
     sub((r) => got.push(outputOf(r))),
   );
-  note("s", "newer", 2);
-  note("s", "older", 1);
+  note(S, "newer", 2);
+  note(S, "older", 1);
   clock.advance(20);
   close();
   expect(got).toEqual(["newer#0"]);
@@ -493,13 +504,13 @@ test("a request that arrived before the one held is not the session's data, howe
 
 test("a watched session's request outlives the eviction of the least recently noted", () => {
   const { feeds, note, state, changes, clock } = harness({ motion: "still" });
-  note("s", "bar");
+  note(S, "bar");
   const close = feeds.subscribe(
-    "s",
+    S,
     sub(() => {}),
   );
   clock.advance(20);
-  for (let i = 0; i < 300; i++) note(`other-${i}`, "x");
+  for (let i = 0; i < 300; i++) note(sessionIdOf(`other-${i}`), "x");
   const drawn = state.renders;
   changes.get("s")!();
   clock.advance(20);
@@ -510,11 +521,11 @@ test("a watched session's request outlives the eviction of the least recently no
 test("every subscriber is handed the bar with its lane's answer, and one joining later the bar as it stands", () => {
   const { feeds, note, state, clock } = harness({ motion: "still" });
   state.handoff = "the bar is drawn in the band";
-  note("s", "bar");
+  note(S, "bar");
   const barText = (bar: Frame): string => plainOf(bar.rows[0]!.runs);
   const seen: Array<[string, string]> = [];
   const follow = (lane: Lane): (() => void) =>
-    feeds.subscribe("s", {
+    feeds.subscribe(S, {
       lane,
       frame: (bar, json) => seen.push([barText(bar), json]),
       refused: () => {},
@@ -539,9 +550,9 @@ test("a frame that keeps failing the same way is logged once, and counted every 
     motion: "still",
     fails: true,
   });
-  note("s", "bar");
+  note(S, "bar");
   const close = feeds.subscribe(
-    "s",
+    S,
     sub(() => {}),
   );
   clock.advance(20);
@@ -559,9 +570,9 @@ describe("a feed's draws and its summary", () => {
   // next frame: one that comes into view is drawn at the moving rate from then.
   test("a moving bar that comes into view is drawn at the moving rate from then", () => {
     const { feeds, note, state, log, clock } = harness({ motion: "unseen" });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(50);
@@ -584,9 +595,9 @@ describe("a feed's draws and its summary", () => {
     const { feeds, note, state, changes, log, clock } = harness({
       motion: "moving",
     });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(200);
@@ -615,9 +626,9 @@ describe("a feed's draws and its summary", () => {
   // daemon's other work cost it.
   test("the summary states the rate the feed drew at over its life", () => {
     const { feeds, note, state, log, clock } = harness({ motion: "moving" });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(2000);
@@ -635,9 +646,9 @@ describe("a feed's draws and its summary", () => {
   // beside what it drew.
   test("the summary counts the parts its frames evaluated", () => {
     const { feeds, note, state, log, clock } = harness({ motion: "moving" });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(100);
@@ -654,9 +665,9 @@ describe("a feed's draws and its summary", () => {
   // lane's width treats its bar.
   test("the summary counts the strip items its frames' divided cells added", () => {
     const { feeds, note, state, log, clock } = harness({ motion: "moving" });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(100);
@@ -670,16 +681,16 @@ describe("a feed's draws and its summary", () => {
   // how many of those wakes found a frame already due.
   test("wakes of every cause at 1 ms intervals draw a shown feed at most once a moving period", () => {
     const { feeds, note, state, log, clock } = harness({ motion: "still" });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(1);
     expect(state.renders).toBe(1);
     const causes = ["data", "state", "reload", "visibility"] as const;
     for (let ms = 0; ms < 200; ms++) {
-      feeds.wake("s", causes[ms % causes.length]!);
+      feeds.wake(S, causes[ms % causes.length]!);
       clock.advance(1);
     }
     close();
@@ -698,14 +709,14 @@ describe("a feed's draws and its summary", () => {
 
   test("a feed whose pane nobody can see, woken at 1 ms intervals, draws at most once a still period", () => {
     const { feeds, note, state, clock } = harness({ motion: "unseen" });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(1);
     for (let ms = 0; ms < 1000; ms++) {
-      feeds.wake("s", "data");
+      feeds.wake(S, "data");
       clock.advance(1);
     }
     close();
@@ -724,9 +735,9 @@ describe("a feed's draws and its summary", () => {
       refresh: ["first", "period"],
     });
     tmux.recorded("pane=%1", "first", ok(null), 1);
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(1);
@@ -743,10 +754,10 @@ describe("a feed's draws and its summary", () => {
   // is coalesced into that frame, and the next falls due as the frame set it.
   test("a wake while a frame is drawn is coalesced into it", () => {
     const { feeds, note, state, log, clock } = harness({ motion: "still" });
-    note("s", "bar");
-    state.duringRender = () => feeds.wake("s", "data");
+    note(S, "bar");
+    state.duringRender = () => feeds.wake(S, "data");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(PERIODS.still - 1);
@@ -765,15 +776,15 @@ describe("a feed's draws and its summary", () => {
   test("a feed waiting for a view draws once the view that opens wakes it", () => {
     const { feeds, note, state, log, clock } = harness({ motion: "still" });
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(PERIODS.still * 2);
     expect(state.renders).toBe(0);
-    feeds.note("s", "bar", 1);
+    feeds.note(S, "bar", 1);
     clock.advance(PERIODS.still * 2);
     expect(state.renders).toBe(0);
-    note("s", "bar", 2);
+    note(S, "bar", 2);
     clock.advance(1);
     close();
     expect(state.renders).toBe(1);
@@ -786,12 +797,12 @@ describe("a feed's draws and its summary", () => {
   test("the frame a view's opening wakes is drawn at once, not spaced from a draw that found no view", () => {
     const { feeds, note, state, clock } = harness({ motion: "unseen" });
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(PERIODS.still / 8);
     expect(state.renders).toBe(0);
-    note("s", "bar");
+    note(S, "bar");
     clock.advance(1);
     close();
     expect(state.renders).toBe(1);
@@ -799,15 +810,15 @@ describe("a feed's draws and its summary", () => {
 
   test("wakeWhere draws at once only the watched sessions it matches", () => {
     const { feeds, note, state, clock } = harness({ motion: "still" });
-    note("a", "%1:a");
-    note("b", "%2:b");
-    note("c", "%1:c");
+    note(SID_A, "%1:a");
+    note(B, "%2:b");
+    note(C, "%1:c");
     const closeA = feeds.subscribe(
-      "a",
+      SID_A,
       sub(() => {}),
     );
     const closeB = feeds.subscribe(
-      "b",
+      B,
       sub(() => {}),
     );
     clock.advance(20);
@@ -830,9 +841,9 @@ test("a render slower than the moving period leaves the pace at the moving rate"
     motion: "moving",
     renderMs: 60,
   });
-  note("s", "bar");
+  note(S, "bar");
   const close = feeds.subscribe(
-    "s",
+    S,
     sub(() => {}),
   );
   clock.advance(400);
@@ -846,19 +857,19 @@ test("a render slower than the moving period leaves the pace at the moving rate"
 
 test("the feeds watch from the first feed opening to the last closing", () => {
   const { feeds, note, state } = harness({ motion: "still" });
-  note("a", "x");
-  note("b", "y");
+  note(SID_A, "x");
+  note(B, "y");
   expect(state.opened).toBe(0);
   const closeA = feeds.subscribe(
-    "a",
+    SID_A,
     sub(() => {}),
   );
   const closeA2 = feeds.subscribe(
-    "a",
+    SID_A,
     sub(() => {}),
   );
   const closeB = feeds.subscribe(
-    "b",
+    B,
     sub(() => {}),
   );
   expect([state.opened, state.stopped]).toEqual([1, 0]);
@@ -868,7 +879,7 @@ test("the feeds watch from the first feed opening to the last closing", () => {
   closeB();
   expect([state.opened, state.stopped]).toEqual([1, 1]);
   feeds.subscribe(
-    "a",
+    SID_A,
     sub(() => {}),
   )();
   expect([state.opened, state.stopped]).toEqual([2, 2]);
@@ -885,11 +896,11 @@ describe("a subscription's lane", () => {
       pane: true,
       tmuxStatus: false,
     };
-    note("s", "bar");
+    note(S, "bar");
     const refusals: Refusal[] = [];
     const frames: string[] = [];
     feeds.subscribe(
-      "s",
+      S,
       sub(
         (r) => frames.push(outputOf(r)),
         "band",
@@ -920,12 +931,12 @@ describe("a subscription's lane", () => {
     const { feeds, note, state, changes, log, clock } = harness({
       motion: "still",
     });
-    note("s", "bar");
+    note(S, "bar");
     const band: string[] = [];
     const pane: string[] = [];
     const refusals: Refusal[] = [];
     feeds.subscribe(
-      "s",
+      S,
       sub(
         (r) => band.push(outputOf(r)),
         "band",
@@ -933,7 +944,7 @@ describe("a subscription's lane", () => {
       ),
     );
     const closePane = feeds.subscribe(
-      "s",
+      S,
       sub((r) => pane.push(outputOf(r)), "pane"),
     );
     clock.advance(30);
@@ -984,10 +995,10 @@ describe("a subscription's lane", () => {
     const { feeds, note, state, changes, log, clock } = harness({
       motion: "still",
     });
-    note("s", "bar");
+    note(S, "bar");
     const got: string[] = [];
     const close = feeds.subscribe(
-      "s",
+      S,
       sub((r) => got.push(outputOf(r))),
     );
     clock.advance(20);
@@ -1014,7 +1025,7 @@ describe("a subscription's lane", () => {
     const { feeds, note, state, clock } = harness({ motion: "still" });
     const refusals: Refusal[] = [];
     feeds.subscribe(
-      "s",
+      S,
       sub(
         () => {},
         "pane",
@@ -1029,7 +1040,7 @@ describe("a subscription's lane", () => {
       pane: false,
       tmuxStatus: false,
     };
-    note("s", "bar");
+    note(S, "bar");
     clock.advance(20);
     expect(refusals.map((r) => r.code)).toEqual(["SWITCHED_OFF"]);
     expect(feeds.getStats()).toMatchObject({ feeds: 0, subscribers: 0 });
@@ -1045,10 +1056,10 @@ describe("a subscription's lane", () => {
       pane: true,
       tmuxStatus: false,
     };
-    note("s", "bar");
+    note(S, "bar");
     const refusals: Refusal[] = [];
     feeds.subscribe(
-      "s",
+      S,
       sub(
         () => {},
         "band",
@@ -1064,7 +1075,7 @@ describe("a subscription's lane", () => {
     };
     const frames: string[] = [];
     const close = feeds.subscribe(
-      "s",
+      S,
       sub((r) => frames.push(outputOf(r))),
     );
     clock.advance(20);
@@ -1081,14 +1092,14 @@ test("newestWhere finds the session of the newest request it matches, and counts
   const { feeds, note } = harness({ motion: "still" });
   const fromPane = (req: string): boolean => req.startsWith("%3:");
   expect(feeds.newestWhere(fromPane)).toBeNull();
-  note("before-clear", "%3:a");
-  note("elsewhere", "%4:a");
-  note("after-clear", "%3:b");
+  note(BEFORE_CLEAR, "%3:a");
+  note(ELSEWHERE, "%4:a");
+  note(AFTER_CLEAR, "%3:b");
   expect(feeds.newestWhere(fromPane)).toBe("after-clear");
   // A slow render of the old session arriving late is not newer.
-  note("before-clear", "%3:late", 1);
+  note(BEFORE_CLEAR, "%3:late", 1);
   expect(feeds.newestWhere(fromPane)).toBe("after-clear");
-  note("before-clear", "%3:c");
+  note(BEFORE_CLEAR, "%3:c");
   expect(feeds.newestWhere(fromPane)).toBe("before-clear");
   expect(feeds.getStats()).toMatchObject({ lookups: 4, found: 3 });
 });
@@ -1112,28 +1123,28 @@ describe("feedsOf", () => {
 
   test("a session nobody follows is unfollowed on every lane", () => {
     const { feeds, note, nowAt } = harness({ motion: "moving" });
-    note("s", "bar");
-    expect(feeds.feedsOf("s", nowAt())).toEqual(UNFOLLOWED_FEEDS);
-    expect(feedsFact(feeds.feedsOf("s", nowAt()))).toBe("-");
+    note(S, "bar");
+    expect(feeds.feedsOf(S, nowAt())).toEqual(UNFOLLOWED_FEEDS);
+    expect(feedsFact(feeds.feedsOf(S, nowAt()))).toBe("-");
   });
 
   test("counts each lane's subscribers and the frames pushed in the last second", () => {
     const { feeds, note, clock, nowAt } = harness({ motion: "moving" });
-    note("s", "bar");
+    note(S, "bar");
     const closeA = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "statusline"),
     );
     const closeB = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "statusline"),
     );
     const closeC = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "pane"),
     );
     clock.advance(1100);
-    const now = feeds.feedsOf("s", nowAt());
+    const now = feeds.feedsOf(S, nowAt());
     expect(now.band).toEqual(UNFOLLOWED);
     // The window holds only the last second's frames, never the 1.1 s since
     // subscribing.
@@ -1149,23 +1160,23 @@ describe("feedsOf", () => {
     closeA();
     closeB();
     closeC();
-    expect(feeds.feedsOf("s", nowAt())).toEqual(UNFOLLOWED_FEEDS);
+    expect(feeds.feedsOf(S, nowAt())).toEqual(UNFOLLOWED_FEEDS);
   });
 
   test("a lane is credited only with the frames sent since its first subscriber joined", () => {
     const { feeds, note, clock, nowAt } = harness({ motion: "moving" });
-    note("s", "bar");
+    note(S, "bar");
     const closeA = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "statusline"),
     );
     clock.advance(1000);
     const closeB = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "pane"),
     );
     clock.advance(100);
-    const now = feeds.feedsOf("s", nowAt());
+    const now = feeds.feedsOf(S, nowAt());
     closeA();
     closeB();
     expect(now.statusline.fps).toBe(MOVING);
@@ -1176,59 +1187,59 @@ describe("feedsOf", () => {
 
   test("a lane's rate is unmoved by a subscriber joining it late or leaving it", () => {
     const { feeds, note, clock, nowAt } = harness({ motion: "moving" });
-    note("s", "bar");
+    note(S, "bar");
     const closeA = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "statusline"),
     );
     clock.advance(1000);
     const closeB = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "statusline"),
     );
     clock.advance(100);
-    expect(feeds.feedsOf("s", nowAt()).statusline).toEqual({
+    expect(feeds.feedsOf(S, nowAt()).statusline).toEqual({
       subscribers: 2,
       fps: MOVING,
       shown: true,
     });
     closeA();
-    expect(feeds.feedsOf("s", nowAt()).statusline.fps).toBe(MOVING);
+    expect(feeds.feedsOf(S, nowAt()).statusline.fps).toBe(MOVING);
     closeB();
-    expect(feeds.feedsOf("s", nowAt()).statusline).toEqual(UNFOLLOWED);
+    expect(feeds.feedsOf(S, nowAt()).statusline).toEqual(UNFOLLOWED);
   });
 
   test("a subscriber rejoining a still bar is not counted as a frame", () => {
     const { feeds, note, clock, nowAt } = harness({ motion: "still" });
-    note("s", "bar");
+    note(S, "bar");
     const keep = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "band"),
     );
     clock.advance(1000);
     for (let i = 0; i < 3; i++)
       feeds.subscribe(
-        "s",
+        S,
         sub(() => {}, "band"),
       )();
-    expect(feeds.feedsOf("s", nowAt()).band.fps).toBe(0);
+    expect(feeds.feedsOf(S, nowAt()).band.fps).toBe(0);
     keep();
   });
 
   test("a lane whose answer stands still is credited with no frames while the bar moves", () => {
     const { feeds, note, state, clock, nowAt } = harness({ motion: "moving" });
     state.handoff = "the bar is drawn in the band";
-    note("s", "bar");
+    note(S, "bar");
     const closeBand = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "band"),
     );
     const closeLine = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "statusline"),
     );
     clock.advance(1100);
-    const now = feeds.feedsOf("s", nowAt());
+    const now = feeds.feedsOf(S, nowAt());
     closeBand();
     closeLine();
     expect(now.band.fps).toBe(MOVING);
@@ -1238,13 +1249,13 @@ describe("feedsOf", () => {
 
   test("a pane off screen is drawn at the still rate, and says so", () => {
     const { feeds, note, clock, nowAt } = harness({ motion: "unseen" });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}, "statusline"),
     );
     clock.advance(1100);
-    const { statusline } = feeds.feedsOf("s", nowAt());
+    const { statusline } = feeds.feedsOf(S, nowAt());
     close();
     // Pushed at 400 and 800 ms, a still period apart, inside the window.
     expect(statusline).toEqual({ subscribers: 1, fps: 2, shown: false });
@@ -1270,9 +1281,9 @@ describe("a feed draws when its bar next changes", () => {
       motion: "moving",
       beatMs: 100,
     });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(1050);
@@ -1287,9 +1298,9 @@ describe("a feed draws when its bar next changes", () => {
       motion: "unseen",
       beatMs: 100,
     });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(1000);
@@ -1314,9 +1325,9 @@ describe("a feed draws when its bar next changes", () => {
       });
       state.wallOffsetS = OFFSET_MS / 1000;
       state.shortsMs = shortsMs;
-      note("s", "bar");
+      note(S, "bar");
       const close = feeds.subscribe(
-        "s",
+        S,
         sub(() => {}),
       );
       clock.advance(RUN_MS);
@@ -1342,9 +1353,9 @@ describe("a feed draws when its bar next changes", () => {
       motion: "moving",
       beatMs: 100,
     });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(0);
@@ -1363,9 +1374,9 @@ describe("a feed draws when its bar next changes", () => {
       motion: "moving",
       beatMs: 100,
     });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(0);
@@ -1388,9 +1399,9 @@ describe("a feed draws when its bar next changes", () => {
       motion: "moving",
       beatMs: 100,
     });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     clock.advance(0);
@@ -1406,9 +1417,9 @@ describe("a feed draws when its bar next changes", () => {
       motion: "moving",
       beatMs: 100,
     });
-    note("s", "bar");
+    note(S, "bar");
     const close = feeds.subscribe(
-      "s",
+      S,
       sub(() => {}),
     );
     const BEFORE_MS = 250;
@@ -1448,7 +1459,7 @@ test("a frame whose render threw is the failure's Frame, a still bar in the erro
       openFailure: () => ({ error: new Error("the view would not open") }),
     },
   } as unknown as DaemonParts;
-  const frame = renderFrame(parts, "s", 30, instantOf(new Date(START_MS)))!;
+  const frame = renderFrame(parts, S, 30, instantOf(new Date(START_MS)))!;
   expect(frame.bar).toEqual(renderFailedFrame("the view would not open"));
   expect(frame.bar.nextChange).toBe(Infinity);
   expect(frame.resp).toMatchObject({

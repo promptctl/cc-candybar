@@ -42,6 +42,10 @@ import { pendingOf } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 import { buildScope } from "../src/template-engine/scope";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
+const S1 = sessionIdOf("s1");
+const A_ID = sessionIdOf("a");
+const B_ID = sessionIdOf("b");
 
 // [LAW:one-source-of-truth] Tests pin to the production constant so a future
 // MIN_SHELL_TTL_MS bump doesn't silently desync test timings.
@@ -2902,7 +2906,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
 
   test("returns SessionState value when present", () => {
     const { store, registry, sessionState } = makeWithState();
-    sessionState.set("s1", "toolbar-expanded", "1");
+    sessionState.set(S1, "toolbar-expanded", "1");
     registry.declareState("toolbarExpanded", { key: "toolbar-expanded" });
     feedInputs(registry, { session_id: "s1" });
     expect(store.read("toolbarExpanded")).toBe("1");
@@ -2924,17 +2928,17 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     feedInputs(registry, { session_id: "s1" });
     expect(store.read("theme")).toBe("");
 
-    sessionState.set("s1", "theme", "ember");
+    sessionState.set(S1, "theme", "ember");
     expect(store.read("theme")).toBe("ember");
 
-    sessionState.clear("s1", "theme");
+    sessionState.clear(S1, "theme");
     expect(store.read("theme")).toBe("");
   });
 
   test("different sessionIds yield different state (no cross-session leakage)", () => {
     const { store, registry, sessionState } = makeWithState();
-    sessionState.set("a", "theme", "ocean");
-    sessionState.set("b", "theme", "ember");
+    sessionState.set(A_ID, "theme", "ocean");
+    sessionState.set(B_ID, "theme", "ember");
     registry.declareState("theme", { key: "theme" });
 
     feedInputs(registry, { session_id: "a" });

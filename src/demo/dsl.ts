@@ -70,7 +70,7 @@ import { drawDsl } from "../dsl/render.js";
 import { SessionEffects } from "../render/effect.js";
 import { ansiOf } from "../render/frame.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
-import type { ClaudeHookData } from "../utils/claude.js";
+import type { CheckedHookData } from "../renderer/request-context.js";
 import { debug, setDebug } from "../utils/logger.js";
 import { instantOf } from "../utils/instant.js";
 import { SourceRuns } from "../var-system/source-runs.js";
@@ -94,7 +94,7 @@ const sessionId = sessionIdOf("demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
 // One Claude Code hook event, faked. A session that has never run has no
 // transcript, so the path names no file — a missing transcript is an empty
 // session, not a failure.
-const hookData: ClaudeHookData = {
+const hookData: CheckedHookData = {
   hook_event_name: "Status",
   session_id: sessionId,
   transcript_path: join(host.tmp, `cc-candybar-demo-${sessionId}.jsonl`),
@@ -201,7 +201,7 @@ async function renderFrames(): Promise<void> {
     },
     log,
   });
-  const request = { sessionId, hookData, cwd, hints };
+  const request = { hookData, cwd, hints };
   // What the collector holds goes with the demo, whatever stops it.
   try {
     worldStates.take(collector.requested(request));
@@ -221,7 +221,9 @@ async function renderFrames(): Promise<void> {
     });
     // [LAW:one-source-of-truth] The view's subscriptions reach the collector as
     // a turn's output takes them to the daemon's.
-    collector.subscribed({ sources: { [sessionId]: subscriptionsOf(state) } });
+    collector.subscribed({
+      sources: new Map([[sessionId, subscriptionsOf(state)]]),
+    });
     try {
       const effective = view.source.effective();
 

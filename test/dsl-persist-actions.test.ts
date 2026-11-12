@@ -66,6 +66,10 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
+const S2_NO_PICK = sessionIdOf("s2-no-pick");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -410,7 +414,7 @@ describe("persist/reset action loader shape", () => {
 // edits sits in the file the bar rendered from — the daemon's own situation.
 function buildPersistRuntime(
   src: string,
-  sessionId = "s1",
+  sessionId = S1,
   dflt: DslConfig = EMPTY_DEFAULT,
 ) {
   durable.write(src);
@@ -572,7 +576,7 @@ describe("persist action click → the config file", () => {
     durable.write(src);
     const config = parseAndValidate("<test>", src, ALLOWED);
     const sessionState = new SessionState();
-    durable.seedOrigin(sessionState, "s1");
+    durable.seedOrigin(sessionState, S1);
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
@@ -721,7 +725,7 @@ describe("persist action click → the config file", () => {
   test("a persist stepper under a preset that pins its field steps and writes that preset's globals", async () => {
     const { render, click, sessionState } =
       buildPersistRuntime(SRC_UNDER_PRESET);
-    sessionState.set("s1", "preset", "roomy");
+    sessionState.set(S1, "preset", "roomy");
     const urls = ownUrls(render());
     await click(urls[0]!); // seeds from roomy's 4, not the shadowed top-level 2
     expect(barUnder("roomy").padding).toBe(5);
@@ -731,7 +735,7 @@ describe("persist action click → the config file", () => {
   test("a persist cycle under a preset that pins its field writes that preset's globals", async () => {
     const { render, click, sessionState } =
       buildPersistRuntime(SRC_UNDER_PRESET);
-    sessionState.set("s1", "preset", "roomy");
+    sessionState.set(S1, "preset", "roomy");
     await click(ownUrls(render())[1]!);
     expect(barUnder("roomy").autoWrap).toBe(false);
     expect(globalsInFile()).toEqual({ padding: 2, autoWrap: true });
@@ -747,10 +751,10 @@ describe("persist action click → the config file", () => {
     };
     const { render, click, sessionState } = buildPersistRuntime(
       SRC2,
-      "s1",
+      S1,
       withCompact,
     );
-    sessionState.set("s1", "preset", "compact");
+    sessionState.set(S1, "preset", "compact");
     await click(ownUrls(render())[2]!);
     expect(barUnder("compact", withCompact).padding).toBe(1);
     expect(globalsInFile()).toEqual({});
@@ -760,7 +764,7 @@ describe("persist action click → the config file", () => {
     const { render, click, sessionState } = buildPersistRuntime(
       SRC_UNDER_PRESET.replace("padding: 4, ", ""),
     );
-    sessionState.set("s1", "preset", "roomy");
+    sessionState.set(S1, "preset", "roomy");
     await click(ownUrls(render())[0]!);
     expect(globalsInFile()).toEqual({ padding: 3, autoWrap: true });
   });
@@ -825,7 +829,7 @@ describe("persist action click → the config file", () => {
       ALLOWED,
     );
     const sessionState = new SessionState();
-    durable.seedOrigin(sessionState, "s1");
+    durable.seedOrigin(sessionState, S1);
     const ctx: VerbContext = testVerbContext(
       sessionState,
       durable.historyFor(sessionState),
@@ -905,7 +909,7 @@ describe("a durable click lands in the file the next reload reads", () => {
     );
     const sessionState = new SessionState();
     const named = join(durable.projectDir, "named.json5");
-    durable.seedOrigin(sessionState, "s1", named);
+    durable.seedOrigin(sessionState, S1, named);
     durable.write(`{ globals: { palette: "textual-dark" } }`);
     const ctx: VerbContext = testVerbContext(
       sessionState,
@@ -944,7 +948,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       ALLOWED,
     );
     const sessionState = new SessionState();
-    durable.seedOrigin(sessionState, "s1");
+    durable.seedOrigin(sessionState, S1);
     const ctx: VerbContext = testVerbContext(
       sessionState,
       durable.historyFor(sessionState),
@@ -1002,7 +1006,7 @@ describe("RenderCache: the config file is the durable store", () => {
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.globals.palette).toBe("textual-dark");
 
-      durable.seedOrigin(sessionState, "s1");
+      durable.seedOrigin(sessionState, S1);
       const ctx: VerbContext = testVerbContext(
         sessionState,
         durable.historyFor(sessionState),
@@ -1111,11 +1115,11 @@ describe("RenderCache: the config file is the durable store", () => {
       // session state is consulted BEFORE globals.palette, so the file only
       // ever changes what a session sees when it hasn't picked anything.
       const sessionState = new SessionState();
-      sessionState.set("s1", "theme", "dracula");
+      sessionState.set(S1, "theme", "dracula");
       expect(
         resolveThemeSelection(
           undefined,
-          sessionState.get("s1", "theme"),
+          sessionState.get(S1, "theme"),
           entry.state.config.globals.palette,
         ),
       ).toMatchObject({ kind: "decided", name: "dracula" });
@@ -1123,7 +1127,7 @@ describe("RenderCache: the config file is the durable store", () => {
       expect(
         resolveThemeSelection(
           undefined,
-          sessionState.get("s2-no-pick", "theme"),
+          sessionState.get(S2_NO_PICK, "theme"),
           entry.state.config.globals.palette,
         ),
       ).toMatchObject({ kind: "decided", name: "nord" });

@@ -18,6 +18,7 @@
 // over the payload re-runs in the turn a fact it reads moves — a request's
 // arrival, a world state's landing, a click — and never inside a draw.
 
+import type { SessionId } from "./session-id.js";
 import type { EffectiveGlobals } from "../config/effective-globals.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import type { ValidatedConfig } from "../config/dsl-types.js";
@@ -64,10 +65,13 @@ export interface SessionSourceDeps {
   // The user's home, which the payload's `home` reads.
   readonly home: string;
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
-  readonly history: (sessionId: string) => HistoryDepth;
+  readonly history: (sessionId: SessionId) => HistoryDepth;
   // The session's back depth, measured against the gate of the config its
   // view draws with — NavigationHistory.depth in the daemon.
-  readonly navigation: (sessionId: string, config: ValidatedConfig) => number;
+  readonly navigation: (
+    sessionId: SessionId,
+    config: ValidatedConfig,
+  ) => number;
 }
 
 export function sessionSource(

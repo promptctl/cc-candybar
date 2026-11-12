@@ -26,6 +26,7 @@
 // user's to act on, thrown as BadVerbArgs with what to do, and the click shows
 // it (src/daemon/click-error.ts).
 
+import type { SessionId } from "./session-id.js";
 import path from "node:path";
 import { CLAUDE_CONFIG_DIR_ENV } from "../claude-settings.js";
 import { CONFIG_ENV } from "../config-hint.js";
@@ -161,7 +162,7 @@ export interface LaneEdge {
   // Resolves true once a subscriber of `lane` follows `sessionId`'s frames,
   // false if none does within `withinMs`.
   readonly followed: (
-    sessionId: string,
+    sessionId: SessionId,
     lane: Lane,
     withinMs: number,
   ) => Promise<boolean>;
@@ -180,7 +181,7 @@ export interface LaneHost {
 }
 
 export interface LaneSession {
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   readonly hints: ClientHints;
   // The inputs its last render resolved its config from.
   readonly origin: RenderOrigin;
@@ -580,7 +581,7 @@ function sessionStartOf(
 
 // How the restart's report names the session it started on.
 const STARTED: Readonly<
-  Record<SessionStart["kind"], (sessionId: string) => string>
+  Record<SessionStart["kind"], (sessionId: SessionId) => string>
 > = {
   resume: (id) => `resuming ${id}`,
   fresh: (id) => `starting ${id} afresh, since it had no conversation yet`,
@@ -645,9 +646,9 @@ type Owed = Map<Lane, boolean>;
 // as a click's failure is (src/daemon/click-error.ts).
 export class LaneSetups {
   // Each session's owed lanes, least recently owed first.
-  private readonly owed = new Map<string, Owed>();
+  private readonly owed = new Map<SessionId, Owed>();
   // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time.
-  private readonly setups = new KeyedSerialQueue<string>();
+  private readonly setups = new KeyedSerialQueue<SessionId>();
 
   constructor(
     private readonly deps: {
@@ -667,7 +668,7 @@ export class LaneSetups {
   // `session` is the session as its latest request reported it, or null when
   // this daemon holds none yet.
   clicked(
-    sessionId: string,
+    sessionId: SessionId,
     session: LaneSession | null,
     before: LaneSwitches,
     after: LaneSwitches,
@@ -716,7 +717,7 @@ export class LaneSetups {
     this.settle(session, this.take(session.sessionId), switches, () => "owed");
   }
 
-  private take(sessionId: string): Owed {
+  private take(sessionId: SessionId): Owed {
     const owed = this.owed.get(sessionId) ?? new Map<Lane, boolean>();
     this.owed.delete(sessionId);
     return owed;

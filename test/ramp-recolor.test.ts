@@ -16,8 +16,9 @@ import { runUnder } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
 import { buildRig, type Rig } from "./helpers/rig";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s-ramp-recolor";
+const SID = sessionIdOf("s-ramp-recolor");
 const BASE_THEME = "textual-dark";
 // A light theme whose panel/warning/error all differ from textual-dark's —
 // textual-light shares warning and error with it byte-for-byte, so a click

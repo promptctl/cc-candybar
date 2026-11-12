@@ -13,6 +13,7 @@ import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import { debug, quietLogger, type DaemonLogger } from "../utils/logger";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import type { Timekeeper } from "../time";
+import type { SessionId } from "../daemon/session-id";
 
 import {
   ABSENT,
@@ -134,7 +135,7 @@ export class MetricsProvider {
   // [LAW:no-silent-failure] A transcript parse error is `failed`, carried to
   // the payload boundary.
   async refresh(
-    sessionId: string,
+    sessionId: SessionId,
     transcriptPath: string,
   ): Promise<Outcome<MetricsFold>> {
     debug(`Getting metrics from the transcript for session: ${sessionId}`);
@@ -142,7 +143,7 @@ export class MetricsProvider {
   }
 
   // The session's metrics fold as its last refresh left it, for a draw.
-  foldOf(sessionId: string): Reading<MetricsFold> {
+  foldOf(sessionId: SessionId): Reading<MetricsFold> {
     const answer = this.fold.answer(sessionId);
     return answer.kind === "pending" ? answer : foldFrom(sessionId, answer);
   }
@@ -151,7 +152,7 @@ export class MetricsProvider {
 // [LAW:one-source-of-truth] The one projection of a fold's answer, whether a
 // refresh just made it or a draw reads it as it stands.
 function foldFrom(
-  sessionId: string,
+  sessionId: SessionId,
   folded: FoldOutcome<MetricsState>,
 ): Outcome<MetricsFold> {
   if (folded.kind === "failed") {

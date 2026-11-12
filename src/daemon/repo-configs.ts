@@ -3,6 +3,7 @@
 // repository awaiting one. The gate itself is pure
 // (src/config/loader/repo-gate.ts); this is where its answers are kept.
 
+import type { SessionId } from "./session-id.js";
 import fs from "node:fs";
 import path from "node:path";
 import type { LinkSigner, SignedFields } from "../click/link-signer.js";
@@ -131,7 +132,7 @@ export function repoGateAt(stateDir: string, cwd: string): RepoGate {
 // link's declaration is a JSON array and an answer's a directory, so neither
 // verifies as the other under the one key.
 export function repoAnswerFields(
-  sessionId: string,
+  sessionId: SessionId,
   dir: string,
   answer: RepoAnswer,
 ): SignedFields {
@@ -149,7 +150,7 @@ export function repoAnswerFields(
 // text (the viewer's ⧉ copies it); each answer is its own signed click.
 export function repoQuestions(
   gate: RepoGate,
-  sessionId: string,
+  sessionId: SessionId,
   signer: LinkSigner,
 ): DiagnosticMessage[] {
   return gate.awaiting.map((dir) => {

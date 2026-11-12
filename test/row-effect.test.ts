@@ -1,3 +1,4 @@
+import { sessionIdOf } from "../src/daemon/session-id";
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { runUnder, sameDraw } from "./helpers/frame";
@@ -228,7 +229,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
 
   test("a session holds the effects of the rows its latest render drew, and no others", () => {
     const sessions = new EffectSessions<RenderedLine>();
-    const effects = sessions.of("s");
+    const effects = sessions.of(sessionIdOf("s"));
     const draw = (when: Instant, rows: number): void => {
       const motion = effects.motion("shimmer", effects.clockAt(when, 1), STILL_FRAME);
       for (let row = 0; row < rows; row++) {

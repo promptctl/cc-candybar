@@ -57,7 +57,6 @@ const SID = sessionIdOf("s1");
 // A request of `session` from `cwd`.
 function requestAt(cwd: string, session = SID): ViewFacts {
   return {
-    sessionId: session,
     hookData: {
       hook_event_name: "Status",
       session_id: session,
@@ -149,13 +148,16 @@ const subscribing = (
   session: SessionId,
   ...folders: string[]
 ): Subscriptions => ({
-  sources: {
-    [session]: folders.map((folder) => ({
-      kind: "plugin" as const,
-      source: folder,
-      storage: { folder, generation: 1 },
-    })),
-  },
+  sources: new Map([
+    [
+      session,
+      folders.map((folder) => ({
+        kind: "plugin" as const,
+        source: folder,
+        storage: { folder, generation: 1 },
+      })),
+    ],
+  ]),
 });
 
 // Retires the renderer answers only when the case says, in the order sent.
@@ -286,7 +288,7 @@ describe("the renderer's subscriptions", () => {
       kind: "world-state",
       worldState: { sources: { "/plugin": { kind: "ok" } } },
     });
-    collector.subscribed({ sources: {} });
+    collector.subscribed({ sources: new Map() });
     expect(held.has("source:/plugin")).toBe(false);
   });
 

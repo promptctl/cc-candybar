@@ -44,8 +44,9 @@ import {
   requestPayload,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "slash-gate";
+const SID = sessionIdOf("slash-gate");
 const OPTS = {
   endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,

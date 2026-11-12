@@ -16,7 +16,6 @@ import {
   foldAppended,
   longLineLog,
   unlessGone,
-  type ClaudeHookData,
   type Folded,
   type ParsedEntry,
 } from "../../utils/claude";
@@ -29,6 +28,7 @@ import {
   stampOf,
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
+import { parseSessionId, type SessionId } from "../session-id";
 import {
   ABSENT,
   failed,
@@ -409,9 +409,12 @@ export class SessionUsageStore {
   // scalars per file and retained day, and `sweepStale` bounds the map to the
   // sessions seen within `staleAgeMs` plus those holding work done today.
   // Observable, shallowly: a slot replaced is the change the day sums read.
-  private readonly sessions = observable.map<string, SessionSlot>(undefined, {
-    deep: false,
-  });
+  private readonly sessions = observable.map<SessionId, SessionSlot>(
+    undefined,
+    {
+      deep: false,
+    },
+  );
   // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
   // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
   // not a cache — the records map IS the cache).
@@ -524,7 +527,7 @@ export class SessionUsageStore {
   // read the one refresh it starts, whichever asks first and whenever the
   // others land, so it reads, records and logs once per request.
   request(
-    sessionId: string,
+    sessionId: SessionId,
     transcriptPath: string | undefined,
   ): SessionRequest {
     let refresh: SessionRefresh | null = null;
@@ -563,7 +566,7 @@ export class SessionUsageStore {
   // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
   // dropped) is not answered yet; one whose refresh found no transcript is the
   // empty record its refresh answers for it.
-  usageOf(sessionId: string): Reading<TranscriptUsage> {
+  usageOf(sessionId: SessionId): Reading<TranscriptUsage> {
     const slot = this.sessions.get(sessionId);
     if (slot === undefined) return pendingOf("unread");
     const failure = slot.failure.get();
@@ -574,7 +577,7 @@ export class SessionUsageStore {
   // A request's ingest of its own session, whose outcome the session's slot
   // keeps for the draws until the next one.
   private refreshed(
-    sessionId: string,
+    sessionId: SessionId,
     transcriptPath: string | undefined,
     stamp: string,
   ): Promise<Outcome<SessionRecord>> {
@@ -621,11 +624,11 @@ export class SessionUsageStore {
   // A request's refresh of `today`: the active session's own record, so
   // `today` keeps up with the cost it was sent with. The directory set's
   // scan is not waited for (`declareToday`).
-  refreshToday(hookData: ClaudeHookData | undefined): Promise<void> {
-    return this.request(
-      hookData?.session_id ?? "",
-      hookData?.transcript_path,
-    ).today();
+  refreshToday(
+    sessionId: SessionId,
+    transcriptPath: string | undefined,
+  ): Promise<void> {
+    return this.request(sessionId, transcriptPath).today();
   }
 
   // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
@@ -660,7 +663,7 @@ export class SessionUsageStore {
   // failing, so the fact fails with it and the draw shows a gap, never a total
   // silently missing the session's own work.
   daysOutside(
-    sessionId: string,
+    sessionId: SessionId,
     roots: readonly string[],
   ): Outcome<Readonly<Record<string, DayUsage>>> {
     const slot = this.sessions.get(sessionId);
@@ -682,7 +685,7 @@ export class SessionUsageStore {
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
   // clock instant — the store never reads the clock for tok/s timing itself.
   observeSpeed(
-    sessionId: string,
+    sessionId: SessionId,
     transcriptPath: string | undefined,
     nowMs: number,
   ): Promise<Outcome<SpeedObservation>> {
@@ -691,7 +694,7 @@ export class SessionUsageStore {
 
   // A request's speed sample, over the request's one refresh of the session.
   private async observed(
-    sessionId: string,
+    sessionId: SessionId,
     refresh: () => SessionRefresh,
     nowMs: number,
   ): Promise<Outcome<SpeedObservation>> {
@@ -701,9 +704,6 @@ export class SessionUsageStore {
     // the write of `cur` happen exactly once for that state, with the flight as
     // the sole owner of ordering. A distinct stamp is a genuinely new sample and
     // gets its own key.
-    // No session id is no session: there is no baseline to keep, and a ring
-    // keyed "" would be every id-less caller's baseline at once.
-    if (!sessionId) return ABSENT;
     const { stamp, record: refreshed } = refresh();
     return this.speedFlight.run(`${sessionId}:${stamp}`, async () => {
       const record = await refreshed;
@@ -747,24 +747,22 @@ export class SessionUsageStore {
 
   // The session's speed as its last request observed it, for a draw: a frame
   // takes no sample, so how often the bar is drawn moves no rate.
-  speedOf(sessionId: string): Reading<SpeedObservation> {
-    if (!sessionId) return ABSENT;
+  speedOf(sessionId: SessionId): Reading<SpeedObservation> {
     return this.sessions.get(sessionId)?.speed.get() ?? pendingOf("unread");
   }
 
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
-  // `absent` is an unknown empty session (or no sessionId), `failed` is a
+  // `absent` is a session with no transcript to read, `failed` is a
   // transcript that exists but couldn't be parsed — NOT cached (only ok
   // records are stored; the next render retries, same rule as the git
   // cache). This is the single write-path of a slot's record.
   private async ingest(
-    sessionId: string,
+    sessionId: SessionId,
     transcriptPath: string | undefined,
     tally: IngestTally,
     // The transcript's stamp as the caller observed it.
     stamp: string,
   ): Promise<Outcome<SessionRecord>> {
-    if (!sessionId) return ABSENT;
     const existing = this.see(sessionId)?.record;
     if (existing && stamp !== "" && existing.transcriptStamp === stamp) {
       tally.hits++;
@@ -844,21 +842,21 @@ export class SessionUsageStore {
   // [LAW:single-enforcer] The one write of a slot's record: the slot is
   // replaced in the observable map, which is the change the day sums derive
   // from.
-  private stored(sessionId: string, record: SessionRecord): void {
+  private stored(sessionId: SessionId, record: SessionRecord): void {
     const slot = this.hold(sessionId);
     runInAction(() => this.sessions.set(sessionId, { ...slot, record }));
   }
 
   // The one write of `lastSeenAt`: the session's slot, refreshed as seen, or
   // undefined while the store holds nothing for it — asking stores nothing.
-  private see(sessionId: string): SessionSlot | undefined {
+  private see(sessionId: SessionId): SessionSlot | undefined {
     const slot = this.sessions.get(sessionId);
     if (slot) slot.lastSeenAt = this.clock.now();
     return slot;
   }
 
   // The slot something is about to be stored in, created on the first store.
-  private hold(sessionId: string): SessionSlot {
+  private hold(sessionId: SessionId): SessionSlot {
     const seen = this.see(sessionId);
     if (seen) return seen;
     const slot: SessionSlot = {
@@ -898,7 +896,7 @@ export class SessionUsageStore {
   // fails the fold (the boundary logs it); an `absent` file (not yet written /
   // agent removed) keeps its prior fold and contributes nothing new.
   private async refold(
-    sessionId: string,
+    sessionId: SessionId,
     transcriptPath: string,
     prior: SessionRecord | undefined,
   ): Promise<
@@ -964,7 +962,7 @@ export class SessionUsageStore {
       const cutoff = seedCutoffMs(this.clock.now());
       const projectPaths = await findProjectPaths(claudePaths);
       const candidates: Array<{
-        sessionId: string;
+        sessionId: SessionId;
         path: string;
         stamp: string;
       }> = [];
@@ -976,8 +974,18 @@ export class SessionUsageStore {
           const filePath = join(dir, file);
           const st = await unlessGone(gatedStat(filePath));
           if (st === undefined || st.mtimeMs < cutoff) continue;
+          // [LAW:parse-dont-validate] A transcript's name is the session id it
+          // holds; a name the checkpoint refuses is reported and not read.
+          const id = parseSessionId(file.slice(0, -".jsonl".length));
+          if (!id.ok) {
+            this.log(
+              "warn",
+              `usageStore scan: transcript ${JSON.stringify(file)} names no session: session id ${id.problem}`,
+            );
+            continue;
+          }
           candidates.push({
-            sessionId: file.slice(0, -".jsonl".length),
+            sessionId: id.id,
             path: filePath,
             stamp: stampOf(st),
           });

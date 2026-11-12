@@ -37,6 +37,22 @@ export function parseSessionId(raw: unknown): ParsedSessionId {
     : { ok: false, problem };
 }
 
+// [LAW:single-enforcer] A stored record keyed by session id, as its file
+// spelled it: each key crosses the checkpoint, and one it refuses is named to
+// `refused` and dropped, so the keys that remain come back branded.
+export function sessionKeyed<V>(
+  record: Readonly<Record<string, V>>,
+  refused: (key: string, problem: string) => void,
+): Map<SessionId, V> {
+  const keyed = new Map<SessionId, V>();
+  for (const [key, value] of Object.entries(record)) {
+    const id = parseSessionId(key);
+    if (id.ok) keyed.set(id.id, value);
+    else refused(key, id.problem);
+  }
+  return keyed;
+}
+
 // A session id the program spells itself (the demo's), parsed by the same
 // checkpoint: one that fails is a bug in the program, thrown.
 export function sessionIdOf(raw: string): SessionId {

@@ -20,6 +20,7 @@ import { observable, runInAction } from "mobx";
 import { recordingView, type SessionStateRW } from "./session-state";
 import type { Gate } from "./foundations/validator-registry";
 import { BadVerbArgs } from "./verb-error";
+import type { SessionId } from "./session-id";
 
 export interface NavigationChange {
   readonly key: string;
@@ -55,14 +56,14 @@ export interface NavigationJournal {
 export class NavigationHistory {
   // Observable, so a view's payload over a session's depth (`◁`) is
   // recomputed in the turn a step lands.
-  private readonly past = observable.map<string, readonly NavigationStep[]>(
+  private readonly past = observable.map<SessionId, readonly NavigationStep[]>(
     undefined,
     { deep: false },
   );
 
   // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
   // walk `back` itself makes, so the count cannot promise a step it discards.
-  depth(sessionId: string, store: SessionStateRW, gate: Gate): number {
+  depth(sessionId: SessionId, store: SessionStateRW, gate: Gate): number {
     return this.restorable(sessionId, store, gate).length;
   }
 
@@ -75,7 +76,7 @@ export class NavigationHistory {
   // it configured), or no longer one the config admits (that placement
   // removed, a group renamed) — and is discarded rather than replayed.
   private restorable(
-    sessionId: string,
+    sessionId: SessionId,
     store: SessionStateRW,
     gate: Gate,
   ): readonly NavigationStep[] {
@@ -102,7 +103,7 @@ export class NavigationHistory {
   begin(store: SessionStateRW): NavigationJournal {
     // Keyed by session, then key: a click that writes one key twice records
     // one change from its first `before` to its last `after`.
-    const pending = new Map<string, Map<string, NavigationChange>>();
+    const pending = new Map<SessionId, Map<string, NavigationChange>>();
     const sessionState = recordingView(
       store,
       isNavigationKey,
@@ -134,7 +135,7 @@ export class NavigationHistory {
   // the bare store, never a navigation journal, so going back is not itself a
   // step.
   back(
-    sessionId: string,
+    sessionId: SessionId,
     store: SessionStateRW,
     gate: Gate,
   ): { readonly step: NavigationStep; readonly discarded: number } {
@@ -163,13 +164,13 @@ export class NavigationHistory {
     return { step, discarded };
   }
 
-  private push(sessionId: string, step: NavigationStep): void {
+  private push(sessionId: SessionId, step: NavigationStep): void {
     const steps = this.past.get(sessionId) ?? [];
     this.put(sessionId, [...steps, step].slice(-MAX_STEPS));
   }
 
   // Move-to-end keeps insertion order as recency.
-  private put(sessionId: string, steps: readonly NavigationStep[]): void {
+  private put(sessionId: SessionId, steps: readonly NavigationStep[]): void {
     runInAction(() => {
       this.past.delete(sessionId);
       if (steps.length > 0) this.past.set(sessionId, steps);

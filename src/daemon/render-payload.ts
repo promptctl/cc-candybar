@@ -21,6 +21,7 @@ import type { HistoryDepth } from "./settings-history";
 import path from "node:path";
 import { inspect } from "node:util";
 import type { ClaudeHookData } from "../utils/claude.js";
+import type { CheckedHookData } from "../renderer/request-context.js";
 import type { ClientHints } from "./protocol.js";
 import {
   DEFAULT_TERMINAL_WIDTH,
@@ -749,7 +750,7 @@ export type ConfigFileFacts = SettingCounts & {
 // What every payload function reads of the render it serves: the request's
 // facts and the owners they are read from.
 export interface PayloadInputs {
-  readonly hookData: ClaudeHookData;
+  readonly hookData: CheckedHookData;
   readonly deps: RenderPayloadDeps;
   readonly cwd: string | undefined;
   // [LAW:locality-or-seam] The parsed client hints, NOT the raw request — this
@@ -899,10 +900,8 @@ export interface Readings {
 }
 
 // What a session's declaration reads of its newest request: the keys every
-// keyed lane is read at, and the session as the checkpoint parsed it.
-export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints"> & {
-  readonly sessionId: SessionId;
-};
+// keyed lane is read at, the session among them.
+export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints">;
 
 // The owners of the keyed lanes, which a declaration takes its holds in.
 export type KeyedOwners = Pick<
@@ -1016,7 +1015,11 @@ export function declareLanes(
       [...sources].map(([name, storage]) => [
         name,
         declare(name, () =>
-          owners.managedStorage.declare(holds, storage, facts.sessionId),
+          owners.managedStorage.declare(
+            holds,
+            storage,
+            facts.hookData.session_id,
+          ),
         ),
       ]),
     ),
@@ -1033,8 +1036,8 @@ export function readingsOf(
   inputs: PayloadInputs,
   lanes: DeclaredLanes,
 ): Readings {
-  const { hookData, deps } = inputs;
-  const sessionId = hookData.session_id;
+  const { deps } = inputs;
+  const sessionId = inputs.hookData.session_id;
   // [LAW:no-silent-failure] A read that throws is a bug in its owner: logged
   // here, by the read that met it — a frame's included, whose failures go
   // nowhere else — and that lane's failure, so it costs its own cells, never
@@ -1091,7 +1094,7 @@ export function readingsOf(
 export function todayReading(
   lane: Lane<DaySums>,
   usage: Pick<SessionUsageStore, "daysOutside">,
-  sessionId: string,
+  sessionId: SessionId,
 ): Current<TodayFacts> {
   const set = lane.current();
   if (set.kind !== "ok") return set;
@@ -1190,6 +1193,7 @@ export function composePayload(
   draw: DrawInputs,
 ): ViewPayload {
   const { hookData, hints } = inputs;
+  const sessionId = hookData.session_id;
   const { effective, configFacts } = draw;
   const { configPath, ...settingCounts } = configFacts;
   const built = facts.builtins;
@@ -1325,8 +1329,6 @@ export function composePayload(
         ),
       }
     : hookData.workspace;
-
-  const sessionId = hookData.session_id;
 
   const payload: ViewPayload = {
     ...hookData,

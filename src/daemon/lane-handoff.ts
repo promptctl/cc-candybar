@@ -9,6 +9,7 @@
 // change: the lanes draw from the session's full render, which the feed is
 // handed before this line replaces it (src/daemon/draw-bar.ts).
 
+import type { SessionId } from "./session-id.js";
 import {
   LANES,
   LANE_NAMES,
@@ -43,7 +44,7 @@ export const HANDOFF_BUTTON = "[⟲ claude]";
 // what the lane runs follows the switch (src/daemon/lane-setup.ts), so a pane
 // it opened closes.
 export function laneHandoff(
-  sessionId: string,
+  sessionId: SessionId,
   lanes: readonly [Lane, ...Lane[]],
 ): ChannelMessage {
   const reset = effectsUrl([

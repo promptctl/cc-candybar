@@ -9,6 +9,7 @@ import type { Holds } from "../../src/utils/holds";
 import type { Instant } from "../../src/utils/instant";
 import { pendingOf } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
+import { sessionIdOf } from "../../src/daemon/session-id";
 
 // `today` once its set's first scan has landed: the set declared, the
 // session's own refresh and the scan awaited here (a request awaits only the
@@ -16,12 +17,12 @@ import { laneOutcome } from "../../src/utils/reading";
 export async function todayInfo(
   store: SessionUsageStore,
   holds: Holds,
-  hookData: ClaudeHookData | undefined,
+  hookData: ClaudeHookData,
   claudeConfigDir: string | undefined,
   at: Instant,
 ) {
   const lane = store.declareToday(holds, claudeConfigDir);
-  await store.refreshToday(hookData);
+  await store.refreshToday(sessionIdOf(hookData.session_id), hookData.transcript_path);
   await laneOutcome(lane);
   return projected(store, lane, hookData, at);
 }
@@ -31,7 +32,7 @@ export async function todayInfo(
 export function todayNow(
   store: SessionUsageStore,
   holds: Holds,
-  hookData: ClaudeHookData | undefined,
+  hookData: ClaudeHookData,
   claudeConfigDir: string | undefined,
   at: Instant,
 ) {
@@ -45,10 +46,10 @@ export function todayNow(
 function projected(
   store: SessionUsageStore,
   lane: ReturnType<SessionUsageStore["declareToday"]>,
-  hookData: ClaudeHookData | undefined,
+  hookData: ClaudeHookData,
   at: Instant,
 ) {
-  const fact = todayReading(lane, store, hookData?.session_id ?? "");
+  const fact = todayReading(lane, store, sessionIdOf(hookData.session_id));
   return fact.kind === "ok" ? projectToday(fact.value, at) : fact;
 }
 

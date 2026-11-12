@@ -11,10 +11,9 @@ export function viewFacts(
   hints: ClientHints = parseClientHints({}),
 ): ViewFacts {
   return {
-    sessionId: sessionIdOf(sessionId),
     hookData: {
       hook_event_name: "Status",
-      session_id: sessionId,
+      session_id: sessionIdOf(sessionId),
       transcript_path: path.join(cwd, `${sessionId}.jsonl`),
       cwd,
       model: { id: "m", display_name: "M" },

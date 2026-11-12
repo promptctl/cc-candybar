@@ -46,8 +46,9 @@ import {
 } from "./payload-owners";
 import { sumsOf } from "./today";
 import { viewFacts } from "./view-facts";
+import { sessionIdOf } from "../../src/daemon/session-id";
 
-export const SESSION = "golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a";
+export const SESSION = sessionIdOf("golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a");
 export const AT = instantOf(new Date(1_700_000_000_000));
 const NOW_SEC = Math.floor(AT);
 export const PROJECT = "/home/tester/code/project";
@@ -262,7 +263,7 @@ export async function settledRequest(
     },
     AT,
     refreshed,
-    () => rig.served.worldStates.of(request.sessionId),
+    () => rig.served.worldStates.of(request.hookData.session_id),
     new AbortController().signal,
   );
   return held.view;

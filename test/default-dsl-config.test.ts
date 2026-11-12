@@ -64,6 +64,7 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 // The powerline cap glyphs, which visible segment text is read without.
 const CAPS = /[\u{E0B0}-\u{E0BC}]/gu;
@@ -501,7 +502,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // draw-bar.ts does (resolveThemeSelection/resolveStyleSelection over SessionState) —
   // mirroring the daemon's real click → next-render loop, not a synthetic rig.
   test("clicking a theme/style option changes theme.effective/style.effective on the next render", async () => {
-    const SID = "theming-8uj-1";
+    const SID = sessionIdOf("theming-8uj-1");
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
@@ -982,7 +983,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   describe("git segment per-fact coloring", () => {
     const GIT_PAYLOAD = {
       hook_event_name: "Status",
-      session_id: "x",
+      session_id: sessionIdOf("x"),
       transcript_path: "/tmp/t.jsonl",
       cwd: "/tmp",
       model: { id: "x", display_name: "x" },

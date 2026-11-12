@@ -28,6 +28,15 @@ import {
 import type { EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 
+import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+
+const S_BYSTANDER = sessionIdOf("s-bystander");
+const S_CLICKER = sessionIdOf("s-clicker");
+const S_WRAP = sessionIdOf("s-wrap");
+const S_OTHER = sessionIdOf("s-other");
+
+const S_CLEAR = sessionIdOf("s-clear");
+
 const BASE_THEME = "textual-dark";
 const ALLOWED = new Set([BASE_THEME]);
 
@@ -78,9 +87,9 @@ function globalsBar(padding: number = CONFIG_PADDING) {
   // [LAW:one-source-of-truth] Resolve both fields per render exactly as
   // draw-bar.ts does — the session's clicked value over the config default over
   // the floor. Freezing either would pass here while the real daemon moved.
-  const globals = (sid: string): EffectiveGlobals =>
+  const globals = (sid: SessionId): EffectiveGlobals =>
     globalsFor(config, (key) => sessionState.get(sid, key));
-  const render = (sid: string, width: number): Frame =>
+  const render = (sid: SessionId, width: number): Frame =>
     rig.draw({
       payload: { session_id: sid },
       opts: { wrap: globals(sid).autoWrap, padding: globals(sid).padding, width },
@@ -89,7 +98,7 @@ function globalsBar(padding: number = CONFIG_PADDING) {
   // Drive the real wire end-to-end, the URL a rendered `{{ action }}` emits.
   // The dispatch gates the write by the config the clicking session renders,
   // so the session's render is recorded first.
-  const setState = async (sid: string, key: string, value: string): Promise<void> => {
+  const setState = async (sid: SessionId, key: string, value: string): Promise<void> => {
     recordRender(sessionState, sid);
     await rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
   };
@@ -110,15 +119,15 @@ describe("a padding click changes one session's bar", () => {
     // renders and `.effective` means two things.
     const asIfConfigured = globalsBar(5);
     try {
-      const bystanderBefore = textOf(clicked.render("s-bystander", WIDE));
+      const bystanderBefore = textOf(clicked.render(S_BYSTANDER, WIDE));
 
-      await clicked.setState("s-clicker", "padding", "5");
+      await clicked.setState(S_CLICKER, "padding", "5");
 
-      expect(textOf(clicked.render("s-clicker", WIDE))).toBe(
-        textOf(asIfConfigured.render("s-clicker", WIDE)),
+      expect(textOf(clicked.render(S_CLICKER, WIDE))).toBe(
+        textOf(asIfConfigured.render(S_CLICKER, WIDE)),
       );
       // The bystander never clicked, so their bar is byte-identical to before.
-      expect(textOf(clicked.render("s-bystander", WIDE))).toBe(
+      expect(textOf(clicked.render(S_BYSTANDER, WIDE))).toBe(
         bystanderBefore,
       );
     } finally {
@@ -130,13 +139,13 @@ describe("a padding click changes one session's bar", () => {
   it("returns to the config default when the session value goes away", async () => {
     const { config, sessionState, render, setState, dispose } = globalsBar();
     try {
-      const atConfigDefault = textOf(render("s-clear", WIDE));
+      const atConfigDefault = textOf(render(S_CLEAR, WIDE));
 
-      await setState("s-clear", "padding", "7");
-      expect(textOf(render("s-clear", WIDE))).not.toBe(atConfigDefault);
+      await setState(S_CLEAR, "padding", "7");
+      expect(textOf(render(S_CLEAR, WIDE))).not.toBe(atConfigDefault);
 
-      sessionState.clear("s-clear", "padding");
-      expect(textOf(render("s-clear", WIDE))).toBe(atConfigDefault);
+      sessionState.clear(S_CLEAR, "padding");
+      expect(textOf(render(S_CLEAR, WIDE))).toBe(atConfigDefault);
       // ...which is the config file's own value, not the built-in floor — so
       // this asserts the middle rung of the precedence chain, not just "some
       // default".
@@ -153,16 +162,16 @@ describe("an autoWrap click changes one session's bar", () => {
     const { config, sessionState, render, setState, dispose } = globalsBar();
     try {
       expect(config.globals.autoWrap).toBe(true);
-      const wrappedRows = textOf(render("s-wrap", NARROW)).split("\n").length;
+      const wrappedRows = textOf(render(S_WRAP, NARROW)).split("\n").length;
       expect(wrappedRows).toBeGreaterThan(1);
 
-      await setState("s-wrap", "autoWrap", "false");
+      await setState(S_WRAP, "autoWrap", "false");
 
       // The regression this pins: a `false` session pick is a real answer, not
       // a missing one. Resolving with `||` instead of `??` would fall through
       // to the `true` config default and silently keep wrapping.
-      expect(textOf(render("s-wrap", NARROW)).split("\n")).toHaveLength(1);
-      expect(textOf(render("s-other", NARROW)).split("\n")).toHaveLength(wrappedRows);
+      expect(textOf(render(S_WRAP, NARROW)).split("\n")).toHaveLength(1);
+      expect(textOf(render(S_OTHER, NARROW)).split("\n")).toHaveLength(wrappedRows);
     } finally {
       dispose();
     }

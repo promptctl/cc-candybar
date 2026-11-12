@@ -52,8 +52,9 @@ import {
 } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { lastClickError } from "../src/daemon/click-error";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s1";
+const SID = sessionIdOf("s1");
 // A session that has rendered a config declaring no action: its gate holds
 // the built-in keys (theme, endcaps) and nothing else.
 const ctx = (sessionState: SessionState) => {

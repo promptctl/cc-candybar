@@ -1,3 +1,4 @@
+import { sessionIdOf } from "../src/daemon/session-id";
 import { MetricsProvider, metricsOver } from "../src/segments/metrics";
 import {
   writeFileSync,
@@ -42,7 +43,7 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, transcriptContent);
 
     const outcome = await metricsProvider.refresh(
-      "test-session",
+      sessionIdOf("test-session"),
       transcriptPath,
     );
 
@@ -73,7 +74,7 @@ describe("Metrics Provider", () => {
     );
 
     const outcome = await metricsProvider.refresh(
-      "meta-session",
+      sessionIdOf("meta-session"),
       transcriptPath,
     );
     expect(outcome.kind === "ok" && outcome.value).toMatchObject({
@@ -98,7 +99,7 @@ describe("Metrics Provider", () => {
     );
 
     const outcome = await metricsProvider.refresh(
-      "clock-session",
+      sessionIdOf("clock-session"),
       transcriptPath,
     );
     expect(outcome.kind === "ok" && outcome.value.lastResponseTime).toBe(25);
@@ -120,7 +121,7 @@ describe("Metrics Provider", () => {
     );
 
     const outcome = await metricsProvider.refresh(
-      "turn-session",
+      sessionIdOf("turn-session"),
       transcriptPath,
     );
     expect(outcome.kind === "ok" && outcome.value.lastResponseTime).toBe(5);
@@ -130,7 +131,7 @@ describe("Metrics Provider", () => {
   // session pre-first-write): the counts are genuinely zero.
   it("handles missing transcript gracefully", async () => {
     const outcome = await metricsProvider.refresh(
-      "nonexistent-session",
+      sessionIdOf("nonexistent-session"),
       join(tempDir, "nonexistent.jsonl"),
     );
 
@@ -148,7 +149,7 @@ describe("Metrics Provider", () => {
     chmodSync(transcriptPath, 0o000);
 
     const outcome = await metricsProvider.refresh(
-      "locked-session",
+      sessionIdOf("locked-session"),
       transcriptPath,
     );
     chmodSync(transcriptPath, 0o644);
@@ -175,7 +176,7 @@ describe("Metrics Provider", () => {
 
     writeFileSync(transcriptPath, v1);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);
-    const warm = await metricsProvider.refresh("cache-session", transcriptPath);
+    const warm = await metricsProvider.refresh(sessionIdOf("cache-session"), transcriptPath);
     expect(warm.kind === "ok" && warm.value.messageCount).toBe(2);
 
     // Mutate content but hold mtime identical: foldMetrics's mtime gate is
@@ -185,7 +186,7 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, v2);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);
     const cached = await metricsProvider.refresh(
-      "cache-session",
+      sessionIdOf("cache-session"),
       transcriptPath,
     );
     expect(cached.kind === "ok" && cached.value.messageCount).toBe(2);
@@ -204,7 +205,7 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, userLine() + userLine());
     let mtime = 1_700_000_000;
     utimesSync(transcriptPath, mtime, mtime);
-    const first = await metricsProvider.refresh("inc-session", transcriptPath);
+    const first = await metricsProvider.refresh(sessionIdOf("inc-session"), transcriptPath);
     expect(first.kind === "ok" && first.value.messageCount).toBe(2);
     // No assistant turn yet → no user→assistant pair → no response time.
     expect(first.kind === "ok" && first.value.lastResponseTime).toBeNull();
@@ -214,7 +215,7 @@ describe("Metrics Provider", () => {
     // that happens to also be 3 — verified next by appending a non-user line.
     appendFileSync(transcriptPath, userLine());
     utimesSync(transcriptPath, ++mtime, mtime);
-    const second = await metricsProvider.refresh("inc-session", transcriptPath);
+    const second = await metricsProvider.refresh(sessionIdOf("inc-session"), transcriptPath);
     expect(second.kind === "ok" && second.value.messageCount).toBe(3);
     expect(second.kind === "ok" && second.value.lastResponseTime).toBeNull();
 
@@ -231,7 +232,7 @@ describe("Metrics Provider", () => {
       }) + "\n",
     );
     utimesSync(transcriptPath, ++mtime, mtime);
-    const third = await metricsProvider.refresh("inc-session", transcriptPath);
+    const third = await metricsProvider.refresh(sessionIdOf("inc-session"), transcriptPath);
     expect(third.kind === "ok" && third.value.messageCount).toBe(3);
     expect(third.kind === "ok" && third.value.lastResponseTime).toBeCloseTo(
       1.0,
@@ -244,7 +245,7 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, "");
 
     const outcome = await metricsProvider.refresh(
-      "empty-session",
+      sessionIdOf("empty-session"),
       transcriptPath,
     );
 

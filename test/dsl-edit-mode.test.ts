@@ -68,6 +68,9 @@ import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { menuMember, menuStateKey } from "../src/config/menu-keys";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
 
 // The colours drawn at `text`'s first character, as hex; either is undefined
 // when none is (a cell drawn with no fill has no bg).
@@ -155,7 +158,7 @@ afterEach(() => {
 // config file — the remove/insert ops). The runtime parses `src` for the
 // render AND writes the same text as the session's config file, so the tree
 // a click edits is the tree the bar rendered — the daemon's own situation.
-function buildEditRuntime(src: string, sessionId = "s1") {
+function buildEditRuntime(src: string, sessionId = S1) {
   durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
@@ -654,7 +657,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
       ),
     );
-    ctx.sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    ctx.sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const liveToggle = (rendered: Frame, to: string): string | undefined =>
       ownUrls(rendered).find((u) =>
         effectsOf(u).some(
@@ -825,7 +828,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const registry = new SourceRegistry(unscriptedRuns(), store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
-    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const renderWith = (padding: number): Frame =>
       drawPayload(
         config,
@@ -909,10 +912,10 @@ describe("edit mode's save and cancel", () => {
     expect(durable.text()).not.toBe(original);
     await cancel(rt);
     expect(durable.text()).toBe(original);
-    expect(rt.sessionState.get("s1", EDIT_MODE_KEY)).not.toBe(
+    expect(rt.sessionState.get(S1, EDIT_MODE_KEY)).not.toBe(
       EDIT_MODE_ARRANGE,
     );
-    expect(rt.history.depth("s1")).toEqual({
+    expect(rt.history.depth(S1)).toEqual({
       undo: 0,
       redo: 0,
       sinceEdit: 0,
@@ -929,7 +932,7 @@ describe("edit mode's save and cancel", () => {
     await done(rt);
     expect(durable.text()).toBe(edited);
     expect(edited).not.toBe(original);
-    expect(rt.history.depth("s1")).toEqual({
+    expect(rt.history.depth(S1)).toEqual({
       undo: 1,
       redo: 0,
       sinceEdit: 0,
@@ -943,21 +946,21 @@ describe("edit mode's save and cancel", () => {
     const original = durable.text();
     // A step from before edit mode opened.
     const earlier = rt.history.begin();
-    earlier.sessionState.set("s1", "theme", "nord");
+    earlier.sessionState.set(S1, "theme", "nord");
     earlier.commit();
     await open(rt);
     await removeGit(rt);
     await cancel(rt);
-    expect(rt.history.depth("s1")).toEqual({
+    expect(rt.history.depth(S1)).toEqual({
       undo: 1,
       redo: 0,
       sinceEdit: 0,
     });
-    expect(rt.sessionState.get("s1", "theme")).toBe("nord");
+    expect(rt.sessionState.get(S1, "theme")).toBe("nord");
     await VERBS.get("undo")!("s1", rt.ctx);
-    expect(rt.sessionState.get("s1", "theme")).toBeNull();
+    expect(rt.sessionState.get(S1, "theme")).toBeNull();
     expect(durable.text()).toBe(original);
-    expect(rt.history.depth("s1")).toEqual({
+    expect(rt.history.depth(S1)).toEqual({
       undo: 0,
       redo: 1,
       sinceEdit: 0,

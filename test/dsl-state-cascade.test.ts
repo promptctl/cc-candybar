@@ -14,6 +14,7 @@ import { autorun } from "mobx";
 import { VERBS } from "../src/daemon/verbs";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { buildRig } from "./helpers/rig";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -36,7 +37,7 @@ const CONFIG_SRC = `{
 }`;
 
 describe("DSL state cascade (vhi.1 acceptance)", () => {
-  const SESSION_ID = "s-cascade";
+  const SESSION_ID = sessionIdOf("s-cascade");
   const HOOK_DATA = { session_id: SESSION_ID };
 
   // A click is gated by the config its session renders: the rig records that

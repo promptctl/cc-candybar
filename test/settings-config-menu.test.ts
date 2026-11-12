@@ -64,9 +64,10 @@ import { LANE_HELP } from "../src/help-text";
 import { settingMenuPath } from "../src/config/menu-places";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-const SID = "settings-ui-aok-3";
+const SID = sessionIdOf("settings-ui-aok-3");
 
 // The config that motivated the whole epic: a `root` naming two segments and
 // nothing else. It declares no actions, no menu, no drawer — every control

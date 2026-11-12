@@ -112,6 +112,9 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/var-system/source-runs";
+import { sessionIdOf } from "../src/daemon/session-id";
+
+const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -543,7 +546,7 @@ let durable: DurableConfig;
 // [LAW:one-source-of-truth] The runtime parses `src` for the render AND
 // writes the same text as the session's config file, so the tree a click
 // edits is the tree the bar rendered — exactly the daemon's own situation.
-function buildLayoutRuntime(src: string, sessionId = "s1") {
+function buildLayoutRuntime(src: string, sessionId = S1) {
   if (durable.text() === null) durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED);
   // What the daemon's cache entry holds: the config, re-read from the file
@@ -808,7 +811,7 @@ describe("apply-layout-op click → the config file", () => {
   test("a hand-crafted click carrying an undeclared op token is rejected loudly", async () => {
     const { config } = buildLayoutRuntime(SRC);
     const sessionState = new SessionState();
-    durable.seedOrigin(sessionState, "s1");
+    durable.seedOrigin(sessionState, S1);
     const ctx: VerbContext = testVerbContext(
       sessionState,
       durable.historyFor(sessionState),
@@ -891,7 +894,7 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
     // The banner is edit chrome: visible only with edit mode open AND the
     // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
-    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
@@ -951,9 +954,9 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
   function renderGated(config: ReturnType<typeof buildConfig>): string {
     const store = new VariableStore(systemTimekeeper);
     const sessionState = new SessionState();
-    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
-    sessionState.set("s1", EDIT_LIVE_KEY, "open");
+    sessionState.set(S1, EDIT_LIVE_KEY, "open");
     const registry = new SourceRegistry(unscriptedRuns(),
       store,
       "",
@@ -1093,7 +1096,7 @@ async function fireVerb(
 function originCtx(
   cache: RenderCache,
   sessionState: SessionState,
-  sessionId = "s1",
+  sessionId = S1,
 ): VerbContext {
   durable.seedOrigin(sessionState, sessionId);
   return {

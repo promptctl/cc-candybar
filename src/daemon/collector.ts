@@ -157,7 +157,6 @@ const locatorOf = (req: ViewFacts): ViewFacts => ({
   hookData: req.hookData,
   cwd: req.cwd,
   hints: req.hints,
-  sessionId: req.sessionId,
 });
 
 const sourcesOf = (subscriptions: readonly Subscription[]): DeclaredSources =>
@@ -189,11 +188,12 @@ export class Collector {
   // a retiring session makes it live again.
   requested(req: ViewFacts): WorldState {
     const locator = locatorOf(req);
+    const sessionId = req.hookData.session_id;
     const document = runInAction(() => {
-      const held = this.records.get(req.sessionId);
+      const held = this.records.get(sessionId);
       if (held === undefined) {
-        const opened = this.open(req.sessionId, locator);
-        this.records.set(req.sessionId, opened);
+        const opened = this.open(sessionId, locator);
+        this.records.set(sessionId, opened);
         return opened.stamped.document;
       }
       held.active = true;
@@ -217,7 +217,7 @@ export class Collector {
     // [LAW:no-silent-failure] A renderer subscribes only for sessions the host
     // handed it, and the host keeps a session's record until its retire
     // settles: a session with no record is the host's bug.
-    for (const session of Object.keys(sources) as SessionId[]) {
+    for (const session of sources.keys()) {
       if (!this.records.has(session))
         this.deps.log(
           "error",
@@ -226,7 +226,7 @@ export class Collector {
     }
     runInAction(() => {
       for (const record of this.records.values()) {
-        const next = sourcesOf(sources[record.session] ?? []);
+        const next = sourcesOf(sources.get(record.session) ?? []);
         if (sameSources(next, record.subscriptions)) continue;
         record.subscriptions = next;
         const { phase } = record;

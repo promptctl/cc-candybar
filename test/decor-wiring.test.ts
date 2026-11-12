@@ -44,7 +44,9 @@ import {
   type VariationName,
 } from "../src/themes/decor";
 import { DEFAULT_DECOR, decorOf } from "./helpers/decor";
+import { sessionIdOf } from "../src/daemon/session-id";
 
+const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
@@ -347,11 +349,11 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
       segments: { a: { template: 'A' }, b: { template: 'B' }, solo: { template: 'S' }, c: { template: 'C' } },
       root: { v: [ { h: ['a', 'b'] }, 'solo', { h: ['c'] } ] },
     }`);
-    rt.sessionState.set("s1", EDIT_MODE_KEY, "arrange");
-    rt.sessionState.set("s1", EDIT_LIVE_KEY, "open");
+    rt.sessionState.set(S1, EDIT_MODE_KEY, "arrange");
+    rt.sessionState.set(S1, EDIT_LIVE_KEY, "open");
     rt.render();
     const live = new Map(["a", "solo"].map((c) => [c, rt.bgOf(c)]));
-    rt.sessionState.set("s1", EDIT_LIVE_KEY, "closed");
+    rt.sessionState.set(S1, EDIT_LIVE_KEY, "closed");
     rt.render();
     const sameStep = (x: Address[number], y: Address[number]): boolean =>
       x.index === y.index && x.count === y.count && x.axis === y.axis;
@@ -798,8 +800,8 @@ describe("candybar-joiners-e5r4.3m7 — a row's leaves take their own places, ho
     const rt = build(groupedRow("[ 'a', { h: [ 'b', 'c', 'd' ] }, 'e' ]"));
     rt.render();
     const closed = tints(rt, FIVE);
-    rt.sessionState.set("s1", EDIT_MODE_KEY, "arrange");
-    rt.sessionState.set("s1", EDIT_LIVE_KEY, "open");
+    rt.sessionState.set(S1, EDIT_MODE_KEY, "arrange");
+    rt.sessionState.set(S1, EDIT_LIVE_KEY, "open");
     rt.render();
     expect(tints(rt, FIVE)).toEqual(closed);
     rt.dispose();

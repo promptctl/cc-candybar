@@ -15,7 +15,7 @@ import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
 import { HOST } from "./host";
 import type { ClaudeHookData } from "../../src/utils/claude";
-import { sessionIdOf } from "../../src/daemon/session-id";
+import type { CheckedHookData } from "../../src/renderer/request-context";
 import type { GitInfo } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
 import type { MetricsFold } from "../../src/segments/metrics";
@@ -63,6 +63,7 @@ import { Holds as HoldsClass } from "../../src/utils/holds";
 import { CacheExpiryProvider } from "../../src/segments/cache";
 import { RefreshFaults } from "../../src/daemon/refresh-faults";
 import { systemTimekeeper } from "../../src/time";
+import { sessionIdOf } from "../../src/daemon/session-id";
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
 
@@ -143,7 +144,7 @@ export interface LanedInputs extends PayloadInputs {
 export function documentOf(inputs: LanedInputs) {
   return assembleFacts(
     undefined,
-    sessionIdOf(inputs.hookData.session_id),
+    inputs.hookData.session_id,
     readingsOf(inputs, inputs.lanes()),
     pendingOf("unread"),
     instantOf(new Date(0)),
@@ -370,7 +371,7 @@ export function absentOwners() {
 // it projected are logged as the daemon's request logs them. The home lives
 // for this one request, where the daemon's view keeps it across requests.
 export async function requestPayload(
-  hookData: ClaudeHookData,
+  rawHookData: ClaudeHookData,
   at: Instant,
   deps: RenderPayloadDeps,
   cwd: string | undefined,
@@ -378,8 +379,13 @@ export async function requestPayload(
   hints: ClientHints,
   configFacts: ConfigFileFacts,
 ): Promise<DrawnPayload> {
+  // [LAW:one-source-of-truth] The hook's session id is parsed by the checkpoint
+  // once here; the inputs read it from the checked hook alone.
+  const hookData: CheckedHookData = {
+    ...rawHookData,
+    session_id: sessionIdOf(rawHookData.session_id),
+  };
   using home = openHome(deps, {
-    sessionId: sessionIdOf(hookData.session_id),
     hookData,
     cwd,
     hints,
