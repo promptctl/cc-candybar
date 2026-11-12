@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-730",
+      "ref": "refs/pull/730/merge",
+      "sha": "18382e3ad1983820c0c97a6e0325530b8a4811a3",
+      "timestamp": "2026-11-12T08:47:48.058Z",
+      "commits": [
+        {
+          "sha": "18382e3ad1983820c0c97a6e0325530b8a4811a3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T01:46:54-07:00",
+          "message": "Merge 57fa022dcbd29434d9454f7ca77fe07bd0686a42 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+        },
+        {
+          "sha": "57fa022dcbd29434d9454f7ca77fe07bd0686a42",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T01:45:49-07:00",
+          "message": "feat(host): the host runs shell and file sources from the renderer's subscriptions, and their readings come back in the world state (candybar-host-renderer-x96a.8e9)\n\nA view's registry names each shell and file source's run as a digest of its\nidentity, and the renderer's output subscribes to those runs. The collector\nholds them through the daemon's one SourceRuns, and each session's world state\ncarries their readings, so a run is read once for every session naming it and\nthe registry holds no runs of its own. Shell and file variables are now\nview-scoped. A run's identity is derived from its policy's inputs, never\nwritten by a reaction, so a turn reading subscriptions mid-batch names the run\nthe move just produced. Unheld runs keep their last answer up to a bound.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "717218f3277b68494d6138b7195debffd0a866d0",
