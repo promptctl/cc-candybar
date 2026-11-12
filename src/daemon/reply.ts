@@ -748,7 +748,10 @@ async function handleClick(
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const session = clickSessionOf(verb, value);
   if (session === null) noteFacts(facts, { sid: "-" });
-  else if (session.ok) noteFacts(facts, { sid: session.id });
+  else if (session.ok) {
+    noteFacts(facts, { sid: session.id });
+    parts.collector.clicked(session.id);
+  }
   const delivered = await parts.renderer.answer({
     kind: "event",
     at: instantAt(parts.clock),

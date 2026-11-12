@@ -222,6 +222,14 @@ export class Collector {
     return document;
   }
 
+  // A click is a person's input naming the session, as a request is, so the
+  // next sweep keeps it whatever the click's turn draws in the meantime. A
+  // retiring session stays retiring: only a request reopens its reads.
+  clicked(session: SessionId): void {
+    const record = this.records.get(session);
+    if (record?.phase.kind === "live") record.active = true;
+  }
+
   // [LAW:one-source-of-truth] Every renderer output's subscriptions, whole:
   // a session whose set moved is declared again, and one absent from them has
   // no plugin sources. A retiring session takes its set too, and holds none

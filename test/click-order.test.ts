@@ -555,7 +555,7 @@ test("a click's turn holds its session in the collector while it runs, with noth
     menuIdle: idle,
     payloadProviders: {},
     log: () => {},
-    ...clickParts(verbCtx, idle, holding),
+    ...clickParts(verbCtx, idle, { holding, clicked: () => {} }),
   } as unknown as DaemonParts;
   const send = (gone: () => boolean) =>
     replyTo(

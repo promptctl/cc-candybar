@@ -333,6 +333,18 @@ describe("the sweep", () => {
     expect(collector.stats()).toEqual({ sessions: 1, retiring: 0 });
   });
 
+  test("keeps a clicked session through the next sweep, as a request does", () => {
+    const { owners } = handLanded();
+    const { collector, clock, handedIn } = collectorOver(owners);
+    collector.requested(requestAt("/a"));
+    clock.advance(SESSION_SWEEP_MS);
+    collector.clicked(SID);
+    clock.advance(SESSION_SWEEP_MS);
+    expect(handedIn).toEqual([]);
+    clock.advance(SESSION_SWEEP_MS);
+    expect(handedIn).toEqual([{ kind: "retire", session: SID }]);
+  });
+
   test("keeps a session a turn holds for as long as it holds it, and the first sweep after it settles with no request since retires it", () => {
     const { owners } = handLanded();
     const { collector, clock, handedIn } = collectorOver(owners);
