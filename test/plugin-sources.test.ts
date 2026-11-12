@@ -65,7 +65,11 @@ import type { WorldStates } from "../src/renderer/world-states";
 import { UNREAD_RUN } from "../src/facts/world-state";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
-import { rendererHost } from "../src/daemon/renderer-host";
+import {
+  rendererHost,
+  type Delivered,
+  type RendererHost,
+} from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
@@ -803,7 +807,7 @@ function statusline(r: Rig, configFile: string) {
       providers: r.providers,
     }),
   );
-  const host = rendererHost(
+  const rendered = rendererHost(
     "main",
     systemTimekeeper,
     {
@@ -816,6 +820,18 @@ function statusline(r: Rig, configFile: string) {
     () => {},
     r.collector,
   );
+  // [LAW:no-ambient-temporal-coupling] An ask returns once every turn its
+  // request delivered has settled, the present's `effect-done` among them, so
+  // no turn still holds the session when the test moves on.
+  const delivering: Promise<Delivered>[] = [];
+  const host: RendererHost = {
+    ...rendered,
+    deliver: (input, about) => {
+      const turn = rendered.deliver(input, about);
+      delivering.push(turn);
+      return turn;
+    },
+  };
   let id = 0;
   return async (): Promise<{ text: string; facts: RequestFacts }> => {
     const { hookData } = viewFacts(dir, "s1");
@@ -846,6 +862,7 @@ function statusline(r: Rig, configFile: string) {
     );
     answered.settled(true);
     expect(answered.outcome).toEqual({ kind: "ok" });
+    await Promise.all(delivering.splice(0));
     return { text: textOf(presented.at(-1)!), facts };
   };
 }
@@ -865,9 +882,6 @@ describe("a session's first bar", () => {
     const ask = statusline(r, config(["plugins.p.gated"]));
     programWrites(storageOf(), "s1", { home: "here" });
     await ask();
-    // The present's `effect-done` turn holds the session while it runs, so
-    // the sweeps come once it has settled.
-    await new Promise((resolve) => setImmediate(resolve));
     // Two sweeps with no request between them retire the session, which
     // closes its view.
     r.collector.sweep();

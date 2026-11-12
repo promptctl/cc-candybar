@@ -55,8 +55,9 @@ export function rendererHost(
     // [LAW:single-enforcer] Where every output's subscriptions go: the
     // collector, which diffs each whole set against the last.
     readonly subscribed: (subscriptions: Subscriptions) => void;
-    // [LAW:single-enforcer] Every turn holds the session its event names
-    // until it settles, so no sweep retires a session under a turn on it.
+    // [LAW:single-enforcer] [LAW:no-ambient-temporal-coupling] Every turn
+    // holds the session its event names until it settles, so no sweep retires
+    // a session under a turn on it, however long the turn waits.
     readonly holding: (session: SessionId) => () => void;
   },
 ): RendererHost {
