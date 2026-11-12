@@ -2,102 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-730",
-      "ref": "refs/pull/730/merge",
-      "sha": "3f69e9c920150abb274118b58a5423107a12c4ec",
-      "timestamp": "2026-11-12T09:51:11.844Z",
-      "commits": [
-        {
-          "sha": "3f69e9c920150abb274118b58a5423107a12c4ec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:50:11Z",
-          "message": "Merge 809256e1535a511d4ebd4a84e8fa21261dda4dd3 into 717218f3277b68494d6138b7195debffd0a866d0\n"
-        },
-        {
-          "sha": "809256e1535a511d4ebd4a84e8fa21261dda4dd3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:50:01-07:00",
-          "message": "fix(source-runs): a run lives while it is held, so its last release ends its child, period and watch (candybar-host-renderer-x96a.8e9)\n\nA key that moves every tick named a new run per tick, and keeping the\nruns it left let each one's child run on. The collector holds a\nsession's runs across each whole set of subscriptions, so a reopened\nview keeps its runs without an unheld bound.\n"
-        },
-        {
-          "sha": "c1246d2507c8ed13ec51b4370394327a05ad6f7d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:34:41-07:00",
-          "message": "fix(renderer): the wait reads only the runs its view names, the demo hands back every turn's subscriptions, and a run whose declaration throws fails the check (candybar-host-renderer-x96a.8e9)\n\nA run the view stopped naming stays in the world state until the host\ndrops it, so the wait no longer reads the world state's runs. The demo's\ncollector re-subscribes after each world state, as the host does, so a\nrun named once a fact landed is read and the demo's wait ends. The bench\ntears a prepared config down whole, and check's holder compares a lane's\nanswer by reference.\n"
-        },
-        {
-          "sha": "4a224ada95e5bd4d1a8318b8d80c98c0e6aa6793",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:25:07-07:00",
-          "message": "fix(render-event): a shell or file source whose key has not answered is counted and named pending (candybar-host-renderer-x96a.8e9)\n"
-        },
-        {
-          "sha": "c083a0b517ed29ad79a0cc11fe4775383852cf8e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:22:11-07:00",
-          "message": "perf(sources): a key or depends_on policy compares what it read by value, so an input that moved without moving it hashes nothing (candybar-host-renderer-x96a.8e9)\n"
-        },
-        {
-          "sha": "a47821f7dc551c3bdbb9ad89d9bd9d39ac8abeaa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:19:23-07:00",
-          "message": "perf(sources): a registry's runs are observed for its life, so a turn in which nothing moved derives them nothing again (candybar-host-renderer-x96a.8e9)\n"
-        },
-        {
-          "sha": "77197423cbd3702aab45828f73ef09066520bda9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:16:10-07:00",
-          "message": "fix(check): a prepared config closes its runs with its registry, so the gallery leaks no hold, period or watch past its draw (candybar-host-renderer-x96a.8e9)\n"
-        },
-        {
-          "sha": "a925287ac6de01c3a74c57a0c6b08b9626d21ef3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:13:23-07:00",
-          "message": "fix(check): a run that moved nothing answers the same fact, so a re-bind publishes nothing again (candybar-host-renderer-x96a.8e9)\n"
-        },
-        {
-          "sha": "c1138a0f7fbc651b2ba17db315be934ee5a184f6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:12:15-07:00",
-          "message": "fix(collector): a run whose declaration throws fails that run alone, and every other lane of the session declares (candybar-host-renderer-x96a.8e9)\n"
-        },
-        {
-          "sha": "8140078f3b9ad0b2c4359cee24ce322029b27445",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:08:23-07:00",
-          "message": "fix(renderer): a request waits on every run its view names, so a run whose key lands after the request arrived is waited on (candybar-host-renderer-x96a.8e9)\n\nThe world state carries only runs the host has subscribed, and the host\nsubscribes a moved key's run a turn after the world state that moved it.\nThe wait now reads the view's named runs too, and the test host hands\nsubscriptions back after the answer settles, as the real host does.\n"
-        },
-        {
-          "sha": "57fa022dcbd29434d9454f7ca77fe07bd0686a42",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T01:45:49-07:00",
-          "message": "feat(host): the host runs shell and file sources from the renderer's subscriptions, and their readings come back in the world state (candybar-host-renderer-x96a.8e9)\n\nA view's registry names each shell and file source's run as a digest of its\nidentity, and the renderer's output subscribes to those runs. The collector\nholds them through the daemon's one SourceRuns, and each session's world state\ncarries their readings, so a run is read once for every session naming it and\nthe registry holds no runs of its own. Shell and file variables are now\nview-scoped. A run's identity is derived from its policy's inputs, never\nwritten by a reaction, so a turn reading subscriptions mid-batch names the run\nthe move just produced. Unheld runs keep their last answer up to a bound.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "717218f3277b68494d6138b7195debffd0a866d0",
-      "timestamp": "2026-11-12T08:11:15.548Z",
+      "sha": "9148e02f16de59ebceccf9638f7aab3a3ad46b12",
+      "timestamp": "2026-11-12T10:00:05.969Z",
       "commits": [
         {
-          "sha": "717218f3277b68494d6138b7195debffd0a866d0",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-12T08:10:14Z",
-          "message": "chore(release): set `package.json` to 1.218.4\n\n## [1.218.4](https://github.com/promptctl/cc-candybar/compare/v1.218.3...v1.218.4) (2026-11-12)\n\n### Bug Fixes\n\n* **daemon:** a TIMEOUT names its request, and the click's event records it, so a test settles its own click (candybar-host-renderer-x96a.9m0) ([#729](https://github.com/promptctl/cc-candybar/issues/729)) ([3e80b43](https://github.com/promptctl/cc-candybar/commit/3e80b4374f9aaffca5c6005bf4cf3bc1021e4b63))\n"
+          "sha": "9148e02f16de59ebceccf9638f7aab3a3ad46b12",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T02:58:58-07:00",
+          "message": "feat(host): the host runs shell and file sources from the renderer's subscriptions, and their readings come back in the world state (candybar-host-renderer-x96a.8e9) (#730)\n\n* feat(host): the host runs shell and file sources from the renderer's subscriptions, and their readings come back in the world state (candybar-host-renderer-x96a.8e9)\n\nA view's registry names each shell and file source's run as a digest of its\nidentity, and the renderer's output subscribes to those runs. The collector\nholds them through the daemon's one SourceRuns, and each session's world state\ncarries their readings, so a run is read once for every session naming it and\nthe registry holds no runs of its own. Shell and file variables are now\nview-scoped. A run's identity is derived from its policy's inputs, never\nwritten by a reaction, so a turn reading subscriptions mid-batch names the run\nthe move just produced. Unheld runs keep their last answer up to a bound.\n\n* fix(renderer): a request waits on every run its view names, so a run whose key lands after the request arrived is waited on (candybar-host-renderer-x96a.8e9)\n\nThe world state carries only runs the host has subscribed, and the host\nsubscribes a moved key's run a turn after the world state that moved it.\nThe wait now reads the view's named runs too, and the test host hands\nsubscriptions back after the answer settles, as the real host does.\n\n* fix(collector): a run whose declaration throws fails that run alone, and every other lane of the session declares (candybar-host-renderer-x96a.8e9)\n\n* fix(check): a run that moved nothing answers the same fact, so a re-bind publishes nothing again (candybar-host-renderer-x96a.8e9)\n\n* fix(check): a prepared config closes its runs with its registry, so the gallery leaks no hold, period or watch past its draw (candybar-host-renderer-x96a.8e9)\n\n* perf(sources): a registry's runs are observed for its life, so a turn in which nothing moved derives them nothing again (candybar-host-renderer-x96a.8e9)\n\n* perf(sources): a key or depends_on policy compares what it read by value, so an input that moved without moving it hashes nothing (candybar-host-renderer-x96a.8e9)\n\n* fix(render-event): a shell or file source whose key has not answered is counted and named pending (candybar-host-renderer-x96a.8e9)\n\n* fix(renderer): the wait reads only the runs its view names, the demo hands back every turn's subscriptions, and a run whose declaration throws fails the check (candybar-host-renderer-x96a.8e9)\n\nA run the view stopped naming stays in the world state until the host\ndrops it, so the wait no longer reads the world state's runs. The demo's\ncollector re-subscribes after each world state, as the host does, so a\nrun named once a fact landed is read and the demo's wait ends. The bench\ntears a prepared config down whole, and check's holder compares a lane's\nanswer by reference.\n\n* fix(source-runs): a run lives while it is held, so its last release ends its child, period and watch (candybar-host-renderer-x96a.8e9)\n\nA key that moves every tick named a new run per tick, and keeping the\nruns it left let each one's child run on. The collector holds a\nsession's runs across each whole set of subscriptions, so a reopened\nview keeps its runs without an unheld bound."
         }
       ]
     }
