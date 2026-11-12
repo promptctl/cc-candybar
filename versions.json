@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-718",
+      "ref": "refs/pull/718/merge",
+      "sha": "43b516e2649d93adb07348f505c4357519a8cf9e",
+      "timestamp": "2026-11-12T01:00:36.751Z",
+      "commits": [
+        {
+          "sha": "43b516e2649d93adb07348f505c4357519a8cf9e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T00:59:36Z",
+          "message": "Merge 4e18402ddbc28e007cdde73763559ed25b29888b into 6265510f73032c0f771cd0fd10f3a178141b03ea\n"
+        },
+        {
+          "sha": "4e18402ddbc28e007cdde73763559ed25b29888b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T17:59:15-07:00",
+          "message": "test(click-order): both fixture sessions are checked SessionIds (candybar-host-renderer-x96a.snf)\n"
+        },
+        {
+          "sha": "4a4078bbd73a86f6c34858d0263acfd451e0f4c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T17:55:30-07:00",
+          "message": "refactor(daemon): the idle clock keys sessions by the checked SessionId, so its menu-idle turn names its session with no cast (candybar-host-renderer-x96a.snf)\n\nThe clock's records, pending counts, methods and deps take SessionId; the\nverb context's clickLanded, closeIdleMenus and the renderer's closeIdle\npass it through. Every caller already held a checked id, so nothing parses\nanew, and closeByTurn's cast and its parse-dont-validate exception go. The\nverb layer's wider sid: string stays: it reads ids, and SessionId narrows\nto string there.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "6265510f73032c0f771cd0fd10f3a178141b03ea",
@@ -13,28 +42,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-12T00:56:36Z",
           "message": "chore(release): set `package.json` to 1.218.0\n\n## [1.218.0](https://github.com/promptctl/cc-candybar/compare/v1.217.1...v1.218.0) (2026-11-12)\n\n### Features\n\n* **renderer:** a click is a turn through answer, and its output carries what its act moved (candybar-host-renderer-x96a.8se) ([#717](https://github.com/promptctl/cc-candybar/issues/717)) ([ef62dc2](https://github.com/promptctl/cc-candybar/commit/ef62dc27975021a4aedb20614df8ab62ea63b6e7))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-718",
-      "ref": "refs/pull/718/merge",
-      "sha": "320d88445a65beb96eda6b34f9d3a28197b8b920",
-      "timestamp": "2026-11-12T00:56:47.266Z",
-      "commits": [
-        {
-          "sha": "320d88445a65beb96eda6b34f9d3a28197b8b920",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T17:55:52-07:00",
-          "message": "Merge 4a4078bbd73a86f6c34858d0263acfd451e0f4c9 into ef62dc27975021a4aedb20614df8ab62ea63b6e7\n"
-        },
-        {
-          "sha": "4a4078bbd73a86f6c34858d0263acfd451e0f4c9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T17:55:30-07:00",
-          "message": "refactor(daemon): the idle clock keys sessions by the checked SessionId, so its menu-idle turn names its session with no cast (candybar-host-renderer-x96a.snf)\n\nThe clock's records, pending counts, methods and deps take SessionId; the\nverb context's clickLanded, closeIdleMenus and the renderer's closeIdle\npass it through. Every caller already held a checked id, so nothing parses\nanew, and closeByTurn's cast and its parse-dont-validate exception go. The\nverb layer's wider sid: string stays: it reads ids, and SessionId narrows\nto string there.\n"
         }
       ]
     }
