@@ -77290,45 +77290,37 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
       at: instantAt(clock),
       event: {
         kind: "effect-done",
+        session: effect.session,
         of: effect.id,
         outcome: reason === null ? { kind: "ok" } : { kind: "failed", reason }
       }
     },
-    [
-      ["sid", req.hookData.session_id],
-      ["effect", String(effect.id)]
-    ]
+    [["effect", String(effect.id)]]
   );
   const worldState = collector.requested(req);
-  const release4 = collector.holding(req.hookData.session_id);
-  let delivered;
-  try {
-    const configured = await host.answer({
-      kind: "event",
-      at,
-      event: {
-        kind: "config",
-        context: req,
-        worldState
-      }
-    });
-    recorded(facts, configured);
-    if (configured.kind === "threw") {
-      noteFacts(facts, { renderer: host.name });
-      return failed2(host, configured.error, "its config turn: ");
+  const configured = await host.answer({
+    kind: "event",
+    at,
+    event: {
+      kind: "config",
+      context: req,
+      worldState
     }
-    delivered = await host.answer({
-      kind: "event",
-      at,
-      event: { kind: "request", id: id2, context: req, waitEndsAt }
-    });
-    recorded(facts, delivered);
-    if (delivered.kind === "threw") {
-      noteFacts(facts, { renderer: host.name });
-      return failed2(host, delivered.error);
-    }
-  } finally {
-    release4();
+  });
+  recorded(facts, configured);
+  if (configured.kind === "threw") {
+    noteFacts(facts, { renderer: host.name });
+    return failed2(host, configured.error, "its config turn: ");
+  }
+  const delivered = await host.answer({
+    kind: "event",
+    at,
+    event: { kind: "request", id: id2, context: req, waitEndsAt }
+  });
+  recorded(facts, delivered);
+  if (delivered.kind === "threw") {
+    noteFacts(facts, { renderer: host.name });
+    return failed2(host, delivered.error);
   }
   const { effects } = delivered.output;
   noteFacts(facts, {
@@ -78167,25 +78159,22 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const session = clickSessionOf(verb, value);
   if (session === null) noteFacts(facts, { sid: "-" });
-  else if (session.ok) noteFacts(facts, { sid: session.id });
-  const release4 = session?.ok ? parts.collector.holding(session.id) : () => {
-  };
-  try {
-    const delivered = await parts.renderer.answer({
-      kind: "event",
-      at: instantAt(parts.clock),
-      event: { kind: "click", verb, value, session, arrival, gone: clientGone }
-    });
-    switch (delivered.kind) {
-      case "answered":
-        facts.push(...delivered.output.record);
-        return { kind: "ok" };
-      case "threw":
-        facts.push(...delivered.record);
-        throw delivered.error;
-    }
-  } finally {
-    release4();
+  else if (session.ok) {
+    noteFacts(facts, { sid: session.id });
+    parts.collector.clicked(session.id);
+  }
+  const delivered = await parts.renderer.answer({
+    kind: "event",
+    at: instantAt(parts.clock),
+    event: { kind: "click", verb, value, session, arrival, gone: clientGone }
+  });
+  switch (delivered.kind) {
+    case "answered":
+      facts.push(...delivered.output.record);
+      return { kind: "ok" };
+    case "threw":
+      facts.push(...delivered.record);
+      throw delivered.error;
   }
 }
 function clickReply(outcome) {
@@ -82865,6 +82854,13 @@ var Collector = class {
     this.armSweep();
     return document;
   }
+  // A click is a person's input naming the session, as a request is, so the
+  // next sweep keeps it whatever the click's turn draws in the meantime. A
+  // retiring session stays retiring: only a request reopens its reads.
+  clicked(session) {
+    const record2 = this.records.get(session);
+    if (record2?.phase.kind === "live") record2.active = true;
+  }
   // [LAW:one-source-of-truth] Every renderer output's subscriptions, whole:
   // a session whose set moved is declared again, and one absent from them has
   // no plugin sources. A retiring session takes its set too, and holds none
@@ -82893,12 +82889,13 @@ var Collector = class {
       }
     });
   }
-  // [LAW:no-ambient-temporal-coupling] A turn, a request's or a click's, holds
-  // its session for as long as the host awaits it, however long that is, so
-  // no sweep retires the session under a turn still drawing it. Its release
-  // names the session as a request does, so the next sweep keeps it too. Only a
-  // live session is kept: a retiring one has released its reads, and its
-  // record goes once the retire settles, as one with no record has gone.
+  // [LAW:no-ambient-temporal-coupling] A turn on a session holds it for as
+  // long as it runs, however long that is, so no sweep retires the session
+  // under a turn still drawing it. Its release says nothing of activity: only
+  // a request keeps a session past the next sweep, so a turn the collector's
+  // own deliveries start never keeps a session nobody draws. Only a live
+  // session is held: a retiring one has released its reads, and its record
+  // goes once the retire settles, as one with no record has gone.
   holding(session) {
     const record2 = this.records.get(session);
     if (record2?.phase.kind !== "live") return () => {
@@ -82906,7 +82903,6 @@ var Collector = class {
     record2.turns++;
     return () => {
       record2.turns--;
-      record2.active = true;
     };
   }
   // One sweep. Public so a test can run it at an instant it chose.
@@ -83244,11 +83240,11 @@ function shownPanes(listPanes, controlled) {
   return shown;
 }
 function statusLinesOf(listPanes, listClients) {
-  const sessionOf = /* @__PURE__ */ new Map();
+  const sessionOf2 = /* @__PURE__ */ new Map();
   for (const line of listPanes.split("\n")) {
     const [pane, session] = line.trim().split(" ");
     if (pane !== void 0 && pane !== "" && session !== void 0)
-      sessionOf.set(pane, session);
+      sessionOf2.set(pane, session);
   }
   const shownBy = /* @__PURE__ */ new Map();
   for (const line of listClients.split("\n")) {
@@ -83256,7 +83252,7 @@ function statusLinesOf(listPanes, listClients) {
     if (session !== void 0 && control2 === "0" && pane !== void 0)
       shownBy.set(session, pane);
   }
-  return { sessionOf, shownBy };
+  return { sessionOf: sessionOf2, shownBy };
 }
 var PaneVisibility = class {
   constructor(deps) {
@@ -84888,11 +84884,14 @@ var TurnThrew = class extends Error {
 };
 
 // src/daemon/renderer-host.ts
-function rendererHost(name, clock, renderer, log, subscribed) {
+function rendererHost(name, clock, renderer, log, collector) {
   const turn = async (input) => {
+    const session = sessionOf(input.event);
+    const release4 = session === null ? () => {
+    } : collector.holding(session);
     try {
       const output = await renderer.answer(input);
-      subscribed(output.subscriptions);
+      collector.subscribed(output.subscriptions);
       if (input.event.kind !== "request")
         for (const effect of output.effects)
           refuse4(effect, `a ${input.event.kind} turn answers no request`);
@@ -84900,8 +84899,10 @@ function rendererHost(name, clock, renderer, log, subscribed) {
     } catch (e) {
       if (!(e instanceof TurnThrew))
         return { kind: "threw", error: e, record: [] };
-      subscribed(e.subscriptions);
+      collector.subscribed(e.subscriptions);
       return { kind: "threw", error: e.thrown, record: e.record };
+    } finally {
+      release4();
     }
   };
   const refuse4 = (effect, reason) => void deliver(
@@ -84910,19 +84911,19 @@ function rendererHost(name, clock, renderer, log, subscribed) {
       at: instantAt(clock),
       event: {
         kind: "effect-done",
+        session: effect.session,
         of: effect.id,
         outcome: { kind: "failed", reason }
       }
     },
-    [
-      ["sid", effect.session],
-      ["effect", String(effect.id)]
-    ]
+    [["effect", String(effect.id)]]
   );
   const record2 = (input, about, delivered) => {
+    const session = sessionOf(input.event);
     const head = [
       ["renderer", name],
       ["input", input.event.kind],
+      ...session === null ? [] : [["sid", session]],
       ...about
     ];
     switch (delivered.kind) {
@@ -84947,6 +84948,21 @@ function rendererHost(name, clock, renderer, log, subscribed) {
     return delivered;
   };
   return { name, answer: turn, deliver };
+}
+function sessionOf(event) {
+  switch (event.kind) {
+    case "config":
+    case "request":
+      return event.context.hookData.session_id;
+    case "world-state":
+      return event.worldState.session;
+    case "click":
+      return event.session?.ok ? event.session.id : null;
+    case "retire":
+    case "effect-done":
+    case "menu-idle":
+      return event.session;
+  }
 }
 
 // src/renderer/main.ts
@@ -85585,12 +85601,7 @@ function createDaemon(inputs) {
     update: () => updateFact.get(),
     clock,
     watched: (sessionId2) => frameFeeds.feedOpen(sessionId2),
-    deliver: (event) => parts.renderer.deliver({ kind: "event", event, at: instant() }, [
-      [
-        "sid",
-        event.kind === "world-state" ? event.worldState.session : event.session
-      ]
-    ]),
+    deliver: (event) => parts.renderer.deliver({ kind: "event", event, at: instant() }, []),
     log
   });
   const parts = {
@@ -85650,7 +85661,7 @@ function createDaemon(inputs) {
         verbs: verbsOver(verbCtx)
       }),
       log,
-      (subscriptions) => collector.subscribed(subscriptions)
+      collector
     )
   };
   return {

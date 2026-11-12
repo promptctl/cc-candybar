@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-735",
-      "ref": "refs/pull/735/merge",
-      "sha": "6c4ca6ed372fdfe847799945ff26677f1bcca150",
-      "timestamp": "2026-11-12T16:41:57.898Z",
-      "commits": [
-        {
-          "sha": "6c4ca6ed372fdfe847799945ff26677f1bcca150",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T16:40:55Z",
-          "message": "Merge 9b7928c2d6a91b93b8b224176453935d2fd5cc01 into 3983a91c21a0618069a1511472a7828dab676511\n"
-        },
-        {
-          "sha": "9b7928c2d6a91b93b8b224176453935d2fd5cc01",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:09:59-07:00",
-          "message": "fix(collector): a click marks its session active as a request does, so the next sweep keeps a session someone just clicked (candybar-host-renderer-x96a.111)\n"
-        },
-        {
-          "sha": "e86aecdfe18c86acf55b89cb61502de0766b2135",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:06:24-07:00",
-          "message": "test(plugin-sources): an ask waits for its delivered turns to settle, and the hold cites its timing law (candybar-host-renderer-x96a.111)\n"
-        },
-        {
-          "sha": "2897b139e58474eb40f2b15bf65bdc12c498cfb3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T03:59:09-07:00",
-          "message": "refactor(host): every renderer turn holds the session its event names, so no caller pairs the hold by hand (candybar-host-renderer-x96a.111)\n\nThe host's one turn path reads each event's session through one derivation,\nwhich both the hold and the turn line's sid use. A hold only counts the turn;\nactivity is a request's alone, so a turn the collector's own deliveries start\nnever keeps a session nobody draws. effect-done names its effect's session.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "3983a91c21a0618069a1511472a7828dab676511",
-      "timestamp": "2026-11-12T10:51:49.742Z",
+      "sha": "f02693a9bd83176c9126d9473453ca4bd96fda85",
+      "timestamp": "2026-11-12T16:47:28.925Z",
       "commits": [
         {
-          "sha": "3983a91c21a0618069a1511472a7828dab676511",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-12T10:50:59Z",
-          "message": "chore(release): set `package.json` to 1.219.1\n\n## [1.219.1](https://github.com/promptctl/cc-candybar/compare/v1.219.0...v1.219.1) (2026-11-12)\n\n### Bug Fixes\n\n* **collector:** a request turn holds its session as a click's does, so no sweep retires it while its wait is out (candybar-host-renderer-x96a.pww) ([#734](https://github.com/promptctl/cc-candybar/issues/734)) ([9bf2fb3](https://github.com/promptctl/cc-candybar/commit/9bf2fb3ecbfd8acdf5eb0ee20826b372202773da))\n"
+          "sha": "f02693a9bd83176c9126d9473453ca4bd96fda85",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T09:46:35-07:00",
+          "message": "refactor(host): every renderer turn holds the session its event names (candybar-host-renderer-x96a.111) (#735)\n\n* refactor(host): every renderer turn holds the session its event names, so no caller pairs the hold by hand (candybar-host-renderer-x96a.111)\n\nThe host's one turn path reads each event's session through one derivation,\nwhich both the hold and the turn line's sid use. A hold only counts the turn;\nactivity is a request's alone, so a turn the collector's own deliveries start\nnever keeps a session nobody draws. effect-done names its effect's session.\n\n* test(plugin-sources): an ask waits for its delivered turns to settle, and the hold cites its timing law (candybar-host-renderer-x96a.111)\n\n* fix(collector): a click marks its session active as a request does, so the next sweep keeps a session someone just clicked (candybar-host-renderer-x96a.111)"
         }
       ]
     }
