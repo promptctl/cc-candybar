@@ -592,10 +592,11 @@ export interface PreparedConfig {
   readonly compiled: CompiledConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
-  // What holds the registry's runs, and the check's own owner of them, both
-  // closed with the registry.
+  // What holds the registry's runs.
   readonly runs: CheckRuns;
-  readonly sourceRuns: SourceRuns;
+  // [LAW:single-enforcer] The one teardown of what a prepare opened: the
+  // registry, its runs' holder and the check's own owner of those runs.
+  [Symbol.dispose](): void;
 }
 
 // The repository a chain loads with: its approved project.
@@ -646,6 +647,11 @@ export async function prepareConfig(
     world.host.env,
   );
   const runs = new CheckRuns(sourceRuns, registry, at);
+  const dispose = (): void => {
+    registry.dispose();
+    runs.close();
+    sourceRuns.close();
+  };
   try {
     // [LAW:single-enforcer] check draws `run` links as the daemon does,
     // signed with the one key.
@@ -690,12 +696,10 @@ export async function prepareConfig(
       store,
       registry,
       runs,
-      sourceRuns,
+      [Symbol.dispose]: dispose,
     };
   } catch (e) {
-    registry.dispose();
-    runs.close();
-    sourceRuns.close();
+    dispose();
     throw e;
   }
 }
@@ -939,12 +943,9 @@ async function loadRegisterRender(
     }
     return bar;
   } finally {
-    // [LAW:single-enforcer] The registry owns every async handle the config
-    // declared (timers, fs watchers); a one-shot check must
-    // not leak them past the verdict.
-    prepared.registry.dispose();
-    prepared.runs.close();
-    prepared.sourceRuns.close();
+    // A one-shot check must not leak the timers, watches and children the
+    // config declared past the verdict.
+    prepared[Symbol.dispose]();
   }
 }
 
