@@ -42,6 +42,7 @@ import {
   retriedRender,
 } from "./daemon-log";
 import { until } from "./until";
+import { fieldOf, fieldsOf } from "../../src/utils/logfmt";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
 export const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
@@ -80,7 +81,7 @@ export function answeredEvents(log: string, sessionId: string): string[] {
 // The click events whose client had already been told TIMEOUT, in log order.
 function timedOutClicks(log: string): string[] {
   return logLines(log).filter(
-    (l) => l.includes("] click ") && l.includes(" timedOut=Y "),
+    (l) => l.includes("] click ") && fieldsOf(l).get("timedOut") === "Y",
   );
 }
 
@@ -259,7 +260,8 @@ export function sendClick(
 // [LAW:no-ambient-temporal-coupling] A TIMEOUT is not the click's outcome. The
 // daemon's 200 ms guard abandons a request's reply: a click already running
 // still lands, and one still waiting for its turn is dropped unrun
-// (`abandoned`). reply.ts records which on the click's event (`timedOut=Y`).
+// (`abandoned`). reply.ts marks the click's event `timedOut=Y` either way,
+// and its `outcome` says which: `abandoned` for one dropped unrun.
 // A render may be asked again on TIMEOUT because it is a read; a click is a
 // write, so sending it again can apply it twice, and a second apply-update is
 // refused as already running. On TIMEOUT the click's outcome is read from the
@@ -286,8 +288,8 @@ export async function click(
     `the click event of a click answered TIMEOUT (${url})`,
     replyBudgetMs,
   );
-  if (!/ outcome=ok(?: |$)/.test(event)) {
-    throw new Error(`click failed once it ran past its TIMEOUT: ${event}`);
+  if (fieldOf(event, "outcome") !== "ok") {
+    throw new Error(`click answered TIMEOUT did not land: ${event}`);
   }
 }
 
