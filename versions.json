@@ -4,15 +4,22 @@
     {
       "version": "pr-735",
       "ref": "refs/pull/735/merge",
-      "sha": "ec542ccdeb61eb829fdd0d68429109416c42f88b",
-      "timestamp": "2026-11-12T11:00:23.547Z",
+      "sha": "55997fdb5ceb28c0bea473d77d641219e4284498",
+      "timestamp": "2026-11-12T16:07:37.733Z",
       "commits": [
         {
-          "sha": "ec542ccdeb61eb829fdd0d68429109416c42f88b",
+          "sha": "55997fdb5ceb28c0bea473d77d641219e4284498",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T03:59:20-07:00",
-          "message": "Merge 953d60968908c23cb6fd1bbf3d860838add164db into 3983a91c21a0618069a1511472a7828dab676511\n"
+          "timestamp": "2026-11-12T16:06:37Z",
+          "message": "Merge 31c999200d89c76acd7d45e2540b840c560163d1 into 3983a91c21a0618069a1511472a7828dab676511\n"
+        },
+        {
+          "sha": "31c999200d89c76acd7d45e2540b840c560163d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T09:06:24-07:00",
+          "message": "test(plugin-sources): an ask waits for its delivered turns to settle, and the hold cites its timing law (candybar-host-renderer-x96a.111)\n"
         },
         {
           "sha": "953d60968908c23cb6fd1bbf3d860838add164db",
