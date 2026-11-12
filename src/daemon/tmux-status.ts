@@ -29,6 +29,7 @@
 // `if-shell -F '#{@cc-candybar-status-prior}'`, which the restore removes, so
 // a draw landing after it does nothing.
 
+import type { SessionId } from "./session-id.js";
 import { LANES } from "../config/lanes.js";
 import type { TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
@@ -441,7 +442,7 @@ export type TmuxAtExit = (
 
 export interface TmuxStatusDeps {
   readonly edge: TmuxStatusEdge;
-  readonly subscribe: (sessionId: string, sub: Subscriber) => () => void;
+  readonly subscribe: (sessionId: SessionId, sub: Subscriber) => () => void;
   // The session whose statusline last rendered from `pane`, as the daemon
   // holds it — a /clear or a new Claude Code in the pane takes it over.
   readonly sessionInPane: (socket: string, pane: string) => string | null;
@@ -454,7 +455,7 @@ export interface TmuxStatusDeps {
 }
 
 interface Held {
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   readonly socket: string;
   readonly pane: string;
   unsubscribe: (() => void) | null;
@@ -515,7 +516,7 @@ export type StatusClick =
  * only through observe / answered / the subscriptions it holds.
  */
 export class TmuxStatusLines {
-  private readonly held = new Map<string, Held>();
+  private readonly held = new Map<SessionId, Held>();
   private readonly servers = new Map<string, Server>();
   private closed = false;
   private writes = 0;
@@ -529,7 +530,7 @@ export class TmuxStatusLines {
   // pane is held, any other is not. A daemon restart picks each session up at
   // its next request.
   observe(
-    sessionId: string,
+    sessionId: SessionId,
     tmux: TmuxHint | null | undefined,
     on: boolean,
   ): void {

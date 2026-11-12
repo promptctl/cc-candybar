@@ -4,6 +4,8 @@
 // session variables are whichever shell spawned it, and wrong for every other
 // session (.claude/memory/architecture.md).
 
+import type { SessionId } from "./session-id";
+
 // The variables that state a session fact. Each is unset, and set again only
 // from the session's own facts.
 const SESSION_FACT_VARIABLES = [
@@ -21,7 +23,7 @@ const SESSION_FACT_VARIABLES = [
 // the variable unset. The tmux facts stay unset: a hint carries the pane and
 // socket, not a whole `TMUX` value, and a partial one would lie.
 export interface SessionFacts {
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   readonly projectDir: string;
   readonly claudeConfigDir: string | undefined;
 }

@@ -15,13 +15,14 @@
 // without any observer see no change in behavior.
 
 import { createAtom, type IAtom, runInAction } from "mobx";
+import type { SessionId } from "./session-id";
 
 export interface SessionStateReader {
-  get(sessionId: string, key: string): string | null;
+  get(sessionId: SessionId, key: string): string | null;
   // The store's revision when this session's state last changed — a write
   // of a value it did not hold, a clear of a key it did — or 0 while it holds
   // none. Two reads that return one revision read one state, whoever wrote it.
-  revision(sessionId: string): number;
+  revision(sessionId: SessionId): number;
 }
 
 // [LAW:locality-or-seam] Renderer needs to *cache* per-session random picks
@@ -36,12 +37,12 @@ export interface SessionStateReader {
 // render half-applied state. The atomicity contract lives in the seam,
 // not in each consumer. [LAW:single-enforcer]
 export interface SessionStateRW extends SessionStateReader {
-  set(sessionId: string, key: string, value: string): void;
+  set(sessionId: SessionId, key: string, value: string): void;
   setBatch(
-    sessionId: string,
+    sessionId: SessionId,
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void;
-  clear(sessionId: string, key: string): void;
+  clear(sessionId: SessionId, key: string): void;
 }
 
 // [LAW:one-source-of-truth] A view of `store` that reports, once a write has
@@ -53,14 +54,14 @@ export function recordingView(
   store: SessionStateRW,
   records: (key: string) => boolean,
   onChange: (
-    sessionId: string,
+    sessionId: SessionId,
     key: string,
     before: string | null,
     after: string | null,
   ) => void,
 ): SessionStateRW {
   const recorded = (
-    sessionId: string,
+    sessionId: SessionId,
     keys: readonly string[],
     write: () => void,
   ): void => {
@@ -89,14 +90,22 @@ export function recordingView(
 }
 
 // Flat, JSON-shaped mirror of the store: sessionId → key → value. This is the
-// on-disk representation and the load/save currency between store and storage.
+// on-disk representation and the save currency between store and storage.
 export type SessionSnapshot = Record<string, Record<string, string>>;
+
+// What a storage loads: each session's values, keyed by a session id the storage
+// has already checked. Holding the brand here is what lets the store take the
+// keys as they are.
+export type LoadedSessions = ReadonlyMap<
+  SessionId,
+  Readonly<Record<string, string>>
+>;
 
 // [LAW:locality-or-seam] The store depends on this seam, not on the filesystem.
 // The daemon injects a disk-backed impl; tests and non-daemon callers get the
 // ephemeral default. Persistence is a property of the *storage*, not the store.
 export interface SessionStorage {
-  load(): SessionSnapshot;
+  load(): LoadedSessions;
   save(snapshot: SessionSnapshot): void;
   flush(): void;
 }
@@ -105,7 +114,7 @@ export interface SessionStorage {
 // save()/flush() — no "am I persisting?" branch. The ephemeral case is data
 // (a storage that discards), not a special control path.
 export const EPHEMERAL_SESSION_STORAGE: SessionStorage = {
-  load: () => ({}),
+  load: () => new Map(),
   save: () => {},
   flush: () => {},
 };
@@ -127,7 +136,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // [LAW:types-are-the-program] Insertion order is recency order: the store
   // cannot hold more than maxSessions, so "bounded on disk" is structural, not
   // dependent on an external prune caller.
-  private sessions: Map<string, Session>;
+  private sessions: Map<SessionId, Session>;
   private storage: SessionStorage;
   // [LAW:single-enforcer] The store's revision: counts every change any
   // writer makes, so it never repeats while the store lives.
@@ -148,8 +157,8 @@ export class SessionState implements SessionStateReader, SessionStateRW {
 
   private hydrateFromStorage(): void {
     this.sessions = new Map(
-      Object.entries(this.storage.load()).map(([sessionId, kv]) => [
-        sessionId,
+      Array.from(this.storage.load(), ([id, kv]): [SessionId, Session] => [
+        id,
         { values: new Map(Object.entries(kv)), revision: ++this.head },
       ]),
     );
@@ -160,7 +169,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     this.persist();
   }
 
-  get(sessionId: string, key: string): string | null {
+  get(sessionId: SessionId, key: string): string | null {
     // [LAW:single-enforcer] reportObserved is the reactive-dep registration —
     // outside a tracking context (the common direct-read case) it is a no-op.
     this.atom.reportObserved();
@@ -173,7 +182,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     return session.values.get(key) ?? null;
   }
 
-  revision(sessionId: string): number {
+  revision(sessionId: SessionId): number {
     this.atom.reportObserved();
     return this.sessions.get(sessionId)?.revision ?? 0;
   }
@@ -207,7 +216,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // standalone set body) split the write semantics across two routes
   // once setBatch was introduced; collapsing keeps mutation, persistence,
   // and notification in exactly one place.
-  set(sessionId: string, key: string, value: string): void {
+  set(sessionId: SessionId, key: string, value: string): void {
     this.setBatch(sessionId, [{ key, value }]);
   }
 
@@ -228,7 +237,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // verb body validates that pairs is non-empty before calling, so
   // this is the public-API safety net rather than the hot path.
   setBatch(
-    sessionId: string,
+    sessionId: SessionId,
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void {
     if (pairs.length === 0) return;
@@ -247,7 +256,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     });
   }
 
-  clear(sessionId: string, key: string): void {
+  clear(sessionId: SessionId, key: string): void {
     runInAction(() => {
       const session = this.sessions.get(sessionId);
       if (session) {
@@ -265,7 +274,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   // [LAW:one-source-of-truth] Drop state for sessions that no longer exist.
-  prune(activeSessionIds: Set<string>): void {
+  prune(activeSessionIds: ReadonlySet<SessionId>): void {
     runInAction(() => {
       for (const id of this.sessions.keys()) {
         if (!activeSessionIds.has(id)) this.sessions.delete(id);
@@ -276,7 +285,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   // Move-to-end: re-inserting at the tail makes this the most-recently-used.
-  private touch(sessionId: string, session: Session): void {
+  private touch(sessionId: SessionId, session: Session): void {
     this.sessions.delete(sessionId);
     this.sessions.set(sessionId, session);
   }

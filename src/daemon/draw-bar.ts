@@ -182,7 +182,7 @@ export const RENDER_ANSWERS: Readonly<
 // and an event, never a frame, opened the view it draws.
 export function renderFrame(
   parts: RendererParts,
-  sessionId: string,
+  sessionId: SessionId,
   fps: number,
   at: Instant,
 ): FeedFrame | null {
@@ -243,7 +243,7 @@ export function renderFrame(
 // the tree that actually rendered.
 function sessionGlobals(
   parts: RendererParts,
-  sessionId: string,
+  sessionId: SessionId,
   state: DslRenderState,
 ): EffectiveGlobals {
   const { sessionState } = parts;
@@ -259,7 +259,7 @@ function sessionGlobals(
 // opens nothing (`holdView`).
 export function viewLanes(
   parts: DaemonParts,
-  sessionId: string,
+  sessionId: SessionId,
 ): LaneSwitches | null {
   const { renderCache } = parts;
   using hold = renderCache.holdView(sessionId);
@@ -281,7 +281,7 @@ export function viewLanes(
 export function lanesAt(
   parts: DaemonParts,
   origin: RenderOrigin,
-  sessionId: string,
+  sessionId: SessionId,
 ): LaneSwitches {
   const { renderCache, frameFeeds } = parts;
   using hold = renderCache.hold(
@@ -456,7 +456,7 @@ export function setUpRender(
 // session has no view. It opens nothing (`holdView`).
 function setUpFrame(
   parts: RendererParts,
-  sessionId: string,
+  sessionId: SessionId,
   at: Instant,
   facts: RequestFacts,
 ): RenderSetup | null {
@@ -501,6 +501,7 @@ function setUpDraw(
     // and output = diagnostics + body, with no "did the config load" branch.
     const payloadInputs: PayloadInputs = {
       hookData: req.hookData,
+      sessionId,
       deps: payloadProviders,
       cwd: req.cwd,
       hints,
@@ -1006,11 +1007,7 @@ function arrived(
 ): void {
   const { laneSetups, tmuxStatusLines } = parts;
   laneSetups.noted(laneSessionOf(parts, req), lanes);
-  tmuxStatusLines.observe(
-    req.hookData.session_id,
-    req.hints.tmux,
-    lanes.tmuxStatus,
-  );
+  tmuxStatusLines.observe(req.sessionId, req.hints.tmux, lanes.tmuxStatus);
 }
 
 // [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
@@ -1020,7 +1017,7 @@ export function laneSessionOf(
   req: CheckedRenderRequest,
 ): LaneSession {
   const { sessionState } = parts;
-  const sessionId = req.hookData.session_id;
+  const { sessionId } = req;
   return {
     sessionId,
     hints: req.hints,
@@ -1039,7 +1036,7 @@ export function laneSessionOf(
 // took it since.
 export function laneClicked(
   parts: DaemonParts,
-  sessionId: string,
+  sessionId: SessionId,
   before: LaneSwitches,
   after: LaneSwitches,
 ): void {
@@ -1177,7 +1174,7 @@ function answerDelivered(
 // one list, and its click opens the one viewer: while it is open the statusline
 // shows it, the same body the lanes draw.
 function statuslineOf(
-  sessionId: string,
+  sessionId: SessionId,
   drawn: DrawnBar,
   elsewhere: readonly Lane[],
 ): Frame {

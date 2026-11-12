@@ -13,6 +13,7 @@
 // is the record's own, written once by the request boundary after the answer
 // went out (answeredClickError) — never by a render.
 
+import type { SessionId } from "./session-id.js";
 import type { SessionStateReader, SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
 import type { Drawing } from "../config/lanes.js";
@@ -41,7 +42,7 @@ export type ClickErrorHold =
 
 export function holdClickError(
   state: SessionStateRW,
-  sessionId: string,
+  sessionId: SessionId,
   text: string,
   at: Instant,
 ): void {
@@ -55,7 +56,7 @@ export function holdClickError(
 // state for nothing.
 export function answeredClickError(
   state: SessionStateRW,
-  sessionId: string,
+  sessionId: SessionId,
   error: ClickErrorRecord,
 ): void {
   const last = lastClickError(state, sessionId);
@@ -71,7 +72,7 @@ export function answeredClickError(
 // as none.
 export function lastClickError(
   state: SessionStateReader,
-  sessionId: string,
+  sessionId: SessionId,
 ): ClickErrorRecord | null {
   const raw = state.get(sessionId, KEY);
   return raw === null ? null : recordOf(raw);
@@ -81,7 +82,7 @@ export function lastClickError(
 // for an event-shaped error (src/utils/event-hold.ts).
 export function clickErrorAt(
   state: SessionStateReader,
-  sessionId: string,
+  sessionId: SessionId,
   at: Instant,
   render: Drawing["by"],
 ): ClickErrorHold {

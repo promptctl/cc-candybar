@@ -6,6 +6,7 @@
 // the failure until a refresh of it runs clean; without it a lane whose first
 // refresh threw would read as not answered yet for good.
 
+import type { SessionId } from "./session-id.js";
 import { observable, runInAction } from "mobx";
 import { failed, type Failed } from "../utils/outcome.js";
 
@@ -26,18 +27,22 @@ export type RefreshLane = (typeof REFRESH_LANES)[number];
 
 export class RefreshFaults {
   private readonly bySession = observable.map<
-    string,
+    SessionId,
     ReadonlyMap<RefreshLane, string>
   >(undefined, { deep: false });
 
   // The lane's failure while its last refresh threw; none once one ran clean.
-  of(sessionId: string, lane: RefreshLane): Failed | undefined {
+  of(sessionId: SessionId, lane: RefreshLane): Failed | undefined {
     const reason = this.bySession.get(sessionId)?.get(lane);
     return reason === undefined ? undefined : failed(reason, "read");
   }
 
   // What the lane's refresh just did: threw `reason`, or ran clean (null).
-  refreshed(sessionId: string, lane: RefreshLane, reason: string | null): void {
+  refreshed(
+    sessionId: SessionId,
+    lane: RefreshLane,
+    reason: string | null,
+  ): void {
     const held = this.bySession.get(sessionId);
     if (reason === null && held?.has(lane) !== true) return;
     const next = new Map(held);

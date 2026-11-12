@@ -31,6 +31,7 @@ import {
 } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
 import type { Timekeeper } from "../time";
+import type { SessionId } from "./session-id";
 
 // What one frame of the feed drew: the bar, the responses its subscribers
 // receive, and — for a render that threw — the render event describing it,
@@ -135,11 +136,11 @@ export interface FeedDeps<Req> {
   // [LAW:types-are-the-program] Null when the session has no view to draw
   // yet: a frame opens none (src/daemon/cache/render.ts `holdView`), so the
   // feed waits for the event that opens one.
-  render(sessionId: string, fps: number, at: Instant): FeedFrame | null;
+  render(sessionId: SessionId, fps: number, at: Instant): FeedFrame | null;
   // Which animation lanes the session's settings switch on now, as its view
   // draws them — never a copy taken when a frame was drawn, so a toggle turned
   // on is honoured at the next subscribe. Null while it has no view.
-  lanes(sessionId: string): LaneSwitches | null;
+  lanes(sessionId: SessionId): LaneSwitches | null;
   // Whether the bar of the session `req` is from is on a screen now: a bar
   // nobody can see is drawn at the still rate however it moves.
   shown(req: Req): boolean;
@@ -149,11 +150,11 @@ export interface FeedDeps<Req> {
   // Calls `onChange` whenever the session's own state changes (a click opening
   // a menu), so its next frame is brought forward (`wake`). Returns the
   // disposer.
-  watch(sessionId: string, onChange: () => void): () => void;
+  watch(sessionId: SessionId, onChange: () => void): () => void;
   // [LAW:no-ambient-temporal-coupling] Holds the session's view open, and the
   // entry it is of, from the feed's open to its close: the feed being open is
   // what keeps it, not its frames reading it. Returns the release.
-  pin(sessionId: string): () => void;
+  pin(sessionId: SessionId): () => void;
   // Every source's refreshes so far, by trigger (the daemon's one ledger):
   // the feed's summary says how many ran while it was open, beside the frames
   // it drew, so a feed that drew without refreshing anything is seen to.
@@ -184,7 +185,7 @@ type Phase =
   | { readonly kind: "drawing" };
 
 interface Feed {
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   // Each subscriber, with the bytes it was last sent: a lane whose answer a
   // frame left as it was is not sent it again.
   readonly followers: Map<Subscriber, string | null>;
@@ -307,8 +308,8 @@ export interface FeedStats {
  * subscribers to one session share every render.
  */
 export class FrameFeeds<Req> {
-  private readonly requests = new Map<string, Noted<Req>>();
-  private readonly feeds = new Map<string, Feed>();
+  private readonly requests = new Map<SessionId, Noted<Req>>();
+  private readonly feeds = new Map<SessionId, Feed>();
   // [LAW:no-ambient-temporal-coupling] The stop of what runs while any feed
   // exists: held exactly from the first feed opening to the last closing.
   private stopWatching: (() => void) | null = null;
@@ -325,7 +326,7 @@ export class FrameFeeds<Req> {
   // shown, and which sessions a wake or a lookup matches. Its frames draw by
   // the request its view is declared with. One that arrived before it — a
   // slow render finishing late — is not the session's latest.
-  note(sessionId: string, req: Req, order: number): void {
+  note(sessionId: SessionId, req: Req, order: number): void {
     const held = this.requests.get(sessionId);
     if (held !== undefined && held.order > order) return;
     this.requests.delete(sessionId);
@@ -351,7 +352,7 @@ export class FrameFeeds<Req> {
   // lane the session's settings switch off is refused here before any feed
   // opens, and one whose lane is switched off while it streams is ended in
   // `push`. A session with no view yet waits, and its first frame decides.
-  subscribe(sessionId: string, sub: Subscriber): () => void {
+  subscribe(sessionId: SessionId, sub: Subscriber): () => void {
     const lanes = this.deps.lanes(sessionId);
     if (lanes !== null && !lanes[sub.lane]) {
       this.refuse(sessionId, sub);
@@ -377,12 +378,12 @@ export class FrameFeeds<Req> {
 
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
   // fact its pin counts, from the feed's open to its close.
-  feedOpen(sessionId: string): boolean {
+  feedOpen(sessionId: SessionId): boolean {
     return this.feeds.has(sessionId);
   }
 
   // The lanes whose subscribers follow the session's frames and draw them now.
-  following(sessionId: string): ReadonlySet<Lane> {
+  following(sessionId: SessionId): ReadonlySet<Lane> {
     return new Set(
       [...(this.feeds.get(sessionId)?.followers.keys() ?? [])]
         .filter((s) => s.drawing())
@@ -392,7 +393,7 @@ export class FrameFeeds<Req> {
 
   // Something the session's bar shows changed, for `cause`: its next frame,
   // if anyone is watching it, is drawn as soon as the feed's spacing allows.
-  wake(sessionId: string, cause: WakeCause): void {
+  wake(sessionId: SessionId, cause: WakeCause): void {
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
     feed.woke[cause]++;
@@ -409,7 +410,7 @@ export class FrameFeeds<Req> {
   // The session of the newest request `match` accepts, among the latest
   // request of each session the daemon holds, or null when none does.
   newestWhere(match: (req: Req) => boolean): string | null {
-    let newest: { sessionId: string; order: number } | null = null;
+    let newest: { sessionId: SessionId; order: number } | null = null;
     for (const [sessionId, { req, order }] of this.requests)
       if (match(req) && (newest === null || order > newest.order))
         newest = { sessionId, order };
@@ -420,12 +421,12 @@ export class FrameFeeds<Req> {
 
   // The latest request the daemon holds of `sessionId`, or null when it
   // holds none.
-  latest(sessionId: string): Req | null {
+  latest(sessionId: SessionId): Req | null {
     return this.requests.get(sessionId)?.req ?? null;
   }
 
   // The latest request of every session someone is watching, by session.
-  watched(): Array<{ readonly sessionId: string; readonly req: Req }> {
+  watched(): Array<{ readonly sessionId: SessionId; readonly req: Req }> {
     return [...this.feeds.keys()].flatMap((sessionId) => {
       const noted = this.requests.get(sessionId);
       return noted === undefined ? [] : [{ sessionId, req: noted.req }];
@@ -440,7 +441,7 @@ export class FrameFeeds<Req> {
   // never a clock of the feed's own, so a frame's count is a function of the
   // frames before it and its own instant: like every value relative to now,
   // it is the draw's, and it changes nothing the feed wakes on.
-  feedsOf(sessionId: string, at: Instant): LaneFeeds {
+  feedsOf(sessionId: SessionId, at: Instant): LaneFeeds {
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return UNFOLLOWED_FEEDS;
     const since = at - RATE_WINDOW_S;
@@ -471,7 +472,7 @@ export class FrameFeeds<Req> {
     };
   }
 
-  private open(sessionId: string): Feed {
+  private open(sessionId: SessionId): Feed {
     const now = this.deps.clock.monotonic();
     const feed: Feed = {
       sessionId,
@@ -749,7 +750,7 @@ export class FrameFeeds<Req> {
   }
 
   // A subscription its lane's toggle refuses, told why.
-  private refuse(sessionId: string, sub: Subscriber): void {
+  private refuse(sessionId: SessionId, sub: Subscriber): void {
     this.refused++;
     this.deps.log(
       "info",

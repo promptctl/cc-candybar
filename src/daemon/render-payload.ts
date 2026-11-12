@@ -750,6 +750,9 @@ export type ConfigFileFacts = SettingCounts & {
 // facts and the owners they are read from.
 export interface PayloadInputs {
   readonly hookData: ClaudeHookData;
+  // [LAW:parse-dont-validate] The session as the checkpoint parsed it. The
+  // hook's own `session_id` is the raw string it came in as.
+  readonly sessionId: SessionId;
   readonly deps: RenderPayloadDeps;
   readonly cwd: string | undefined;
   // [LAW:locality-or-seam] The parsed client hints, NOT the raw request — this
@@ -821,8 +824,7 @@ export async function refreshPayload(
   at: Instant,
   refreshed: Refreshed,
 ): Promise<void> {
-  const { hookData, deps, hints } = inputs;
-  const sessionId = hookData.session_id;
+  const { hookData, deps, hints, sessionId } = inputs;
   // The request's one refresh of its session's record, which the session,
   // today and speed lanes share.
   const session = deps.usageStore.request(sessionId, hookData.transcript_path);
@@ -1033,8 +1035,7 @@ export function readingsOf(
   inputs: PayloadInputs,
   lanes: DeclaredLanes,
 ): Readings {
-  const { hookData, deps } = inputs;
-  const sessionId = hookData.session_id;
+  const { deps, sessionId } = inputs;
   // [LAW:no-silent-failure] A read that throws is a bug in its owner: logged
   // here, by the read that met it — a frame's included, whose failures go
   // nowhere else — and that lane's failure, so it costs its own cells, never
@@ -1091,7 +1092,7 @@ export function readingsOf(
 export function todayReading(
   lane: Lane<DaySums>,
   usage: Pick<SessionUsageStore, "daysOutside">,
-  sessionId: string,
+  sessionId: SessionId,
 ): Current<TodayFacts> {
   const set = lane.current();
   if (set.kind !== "ok") return set;
@@ -1157,7 +1158,10 @@ function firstPending(
 
 // What a payload is composed from besides the document: the hook's
 // instantaneous fields, the client's hints and the user's home.
-export type ComposeInputs = Pick<PayloadInputs, "hookData" | "hints"> & {
+export type ComposeInputs = Pick<
+  PayloadInputs,
+  "hookData" | "hints" | "sessionId"
+> & {
   readonly home: string | undefined;
 };
 
@@ -1189,7 +1193,7 @@ export function composePayload(
   inputs: ComposeInputs,
   draw: DrawInputs,
 ): ViewPayload {
-  const { hookData, hints } = inputs;
+  const { hookData, hints, sessionId } = inputs;
   const { effective, configFacts } = draw;
   const { configPath, ...settingCounts } = configFacts;
   const built = facts.builtins;
@@ -1325,8 +1329,6 @@ export function composePayload(
         ),
       }
     : hookData.workspace;
-
-  const sessionId = hookData.session_id;
 
   const payload: ViewPayload = {
     ...hookData,

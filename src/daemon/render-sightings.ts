@@ -18,6 +18,7 @@
 // start and never pruned, so a session an older daemon recorded would answer
 // for a client nothing runs any more.
 
+import type { SessionId } from "./session-id.js";
 import { DRAWN_MOTIONS } from "../render/drawn-motion.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHint } from "../client-hint.js";
@@ -112,7 +113,7 @@ export interface RoledSaid extends RenderSaid {
 export interface RenderSighting extends RoledSaid {
   // Whose render it was: `cc-candybar doctor` run in a Claude Code session's
   // shell finds that session's own sighting by it.
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   // Seconds since the session's last render.
   readonly ago: number;
 }
@@ -125,7 +126,7 @@ export class RenderSightings {
   private readonly seen = new Map<
     string,
     {
-      readonly sessionId: string;
+      readonly sessionId: SessionId;
       readonly said: RoledSaid;
       readonly at: Instant;
       readonly order: number;
@@ -136,7 +137,12 @@ export class RenderSightings {
   // day's first seed, a PR lookup — so a request that settles after a newer
   // one of the same session and role is not its latest, and is dropped; its
   // own settling replaces its arrival.
-  see(sessionId: string, said: RenderSaid, at: Instant, order: number): void {
+  see(
+    sessionId: SessionId,
+    said: RenderSaid,
+    at: Instant,
+    order: number,
+  ): void {
     const role = roleOf(said.client);
     // JSON, so no session id can spell another sighting's key.
     const key = JSON.stringify([sessionId, role]);
@@ -162,7 +168,7 @@ export class RenderSightings {
   // The latest render in each role that drew one session's bar — none when
   // this process has served it no render (a daemon restarted under a bar
   // already on screen).
-  ofSession(sessionId: string, now: Instant): readonly RenderSighting[] {
+  ofSession(sessionId: SessionId, now: Instant): readonly RenderSighting[] {
     return this.list(now).filter((s) => s.sessionId === sessionId);
   }
 }

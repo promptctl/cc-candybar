@@ -21,6 +21,7 @@
 // ended by SIGTERM before its first message leaves no transcript, and
 // `--session-id` then starts it again under the same id.
 
+import type { SessionId } from "./session-id.js";
 import path from "node:path";
 
 // What a flag consumes after it, as commander reads it: nothing, exactly one
@@ -131,7 +132,7 @@ const FLAGS: Readonly<Record<string, FlagRule>> = {
 // waiting on the restarted session, still name it.
 export interface SessionStart {
   readonly kind: "resume" | "fresh";
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
 }
 
 const SESSION_FLAG: Readonly<Record<SessionStart["kind"], string>> = {

@@ -5,6 +5,7 @@
 // and being destroyed when its peer vanishes, because a flush that never settles
 // strands the exit.
 
+import type { SessionId } from "./session-id.js";
 import type { Duplex } from "node:stream";
 import { inspect } from "node:util";
 import type { Daemon } from "./daemon.js";
@@ -195,7 +196,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // way only, so anything more the subscriber sends is not read.
   // [LAW:no-ambient-temporal-coupling] A subscriber slower than the frames
   // gets the newest one when its socket drains, never a backlog of stale ones.
-  const stream = (sessionId: string, lane: Lane): void => {
+  const stream = (sessionId: SessionId, lane: Lane): void => {
     // A connection the request timer already answered — TIMEOUT, then ended, while a cold or busy
     // daemon had not yet read the subscribe — is not a subscription: its socket is closing, and a
     // feed attached to it would never hear the close. The subscriber was told, and opens another.

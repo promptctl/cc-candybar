@@ -28,6 +28,7 @@ import type { StoresRead } from "./edge.js";
 import { parseMarkBook } from "./mark-book.js";
 import { parseClickedTerminals } from "./clicked-terminals.js";
 import { parsePostMortemsRead } from "./post-mortems-read.js";
+import { parseSessionId } from "../daemon/session-id.js";
 
 export interface DaemonClients {
   readonly bundle: string;
@@ -98,17 +99,25 @@ export function parseDaemonClients(stats: StatsSnapshot): Asked<DaemonClients> {
       reason: `the running daemon (${stats.version}) reported clients without their age or session: ${JSON.stringify(stats.clients)}`,
     };
   }
-  return {
-    kind: "ok",
-    value: {
-      bundle: stats.bundle,
-      clients: sightings.map((c) => ({
-        client: sanitizeClient(c.client) ?? null,
-        sessionId: c.sessionId as string,
-        ago: c.ago as number,
-      })),
-    },
-  };
+  const clients: Array<DaemonClients["clients"][number]> = [];
+  for (const c of sightings) {
+    // [LAW:parse-dont-validate] The session id crosses the same checkpoint a
+    // render's hook JSON does; a refused one fails the read as a malformed
+    // sighting does above.
+    const sessionId = parseSessionId(c.sessionId);
+    if (!sessionId.ok) {
+      return {
+        kind: "failed",
+        reason: `the running daemon (${stats.version}) reported a client whose session id ${sessionId.problem}: ${JSON.stringify(stats.clients)}`,
+      };
+    }
+    clients.push({
+      client: sanitizeClient(c.client) ?? null,
+      sessionId: sessionId.id,
+      ago: c.ago as number,
+    });
+  }
+  return { kind: "ok", value: { bundle: stats.bundle, clients } };
 }
 
 const isPostMortem = (m: unknown): m is PostMortem => {

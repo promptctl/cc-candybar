@@ -217,16 +217,19 @@ export class Collector {
     // [LAW:no-silent-failure] A renderer subscribes only for sessions the host
     // handed it, and the host keeps a session's record until its retire
     // settles: a session with no record is the host's bug.
-    for (const session of Object.keys(sources) as SessionId[]) {
+    for (const { session } of sources) {
       if (!this.records.has(session))
         this.deps.log(
           "error",
           `subscriptions name session ${JSON.stringify(session)}, which the collector has no record of`,
         );
     }
+    const bySession = new Map<SessionId, readonly Subscription[]>(
+      sources.map((e) => [e.session, e.subscriptions]),
+    );
     runInAction(() => {
       for (const record of this.records.values()) {
-        const next = sourcesOf(sources[record.session] ?? []);
+        const next = sourcesOf(bySession.get(record.session) ?? []);
         if (sameSources(next, record.subscriptions)) continue;
         record.subscriptions = next;
         const { phase } = record;

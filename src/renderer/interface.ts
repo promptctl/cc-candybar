@@ -151,7 +151,10 @@ export interface Subscription {
 // renderer holds needs read. The host diffs it; nothing is declared by
 // message. A session absent from it needs nothing read.
 export interface Subscriptions {
-  readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
+  readonly sources: ReadonlyArray<{
+    readonly session: SessionId;
+    readonly subscriptions: readonly Subscription[];
+  }>;
 }
 
 export interface RendererOutput {

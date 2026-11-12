@@ -221,7 +221,9 @@ async function renderFrames(): Promise<void> {
     });
     // [LAW:one-source-of-truth] The view's subscriptions reach the collector as
     // a turn's output takes them to the daemon's.
-    collector.subscribed({ sources: { [sessionId]: subscriptionsOf(state) } });
+    collector.subscribed({
+      sources: [{ session: sessionId, subscriptions: subscriptionsOf(state) }],
+    });
     try {
       const effective = view.source.effective();
 
@@ -239,7 +241,7 @@ async function renderFrames(): Promise<void> {
         // instant, sampled here as the daemon samples it per request.
         const at = instantOf(new Date(world.clock.now()));
         await settleWorld(
-          { hookData, deps: providers, cwd, hints },
+          { sessionId, hookData, deps: providers, cwd, hints },
           at,
           new Map(),
           () => worldStates.of(sessionId),

@@ -18,6 +18,7 @@
 // context) → the offer and the failure. The watch below is the edge: the
 // clocks, the registry fetch, the act's record, the validator registrations.
 
+import type { SessionId } from "./session-id.js";
 import {
   effectsUrl,
   VERB_APPLY_UPDATE,
@@ -157,7 +158,7 @@ export function factsOf(update: Update): UpdateFacts {
 // session dismissed (the identity it wrote, or nothing), and whether the
 // session's config allows the notice at all (Globals.updateNotice).
 export interface NoticeContext {
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   readonly dismissed: string | null;
   readonly enabled: boolean;
 }

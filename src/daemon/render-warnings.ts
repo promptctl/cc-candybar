@@ -21,6 +21,7 @@
 // compared by value: a warning that starts or stops while nothing else about
 // the frame moved is counted, or cleared, by the renderer's next frame.
 
+import type { SessionId } from "./session-id.js";
 import type { Drawing } from "../config/lanes.js";
 import type { RenderWarning } from "../dsl/render.js";
 
@@ -59,7 +60,7 @@ export class RenderWarningRecords {
   constructor(private readonly maxRecords: number = MAX_RECORDS) {}
 
   // The warnings `by` last recorded for `sessionId`; none before its first.
-  of(sessionId: string, by: Drawing["by"]): readonly RenderWarning[] {
+  of(sessionId: SessionId, by: Drawing["by"]): readonly RenderWarning[] {
     return this.records.get(keyOf(sessionId, by))?.warnings ?? [];
   }
 
@@ -67,7 +68,7 @@ export class RenderWarningRecords {
   // every other renderer's drawn from the same config, each warning once
   // across renderers (a warning two renderers met is one fact).
   ofSession(
-    sessionId: string,
+    sessionId: SessionId,
     by: Drawing["by"],
     scope: RecordScope,
   ): readonly RenderWarning[] {
@@ -95,7 +96,7 @@ export class RenderWarningRecords {
   // Records what a frame warned. Says whether that changed what the
   // renderer's next frame shows.
   drawn(
-    sessionId: string,
+    sessionId: SessionId,
     by: Drawing["by"],
     scope: RecordScope,
     warnings: readonly RenderWarning[],
@@ -115,5 +116,5 @@ export class RenderWarningRecords {
   }
 }
 
-const keyOf = (sessionId: string, by: Drawing["by"]): string =>
+const keyOf = (sessionId: SessionId, by: Drawing["by"]): string =>
   `${by}\0${sessionId}`;

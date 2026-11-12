@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
-import type { SessionSnapshot, SessionStorage } from "./session-state";
+import type {
+  LoadedSessions,
+  SessionSnapshot,
+  SessionStorage,
+} from "./session-state";
+import { parseSessionId, type SessionId } from "./session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
 // [LAW:no-silent-failure] Corrupt/missing file → empty state is the *defined*
@@ -52,7 +57,8 @@ export class FileSessionStorage implements SessionStorage {
     this.writingPath = `${filePath}.writing`;
   }
 
-  load(): SessionSnapshot {
+  load(): LoadedSessions {
+    const loaded = new Map<SessionId, Readonly<Record<string, string>>>();
     let raw: string;
     try {
       raw = fs.readFileSync(this.filePath, "utf8");
@@ -67,19 +73,35 @@ export class FileSessionStorage implements SessionStorage {
           `session-state read failed (${code}); starting empty`,
         );
       }
-      return {};
+      return loaded;
     }
     try {
       const parsed: unknown = JSON.parse(raw);
-      if (isSnapshot(parsed)) return parsed;
+      if (isSnapshot(parsed)) {
+        // [LAW:no-silent-failure] A key the session id checkpoint refuses is
+        // reported here, the one place a file's keys are read, and dropped; the
+        // keys that remain come back branded.
+        for (const [key, values] of Object.entries(parsed)) {
+          const id = parseSessionId(key);
+          if (id.ok) {
+            loaded.set(id.id, values);
+          } else {
+            this.logger(
+              "warn",
+              `session-state load: dropped session key ${JSON.stringify(key)}: session id ${id.problem}`,
+            );
+          }
+        }
+        return loaded;
+      }
       this.logger(
         "warn",
         `session-state load: unexpected shape, starting empty`,
       );
-      return {};
+      return loaded;
     } catch {
       this.logger("warn", `session-state load: corrupt JSON, starting empty`);
-      return {};
+      return loaded;
     }
   }
 

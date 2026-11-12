@@ -265,9 +265,9 @@ export interface DaemonContext {
   // daemon hands both to the one owner of lane setup
   // (src/daemon/lane-setup.ts) and of the tmux status line.
   readonly lanes: {
-    readonly of: (origin: RenderOrigin, sessionId: string) => LaneSwitches;
+    readonly of: (origin: RenderOrigin, sessionId: SessionId) => LaneSwitches;
     readonly clicked: (
-      sessionId: string,
+      sessionId: SessionId,
       before: LaneSwitches,
       after: LaneSwitches,
     ) => void;
@@ -277,12 +277,12 @@ export interface DaemonContext {
   // does after its commit (`journaled`), so a feed drawing the session shows
   // the pick on its next frame with no request after it.
   readonly views: {
-    readonly follow: (sessionId: string, origin: RenderOrigin) => void;
+    readonly follow: (sessionId: SessionId, origin: RenderOrigin) => void;
   };
   // What the diagnostic the frame renderer `by` last delivered for the
   // session listed under `key` copies; undefined when it lists none under it.
   readonly diagnosticCopy: (
-    sessionId: string,
+    sessionId: SessionId,
     by: Drawing["by"],
     key: string,
   ) => string | undefined;
@@ -775,7 +775,7 @@ const stepState: VerbHandler = async (rawValue, ctx) => {
 // placement's setting asks nothing of the session's config.
 function refuseDisorderedPicks(
   ctx: Unbound,
-  sid: string,
+  sid: SessionId,
   verb: string,
   writes: ReadonlyArray<{ readonly key: string; readonly value: string }>,
 ): void {
@@ -827,7 +827,7 @@ function stepFrom(
 export function sessionRenderOrigin(
   requested: RenderOrigin,
   state: SessionStateReader,
-  sid: string,
+  sid: SessionId,
 ): RenderOrigin {
   const pick = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
   return pick === null
@@ -881,7 +881,7 @@ export function parseRenderOrigin(raw: string): RenderOrigin {
 // [LAW:no-silent-failure] A session that has never rendered has no origin
 // and therefore no config — a loud BadVerbArgs, not the daemon's own XDG
 // guess.
-function sessionOrigin(ctx: Unbound, sid: string): RenderOrigin {
+function sessionOrigin(ctx: Unbound, sid: SessionId): RenderOrigin {
   const origin = recordedOrigin(ctx, sid);
   if (origin === null) {
     throw new BadVerbArgs(
@@ -895,7 +895,7 @@ function sessionOrigin(ctx: Unbound, sid: string): RenderOrigin {
 // session that has never rendered.
 function requestedOrigin(
   ctx: Omit<DaemonContext, TurnBound>,
-  sid: string,
+  sid: SessionId,
 ): RenderOrigin | null {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null ? null : parseRenderOrigin(raw);
@@ -905,7 +905,7 @@ function requestedOrigin(
 // pick; null for a session that has never rendered.
 function recordedOrigin(
   ctx: Omit<DaemonContext, TurnBound>,
-  sid: string,
+  sid: SessionId,
 ): RenderOrigin | null {
   const requested = requestedOrigin(ctx, sid);
   return requested === null
@@ -917,7 +917,7 @@ function recordedOrigin(
 // session renders from reloads it before the click answers, as save does; one
 // that wrote no such file rebuilds nothing (a reload restarts every source).
 // Another session's file reaches its render through the fs watcher.
-function reloadIfWritten(ctx: Unbound, sid: string, step: Step): void {
+function reloadIfWritten(ctx: Unbound, sid: SessionId, step: Step): void {
   // A session with no recorded render has no cache entry to draw stale.
   const origin = recordedOrigin(ctx, sid);
   if (origin === null) return;
@@ -930,7 +930,7 @@ function reloadIfWritten(ctx: Unbound, sid: string, step: Step): void {
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
 // read, and what gates them: a session's gate is its own config's, never a
 // merge of every config the daemon holds.
-function sessionConfig(ctx: Unbound, sid: string): DslConfig {
+function sessionConfig(ctx: Unbound, sid: SessionId): DslConfig {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
 
@@ -939,12 +939,12 @@ function sessionConfig(ctx: Unbound, sid: string): DslConfig {
 // each read, which a click can move. Null for a session that has never
 // rendered, which has no config to switch them.
 interface LaneMeter {
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   readonly before: LaneSwitches;
   readonly read: () => LaneSwitches;
 }
 
-function laneMeter(ctx: DaemonContext, sid: string): LaneMeter | null {
+function laneMeter(ctx: DaemonContext, sid: SessionId): LaneMeter | null {
   const requested = requestedOrigin(ctx, sid);
   if (requested === null) return null;
   const read = (): LaneSwitches =>
@@ -956,7 +956,7 @@ function laneMeter(ctx: DaemonContext, sid: string): LaneMeter | null {
 // config, so nothing nested.
 function nestOf(
   ctx: Omit<DaemonContext, TurnBound>,
-  sid: string,
+  sid: SessionId,
 ): DisclosureNest {
   const origin = recordedOrigin(ctx, sid);
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
@@ -977,7 +977,7 @@ function originHome(
   );
 }
 
-function editStore(ctx: ClickContext, sid: string): EditStore {
+function editStore(ctx: ClickContext, sid: SessionId): EditStore {
   return {
     record: (file, before, after) => ctx.journal.file(sid, file, before, after),
     logger: ctx.log,
@@ -1462,7 +1462,7 @@ const applyUpdate: VerbHandler = async (value, ctx) => {
 // a loud BadVerbArgs, never a click that acts on a guessed "not in tmux".
 function sessionHints(
   ctx: Unbound,
-  sid: string,
+  sid: SessionId,
 ): ReturnType<typeof parseClientHints> {
   const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
   if (raw === null) {
@@ -1484,7 +1484,7 @@ function sessionHints(
 
 // [LAW:single-enforcer] One write of the whole report, through setBatch — the
 // row cap flips, the reason and fixable land, in one reactive transaction.
-function writeReport(ctx: Unbound, sid: string, facts: DoctorFacts): void {
+function writeReport(ctx: Unbound, sid: SessionId, facts: DoctorFacts): void {
   const reports = runDoctor(facts);
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.log(
@@ -1509,7 +1509,7 @@ interface ClickGather {
 // written over facts the doctor did not see.
 async function clickGather(
   ctx: VerbContext,
-  sid: string,
+  sid: SessionId,
   doctor: DoctorEdge,
   load: ReturnType<DoctorEdge["loadConfig"]>,
 ): Promise<ClickGather> {
@@ -1563,7 +1563,10 @@ async function clickGather(
 }
 
 // A doctor effect's gather, and the facts its turn reasons over.
-const gatherClick = (ctx: VerbContext, sid: string): Promise<ClickGather> => {
+const gatherClick = (
+  ctx: VerbContext,
+  sid: SessionId,
+): Promise<ClickGather> => {
   const doctor = oneAskPerClick(ctx.doctor);
   return clickGather(
     ctx,
@@ -1579,7 +1582,7 @@ const gatherClick = (ctx: VerbContext, sid: string): Promise<ClickGather> => {
 // into them, so what it read before its turn another click may have moved.
 async function clickFacts(
   ctx: ClickContext,
-  sid: string,
+  sid: SessionId,
   gathered: ClickGather,
 ): Promise<DoctorFacts> {
   const { facts, install } = await ctx.gather(gathered.current);

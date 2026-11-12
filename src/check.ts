@@ -346,6 +346,7 @@ export function checkPayload(
   const { term: _term, ...payload } = composePayload(
     document,
     {
+      sessionId: CHECK_SESSION,
       hookData,
       hints: CHECK_HINTS,
       home: CHECK_HOME,

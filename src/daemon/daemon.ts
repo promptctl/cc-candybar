@@ -138,7 +138,7 @@ export interface DaemonAdapters {
   // which lanes a session's feed follows, and ends its waits with the daemon.
   readonly laneEdge: (
     launcher: Launcher,
-    following: (sessionId: string) => ReadonlySet<Lane>,
+    following: (sessionId: SessionId) => ReadonlySet<Lane>,
     closing: AbortSignal,
     probe: ProcessProbe,
   ) => LaneEdge;
@@ -709,13 +709,16 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     links: linkSigner,
     runs,
     lanes: {
-      of: (origin: RenderOrigin, sessionId: string) =>
+      of: (origin: RenderOrigin, sessionId: SessionId) =>
         lanesAt(parts, origin, sessionId),
-      clicked: (sessionId: string, before: LaneSwitches, after: LaneSwitches) =>
-        laneClicked(parts, sessionId, before, after),
+      clicked: (
+        sessionId: SessionId,
+        before: LaneSwitches,
+        after: LaneSwitches,
+      ) => laneClicked(parts, sessionId, before, after),
     },
     views: {
-      follow: (sessionId: string, origin: RenderOrigin) =>
+      follow: (sessionId: SessionId, origin: RenderOrigin) =>
         renderCache.follow(
           sessionId,
           origin.projectDir,
@@ -723,7 +726,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           origin.target.path,
         ),
     },
-    diagnosticCopy: (sessionId: string, by: Drawing["by"], key: string) =>
+    diagnosticCopy: (sessionId: SessionId, by: Drawing["by"], key: string) =>
       renderCache.drawnCopy(sessionId, by, key),
   };
 
