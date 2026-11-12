@@ -608,7 +608,8 @@ export class SessionUsageStore {
     });
   }
 
-  // The `today` projection: cross-session sum of every record's today bucket.
+  // The `today` projection, which declareToday and daysOutside below answer
+  // together: the cross-session sum of every record's today bucket.
   // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
   // makes the whole projection `failed` — a total silently missing today's
   // main work would be a confident wrong number, worse than a loud gap.
@@ -667,14 +668,13 @@ export class SessionUsageStore {
     return ok(Object.fromEntries(record.days));
   }
 
-  // Take one tok/s observation of the active session: ingest its current
+  // A request's speed sample, over its one refresh of the session: ingest its current
   // cumulative counts, return the prior sample alongside, and record this one as
   // the new baseline. [LAW:no-silent-failure] A failed transcript parse flows out
   // as `failed` (the boundary logs it and the segment reads "—"); an unknown
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
   // clock instant — the store never reads the clock for tok/s timing itself.
-  // It runs over the request's one refresh of the session.
   private async observed(
     sessionId: SessionId,
     refresh: () => SessionRefresh,

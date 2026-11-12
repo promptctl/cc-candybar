@@ -225,20 +225,15 @@ export function fakeUsage(
   const speed = refreshed<SpeedObservation>();
   const refreshUsage = (sessionId: string) =>
     usage.store(sessionId, readers.usage?.(sessionId) ?? ABSENT);
-  const observeSpeed = (
-    sessionId: string,
-    transcriptPath: string | undefined,
-    nowMs: number,
-  ) =>
-    speed.store(
-      sessionId,
-      readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
-    );
   return {
     // A request's lanes over its session, as the real store's `request`.
     request: (sessionId: string, transcriptPath: string | undefined) => ({
       usage: () => refreshUsage(sessionId),
-      speed: (nowMs: number) => observeSpeed(sessionId, transcriptPath, nowMs),
+      speed: (nowMs: number) =>
+        speed.store(
+          sessionId,
+          readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
+        ),
       today: async () => {
         runInAction(() => todayRefreshed.add(sessionId));
       },
