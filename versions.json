@@ -4,15 +4,22 @@
     {
       "version": "pr-725",
       "ref": "refs/pull/725/merge",
-      "sha": "7c2aeab7fe98ab960365386e56dfb7f11a5d261d",
-      "timestamp": "2026-11-12T06:17:03.459Z",
+      "sha": "2795b1d19c2f2364858495bc2261408f1ec929bb",
+      "timestamp": "2026-11-12T06:18:12.326Z",
       "commits": [
         {
-          "sha": "7c2aeab7fe98ab960365386e56dfb7f11a5d261d",
+          "sha": "2795b1d19c2f2364858495bc2261408f1ec929bb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T23:14:18-07:00",
-          "message": "Merge 6548f252746a3180de2e7ff34b3e3a41ce583021 into cd25df0cf0cb1088bd2b4a19deac4d21858b1823\n"
+          "timestamp": "2026-11-12T06:17:10Z",
+          "message": "Merge 938fdf110d6bc47dfea8557d1f6ee714b609e5f7 into cd25df0cf0cb1088bd2b4a19deac4d21858b1823\n"
+        },
+        {
+          "sha": "938fdf110d6bc47dfea8557d1f6ee714b609e5f7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:16:58-07:00",
+          "message": "refactor(usage): speed is read through the request path too, and the fake usage store is typed against the real one (candybar-host-renderer-x96a.3vg)\n"
         },
         {
           "sha": "6548f252746a3180de2e7ff34b3e3a41ce583021",

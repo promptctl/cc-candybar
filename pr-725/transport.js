@@ -80245,7 +80245,6 @@ var SessionUsageStore = class {
   // off where its transcript lives: a sum over every directory seen so far, or
   // over the sessions that had asked, would move with which other sessions
   // happened to have rendered.
-  //
   // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
@@ -80287,10 +80286,7 @@ var SessionUsageStore = class {
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
   // clock instant — the store never reads the clock for tok/s timing itself.
-  observeSpeed(sessionId2, transcriptPath, nowMs) {
-    return this.request(sessionId2, transcriptPath).speed(nowMs);
-  }
-  // A request's speed sample, over the request's one refresh of the session.
+  // It runs over the request's one refresh of the session.
   async observed(sessionId2, refresh, nowMs) {
     const { stamp: stamp2, record: refreshed } = refresh();
     return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
