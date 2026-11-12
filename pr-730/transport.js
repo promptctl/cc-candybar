@@ -66669,7 +66669,10 @@ function sourcesFactOf(names, runs, facts) {
   const named3 = [
     ...names.map((name) => [name, sourceFactOf(facts, name)]),
     ...[...runs].map(
-      ([name, run3]) => [name, (facts.runs[run3.digest] ?? UNREAD_RUN).reading]
+      ([name, run3]) => [
+        name,
+        run3 === void 0 ? UNREAD_RUN.reading : (facts.runs[run3.digest] ?? UNREAD_RUN).reading
+      ]
     )
   ];
   return {
@@ -71841,16 +71844,24 @@ var SourceRegistry = class _SourceRegistry {
   // the turn's input moved them. The host runs them (src/daemon/source-runs.ts),
   // and their readings come back through the view's input source.
   runs = observable.map(void 0, { deep: false });
+  runSourcesNow = computed(
+    () => new Map([...this.runs].map(([name, run3]) => [name, run3.get()]))
+  );
   namedNow = computed(
     () => new Map(
-      [...this.runs].flatMap(([name, run3]) => {
-        const named3 = run3.get();
-        return named3 === void 0 ? [] : [[name, named3]];
-      })
+      [...this.runSourcesNow.get()].flatMap(
+        ([name, run3]) => run3 === void 0 ? [] : [[name, run3]]
+      )
     )
   );
-  // The run each source names, by variable name: what names a pending run on
-  // the render event and among `check`'s stragglers.
+  // Every `shell` and `file` source by variable name, with the run it names
+  // or none while its policy has nothing answered to name: what the render
+  // event counts, so a source whose key never answers is still told.
+  runSources() {
+    return this.runSourcesNow.get();
+  }
+  // The run each source names, by variable name: what a request waits on and
+  // what names `check`'s stragglers.
   namedRuns() {
     return this.namedNow.get();
   }
@@ -76938,7 +76949,7 @@ function drawRender(parts, setup, drawing2) {
     facts,
     sourcesFactOf(
       [...view.state.sources.keys()],
-      view.registry.namedRuns(),
+      view.registry.runSources(),
       document
     )
   );

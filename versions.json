@@ -4,15 +4,22 @@
     {
       "version": "pr-730",
       "ref": "refs/pull/730/merge",
-      "sha": "d2227a79779d1f47adc5c26cd83fb39e029004af",
-      "timestamp": "2026-11-12T09:23:21.523Z",
+      "sha": "2f291728599acc978d7e85d8dec7182f5d682e10",
+      "timestamp": "2026-11-12T09:26:28.516Z",
       "commits": [
         {
-          "sha": "d2227a79779d1f47adc5c26cd83fb39e029004af",
+          "sha": "2f291728599acc978d7e85d8dec7182f5d682e10",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:22:21Z",
-          "message": "Merge c083a0b517ed29ad79a0cc11fe4775383852cf8e into 717218f3277b68494d6138b7195debffd0a866d0\n"
+          "timestamp": "2026-11-12T09:25:18Z",
+          "message": "Merge 4a224ada95e5bd4d1a8318b8d80c98c0e6aa6793 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+        },
+        {
+          "sha": "4a224ada95e5bd4d1a8318b8d80c98c0e6aa6793",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T02:25:07-07:00",
+          "message": "fix(render-event): a shell or file source whose key has not answered is counted and named pending (candybar-host-renderer-x96a.8e9)\n"
         },
         {
           "sha": "c083a0b517ed29ad79a0cc11fe4775383852cf8e",
