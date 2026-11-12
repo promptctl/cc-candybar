@@ -4,15 +4,22 @@
     {
       "version": "pr-729",
       "ref": "refs/pull/729/merge",
-      "sha": "4cfbdab453d3c24f46a352410f6dfc41b4e5a286",
-      "timestamp": "2026-11-12T07:52:59.532Z",
+      "sha": "4f336ba9120219768f6f4800e4ab88d8afa1359f",
+      "timestamp": "2026-11-12T07:57:00.396Z",
       "commits": [
         {
-          "sha": "4cfbdab453d3c24f46a352410f6dfc41b4e5a286",
+          "sha": "4f336ba9120219768f6f4800e4ab88d8afa1359f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T07:52:03Z",
-          "message": "Merge 99915b395361303588bffd9da1ae8983bc7d2360 into 7c43611a9831800d0c61d84c0a4dbcebc50c6fda\n"
+          "timestamp": "2026-11-12T07:56:01Z",
+          "message": "Merge d2d90af65c3fb8bcd28dd6166b1929c30fee289c into 7c43611a9831800d0c61d84c0a4dbcebc50c6fda\n"
+        },
+        {
+          "sha": "d2d90af65c3fb8bcd28dd6166b1929c30fee289c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T00:55:49-07:00",
+          "message": "fix(daemon): the TIMEOUT id's docs say which requests record it, and a refused click is checked against the test's own statement of the wire (candybar-host-renderer-x96a.9m0)\n"
         },
         {
           "sha": "99915b395361303588bffd9da1ae8983bc7d2360",
