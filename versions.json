@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-725",
+      "ref": "refs/pull/725/merge",
+      "sha": "9e2d92b055cd290cd7fc514dcaaea06f60e2f7e8",
+      "timestamp": "2026-11-12T06:31:34.721Z",
+      "commits": [
+        {
+          "sha": "9e2d92b055cd290cd7fc514dcaaea06f60e2f7e8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T06:30:19Z",
+          "message": "Merge 67dbddcd3f384e4ca7d7155d9159a4fba94dfbdc into cc2d992b5cd1f84f725f441ef665e582efabd1b6\n"
+        },
+        {
+          "sha": "67dbddcd3f384e4ca7d7155d9159a4fba94dfbdc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:18:58-07:00",
+          "message": "docs(usage): the today and speed comments describe the code they sit on (candybar-host-renderer-x96a.3vg)\n"
+        },
+        {
+          "sha": "4c17edfed75765f4a9c6acf2bdeb156722da1e01",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:16:58-07:00",
+          "message": "refactor(usage): speed is read through the request path too, and the fake usage store is typed against the real one (candybar-host-renderer-x96a.3vg)\n"
+        },
+        {
+          "sha": "a068e83cf7f686ba4e0018d19a7ed57719874ffb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:14:07-07:00",
+          "message": "refactor(usage): a test refreshes today through the request path the daemon takes, so the store keeps no method production never calls (candybar-host-renderer-x96a.3vg)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "cc2d992b5cd1f84f725f441ef665e582efabd1b6",
@@ -13,42 +49,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-12T06:21:15Z",
           "message": "chore(release): set `package.json` to 1.218.3\n\n## [1.218.3](https://github.com/promptctl/cc-candybar/compare/v1.218.2...v1.218.3) (2026-11-12)\n\n### Performance Improvements\n\n* **config:** a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg) ([#723](https://github.com/promptctl/cc-candybar/issues/723)) ([a454d2f](https://github.com/promptctl/cc-candybar/commit/a454d2f2ed6d81675e56ae6c45bef77b1db7007f))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-725",
-      "ref": "refs/pull/725/merge",
-      "sha": "dc2c5030605cf0824a0d966888e5f5d5790352b9",
-      "timestamp": "2026-11-12T06:20:07.604Z",
-      "commits": [
-        {
-          "sha": "dc2c5030605cf0824a0d966888e5f5d5790352b9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T06:19:10Z",
-          "message": "Merge 8363514848b150ae844650a956382ff7c8aca65d into cd25df0cf0cb1088bd2b4a19deac4d21858b1823\n"
-        },
-        {
-          "sha": "8363514848b150ae844650a956382ff7c8aca65d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T23:18:58-07:00",
-          "message": "docs(usage): the today and speed comments describe the code they sit on (candybar-host-renderer-x96a.3vg)\n"
-        },
-        {
-          "sha": "938fdf110d6bc47dfea8557d1f6ee714b609e5f7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T23:16:58-07:00",
-          "message": "refactor(usage): speed is read through the request path too, and the fake usage store is typed against the real one (candybar-host-renderer-x96a.3vg)\n"
-        },
-        {
-          "sha": "6548f252746a3180de2e7ff34b3e3a41ce583021",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T23:14:07-07:00",
-          "message": "refactor(usage): a test refreshes today through the request path the daemon takes, so the store keeps no method production never calls (candybar-host-renderer-x96a.3vg)\n"
         }
       ]
     }
