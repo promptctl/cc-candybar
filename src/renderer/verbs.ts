@@ -5,6 +5,7 @@
 // effect (docs/design/host-and-renderer.md §12).
 
 import type { RendererParts } from "../daemon/draw-bar.js";
+import type { MenuIdle } from "../daemon/menu-idle.js";
 import {
   closeIdleMenus,
   VERBS,
@@ -35,9 +36,11 @@ export interface RendererVerbs {
 }
 
 // The main renderer's parts: the draw's, which the host's own frames share,
-// and the verbs its click and menu-idle turns act through.
+// the verbs its click and menu-idle turns act through, and the idle clock's
+// count of the clicks in flight.
 export type MainRendererParts = RendererParts & {
   readonly verbs: RendererVerbs;
+  readonly menuIdle: Pick<MenuIdle, "clickArrived" | "clickSettled">;
 };
 
 // [LAW:single-enforcer] The verb table over the one verb context the daemon

@@ -7,6 +7,7 @@ import type { DaemonParts } from "../../src/daemon/daemon-parts";
 import type { MenuIdle } from "../../src/daemon/menu-idle";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { mainRenderer } from "../../src/renderer/main";
+import { systemTimekeeper } from "../../src/time";
 import {
   verbsOver,
   type DaemonVerbContext,
@@ -27,6 +28,7 @@ export function clickParts(
   return {
     renderer: rendererHost(
       "main",
+      systemTimekeeper,
       mainRenderer(parts),
       () => {},
       () => {},

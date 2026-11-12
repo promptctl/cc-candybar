@@ -46,7 +46,7 @@ import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
-import { instantOf } from "../utils/instant.js";
+import { instantAt, instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
 import {
   noteFacts,
@@ -708,6 +708,14 @@ async function clickRan(
   }
 }
 
+// [LAW:dataflow-not-control-flow] The field a click records the verb it runs
+// under, by how it arrived: a status-line click has already recorded its own
+// verb, so the one its link runs is `linkVerb`.
+const VERB_FACT: Readonly<Record<ClickArrival["via"], string>> = {
+  link: "verb",
+  "tmux-status": "linkVerb",
+};
+
 // [LAW:single-enforcer] A click that runs a verb is one turn of the renderer,
 // which decides what it means and acts on it (src/renderer/click.ts); the
 // host parses its session at the one session-id checkpoint, holds the session
@@ -728,12 +736,19 @@ async function handleClick(
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
+  // [LAW:nothing-unseen] What the host knows of the click is recorded before
+  // anything about it can fail: the verb it runs, then its session as it
+  // crossed the one session-id checkpoint. One that failed is never recorded,
+  // and a click naming none records `sid=-`.
+  noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const session = clickSessionOf(verb, value);
+  if (session === null) noteFacts(facts, { sid: "-" });
+  else if (session.ok) noteFacts(facts, { sid: session.id });
   const release = session?.ok ? parts.collector.holding(session.id) : () => {};
   try {
     const delivered = await parts.renderer.answer({
       kind: "event",
-      at: instantOf(new Date(parts.clock.now())),
+      at: instantAt(parts.clock),
       event: { kind: "click", verb, value, session, arrival, gone: clientGone },
     });
     switch (delivered.kind) {

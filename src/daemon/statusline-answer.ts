@@ -8,7 +8,7 @@ import type { Effect, RequestId } from "../renderer/interface.js";
 import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { checkoutLocation } from "../utils/git-root.js";
-import { instantOf, type Instant } from "../utils/instant.js";
+import { instantAt, type Instant } from "../utils/instant.js";
 import { RENDER_ANSWERS, renderFailed } from "./draw-bar.js";
 import type { Response } from "./protocol";
 import type { FrameSeen } from "./render-sightings";
@@ -96,7 +96,7 @@ export async function answerStatusline(
     void host.deliver(
       {
         kind: "event",
-        at: instantOf(new Date(clock.now())),
+        at: instantAt(clock),
         event: {
           kind: "effect-done",
           of: effect.id,

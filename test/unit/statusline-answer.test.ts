@@ -109,6 +109,7 @@ async function answer(
   const answered = await answerStatusline(
     rendererHost(
       "main",
+      CLOCK,
       renderer,
       (_level, line) => logged.push(line),
       (subscriptions) => subscribed.push(subscriptions),

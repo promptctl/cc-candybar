@@ -576,6 +576,27 @@ test("the click path holds its session in the collector while the turn runs, and
   idle.dispose();
 });
 
+test("a click whose session will not decode is a bad request whose event still names its verb", async () => {
+  const { ctx } = setup();
+  const { arrival: _a, turnWaited: _t, placeWaited: _p, gatherTook: _g, clientGone: _c, ...verbCtx } = ctx;
+  const events: string[] = [];
+  const parts = {
+    clock: { monotonic: () => performance.now(), now: () => Date.now() },
+    payloadProviders: {},
+    log: (_level: string, line: string) => events.push(line),
+    ...clickParts(verbCtx, { clickArrived: () => {}, clickSettled: () => {} }),
+  } as unknown as DaemonParts;
+  const { resp } = await replyTo(
+    parts,
+    { kind: "click", verb: VERB_DOCTOR_RUN, value: "%ZZ" } as Parameters<typeof replyTo>[1],
+    () => false,
+    systemTimekeeper.monotonic(),
+    () => false,
+  );
+  expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+  expect(events).toEqual([expect.stringMatching(new RegExp(` verb=${VERB_DOCTOR_RUN} `))]);
+});
+
 test("tsc refuses `ctx.launcher` in a VerbHandler", () => {
   const handler: VerbHandler = async (_value, ctx) => {
     // @ts-expect-error A handler reaches launches through the turn alone.

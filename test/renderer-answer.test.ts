@@ -350,6 +350,7 @@ describe("the session's config, ahead of its request", () => {
     const kinds: string[] = [];
     const host = rendererHost(
       "main",
+      systemTimekeeper,
       {
         answer: (input) => {
           kinds.push(input.event.kind);
@@ -428,6 +429,7 @@ describe("two requests of one session at different keys", () => {
     const requests: WorldState[] = [];
     const host = rendererHost(
       "main",
+      systemTimekeeper,
       {
         answer: (input) => {
           if (input.event.kind === "config")
@@ -506,10 +508,8 @@ describe("a click", () => {
     const { effects, subscriptions, record } = await handIn(t.r, click("act"));
     expect(effects).toEqual([]);
     expect(subscriptions.sources).toEqual({});
-    expect(record).toEqual([
-      ["verb", "act"],
-      ["sid", SESSION],
-    ]);
+    // The host records what it knows of the click; this act waited on nothing.
+    expect(record).toEqual([]);
   });
 
   test("that throws once its act has landed names what the open views read then", async () => {

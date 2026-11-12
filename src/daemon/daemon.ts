@@ -782,6 +782,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     worldStates,
     renderer: rendererHost(
       "main",
+      clock,
       mainRenderer({
         clock,
         log,

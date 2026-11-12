@@ -17,6 +17,8 @@ import {
   type TurnRecord,
 } from "../renderer/interface.js";
 import { eventLine } from "../utils/logfmt.js";
+import { instantAt } from "../utils/instant.js";
+import type { Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 
 // The only renderer there is yet: the main one, in process.
@@ -43,6 +45,8 @@ export interface RendererHost {
 
 export function rendererHost(
   name: RendererName,
+  // The clock a refusal's `effect-done` is stamped by, when it is made.
+  clock: Pick<Timekeeper, "now">,
   renderer: Renderer,
   log: DaemonLogger,
   // [LAW:single-enforcer] Where every output's subscriptions go: the
@@ -58,11 +62,7 @@ export function rendererHost(
       // and none is left owed its `effect-done`.
       if (input.event.kind !== "request")
         for (const effect of output.effects)
-          refuse(
-            input,
-            effect,
-            `a ${input.event.kind} turn answers no request`,
-          );
+          refuse(effect, `a ${input.event.kind} turn answers no request`);
       return { kind: "answered", output };
     } catch (e) {
       if (!(e instanceof TurnThrew))
@@ -71,11 +71,11 @@ export function rendererHost(
       return { kind: "threw", error: e.thrown, record: e.record };
     }
   };
-  const refuse = (input: RendererInput, effect: Effect, reason: string): void =>
+  const refuse = (effect: Effect, reason: string): void =>
     void deliver(
       {
         kind: "event",
-        at: input.at,
+        at: instantAt(clock),
         event: {
           kind: "effect-done",
           of: effect.id,

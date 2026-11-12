@@ -795,6 +795,7 @@ function statusline(r: Rig, configFile: string) {
   );
   const host = rendererHost(
     "main",
+    systemTimekeeper,
     {
       answer: async (input) => {
         const output = await renderer.answer(input);
