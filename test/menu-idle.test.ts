@@ -17,6 +17,7 @@ import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, clickSessionOf, type VerbContext } from "../src/daemon/verbs/index";
 import { instantOf, type Instant } from "../src/utils/instant";
+import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
@@ -39,6 +40,7 @@ import { textOf, type Frame, type Row } from "../src/render/frame";
 import { systemTimekeeper } from "../src/time";
 
 const at = (s: number): Instant => s as Instant;
+const S = sessionIdOf("s");
 
 describe("the flash", () => {
   test("three slow flashes, then three fast ones, ending where the menu closes", () => {
@@ -69,7 +71,7 @@ describe("the flash", () => {
 
 describe("MenuIdle: the close follows the idle clock, whoever writes it", () => {
   let now = 0;
-  let closes: Array<{ sid: string; idleS: number; timeoutS: number }>;
+  let closes: Array<{ sid: SessionId; idleS: number; timeoutS: number }>;
   let failures: string[];
   let idle: MenuIdle;
   beforeEach(() => {
@@ -97,9 +99,9 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
 
   test("a drawn menu closes a timeout after the first frame that drew it", () => {
     // Nothing drawn yet: a frame drawing a menu now has only begun it.
-    expect(idle.since("s", at(now))).toBeUndefined();
-    idle.observe("s", at(now), true, 30);
-    expect(idle.since("s", at(now))).toBe(1000);
+    expect(idle.since(S, at(now))).toBeUndefined();
+    idle.observe(S, at(now), true, 30);
+    expect(idle.since(S, at(now))).toBe(1000);
     expect(idle.getStats().armed).toBe(1);
     advance(29.9);
     expect(closes).toEqual([]);
@@ -111,16 +113,16 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
   // closed lands here: disposed, it arms nothing.
   test("a frame landing after dispose arms no close", () => {
     idle.dispose();
-    idle.observe("s1", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     expect(idle.getStats().armed).toBe(0);
     advance(31);
     expect(closes).toEqual([]);
   });
 
   test("a click moves the close with no render after it", () => {
-    idle.observe("s", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     advance(20);
-    idle.clicked("s", at(now));
+    idle.clicked(S, at(now));
     advance(10);
     expect(closes).toEqual([]);
     advance(20);
@@ -128,12 +130,12 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
   });
 
   test("a menu first drawn long after the last click closes a timeout after it appears", () => {
-    idle.clicked("s", at(now));
-    idle.observe("s", at(now), false, 30);
+    idle.clicked(S, at(now));
+    idle.observe(S, at(now), false, 30);
     advance(3600);
     // A reload adds a group open by default.
-    idle.observe("s", at(now), true, 30);
-    expect(idle.since("s", at(now))).toBe(4600);
+    idle.observe(S, at(now), true, 30);
+    expect(idle.since(S, at(now))).toBe(4600);
     advance(29.9);
     expect(closes).toEqual([]);
     advance(0.1);
@@ -144,25 +146,25 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     const older = at(now);
     advance(1);
     // The newer frame, drawn after a ✕ click, shows no menu.
-    idle.observe("s", at(now), false, 30);
+    idle.observe(S, at(now), false, 30);
     // The older frame, which drew the menu, finishes last.
-    idle.observe("s", older, true, 30);
+    idle.observe(S, older, true, 30);
     expect(idle.getStats().armed).toBe(0);
-    expect(idle.since("s", at(now))).toBeUndefined();
+    expect(idle.since(S, at(now))).toBeUndefined();
   });
 
   test("a click in another session moves nothing here", () => {
-    idle.observe("s", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     advance(20);
-    idle.clicked("other", at(now));
+    idle.clicked(sessionIdOf("other"), at(now));
     advance(10);
     expect(closes.map((c) => c.sid)).toEqual(["s"]);
   });
 
   test("a changed timeout is honoured", () => {
-    idle.observe("s", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     advance(10);
-    idle.observe("s", at(now), true, 60);
+    idle.observe(S, at(now), true, 60);
     advance(20);
     expect(closes).toEqual([]);
     advance(30);
@@ -170,20 +172,20 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
   });
 
   test("no menu drawn, no timer", () => {
-    idle.observe("s", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     advance(10);
-    idle.observe("s", at(now), false, 30);
+    idle.observe(S, at(now), false, 30);
     expect(idle.getStats().armed).toBe(0);
     advance(60);
     expect(closes).toEqual([]);
   });
 
   test("a menu still drawn after a close closes a timeout later, never at once", async () => {
-    idle.observe("s", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     advance(30);
     await jest.advanceTimersByTimeAsync(0);
     // The render after the close still draws a menu (a group open by default).
-    idle.observe("s", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     advance(29);
     expect(closes).toHaveLength(1);
     advance(1);
@@ -191,7 +193,7 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
   });
 
   test("a session that stops rendering after a close is closed once, not every timeout", () => {
-    idle.observe("s", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     advance(30);
     expect(closes).toHaveLength(1);
     expect(idle.getStats().armed).toBe(0);
@@ -207,13 +209,13 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
       },
       failed: (sid, e) => failures.push(`${sid}: ${(e as Error).message}`),
     });
-    failing.observe("s", at(now), true, 30);
+    failing.observe(S, at(now), true, 30);
     advance(30);
     await jest.advanceTimersByTimeAsync(0);
     expect(failures).toEqual(["s: no config"]);
     expect(failing.getStats().armed).toBe(0);
     advance(5);
-    failing.observe("s", at(now), true, 30);
+    failing.observe(S, at(now), true, 30);
     advance(29.9);
     expect(failures).toHaveLength(1);
     advance(0.1);
@@ -256,7 +258,7 @@ describe("the close as a renderer turn", () => {
       stillIdle: () => true,
       closed: () => {},
     };
-    await closeByTurn(host, () => at(now), "s", idle);
+    await closeByTurn(host, () => at(now), S, idle);
     expect(inputs).toEqual([
       {
         kind: "event",
@@ -279,7 +281,7 @@ describe("the close as a renderer turn", () => {
       close: (sid, i) => closeByTurn(host, () => at(now), sid, i),
       failed: (sid, e) => failures.push(`${sid}: ${(e as Error).message}`),
     });
-    idle.observe("s", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     advance(30);
     await jest.advanceTimersByTimeAsync(0);
     expect(failures).toEqual(["s: the close threw"]);
@@ -288,7 +290,7 @@ describe("the close as a renderer turn", () => {
     advance(5);
     await jest.advanceTimersByTimeAsync(0);
     expect(inputs).toHaveLength(1);
-    idle.observe("s", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     advance(29.9);
     await jest.advanceTimersByTimeAsync(0);
     expect(inputs).toHaveLength(1);
@@ -320,15 +322,15 @@ describe("a close that waits its turn", () => {
       },
       failed: () => {},
     });
-    idle.observe("s", at(now), true, 30);
-    const since = idle.since("s", at(now));
+    idle.observe(S, at(now), true, 30);
+    const since = idle.since(S, at(now));
     tick(30);
     for (let i = 0; i < 5; i++) {
-      idle.observe("s", at(now), true, 30);
+      idle.observe(S, at(now), true, 30);
       tick(1);
     }
     expect(closes).toBe(1);
-    expect(idle.since("s", at(now))).toBe(since);
+    expect(idle.since(S, at(now))).toBe(since);
     release();
     await jest.advanceTimersByTimeAsync(0);
     idle.dispose();
@@ -345,7 +347,7 @@ describe("a close that waits its turn", () => {
       close: () => new Promise((_resolve, no) => (reject = no)),
       failed: (_sid, e) => failures.push(e),
     });
-    idle.observe("s", at(now), true, 30);
+    idle.observe(S, at(now), true, 30);
     tick(30);
     idle.dispose();
     reject(new DaemonClosing("menu-idle"));
@@ -357,7 +359,7 @@ describe("a close that waits its turn", () => {
 });
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-const SID = "s1";
+const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";
 const PICKERS = "menus.candybar_pickers";
 const PAYLOAD = {

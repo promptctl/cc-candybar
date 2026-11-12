@@ -30,8 +30,9 @@ import { VERB_DOCTOR_RUN } from "../src/click/wire";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
+import { sessionIdOf } from "../src/daemon/session-id";
 
-const SID = "s1";
+const SID = sessionIdOf("s1");
 const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true, closed: () => {} };
 
 function gate(): { wait: Promise<void>; open: () => void } {
@@ -201,7 +202,7 @@ describe("the idle close decides in its turn", () => {
     });
     await drain();
     m.advance(30);
-    for (let i = 0; i < 256; i++) m.idle.clicked(`other${i}`, m.at());
+    for (let i = 0; i < 256; i++) m.idle.clicked(sessionIdOf(`other${i}`), m.at());
     m.idle.clicked(SID, m.at());
     held.open();
     await jest.advanceTimersByTimeAsync(0);
