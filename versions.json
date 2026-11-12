@@ -4,15 +4,22 @@
     {
       "version": "pr-717",
       "ref": "refs/pull/717/merge",
-      "sha": "ff6a554a4b28128bbea81d6d886c2a79173f4526",
-      "timestamp": "2026-11-12T00:17:27.625Z",
+      "sha": "2f2e98a671043181e2dbe0f97de5dece76f04939",
+      "timestamp": "2026-11-12T00:28:44.036Z",
       "commits": [
         {
-          "sha": "ff6a554a4b28128bbea81d6d886c2a79173f4526",
+          "sha": "2f2e98a671043181e2dbe0f97de5dece76f04939",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T17:16:24-07:00",
-          "message": "Merge d92648729c95339c9cfeb3cc43a15565c240d5af into 34aef2fa5a55d9dcf7fea8290c49861922b39bb8\n"
+          "timestamp": "2026-11-12T00:27:54Z",
+          "message": "Merge 520025d728131cae4ac7d803cf01f9df146f15b3 into 34aef2fa5a55d9dcf7fea8290c49861922b39bb8\n"
+        },
+        {
+          "sha": "520025d728131cae4ac7d803cf01f9df146f15b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T17:27:42-07:00",
+          "message": "fix(renderer): a turn that threw still names its views, and the host refuses every effect a turn answering no request returns (candybar-host-renderer-x96a.8se)\n\nA click can commit and follow its view before a later step throws, so a\nthrown turn carries the open views' subscriptions and the host takes them.\nEvery effect of a turn other than a request is refused through the host's\none path, which replaces the config turn's own refusal. Only a live session\nis held by a click: a retiring record goes once its retire settles.\n"
         },
         {
           "sha": "d92648729c95339c9cfeb3cc43a15565c240d5af",

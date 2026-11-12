@@ -77272,8 +77272,6 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
     noteFacts(facts, { renderer: host.name });
     return failed2(host, configured.error, "its config turn: ");
   }
-  for (const effect of configured.output.effects)
-    done2(effect, "a config turn answers no request");
   const delivered = await host.answer({
     kind: "event",
     at,
@@ -82760,11 +82758,12 @@ var Collector = class {
   }
   // [LAW:no-ambient-temporal-coupling] A click holds its session for as long
   // as the host awaits its turn, however long that is, and its release names
-  // the session as a request does, so the next sweep keeps it too. A session
-  // the collector holds no record of has nothing to keep.
+  // the session as a request does, so the next sweep keeps it too. Only a
+  // live session is kept: a retiring one has released its reads, and its
+  // record goes once the retire settles, as one with no record has gone.
   holding(session) {
     const record2 = this.records.get(session);
-    if (record2 === void 0) return () => {
+    if (record2?.phase.kind !== "live") return () => {
     };
     record2.clicks++;
     return () => {
@@ -84734,14 +84733,16 @@ init_globals();
 // src/renderer/interface.ts
 init_globals();
 var TurnThrew = class extends Error {
-  constructor(record2, thrown2) {
+  constructor(record2, thrown2, subscriptions) {
     super(thrown2 instanceof Error ? thrown2.message : String(thrown2));
     this.record = record2;
     this.thrown = thrown2;
+    this.subscriptions = subscriptions;
     this.name = "TurnThrew";
   }
   record;
   thrown;
+  subscriptions;
 };
 
 // src/daemon/renderer-host.ts
@@ -84750,11 +84751,36 @@ function rendererHost(name, renderer, log, subscribed) {
     try {
       const output = await renderer.answer(input);
       subscribed(output.subscriptions);
+      if (input.event.kind !== "request")
+        for (const effect of output.effects)
+          refuse4(
+            input,
+            effect,
+            `a ${input.event.kind} turn answers no request`
+          );
       return { kind: "answered", output };
     } catch (e) {
-      return e instanceof TurnThrew ? { kind: "threw", error: e.thrown, record: e.record } : { kind: "threw", error: e, record: [] };
+      if (!(e instanceof TurnThrew))
+        return { kind: "threw", error: e, record: [] };
+      subscribed(e.subscriptions);
+      return { kind: "threw", error: e.thrown, record: e.record };
     }
   };
+  const refuse4 = (input, effect, reason) => void deliver(
+    {
+      kind: "event",
+      at: input.at,
+      event: {
+        kind: "effect-done",
+        of: effect.id,
+        outcome: { kind: "failed", reason }
+      }
+    },
+    [
+      ["sid", effect.session],
+      ["effect", String(effect.id)]
+    ]
+  );
   const record2 = (input, about, delivered) => {
     const head = [
       ["renderer", name],
@@ -84777,17 +84803,12 @@ function rendererHost(name, renderer, log, subscribed) {
         );
     }
   };
-  return {
-    name,
-    answer: turn,
-    // [LAW:nothing-unseen] An input no event of its own records is recorded
-    // here.
-    deliver: async (input, about) => {
-      const delivered = await turn(input);
-      record2(input, about, delivered);
-      return delivered;
-    }
+  const deliver = async (input, about) => {
+    const delivered = await turn(input);
+    record2(input, about, delivered);
+    return delivered;
   };
+  return { name, answer: turn, deliver };
 }
 
 // src/renderer/main.ts
@@ -84891,7 +84912,7 @@ function mainRenderer(parts) {
       try {
         return await turn(event, at, record2);
       } catch (thrown2) {
-        throw new TurnThrew(record2, thrown2);
+        throw new TurnThrew(record2, thrown2, parts.renderCache.subscriptions());
       }
     }
   };
