@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-723",
+      "ref": "refs/pull/723/merge",
+      "sha": "074f26b9cd8d8a4fed3a030ce1608ba8ea19f8c5",
+      "timestamp": "2026-11-12T05:21:01.481Z",
+      "commits": [
+        {
+          "sha": "074f26b9cd8d8a4fed3a030ce1608ba8ea19f8c5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:20:15-07:00",
+          "message": "Merge 1b20943467f6fae486dbb97e9c503ad814eccfd9 into 0414cd9074150ff566b34b41a0172ea94b7ec30c\n"
+        },
+        {
+          "sha": "1b20943467f6fae486dbb97e9c503ad814eccfd9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:20:04-07:00",
+          "message": "perf(config): a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0414cd9074150ff566b34b41a0172ea94b7ec30c",
