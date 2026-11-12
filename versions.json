@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-717",
+      "ref": "refs/pull/717/merge",
+      "sha": "ff6a554a4b28128bbea81d6d886c2a79173f4526",
+      "timestamp": "2026-11-12T00:17:27.625Z",
+      "commits": [
+        {
+          "sha": "ff6a554a4b28128bbea81d6d886c2a79173f4526",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T17:16:24-07:00",
+          "message": "Merge d92648729c95339c9cfeb3cc43a15565c240d5af into 34aef2fa5a55d9dcf7fea8290c49861922b39bb8\n"
+        },
+        {
+          "sha": "d92648729c95339c9cfeb3cc43a15565c240d5af",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T17:15:55-07:00",
+          "message": "feat(renderer): a click is a turn through answer, and its output carries what its act moved (candybar-host-renderer-x96a.8se)\n\nA click that runs a verb is now one `click` turn of the main renderer, and\nthe idle clock's close of a session's menus is a `menu-idle` turn. Every\nverb still acts in place, through the verb table over the daemon's verb\ncontext, now reached as the renderer's own port. So a turn's output reads\nthe subscriptions once the act has landed (its commit and its view's\nfollow), which 8e9 needs once the host learns of a moved run only from an\noutput.\n\nThe host keeps the session checkpoint, the status row's resolution and its\nopener; a turn's throw is the click's reply by its class, as before. A click\nin flight holds its session against the collector's sweep, and its release\nnames the session as a request does. The idle close turns a turn that threw\nback into a rejection, so the clock waits a timeout before retrying and\nwrites its one line.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "34aef2fa5a55d9dcf7fea8290c49861922b39bb8",
