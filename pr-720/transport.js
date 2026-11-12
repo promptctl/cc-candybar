@@ -51573,6 +51573,15 @@ function parseSessionId(raw) {
   const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
   return problem === null ? { ok: true, id: raw } : { ok: false, problem };
 }
+function sessionKeyed(record2, refused) {
+  const keyed = /* @__PURE__ */ new Map();
+  for (const [key, value] of Object.entries(record2)) {
+    const id2 = parseSessionId(key);
+    if (id2.ok) keyed.set(id2.id, value);
+    else refused(key, id2.problem);
+  }
+  return keyed;
+}
 
 // src/utils/holds.ts
 init_globals();
@@ -65303,17 +65312,15 @@ function fileHistoryStorage(file, logger) {
         const parsed2 = JSON.parse(raw);
         if (parsed2 !== null && typeof parsed2 === "object" && !Array.isArray(parsed2) && Object.values(parsed2).every(isSessionHistory)) {
           const retired = /* @__PURE__ */ new Set();
-          for (const [sid, history] of Object.entries(parsed2)) {
-            const id2 = parseSessionId(sid);
-            if (id2.ok) {
-              loaded.set(id2.id, withoutRetiredKeys(history, retired));
-            } else {
-              logger(
-                "warn",
-                `settings-history load: dropped session key ${JSON.stringify(sid)}: session id ${id2.problem}`
-              );
-            }
-          }
+          const keyed = sessionKeyed(
+            parsed2,
+            (key, problem) => logger(
+              "warn",
+              `settings-history load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
+            )
+          );
+          for (const [id2, history] of keyed)
+            loaded.set(id2, withoutRetiredKeys(history, retired));
           if (retired.size > 0) {
             logger(
               "warn",
@@ -77108,14 +77115,11 @@ function arrived2(parts, req, lanes) {
 }
 function laneSessionOf(parts, req) {
   const { sessionState } = parts;
+  const sessionId2 = req.hookData.session_id;
   return {
-    sessionId: req.hookData.session_id,
+    sessionId: sessionId2,
     hints: req.hints,
-    origin: sessionRenderOrigin(
-      req.requested,
-      sessionState,
-      req.hookData.session_id
-    ),
+    origin: sessionRenderOrigin(req.requested, sessionState, sessionId2),
     transcript: req.hookData.transcript_path,
     answered: answeredOf(req.hookData)
   };
@@ -82739,11 +82743,12 @@ var Collector = class {
   // a retiring session makes it live again.
   requested(req) {
     const locator = locatorOf(req);
+    const sessionId2 = req.hookData.session_id;
     const document = runInAction(() => {
-      const held = this.records.get(req.hookData.session_id);
+      const held = this.records.get(sessionId2);
       if (held === void 0) {
-        const opened = this.open(req.hookData.session_id, locator);
-        this.records.set(req.hookData.session_id, opened);
+        const opened = this.open(sessionId2, locator);
+        this.records.set(sessionId2, opened);
         return opened.stamped.document;
       }
       held.active = true;
@@ -86006,18 +86011,13 @@ var FileSessionStorage = class {
     try {
       const parsed2 = JSON.parse(raw);
       if (isSnapshot(parsed2)) {
-        for (const [key, values2] of Object.entries(parsed2)) {
-          const id2 = parseSessionId(key);
-          if (id2.ok) {
-            loaded.set(id2.id, values2);
-          } else {
-            this.logger(
-              "warn",
-              `session-state load: dropped session key ${JSON.stringify(key)}: session id ${id2.problem}`
-            );
-          }
-        }
-        return loaded;
+        return sessionKeyed(
+          parsed2,
+          (key, problem) => this.logger(
+            "warn",
+            `session-state load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
+          )
+        );
       }
       this.logger(
         "warn",

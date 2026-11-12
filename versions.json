@@ -4,15 +4,22 @@
     {
       "version": "pr-720",
       "ref": "refs/pull/720/merge",
-      "sha": "bd116b498287fafc300c12a7dc83bdcf19928493",
-      "timestamp": "2026-11-12T02:37:02.821Z",
+      "sha": "76c9730d0503b99ec4a75c25e3a759b72f498026",
+      "timestamp": "2026-11-12T02:45:58.356Z",
       "commits": [
         {
-          "sha": "bd116b498287fafc300c12a7dc83bdcf19928493",
+          "sha": "76c9730d0503b99ec4a75c25e3a759b72f498026",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T02:36:05Z",
-          "message": "Merge b3b3a9319ce94ca197c5f092a806751cb289ce62 into 23abb3a1cc2bd8b7b5c9a71d0fdef270db785dbc\n"
+          "timestamp": "2026-11-12T02:44:59Z",
+          "message": "Merge 7db8e2420767c55be4cd4c786f40b40f1c947c7d into 23abb3a1cc2bd8b7b5c9a71d0fdef270db785dbc\n"
+        },
+        {
+          "sha": "7db8e2420767c55be4cd4c786f40b40f1c947c7d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T19:44:38-07:00",
+          "message": "refactor(daemon): a stored session key crosses the checkpoint through one loader (candybar-host-renderer-x96a.6ql)\n\nFrom the medium review of #720: the state and history files share one keyed loader; the doctor's client read leaves the session id to the checkpoint alone.\n"
         },
         {
           "sha": "b3b3a9319ce94ca197c5f092a806751cb289ce62",
