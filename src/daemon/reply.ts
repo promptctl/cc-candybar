@@ -749,23 +749,18 @@ async function handleClick(
   const session = clickSessionOf(verb, value);
   if (session === null) noteFacts(facts, { sid: "-" });
   else if (session.ok) noteFacts(facts, { sid: session.id });
-  const release = session?.ok ? parts.collector.holding(session.id) : () => {};
-  try {
-    const delivered = await parts.renderer.answer({
-      kind: "event",
-      at: instantAt(parts.clock),
-      event: { kind: "click", verb, value, session, arrival, gone: clientGone },
-    });
-    switch (delivered.kind) {
-      case "answered":
-        facts.push(...delivered.output.record);
-        return { kind: "ok" };
-      case "threw":
-        facts.push(...delivered.record);
-        throw delivered.error;
-    }
-  } finally {
-    release();
+  const delivered = await parts.renderer.answer({
+    kind: "event",
+    at: instantAt(parts.clock),
+    event: { kind: "click", verb, value, session, arrival, gone: clientGone },
+  });
+  switch (delivered.kind) {
+    case "answered":
+      facts.push(...delivered.output.record);
+      return { kind: "ok" };
+    case "threw":
+      facts.push(...delivered.record);
+      throw delivered.error;
   }
 }
 

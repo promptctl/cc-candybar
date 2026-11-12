@@ -333,17 +333,16 @@ describe("the sweep", () => {
     expect(collector.stats()).toEqual({ sessions: 1, retiring: 0 });
   });
 
-  test("keeps a session a click holds for as long as it holds it, and the sweep after the click settles keeps it too", () => {
+  test("keeps a session a turn holds for as long as it holds it, and the first sweep after it settles with no request since retires it", () => {
     const { owners } = handLanded();
     const { collector, clock, handedIn } = collectorOver(owners);
     collector.requested(requestAt("/a"));
     const release = collector.holding(SID);
     clock.advance(5 * SESSION_SWEEP_MS);
     expect(handedIn).toEqual([]);
+    // A settled turn is no request: only a request keeps a session past the
+    // next sweep, so a turn the collector's own deliveries start keeps none.
     release();
-    // The settled click names the session, as a request does.
-    clock.advance(SESSION_SWEEP_MS);
-    expect(handedIn).toEqual([]);
     clock.advance(SESSION_SWEEP_MS);
     expect(handedIn).toEqual([{ kind: "retire", session: SID }]);
   });

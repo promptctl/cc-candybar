@@ -814,7 +814,7 @@ function statusline(r: Rig, configFile: string) {
       },
     },
     () => {},
-    (subscriptions) => r.collector.subscribed(subscriptions),
+    r.collector,
   );
   let id = 0;
   return async (): Promise<{ text: string; facts: RequestFacts }> => {
@@ -865,6 +865,9 @@ describe("a session's first bar", () => {
     const ask = statusline(r, config(["plugins.p.gated"]));
     programWrites(storageOf(), "s1", { home: "here" });
     await ask();
+    // The present's `effect-done` turn holds the session while it runs, so
+    // the sweeps come once it has settled.
+    await new Promise((resolve) => setImmediate(resolve));
     // Two sweeps with no request between them retire the session, which
     // closes its view.
     r.collector.sweep();

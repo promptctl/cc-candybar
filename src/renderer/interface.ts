@@ -87,6 +87,8 @@ export type Event =
     }
   | {
       readonly kind: "effect-done";
+      // The session of the effect it reports on.
+      readonly session: SessionId;
       readonly of: EffectId;
       readonly outcome: EffectOutcome;
     }

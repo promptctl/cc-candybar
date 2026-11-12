@@ -740,14 +740,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     watched: (sessionId) => frameFeeds.feedOpen(sessionId),
     deliver: (event) =>
-      parts.renderer.deliver({ kind: "event", event, at: instant() }, [
-        [
-          "sid",
-          event.kind === "world-state"
-            ? event.worldState.session
-            : event.session,
-        ],
-      ]),
+      parts.renderer.deliver({ kind: "event", event, at: instant() }, []),
     log,
   });
 
@@ -808,7 +801,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         verbs: verbsOver(verbCtx),
       }),
       log,
-      (subscriptions) => collector.subscribed(subscriptions),
+      collector,
     ),
   };
 

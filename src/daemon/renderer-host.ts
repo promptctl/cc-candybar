@@ -10,6 +10,7 @@ import { inspect } from "node:util";
 import {
   TurnThrew,
   type Effect,
+  type Event,
   type Renderer,
   type RendererInput,
   type RendererOutput,
@@ -20,6 +21,7 @@ import { eventLine } from "../utils/logfmt.js";
 import { instantAt } from "../utils/instant.js";
 import type { Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
+import type { SessionId } from "./session-id.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";
@@ -39,7 +41,7 @@ export interface RendererHost {
   // turns on the request's render event.
   answer(input: RendererInput): Promise<Delivered>;
   // One turn, recorded on its own line. `about` is what the host knows of the
-  // input, for that line.
+  // input beyond its session, for that line.
   deliver(input: RendererInput, about: TurnRecord): Promise<Delivered>;
 }
 
@@ -49,14 +51,21 @@ export function rendererHost(
   clock: Pick<Timekeeper, "now">,
   renderer: Renderer,
   log: DaemonLogger,
-  // [LAW:single-enforcer] Where every output's subscriptions go: the
-  // collector, which diffs each whole set against the last.
-  subscribed: (subscriptions: Subscriptions) => void,
+  collector: {
+    // [LAW:single-enforcer] Where every output's subscriptions go: the
+    // collector, which diffs each whole set against the last.
+    readonly subscribed: (subscriptions: Subscriptions) => void;
+    // [LAW:single-enforcer] Every turn holds the session its event names
+    // until it settles, so no sweep retires a session under a turn on it.
+    readonly holding: (session: SessionId) => () => void;
+  },
 ): RendererHost {
   const turn = async (input: RendererInput): Promise<Delivered> => {
+    const session = sessionOf(input.event);
+    const release = session === null ? () => {} : collector.holding(session);
     try {
       const output = await renderer.answer(input);
-      subscribed(output.subscriptions);
+      collector.subscribed(output.subscriptions);
       // [LAW:single-enforcer] A present answers the request whose turn
       // returned it, so every effect another turn returns is refused here,
       // and none is left owed its `effect-done`.
@@ -67,8 +76,10 @@ export function rendererHost(
     } catch (e) {
       if (!(e instanceof TurnThrew))
         return { kind: "threw", error: e, record: [] };
-      subscribed(e.subscriptions);
+      collector.subscribed(e.subscriptions);
       return { kind: "threw", error: e.thrown, record: e.record };
+    } finally {
+      release();
     }
   };
   const refuse = (effect: Effect, reason: string): void =>
@@ -78,14 +89,12 @@ export function rendererHost(
         at: instantAt(clock),
         event: {
           kind: "effect-done",
+          session: effect.session,
           of: effect.id,
           outcome: { kind: "failed", reason },
         },
       },
-      [
-        ["sid", effect.session],
-        ["effect", String(effect.id)],
-      ],
+      [["effect", String(effect.id)]],
     );
   // A turn's line, when it learned something or failed.
   const record = (
@@ -93,9 +102,11 @@ export function rendererHost(
     about: TurnRecord,
     delivered: Delivered,
   ): void => {
+    const session = sessionOf(input.event);
     const head: TurnRecord = [
       ["renderer", name],
       ["input", input.event.kind],
+      ...(session === null ? [] : ([["sid", session]] as const)),
       ...about,
     ];
     switch (delivered.kind) {
@@ -126,4 +137,23 @@ export function rendererHost(
     return delivered;
   };
   return { name, answer: turn, deliver };
+}
+
+// [LAW:one-source-of-truth] The session an event names: what a turn holds,
+// and what its line's `sid` says. A click naming none, or one whose id failed
+// its checkpoint, names none.
+function sessionOf(event: Event): SessionId | null {
+  switch (event.kind) {
+    case "config":
+    case "request":
+      return event.context.hookData.session_id;
+    case "world-state":
+      return event.worldState.session;
+    case "click":
+      return event.session?.ok ? event.session.id : null;
+    case "retire":
+    case "effect-done":
+    case "menu-idle":
+      return event.session;
+  }
 }

@@ -128,11 +128,10 @@ interface SessionRecord {
   readonly session: SessionId;
   readonly stamped: Stamped;
   subscriptions: Subscribed;
-  // Whether an input named the session since the last sweep: a request, or
-  // a turn, a request's or a click's, that settled.
+  // Whether a request named the session since the last sweep.
   active: boolean;
-  // The turns on the session the host still awaits, a request's or a click's:
-  // each holds the session as an open feed does.
+  // The renderer's turns on the session still under way: each holds the
+  // session as an open feed does.
   turns: number;
   phase: Phase;
 }
@@ -255,19 +254,19 @@ export class Collector {
     });
   }
 
-  // [LAW:no-ambient-temporal-coupling] A turn, a request's or a click's, holds
-  // its session for as long as the host awaits it, however long that is, so
-  // no sweep retires the session under a turn still drawing it. Its release
-  // names the session as a request does, so the next sweep keeps it too. Only a
-  // live session is kept: a retiring one has released its reads, and its
-  // record goes once the retire settles, as one with no record has gone.
+  // [LAW:no-ambient-temporal-coupling] A turn on a session holds it for as
+  // long as it runs, however long that is, so no sweep retires the session
+  // under a turn still drawing it. Its release says nothing of activity: only
+  // a request keeps a session past the next sweep, so a turn the collector's
+  // own deliveries start never keeps a session nobody draws. Only a live
+  // session is held: a retiring one has released its reads, and its record
+  // goes once the retire settles, as one with no record has gone.
   holding(session: SessionId): () => void {
     const record = this.records.get(session);
     if (record?.phase.kind !== "live") return () => {};
     record.turns++;
     return () => {
       record.turns--;
-      record.active = true;
     };
   }
 
