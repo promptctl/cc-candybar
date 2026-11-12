@@ -4,15 +4,22 @@
     {
       "version": "pr-735",
       "ref": "refs/pull/735/merge",
-      "sha": "55997fdb5ceb28c0bea473d77d641219e4284498",
-      "timestamp": "2026-11-12T16:07:37.733Z",
+      "sha": "2062621461bfb3f9a301d5cb55f353a2636d3383",
+      "timestamp": "2026-11-12T16:11:13.128Z",
       "commits": [
         {
-          "sha": "55997fdb5ceb28c0bea473d77d641219e4284498",
+          "sha": "2062621461bfb3f9a301d5cb55f353a2636d3383",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T16:06:37Z",
-          "message": "Merge 31c999200d89c76acd7d45e2540b840c560163d1 into 3983a91c21a0618069a1511472a7828dab676511\n"
+          "timestamp": "2026-11-12T16:10:12Z",
+          "message": "Merge bae2a41eed895fea3f3207372f24a3309bd852ff into 3983a91c21a0618069a1511472a7828dab676511\n"
+        },
+        {
+          "sha": "bae2a41eed895fea3f3207372f24a3309bd852ff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T09:09:59-07:00",
+          "message": "fix(collector): a click marks its session active as a request does, so the next sweep keeps a session someone just clicked (candybar-host-renderer-x96a.111)\n"
         },
         {
           "sha": "31c999200d89c76acd7d45e2540b840c560163d1",

@@ -78159,7 +78159,10 @@ async function handleClick(parts, verb, value, arrival, facts, clientGone) {
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const session = clickSessionOf(verb, value);
   if (session === null) noteFacts(facts, { sid: "-" });
-  else if (session.ok) noteFacts(facts, { sid: session.id });
+  else if (session.ok) {
+    noteFacts(facts, { sid: session.id });
+    parts.collector.clicked(session.id);
+  }
   const delivered = await parts.renderer.answer({
     kind: "event",
     at: instantAt(parts.clock),
@@ -82850,6 +82853,13 @@ var Collector = class {
     });
     this.armSweep();
     return document;
+  }
+  // A click is a person's input naming the session, as a request is, so the
+  // next sweep keeps it whatever the click's turn draws in the meantime. A
+  // retiring session stays retiring: only a request reopens its reads.
+  clicked(session) {
+    const record2 = this.records.get(session);
+    if (record2?.phase.kind === "live") record2.active = true;
   }
   // [LAW:one-source-of-truth] Every renderer output's subscriptions, whole:
   // a session whose set moved is declared again, and one absent from them has
