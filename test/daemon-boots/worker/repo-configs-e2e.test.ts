@@ -14,7 +14,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { findUrl, render, renderUntil, sendClick } from "../../helpers/daemon-e2e";
+import { click, findUrl, render, renderUntil, sendClick } from "../../helpers/daemon-e2e";
 import type { DaemonTarget } from "../../helpers/daemon-wire";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
@@ -65,7 +65,8 @@ function repoConfig(marker: string, label: string): string {
 // An answer's click reloads the session's config before it replies, as
 // save's does, so the next render draws the answered config: approving
 // compiles the repository's config first, which the source daemon can take
-// seconds over on a loaded machine.
+// seconds over on a loaded machine. Such a click is answered TIMEOUT, so
+// this bounds click()'s wait for the click's event.
 const ANSWER_REPLY_MS = 20_000;
 
 // The question the bar asks of a session, read in the viewer its indicator
@@ -164,12 +165,11 @@ describe("a repository's config waits for the user's one answer", () => {
       project,
       await draw("repo-yes"),
     );
-    const resp = await sendClick(
+    await click(
       daemon,
       answerUrl(asked!.rendered, "approved"),
       ANSWER_REPLY_MS,
     );
-    expect(resp.ok).toBe(true);
     const approved = await renderUntil(
       daemon,
       "repo-yes",
@@ -213,12 +213,11 @@ describe("a repository's config waits for the user's one answer", () => {
       project,
       await draw("repo-no"),
     );
-    const resp = await sendClick(
+    await click(
       daemon,
       answerUrl(asked!.rendered, "declined"),
       ANSWER_REPLY_MS,
     );
-    expect(resp.ok).toBe(true);
     // The user's config draws nothing else to say, so no question is no
     // indicator at all.
     const declined = await renderUntil(
@@ -279,12 +278,11 @@ describe("a repository's config waits for the user's one answer", () => {
         await render(daemon, "repo-wt", wt),
       );
       expect(asked!.text).toContain(`a cc-candybar config for ${project}`);
-      const resp = await sendClick(
+      await click(
         daemon,
         answerUrl(asked!.rendered, "approved"),
         ANSWER_REPLY_MS,
       );
-      expect(resp.ok).toBe(true);
       await renderUntil(
         daemon,
         "repo-wt",

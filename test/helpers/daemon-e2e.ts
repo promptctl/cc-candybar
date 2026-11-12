@@ -16,6 +16,7 @@ import path from "node:path";
 
 import {
   PROTOCOL_VERSION,
+  type ClickRequest,
   type ClientHints,
   type Response,
 } from "../../src/daemon/protocol";
@@ -41,6 +42,7 @@ import {
   retriedRender,
 } from "./daemon-log";
 import { until } from "./until";
+import { fieldOf, fieldsOf } from "../../src/utils/logfmt";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
 export const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
@@ -79,7 +81,7 @@ export function answeredEvents(log: string, sessionId: string): string[] {
 // The click events whose client had already been told TIMEOUT, in log order.
 function timedOutClicks(log: string): string[] {
   return logLines(log).filter(
-    (l) => l.includes("] click ") && l.includes(" timedOut=Y "),
+    (l) => l.includes("] click ") && fieldsOf(l).get("timedOut") === "Y",
   );
 }
 
@@ -231,54 +233,63 @@ export function render(
   return frameRequest(target, renderBody(sessionId, cwd, hints, args));
 }
 
-// A click, decoded the same way `cc-candybar url-handle` decodes it, then sent
-// as the wire request the URL handler app sends. The daemon's answer is
+// A click, decoded the same way `cc-candybar url-handle` decodes it, as the
+// wire request the URL handler app sends.
+export function clickBody(url: string) {
+  const { verb, value } = linkClick(url);
+  return {
+    v: PROTOCOL_VERSION,
+    kind: "click",
+    verb,
+    value,
+  } as const satisfies ClickRequest;
+}
+
+// A click sent as the URL handler app sends it. The daemon's answer is
 // returned as it came, refusal included.
 export function sendClick(
   target: DaemonTarget,
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<Response> {
-  const { verb, value } = linkClick(url);
-  return sendDaemonRequest(
-    target,
-    {
-      v: PROTOCOL_VERSION,
-      kind: "click",
-      verb,
-      value,
-    },
-    replyBudgetMs,
-  );
+  return sendDaemonRequest(target, clickBody(url), replyBudgetMs);
 }
 
 // `sendClick`, for a test whose click must land.
 //
 // [LAW:no-ambient-temporal-coupling] A TIMEOUT is not the click's outcome. The
-// daemon's 200 ms guard abandons a request's reply, never its work, so a click
-// answered TIMEOUT still runs and its effect still lands (reply.ts records it
-// as `timedOut=Y`). A render may be asked again on TIMEOUT because it is a
-// read; a click is a write, so sending it again applies it twice, and a second
-// apply-update is refused as already running. On TIMEOUT the click's outcome
-// is read from the daemon's own click event instead.
-export async function click(target: DaemonTarget, url: string): Promise<void> {
+// daemon's 200 ms guard abandons a request's reply: a click already running
+// still lands, and one still waiting for its turn is dropped unrun
+// (`abandoned`). reply.ts marks the click's event `timedOut=Y` either way,
+// and its `outcome` says which: `abandoned` for one dropped unrun.
+// A render may be asked again on TIMEOUT because it is a read; a click is a
+// write, so sending it again can apply it twice, and a second apply-update is
+// refused as already running. On TIMEOUT the click's outcome is read from the
+// daemon's own click event instead. The event carries no click identity, so
+// it is taken by order, which holds while this is the test's one click in
+// flight.
+export async function click(
+  target: DaemonTarget,
+  url: string,
+  replyBudgetMs = REPLY_BUDGET_MS,
+): Promise<void> {
   const { log } = endpointOf(target);
   const before = timedOutClicks(log).length;
-  const resp = await sendClick(target, url);
+  const resp = await sendClick(target, url, replyBudgetMs);
   if (resp.ok) return;
   if (resp.code !== "TIMEOUT") {
     throw new Error(`click failed: ${resp.error} (${resp.code})`);
   }
   let event = "";
-  // The event is the click's answer by another road, so it has the budget
-  // the click's reply had.
+  // The event is the click's answer by another road, so its wait gets the
+  // reply's budget again, counted from the TIMEOUT.
   await until(
     () => (event = timedOutClicks(log)[before] ?? "") !== "",
     `the click event of a click answered TIMEOUT (${url})`,
-    REPLY_BUDGET_MS,
+    replyBudgetMs,
   );
-  if (!/ outcome=ok(?: |$)/.test(event)) {
-    throw new Error(`click failed once it ran past its TIMEOUT: ${event}`);
+  if (fieldOf(event, "outcome") !== "ok") {
+    throw new Error(`click answered TIMEOUT did not land: ${event}`);
   }
 }
 

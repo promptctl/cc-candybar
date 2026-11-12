@@ -247,13 +247,11 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       "the forged link's refusal",
     );
     const open = viewerLink(bar, "open")!;
-    expect((await sendClick(daemon, open.url)).ok).toBe(true);
+    await click(daemon, open.url);
     const shown = textOf(await renderRaw());
     expect(shown).toContain("signature does not match");
     expect(shown).not.toContain("/h/forged");
-    expect(
-      (await sendClick(daemon, viewerLink(await renderRaw(), "✕")!.url)).ok,
-    ).toBe(true);
+    await click(daemon, viewerLink(await renderRaw(), "✕")!.url);
     expect(await render()).not.toContain("/h/forged");
   });
 });
