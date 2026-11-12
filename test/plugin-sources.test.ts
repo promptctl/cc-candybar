@@ -740,6 +740,7 @@ describe("a source's document", () => {
     const registry = new SourceRegistry(new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }), store);
     registry.declareSourceDocument(STATUS);
     registry.bindInputs({
+      session: () => null,
       read: (p) => resolvePath(payload(), p),
       drawnAt: () => {
         throw new Error("no depth is read");

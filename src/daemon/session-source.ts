@@ -120,6 +120,7 @@ export function sessionSource(
       composePayload(document(), compose.read(), draw.read()),
     );
     return {
+      session: sessionId,
       payload: () => payload.read(),
       effective: () => draw.read().effective,
       facts: document,

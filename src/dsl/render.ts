@@ -77,12 +77,14 @@ import {
   compileActions,
   actionFuncs,
   bindRender,
+  clickSession,
   renderBinding,
   type ActionRuntime,
 } from "../render/action.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
+import type { SessionId } from "../daemon/session-id.js";
 import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
 import { themePreviewFuncs } from "../render/theme-preview.js";
@@ -1294,7 +1296,8 @@ export type RenderSelection = DrawSelection & Selections;
 // paths in it). [LAW:one-source-of-truth] The one composition of what a fixed
 // view reads: a source keyed on an input starts its run inside this bind, and
 // a caller that waits for that run before it draws (`cc-candybar check`)
-// draws the very object the key read.
+// draws the very object the key read. `session` is the one the view draws
+// for, or none for a draw no session asked for (`cc-candybar check`).
 export function bindPayload(
   compiled: CompiledConfig,
   store: VariableStore,
@@ -1302,13 +1305,14 @@ export function bindPayload(
   payload: unknown,
   opts: BuildLineOptions,
   selection: RenderSelection,
+  session: SessionId | null,
 ): unknown {
   const drawn = {
     ...(payload as object),
     term: { cols: opts.width },
     colorCompatibility: { effective: opts.colorCompatibility },
   };
-  bindView(compiled, store, registry, fixedSource(drawn, selection));
+  bindView(compiled, store, registry, fixedSource(drawn, selection, session));
   return drawn;
 }
 
@@ -1376,7 +1380,7 @@ export function drawDsl(
   };
   // The view's record of this frame, kept once its rows serialize, and the
   // sources whose values it drew as not answered yet. The session's state
-  // revision is read through the session id the view's payload carries.
+  // revision is read through the session the view draws for.
   const source = {
     config,
     preset,
@@ -1548,9 +1552,13 @@ export function drawDsl(
       // `decorationFor` each time a band item opens the next — so a nested
       // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
       renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
-      // [LAW:one-source-of-truth] The row ✕ reads the session id from the
-      // same store every other affordance's URL does.
-      closeDisclosure: (key) => disclosureCloseFragment(store, key),
+      // [LAW:one-source-of-truth] The row ✕ names the session every other
+      // affordance's URL does.
+      closeDisclosure: (key) =>
+        disclosureCloseFragment(
+          clickSession(compiled.menuRuntime.action, "row ✕"),
+          key,
+        ),
       placed: (id, lines) => record.placed(id, motion.placed(id, lines)),
       lastDrawn: (id) => last?.placements.get(id),
       waited: (variable) => waited.add(variable),

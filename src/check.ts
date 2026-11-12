@@ -169,6 +169,7 @@ function bindPass(
     checkPayload(config, effective, layers.at(-1) ?? null, at),
     opts,
     effective,
+    null,
   );
   return { drawn, opts };
 }

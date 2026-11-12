@@ -1024,8 +1024,7 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     presets[name] = { ...presetByName(config.presets, name), root };
   }
   // [LAW:no-silent-failure] What the chrome reads and the config does not
-  // declare (the banner's `.preset.customized`, the session.id every click
-  // carries), merged UNDER the config so a user's own declaration wins.
+  // declare (the banner's `.preset.customized`), merged UNDER the config so a user's own declaration wins.
   const ensured = synthesisInputs(artifacts, roots, config);
   return {
     ...config,

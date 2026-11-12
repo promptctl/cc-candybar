@@ -15,6 +15,7 @@ import type { Instant } from "../../src/utils/instant";
 import type { SourceRegistry } from "../../src/var-system/sources";
 import type { VariableStore } from "../../src/var-system/store";
 import { globalsFor } from "./selection";
+import { parseSessionId } from "../../src/daemon/session-id";
 
 export function drawPayload(
   config: ValidatedConfig,
@@ -31,6 +32,28 @@ export function drawPayload(
   // the bar does.
   selection: RenderSelection = globalsFor(config),
 ): DrawnFrame {
-  const drawn = bindPayload(compiled, store, registry, payload, opts, selection);
-  return drawDsl(config, compiled, store, registry, drawn, at, opts, observers, selection);
+  // The session is the payload's `session_id`, as the hook door checks it.
+  const session = parseSessionId(
+    (payload as { session_id?: unknown } | null)?.session_id,
+  );
+  const drawn = bindPayload(
+    compiled,
+    store,
+    registry,
+    payload,
+    opts,
+    selection,
+    session.ok ? session.id : null,
+  );
+  return drawDsl(
+    config,
+    compiled,
+    store,
+    registry,
+    drawn,
+    at,
+    opts,
+    observers,
+    selection,
+  );
 }

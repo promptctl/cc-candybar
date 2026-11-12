@@ -56,6 +56,7 @@ function viewOver(
     () => false,
   );
   bindView(compiled, store, registry, {
+    session: null,
     payload: () => answer.get(),
     selections: () => selections,
   });

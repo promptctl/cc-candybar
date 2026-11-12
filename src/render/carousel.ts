@@ -26,6 +26,7 @@ import {
   bindsTemplateValue,
   linkFragment,
   linkOver,
+  clickSession,
   readVar,
   realize,
   renderBinding,
@@ -78,7 +79,7 @@ export function renderCarousel(
     );
   }
   const declared = runtime.compiled.get(applyName)!;
-  const sessionId = readVar(store, "session.id");
+  const sessionId = clickSession(runtime, "carousel");
   const { options } = apply;
   // [LAW:dataflow-not-control-flow] An empty domain holds nothing to step to
   // or show, so the ring is empty, as a grid over it has no cells.

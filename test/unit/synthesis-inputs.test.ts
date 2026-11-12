@@ -10,18 +10,6 @@ const BARE: DslConfig = { ...DEFAULT_DSL_CONFIG, variables: {} };
 const NONE = { variables: {}, actions: {}, segments: {} };
 
 describe("synthesisInputs", () => {
-  test("a state variable reads session.id, with no action minted", () => {
-    const ensured = synthesisInputs(
-      {
-        ...NONE,
-        variables: { "x.open": { kind: "state", key: "x.open", default: "" } },
-      },
-      [],
-      BARE,
-    );
-    expect(ensured["session.id"]).toEqual(PAYLOAD_INPUTS["session.id"]);
-  });
-
   test("a read in a `when` of a returned tree is ensured", () => {
     const tree: LayoutNode = {
       kind: "container",
