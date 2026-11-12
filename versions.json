@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-738",
-      "ref": "refs/pull/738/merge",
-      "sha": "a2f32551848aa443700c988989b8ad870d30bba4",
-      "timestamp": "2026-11-12T17:55:33.793Z",
-      "commits": [
-        {
-          "sha": "a2f32551848aa443700c988989b8ad870d30bba4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T17:54:44Z",
-          "message": "Merge 731cdef019da6f675156a29dc3e499f604c39ba9 into 303a122503d2659aa2d923221bd1480aa8858f00\n"
-        },
-        {
-          "sha": "731cdef019da6f675156a29dc3e499f604c39ba9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T10:54:33-07:00",
-          "message": "docs(judge): keep only the judge's edits in the authoring docs and check tests, dropping a formatter's reflow (candybar-host-renderer-x96a.jmi)\n"
-        },
-        {
-          "sha": "5cde375c48a4e7197bd325f223a4260fc64584b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T10:50:38-07:00",
-          "message": "fix(judge): the judge hands its compiled parser to the run, a refusal is said once, and its log reason is quoted (candybar-host-renderer-x96a.jmi)\n"
-        },
-        {
-          "sha": "c6916231659955e8d65b96a1c1a8f2202d5d9551",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T10:40:52-07:00",
-          "message": "feat(judge): the host judges each shell and file run once, where its set arrives, and a refusal stands as the run's fault (candybar-host-renderer-x96a.jmi)\n\nThe loader parses a run's path, regex and ttl and no longer judges them.\nThe collector judges a subscribed set's new digests as it arrives, and\ncheck's holder judges its set as it moves, so a request judges nothing.\nA refused run never reaches a reader: its lane answers \"refused: <reason>\"\nfor good, and that is its standing fault, so the bar draws the fallback\nbeside a ⚠ and check fails naming the variable. A shell ttl below 500ms is\nrefused rather than raised, so a digest is the identity that runs.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "303a122503d2659aa2d923221bd1480aa8858f00",
-      "timestamp": "2026-11-12T17:22:52.157Z",
+      "sha": "b6d03dff468ab270253e97ec293b10ccfad5e970",
+      "timestamp": "2026-11-12T18:12:02.129Z",
       "commits": [
         {
-          "sha": "303a122503d2659aa2d923221bd1480aa8858f00",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-12T17:21:52Z",
-          "message": "chore(release): set `package.json` to 1.219.2\n\n## [1.219.2](https://github.com/promptctl/cc-candybar/compare/v1.219.1...v1.219.2) (2026-11-12)\n\n### Bug Fixes\n\n* **render-event:** a source that failed, or whose key failed, is named failed by its variable (candybar-host-renderer-x96a.z7t) ([#736](https://github.com/promptctl/cc-candybar/issues/736)) ([cd02950](https://github.com/promptctl/cc-candybar/commit/cd0295020dccaffce2a127a63aa99318563b8276))\n"
+          "sha": "b6d03dff468ab270253e97ec293b10ccfad5e970",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T11:11:05-07:00",
+          "message": "feat(judge): the host judges each shell and file run once, where its set arrives, and a refusal stands as the run's fault (candybar-host-renderer-x96a.jmi) (#738)\n\n* feat(judge): the host judges each shell and file run once, where its set arrives, and a refusal stands as the run's fault (candybar-host-renderer-x96a.jmi)\n\nThe loader parses a run's path, regex and ttl and no longer judges them.\nThe collector judges a subscribed set's new digests as it arrives, and\ncheck's holder judges its set as it moves, so a request judges nothing.\nA refused run never reaches a reader: its lane answers \"refused: <reason>\"\nfor good, and that is its standing fault, so the bar draws the fallback\nbeside a ⚠ and check fails naming the variable. A shell ttl below 500ms is\nrefused rather than raised, so a digest is the identity that runs.\n\n* fix(judge): the judge hands its compiled parser to the run, a refusal is said once, and its log reason is quoted (candybar-host-renderer-x96a.jmi)\n\n* docs(judge): keep only the judge's edits in the authoring docs and check tests, dropping a formatter's reflow (candybar-host-renderer-x96a.jmi)"
         }
       ]
     }
