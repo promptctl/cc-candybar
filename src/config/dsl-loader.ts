@@ -857,7 +857,8 @@ function judgeRenderable(
   // it governs.
   // [LAW:no-silent-failure] exception: what these passes mint does not
   // re-enter cross-ref, and a load does not re-prove its reads; a unit test
-  // over authored configs names any that nothing declares (test/unit/synthesis-reads.test.ts).
+  // over authored configs names any that nothing declares (test/unit/synthesis-reads.test.ts),
+  // and a chain test does the same for what only a loaded chain holds (test/synthesis-reads-chain.test.ts).
   const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
   // [LAW:single-enforcer] Over the names the store is declared from, every
   // synthesized one included (nesting.ts).
