@@ -48,7 +48,8 @@ import { resolvePath, SourceRegistry } from "../src/var-system/sources";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { checkConfig, type CheckOutcome } from "../src/check";
 import { instantOf } from "../src/utils/instant";
-import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
+import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
+import type { Run } from "../src/facts/source-identity";
 import { settledLane } from "../src/utils/reading";
 import { installFromRepo } from "../src/plugin-install";
 import { REPO_PLUGIN_DIR } from "../src/config/loader/plugin-folders";
@@ -930,10 +931,11 @@ describe("the session subscribes to every source the config declares", () => {
   });
 
   // [LAW:nothing-unseen] The render event's fields.
-  test("the render event counts the declared sources and names the pending ones", () => {
+  test("the render event counts the declared sources and names the pending and failed ones", () => {
     expect(sourcesFactOf([], new Map(), { sources: {}, runs: {} })).toEqual({
       sources: "0",
       sourcesPending: "-",
+      sourcesFailed: "-",
     });
     const at = instantOf(new Date(0));
     expect(
@@ -963,15 +965,52 @@ describe("the session subscribes to every source the config declares", () => {
       sources: "5",
       sourcesPending:
         "plugins.b.s:unread,plugins.d.s:superseded,plugins.e.s:unread",
+      sourcesFailed: "-",
     });
     // A shell source whose key has not answered names no run, and is counted
     // and pending all the same.
     expect(
-      sourcesFactOf([], new Map([["probe", undefined]]), {
+      sourcesFactOf([], new Map([["probe", pendingOf("unread")]]), {
         runs: {},
         sources: {},
       }),
-    ).toEqual({ sources: "1", sourcesPending: "probe:unread" });
+    ).toEqual({
+      sources: "1",
+      sourcesPending: "probe:unread",
+      sourcesFailed: "-",
+    });
+    // One whose key failed before answering will not answer: it says so.
+    expect(
+      sourcesFactOf([], new Map([["probe", failed("cache key: x", "read")]]), {
+        runs: {},
+        sources: {},
+      }),
+    ).toEqual({ sources: "1", sourcesPending: "-", sourcesFailed: "probe" });
+    // A plugin source or a run whose reading failed, a run whose declaration
+    // threw among them, is named by its variable, which the host's line, keyed
+    // by digest, cannot name.
+    const run = ok({ digest: "d1" } as Run);
+    expect(
+      sourcesFactOf(["plugins.a.s"], new Map([["probe", run]]), {
+        runs: {
+          d1: {
+            reading: restamp(
+              undefined,
+              failed("run d1: Error: boom", "read"),
+              at,
+            ),
+            fault: null,
+          },
+        },
+        sources: {
+          "plugins.a.s": restamp(undefined, failed("bad", "read"), at),
+        },
+      }),
+    ).toEqual({
+      sources: "2",
+      sourcesPending: "-",
+      sourcesFailed: "plugins.a.s,probe",
+    });
   });
 });
 

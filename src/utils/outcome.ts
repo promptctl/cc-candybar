@@ -77,6 +77,9 @@ export interface Pending {
   readonly why: PendingWhy;
 }
 export type Reading<T> = Pending | Outcome<T>;
+// A reading of something that is never absent: what it is, why not yet, or
+// what failed.
+export type Present<T> = Exclude<Reading<T>, { kind: "absent" }>;
 
 const PENDINGS: Readonly<Record<PendingWhy, Pending>> = {
   unread: Object.freeze({ kind: "pending", why: "unread" }),

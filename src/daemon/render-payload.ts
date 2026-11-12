@@ -116,6 +116,7 @@ import {
 } from "./source-runs.js";
 import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
+import type { SourceRun } from "../var-system/sources.js";
 import { elapsedMs, type Timekeeper } from "../time";
 import { shortDigest } from "../source-digest.js";
 
@@ -1482,29 +1483,33 @@ export const sourceFactOf = (
   name: string,
 ): Fact<SourceValue> => facts.sources[name] ?? pendingOf("unread");
 
-// [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
-// how many plugin, `shell` and `file` sources the view's config declares, and
-// those not answered yet (a source whose key has not answered among them) as the draw reads them, each
-// by variable with why (`<name>:unread` or `<name>:superseded`; `-` for none),
-// so a source that never lands is told from one nothing declared, and a run's
-// superseded source from a wait that left one out.
+// [LAW:nothing-unseen] The render event's `sources=`, `sourcesPending=` and
+// `sourcesFailed=`: how many plugin, `shell` and `file` sources the view's
+// config declares; those not answered yet as the draw reads them, each by
+// variable with why (`<name>:unread` or `<name>:superseded`); and those whose
+// reading, or whose key before it ever answered, failed, by variable (`-` for
+// none). So a source that never lands is told from one nothing declared, a
+// run's superseded source from a wait that left one out, and a failure from a
+// wait, by the variable's name, which the host's own line, keyed by run
+// digest, cannot give.
 export function sourcesFactOf(
   names: readonly string[],
-  runs: ReadonlyMap<string, Run | undefined>,
+  runs: ReadonlyMap<string, SourceRun>,
   facts: Pick<WorldState, "sources" | "runs">,
 ): {
   readonly sources: string;
   readonly sourcesPending: string;
+  readonly sourcesFailed: string;
 } {
-  const named = [
+  const named: ReadonlyArray<readonly [string, Reading<unknown>]> = [
     ...names.map((name) => [name, sourceFactOf(facts, name)] as const),
     ...[...runs].map(
       ([name, run]) =>
         [
           name,
-          run === undefined
-            ? UNREAD_RUN.reading
-            : (facts.runs[run.digest] ?? UNREAD_RUN).reading,
+          run.kind === "ok"
+            ? (facts.runs[run.value.digest] ?? UNREAD_RUN).reading
+            : run,
         ] as const,
     ),
   ];
@@ -1515,6 +1520,10 @@ export function sourcesFactOf(
         .flatMap(([name, fact]) =>
           fact.kind === "pending" ? [`${name}:${fact.why}`] : [],
         )
+        .join(",") || "-",
+    sourcesFailed:
+      named
+        .flatMap(([name, fact]) => (fact.kind === "failed" ? [name] : []))
         .join(",") || "-",
   };
 }

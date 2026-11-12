@@ -10,7 +10,7 @@
 
 import type { VariableStore } from "../var-system/store.js";
 import { PendingValueError, type JsonValue } from "../var-system/types.js";
-import type { Reading } from "../utils/outcome.js";
+import type { Present } from "../utils/outcome.js";
 
 // Build the scope object the engine receives as `.` (dot).
 // Call once per render; the returned object is a read-only view of the store
@@ -101,10 +101,7 @@ function absentDocument(store: VariableStore, name: string): boolean {
 // whose scan failed throws its reason, which the segment reading it renders as
 // its ⚠ cell (and `cc-candybar check` fails on). A document never reads as an
 // empty value.
-function unwrapDocument(
-  name: string,
-  doc: Exclude<Reading<JsonValue>, { kind: "absent" }>,
-): JsonValue {
+function unwrapDocument(name: string, doc: Present<JsonValue>): JsonValue {
   switch (doc.kind) {
     case "ok":
       return doc.value;
