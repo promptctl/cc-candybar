@@ -4,15 +4,22 @@
     {
       "version": "pr-736",
       "ref": "refs/pull/736/merge",
-      "sha": "16de57056efac8eb475af8ec6788c321c1186889",
-      "timestamp": "2026-11-12T16:56:22.575Z",
+      "sha": "026f222c0310829727d92eec74a3e637ed3506c5",
+      "timestamp": "2026-11-12T17:02:24.356Z",
       "commits": [
         {
-          "sha": "16de57056efac8eb475af8ec6788c321c1186889",
+          "sha": "026f222c0310829727d92eec74a3e637ed3506c5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:55:27-07:00",
-          "message": "Merge 08dcb6b29ad10d5f53114fa793ad9e952ed4b1da into f02693a9bd83176c9126d9473453ca4bd96fda85\n"
+          "timestamp": "2026-11-12T17:01:24Z",
+          "message": "Merge 0f1c026cb32642a65abefe90bd7b598fbfe2deac into f02693a9bd83176c9126d9473453ca4bd96fda85\n"
+        },
+        {
+          "sha": "0f1c026cb32642a65abefe90bd7b598fbfe2deac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T10:01:12-07:00",
+          "message": "fix(render-event): a source's run names its key's failure, and failed sources get their own field (candybar-host-renderer-x96a.z7t)\n\nThe run each shell and file source names is Pending | Ok<Run> | Failed, so\nthe render event reads a key that failed before answering from the run\nitself, not from a second map of policy faults rebuilt every render.\nsourcesPending= keeps meaning not answered yet; sourcesFailed= names each\nfailed source by variable.\n"
         },
         {
           "sha": "08dcb6b29ad10d5f53114fa793ad9e952ed4b1da",
