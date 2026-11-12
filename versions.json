@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-722",
-      "ref": "refs/pull/722/merge",
-      "sha": "cb3fa0b8e16ca4614f00eea4cbade94e60d5405b",
-      "timestamp": "2026-11-12T05:10:52.084Z",
-      "commits": [
-        {
-          "sha": "cb3fa0b8e16ca4614f00eea4cbade94e60d5405b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T05:09:46Z",
-          "message": "Merge 9846a25ad96b66fc1155de842a90a752a1012601 into e3e73c6b78a8776b63461d4fcab107abbec5184f\n"
-        },
-        {
-          "sha": "9846a25ad96b66fc1155de842a90a752a1012601",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T21:51:04-07:00",
-          "message": "fix(config): a refused file carries its payload-declaration warnings, and the comments name the merge's last word (candybar-host-renderer-x96a.5e0)\n"
-        },
-        {
-          "sha": "d54e90bee931136103779032c5f0e30eed34a665",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T21:41:46-07:00",
-          "message": "fix(config): the merge gives the payload inputs the last word, so a file's own declaration is only a warning (candybar-host-renderer-x96a.5e0)\n\nLaying them last enforces precedence for every layer, programmatic ones\nincluded, in the one place layers meet. The loader no longer rebuilds the\nparsed file; it only names the redundant lines. A segment var under a payload\nname stays refused: it stores beside the payload's input, where the merge has\nno say.\n"
-        },
-        {
-          "sha": "85438f0f30f306a5e951e19d40dff394f4e74c5e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T21:33:10-07:00",
-          "message": "fix(config): a file's own payload-input declaration is dropped with a warning, and the merge lays the payload floor beneath every base (candybar-host-renderer-x96a.5e0)\n\nRefusing the file cost an upgrading user every other line of a config the\ndocs once told them to write. The floor now lives in the merge, so no base a\ncaller builds can lack it.\n"
-        },
-        {
-          "sha": "e3436ad5bdab768cddad641cfdbcc2e7c515327b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T21:19:46-07:00",
-          "message": "fix(config): a payload input is the daemon's, so no config can redeclare the session, file or setting the bar's own acts read (candybar-host-renderer-x96a.5e0)\n\nThe bundled default authored the payload inputs (session.id, project_dir,\nconfig_path, every *.effective, term.cols, ...) by spreading them into its\nvariables, so any config file could redeclare one: `{{ .session.id }}`,\ncopySession and a plugin `run` then named another session.\n\nThe rows now sit beneath the parsed default instead of in it, so every\nconfig reads them and no parsed source declares one. The loader's one\nownership check (plugin scopes) also owns the payload inputs, and refuses a\nfile's declaration of one, top-level or as a segment var. Synthesis no\nlonger supplies inputs; it only checks that its reads resolve.\n\nFixtures, docs and examples drop their redundant declarations; the test\nfloor carries the payload rows, as production does.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "e3e73c6b78a8776b63461d4fcab107abbec5184f",
-      "timestamp": "2026-11-12T03:44:47.228Z",
+      "sha": "0414cd9074150ff566b34b41a0172ea94b7ec30c",
+      "timestamp": "2026-11-12T05:17:22.895Z",
       "commits": [
         {
-          "sha": "e3e73c6b78a8776b63461d4fcab107abbec5184f",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-12T03:43:50Z",
-          "message": "chore(release): set `package.json` to 1.218.1\n\n## [1.218.1](https://github.com/promptctl/cc-candybar/compare/v1.218.0...v1.218.1) (2026-11-12)\n\n### Bug Fixes\n\n* **renderer:** a view hands its checked SessionId to its registry and its click URLs, so no config can redeclare which session a bar reads or writes (candybar-host-renderer-x96a.k4k) ([#721](https://github.com/promptctl/cc-candybar/issues/721)) ([f654b90](https://github.com/promptctl/cc-candybar/commit/f654b902297dc4e6fa4e12fa108c517e21d7a838))\n"
+          "sha": "0414cd9074150ff566b34b41a0172ea94b7ec30c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:16:33-07:00",
+          "message": "fix(config): a payload input is the daemon's, so no config can redeclare the session, file or setting the bar's own acts read (candybar-host-renderer-x96a.5e0) (#722)\n\n* fix(config): a payload input is the daemon's, so no config can redeclare the session, file or setting the bar's own acts read (candybar-host-renderer-x96a.5e0)\n\nThe bundled default authored the payload inputs (session.id, project_dir,\nconfig_path, every *.effective, term.cols, ...) by spreading them into its\nvariables, so any config file could redeclare one: `{{ .session.id }}`,\ncopySession and a plugin `run` then named another session.\n\nThe rows now sit beneath the parsed default instead of in it, so every\nconfig reads them and no parsed source declares one. The loader's one\nownership check (plugin scopes) also owns the payload inputs, and refuses a\nfile's declaration of one, top-level or as a segment var. Synthesis no\nlonger supplies inputs; it only checks that its reads resolve.\n\nFixtures, docs and examples drop their redundant declarations; the test\nfloor carries the payload rows, as production does.\n\n* fix(config): a file's own payload-input declaration is dropped with a warning, and the merge lays the payload floor beneath every base (candybar-host-renderer-x96a.5e0)\n\nRefusing the file cost an upgrading user every other line of a config the\ndocs once told them to write. The floor now lives in the merge, so no base a\ncaller builds can lack it.\n\n* fix(config): the merge gives the payload inputs the last word, so a file's own declaration is only a warning (candybar-host-renderer-x96a.5e0)\n\nLaying them last enforces precedence for every layer, programmatic ones\nincluded, in the one place layers meet. The loader no longer rebuilds the\nparsed file; it only names the redundant lines. A segment var under a payload\nname stays refused: it stores beside the payload's input, where the merge has\nno say.\n\n* fix(config): a refused file carries its payload-declaration warnings, and the comments name the merge's last word (candybar-host-renderer-x96a.5e0)"
         }
       ]
     }
