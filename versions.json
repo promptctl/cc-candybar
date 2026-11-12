@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-736",
+      "ref": "refs/pull/736/merge",
+      "sha": "16de57056efac8eb475af8ec6788c321c1186889",
+      "timestamp": "2026-11-12T16:56:22.575Z",
+      "commits": [
+        {
+          "sha": "16de57056efac8eb475af8ec6788c321c1186889",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T09:55:27-07:00",
+          "message": "Merge 08dcb6b29ad10d5f53114fa793ad9e952ed4b1da into f02693a9bd83176c9126d9473453ca4bd96fda85\n"
+        },
+        {
+          "sha": "08dcb6b29ad10d5f53114fa793ad9e952ed4b1da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T09:55:14-07:00",
+          "message": "fix(render-event): a source that failed, or whose key failed, is named failed by its variable (candybar-host-renderer-x96a.z7t)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f02693a9bd83176c9126d9473453ca4bd96fda85",
