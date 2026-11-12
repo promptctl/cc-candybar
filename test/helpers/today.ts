@@ -22,7 +22,9 @@ export async function todayInfo(
   at: Instant,
 ) {
   const lane = store.declareToday(holds, claudeConfigDir);
-  await store.refreshToday(sessionIdOf(hookData.session_id), hookData.transcript_path);
+  await store
+    .request(sessionIdOf(hookData.session_id), hookData.transcript_path)
+    .today();
   await laneOutcome(lane);
   return projected(store, lane, hookData, at);
 }

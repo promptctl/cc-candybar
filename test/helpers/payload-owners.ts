@@ -263,11 +263,6 @@ export function fakeUsage(
       };
     },
     daysOutside: (): Outcome<never> => ABSENT,
-    refreshToday: async (
-      hookData: ClaudeHookData | undefined,
-    ): Promise<void> => {
-      runInAction(() => todayRefreshed.add(hookData?.session_id ?? ""));
-    },
     observeSpeed,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
       speed.read(sessionId),

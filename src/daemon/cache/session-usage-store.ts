@@ -621,16 +621,6 @@ export class SessionUsageStore {
   // over the sessions that had asked, would move with which other sessions
   // happened to have rendered.
   //
-  // A request's refresh of `today`: the active session's own record, so
-  // `today` keeps up with the cost it was sent with. The directory set's
-  // scan is not waited for (`declareToday`).
-  refreshToday(
-    sessionId: SessionId,
-    transcriptPath: string | undefined,
-  ): Promise<void> {
-    return this.request(sessionId, transcriptPath).today();
-  }
-
   // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
