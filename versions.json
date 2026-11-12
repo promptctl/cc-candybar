@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-717",
-      "ref": "refs/pull/717/merge",
-      "sha": "c9c6bb88d1ad59cfd44529f4add9d775f315c2f2",
-      "timestamp": "2026-11-12T00:38:31.610Z",
-      "commits": [
-        {
-          "sha": "c9c6bb88d1ad59cfd44529f4add9d775f315c2f2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T00:37:23Z",
-          "message": "Merge 33a6f826abee1b1a0748d9775fc3903a41c3f205 into 34aef2fa5a55d9dcf7fea8290c49861922b39bb8\n"
-        },
-        {
-          "sha": "33a6f826abee1b1a0748d9775fc3903a41c3f205",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T17:37:10-07:00",
-          "message": "fix(renderer): the host records what it knows of a click before parsing it, and stamps a refusal by its own clock (candybar-host-renderer-x96a.8se)\n\nA click whose session segment does not decode is refused before its turn\nruns, so its verb and session are noted by the host ahead of the parse and\nthe click turn records only what it learns. The idle clock's click brackets\nbelong to the main renderer's parts, not the draw's. A refused effect's\neffect-done carries the instant the host refused it, through instantAt.\n"
-        },
-        {
-          "sha": "520025d728131cae4ac7d803cf01f9df146f15b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T17:27:42-07:00",
-          "message": "fix(renderer): a turn that threw still names its views, and the host refuses every effect a turn answering no request returns (candybar-host-renderer-x96a.8se)\n\nA click can commit and follow its view before a later step throws, so a\nthrown turn carries the open views' subscriptions and the host takes them.\nEvery effect of a turn other than a request is refused through the host's\none path, which replaces the config turn's own refusal. Only a live session\nis held by a click: a retiring record goes once its retire settles.\n"
-        },
-        {
-          "sha": "d92648729c95339c9cfeb3cc43a15565c240d5af",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T17:15:55-07:00",
-          "message": "feat(renderer): a click is a turn through answer, and its output carries what its act moved (candybar-host-renderer-x96a.8se)\n\nA click that runs a verb is now one `click` turn of the main renderer, and\nthe idle clock's close of a session's menus is a `menu-idle` turn. Every\nverb still acts in place, through the verb table over the daemon's verb\ncontext, now reached as the renderer's own port. So a turn's output reads\nthe subscriptions once the act has landed (its commit and its view's\nfollow), which 8e9 needs once the host learns of a moved run only from an\noutput.\n\nThe host keeps the session checkpoint, the status row's resolution and its\nopener; a turn's throw is the click's reply by its class, as before. A click\nin flight holds its session against the collector's sweep, and its release\nnames the session as a request does. The idle close turns a turn that threw\nback into a rejection, so the clock waits a timeout before retrying and\nwrites its one line.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "34aef2fa5a55d9dcf7fea8290c49861922b39bb8",
-      "timestamp": "2026-11-11T23:30:39.497Z",
+      "sha": "ef62dc27975021a4aedb20614df8ab62ea63b6e7",
+      "timestamp": "2026-11-12T00:48:27.538Z",
       "commits": [
         {
-          "sha": "34aef2fa5a55d9dcf7fea8290c49861922b39bb8",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-11T23:29:33Z",
-          "message": "chore(release): set `package.json` to 1.217.1\n\n## [1.217.1](https://github.com/promptctl/cc-candybar/compare/v1.217.0...v1.217.1) (2026-11-11)\n\n### Bug Fixes\n\n* **collector:** a retire that settles drops its session's record, because the renderer lets go of the document on every outcome (candybar-host-renderer-x96a.0iu) ([#716](https://github.com/promptctl/cc-candybar/issues/716)) ([316d84b](https://github.com/promptctl/cc-candybar/commit/316d84baeabd627bb71ba4184597372d24e77cde))\n"
+          "sha": "ef62dc27975021a4aedb20614df8ab62ea63b6e7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T17:47:36-07:00",
+          "message": "feat(renderer): a click is a turn through answer, and its output carries what its act moved (candybar-host-renderer-x96a.8se) (#717)\n\n* feat(renderer): a click is a turn through answer, and its output carries what its act moved (candybar-host-renderer-x96a.8se)\n\nA click that runs a verb is now one `click` turn of the main renderer, and\nthe idle clock's close of a session's menus is a `menu-idle` turn. Every\nverb still acts in place, through the verb table over the daemon's verb\ncontext, now reached as the renderer's own port. So a turn's output reads\nthe subscriptions once the act has landed (its commit and its view's\nfollow), which 8e9 needs once the host learns of a moved run only from an\noutput.\n\nThe host keeps the session checkpoint, the status row's resolution and its\nopener; a turn's throw is the click's reply by its class, as before. A click\nin flight holds its session against the collector's sweep, and its release\nnames the session as a request does. The idle close turns a turn that threw\nback into a rejection, so the clock waits a timeout before retrying and\nwrites its one line.\n\n* fix(renderer): a turn that threw still names its views, and the host refuses every effect a turn answering no request returns (candybar-host-renderer-x96a.8se)\n\nA click can commit and follow its view before a later step throws, so a\nthrown turn carries the open views' subscriptions and the host takes them.\nEvery effect of a turn other than a request is refused through the host's\none path, which replaces the config turn's own refusal. Only a live session\nis held by a click: a retiring record goes once its retire settles.\n\n* fix(renderer): the host records what it knows of a click before parsing it, and stamps a refusal by its own clock (candybar-host-renderer-x96a.8se)\n\nA click whose session segment does not decode is refused before its turn\nruns, so its verb and session are noted by the host ahead of the parse and\nthe click turn records only what it learns. The idle clock's click brackets\nbelong to the main renderer's parts, not the draw's. A refused effect's\neffect-done carries the instant the host refused it, through instantAt."
         }
       ]
     }

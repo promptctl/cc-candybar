@@ -77246,7 +77246,7 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
   const done2 = (effect, reason) => void host.deliver(
     {
       kind: "event",
-      at: instantOf(new Date(clock.now())),
+      at: instantAt(clock),
       event: {
         kind: "effect-done",
         of: effect.id,
@@ -77272,8 +77272,6 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
     noteFacts(facts, { renderer: host.name });
     return failed2(host, configured.error, "its config turn: ");
   }
-  for (const effect of configured.output.effects)
-    done2(effect, "a config turn answers no request");
   const delivered = await host.answer({
     kind: "event",
     at,
@@ -78109,36 +78107,33 @@ var VERB_FACT = {
   "tmux-status": "linkVerb"
 };
 async function handleClick(parts, verb, value, arrival, facts, clientGone) {
-  const { menuIdle, verbCtx } = parts;
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
     return statusLineClick(parts, value, facts, clientGone);
   }
-  const handler = VERBS.get(verb);
-  if (!handler) {
-    return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
-  }
   noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
   const session = clickSessionOf(verb, value);
-  const pending2 = session?.ok ? session.id : null;
   if (session === null) noteFacts(facts, { sid: "-" });
-  else if (pending2 !== null) {
-    noteFacts(facts, { sid: pending2 });
-    menuIdle.clickArrived(pending2);
-  }
+  else if (session.ok) noteFacts(facts, { sid: session.id });
+  const release4 = session?.ok ? parts.collector.holding(session.id) : () => {
+  };
   try {
-    await handler(value, {
-      ...verbCtx,
-      arrival,
-      placeWaited: (ms) => noteFacts(facts, { placeWait: `${ms}ms` }),
-      gatherTook: (ms) => noteFacts(facts, { gather: `${ms}ms` }),
-      turnWaited: (ms) => noteFacts(facts, { turnWait: `${ms}ms` }),
-      clientGone
+    const delivered = await parts.renderer.answer({
+      kind: "event",
+      at: instantAt(parts.clock),
+      event: { kind: "click", verb, value, session, arrival, gone: clientGone }
     });
+    switch (delivered.kind) {
+      case "answered":
+        facts.push(...delivered.output.record);
+        return { kind: "ok" };
+      case "threw":
+        facts.push(...delivered.record);
+        throw delivered.error;
+    }
   } finally {
-    if (pending2 !== null) menuIdle.clickSettled(pending2);
+    release4();
   }
-  return { kind: "ok" };
 }
 function clickReply(outcome) {
   switch (outcome.kind) {
@@ -82728,7 +82723,7 @@ var Collector = class {
         this.records.set(req.sessionId, opened);
         return opened.stamped.document;
       }
-      held.requested = true;
+      held.active = true;
       const { phase } = held;
       if (phase.kind === "live")
         phase.declared.set(this.declared({ ...held, locator }, phase.holds));
@@ -82768,12 +82763,27 @@ var Collector = class {
       }
     });
   }
+  // [LAW:no-ambient-temporal-coupling] A click holds its session for as long
+  // as the host awaits its turn, however long that is, and its release names
+  // the session as a request does, so the next sweep keeps it too. Only a
+  // live session is kept: a retiring one has released its reads, and its
+  // record goes once the retire settles, as one with no record has gone.
+  holding(session) {
+    const record2 = this.records.get(session);
+    if (record2?.phase.kind !== "live") return () => {
+    };
+    record2.clicks++;
+    return () => {
+      record2.clicks--;
+      record2.active = true;
+    };
+  }
   // One sweep. Public so a test can run it at an instant it chose.
   sweep() {
     for (const record2 of this.records.values()) {
       if (record2.phase.kind !== "live") continue;
-      if (record2.requested) record2.requested = false;
-      else if (!this.deps.watched(record2.session))
+      if (record2.active) record2.active = false;
+      else if (record2.clicks === 0 && !this.deps.watched(record2.session))
         this.retire(record2, record2.phase);
     }
   }
@@ -82814,7 +82824,8 @@ var Collector = class {
       session,
       stamped,
       subscriptions,
-      requested: true,
+      active: true,
+      clicks: 0,
       phase: this.watch(session, stamped, reader)
     };
   }
@@ -84729,27 +84740,50 @@ init_globals();
 // src/renderer/interface.ts
 init_globals();
 var TurnThrew = class extends Error {
-  constructor(record2, thrown2) {
+  constructor(record2, thrown2, subscriptions) {
     super(thrown2 instanceof Error ? thrown2.message : String(thrown2));
     this.record = record2;
     this.thrown = thrown2;
+    this.subscriptions = subscriptions;
     this.name = "TurnThrew";
   }
   record;
   thrown;
+  subscriptions;
 };
 
 // src/daemon/renderer-host.ts
-function rendererHost(name, renderer, log, subscribed) {
+function rendererHost(name, clock, renderer, log, subscribed) {
   const turn = async (input) => {
     try {
       const output = await renderer.answer(input);
       subscribed(output.subscriptions);
+      if (input.event.kind !== "request")
+        for (const effect of output.effects)
+          refuse4(effect, `a ${input.event.kind} turn answers no request`);
       return { kind: "answered", output };
     } catch (e) {
-      return e instanceof TurnThrew ? { kind: "threw", error: e.thrown, record: e.record } : { kind: "threw", error: e, record: [] };
+      if (!(e instanceof TurnThrew))
+        return { kind: "threw", error: e, record: [] };
+      subscribed(e.subscriptions);
+      return { kind: "threw", error: e.thrown, record: e.record };
     }
   };
+  const refuse4 = (effect, reason) => void deliver(
+    {
+      kind: "event",
+      at: instantAt(clock),
+      event: {
+        kind: "effect-done",
+        of: effect.id,
+        outcome: { kind: "failed", reason }
+      }
+    },
+    [
+      ["sid", effect.session],
+      ["effect", String(effect.id)]
+    ]
+  );
   const record2 = (input, about, delivered) => {
     const head = [
       ["renderer", name],
@@ -84772,21 +84806,39 @@ function rendererHost(name, renderer, log, subscribed) {
         );
     }
   };
-  return {
-    name,
-    answer: turn,
-    // [LAW:nothing-unseen] An input no event of its own records is recorded
-    // here.
-    deliver: async (input, about) => {
-      const delivered = await turn(input);
-      record2(input, about, delivered);
-      return delivered;
-    }
+  const deliver = async (input, about) => {
+    const delivered = await turn(input);
+    record2(input, about, delivered);
+    return delivered;
   };
+  return { name, answer: turn, deliver };
 }
 
 // src/renderer/main.ts
 init_globals();
+
+// src/renderer/click.ts
+init_globals();
+async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, gone }, record2) {
+  const handler = verbs.handler(verb);
+  if (handler === void 0)
+    throw new BadVerbArgs(`unknown click verb: ${verb}`);
+  const pending2 = session?.ok ? session.id : null;
+  if (pending2 !== null) menuIdle.clickArrived(pending2);
+  try {
+    await handler(value, {
+      arrival,
+      placeWaited: (ms) => noteFacts(record2, { placeWait: `${ms}ms` }),
+      gatherTook: (ms) => noteFacts(record2, { gather: `${ms}ms` }),
+      turnWaited: (ms) => noteFacts(record2, { turnWait: `${ms}ms` }),
+      clientGone: gone
+    });
+  } finally {
+    if (pending2 !== null) menuIdle.clickSettled(pending2);
+  }
+}
+
+// src/renderer/main.ts
 function mainRenderer(parts) {
   const deliveries = /* @__PURE__ */ new Map();
   let minted = 0;
@@ -84840,6 +84892,12 @@ function mainRenderer(parts) {
         if (event.outcome.kind === "ok") delivered();
         return answered([], record2);
       }
+      case "click":
+        await clickTurn(parts, event, record2);
+        return answered([], record2);
+      case "menu-idle":
+        await parts.verbs.closeIdle(event.session, event.idle);
+        return answered([], record2);
     }
   };
   return {
@@ -84848,14 +84906,34 @@ function mainRenderer(parts) {
       try {
         return await turn(event, at, record2);
       } catch (thrown2) {
-        throw new TurnThrew(record2, thrown2);
+        throw new TurnThrew(record2, thrown2, parts.renderCache.subscriptions());
       }
     }
   };
 }
 
+// src/renderer/verbs.ts
+init_globals();
+function verbsOver(ctx) {
+  return {
+    handler: (verb) => {
+      const handler = VERBS.get(verb);
+      return handler && ((value, click3) => handler(value, { ...ctx, ...click3 }));
+    },
+    closeIdle: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, ctx)
+  };
+}
+
 // src/daemon/menu-idle.ts
 init_globals();
+async function closeByTurn(host, at, sessionId2, idle) {
+  const delivered = await host.answer({
+    kind: "event",
+    at: at(),
+    event: { kind: "menu-idle", session: sessionId2, idle }
+  });
+  if (delivered.kind === "threw") throw delivered.error;
+}
 var MAX_SESSIONS6 = 256;
 var MenuIdle = class {
   constructor(deps) {
@@ -85094,7 +85172,7 @@ function createDaemon(inputs) {
   const menuIdle = new MenuIdle({
     clock,
     now: instant,
-    close: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, verbCtx),
+    close: (sessionId2, idle) => closeByTurn(parts.renderer, instant, sessionId2, idle),
     failed: (sessionId2, error) => log(
       error instanceof DaemonClosing ? "info" : "error",
       `menu-idle: close failed (session=${sessionId2}): ${inspect(error)}`
@@ -85410,13 +85488,13 @@ function createDaemon(inputs) {
     renderCache,
     updateWatch,
     limits,
-    verbCtx,
     // [LAW:one-way-deps] exception: the main renderer, in process, over the
     // host parts its side still reaches (RendererParts, src/daemon/draw-bar.ts).
     collector,
     worldStates,
     renderer: rendererHost(
       "main",
+      clock,
       mainRenderer({
         clock,
         log,
@@ -85433,7 +85511,8 @@ function createDaemon(inputs) {
         menuIdle,
         launcher,
         laneSetups,
-        tmuxStatusLines
+        tmuxStatusLines,
+        verbs: verbsOver(verbCtx)
       }),
       log,
       (subscriptions) => collector.subscribed(subscriptions)
