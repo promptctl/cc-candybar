@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-724",
-      "ref": "refs/pull/724/merge",
-      "sha": "a8277e4fbf68b70363592151d5d185d4e0d1803f",
-      "timestamp": "2026-11-12T06:05:22.480Z",
-      "commits": [
-        {
-          "sha": "a8277e4fbf68b70363592151d5d185d4e0d1803f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T06:04:27Z",
-          "message": "Merge e4bdd7e108c4e2c755ce99bc121932efb2604b34 into a454d2f2ed6d81675e56ae6c45bef77b1db7007f\n"
-        },
-        {
-          "sha": "e4bdd7e108c4e2c755ce99bc121932efb2604b34",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T23:04:15-07:00",
-          "message": "test(config): the chain cases show the chrome minted for the plugin's settings and the inserted cell, so an empty unresolved list is over real reads (candybar-host-renderer-x96a.01x)\n"
-        },
-        {
-          "sha": "8e9433b9e1adf58d7604b103fca4fbb03aa422ea",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:59:46-07:00",
-          "message": "test(config): the chain cases live in the worker tier, since they write a config to disk, and an insert is held to the root as well as the preset (candybar-host-renderer-x96a.01x)\n"
-        },
-        {
-          "sha": "fd0ca68fa1990370e4e9be095438853de4f4d237",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:56:42-07:00",
-          "message": "test(config): the chain cases load over the setup's isolated host, name their layers in order, and prove the load raised no advisory (candybar-host-renderer-x96a.01x)\n"
-        },
-        {
-          "sha": "eefa81ad7fa861cb796367ac1f8de3bbd703d7da",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:53:17-07:00",
-          "message": "test(config): the synthesis-reads test loads a rendering plugin and a beneath layer through the chain, so the names they make the chrome mint are proven to resolve (candybar-host-renderer-x96a.01x)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "a454d2f2ed6d81675e56ae6c45bef77b1db7007f",
-      "timestamp": "2026-11-12T05:51:27.353Z",
+      "sha": "cd25df0cf0cb1088bd2b4a19deac4d21858b1823",
+      "timestamp": "2026-11-12T06:13:43.369Z",
       "commits": [
         {
-          "sha": "a454d2f2ed6d81675e56ae6c45bef77b1db7007f",
+          "sha": "cd25df0cf0cb1088bd2b4a19deac4d21858b1823",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T22:50:25-07:00",
-          "message": "perf(config): a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg) (#723)\n\n* perf(config): a load no longer re-proves the chrome's reads; a test over loaded configs names any it mints that nothing declares (candybar-host-renderer-x96a.dbg)\n\n* test(config): the chrome-reads check lives in test helpers, runs over authored configs, and checks a replaced declaration by identity (candybar-host-renderer-x96a.dbg)\n\n* test(config): the chrome-reads check runs over every shipped example and an authored config with presets and settings; the load names its exception (candybar-host-renderer-x96a.dbg)\n\n* test(config): the chrome-reads corpus authors a menu, the helpers share one authored-config builder, and unrelated helper formatting is restored (candybar-host-renderer-x96a.dbg)"
+          "timestamp": "2026-11-11T23:12:45-07:00",
+          "message": "test(config): synthesis-reads covers a rendering plugin and a beneath layer (candybar-host-renderer-x96a.01x) (#724)\n\n* test(config): the synthesis-reads test loads a rendering plugin and a beneath layer through the chain, so the names they make the chrome mint are proven to resolve (candybar-host-renderer-x96a.01x)\n\n* test(config): the chain cases load over the setup's isolated host, name their layers in order, and prove the load raised no advisory (candybar-host-renderer-x96a.01x)\n\n* test(config): the chain cases live in the worker tier, since they write a config to disk, and an insert is held to the root as well as the preset (candybar-host-renderer-x96a.01x)\n\n* test(config): the chain cases show the chrome minted for the plugin's settings and the inserted cell, so an empty unresolved list is over real reads (candybar-host-renderer-x96a.01x)"
         }
       ]
     }
