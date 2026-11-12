@@ -4,15 +4,22 @@
     {
       "version": "pr-730",
       "ref": "refs/pull/730/merge",
-      "sha": "c012895f0b49227e2af94fac930a7ce5bd5169ad",
-      "timestamp": "2026-11-12T09:09:34.919Z",
+      "sha": "ec9f583531d49172287efdd7ae45329b4839da08",
+      "timestamp": "2026-11-12T09:13:33.625Z",
       "commits": [
         {
-          "sha": "c012895f0b49227e2af94fac930a7ce5bd5169ad",
+          "sha": "ec9f583531d49172287efdd7ae45329b4839da08",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T09:08:33Z",
-          "message": "Merge 8140078f3b9ad0b2c4359cee24ce322029b27445 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+          "timestamp": "2026-11-12T09:12:25Z",
+          "message": "Merge c1138a0f7fbc651b2ba17db315be934ee5a184f6 into 717218f3277b68494d6138b7195debffd0a866d0\n"
+        },
+        {
+          "sha": "c1138a0f7fbc651b2ba17db315be934ee5a184f6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-12T02:12:15-07:00",
+          "message": "fix(collector): a run whose declaration throws fails that run alone, and every other lane of the session declares (candybar-host-renderer-x96a.8e9)\n"
         },
         {
           "sha": "8140078f3b9ad0b2c4359cee24ce322029b27445",

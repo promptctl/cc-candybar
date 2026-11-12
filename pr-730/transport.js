@@ -66081,9 +66081,12 @@ var SourceRuns = class {
     this.watchMgr.dispose();
   }
 };
-function declareRuns(sourceRuns, holds2, runs) {
+function declareRuns(sourceRuns, holds2, runs, take) {
   return new Map(
-    [...runs].map(([digest2, run3]) => [digest2, sourceRuns.declare(holds2, run3)])
+    [...runs].map(([digest2, run3]) => [
+      digest2,
+      take(digest2, () => sourceRuns.declare(holds2, run3))
+    ])
   );
 }
 
@@ -66311,7 +66314,18 @@ function declareLanes(owners, holds2, facts, sources) {
         )
       ])
     ),
-    runs: declareRuns(owners.sourceRuns, holds2, sources.runs)
+    // A run whose declaration threw answers that failure and watches nothing;
+    // a declared run's own lane carries its watch's fault.
+    runs: declareRuns(
+      owners.sourceRuns,
+      holds2,
+      sources.runs,
+      (digest2, take) => ({
+        digest: digest2,
+        fault: () => null,
+        ...declare(`run ${shortDigest(digest2)}`, take)
+      })
+    )
   };
   return { lanes, faults };
 }
