@@ -4,15 +4,22 @@
     {
       "version": "pr-724",
       "ref": "refs/pull/724/merge",
-      "sha": "e901569ae5a3ef12291430896fffe4183bc2aeb5",
-      "timestamp": "2026-11-12T05:57:52.206Z",
+      "sha": "d70b20b2c6e6654bd6f5e62f9d96709a443fc759",
+      "timestamp": "2026-11-12T06:00:52.364Z",
       "commits": [
         {
-          "sha": "e901569ae5a3ef12291430896fffe4183bc2aeb5",
+          "sha": "d70b20b2c6e6654bd6f5e62f9d96709a443fc759",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T05:56:54Z",
-          "message": "Merge fd0ca68fa1990370e4e9be095438853de4f4d237 into a454d2f2ed6d81675e56ae6c45bef77b1db7007f\n"
+          "timestamp": "2026-11-12T05:59:58Z",
+          "message": "Merge 8e9433b9e1adf58d7604b103fca4fbb03aa422ea into a454d2f2ed6d81675e56ae6c45bef77b1db7007f\n"
+        },
+        {
+          "sha": "8e9433b9e1adf58d7604b103fca4fbb03aa422ea",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T22:59:46-07:00",
+          "message": "test(config): the chain cases live in the worker tier, since they write a config to disk, and an insert is held to the root as well as the preset (candybar-host-renderer-x96a.01x)\n"
         },
         {
           "sha": "fd0ca68fa1990370e4e9be095438853de4f4d237",
