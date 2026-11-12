@@ -4,15 +4,22 @@
     {
       "version": "pr-722",
       "ref": "refs/pull/722/merge",
-      "sha": "11741792aa9337e0f287f8bd2251f1d162b7f253",
-      "timestamp": "2026-11-12T04:42:51.288Z",
+      "sha": "19da0a7e6ba6feb9e216f7cef0244e996e751c88",
+      "timestamp": "2026-11-12T04:52:23.305Z",
       "commits": [
         {
-          "sha": "11741792aa9337e0f287f8bd2251f1d162b7f253",
+          "sha": "19da0a7e6ba6feb9e216f7cef0244e996e751c88",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T04:41:58Z",
-          "message": "Merge d43f784932803eb4d206505ab956ca1ceea9a729 into e3e73c6b78a8776b63461d4fcab107abbec5184f\n"
+          "timestamp": "2026-11-12T04:51:16Z",
+          "message": "Merge 808b712bf51c8615b0d6d4c16b5a149f61c40a0d into e3e73c6b78a8776b63461d4fcab107abbec5184f\n"
+        },
+        {
+          "sha": "808b712bf51c8615b0d6d4c16b5a149f61c40a0d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T21:51:04-07:00",
+          "message": "fix(config): a refused file carries its payload-declaration warnings, and the comments name the merge's last word (candybar-host-renderer-x96a.5e0)\n"
         },
         {
           "sha": "d43f784932803eb4d206505ab956ca1ceea9a729",

@@ -40309,13 +40309,13 @@ function pluginScopeCollisions(ctx, out, inherited) {
   for (const [segment, decl] of Object.entries(out.segments ?? {})) {
     for (const v of Object.keys(decl.vars ?? {})) {
       const name = `${segment}.${v}`;
-      const at = {
+      const at = () => ({
         path: `segments.${segment}.vars.${v}`,
         line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
-      };
+      });
       if (isPayloadInput(name)) {
         ctx.issues.push({
-          ...at,
+          ...at(),
           message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} \u2014 rename the var or the segment`
         });
         continue;
@@ -40323,16 +40323,16 @@ function pluginScopeCollisions(ctx, out, inherited) {
       const scope = scopeOf(name);
       if (scope === void 0 || inherited.has(segment)) continue;
       ctx.issues.push({
-        ...at,
+        ...at(),
         message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`
       });
     }
   }
 }
 var PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
-function payloadDeclarationNotices(filePath2, source, raw) {
+function payloadDeclarationNotices(filePath2, source, declared) {
   const lineOf = keyLocator(source);
-  return Object.keys(raw.variables ?? {}).filter(isPayloadInput).map((name) => {
+  return declared.filter(isPayloadInput).map((name) => {
     const line = lineOf(["variables", name]);
     const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
     return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
@@ -58339,7 +58339,7 @@ function validateNoNesting(ctx, cfg, names) {
         continue;
       }
       const [mine, theirs, at] = names.authored(inner) ? [inner, outer, innerAt] : [outer, inner, outerAt];
-      const fix = names.authored(inner) === names.authored(outer) ? "Rename one so neither name starts with the other." : `"${theirs}" is declared outside this file (the bundled default, a plugin, or a control the bar builds), so rename "${mine}".`;
+      const fix = names.authored(inner) === names.authored(outer) ? "Rename one so neither name starts with the other." : `"${theirs}" is declared outside this file (the bundled default, a plugin, a control the bar builds, or the daemon's payload), so rename "${mine}".`;
       ctx.issues.push({
         path: at.join("."),
         message: `variable "${inner}" is declared under the variable "${outer}" \u2014 a read of ".${inner}" would name both, "${inner}" and a field of "${outer}". ${fix}`,
@@ -59160,7 +59160,14 @@ function parseDslConfig(filePath2, source, allowedPalettes = new Set(listResolva
 function parseDslFile(filePath2, source, allowedPalettes, under3) {
   const json2 = parseJson5OrThrow(filePath2, source);
   const notice = editabilityNotice(filePath2, source);
-  const warnings = notice === null ? [] : [notice];
+  const warnings = [
+    ...notice === null ? [] : [notice],
+    ...payloadDeclarationNotices(
+      filePath2,
+      source,
+      isPlainObject(json2) && isPlainObject(json2.variables) ? Object.keys(json2.variables) : []
+    )
+  ];
   const issues = [];
   const ctx = {
     source,
@@ -59196,14 +59203,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under3) {
   if (issues.length > 0) {
     throw new ConfigError(filePath2, issues, warnings);
   }
-  return {
-    raw,
-    warnings: [
-      ...warnings,
-      ...payloadDeclarationNotices(filePath2, source, raw)
-    ],
-    layer
-  };
+  return { raw, warnings, layer };
 }
 var NO_INHERITED_SEGMENTS = /* @__PURE__ */ new Set();
 function parseJson5OrThrow(filePath2, source) {
