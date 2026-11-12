@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-726",
+      "ref": "refs/pull/726/merge",
+      "sha": "6e3610c4420bc2e162f22aa152317910dd8bf9ea",
+      "timestamp": "2026-11-12T06:43:13.380Z",
+      "commits": [
+        {
+          "sha": "6e3610c4420bc2e162f22aa152317910dd8bf9ea",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:42:14-07:00",
+          "message": "Merge 753cd4c35c5d9ec15ad24819ae18a22ca38016e9 into 893a911cb4f02622eaaab14bf90b882bf7f344a2\n"
+        },
+        {
+          "sha": "753cd4c35c5d9ec15ad24819ae18a22ca38016e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:41:55-07:00",
+          "message": "test(doctor): the doctor-run click reads its outcome from its event when its reply outlasts the guard (candybar-host-renderer-x96a.twu)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "893a911cb4f02622eaaab14bf90b882bf7f344a2",
