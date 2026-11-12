@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-721",
+      "ref": "refs/pull/721/merge",
+      "sha": "eb03918bde625cde286a14ca51bf5ab69a90e5d7",
+      "timestamp": "2026-11-12T03:10:09.593Z",
+      "commits": [
+        {
+          "sha": "eb03918bde625cde286a14ca51bf5ab69a90e5d7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T20:09:21-07:00",
+          "message": "Merge e43fc6ae984fef75d066304761ac979a1e4dc1ac into 6c654604baf9e9029c99910f667305f85dd79ae8\n"
+        },
+        {
+          "sha": "e43fc6ae984fef75d066304761ac979a1e4dc1ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T20:09:09-07:00",
+          "message": "fix(renderer): a view hands its checked SessionId to its registry and its click URLs, so no config can redeclare which session a bar reads or writes (candybar-host-renderer-x96a.k4k)\n\nA state variable and every click URL now key by the session the view draws\nfor, carried on its source, instead of the session.id variable a config can\nredeclare. An unbound view's session is pending, as its inputs are, so a\nload probe starts no state-keyed source. The exception parse in the state\nsource is gone, and with it the re-parse on every state read and revision.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "6c654604baf9e9029c99910f667305f85dd79ae8",
