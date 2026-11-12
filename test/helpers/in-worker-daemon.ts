@@ -25,7 +25,11 @@ import { fileStorage } from "../../src/daemon/file-storage";
 import { DaemonLog } from "../../src/daemon/log";
 import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
-import { PROTOCOL_VERSION, sendOne, type Request } from "../../src/daemon/protocol";
+import {
+  PROTOCOL_VERSION,
+  sendOne,
+  type Request,
+} from "../../src/daemon/protocol";
 import { systemTimekeeper } from "../../src/time";
 import type { StatsSnapshot } from "../../src/daemon/stats";
 import { daemonGates } from "../../src/daemon/update-keys";
@@ -33,7 +37,11 @@ import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
 import { memoryConnection } from "./memory-connection";
-import { LEDGER_ENV, TEST_FILE_ENV, recordDaemonStart } from "./process-tier.cjs";
+import {
+  LEDGER_ENV,
+  TEST_FILE_ENV,
+  recordDaemonStart,
+} from "./process-tier.cjs";
 
 // [LAW:single-enforcer] What a boot here is recorded with. `startDaemon` replaces
 // the worker's env with the case's own, which holds neither, so both are read
@@ -44,13 +52,17 @@ const LEDGER = ledgerPath();
 function ledgerPath(): string {
   const ledger = process.env[LEDGER_ENV];
   if (ledger === undefined) {
-    throw new Error(`${LEDGER_ENV} is unset: a daemon built in a worker records itself in the run's ledger, which global setup makes`);
+    throw new Error(
+      `${LEDGER_ENV} is unset: a daemon built in a worker records itself in the run's ledger, which global setup makes`,
+    );
   }
   return ledger;
 }
 const TEST_FILE = process.env[TEST_FILE_ENV] ?? null;
 
-export type DaemonOverrides = Partial<Omit<DaemonInputs, "storage" | "paths">> & {
+export type DaemonOverrides = Partial<
+  Omit<DaemonInputs, "storage" | "paths">
+> & {
   readonly paths?: DaemonPaths;
   readonly storage?: (log: DaemonLogger) => Partial<DaemonStorage>;
 };
@@ -94,7 +106,8 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   // The env a case placed names where the daemon lives, read once here.
   const paths = overrides.paths ?? daemonPaths(HOST);
   fs.mkdirSync(paths.state, { recursive: true });
-  const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
+  const daemonLog =
+    overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
   try {
     const daemon = createDaemon({
       ...productionAdapters(paths, daemonLog, systemTimekeeper),
@@ -142,7 +155,8 @@ export async function statsOf(daemon: Daemon): Promise<StatsSnapshot> {
     daemon.clock.monotonic(),
     () => false,
   );
-  if (!resp.ok || !("stats" in resp)) throw new Error(`stats failed: ${JSON.stringify(resp)}`);
+  if (!resp.ok || !("stats" in resp))
+    throw new Error(`stats failed: ${JSON.stringify(resp)}`);
   return resp.stats;
 }
 

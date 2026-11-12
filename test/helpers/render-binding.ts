@@ -16,7 +16,8 @@ export function lastBinding(runtime: ActionRuntime): () => RenderBinding {
     },
   });
   return () => {
-    if (drawn === undefined) throw new Error("no render has bound this compile");
+    if (drawn === undefined)
+      throw new Error("no render has bound this compile");
     return drawn;
   };
 }

@@ -246,7 +246,10 @@ export function buildRig(init: RigInit = {}): Rig {
         compiled,
         store,
         registry,
-        draw.payload ?? { session_id: sessionId, workspace: { project_dir: cwd } },
+        draw.payload ?? {
+          session_id: sessionId,
+          workspace: { project_dir: cwd },
+        },
         draw.at ?? instantOf(new Date()),
         { ...RIG_OPTS, ...draw.opts },
         draw.observers,

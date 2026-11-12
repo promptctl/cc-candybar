@@ -20,19 +20,31 @@ const RETAINERS = join(__dirname, "..", "..", "scripts", "heap-retainers.mjs");
 // [LAW:one-source-of-truth] The snapshot is read by scripts/heap-retainers.mjs,
 // the repo's one reader, which takes a file of any size where a test could not
 // hold the snapshot as a string.
-export const retainerPathsTo = async (className: string, limit = 3): Promise<string[][]> => {
+export const retainerPathsTo = async (
+  className: string,
+  limit = 3,
+): Promise<string[][]> => {
   await new Promise((resolve) => setImmediate(resolve));
   const dir = mkdtempSync(join(tmpdir(), "retainer-path-"));
   try {
     const snapshot = v8.writeHeapSnapshot(join(dir, "heap.heapsnapshot"));
     const run = spawnSync(
       process.execPath,
-      [RETAINERS, snapshot, `^object / ${className}$`, "--strong", "--limit", String(limit), "--json"],
+      [
+        RETAINERS,
+        snapshot,
+        `^object / ${className}$`,
+        "--strong",
+        "--limit",
+        String(limit),
+        "--json",
+      ],
       { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
     );
     // [LAW:no-silent-failure] A reader that did not run says so; reading its
     // empty output as "nothing holds it" would pass a leak.
-    if (run.status !== 0) throw new Error(`heap-retainers exited ${run.status}: ${run.stderr}`);
+    if (run.status !== 0)
+      throw new Error(`heap-retainers exited ${run.status}: ${run.stderr}`);
     return (JSON.parse(run.stdout) as { paths: string[][] }).paths;
   } finally {
     rmSync(dir, { recursive: true, force: true });

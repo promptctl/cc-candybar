@@ -8,7 +8,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type Surface = "filesystem" | "socket" | "child process" | "network" | "clock";
+export type Surface =
+  | "filesystem"
+  | "socket"
+  | "child process"
+  | "network"
+  | "clock";
 
 export interface Call {
   readonly surface: Surface;
@@ -30,13 +35,37 @@ export interface PackageFiles {
 // else a unit test touches is refused: writes, temp directories, watchers,
 // sockets, spawns.
 const FS_READS = new Set([
-  "readFileSync", "readFile", "readdirSync", "readdir", "statSync", "stat",
-  "lstatSync", "lstat", "existsSync", "exists", "accessSync", "access",
-  "readlinkSync", "readlink", "realpathSync", "realpath", "opendirSync",
-  "opendir", "createReadStream", "openSync", "open",
+  "readFileSync",
+  "readFile",
+  "readdirSync",
+  "readdir",
+  "statSync",
+  "stat",
+  "lstatSync",
+  "lstat",
+  "existsSync",
+  "exists",
+  "accessSync",
+  "access",
+  "readlinkSync",
+  "readlink",
+  "realpathSync",
+  "realpath",
+  "opendirSync",
+  "opendir",
+  "createReadStream",
+  "openSync",
+  "open",
 ]);
 // A descriptor was judged when it was opened.
-export const FS_DESCRIPTOR_OPS = new Set(["readSync", "read", "closeSync", "close", "fstatSync", "fstat"]);
+export const FS_DESCRIPTOR_OPS = new Set([
+  "readSync",
+  "read",
+  "closeSync",
+  "close",
+  "fstatSync",
+  "fstat",
+]);
 
 function pathOf(arg: unknown): string | null {
   if (typeof arg === "string") return arg;
@@ -52,7 +81,13 @@ const nameOf = (call: string): string => call.split(".").pop() ?? call;
 function opensForReading(call: string, args: readonly unknown[]): boolean {
   if (nameOf(call) !== "openSync" && nameOf(call) !== "open") return true;
   const flags = args[1];
-  return flags === undefined || typeof flags === "function" || flags === "r" || flags === "rs" || flags === "sr";
+  return (
+    flags === undefined ||
+    typeof flags === "function" ||
+    flags === "r" ||
+    flags === "rs" ||
+    flags === "sr"
+  );
 }
 
 // Compared without case: TypeScript probes whether the file system is
@@ -67,11 +102,16 @@ export function isUnderRoot(file: string, root: string): boolean {
 function isPackageFile(file: string, { root, ignored }: PackageFiles): boolean {
   return (
     isUnderRoot(file, root) &&
-    ![".git", ...ignored].some((entry) => isUnderRoot(file, path.join(root, entry)))
+    ![".git", ...ignored].some((entry) =>
+      isUnderRoot(file, path.join(root, entry)),
+    )
   );
 }
 
-export function allows({ surface, call, args }: Call, files: PackageFiles): boolean {
+export function allows(
+  { surface, call, args }: Call,
+  files: PackageFiles,
+): boolean {
   if (surface !== "filesystem") return false;
   const name = nameOf(call);
   if (FS_DESCRIPTOR_OPS.has(name)) return true;
@@ -83,11 +123,18 @@ export function allows({ surface, call, args }: Call, files: PackageFiles): bool
 function shown(arg: unknown): string {
   const file = pathOf(arg);
   if (file !== null) return JSON.stringify(file);
-  return typeof arg === "function" ? "fn" : typeof arg === "object" ? "{...}" : String(arg);
+  return typeof arg === "function"
+    ? "fn"
+    : typeof arg === "object"
+      ? "{...}"
+      : String(arg);
 }
 
 export function refusal(call: Call, testName: string | undefined): string {
-  const where = testName === undefined ? "outside a test (while the file loaded, or in a beforeAll or afterAll hook)" : `in test "${testName}"`;
+  const where =
+    testName === undefined
+      ? "outside a test (while the file loaded, or in a beforeAll or afterAll hook)"
+      : `in test "${testName}"`;
   const shownCall = `${call.call}(${call.args.slice(0, 2).map(shown).join(", ")})`;
   return (
     `a unit test reached the ${call.surface}: ${shownCall} ${where}. ` +

@@ -43,7 +43,11 @@ import {
 import { until } from "./until";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
-export const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
+export const configFlag = (p: string): string[] => [
+  "cc-candybar",
+  "--config",
+  p,
+];
 
 const REPLY_BUDGET_MS = 5000;
 

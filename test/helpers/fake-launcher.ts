@@ -47,7 +47,10 @@ export function fakeLauncher(
   owner: Partial<LaunchOwner> = {},
 ): FakeLauncher {
   const spawner = fakeSpawner(clock);
-  spawner.program((bin, args) => isLifeline({ bin, args }), readsStdin("until-end"));
+  spawner.program(
+    (bin, args) => isLifeline({ bin, args }),
+    readsStdin("until-end"),
+  );
   const launcher = createOneShotLauncher(
     { inherited: {}, ...owner },
     clock,
@@ -63,9 +66,8 @@ export function fakeLauncher(
 // A launcher for a test whose subject takes one and means to launch nothing: any
 // launch fails as a missing program does, loudly, so a test that starts to
 // spawn must say what it spawns.
-export const unscriptedLauncher: FakeLauncher["launcher"] = fakeLauncher(
-  systemTimekeeper,
-).launcher;
+export const unscriptedLauncher: FakeLauncher["launcher"] =
+  fakeLauncher(systemTimekeeper).launcher;
 
 // A source-runs owner over the unscripted launcher, for a registry whose
 // sources never run: one per registry, so no test's holds reach another's.

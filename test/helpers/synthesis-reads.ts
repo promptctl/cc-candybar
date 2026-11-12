@@ -21,14 +21,13 @@ import {
   SESSION_KEY_TO_EFFECTIVE_VAR,
 } from "../../src/config/setting-projections.js";
 
-// Every variable the synthesis minted into `config` reads, plus the author's
-// node `when`s: the preset trees are walked whole. Three kinds of read: the dotted refs of
-// every template (segment fields, node `when`s and the lead/trail drawn in a
-// segment node's cell, template variables, copy/open actions); and the
-// `.effective` projection a
-// `set` or `persist` on a setting reads its current value back through
-// (registerDslConfig's stateKeyToVar, CONFIG_KEY_TO_EFFECTIVE_VAR).
-function mintedReads(config: DslConfig, before: DslConfig): Set<string> {
+// Every variable `config` reads that the synthesis minted over `before`, and
+// every node of the preset trees, author nodes included. Two kinds of read:
+// the dotted refs of every template (segment fields, node `when`s and the
+// lead/trail drawn in a segment node's cell, template variables, copy/open
+// actions); and the `.effective` projection a `set` or `persist` on a setting
+// reads its current value back through (CONFIG_KEY_TO_EFFECTIVE_VAR).
+function synthesisReads(config: DslConfig, before: DslConfig): Set<string> {
   const helpers = config.helpers;
   const minted = <T>(
     all: Readonly<Record<string, T>>,
@@ -94,7 +93,7 @@ export function unresolvedReads(
   before: DslConfig,
 ): string[] {
   const scope = templateScopeOf(config);
-  return [...mintedReads(config, before)].filter(
+  return [...synthesisReads(config, before)].filter(
     (ref) => !refResolves(ref, scope),
   );
 }

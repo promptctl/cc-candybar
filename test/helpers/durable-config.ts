@@ -70,7 +70,6 @@ export interface DurableConfig {
   dispose(): void;
 }
 
-
 export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   const root = mkdtempSync(join(tmpdir(), prefix));
   const host = hostOf({

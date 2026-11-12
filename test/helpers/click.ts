@@ -73,7 +73,8 @@ export function testVerbContext(
 ): VerbContext {
   return {
     gates: bareGates(),
-    stateDir: stateDir(host), locations: locations(host),
+    stateDir: stateDir(host),
+    locations: locations(host),
     sessionState,
     history,
     navigation: new NavigationHistory(),

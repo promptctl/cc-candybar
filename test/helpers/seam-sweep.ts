@@ -35,7 +35,15 @@
 // [LAW:one-source-of-truth] The one sweep: audits/seam-sweep.audit.ts holds it
 // under every variation, shipped and trial, with one rule and one reader.
 
-import { ColorDepth, drawnColour, getThemePalette, listThemePalettes, type ColorRgba, type Palette, type RichText } from "@promptctl/rich-js";
+import {
+  ColorDepth,
+  drawnColour,
+  getThemePalette,
+  listThemePalettes,
+  type ColorRgba,
+  type Palette,
+  type RichText,
+} from "@promptctl/rich-js";
 import { sharedMenuStateKey } from "../../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../src/config/settings-menu";
 import { SETTINGS_NS } from "../../src/config/reserved-names";
@@ -54,7 +62,14 @@ import {
 } from "../../src/themes/decor";
 import { instantOf } from "../../src/utils/instant";
 import { LADDER, TODAY, besidePress } from "./decor-vocabulary";
-import { cellAfter, cellBefore, drawnChars, seams, shown, visible } from "./seams";
+import {
+  cellAfter,
+  cellBefore,
+  drawnChars,
+  seams,
+  shown,
+  visible,
+} from "./seams";
 import { sessionBar, type SessionBar } from "./session-bar";
 
 const THEMES = listThemePalettes();
@@ -96,11 +111,16 @@ const FRAMES: ReadonlyArray<readonly [string, (bar: SessionBar) => void]> = [
 
 // Every shade of a role of `palette`, as the palette names it, whose whole
 // ladder `drawnAt` draws as one colour.
-function flatShades(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> {
-  const named = (hue: DecorHue, shade: RoleShade) => palette.get(shadeRole(hue, shade));
+function flatShades(
+  palette: Palette,
+  drawnAt: ColorDepth,
+): ReadonlySet<string> {
+  const named = (hue: DecorHue, shade: RoleShade) =>
+    palette.get(shadeRole(hue, shade));
   return new Set(
     DECOR_HUES.flatMap((hue) =>
-      new Set(LADDER.map((rung) => drawnColour(named(hue, rung), drawnAt).hex)).size === 1
+      new Set(LADDER.map((rung) => drawnColour(named(hue, rung), drawnAt).hex))
+        .size === 1
         ? [...LADDER, "muted" as const].map((shade) => named(hue, shade).hex)
         : [],
     ),
@@ -111,26 +131,40 @@ function flatShades(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> 
 // give: its role's ladder `drawnAt` draws only in colours the design stands
 // beside the press (`besidePress`). The press exemption, read by every frame
 // that holds a seam beside an open trigger.
-function pressHasNoneToGive(palette: Palette, decor: Decor, depth: number, drawnAt: ColorDepth): boolean {
+function pressHasNoneToGive(
+  palette: Palette,
+  decor: Decor,
+  depth: number,
+  drawnAt: ColorDepth,
+): boolean {
   const hue = hueOf({ decor, depth });
   const taken = besidePress(palette, decor, depth, drawnAt);
-  return LADDER.every((rung) => taken.has(drawnColour(palette.get(shadeRole(hue, rung)), drawnAt).hex));
+  return LADDER.every((rung) =>
+    taken.has(drawnColour(palette.get(shadeRole(hue, rung)), drawnAt).hex),
+  );
 }
 
 // Every pressed shade under `decor`, as the palette names it, that has none to
 // give at its depth. The sweep knows a cell by its text and colour, not by the
 // depth of the band it presses, so it reads every depth's at once.
-function pressesWithNoneToGive(palette: Palette, decor: Decor, drawnAt: ColorDepth): ReadonlySet<string> {
+function pressesWithNoneToGive(
+  palette: Palette,
+  decor: Decor,
+  drawnAt: ColorDepth,
+): ReadonlySet<string> {
   return new Set(
     [0, 1, 2, 3].flatMap((depth) => {
       const disclosure: Disclosure = { decor, depth };
-      return pressHasNoneToGive(palette, decor, depth, drawnAt) ? [bandFor(palette, disclosure, drawnAt).state.hex] : [];
+      return pressHasNoneToGive(palette, decor, depth, drawnAt)
+        ? [bandFor(palette, disclosure, drawnAt).state.hex]
+        : [];
     }),
   );
 }
 
 // A cell's background as the render dealt it, before the writer rounds it.
-const dealt = (cell: RichText): ColorRgba | undefined => resolvedStyle(cell.style).bgcolor?.value;
+const dealt = (cell: RichText): ColorRgba | undefined =>
+  resolvedStyle(cell.style).bgcolor?.value;
 
 /**
  * The bundled bar drawn at each depth, one rig per depth: parse and compile
@@ -143,7 +177,18 @@ export interface SweepRigs {
 }
 
 export function sweepRigs(): SweepRigs {
-  const bars = new Map(DEPTHS.map(([compatibility]) => [compatibility, sessionBar(`{ globals: { colorCompatibility: '${compatibility}' } }`, COLS)] as const));
+  const bars = new Map(
+    DEPTHS.map(
+      ([compatibility]) =>
+        [
+          compatibility,
+          sessionBar(
+            `{ globals: { colorCompatibility: '${compatibility}' } }`,
+            COLS,
+          ),
+        ] as const,
+    ),
+  );
   return {
     bars,
     dispose: () => {
@@ -157,7 +202,10 @@ export function sweepRigs(): SweepRigs {
  * depth: no seam joins two grounds drawn as one colour but the three kinds
  * above, and the authored list names exactly the cells that wear an alert.
  */
-export function expectEverySeamHeld(rigs: SweepRigs, variation: VariationName): void {
+export function expectEverySeamHeld(
+  rigs: SweepRigs,
+  variation: VariationName,
+): void {
   const decor: Decor = { ...TODAY, variation: VARIATIONS[variation] };
   const alike: string[] = [];
   const counts = { seams: 0, authored: 0, flat: 0, pressed: 0 };
@@ -170,7 +218,9 @@ export function expectEverySeamHeld(rigs: SweepRigs, variation: VariationName): 
       const palette = getThemePalette(theme)!;
       const flat = flatShades(palette, drawnAt);
       const noneToGive = pressesWithNoneToGive(palette, decor, drawnAt);
-      const alerts = new Set((["warning", "error"] as const).map((role) => palette.get(role).hex));
+      const alerts = new Set(
+        (["warning", "error"] as const).map((role) => palette.get(role).hex),
+      );
       bar.pick("theme", theme);
       for (const [frame, show] of FRAMES) {
         show(bar);
@@ -182,20 +232,27 @@ export function expectEverySeamHeld(rigs: SweepRigs, variation: VariationName): 
             if (cells === undefined) return [];
             authoredSeen.add(name);
             if (!cells.every((cell) => alerts.has(dealt(cell)?.hex ?? "")))
-              onTint.push(`${theme} at ${compatibility}, ${frame}: ${name} wears ${cells.map((cell) => dealt(cell)?.hex).join()}`);
+              onTint.push(
+                `${theme} at ${compatibility}, ${frame}: ${name} wears ${cells.map((cell) => dealt(cell)?.hex).join()}`,
+              );
             return [visible(cells.map((cell) => cell.plain).join(""))];
           }),
         );
         // What the cells of the frame wear, by visible text and drawn colour.
         const worn = new Map<string, Set<string>>();
-        const known = (text: string, ground: string | undefined): string => `${text}|${ground}`;
+        const known = (text: string, ground: string | undefined): string =>
+          `${text}|${ground}`;
         for (const cell of [...segments.values()].flat()) {
           const bg = dealt(cell);
           if (bg === undefined) continue;
           const key = known(visible(cell.plain), drawnColour(bg, drawnAt).hex);
           worn.set(key, new Set([...(worn.get(key) ?? []), bg.hex]));
         }
-        const wearsOnly = (text: string, ground: string | undefined, shades: ReadonlySet<string>): boolean => {
+        const wearsOnly = (
+          text: string,
+          ground: string | undefined,
+          shades: ReadonlySet<string>,
+        ): boolean => {
           const bgs = worn.get(known(text, ground));
           return bgs !== undefined && [...bgs].every((bg) => shades.has(bg));
         };
@@ -211,15 +268,23 @@ export function expectEverySeamHeld(rigs: SweepRigs, variation: VariationName): 
           }
           const ground = shown(left);
           if (ground !== shown(right)) continue;
-          if (wearsOnly(before, ground, flat) && wearsOnly(after, ground, flat)) {
+          if (
+            wearsOnly(before, ground, flat) &&
+            wearsOnly(after, ground, flat)
+          ) {
             counts.flat++;
             continue;
           }
-          if (wearsOnly(before, ground, noneToGive) || wearsOnly(after, ground, noneToGive)) {
+          if (
+            wearsOnly(before, ground, noneToGive) ||
+            wearsOnly(after, ground, noneToGive)
+          ) {
             counts.pressed++;
             continue;
           }
-          alike.push(`${theme} at ${compatibility}, ${frame}: "${before}" | "${after}" both on ${ground}`);
+          alike.push(
+            `${theme} at ${compatibility}, ${frame}: "${before}" | "${after}" both on ${ground}`,
+          );
         }
       }
     }
@@ -232,6 +297,8 @@ export function expectEverySeamHeld(rigs: SweepRigs, variation: VariationName): 
   expect(onTint).toEqual([]);
   // Non-vacuous: every frame of every theme at every depth draws seams, and
   // the flat ladders the rule reads are textual-ansi's.
-  expect(counts.seams).toBeGreaterThan(DEPTHS.length * THEMES.length * FRAMES.length * 10);
+  expect(counts.seams).toBeGreaterThan(
+    DEPTHS.length * THEMES.length * FRAMES.length * 10,
+  );
   expect(counts.flat).toBeGreaterThan(0);
 }

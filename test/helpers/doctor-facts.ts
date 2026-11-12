@@ -1,9 +1,24 @@
 import { HOST } from "./host";
-import type { Asked, DaemonProcess, DoctorFacts, MarkBook, PostMortemsRead } from "../../src/doctor/checks";
-import type { FrameSeen, FrameSighting } from "../../src/daemon/render-sightings";
+import type {
+  Asked,
+  DaemonProcess,
+  DoctorFacts,
+  MarkBook,
+  PostMortemsRead,
+} from "../../src/doctor/checks";
+import type {
+  FrameSeen,
+  FrameSighting,
+} from "../../src/daemon/render-sightings";
 import type { SettingsSource } from "../../src/claude-settings";
 import type { SightedBar } from "../../src/doctor/sightings";
-import { readStores, type DoctorEdge, type DoctorStores, type InstallEdge, type StoresRead } from "../../src/doctor/edge";
+import {
+  readStores,
+  type DoctorEdge,
+  type DoctorStores,
+  type InstallEdge,
+  type StoresRead,
+} from "../../src/doctor/edge";
 import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
 import type { ServingDaemon } from "../../src/daemon/limits";
 import { memoryStateFile } from "./state-file";
@@ -38,7 +53,11 @@ export const HEALTHY_SERVING: ServingDaemon = {
   pid: 4100,
   memory: {
     kind: "measured",
-    charge: { kind: "charged", measure: "phys_footprint", bytes: 120 * 1024 * 1024 },
+    charge: {
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes: 120 * 1024 * 1024,
+    },
     rss: 160 * 1024 * 1024,
     heapTotal: 90 * 1024 * 1024,
   },
@@ -177,42 +196,44 @@ export const reportedFrame = (
 // That daemon, as `cc-candybar doctor` asks it: one session drawn a second
 // ago by the native client beside it, whose payload carried the rate-limit
 // windows — a session running with `claudeConfigDir`.
-export const healthyDaemonIn = (
-  claudeConfigDir: string,
-): (() => Promise<DaemonAnswer>) => () =>
-  Promise.resolve({
-    rateLimits: {
-      kind: "ok",
-      value: [{ rateLimits: "carried", claudeConfigDir, sessionId: S1, ago: 1 }],
-    },
-    transcripts: {
-      kind: "ok",
-      value: [{ transcript: HEALTHY_TRANSCRIPT, sessionId: S1, ago: 1 }],
-    },
-    frames: {
-      kind: "ok",
-      value: [reportedFrame("still", claudeConfigDir)],
-    },
-    widths: {
-      kind: "ok",
-      value: [{ sessionId: S1, ago: 1, role: "statusline", termCols: 148 }],
-    },
-    clients: {
-      kind: "ok",
-      value: {
-        bundle: HEALTHY_BUNDLE,
-        clients: [
-          {
-            client: { kind: "native", bundle: HEALTHY_BUNDLE, source: null },
-            sessionId: S1,
-            ago: 1,
-          },
+export const healthyDaemonIn =
+  (claudeConfigDir: string): (() => Promise<DaemonAnswer>) =>
+  () =>
+    Promise.resolve({
+      rateLimits: {
+        kind: "ok",
+        value: [
+          { rateLimits: "carried", claudeConfigDir, sessionId: S1, ago: 1 },
         ],
       },
-    },
-    serving: { kind: "ok", value: HEALTHY_SERVING },
-    stores: EMPTY_STORES,
-  });
+      transcripts: {
+        kind: "ok",
+        value: [{ transcript: HEALTHY_TRANSCRIPT, sessionId: S1, ago: 1 }],
+      },
+      frames: {
+        kind: "ok",
+        value: [reportedFrame("still", claudeConfigDir)],
+      },
+      widths: {
+        kind: "ok",
+        value: [{ sessionId: S1, ago: 1, role: "statusline", termCols: 148 }],
+      },
+      clients: {
+        kind: "ok",
+        value: {
+          bundle: HEALTHY_BUNDLE,
+          clients: [
+            {
+              client: { kind: "native", bundle: HEALTHY_BUNDLE, source: null },
+              sessionId: S1,
+              ago: 1,
+            },
+          ],
+        },
+      },
+      serving: { kind: "ok", value: HEALTHY_SERVING },
+      stores: EMPTY_STORES,
+    });
 
 export const HEALTHY_DAEMON = healthyDaemonIn("/claude");
 

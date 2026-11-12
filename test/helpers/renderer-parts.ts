@@ -6,7 +6,10 @@ import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { RenderWarningRecords } from "../../src/daemon/render-warnings";
 import type { SessionState } from "../../src/daemon/session-state";
 import { EffectSessions } from "../../src/render/effect";
-import type { MainRendererParts, RendererVerbs } from "../../src/renderer/verbs";
+import type {
+  MainRendererParts,
+  RendererVerbs,
+} from "../../src/renderer/verbs";
 import type { WorldStates } from "../../src/renderer/world-states";
 import { systemTimekeeper } from "../../src/time";
 import { TEST_SIGNER } from "./link-signer";
@@ -43,9 +46,16 @@ export function rendererParts({
     renderWarnings: new RenderWarningRecords(),
     effectSessions: new EffectSessions(),
     frameFeeds: { feedsOf: () => UNFOLLOWED_FEEDS, following: () => new Set() },
-    updateWatch: { notice: () => ({ offer: [], failure: [] }), error: () => null },
+    updateWatch: {
+      notice: () => ({ offer: [], failure: [] }),
+      error: () => null,
+    },
     fileEvents: {
-      delivery: () => ({ kind: "delivering", unreported: [], missedSince: null }),
+      delivery: () => ({
+        kind: "delivering",
+        unreported: [],
+        missedSince: null,
+      }),
     },
     menuIdle: {
       observe: () => {},

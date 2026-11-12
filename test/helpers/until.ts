@@ -38,7 +38,9 @@ export async function holdsWithin(
   const stop = new AbortController();
   let expired = false;
   const expiry = sleep(budgetMs, undefined, { signal: stop.signal }).then(
-    () => { expired = true; },
+    () => {
+      expired = true;
+    },
     () => {},
   );
   try {
@@ -48,8 +50,12 @@ export async function holdsWithin(
       if (typeof result === "boolean") seen.answer = result;
       else {
         const probe = result.then(
-          (held) => { seen.answer = held; },
-          (error) => { seen.failure = { error }; },
+          (held) => {
+            seen.answer = held;
+          },
+          (error) => {
+            seen.failure = { error };
+          },
         );
         await Promise.race([probe, expiry]);
         if (seen.failure) throw seen.failure.error;
