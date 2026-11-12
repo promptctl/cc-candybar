@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f654b902297dc4e6fa4e12fa108c517e21d7a838",
-      "timestamp": "2026-11-12T03:39:14.000Z",
+      "sha": "e3e73c6b78a8776b63461d4fcab107abbec5184f",
+      "timestamp": "2026-11-12T03:44:47.228Z",
       "commits": [
         {
-          "sha": "f654b902297dc4e6fa4e12fa108c517e21d7a838",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-11T20:38:25-07:00",
-          "message": "fix(renderer): a view hands its checked SessionId to its registry and its click URLs, so no config can redeclare which session a bar reads or writes (candybar-host-renderer-x96a.k4k) (#721)\n\n* fix(renderer): a view hands its checked SessionId to its registry and its click URLs, so no config can redeclare which session a bar reads or writes (candybar-host-renderer-x96a.k4k)\n\nA state variable and every click URL now key by the session the view draws\nfor, carried on its source, instead of the session.id variable a config can\nredeclare. An unbound view's session is pending, as its inputs are, so a\nload probe starts no state-keyed source. The exception parse in the state\nsource is gone, and with it the re-parse on every state read and revision.\n\n* fix(renderer): a view always draws for a session, so check's clicks name the session it fakes and no click falls back to an empty id (candybar-host-renderer-x96a.k4k)\n\ncheck binds CHECK_SESSION, so a view source's session is a SessionId and\nthe empty-id fallback and the no-session branches in state reads and the\nrevision are gone. A test payload naming no session draws for the test's\nown, from one helper. The unbound session's pending names its payload\npath, and the no-mode-explosion marker returns to the state declaration.\n\n* fix(renderer): the row ✕ reads the session from its registry, and a click's session is typed SessionId to its URL (candybar-host-renderer-x96a.k4k)"
+          "sha": "e3e73c6b78a8776b63461d4fcab107abbec5184f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-12T03:43:50Z",
+          "message": "chore(release): set `package.json` to 1.218.1\n\n## [1.218.1](https://github.com/promptctl/cc-candybar/compare/v1.218.0...v1.218.1) (2026-11-12)\n\n### Bug Fixes\n\n* **renderer:** a view hands its checked SessionId to its registry and its click URLs, so no config can redeclare which session a bar reads or writes (candybar-host-renderer-x96a.k4k) ([#721](https://github.com/promptctl/cc-candybar/issues/721)) ([f654b90](https://github.com/promptctl/cc-candybar/commit/f654b902297dc4e6fa4e12fa108c517e21d7a838))\n"
         }
       ]
     }
