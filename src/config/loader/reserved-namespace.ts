@@ -102,15 +102,15 @@ export function pluginScopeCollisions(
   for (const [segment, decl] of Object.entries(out.segments ?? {})) {
     for (const v of Object.keys(decl.vars ?? {})) {
       const name = `${segment}.${v}`;
-      const at = {
+      const at = () => ({
         path: `segments.${segment}.vars.${v}`,
         line: findKeyLine(ctx.source, ["segments", segment, "vars", v]),
-      };
+      });
       // A segment var stores under its full name beside the payload's own
       // input, so the merge cannot give the payload the last word here.
       if (isPayloadInput(name)) {
         ctx.issues.push({
-          ...at,
+          ...at(),
           message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} — rename the var or the segment`,
         });
         continue;
@@ -118,7 +118,7 @@ export function pluginScopeCollisions(
       const scope = scopeOf(name);
       if (scope === undefined || inherited.has(segment)) continue;
       ctx.issues.push({
-        ...at,
+        ...at(),
         message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own — rename the var or the segment`,
       });
     }
@@ -135,16 +135,15 @@ const PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
 export function payloadDeclarationNotices(
   filePath: string,
   source: string,
-  raw: RawDslConfig,
+  // The names the file's `variables` section declares.
+  declared: readonly string[],
 ): readonly string[] {
   const lineOf = keyLocator(source);
-  return Object.keys(raw.variables ?? {})
-    .filter(isPayloadInput)
-    .map((name) => {
-      const line = lineOf(["variables", name]);
-      const at = line === undefined ? filePath : `${filePath}:${line}`;
-      return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored — remove it`;
-    });
+  return declared.filter(isPayloadInput).map((name) => {
+    const line = lineOf(["variables", name]);
+    const at = line === undefined ? filePath : `${filePath}:${line}`;
+    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored — remove it`;
+  });
 }
 
 function isPayloadInput(name: string): boolean {

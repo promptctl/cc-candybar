@@ -8,6 +8,7 @@ import { linkUrls } from "./helpers/frame";
 import { effectsOf } from "./helpers/click";
 import { sessionIdOf } from "../src/daemon/session-id";
 import {
+  ConfigError,
   loadConfigSource,
   noProject,
   parseDslConfig,
@@ -106,6 +107,24 @@ describe("a view's session", () => {
     expect(textOf(rig.draw().frame)).toContain(`sid=${OWN}`);
   });
 
+  test("a refused file's error carries the session.id warning beside it", () => {
+    let caught: unknown;
+    try {
+      parseDslConfig(
+        "t.json5",
+        `{ bogus: 1, variables: { 'session.id': { kind: 'literal', value: 'x' } } }`,
+      );
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ConfigError);
+    expect((caught as ConfigError).warnings).toEqual([
+      expect.stringContaining(
+        `"session.id" is supplied by the daemon's payload`,
+      ),
+    ]);
+  });
+
   test("a segment var named into session.id does not load", () => {
     expect(() =>
       parseDslConfig(
@@ -126,7 +145,9 @@ describe("a view's session", () => {
       );
       expect(loaded.config.variables[name]).toEqual(PAYLOAD_INPUTS[name]);
       expect(loaded.warnings).toEqual([
-        expect.stringContaining(`"${name}" is supplied by the daemon's payload`),
+        expect.stringContaining(
+          `"${name}" is supplied by the daemon's payload`,
+        ),
       ]);
     },
   );

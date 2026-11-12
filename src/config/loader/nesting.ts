@@ -49,7 +49,7 @@ export function validateNoNesting(
       const fix =
         names.authored(inner) === names.authored(outer)
           ? "Rename one so neither name starts with the other."
-          : `"${theirs}" is declared outside this file (the bundled default, a plugin, or a control the bar builds), so rename "${mine}".`;
+          : `"${theirs}" is declared outside this file (the bundled default, a plugin, a control the bar builds, or the daemon's payload), so rename "${mine}".`;
       ctx.issues.push({
         path: at.join("."),
         message: `variable "${inner}" is declared under the variable "${outer}" — a read of ".${inner}" would name both, "${inner}" and a field of "${outer}". ${fix}`,

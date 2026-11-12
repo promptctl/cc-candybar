@@ -1,8 +1,9 @@
 // [LAW:one-source-of-truth] The payload inputs: the values the daemon supplies
 // to every config — the session a copy or `run` names, the file `↗ config`
 // opens, the setting a picker marks current — and that the synthesized chrome
-// reads, declared ONCE. The merge lays them beneath every base, and the loader
-// drops a file's own declaration of one, so no config reads another value.
+// reads, declared ONCE. The merge gives them the last word over every layer,
+// so no config reads another value, and the loader warns of a file's own
+// declaration of one.
 //
 // [LAW:one-way-deps] It lives below the merge and the loader that read it.
 

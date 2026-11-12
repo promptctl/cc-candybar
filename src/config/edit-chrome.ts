@@ -171,9 +171,9 @@ function inNamesView(
 // text "false" (evaluateWhen's documented contract), and `and` yields the
 // last argument when every term is truthy — so the conjunction reads back
 // exactly as the boolean does.
-// [LAW:one-source-of-truth] Exported: test/helpers/ambient-chrome.ts filters this
-// ensured name out of "what did the AUTHOR declare" assertions and must read the
-// same string, never a second copy that a rename here would leave behind.
+// [LAW:one-source-of-truth] Exported: a payload input (payload-inputs.ts), and
+// tests read the same string, never a second copy a rename here would leave
+// behind.
 export const PRESET_CUSTOMIZED_VAR = "preset.customized";
 const CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
 

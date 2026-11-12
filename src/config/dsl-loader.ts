@@ -1053,7 +1053,17 @@ function parseDslFile<L>(
   // passes that need a parsed structure to inspect.
   const json = parseJson5OrThrow(filePath, source);
   const notice = editabilityNotice(filePath, source);
-  const warnings = notice === null ? [] : [notice];
+  // Named before structural validation, so a refusal carries them too.
+  const warnings = [
+    ...(notice === null ? [] : [notice]),
+    ...payloadDeclarationNotices(
+      filePath,
+      source,
+      isPlainObject(json) && isPlainObject(json.variables)
+        ? Object.keys(json.variables)
+        : [],
+    ),
+  ];
 
   const issues: ConfigIssue[] = [];
   const ctx: ValidateCtx = {
@@ -1101,14 +1111,7 @@ function parseDslFile<L>(
     throw new ConfigError(filePath, issues, warnings);
   }
 
-  return {
-    raw,
-    warnings: [
-      ...warnings,
-      ...payloadDeclarationNotices(filePath, source, raw),
-    ],
-    layer,
-  };
+  return { raw, warnings, layer };
 }
 
 // ─── Internals ───────────────────────────────────────────────────────────────
