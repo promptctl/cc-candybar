@@ -42,6 +42,7 @@ export class CheckRuns {
             sourceRuns,
             this.holds,
             new Map(runs.map((run) => [run.digest, run])),
+            (_, declare) => declare(),
           ),
         );
         runInAction(() => this.lanes.replace([...result]));

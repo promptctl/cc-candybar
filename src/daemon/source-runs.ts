@@ -497,13 +497,20 @@ export class SourceRuns {
 // them: each run is declared in `holds`, inside the caller's one
 // `Holds.declare`, so a run dropped from the set is released by that
 // declaration's diff and a run two holders share is one entry held twice. The
-// host's collector and `check`'s holder both take their lanes here.
+// host's collector and `check`'s holder both take their lanes here. `take`
+// is how the caller meets one run's declaration throwing: the collector's
+// turns it into that run's failed lane while every other run declares, and
+// `check`'s lets it fail the check.
 export function declareRuns(
   sourceRuns: Pick<SourceRuns, "declare">,
   holds: Holds,
   runs: ReadonlyMap<string, Run>,
+  take: (digest: string, declare: () => SourceLane) => SourceLane,
 ): ReadonlyMap<string, SourceLane> {
   return new Map(
-    [...runs].map(([digest, run]) => [digest, sourceRuns.declare(holds, run)]),
+    [...runs].map(([digest, run]) => [
+      digest,
+      take(digest, () => sourceRuns.declare(holds, run)),
+    ]),
   );
 }

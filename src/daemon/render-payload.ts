@@ -117,6 +117,7 @@ import {
 import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
 import { elapsedMs, type Timekeeper } from "../time";
+import { shortDigest } from "../source-digest.js";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -1058,7 +1059,18 @@ export function declareLanes(
         ),
       ]),
     ),
-    runs: declareRuns(owners.sourceRuns, holds, sources.runs),
+    // A run whose declaration threw answers that failure and watches nothing;
+    // a declared run's own lane carries its watch's fault.
+    runs: declareRuns(
+      owners.sourceRuns,
+      holds,
+      sources.runs,
+      (digest, take) => ({
+        digest,
+        fault: () => null,
+        ...declare(`run ${shortDigest(digest)}`, take),
+      }),
+    ),
   };
   return { lanes, faults };
 }
