@@ -27,7 +27,10 @@ import {
 // lead/trail drawn in a segment node's cell, template variables, copy/open
 // actions); and the `.effective` projection a `set` or `persist` on a setting
 // reads its current value back through (CONFIG_KEY_TO_EFFECTIVE_VAR).
-function synthesisReads(config: DslConfig, before: DslConfig): Set<string> {
+export function synthesisReads(
+  config: DslConfig,
+  before: DslConfig,
+): Set<string> {
   const helpers = config.helpers;
   const minted = <T>(
     all: Readonly<Record<string, T>>,

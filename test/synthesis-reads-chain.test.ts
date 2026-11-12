@@ -1,9 +1,10 @@
 // The settings menu and edit chrome mint names from whatever the config holds,
 // and two sources of those names exist only once the chain has loaded: a
-// rendering plugin's segments and settings, and an insert landing in the trees
-// of the layer beneath. A config drawn alone cuts the first as absent and has
-// nowhere to put the second, so these cases load through the chain itself and
-// hold the synthesis's reads, and the load's own advisories, to empty.
+// plugin a config lists, with its segments and settings, and an insert landing
+// in the trees of the layer beneath. A config drawn alone cuts the first as
+// absent and has nowhere to put the second, so these cases load through the
+// chain itself, show the chrome minted for those names, and hold what it
+// minted, and the load's own advisories, to nothing unresolved.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -13,7 +14,7 @@ import { presetRoot } from "../src/config/presets";
 import { rootNode } from "../src/config/root";
 import { locs } from "./helpers/host";
 import { jestTmpDir } from "./helpers/jest-tmp";
-import { unresolvedReads } from "./helpers/synthesis-reads";
+import { synthesisReads, unresolvedReads } from "./helpers/synthesis-reads";
 
 describe("unresolvedReads over the loader's own chain", () => {
   let tmp: string;
@@ -64,6 +65,15 @@ describe("unresolvedReads over the loader's own chain", () => {
     expect(placementIds(rootNode(config.root))).toContain("plugins.p.tag");
     expect(placementIds(presetRoot(config, "compact").node)).toContain("short");
     expect(unresolvedReads(config, placed)).toEqual([]);
+    // The plugin's settings reach a settings row in each tree, the
+    // placement's override included, so an empty list is over minted reads.
+    const reads = [...synthesisReads(config, placed)];
+    expect(reads).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^edit\.draft\.pdefault\..*\.chars$/),
+        expect.stringMatching(/^edit\.draft\.pcompact\..*\.chars$/),
+      ]),
+    );
   });
 
   test("an insert into the presets of the layer beneath", () => {
@@ -88,5 +98,12 @@ describe("unresolvedReads over the loader's own chain", () => {
       "theirs",
     );
     expect(unresolvedReads(config, placed)).toEqual([]);
+    // The chrome reached the inserted cell in each tree it landed in.
+    expect(Object.keys(config.segments)).toEqual(
+      expect.arrayContaining([
+        "edit.label:theirs/default:theirs",
+        "edit.label:theirs/compact:theirs",
+      ]),
+    );
   });
 });
