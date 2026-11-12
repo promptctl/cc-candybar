@@ -4,15 +4,22 @@
     {
       "version": "pr-726",
       "ref": "refs/pull/726/merge",
-      "sha": "2ab940e933daec0c8ff4ed561277870ee230fb48",
-      "timestamp": "2026-11-12T06:50:48.423Z",
+      "sha": "c55310c51ae34a34672282cb79d7c2e17e99d7f8",
+      "timestamp": "2026-11-12T06:54:18.168Z",
       "commits": [
         {
-          "sha": "2ab940e933daec0c8ff4ed561277870ee230fb48",
+          "sha": "c55310c51ae34a34672282cb79d7c2e17e99d7f8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T06:49:48Z",
-          "message": "Merge bc2f6f00f4d35629d6d64c941ca81a64c78bcc85 into 893a911cb4f02622eaaab14bf90b882bf7f344a2\n"
+          "timestamp": "2026-11-12T06:53:18Z",
+          "message": "Merge d6ddb158f98e2d5630c4668142d84921ba60e306 into 893a911cb4f02622eaaab14bf90b882bf7f344a2\n"
+        },
+        {
+          "sha": "d6ddb158f98e2d5630c4668142d84921ba60e306",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-11T23:52:54-07:00",
+          "message": "Revert the abandoned-click resend: it makes the helper match events by position for a second send, and a refused click already fails loudly with its event (candybar-host-renderer-x96a.twu)\n"
         },
         {
           "sha": "bc2f6f00f4d35629d6d64c941ca81a64c78bcc85",
