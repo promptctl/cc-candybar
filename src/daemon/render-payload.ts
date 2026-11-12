@@ -115,6 +115,7 @@ import {
   type SourceRuns,
 } from "./source-runs.js";
 import type { Run } from "../facts/source-identity.js";
+import type { Judged } from "./judge-run.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SourceRun } from "../var-system/sources.js";
 import { elapsedMs, type Timekeeper } from "../time";
@@ -957,10 +958,11 @@ export interface DeclaredLanes {
 export type DeclaredSources = ReadonlyMap<string, StorageKey>;
 
 // What a session's renderer subscribes to: its config's plugin sources, and
-// the runs its `shell` and `file` sources name, by digest.
+// the runs its `shell` and `file` sources name, by digest, as the host judged
+// each one.
 export interface Subscribed {
   readonly plugins: DeclaredSources;
-  readonly runs: ReadonlyMap<string, Run>;
+  readonly runs: ReadonlyMap<string, Judged>;
 }
 
 // A declaration's lanes, and what threw while it took them.

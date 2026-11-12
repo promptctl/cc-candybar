@@ -22,6 +22,8 @@ import {
   type HandedIn,
 } from "../src/daemon/collector";
 import { stampFailureOf } from "../src/daemon/facts-assembly";
+import { judgeRun, type Judged } from "../src/daemon/judge-run";
+import { SourceRuns } from "../src/daemon/source-runs";
 import { parseClientHints } from "../src/daemon/protocol";
 import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
 import {
@@ -289,6 +291,49 @@ describe("the renderer's subscriptions", () => {
     });
     collector.subscribed({ sources: new Map() });
     expect(held.has("source:/plugin")).toBe(false);
+  });
+
+  test("a run the host refuses is logged once as it joins the set, and stands as its fault; requests judge nothing again", () => {
+    const { owners } = handLanded();
+    const { collector, handedIn, logged } = collectorOver({
+      ...owners,
+      sourceRuns: new SourceRuns({
+        launcher: unscriptedLauncher,
+        clock: heldClock(new Date(0)),
+      }),
+    } as RenderPayloadDeps);
+    const run = runOf({
+      read: { kind: "file", path: "status.json", readMode: "whole" },
+      parse: { kind: "json" },
+      refresh: { kind: "never" },
+    });
+    const subscription: Subscriptions = {
+      sources: new Map([[SID, [{ kind: "run" as const, run }]]]),
+    };
+    collector.requested(requestAt("/a"));
+    collector.subscribed(subscription);
+    collector.requested(requestAt("/a"));
+    collector.subscribed(subscription);
+    collector.requested(requestAt("/a"));
+    expect(logged.filter((line) => line.includes("run refused"))).toEqual([
+      expect.stringMatching(
+        /^warn run refused .* reason=file\.path must be an absolute path/,
+      ),
+    ]);
+    expect(handedIn.at(-1)).toMatchObject({
+      kind: "world-state",
+      worldState: {
+        runs: {
+          [run.digest]: {
+            reading: {
+              kind: "failed",
+              reason: expect.stringMatching(/^refused: file\.path/),
+            },
+            fault: expect.stringMatching(/^refused: file\.path/),
+          },
+        },
+      },
+    });
   });
 
   test("naming a session the collector has no record of is said", () => {
@@ -570,7 +615,7 @@ test("a run whose declaration throws answers its failure, and every other run an
   const owners = {
     ...absentOwners(),
     sourceRuns: {
-      declare: (_: Holds, run: typeof broken) => {
+      declare: (_: Holds, run: Judged) => {
         if (run.digest === broken.digest) throw new Error("watch bug");
         return { digest: run.digest, current: () => ABSENT, fault: () => null };
       },
@@ -580,8 +625,8 @@ test("a run whose declaration throws answers its failure, and every other run an
     declareLanes(owners, holds, requestAt("/w"), {
       plugins: new Map(),
       runs: new Map([
-        [broken.digest, broken],
-        [fine.digest, fine],
+        [broken.digest, judgeRun(broken)],
+        [fine.digest, judgeRun(fine)],
       ]),
     }),
   );

@@ -53,6 +53,8 @@ import {
   type ViewFacts,
 } from "./render-payload.js";
 import type { SessionId } from "./session-id.js";
+import { judgeRun } from "./judge-run.js";
+import { shortDigest } from "../source-digest.js";
 
 // [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
 // first session and stopped with the last: every interval it retires each
@@ -158,7 +160,13 @@ const locatorOf = (req: ViewFacts): ViewFacts => ({
   hints: req.hints,
 });
 
-const sourcesOf = (subscriptions: readonly Subscription[]): Subscribed => ({
+// [LAW:single-enforcer] A set is judged where it arrives, and only for the
+// digests new to it: a run the session already subscribed keeps its verdict,
+// so a request, which declares the set again, judges nothing.
+const sourcesOf = (
+  subscriptions: readonly Subscription[],
+  prior: Subscribed,
+): Subscribed => ({
   plugins: new Map(
     subscriptions.flatMap((s) =>
       s.kind === "plugin" ? [[s.source, s.storage] as const] : [],
@@ -166,7 +174,14 @@ const sourcesOf = (subscriptions: readonly Subscription[]): Subscribed => ({
   ),
   runs: new Map(
     subscriptions.flatMap((s) =>
-      s.kind === "run" ? [[s.run.digest, s.run] as const] : [],
+      s.kind === "run"
+        ? [
+            [
+              s.run.digest,
+              prior.runs.get(s.run.digest) ?? judgeRun(s.run),
+            ] as const,
+          ]
+        : [],
     ),
   ),
 });
@@ -247,8 +262,22 @@ export class Collector {
     }
     runInAction(() => {
       for (const record of this.records.values()) {
-        const next = sourcesOf(sources.get(record.session) ?? []);
+        const next = sourcesOf(
+          sources.get(record.session) ?? [],
+          record.subscriptions,
+        );
         if (sameSources(next, record.subscriptions)) continue;
+        // [LAW:nothing-unseen] A refusal is logged once, as its run joins
+        // the set; a set that keeps it says nothing more.
+        for (const [digest, judged] of next.runs)
+          if (
+            judged.kind === "refused" &&
+            !record.subscriptions.runs.has(digest)
+          )
+            this.deps.log(
+              "warn",
+              `run refused sid=${JSON.stringify(record.session)} digest=${shortDigest(digest)} reason=${judged.reason}`,
+            );
         record.subscriptions = next;
         const { phase } = record;
         if (phase.kind === "live")

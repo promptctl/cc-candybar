@@ -9,7 +9,6 @@
 // - SourceRegistry: source-kind semantics (path resolution, fallback chain,
 //   last_error tracking)
 
-import { debug } from "../utils/logger";
 import {
   compareStructural,
   computed,
@@ -18,6 +17,7 @@ import {
   reaction,
   runInAction,
   type IComputedValue,
+  type ObservableMap,
 } from "mobx";
 import type { ColorDepth } from "@promptctl/rich-js";
 import {
@@ -80,28 +80,6 @@ export type CachePolicy =
   | { readonly kind: "key"; readonly template: string }
   | { readonly kind: "depends_on"; readonly varNames: readonly string[] }
   | { readonly kind: "never" };
-
-// [LAW:single-enforcer] Minimum allowed TTL for user-shell sources. User
-// config can request shorter values; declareShell clamps to this floor and
-// emits a debug warning. The floor exists to prevent unbounded subprocess
-// churn from a misconfigured `ttl: 50ms` against a 200ms command (which would
-// silently overlap and stack up). [LAW:no-mode-explosion] not a config knob.
-export const MIN_SHELL_TTL_MS = 500;
-
-// [LAW:single-enforcer] Apply the shell-source TTL floor at declare-time.
-// If the policy is anything other than `ttl`, the input is returned unchanged
-// — the floor only applies to time-driven shell refresh. If `ttl.durationMs`
-// is already at or above MIN_SHELL_TTL_MS, the input is returned unchanged.
-// [LAW:dataflow-not-control-flow] Same code path every call; the result is a
-// function of the input policy + floor constant.
-function clampShellCache(name: string, policy: CachePolicy): CachePolicy {
-  if (policy.kind !== "ttl") return policy;
-  if (policy.durationMs >= MIN_SHELL_TTL_MS) return policy;
-  debug(
-    `declareShell "${name}": ttl ${policy.durationMs}ms below floor ${MIN_SHELL_TTL_MS}ms; clamping`,
-  );
-  return { kind: "ttl", durationMs: MIN_SHELL_TTL_MS };
-}
 
 // Parse a duration string to milliseconds.  Accepted units: ms, s, m, h.
 export function parseDuration(s: string): number {
@@ -184,11 +162,7 @@ function parserIdOf(parse: SourceParse): ParserId {
     case "text":
       return { kind: "text" };
     case "regex":
-      return {
-        kind: "regex",
-        source: parse.regex.source,
-        flags: parse.regex.flags,
-      };
+      return { kind: "regex", pattern: parse.pattern };
     case "json":
       return { kind: "json" };
   }
@@ -341,12 +315,18 @@ export class SourceRegistry {
   private readonly lastErrors = new Map<string, LastError>();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
-  // source will ever run again, so no read outcome clears it. A watch that
-  // cannot hear every place its path changes lives until it can again (its
-  // own re-derive says so); a key template that throws lives
-  // until the key evaluates again. One map, since a variable has one policy.
-  // Observable, since the bar draws each fault as a refresh warning.
+  // source will ever run again, so no read outcome clears it. A key template
+  // that throws lives until the key evaluates again. One map, since a
+  // variable has one policy. Observable, since the bar draws each fault as a
+  // refresh warning.
   private readonly policyFaults = observable.map<string, LastError>(undefined, {
+    deep: false,
+  });
+  // The run's own standing fault, as the host reads it: the judge refused
+  // the run, or its watch cannot hear every place its path changes. Its own
+  // map, written by the run's fault alone, so a policy's outcome and a run's
+  // never clear each other.
+  private readonly runFaults = observable.map<string, LastError>(undefined, {
     deep: false,
   });
 
@@ -434,7 +414,7 @@ export class SourceRegistry {
   private readonly publishedNow = computed(
     (): Published => ({
       values: this.sourceNames.map((name) => this.store.stored(name)),
-      faults: [...this.policyFaults.values()],
+      faults: [...this.policyFaults.values(), ...this.runFaults.values()],
     }),
   );
   published(): Published {
@@ -611,7 +591,7 @@ export class SourceRegistry {
     this.declareSource(
       name,
       { kind: "shell", command, cwd: opts.cwd },
-      clampShellCache(name, opts.cache),
+      opts.cache,
       opts.parse,
     );
   }
@@ -673,6 +653,18 @@ export class SourceRegistry {
       this.runs.set(name, run);
     });
     this.cleanups.push(
+      // The run's fault, as the host reads it, is the variable's standing
+      // fault for as long as this source names that run.
+      reaction(
+        () => this.runFact(name)?.fault ?? null,
+        (fault) =>
+          this.noteFault(
+            this.runFaults,
+            name,
+            fault === null ? ok(undefined) : failed(fault, "read"),
+          ),
+        { fireImmediately: true },
+      ),
       reaction(
         () => this.runFact(name)?.reading,
         (reading) => {
@@ -948,7 +940,7 @@ export class SourceRegistry {
     // directory value's.
     if (!this.declaredHere(name)) return this.parent?.getLastError(name);
     const read = this.lastErrors.get(name);
-    const fault = this.policyFaults.get(name);
+    const fault = this.standingFault(name);
     if (fault === undefined) return read;
     return read === undefined
       ? fault
@@ -958,14 +950,32 @@ export class SourceRegistry {
         };
   }
 
-  // Every variable whose cache policy cannot fire, with why: each render
-  // reports them (`RenderWarning` kind `refresh`), since the bar draws such a
-  // variable's last value with nothing of its own to say it has stopped.
+  // Every variable that cannot refresh, with why: its cache policy cannot
+  // fire, or the host refused or cannot hear its run. Each render reports
+  // them (`RenderWarning` kind `refresh`), since the bar draws such a
+  // variable's last value or fallback with nothing of its own to say so.
   cachePolicyFaults(): ReadonlyMap<string, LastError> {
+    const names = new Set([
+      ...this.policyFaults.keys(),
+      ...this.runFaults.keys(),
+    ]);
     return new Map([
       ...(this.parent?.cachePolicyFaults() ?? []),
-      ...this.policyFaults,
+      ...[...names].map((name) => [name, this.standingFault(name)!] as const),
     ]);
+  }
+
+  // A variable's standing fault: its policy's and its run's, joined when
+  // both stand, so neither hides the other.
+  private standingFault(name: string): LastError | undefined {
+    const policy = this.policyFaults.get(name);
+    const run = this.runFaults.get(name);
+    return policy === undefined || run === undefined
+      ? (policy ?? run)
+      : {
+          timestamp: policy.timestamp,
+          message: `${policy.message}; ${run.message}`,
+        };
   }
 
   // Whether `name` lives in this registry's own store, not its directory's.
@@ -1009,23 +1019,8 @@ export class SourceRegistry {
       case "ttl":
         return () => ok({ kind: "ttl", durationMs: policy.durationMs });
 
-      case "watch_file": {
-        // The watch's fault is the run's, as the host reads it; here it is
-        // the variable's standing fault, for as long as this source names
-        // that run.
-        this.cleanups.push(
-          reaction(
-            () => this.runFact(name)?.fault ?? null,
-            (fault) =>
-              this.notePolicy(
-                name,
-                fault === null ? ok(undefined) : failed(fault, "read"),
-              ),
-            { fireImmediately: true },
-          ),
-        );
+      case "watch_file":
         return () => ok({ kind: "watch_file", path: policy.path });
-      }
 
       case "key": {
         // Parse template once; the reaction re-evaluates it whenever any
@@ -1079,7 +1074,7 @@ export class SourceRegistry {
   // (brandon-unfiled-3248.8ro6). One that throws, or reads a value not
   // answered, keeps the last answer, so a key failing for a moment and coming
   // back unchanged names nothing new; what it failed with is the variable's
-  // standing fault (notePolicy). One that has never answered names its
+  // standing fault (noteFault). One that has never answered names its
   // failure, so the render event says failed rather than unread.
   private answeredUnder(
     name: string,
@@ -1091,7 +1086,7 @@ export class SourceRegistry {
     this.cleanups.push(
       reaction(
         () => answer.get(),
-        (now) => this.notePolicy(name, now),
+        (now) => this.noteFault(this.policyFaults, name, now),
         { fireImmediately: true },
       ),
     );
@@ -1145,15 +1140,19 @@ export class SourceRegistry {
     });
   }
 
-  // The one fold from a policy's own outcome — whether it can fire — to the
-  // variable's standing fault.
+  // The one fold from an outcome (whether the policy can fire, whether the
+  // host can run the run) to the variable's standing fault in `faults`.
   // A fault standing for the same reason keeps its record, so it moves
   // nothing that draws it.
-  private notePolicy(name: string, outcome: Reading<unknown>): void {
+  private noteFault(
+    faults: ObservableMap<string, LastError>,
+    name: string,
+    outcome: Reading<unknown>,
+  ): void {
     runInAction(() => {
-      if (outcome.kind !== "failed") this.policyFaults.delete(name);
-      else if (this.policyFaults.get(name)?.message !== outcome.reason)
-        this.policyFaults.set(name, {
+      if (outcome.kind !== "failed") faults.delete(name);
+      else if (faults.get(name)?.message !== outcome.reason)
+        faults.set(name, {
           timestamp: this.store.clock.now(),
           message: outcome.reason,
         });

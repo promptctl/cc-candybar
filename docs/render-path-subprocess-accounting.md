@@ -21,6 +21,7 @@ Every subprocess spawn in the Node runtime flows through `src/proc/launch.ts`. T
 `src/proc/launch.ts` exports `LAUNCH_CATEGORIES` as a `const` array. Every spawn site must declare its category. Adding a new category requires editing this file, which surfaces in code review.
 
 Current categories (13):
+
 - `git`, `user-shell`, `tmux` — render-related (cache-policy-driven)
 - `forge` — the gh/glab PR lookup, network-bound, metered apart from `git`
 - `click.pbcopy`, `click.open` — user-initiated (rate-limited at 1/sec each)
@@ -33,6 +34,7 @@ Current categories (13):
 `src/dsl/render.ts:drawDsl` is pure CPU: reads from MobX store, evaluates pre-compiled templates, builds strip cells, assembles the Frame. It does not import `launch` and does not transitively call any subprocess-spawning code.
 
 The render-hot-path call chain (daemon side, per request):
+
 ```
 handleRequest (reply.ts)
   └─ renderCache.getOrCreate(...)        — cache HIT in steady state, no work
@@ -45,14 +47,14 @@ handleRequest (reply.ts)
 
 Spawns originate from cache-policy callbacks registered against the MobX store at config-load time:
 
-| Source kind | Cache trigger | When it spawns |
-|---|---|---|
-| `kind: "shell"` | `ttl` | TTL timer fires (interval-driven; clamped to ≥500ms by `MIN_SHELL_TTL_MS`) |
-| `kind: "shell"` | `watch_file` | fs.watch event on the named path |
-| `kind: "shell"` | `depends_on` | MobX reaction: any listed var changes |
-| `kind: "shell"` | `key` | MobX reaction: rendered key template changes |
-| `kind: "shell"` | `never` | once, at declaration |
-| `kind: "tmux"` | (provider-internal cache) | `src/segments/tmux.ts` provider TTL |
+| Source kind     | Cache trigger             | When it spawns                                                                                                 |
+| --------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `kind: "shell"` | `ttl`                     | TTL timer fires (interval-driven; a ttl below 500ms is refused by the host's judge, so the command never runs) |
+| `kind: "shell"` | `watch_file`              | fs.watch event on the named path                                                                               |
+| `kind: "shell"` | `depends_on`              | MobX reaction: any listed var changes                                                                          |
+| `kind: "shell"` | `key`                     | MobX reaction: rendered key template changes                                                                   |
+| `kind: "shell"` | `never`                   | once, at declaration                                                                                           |
+| `kind: "tmux"`  | (provider-internal cache) | `src/segments/tmux.ts` provider TTL                                                                            |
 
 None of these run inside the render request lifecycle. They fire asynchronously on their own clocks/events and write into the store; the render request reads whatever value is already there.
 
@@ -65,6 +67,7 @@ cc-candybar daemon-stats
 ```
 
 Output as of recording:
+
 ```
 subprocesses
   total         27790
@@ -77,7 +80,7 @@ subprocesses
 
 ### Rate limits
 
-`src/proc/launch.ts:RATE_LIMITS` caps click verbs at 1 spawn/sec each. No other categories have per-spawn floors at the launch layer; `kind: "shell"` with `cache: { ttl: ... }` is clamped to 500ms inside the var-system (`MIN_SHELL_TTL_MS`).
+`src/proc/launch.ts:RATE_LIMITS` caps click verbs at 1 spawn/sec each. No other categories have per-spawn floors at the launch layer; `kind: "shell"` with `cache: { ttl: ... }` below 500ms is refused where the run is subscribed (`src/daemon/judge-run.ts`), so it never spawns.
 
 ## Known gaps (not regressions, just things the type system doesn't enforce)
 

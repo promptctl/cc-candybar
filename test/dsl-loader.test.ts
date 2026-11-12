@@ -9,7 +9,15 @@ import fs from "node:fs";
 import { NO_PROJECT } from "./helpers/no-project";
 import os from "node:os";
 import path from "node:path";
-import { ConfigError, templateReads, findKeyLine, loadConfig, parseDslConfig, mergeWithDefault, validateRenderable } from "../src/config/dsl-loader";
+import {
+  ConfigError,
+  templateReads,
+  findKeyLine,
+  loadConfig,
+  parseDslConfig,
+  mergeWithDefault,
+  validateRenderable,
+} from "../src/config/dsl-loader";
 import { presenceOf } from "../src/config/loader/unplaced";
 import { SETTINGS_ANCHOR } from "../src/config/door";
 import {
@@ -401,14 +409,14 @@ describe("loadDslConfig — variable source kinds", () => {
       path: "variables.x.path",
       message: "variables.x.path must be a string",
     });
-    expectIssue(
-      `{ variables: { x: { kind: "file", path: "status.json", cache: { never: true } } } }`,
-      {
-        path: "variables.x.path",
-        message:
-          'variables.x.path must be an absolute path (`~` and relative paths are not expanded), got "status.json"',
-      },
-    );
+    // The loader parses a path and does not judge it: the host refuses a
+    // relative one where the run is subscribed.
+    expect(
+      parseAndValidate(
+        FILE,
+        `{ variables: { x: { kind: "file", path: "status.json", cache: { never: true } } } }`,
+      ).variables.x,
+    ).toMatchObject({ path: "status.json" });
     const ok = parseAndValidate(
       FILE,
       `{ variables: { x: { kind: "file", path: "/etc/hostname", readMode: "first-line", cache: { watch_file: "/etc/hostname" } } } }`,
@@ -748,10 +756,7 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       `{ kind: "state", key: "theme" }`,
     ]) {
       expect(
-        parseAndValidate(
-          FILE,
-          `{ variables: { x: ${decl} } }`,
-        ).variables.x,
+        parseAndValidate(FILE, `{ variables: { x: ${decl} } }`).variables.x,
       ).toMatchObject({ kind: expect.any(String) });
     }
   });
@@ -893,21 +898,14 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
     ).toContain("must be a string");
   });
 
-  test("a regex must compile and must carry the capture group the runtime reads", () => {
-    expectIssue(shell(`parse: { regex: "(" }`), {
-      path: "variables.x.parse.regex",
-      message: "parse.regex is not a valid regular expression",
-    });
-    // A trailing backslash compiles ONLY when something follows it — the
-    // proof is the pattern alone, never the pattern piped for its group count.
-    expectIssue(shell(`parse: { regex: "(a)\\\\" }`), {
-      path: "variables.x.parse.regex",
-      message: "parse.regex is not a valid regular expression",
-    });
-    expectIssue(shell(`parse: { regex: "v[0-9]+" }`), {
-      path: "variables.x.parse.regex",
-      message: "parse.regex must contain a capture group",
-    });
+  test("a regex is any pattern string: the host judges whether it compiles and captures", () => {
+    for (const pattern of ["(", "v[0-9]+"])
+      expect(
+        parseAndValidate(
+          FILE,
+          shell(`parse: { regex: ${JSON.stringify(pattern)} }`),
+        ).variables.x,
+      ).toMatchObject({ parse: { regex: pattern } });
     expectIssue(shell(`parse: { regex: 42 }`), {
       path: "variables.x.parse.regex",
       message: "parse.regex must be a pattern string",
@@ -949,7 +947,14 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
     // an exotic object with no own enumerable fields is not a document.
     const issues: ConfigIssue[] = [];
     validateVariables(
-      { source: "", issues, allowedPalettes: new Set(), groups: [], unplaced: [], inherited: [] },
+      {
+        source: "",
+        issues,
+        allowedPalettes: new Set(),
+        groups: [],
+        unplaced: [],
+        inherited: [],
+      },
       "variables",
       {
         x: {
@@ -1029,19 +1034,15 @@ describe("loadDslConfig — cache policies", () => {
     });
   });
 
-  test("watch_file: an absolute path", () => {
+  test("watch_file: a path string, judged by the host and not here", () => {
     expectIssue(base(`{ watch_file: 7 }`), {
       path: "variables.x.cache.watch_file",
       message: "cache.watch_file must be a path string",
     });
-    // A relative path would name the daemon's cwd for the watcher and the
-    // session's for a shell command — refused, as `~` (not expanded) is.
-    for (const rel of ["", ".budget.json", "~/.cache/b.json"]) {
-      expectIssue(base(`{ watch_file: ${JSON.stringify(rel)} }`), {
-        path: "variables.x.cache.watch_file",
-        message: `cache.watch_file must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(rel)}`,
-      });
-    }
+    expect(
+      parseAndValidate(FILE, base(`{ watch_file: "~/.cache/b.json" }`))
+        .variables.x,
+    ).toMatchObject({ cache: { watch_file: "~/.cache/b.json" } });
   });
 
   test("depends_on: array of strings", () => {
@@ -1352,7 +1353,10 @@ describe("loadDslConfig — renamed built-in segment", () => {
   // an edit-mode click, says it was removed.
   test.each([
     ["a root ref", `{ root: { h: ["directory", "ceiling"] } }`],
-    ["a segments delta", `{ segments: { ceiling: { missingData: "ignore" } } }`],
+    [
+      "a segments delta",
+      `{ segments: { ceiling: { missingData: "ignore" } } }`,
+    ],
     [
       "a tree-op anchor",
       `{ actions: { p: { persist: "presets.compact.root", insertSegment: "model", anchor: "ceiling", relation: "after" } } }`,
@@ -2586,10 +2590,10 @@ describe("loadDslConfig — insert", () => {
   });
 
   test("a cell naming both sides is an issue at its entry", () => {
-    expectIssue(
-      `{ insert: [{ seg: "model", before: "a", after: "b" }] }`,
-      { path: "insert.0", message: "got both" },
-    );
+    expectIssue(`{ insert: [{ seg: "model", before: "a", after: "b" }] }`, {
+      path: "insert.0",
+      message: "got both",
+    });
   });
 
   test("a cell naming an undeclared segment is an issue at its entry", () => {

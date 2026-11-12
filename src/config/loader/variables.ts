@@ -34,7 +34,6 @@ import {
   optionalStringSpec,
   optionalTypedDefault,
   reject,
-  requireAbsolutePathSpec,
   requireStringSpec,
   optionalEnumSpec,
   taggedUnion,
@@ -130,12 +129,10 @@ function typedDefaultSpec(): FieldSpec<string | number | boolean> {
 
 // [LAW:types-are-the-program] The parse-step schema as DATA, through the same
 // tag-by-present-key engine `cache:` runs through: text/json are flags whose
-// value is the literal true (like cache.never); regex is a pattern string. The
-// pattern is proven here — it compiles, and it has the capture group the
-// runtime reads (group 1 IS the value, so a groupless pattern could only ever
-// "not match") — while the decl keeps the SOURCE string: DslConfig is
-// serializable data, and declareOne (src/dsl/render.ts) compiles the RegExp the
-// runtime runs. Past this point a pattern is one `new RegExp` cannot throw on.
+// value is the literal true (like cache.never); regex is a pattern string.
+// [LAW:single-enforcer] Whether the pattern compiles and has its group 1 is
+// the host's judge's to say, where the run is subscribed: a pattern here is
+// any string, and nothing on this side compiles it.
 const PARSE_SCHEMA: OneOfPresentSchema<ParseDecl> = {
   noun: "parse",
   arms: {
@@ -154,7 +151,7 @@ const PARSE_SCHEMA: OneOfPresentSchema<ParseDecl> = {
       json: { type: "string" },
       parse: (ctx, path, value) =>
         typeof value === "string"
-          ? capturingPattern(ctx, path, value)
+          ? { regex: value }
           : reject(
               ctx,
               path,
@@ -174,35 +171,6 @@ const PARSE_SCHEMA: OneOfPresentSchema<ParseDecl> = {
     },
   },
 };
-
-function capturingPattern(
-  ctx: ValidateCtx,
-  path: string,
-  pattern: string,
-): { regex: string } | null {
-  let groups: number;
-  try {
-    // The compile proof is the pattern ALONE (`(a)\\` does not compile, but
-    // `(a)\\|` does — the backslash would escape the alternation). Then the
-    // standard group count: a compiling pattern alternated with the empty
-    // pattern always matches, and every group is a (non-participating) slot.
-    new RegExp(pattern);
-    groups = new RegExp(`${pattern}|`).exec("")!.length - 1;
-  } catch (e) {
-    return reject(
-      ctx,
-      path,
-      `parse.regex is not a valid regular expression: ${(e as Error).message}`,
-    );
-  }
-  return groups >= 1
-    ? { regex: pattern }
-    : reject(
-        ctx,
-        path,
-        `parse.regex must contain a capture group — its group 1 is the value; got ${JSON.stringify(pattern)}`,
-      );
-}
 
 // [LAW:one-source-of-truth] The `parse` field: absent means the text arm, and
 // that default is spelled ONCE, in declareOne's lowering — the decl records
@@ -316,7 +284,7 @@ const ENV_FIELDS: FieldSpecMap<Omit<EnvVarDecl, "kind">> = {
   default: optionalStringSpec(),
 };
 const FILE_FIELDS: FieldSpecMap<Omit<FileVarDecl, "kind">> = {
-  path: requireAbsolutePathSpec(),
+  path: requireStringSpec(),
   readMode: optionalEnumSpec(["whole", "first-line"] as const),
   parse: parseSpec(),
   cache: requireCacheSpec("file"),

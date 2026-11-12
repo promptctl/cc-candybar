@@ -25,7 +25,6 @@ import { readFile as fsReadFile } from "node:fs/promises";
 import { observable, runInAction } from "mobx";
 import { failureText, type Launcher } from "../proc/launch";
 import type {
-  Run,
   SourceRead,
   ParserId,
   ReadMode,
@@ -52,11 +51,12 @@ import {
 } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
-import type { Current } from "../utils/reading.js";
+import { settledLane, type Current } from "../utils/reading.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { shortDigest } from "../source-digest.js";
 import type { Timekeeper } from "../time";
+import type { AcceptedRun, Judged } from "./judge-run.js";
 import {
   jsonParser,
   regexParser,
@@ -172,7 +172,7 @@ function parserOf(parse: ParserId): Parser<JsonValue> {
     case "text":
       return textParser;
     case "regex":
-      return regexParser(new RegExp(parse.source, parse.flags));
+      return regexParser(new RegExp(parse.pattern));
     case "json":
       return (text) => (text.trim() === "" ? ABSENT : jsonParser(text));
   }
@@ -359,8 +359,9 @@ const derived = (filePath: string): PathsWatch =>
 export interface SourceLane {
   readonly digest: string;
   current(): Current<JsonValue>;
-  // Why the run's watch may be missing changes to its path, or `null` when
-  // it hears every place the path can change, or the run watches nothing.
+  // Why the run cannot be trusted to answer: the judge refused it, or its
+  // watch may be missing changes to its path. `null` when the run was
+  // accepted and hears every place its path can change, or watches nothing.
   fault(): string | null;
 }
 
@@ -391,7 +392,7 @@ export interface SourceRunsStats {
 
 export class SourceRuns {
   private readonly byKind: Readonly<
-    Record<SourceRead["kind"], KeyedSource<Run, JsonValue>>
+    Record<SourceRead["kind"], KeyedSource<AcceptedRun, JsonValue>>
   >;
   private readonly watchMgr: PathWatches;
   // Each watching entry's fault, by digest, for the lanes that read it.
@@ -411,7 +412,7 @@ export class SourceRuns {
     // share it. A record per digest would grow with every key value a bar
     // ever had.
     const source = (kind: SourceRead["kind"]) =>
-      new KeyedSource<Run, JsonValue>({
+      new KeyedSource<AcceptedRun, JsonValue>({
         name: `source.${kind}`,
         scope: "daemon",
         keyOf: (run) => run.digest,
@@ -460,10 +461,18 @@ export class SourceRuns {
   }
 
   // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
-  // the run's digest, created and read once on its first hold, and the lane
-  // reads it as it stands.
-  declare(holds: Holds, run: Run): SourceLane {
-    const { digest } = run;
+  // an accepted run's digest, created and read once on its first hold, and
+  // the lane reads it as it stands. A refused run reaches no reader: its lane
+  // answers its refusal for good, and the refusal is its standing fault, so
+  // the bar draws the source's fallback beside a ⚠ that says why.
+  declare(holds: Holds, judged: Judged): SourceLane {
+    const { digest } = judged;
+    if (judged.kind === "refused") {
+      const refusal = `refused: ${judged.reason}`;
+      const lane = settledLane<JsonValue>(failed(refusal, "read"));
+      return { digest, current: () => lane.current(), fault: () => refusal };
+    }
+    const { run } = judged;
     const lane = this.byKind[run.identity.read.kind].declare(holds, run);
     return {
       digest,
@@ -488,7 +497,7 @@ export class SourceRuns {
   }
 }
 
-// [LAW:single-enforcer] The one step from a set of runs to the lanes that read
+// [LAW:single-enforcer] The one step from a judged set of runs to the lanes that read
 // them: each run is declared in `holds`, inside the caller's one
 // `Holds.declare`, so a run dropped from the set is released by that
 // declaration's diff and a run two holders share is one entry held twice. The
@@ -499,13 +508,13 @@ export class SourceRuns {
 export function declareRuns(
   sourceRuns: Pick<SourceRuns, "declare">,
   holds: Holds,
-  runs: ReadonlyMap<string, Run>,
+  runs: ReadonlyMap<string, Judged>,
   take: (digest: string, declare: () => SourceLane) => SourceLane,
 ): ReadonlyMap<string, SourceLane> {
   return new Map(
-    [...runs].map(([digest, run]) => [
+    [...runs].map(([digest, judged]) => [
       digest,
-      take(digest, () => sourceRuns.declare(holds, run)),
+      take(digest, () => sourceRuns.declare(holds, judged)),
     ]),
   );
 }
