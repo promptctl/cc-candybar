@@ -4,15 +4,22 @@
     {
       "version": "pr-742",
       "ref": "refs/pull/742/merge",
-      "sha": "3505e117cbe59af41518ee50fe753344ece69de2",
-      "timestamp": "2026-11-13T09:27:24.915Z",
+      "sha": "35b0d9bbaede79d33b4c06ed790596f48fae760b",
+      "timestamp": "2026-11-13T09:38:02.924Z",
       "commits": [
         {
-          "sha": "3505e117cbe59af41518ee50fe753344ece69de2",
+          "sha": "35b0d9bbaede79d33b4c06ed790596f48fae760b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-13T02:26:26-07:00",
-          "message": "Merge 21c3c96d3742238914ca82423c78cfb01e774223 into 62d68333106c04b0083e0576a630ef2bc03762ce\n"
+          "timestamp": "2026-11-13T09:37:02Z",
+          "message": "Merge b28042cca122321878a629386c9ed411a4f72eec into 62d68333106c04b0083e0576a630ef2bc03762ce\n"
+        },
+        {
+          "sha": "b28042cca122321878a629386c9ed411a4f72eec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-13T02:36:50-07:00",
+          "message": "docs(spec): a cwd layer exists only for a repository of its own, an explicit one only under --config (candybar-host-renderer-x96a.nyy)\n"
         },
         {
           "sha": "21c3c96d3742238914ca82423c78cfb01e774223",
