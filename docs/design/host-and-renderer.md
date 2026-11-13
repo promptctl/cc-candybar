@@ -173,47 +173,44 @@ interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
 }
 
-// Where a declaration came from is what repository trust is judged on.
+// Where a declaration came from is what repository trust is judged on. A layer
+// or plugin is named within the snapshot of the session it is declared for.
 interface Subscription {
   readonly decl: SourceDecl;
-  readonly from: { kind: "bundled" } | { kind: "layer"; layer: LayerId } | { kind: "plugin"; plugin: PluginId };
+  readonly from: { kind: "bundled" } | { kind: "layer"; role: LayerRole } | { kind: "plugin"; plugin: PluginRef };
 }
 
 // What the host's config discovery found for one session's directories: the
 // imperative-shell half of today's load, as a value. Parse, merge and validate
 // are the renderer's, in its functional core. The bundled layer ships in the renderer's own bundle.
 // [LAW:types-are-the-program] Each layer carries only what its role can have.
-// A LayerId is derived, never minted: the role plus a digest of the layer's
-// real directory, so it names the same layer across restarts and sessions.
 interface ConfigSnapshot {
-  readonly chain: Chain;
+  readonly chain: readonly Layer[];          // lowest precedence first
   readonly plugins: readonly Plugin[];
   readonly checkout: CheckoutId | null;      // the session's repository, opaque
 }
 
-// An explicit target replaces the chain, as today, so it stands alone.
-type Chain =
-  | { kind: "explicit"; own: OwnLayer }
-  | { kind: "layered"; own: OwnLayer; repo: readonly RepoLayer[] };   // project, then cwd
+// A chain is user, cwd, project, local; cwd only where it is not the project's
+// directory. An explicit target replaces the chain, as today, and is its one layer.
+// A role names one layer within its session's snapshot.
+type LayerRole = "explicit" | "user" | "cwd" | "project" | "local";
 
-// The one layer of a chain a click may write: the user's file or the explicit target.
-interface OwnLayer {
-  readonly layer: LayerId;
-  readonly display: string;                  // the path, for messages only
-  readonly text: string | null;              // null: not written yet
-}
-
-// An unapproved layer carries no text: it is not merged, and the bar asks its question.
-type RepoLayer =
-  | { layer: LayerId; role: "project" | "cwd"; display: string; trust: "approved"; text: string }
-  | { layer: LayerId; role: "project" | "cwd"; display: string; trust: "refused" | "unasked" };
+// Every layer is writable, and text null means not written yet. A repository's
+// layer that is not approved carries no text: it is not merged, and the bar asks its question.
+type Layer =
+  | { role: "explicit" | "user"; display: string; text: string | null }
+  | { role: "cwd" | "project" | "local"; display: string; trust: "approved"; text: string | null }
+  | { role: "cwd" | "project" | "local"; display: string; trust: "refused" | "unasked" };
+// display: the path, for messages only
 
 interface Plugin {
-  readonly plugin: PluginId;                 // derived like a LayerId
-  readonly origin: { kind: "data-root" } | { kind: "project"; layer: LayerId };   // a project's plugins come with its approval
+  readonly origin: "data-root" | "project";  // a project's plugins come with its approval
   readonly name: string;
   readonly files: Readonly<Record<string, string>>;
 }
+
+// Origin and name name a plugin within its session's snapshot.
+type PluginRef = Pick<Plugin, "origin" | "name">;
 ```
 
 - **Every input gets exactly one output, in order.** The host sends the next input to a renderer only after the last one's output arrived. That serialization is the state machine's turn, owned by the renderer's mailbox in the host. A turn is synchronous, and inputs are plain data. [LAW:no-ambient-temporal-coupling]
@@ -241,7 +238,7 @@ type Effect =
   | { kind: "run"; session: SessionId; program: Program; refreshes: readonly SourceId[] }
   | { kind: "restart-claude"; session: SessionId }
   | { kind: "surface"; session: SessionId; surface: PushedSurface; on: boolean }
-  | { kind: "approve-repo"; layer: LayerId; answer: boolean }
+  | { kind: "approve-repo"; session: SessionId; role: LayerRole; answer: boolean }
   | { kind: "apply-update"; version: Version }
   | { kind: "open"; url: string }
   | { kind: "copy"; text: string }
@@ -254,14 +251,14 @@ type PushedSurface = "band" | "pane" | "tmux-status" | "browser";
 // path, so no stored effect or undo entry can hold an absolute path (R-13).
 type FileTarget =
   | { kind: "profile"; path: ProfilePath }              // under the renderer's profile
-  | { kind: "own-config"; layer: LayerId }              // a chain's own layer; no repository layer is writable
+  | { kind: "layer"; session: SessionId; role: LayerRole }   // any layer of the session's chain
   | { kind: "claude-settings"; session: SessionId };    // the session's Claude Code settings, from its session context
 
 // Today's run action, with its directory named, never spelled.
 interface Program {
   readonly argv: readonly [string, ...string[]];
   readonly env: Readonly<Record<string, string>>;   // laid over the session's environment
-  readonly cwd: { kind: "layer"; layer: LayerId } | { kind: "plugin"; plugin: PluginId } | { kind: "user-home" };
+  readonly cwd: { kind: "layer"; role: LayerRole } | { kind: "plugin"; plugin: PluginRef } | { kind: "user-home" };
 }
 
 type Precondition = { kind: "text"; text: string } | { kind: "absent" };
@@ -270,7 +267,15 @@ type Precondition = { kind: "text"; text: string } | { kind: "absent" };
 `StoreName` is one name per durable store the profile holds; `SlashLine` is a slash command and its arguments, already parsed by the grammar the bar uses today; `Scheduled` is a token the renderer chose and gets back.
 
 - **Every effect names its operation.** There is no `tmux { args }` and no free-form command, because a raw command admits every command and the safety of a slash line or a run could not be expressed in it. A run link's program is the declaration its link signed, as today. [LAW:types-are-the-program]
-- **Every write target is named, never spelled.** A `profile` path is relative to the renderer's profile. An `own-config` is the layer the renderer was handed, wherever its file lives, so an explicit `--config` stays writable. `claude-settings` is reached only through a session the renderer holds. Undo stores these names, so a history copied to another renderer resolves only against what that renderer was handed.
+- **Every write target is named, never spelled.** A `profile` path is relative to the renderer's profile. A `layer` is reached through a session the renderer holds and named by its role in that session's chain, and so is `claude-settings`. Undo stores these names, so a history copied to another renderer resolves only against what that renderer was handed.
+- **Save asks which layer.** Save offers every layer of the session's chain:
+  - **user:** the profile's config file.
+  - **project:** the project's checked-in `.cc-candybar` file.
+  - **local:** `.cc-candybar.local` beside the project's file, holding one person's settings for that project.
+  - **cwd:** where the session has one.
+  - **explicit:** an explicit target, which is its chain's one layer.
+
+  Local merges above project, so a local value wins over the shared one. When the interpreter creates a local file, it adds the file to the repository's exclude file (`git rev-parse --git-path info/exclude`, which every worktree of the repository shares), so git never shows it. The local layer loads under the project layer's approval, because a clone can commit a file by that name.
 - **Writes are conditional.** `write-file` lands only if the target still matches its `precondition`; otherwise it fails with what the file holds now. That is how undo refuses a target someone else changed, how save cannot overwrite a hand edit made after its config was read, and how the doctor's fix applies only to the settings it diagnosed.
 - **`type-slash` checks, then acts.** The interpreter reads the pane and refuses unless it shows Claude Code's bare input box, then stashes, pastes and submits. Nothing in the bar can come between the check and the act, because the interpreter runs one effect at a time; the user can, in the gap between two tmux calls, as today.
 - **`run` carries its refreshes.** The collector holds each named source pending from the run's start until the program exits and the source has been re-read. The host owns that order. A run's program runs in its session's environment (above).
