@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-741",
-      "ref": "refs/pull/741/merge",
-      "sha": "d79e56d14f99d4061d0dde46c478cb99b1284a05",
-      "timestamp": "2026-11-13T05:04:59.964Z",
+      "version": "pr-742",
+      "ref": "refs/pull/742/merge",
+      "sha": "3505e117cbe59af41518ee50fe753344ece69de2",
+      "timestamp": "2026-11-13T09:27:24.915Z",
       "commits": [
         {
-          "sha": "d79e56d14f99d4061d0dde46c478cb99b1284a05",
+          "sha": "3505e117cbe59af41518ee50fe753344ece69de2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T22:03:59-07:00",
-          "message": "Merge f152adcf533c360d51a2974ba9566866586fc90f into 62d68333106c04b0083e0576a630ef2bc03762ce\n"
+          "timestamp": "2026-11-13T02:26:26-07:00",
+          "message": "Merge 21c3c96d3742238914ca82423c78cfb01e774223 into 62d68333106c04b0083e0576a630ef2bc03762ce\n"
         },
         {
-          "sha": "f152adcf533c360d51a2974ba9566866586fc90f",
+          "sha": "21c3c96d3742238914ca82423c78cfb01e774223",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T22:03:39-07:00",
-          "message": "docs(spec): one kind of renderer, out of process first through an adapter, and documents edited by JSON Patch (candybar-host-renderer-x96a.nyy)\n\nA renderer is a name bound to a bundle; nothing differs by name but values.\nThe renderer leaves the host's process as the next step, through one adapter\nwhose entries later steps delete. No effect writes a file: a renderer edits a\ndocument by RFC 6902 patch, whose arithmetic and schema are the renderer's,\nand returns its stored state whole. Every link is signed, copy links included.\n"
+          "timestamp": "2026-11-13T02:26:03-07:00",
+          "message": "docs(spec): save offers every layer of the session's chain, user, project and an excluded local file among them, each named by its role (candybar-host-renderer-x96a.nyy)\n"
         }
       ]
     },
