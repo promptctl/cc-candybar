@@ -190,17 +190,16 @@ interface ConfigSnapshot {
   readonly checkout: CheckoutId | null;      // the session's repository, opaque
 }
 
-// A chain is user, cwd, project, local; cwd only where it is not the project's
-// directory. An explicit target replaces the chain, as today, and is its one layer.
+// A chain is user, project, local. `--config` replaces the chain, as today, and is its one layer.
 // A role names one layer within its session's snapshot.
-type LayerRole = "explicit" | "user" | "cwd" | "project" | "local";
+type LayerRole = "explicit" | "user" | "project" | "local";
 
 // Every layer is writable, and text null means not written yet. A repository's
 // layer that is not approved carries no text: it is not merged, and the bar asks its question.
 type Layer =
   | { role: "explicit" | "user"; display: string; text: string | null }
-  | { role: "cwd" | "project" | "local"; display: string; trust: "approved"; text: string | null }
-  | { role: "cwd" | "project" | "local"; display: string; trust: "refused" | "unasked" };
+  | { role: "project" | "local"; display: string; trust: "approved"; text: string | null }
+  | { role: "project" | "local"; display: string; trust: "refused" | "unasked" };
 // display: the path, for messages only
 
 interface Plugin {
@@ -272,8 +271,7 @@ type Precondition = { kind: "text"; text: string } | { kind: "absent" };
   - **user:** the profile's config file.
   - **project:** the project's checked-in `.cc-candybar` file.
   - **local:** `.cc-candybar.local` beside the project's file, holding one person's settings for that project.
-  - **cwd:** where the session has one.
-  - **explicit:** an explicit target, which is its chain's one layer.
+  - **explicit:** only where `--config` was passed, and then it is the only layer.
 
   Local merges above project, so a local value wins over the shared one. When the interpreter creates a local file, it adds the file to the repository's exclude file (`git rev-parse --git-path info/exclude`, which every worktree of the repository shares), so git never shows it. The local layer loads under the project layer's approval, because a clone can commit a file by that name.
 - **Writes are conditional.** `write-file` lands only if the target still matches its `precondition`; otherwise it fails with what the file holds now. That is how undo refuses a target someone else changed, how save cannot overwrite a hand edit made after its config was read, and how the doctor's fix applies only to the settings it diagnosed.
