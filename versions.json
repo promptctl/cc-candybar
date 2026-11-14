@@ -4,15 +4,22 @@
     {
       "version": "pr-745",
       "ref": "refs/pull/745/merge",
-      "sha": "e054f2f9d810e02819a7f092bc7feb875c24d345",
-      "timestamp": "2026-11-14T20:33:04.332Z",
+      "sha": "743b83b9284fef5c78543b0ceb9afac57483abb8",
+      "timestamp": "2026-11-14T20:36:54.186Z",
       "commits": [
         {
-          "sha": "e054f2f9d810e02819a7f092bc7feb875c24d345",
+          "sha": "743b83b9284fef5c78543b0ceb9afac57483abb8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T13:32:15-07:00",
-          "message": "Merge 62f784ca013481a34be8e0b9ef06702ffc448eac into db68b8f13d34bd2a2a2e51dec5cefe5389917bef\n"
+          "timestamp": "2026-11-14T20:35:58Z",
+          "message": "Merge fdac315daff25c098a8ac787a0263a7bf4c49ae5 into db68b8f13d34bd2a2a2e51dec5cefe5389917bef\n"
+        },
+        {
+          "sha": "fdac315daff25c098a8ac787a0263a7bf4c49ae5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T13:35:37-07:00",
+          "message": "chore(testing): drop the removed hook from the required-CI-steps comment (candybar-testing-ihvy.ums)\n"
         },
         {
           "sha": "62f784ca013481a34be8e0b9ef06702ffc448eac",
