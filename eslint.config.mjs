@@ -383,13 +383,19 @@ const zoneOf = (key) =>
   ZONE_KEYS.find(({ row }) =>
     row.endsWith("/") ? `${key}/`.startsWith(row) : key === row,
   )?.zone ?? "rest";
+// A directory's real path, through its nearest ancestor on disk, so an unsaved
+// buffer in a directory not yet made keys like its saved self.
+const realDir = (dir) =>
+  fs.existsSync(dir)
+    ? fs.realpathSync(dir)
+    : path.join(realDir(path.dirname(dir)), path.basename(dir));
 
 const importDirection = {
   meta: { type: "problem", schema: [] },
   create(context) {
     // Through the real path of the file's directory, so a file reached by a
     // symlinked path keys as the module it is.
-    const dir = fs.realpathSync(path.dirname(context.filename));
+    const dir = realDir(path.resolve(path.dirname(context.filename)));
     const from = moduleKey(path.join(dir, path.basename(context.filename)));
     // [LAW:no-silent-failure] A key outside the repo is in no zone, so the rule
     // refuses it rather than calling it rest and passing every edge.

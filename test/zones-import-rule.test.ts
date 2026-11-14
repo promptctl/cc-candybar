@@ -74,6 +74,11 @@ const REFUSED = {
     code: "const at = 'x';\nexport const m = import(`../daemon/${at}`);\n",
   },
   rendererToNewDirectory: { file: IN_RENDERER, code: imp("../newly-added/x") },
+  // An unsaved buffer in a directory not made yet.
+  rendererUnsavedDirectory: {
+    file: "src/renderer/not-made-yet/probe.ts",
+    code: imp("../../daemon/x"),
+  },
   restToRenderer: { file: IN_REST, code: imp("../renderer/draw-bar") },
   restToRendererDir: { file: IN_REST, code: imp("../renderer/verbs") },
   startToRest: { file: IN_START, code: imp("../daemon/x") },
