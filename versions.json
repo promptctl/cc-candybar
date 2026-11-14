@@ -4,15 +4,22 @@
     {
       "version": "pr-746",
       "ref": "refs/pull/746/merge",
-      "sha": "cc819720735aac8e1f59386b9baee3d7a5652b22",
-      "timestamp": "2026-11-14T21:50:30.778Z",
+      "sha": "92572468de2cb27cb4133784a8639bf6c108b277",
+      "timestamp": "2026-11-14T22:06:54.449Z",
       "commits": [
         {
-          "sha": "cc819720735aac8e1f59386b9baee3d7a5652b22",
+          "sha": "92572468de2cb27cb4133784a8639bf6c108b277",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T14:49:37-07:00",
-          "message": "Merge 9c5795cbdfceb03c4486d8ad6b74da5a8f6f5472 into f4dfec9b8d1658304a1dfb841c3c26df44855662\n"
+          "timestamp": "2026-11-14T22:05:55Z",
+          "message": "Merge abee1a377369c342bb10757e097768018738bb33 into f4dfec9b8d1658304a1dfb841c3c26df44855662\n"
+        },
+        {
+          "sha": "abee1a377369c342bb10757e097768018738bb33",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T15:05:43-07:00",
+          "message": "fix(renderer): the zones rule keys modules from the repo root, the sync-launch ban covers the renderer, and moved law markers sit by their code (candybar-host-renderer-x96a.fro)\n\n- Zone keys resolve against the config's own directory, so ESLint started in\n  src/ (an editor) still holds the seam; the zone test lints from both cwds,\n  and covers the start zone's limits and a directory import through src.\n- The launchSync/runTmux ban reaches src/renderer/, where the daemon-served\n  verbs now live.\n- Headers the moves dropped are back beside their code: the verb table, the\n  click fold, typing over the tmux edge, the update notice, runtime stats,\n  the auto-compact window, and the session usage store.\n- Duplicate and mid-file imports the moves left are merged; stale pointers\n  to src/doctor/edge.ts, src/claude-input/edge.ts and reply.ts's dispatcher\n  name where the code is now.\n- The stats reply reads the renderer's stats once.\n"
         },
         {
           "sha": "9c5795cbdfceb03c4486d8ad6b74da5a8f6f5472",

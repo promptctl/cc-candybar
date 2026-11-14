@@ -61678,6 +61678,28 @@ function isBundledPreset(name) {
   return BUNDLED_PRESETS.includes(name);
 }
 
+// src/facts/world-state.ts
+init_globals();
+var UNREAD_RUN = {
+  reading: pendingOf("unread"),
+  fault: null
+};
+var REFRESH_LANES = [
+  "session",
+  "today",
+  "context",
+  "metrics",
+  "activity",
+  "cache",
+  "speed",
+  "autocompact"
+];
+var SHORT_DIGEST_LENGTH = 7;
+var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
+function stampFailureOf(document) {
+  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
+}
+
 // src/daemon/foundations/today-facts.ts
 init_globals();
 var EMPTY_DAY = {
@@ -62396,28 +62418,6 @@ function resumeCommand(workspace, sessionId2, configDir) {
       ...workspace.added_dirs.flatMap((dir) => ["--add-dir", dir])
     ]
   });
-}
-
-// src/facts/world-state.ts
-init_globals();
-var UNREAD_RUN = {
-  reading: pendingOf("unread"),
-  fault: null
-};
-var REFRESH_LANES = [
-  "session",
-  "today",
-  "context",
-  "metrics",
-  "activity",
-  "cache",
-  "speed",
-  "autocompact"
-];
-var SHORT_DIGEST_LENGTH = 7;
-var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
-function stampFailureOf(document) {
-  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
 }
 
 // src/renderer/render-payload.ts
@@ -64969,17 +64969,18 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     });
   }
   if (req.kind === "stats") {
+    const renderer = toRenderer.stats();
     return stay({
       ok: true,
       stats: stats.snapshot({
         gitCache: gitProvider.getStats(),
         usageCache: usageStore.getStats(),
-        sources: sourceSnapshots(parts),
+        sources: sourceSnapshots(parts, renderer.renderCache),
         fileEvents: fileEvents.stats(),
         sourceRuns: sourceRuns.stats(),
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
-        ...toRenderer.stats(),
+        ...renderer,
         collector: parts.collector.stats(),
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
@@ -65114,7 +65115,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
   const unanswered = req;
   throw new Error(`no reply for request ${inspect(unanswered)}`);
 }
-function sourceSnapshots(parts) {
+function sourceSnapshots(parts, cache2) {
   const {
     payloadProviders: {
       gitProvider,
@@ -65123,14 +65124,12 @@ function sourceSnapshots(parts) {
       managedStorage,
       hostService
     },
-    toRenderer,
     refreshLedger
   } = parts;
   const git = gitProvider.getStats();
   const tmux3 = tmuxService.getStats();
   const today = usageStore.scanStats();
   const storage = managedStorage.stats();
-  const cache2 = toRenderer.stats().renderCache;
   return {
     records: refreshLedger.snapshot(),
     homes: {
