@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-745",
+      "ref": "refs/pull/745/merge",
+      "sha": "e054f2f9d810e02819a7f092bc7feb875c24d345",
+      "timestamp": "2026-11-14T20:33:04.332Z",
+      "commits": [
+        {
+          "sha": "e054f2f9d810e02819a7f092bc7feb875c24d345",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T13:32:15-07:00",
+          "message": "Merge 62f784ca013481a34be8e0b9ef06702ffc448eac into db68b8f13d34bd2a2a2e51dec5cefe5389917bef\n"
+        },
+        {
+          "sha": "62f784ca013481a34be8e0b9ef06702ffc448eac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T13:31:59-07:00",
+          "message": "chore(testing): remove the e2e-signoff hook; the sign-off file and the cap and assertion checks stay (candybar-testing-ihvy.ums)\n\nThe hook refused any tool call whose text named a guarded path, read-only\nones included, so it blocked agents' ordinary work. The checks it guarded\nare what CI enforces, and they are unchanged.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "db68b8f13d34bd2a2a2e51dec5cefe5389917bef",
