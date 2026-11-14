@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-746",
+      "ref": "refs/pull/746/merge",
+      "sha": "cc819720735aac8e1f59386b9baee3d7a5652b22",
+      "timestamp": "2026-11-14T21:50:30.778Z",
+      "commits": [
+        {
+          "sha": "cc819720735aac8e1f59386b9baee3d7a5652b22",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T14:49:37-07:00",
+          "message": "Merge 9c5795cbdfceb03c4486d8ad6b74da5a8f6f5472 into f4dfec9b8d1658304a1dfb841c3c26df44855662\n"
+        },
+        {
+          "sha": "9c5795cbdfceb03c4486d8ad6b74da5a8f6f5472",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T14:49:09-07:00",
+          "message": "refactor(renderer): the renderer side is a directory, and a zones lint run both ways holds its seam (candybar-host-renderer-x96a.fro)\n\nA table of zones in eslint.config.mjs (renderer, its start, shared, rest,\nroots; the longest prefix wins) and an inline rule fail any import into\nsrc/renderer/ but its start and any import out of it but shared code. It\ncertifies import direction only.\n\nThe contract moves to src/renderer-interface/ (interface, request context,\nsession-state and history ports, adapter). The renderer's modules move under\nsrc/renderer/: the verb table, the render cache and its budget, payload\nassembly, session state, the histories, render warnings, debug. Pure modules\nboth sides name move into src/daemon/foundations/ or join the shared row.\n\nAdapterToHost lists what the renderer reaches in the host and is handed in\nat the start; AdapterToRenderer lists what the host reaches in the renderer\nand is returned beside `answer`. Each entry carries its\n[LAW:effects-at-boundaries] exception. The main renderer loads its storage\nwhere the daemon did and starts once the host's parts exist, so construction\norder stays. The foundations rule and its test fold into the zones rule and\nits test.\n"
+        },
+        {
+          "sha": "49d46bc4182ab385c75027ba7f37e4293d55f6b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T13:50:10-07:00",
+          "message": "docs(spec): a file the renderer opens itself is not an adapter entry; the step that removes it adds its rule (candybar-host-renderer-x96a.fro)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f4dfec9b8d1658304a1dfb841c3c26df44855662",
