@@ -44,7 +44,7 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
           parts,
           event.context,
           at,
-          event.waitEndsAt,
+          event.waitMs,
           record,
         );
         const id = ++minted as EffectId;
@@ -85,9 +85,12 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
         // [LAW:no-ambient-temporal-coupling] Whether the session is still
         // idle is the clock's to say, in the close's own journal turn: a
         // click since the firing keeps what it opened.
+        // [LAW:effects-at-boundaries] exception: the idle clock stays with
+        // the host, so the turn asks it in place.
         await parts.verbs.closeIdle(event.session, {
           ...event.idle,
-          confirm: () => parts.menuIdle.confirmClose(event.session),
+          confirm: () =>
+            parts.menuIdle.confirmClose(event.session, event.idle.firedAt),
         });
         return [];
     }

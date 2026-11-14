@@ -333,6 +333,14 @@ describe("the renderer's subscriptions", () => {
     });
   });
 
+  test("a session named like an object's inherited member subscribes to nothing it was not handed", () => {
+    const { owners } = handLanded();
+    const { collector, logged } = collectorOver(owners);
+    collector.requested(requestAt("/a", sessionIdOf("constructor")));
+    expect(() => collector.subscribed({ sources: {} })).not.toThrow();
+    expect(logged.filter((line) => !line.startsWith("info"))).toEqual([]);
+  });
+
   test("naming a session the collector has no record of is said", () => {
     const { owners } = handLanded();
     const { collector, logged } = collectorOver(owners);

@@ -2360,13 +2360,16 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
   ...VERBS.keys(),
 ]) as readonly string[];
 
-// How long a session's menus sat with no click before its timer closed them.
-// How long the session was idle when its timer fired, and the timeout it ran.
+// A firing of a session's idle timer: when it fired, how long the session was
+// idle by then, and the timeout it ran.
 export interface IdleSpan {
+  readonly firedAt: Instant;
   readonly idleS: number;
   readonly timeoutS: number;
 }
 
+// The idle close as its verb takes it: the firing, and the clock's say over
+// whether it goes ahead.
 export interface IdleClose extends IdleSpan {
   // Whether the close goes ahead, read in its turn: the session still known
   // idle since the timer fired, which a click, or its record's eviction, ends.

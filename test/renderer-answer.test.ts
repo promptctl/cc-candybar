@@ -149,7 +149,7 @@ const request = async (t: { r: Renderer; rig: SessionRig }) => {
       kind: "request",
       id: REQUEST,
       context,
-      waitEndsAt: (instantAt(systemTimekeeper) + 5) as Instant,
+      waitMs: 5000,
     },
   });
 };
@@ -229,7 +229,7 @@ describe("a statusline request", () => {
         kind: "request",
         id: REQUEST,
         context,
-        waitEndsAt: (instantAt(systemTimekeeper) + 5) as Instant,
+        waitMs: 5000,
       },
     }));
     expect(presentOf(effects)).toMatchObject({ request: REQUEST });
@@ -406,7 +406,7 @@ describe("the session's config, ahead of its request", () => {
         kind: "request",
         id: REQUEST,
         context: checked(),
-        waitEndsAt: (instantAt(systemTimekeeper) + 5) as Instant,
+        waitMs: 5000,
       },
     });
     expect(threw(answering).failure.message).toMatch(
@@ -562,7 +562,7 @@ describe("the idle close", () => {
         closed.push(sessionId);
       },
     });
-    const idle = { idleS: 30, timeoutS: 30 };
+    const idle = { firedAt: instantAt(systemTimekeeper), idleS: 30, timeoutS: 30 };
     const { effects } = answered(await handIn(t.r, {
       kind: "menu-idle",
       session: SESSION,

@@ -140,15 +140,16 @@ export class MenuIdle {
     this.settle(sessionId);
   }
 
-  // In the turn of a close the timer fired: whether it goes ahead, the session
-  // still known idle since. A click arrived after the firing is queued behind
-  // the close, and a record evicted meanwhile stops counting, so neither is
-  // known idle. Read without making a record, which would count as a session
-  // touched. When it goes ahead, the record follows it.
-  confirmClose(sessionId: SessionId): boolean {
+  // In the turn of the close the timer fired at `firedAt`: whether it goes
+  // ahead, the session still known idle since. A click arrived after the
+  // firing is queued behind the close, and a record evicted meanwhile stops
+  // counting, so neither is known idle: a record made since closes by its own
+  // firing, never by this one. Read without making a record, which would
+  // count as a session touched. When it goes ahead, the record follows it.
+  confirmClose(sessionId: SessionId, firedAt: Instant): boolean {
     const idle = this.sessions.get(sessionId);
-    if (idle?.closing == null || this.pending.has(sessionId)) return false;
-    this.shut(idle, idle.closing);
+    if (idle?.closing !== firedAt || this.pending.has(sessionId)) return false;
+    this.shut(idle, firedAt);
     return true;
   }
 
@@ -240,7 +241,11 @@ export class MenuIdle {
     const now = this.deps.now();
     idle.closing = now;
     void this.deps
-      .close(sessionId, { idleS: now - idle.since, timeoutS: idle.timeoutS })
+      .close(sessionId, {
+        firedAt: now,
+        idleS: now - idle.since,
+        timeoutS: idle.timeoutS,
+      })
       .then((failure) => {
         if (failure === null) return;
         this.shut(idle, now);

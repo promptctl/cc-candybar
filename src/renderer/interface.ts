@@ -65,11 +65,14 @@ export type Event =
       readonly kind: "request";
       readonly id: RequestId;
       readonly context: CheckedRenderRequest;
-      // The instant the request's wait ends, from its client's deadline: the
-      // renderer still waits inside this turn, over the world states the host
-      // hands in, until the mailbox moves the wait, so its turns overlap:
-      // other inputs, other requests' included, arrive while this one waits.
-      readonly waitEndsAt: Instant;
+      // How long the request may still wait, in milliseconds from this
+      // turn's start, from its client's deadline: a span, which each process
+      // counts on its own monotonic clock, so no clock is shared and none
+      // stepped moves it. The renderer still waits inside this turn, over the
+      // world states the host hands in, until the mailbox moves the wait, so
+      // its turns overlap: other inputs, other requests' included, arrive
+      // while this one waits.
+      readonly waitMs: number;
     }
   | {
       // A session's world state moved since the one the renderer holds: read
@@ -113,8 +116,9 @@ export type Event =
       // ✕ does.
       readonly kind: "menu-idle";
       readonly session: SessionId;
-      // How long the session was idle when its clock ran out, for the close's
-      // line. Whether it is still idle is read in the close's journal turn.
+      // The firing of the session's idle clock: the close's line says its
+      // span, and the close's journal turn names it when it asks the clock
+      // whether the session is still idle since.
       readonly idle: IdleSpan;
     };
 
@@ -160,16 +164,17 @@ export interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
 }
 
-// [LAW:no-silent-failure] Every turn answers, a turn that threw included: its
-// failure as data, a class crossing no process, so `answer` never rejects.
-// Either way it carries the record it reached and the open views'
-// subscriptions as they stand after it: an act can land before its turn
-// throws (a click that committed and followed its view), and its view is read
-// all the same.
-export type RendererOutput = {
-  readonly subscriptions: Subscriptions;
-  readonly record: TurnRecord;
-} & (
+// How a turn ended, a turn that threw included: its failure as data, a class
+// crossing no process. Either way it carries the record it reached.
+export type TurnOutcome = { readonly record: TurnRecord } & (
   | { readonly kind: "answered"; readonly effects: readonly Effect[] }
   | { readonly kind: "threw"; readonly failure: Failure }
 );
+
+// [LAW:no-silent-failure] Every turn answers, so `answer` never rejects. Its
+// output names the open views' subscriptions as they stand after it, however
+// it ended: an act can land before its turn throws (a click that committed
+// and followed its view), and its view is read all the same.
+export type RendererOutput = TurnOutcome & {
+  readonly subscriptions: Subscriptions;
+};

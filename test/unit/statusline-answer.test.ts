@@ -14,7 +14,7 @@ import { sessionIdOf } from "../../src/daemon/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { answerStatusline } from "../../src/daemon/statusline-answer";
 import type { RequestFacts } from "../../src/daemon/request-event";
-import { failureOf } from "../../src/daemon/verb-error";
+import { BadVerbArgs, failureOf } from "../../src/daemon/verb-error";
 import {
   type Effect,
   type EffectId,
@@ -26,7 +26,7 @@ import {
 } from "../../src/renderer/interface";
 import type { WorldState } from "../../src/facts/world-state";
 import type { CheckedRenderRequest } from "../../src/renderer/request-context";
-import { instantOf, type Instant } from "../../src/utils/instant";
+import { instantOf } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
 
 const SESSION = sessionIdOf("a-session");
@@ -150,7 +150,7 @@ async function answer(
     REQ,
     REQUEST,
     AT,
-    0 as Instant,
+    0,
     facts,
   );
   return { answered, facts: new Map(facts) };
@@ -255,6 +255,42 @@ test("a turn that throws is a failure naming the renderer, with what it learned 
   expect(facts.get("lanes")).toBe("-");
 });
 
+test("a render turn that throws a bad argument is still the daemon's failure, as its reply says", async () => {
+  const { renderer } = scripted({
+    kind: "threw",
+    failure: failureOf(new BadVerbArgs("no such row")),
+    subscriptions: NO_SUBSCRIPTIONS,
+    record: [],
+  });
+  const { answered } = await answer(renderer);
+  expect(answered.resp).toMatchObject({ code: "RENDER_FAILED" });
+  expect(answered.outcome).toMatchObject({
+    kind: "threw",
+    message: "no such row",
+  });
+});
+
+test("a renderer that rejects is the turn's failure, said on its line, and the subscriptions last taken stand", async () => {
+  const logged: string[] = [];
+  const subscribed: Subscriptions[] = [];
+  const renderer: Renderer = {
+    answer: async ({ event }) => {
+      if (event.kind === "config") return output([]);
+      if (event.kind === "request") return output([present(1)]);
+      throw new Error("the renderer went away");
+    },
+  };
+  const { answered } = await answer(renderer, logged, subscribed);
+  answered.settled(true);
+  await drained();
+  expect(logged).toEqual([
+    expect.stringMatching(
+      /^turn renderer=main input=effect-done sid=a-session effect=1 error=.*the renderer went away/,
+    ),
+  ]);
+  expect(subscribed).toEqual([NO_SUBSCRIPTIONS, NO_SUBSCRIPTIONS]);
+});
+
 test("a turn that throws still hands the host what its open views read", async () => {
   const left: Subscriptions = {
     sources: { [SESSION]: [] },
@@ -312,7 +348,7 @@ test("the session's config reaches the renderer first, with the world state read
     { kind: "config", context: REQ, worldState: WORLD },
   ]);
   expect(requests).toEqual([
-    { kind: "request", id: REQUEST, context: REQ, waitEndsAt: 0 },
+    { kind: "request", id: REQUEST, context: REQ, waitMs: 0 },
   ]);
   expect(subscribed).toEqual([opened, drawn]);
 });

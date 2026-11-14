@@ -10,8 +10,9 @@ import type { MainRendererParts } from "./verbs.js";
 type ClickEvent = Extract<Event, { kind: "click" }>;
 
 // [LAW:no-silent-failure] A verb the table does not have is the click's bad
-// request; whatever the act throws is the turn's throw, which the host turns
-// into the click's reply by its class.
+// request; whatever the act throws is the turn's throw, which the renderer
+// classifies as the turn's failure and the host turns into the click's reply
+// by its kind.
 export async function clickTurn(
   { verbs, menuIdle }: Pick<MainRendererParts, "verbs" | "menuIdle">,
   { verb, value, session, arrival, id }: ClickEvent,

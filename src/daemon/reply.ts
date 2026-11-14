@@ -3,7 +3,7 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import { failedWith, renderFailed } from "./draw-bar.js";
+import { failedWith } from "./draw-bar.js";
 import type { ClickInFlight } from "./clicks-in-flight.js";
 import {
   answerStatusline,
@@ -45,7 +45,7 @@ import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
-import { instantAt, instantOf, type Instant } from "../utils/instant.js";
+import { instantAt, instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
 import {
   noteFacts,
@@ -398,25 +398,25 @@ export async function replyTo(
       at,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to
-      // draw (src/daemon/request-deadline.ts). An instant on the wall, which
-      // every process reads alike, never a monotonic reading, whose origin is
-      // its own process's.
-      (at +
+      // draw (src/daemon/request-deadline.ts).
+      t0 +
         waitBudgetMs(checked.req.deadline, accepted.at, {
           epochMs: started.getTime(),
           monoMs: t0,
-        }) /
-          1000) as Instant,
+        }),
       facts,
     ).catch(
       // [LAW:no-silent-failure] The driver hands every turn's failure back
       // as a value; a throw here is its own bug, answered as any throw is.
-      (error: unknown): StatuslineAnswer => ({
-        outcome: failureOf(error),
-        resp: renderFailed(error),
-        seen: "failed",
-        settled: NOTHING_TO_SETTLE,
-      }),
+      (error: unknown): StatuslineAnswer => {
+        const failure = failureOf(error);
+        return {
+          outcome: failure,
+          resp: failedWith(failure.message),
+          seen: "failed",
+          settled: NOTHING_TO_SETTLE,
+        };
+      },
     );
     // [LAW:single-enforcer] The answer's present is owed its one effect-done
     // on every exit: a reply that never reaches the connection settles here.

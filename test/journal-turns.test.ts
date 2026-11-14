@@ -35,7 +35,12 @@ import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/session-id";
 
 const SID = sessionIdOf("s1");
-const IDLE = { idleS: 30, timeoutS: 30, confirm: () => true };
+const IDLE = {
+  firedAt: instantOf(new Date(0)),
+  idleS: 30,
+  timeoutS: 30,
+  confirm: () => true,
+};
 
 function gate(): { wait: Promise<void>; open: () => void } {
   let open = (): void => {};
@@ -146,7 +151,7 @@ describe("the idle close decides in its turn", () => {
       close: async (sid, closing) => {
         const running = closeIdleMenus(
           sid,
-          { ...closing, confirm: () => idle.confirmClose(sid) },
+          { ...closing, confirm: () => idle.confirmClose(sid, closing.firedAt) },
           ctx,
         );
         fired.push(running);
