@@ -2,46 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-745",
-      "ref": "refs/pull/745/merge",
-      "sha": "743b83b9284fef5c78543b0ceb9afac57483abb8",
-      "timestamp": "2026-11-14T20:36:54.186Z",
-      "commits": [
-        {
-          "sha": "743b83b9284fef5c78543b0ceb9afac57483abb8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T20:35:58Z",
-          "message": "Merge fdac315daff25c098a8ac787a0263a7bf4c49ae5 into db68b8f13d34bd2a2a2e51dec5cefe5389917bef\n"
-        },
-        {
-          "sha": "fdac315daff25c098a8ac787a0263a7bf4c49ae5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T13:35:37-07:00",
-          "message": "chore(testing): drop the removed hook from the required-CI-steps comment (candybar-testing-ihvy.ums)\n"
-        },
-        {
-          "sha": "62f784ca013481a34be8e0b9ef06702ffc448eac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T13:31:59-07:00",
-          "message": "chore(testing): remove the e2e-signoff hook; the sign-off file and the cap and assertion checks stay (candybar-testing-ihvy.ums)\n\nThe hook refused any tool call whose text named a guarded path, read-only\nones included, so it blocked agents' ordinary work. The checks it guarded\nare what CI enforces, and they are unchanged.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "db68b8f13d34bd2a2a2e51dec5cefe5389917bef",
-      "timestamp": "2026-11-14T11:29:51.799Z",
+      "sha": "f4dfec9b8d1658304a1dfb841c3c26df44855662",
+      "timestamp": "2026-11-14T20:43:28.370Z",
       "commits": [
         {
-          "sha": "db68b8f13d34bd2a2a2e51dec5cefe5389917bef",
+          "sha": "f4dfec9b8d1658304a1dfb841c3c26df44855662",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T04:28:49-07:00",
-          "message": "refactor(renderer): every input and output of a turn is plain data that crosses a process (candybar-host-renderer-x96a.265) (#744)\n\n* refactor(renderer): subscriptions are a record and a request's wait ends at an instant, so neither depends on its process (candybar-host-renderer-x96a.265)\n\n* refactor(renderer): a turn's failure is data the renderer classifies where it was thrown, and a request's outcome is ok or that failure (candybar-host-renderer-x96a.265)\n\n* refactor(renderer): the idle close's event carries its span, and its turn asks the clock whether it goes ahead (candybar-host-renderer-x96a.265)\n\n* refactor(renderer): a click crosses to its renderer by its request's id, and the host answers whether its client left (candybar-host-renderer-x96a.265)\n\n* test(renderer): the renderer's every input and output crosses a process as JSON, checked at compile time (candybar-host-renderer-x96a.265)\n\n* fix(renderer): a turn never rejects to its caller, a request's wait crosses as a span, and an idle close confirms its own firing (candybar-host-renderer-x96a.265)\n\n- The host's turn is the one place a renderer's rejection, or an output the\n  host cannot take, becomes the turn's failure, so a fire-and-forget delivery\n  never leaves an unhandled rejection. Its callers take a TurnOutcome; the\n  renderer's output adds the subscriptions the host consumes.\n- A request's wait crosses as the milliseconds left at delivery, which each\n  process counts on its own monotonic clock, so a wall clock stepped mid-wait\n  moves nothing.\n- An idle close names the firing it was born of, so a record made since can\n  only close by its own firing.\n- A render's failure is the daemon's whatever was thrown, as its reply says.\n- The collector reads only a subscriptions record's own keys, so a session\n  named like an inherited member subscribes to nothing.\n\n* fix(renderer): a render's failure is the daemon's on every path it can fail by, through one rule (candybar-host-renderer-x96a.265)\n\n* fix(renderer): the host's whole turn, its hold included, ends as a value (candybar-host-renderer-x96a.265)"
+          "timestamp": "2026-11-14T13:42:38-07:00",
+          "message": "chore(testing): remove the e2e-signoff hook (candybar-testing-ihvy.ums) (#745)\n\n* chore(testing): remove the e2e-signoff hook; the sign-off file and the cap and assertion checks stay (candybar-testing-ihvy.ums)\n\nThe hook refused any tool call whose text named a guarded path, read-only\nones included, so it blocked agents' ordinary work. The checks it guarded\nare what CI enforces, and they are unchanged.\n\n* chore(testing): drop the removed hook from the required-CI-steps comment (candybar-testing-ihvy.ums)"
         }
       ]
     }
