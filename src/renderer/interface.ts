@@ -154,11 +154,10 @@ export type Subscription =
 // renderer holds needs read. The host diffs it; nothing is declared by
 // message. A session absent from it needs nothing read.
 // [LAW:types-are-the-program] Keyed by session, so no session is listed twice,
-// and a record, so it crosses a process as it is.
+// and a record, so it crosses a process as it is: a session absent is a key
+// absent, never one holding `undefined`, which JSON does not carry.
 export interface Subscriptions {
-  readonly sources: Readonly<
-    Partial<Record<SessionId, readonly Subscription[]>>
-  >;
+  readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
 }
 
 // [LAW:no-silent-failure] Every turn answers, a turn that threw included: its
