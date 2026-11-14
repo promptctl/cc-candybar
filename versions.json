@@ -4,15 +4,22 @@
     {
       "version": "pr-746",
       "ref": "refs/pull/746/merge",
-      "sha": "92572468de2cb27cb4133784a8639bf6c108b277",
-      "timestamp": "2026-11-14T22:06:54.449Z",
+      "sha": "6f85cc111e9a87d49ae09f41afeb56a927bc230d",
+      "timestamp": "2026-11-14T22:16:05.354Z",
       "commits": [
         {
-          "sha": "92572468de2cb27cb4133784a8639bf6c108b277",
+          "sha": "6f85cc111e9a87d49ae09f41afeb56a927bc230d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T22:05:55Z",
-          "message": "Merge abee1a377369c342bb10757e097768018738bb33 into f4dfec9b8d1658304a1dfb841c3c26df44855662\n"
+          "timestamp": "2026-11-14T22:15:06Z",
+          "message": "Merge 2298005d8d7ec055877094ddbd5111cf13f9d34c into f4dfec9b8d1658304a1dfb841c3c26df44855662\n"
+        },
+        {
+          "sha": "2298005d8d7ec055877094ddbd5111cf13f9d34c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T15:14:55-07:00",
+          "message": "fix(renderer): only the entry reaches a root, the PR fields are shared, and a click error is held through the loaded renderer (candybar-host-renderer-x96a.fro)\n\n- The host reached src/renderer/ through a root (the doctor's data needs read\n  PR_FIELDS from the render payload). The PR field shape moves beside PrState\n  in segments/git, data-needs is shared, and rest may no longer import a root:\n  src/index.ts is the root that dispatches to them. The zone test refuses\n  every non-entry edge into a root.\n- Runs and LaneSetups held click errors through closures over parts declared\n  later in createDaemon. The hold needs only the session state the load reads,\n  so the loaded renderer offers it (AdapterToLoadedRenderer) and both owners\n  take it before the start.\n- Leftovers: two spellings of one import merged, a stale SEGMENTED_VERBS\n  pointer, and the bench suite back to main's formatting with its one moved\n  import.\n"
         },
         {
           "sha": "abee1a377369c342bb10757e097768018738bb33",
