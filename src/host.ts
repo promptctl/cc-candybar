@@ -2,18 +2,11 @@ import os from "node:os";
 import type { OneShotLauncher } from "./proc/launch.js";
 import { systemOneShotLauncher } from "./proc/system-launcher.js";
 import { systemTimekeeper, type Timekeeper } from "./time.js";
+import type { Host } from "./host-facts.js";
 
-// [LAW:effects-at-boundaries] What a process knows of the machine it runs on,
-// read once by its main and handed down as a value: the environment, the home
-// directory and the temporary directory. In-process code reads `home` and `tmp`
-// from here and never from `env`, so the two cannot disagree inside src; `env`
-// keeps both for the children that inherit it. A test builds one by hand
-// instead of writing `process.env`.
-export interface Host {
-  readonly env: Readonly<NodeJS.ProcessEnv>;
-  readonly home: string;
-  readonly tmp: string;
-}
+// [LAW:effects-at-boundaries] The machine's facts (src/host-facts.ts), read
+// once below by a process main and handed down as a value.
+export type { Host };
 
 // What a process main hands every subcommand it runs: the machine's facts, the
 // launcher over them (so a child inherits the same environment the process

@@ -37,7 +37,7 @@ import {
 import { type ViewFacts } from "../src/renderer-interface/request-context";
 import type { StorageKey } from "../src/renderer-interface/interface";
 import type { Fact } from "../src/facts/fact";
-import type { UpdateNotice, WorldState } from "../src/facts/world-state";
+import type { Update, WorldState } from "../src/facts/world-state";
 import type { Subscriptions } from "../src/renderer-interface/interface";
 import { type GitRead, type PullRequest } from "../src/segments/git";
 import { GitService } from "../src/daemon/cache/git-service";
@@ -124,7 +124,7 @@ function collectorOver(
     watched = new Set<SessionId>(),
     retired = async () => ANSWERED,
   }: {
-    readonly update?: () => Fact<UpdateNotice>;
+    readonly update?: () => Fact<Update>;
     readonly watched?: ReadonlySet<SessionId>;
     readonly retired?: () => Promise<unknown>;
   } = {},

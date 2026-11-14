@@ -5,6 +5,8 @@
 // subdirectory, as an editor whose working directory is `src/` runs it.
 
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const ROOT = path.resolve(__dirname, "..");
@@ -13,8 +15,8 @@ const ROOT = path.resolve(__dirname, "..");
 // directory, as an editor or runner started there runs it.
 const SCRIPT = `
 import { ESLint } from "eslint";
-const [root, casesJson] = process.argv.slice(1);
-const eslint = new ESLint({ cwd: process.cwd() });
+const [root, cwd, casesJson] = process.argv.slice(1);
+const eslint = new ESLint({ cwd });
 const out = {};
 for (const [name, c] of Object.entries(JSON.parse(casesJson))) {
   const [result] = await eslint.lintText(c.code, { filePath: root + "/" + c.file });
@@ -53,6 +55,23 @@ const REFUSED = {
   rendererToRestTypeQuery: {
     file: IN_RENDERER,
     code: `export type T = import("../daemon/x").T;\n`,
+  },
+  rendererToRestRequireEquals: {
+    file: IN_RENDERER,
+    code: `import x = require("../daemon/x");\nexport { x };\n`,
+  },
+  rendererToRestRequire: {
+    file: IN_RENDERER,
+    code: `export const x = require("../daemon/x");\n`,
+  },
+  rendererToRestTemplate: {
+    file: IN_RENDERER,
+    code: "export const m = import(`../daemon/x`);\n",
+  },
+  // A computed source names no module, so the rule cannot place it.
+  rendererComputed: {
+    file: IN_RENDERER,
+    code: "const at = 'x';\nexport const m = import(`../daemon/${at}`);\n",
   },
   rendererToNewDirectory: { file: IN_RENDERER, code: imp("../newly-added/x") },
   restToRenderer: { file: IN_REST, code: imp("../renderer/draw-bar") },
@@ -114,10 +133,10 @@ const ALLOWED = {
 };
 
 describe("the zones import rule", () => {
-  let found: Record<"root" | "src", Record<string, string[]>>;
+  let found: Record<"root" | "src" | "link", Record<string, string[]>>;
 
   beforeAll(() => {
-    const lintFrom = (cwd: string) =>
+    const lintFrom = (cwd: string, root = ROOT) =>
       JSON.parse(
         execFileSync(
           process.execPath,
@@ -125,16 +144,32 @@ describe("the zones import rule", () => {
             "--input-type=module",
             "-e",
             SCRIPT,
-            ROOT,
+            root,
+            cwd,
             JSON.stringify({ ...REFUSED, ...ALLOWED }),
           ],
           { cwd, encoding: "utf8" },
         ),
       );
-    found = { root: lintFrom(ROOT), src: lintFrom(path.join(ROOT, "src")) };
+    // A checkout reached through a symlink, as an editor opened on a linked
+    // path lints it.
+    const link = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "zones-")),
+      "repo",
+    );
+    fs.symlinkSync(ROOT, link);
+    try {
+      found = {
+        root: lintFrom(ROOT),
+        src: lintFrom(path.join(ROOT, "src")),
+        link: lintFrom(link, link),
+      };
+    } finally {
+      fs.rmSync(path.dirname(link), { recursive: true });
+    }
   }, 60_000);
 
-  const AT = ["root", "src"] as const;
+  const AT = ["root", "src", "link"] as const;
   const each = (cases: object) =>
     AT.flatMap((at) => Object.keys(cases).map((name) => [name, at] as const));
 

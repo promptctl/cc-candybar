@@ -7,11 +7,17 @@ import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { RenderWarningRecords } from "../../src/renderer/render-warnings";
 import type { SessionState } from "../../src/renderer/session-state";
 import { EffectSessions } from "../../src/render/effect";
-import type { MainRendererParts, RendererVerbs } from "../../src/renderer/verbs/port";
+import type {
+  MainRendererParts,
+  RendererVerbs,
+} from "../../src/renderer/verbs/port";
 import type { WorldStates } from "../../src/renderer/world-states";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import { UNOWNED_STORAGE } from "../../src/renderer/render-cache";
-import { refreshPayload, type RenderPayloadDeps } from "../../src/daemon/readings";
+import {
+  readingsHost,
+  type RenderPayloadDeps,
+} from "../../src/daemon/readings";
 import { JournalTurns } from "../../src/daemon/journal-turns";
 import {
   applyFix,
@@ -49,9 +55,16 @@ export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
       latest: () => null,
       wake: () => {},
     },
-    updateWatch: { notice: () => ({ offer: [], failure: [] }), error: () => null },
+    updateWatch: {
+      notice: () => ({ offer: [], failure: [] }),
+      error: () => null,
+    },
     fileEvents: {
-      delivery: () => ({ kind: "delivering", unreported: [], missedSince: null }),
+      delivery: () => ({
+        kind: "delivering",
+        unreported: [],
+        missedSince: null,
+      }),
     },
     menuIdle: {
       clicked: () => {},
@@ -65,12 +78,7 @@ export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
     laneSetups: { noted: () => {}, clicked: () => {} },
     tmuxStatusLines: { observe: () => {} },
     clicks: { gone: () => false },
-    refresh: (facts, at, refreshed) =>
-      refreshPayload({ ...facts, deps: providers }, at, refreshed),
-    cacheTallies: () => ({
-      git: providers.gitProvider.getStats(),
-      usage: providers.usageStore.getStats(),
-    }),
+    ...readingsHost(providers),
     managedStorage: UNOWNED_STORAGE,
     watchers: { acquire: unhosted("watchers"), follow: unhosted("watchers") },
     linkSigner: TEST_SIGNER,
@@ -90,16 +98,26 @@ export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
       oneAskPerClick,
       edge: unhosted("doctor edge"),
       stores: {
-        marks: { read: unhosted("doctor stores"), update: unhosted("doctor stores") },
-        clicked: { read: unhosted("doctor stores"), update: unhosted("doctor stores") },
+        marks: {
+          read: unhosted("doctor stores"),
+          update: unhosted("doctor stores"),
+        },
+        clicked: {
+          read: unhosted("doctor stores"),
+          update: unhosted("doctor stores"),
+        },
         postMortemsRead: {
           read: unhosted("doctor stores"),
           update: unhosted("doctor stores"),
         },
       },
     },
-    claudeInput: { read: unhosted("claude input"), type: unhosted("claude input") },
-    applyUpdate: () => Promise.reject(new Error("apply-update: no update watch in this rig")),
+    claudeInput: {
+      read: unhosted("claude input"),
+      type: unhosted("claude input"),
+    },
+    applyUpdate: () =>
+      Promise.reject(new Error("apply-update: no update watch in this rig")),
   };
 }
 

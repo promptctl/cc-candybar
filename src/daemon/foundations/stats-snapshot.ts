@@ -165,7 +165,7 @@ export interface StatsSnapshot {
   // budget and its post-mortems (src/daemon/limits.ts `serving`).
   daemon: ServingDaemon;
   // What the doctor's stores hold, read by the daemon that files them
-  // (src/doctor/edge.ts `DoctorStores`): `cc-candybar doctor` reads the
+  // (src/doctor/ports.ts `DoctorStores`): `cc-candybar doctor` reads the
   // marks, the terminals clicked from and the post-mortems read here, never
   // under its own shell's state directory.
   doctorStores: StoresRead;

@@ -22,7 +22,7 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { instantOf } from "../src/utils/instant";
 import { ok, pendingOf } from "../src/utils/outcome";
 import type { Fact } from "../src/facts/fact";
-import type { UpdateNotice } from "../src/facts/world-state";
+import type { Update } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -182,7 +182,7 @@ describe("what wakes a view", () => {
   async function woken() {
     const changed: string[] = [];
     const depth = observable.box(0);
-    const update = observable.box<Fact<UpdateNotice>>(pendingOf("unread"));
+    const update = observable.box<Fact<Update>>(pendingOf("unread"));
     const rig = sessionRig(dir, cleanups, {
       update: () => update.get(),
       source: {

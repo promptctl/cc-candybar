@@ -58,7 +58,7 @@ import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
 import { rendererHost } from "./renderer-host.js";
 import { loadMainRenderer } from "../renderer/main.js";
-import { refreshPayload } from "./readings.js";
+import { readingsHost } from "./readings.js";
 import {
   applyFix,
   gatherFacts,
@@ -606,12 +606,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     laneSetups,
     tmuxStatusLines,
     clicks,
-    refresh: (facts, at, refreshed) =>
-      refreshPayload({ ...facts, deps: payloadProviders }, at, refreshed),
-    cacheTallies: () => ({
-      git: gitService.getStats(),
-      usage: usageStore.getStats(),
-    }),
+    ...readingsHost(payloadProviders),
     managedStorage,
     watchers: watcherRegistry,
     linkSigner,

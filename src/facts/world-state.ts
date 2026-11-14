@@ -45,9 +45,6 @@ export interface TmuxFacts {
   readonly session: string;
 }
 
-// The release check: something newer than the running code, or absent.
-export type UpdateNotice = Update;
-
 // A fault of the collector's own: one lane of the session whose refresh threw,
 // or the stamp itself, which kept the readings of the document before it.
 export interface LaneDiagnostic {
@@ -93,7 +90,7 @@ export interface WorldState {
   readonly builtins: BuiltinFacts;
   readonly sources: Readonly<Record<SourceId, Fact<SourceValue>>>;
   readonly runs: Readonly<Record<string, RunFact>>;
-  readonly update: Fact<UpdateNotice>;
+  readonly update: Fact<Update>;
   readonly diagnostics: readonly FactsDiagnostic[];
 }
 

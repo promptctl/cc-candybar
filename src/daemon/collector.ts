@@ -26,7 +26,7 @@ import {
 } from "mobx";
 import type { Fact } from "../facts/fact.js";
 import {
-  type UpdateNotice,
+  type Update,
   type WorldState,
   stampFailureOf,
   shortDigest,
@@ -77,7 +77,7 @@ export interface CollectorDeps {
   readonly owners: RenderPayloadDeps;
   // The daemon's one update fact, stamped by its watch
   // (src/daemon/update-notice.ts): every session's document carries it.
-  readonly update: () => Fact<UpdateNotice>;
+  readonly update: () => Fact<Update>;
   readonly clock: Pick<Timekeeper, "now" | "every">;
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
   // frame feeds are the one record of who is watching.
@@ -149,7 +149,7 @@ type StampInputs =
   | {
       readonly kind: "read";
       readonly readings: Readings;
-      readonly update: Fact<UpdateNotice>;
+      readonly update: Fact<Update>;
     }
   | { readonly kind: "failed"; readonly reason: string };
 

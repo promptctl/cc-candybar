@@ -5,7 +5,7 @@ import type {
   RunFact,
   WorldState,
   SourceValue,
-  UpdateNotice,
+  Update,
 } from "../facts/world-state";
 import type { GitInfo, GitRead, PullRequest } from "../segments/git";
 import type { Instant } from "../utils/instant";
@@ -62,7 +62,7 @@ export function assembleFacts(
   prior: WorldState | undefined,
   session: SessionId,
   readings: Readings,
-  update: Fact<UpdateNotice>,
+  update: Fact<Update>,
   at: Instant,
 ): WorldState {
   const { lanes } = readings;

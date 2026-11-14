@@ -48,6 +48,7 @@ import {
   type SourceRuns,
 } from "./source-runs.js";
 import type { JsonValue } from "../var-system/types.js";
+import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Timekeeper } from "../time";
 import type {
   ViewFacts,
@@ -124,6 +125,19 @@ function settingsPathOf(hints: ClientHints, home: string): string {
 // `at` is the request's arrival, the instant its speed sample is taken at.
 // `refreshed` is the request's record of them: each lane it starts, and how
 // long the lane took once it lands.
+// [LAW:one-source-of-truth] What a renderer reaches of the host's readings: the
+// refresh over these providers, and their caches' tallies.
+export const readingsHost = (
+  deps: RenderPayloadDeps,
+): Pick<AdapterToHost, "refresh" | "cacheTallies"> => ({
+  refresh: (facts, at, refreshed) =>
+    refreshPayload({ ...facts, deps }, at, refreshed),
+  cacheTallies: () => ({
+    git: deps.gitProvider.getStats(),
+    usage: deps.usageStore.getStats(),
+  }),
+});
+
 export async function refreshPayload(
   inputs: PayloadInputs,
   at: Instant,

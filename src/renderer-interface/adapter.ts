@@ -374,10 +374,6 @@ export type EveryEntryLoad =
   | { readonly kind: "answers-watch"; readonly heard: Invalidation }
   | { readonly kind: "events-resumed"; readonly since: number };
 
-export interface ExplicitLoad {
-  readonly kind: "write" | "doctor";
-}
-
 // What the host reaches in the renderer once it is loaded, before its start:
 // what a host part built before the start writes through. Each member keeps
 // its in-process shape.

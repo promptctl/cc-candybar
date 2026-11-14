@@ -1,12 +1,8 @@
+import type { Host } from "./host-facts";
 import { explicitConfigPath } from "./utils/user-path";
 
-// [LAW:one-way-deps] What a hint reads of the machine: the Host's environment
-// and home (src/host.ts), spelled here so the renderer's side parses a hint
-// without importing the process's own reader. A Host is one by its shape.
-interface HostPaths {
-  readonly env: Readonly<NodeJS.ProcessEnv>;
-  readonly home: string;
-}
+// What a hint reads of the machine.
+type HostPaths = Pick<Host, "env" | "home">;
 
 // The client's explicit-config probe — the `CC_CANDYBAR_CONFIG` the shell
 // Claude Code spawned the statusline in carries, read from the client's own

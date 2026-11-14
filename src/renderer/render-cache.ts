@@ -17,7 +17,6 @@ import type {
 import type {
   AdapterToHost,
   EveryEntryLoad,
-  ExplicitLoad,
 } from "../renderer-interface/adapter.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
@@ -414,6 +413,10 @@ export interface Teardown {
   // Renders holding the state when it was retired: 0 is a teardown at
   // retirement, more is one deferred to the last release.
   readonly held: number;
+}
+
+export interface ExplicitLoad {
+  readonly kind: "write" | "doctor";
 }
 
 // [LAW:types-are-the-program] Why an entry loaded: its first load; a re-read

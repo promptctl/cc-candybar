@@ -3,6 +3,7 @@ import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
 import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
+import fs from "node:fs";
 import path from "node:path";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
@@ -328,6 +329,7 @@ const ZONE_ROWS = {
   "src/shell-word.ts": "shared",
   "src/client-hint.ts": "shared",
   "src/config-hint.ts": "shared",
+  "src/host-facts.ts": "shared",
   "src/terminal-hint.ts": "shared",
   "src/tmux-hint.ts": "shared",
   "src/click/wire.ts": "shared",
@@ -368,7 +370,7 @@ const ZONE_MESSAGE = {
 // `../time.js`, `./time` and `src/time.ts` are one module, and a directory's
 // import (`../verbs`) is its index's. Relative to this file, not ESLint's cwd,
 // so an editor or runner started in a subdirectory keys the same modules.
-const REPO_ROOT = import.meta.dirname;
+const REPO_ROOT = fs.realpathSync(import.meta.dirname);
 const withoutExtension = (p) => p.replace(/\.(m?ts|m?js)$/, "");
 const moduleKey = (abs) => withoutExtension(path.relative(REPO_ROOT, abs));
 const ZONE_KEYS = Object.entries(ZONE_ROWS)
@@ -385,18 +387,36 @@ const zoneOf = (key) =>
 const importDirection = {
   meta: { type: "problem", schema: [] },
   create(context) {
-    const from = moduleKey(context.filename);
+    // Through the real path of the file's directory, so a file reached by a
+    // symlinked path keys as the module it is.
+    const dir = fs.realpathSync(path.dirname(context.filename));
+    const from = moduleKey(path.join(dir, path.basename(context.filename)));
+    // [LAW:no-silent-failure] A key outside the repo is in no zone, so the rule
+    // refuses it rather than calling it rest and passing every edge.
+    const outside = (key) => key.startsWith("..") || path.isAbsolute(key);
+    if (outside(from)) {
+      return {
+        Program: (node) =>
+          context.report({
+            node,
+            message: `${context.filename} is outside ${REPO_ROOT}, so it is in no zone. [LAW:one-way-deps]`,
+          }),
+      };
+    }
     const fromZone = zoneOf(from);
-    // Every spelling of an edge carries its source as a string literal:
-    // `import`, `export … from`, `import()` and the type `import("…").T`.
     const check = (node, source) => {
-      if (typeof source !== "string" || !source.startsWith(".")) {
+      if (source === null) {
+        context.report({
+          node,
+          message: `An import whose source is computed is in no zone. [LAW:one-way-deps]`,
+        });
         return;
       }
-      const to = moduleKey(
-        path.resolve(path.dirname(context.filename), source),
-      );
-      const toZone = zoneOf(to);
+      if (!source.startsWith(".")) {
+        return;
+      }
+      const to = moduleKey(path.resolve(dir, source));
+      const toZone = outside(to) ? "outside the repo" : zoneOf(to);
       if (!ZONE_IMPORTS[fromZone].includes(toZone)) {
         context.report({
           node,
@@ -404,13 +424,29 @@ const importDirection = {
         });
       }
     };
-    const fromSource = (node) => node.source && check(node, node.source.value);
+    // A source is a string literal or a template with nothing interpolated;
+    // anything else is computed.
+    const sourceOf = (node) =>
+      node.type === "Literal" && typeof node.value === "string"
+        ? node.value
+        : node.type === "TemplateLiteral" && node.expressions.length === 0
+          ? node.quasis[0].value.cooked
+          : null;
+    // Every spelling of an edge: `import`, `export … from`, `import()`, the
+    // type `import("…").T`, `import x = require("…")` and `require("…")`.
+    const fromSource = (node) =>
+      node.source && check(node, sourceOf(node.source));
     return {
       ImportDeclaration: fromSource,
       ExportNamedDeclaration: fromSource,
       ExportAllDeclaration: fromSource,
       ImportExpression: fromSource,
-      TSImportType: (node) => check(node, node.source.value),
+      TSImportType: (node) => check(node, sourceOf(node.source)),
+      TSExternalModuleReference: (node) =>
+        check(node, sourceOf(node.expression)),
+      "CallExpression[callee.type='Identifier'][callee.name='require']": (
+        node,
+      ) => check(node, node.arguments[0] ? sourceOf(node.arguments[0]) : null),
     };
   },
 };
