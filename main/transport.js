@@ -61197,6 +61197,22 @@ var ClickAbandoned = class extends Error {
     this.name = "ClickAbandoned";
   }
 };
+var KINDS = [
+  [BadVerbArgs, "bad-request"],
+  [DaemonClosing, "closing"],
+  [ClickAbandoned, "abandoned"]
+];
+function failureOf(thrown2) {
+  return {
+    kind: KINDS.find(([as]) => thrown2 instanceof as)?.[1] ?? "threw",
+    message: thrown2 instanceof Error ? thrown2.message : inspect(thrown2),
+    detail: inspect(thrown2)
+  };
+}
+function badRequest(...problems) {
+  const message = problems.join("; ");
+  return { kind: "bad-request", message, detail: message };
+}
 function decodeWire(decode) {
   try {
     return decode();
@@ -70472,11 +70488,10 @@ function closeIdleMenus(sid, idle, ctx) {
       gone: () => false
     },
     (turn) => journaled(sid, ctx, turn, async (c) => {
-      if (!idle.stillIdle()) {
+      if (!idle.confirm()) {
         c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
         return;
       }
-      idle.closed();
       const roots = openRoots(
         nestOf(c, sid),
         (key) => c.navigating.get(sid, key)
@@ -76566,11 +76581,11 @@ function detailOf(outcome) {
     case "ok":
       return [];
     case "bad-request":
-      return [["problems", outcome.problems.join("; ")]];
+      return [["problems", outcome.message]];
     case "threw":
-      return [["error", inspect(outcome.error)]];
+      return [["error", outcome.detail]];
     case "closing":
-      return [["closing", outcome.error.message]];
+      return [["closing", outcome.message]];
     case "abandoned":
       return [["abandoned", "1"]];
   }
@@ -76591,11 +76606,15 @@ function requestEvent(kind, facts, outcome, tookMs) {
 // src/daemon/draw-bar.ts
 var NOTHING_DELIVERED = () => {
 };
-var renderFailed = (err) => ({
+var failedWith = (message) => ({
   ok: false,
-  error: err instanceof Error ? err.message : inspect(err),
+  error: message,
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION
+});
+var renderFailure = (failure) => ({
+  ...failure,
+  kind: "threw"
 });
 var RENDER_ANSWERS = {
   ansi: (frame2) => ({ ok: true, output: composeBar(frame2) }),
@@ -76637,14 +76656,14 @@ function renderFrame(parts, sessionId2, fps, at) {
       __callDispose(_stack, _error, _hasError);
     }
   } catch (error) {
-    const outcome = { kind: "threw", error };
+    const outcome = renderFailure(failureOf(error));
     const { level, line } = requestEvent(
       "render",
       facts,
       outcome,
       elapsedMs(clock, started2)
     );
-    const failed3 = renderFailed(error);
+    const failed3 = failedWith(outcome.message);
     return {
       bar: renderFailedFrame(failed3.error),
       resp: failed3,
@@ -77112,10 +77131,11 @@ function laneClicked(parts, sessionId2, before, after) {
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
 }
-async function answerRequest(parts, req, at, waitEndsAt, facts) {
+async function answerRequest(parts, req, at, waitMs, facts) {
   var _stack = [];
   try {
     const { clock, frameFeeds, log } = parts;
+    const turnFrom = clock.monotonic();
     const setup = __using(_stack, setUpRender(parts, req, at, facts));
     arrived2(
       parts,
@@ -77123,7 +77143,7 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
       laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
     );
     const waitFrom = clock.monotonic();
-    const budget = waitEndsAt - waitFrom;
+    const budget = waitMs - (waitFrom - turnFrom);
     noteFacts(facts, {
       deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
     });
@@ -77211,14 +77231,10 @@ init_globals();
 var import_node_path31 = __toESM(require_path_browserify(), 1);
 var NOTHING_TO_SETTLE = (_delivered) => {
 };
-function failed2(host, error, doing = "") {
-  const refusal = renderFailed(error);
+function failed2(host, failure, doing = "") {
   return {
-    outcome: { kind: "threw", error },
-    resp: {
-      ...refusal,
-      error: `renderer ${host.name}: ${doing}${refusal.error}`
-    },
+    outcome: renderFailure(failure),
+    resp: failedWith(`renderer ${host.name}: ${doing}${failure.message}`),
     seen: "failed",
     settled: NOTHING_TO_SETTLE
   };
@@ -77234,9 +77250,7 @@ function located(req) {
   };
 }
 function recorded(facts, delivered) {
-  facts.push(
-    ...delivered.kind === "answered" ? delivered.output.record : delivered.record
-  );
+  facts.push(...delivered.record);
 }
 async function answerStatusline(host, collector, clock, arrived3, id2, at, waitEndsAt, facts) {
   const req = located(arrived3);
@@ -77266,19 +77280,26 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
   recorded(facts, configured);
   if (configured.kind === "threw") {
     noteFacts(facts, { renderer: host.name });
-    return failed2(host, configured.error, "its config turn: ");
+    return failed2(host, configured.failure, "its config turn: ");
   }
   const delivered = await host.answer({
     kind: "event",
     at,
-    event: { kind: "request", id: id2, context: req, waitEndsAt }
+    // [LAW:no-ambient-temporal-coupling] The wait crosses as what is left of
+    // it at delivery, so the renderer counts it on its own clock.
+    event: {
+      kind: "request",
+      id: id2,
+      context: req,
+      waitMs: waitEndsAt - clock.monotonic()
+    }
   });
   recorded(facts, delivered);
   if (delivered.kind === "threw") {
     noteFacts(facts, { renderer: host.name });
-    return failed2(host, delivered.error);
+    return failed2(host, delivered.failure);
   }
-  const { effects } = delivered.output;
+  const { effects } = delivered;
   noteFacts(facts, {
     renderer: host.name,
     effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
@@ -77301,7 +77322,7 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
   if (answer2 === null)
     return failed2(
       host,
-      new Error(`presented no statusline frame for request ${id2}`)
+      failureOf(new Error(`presented no statusline frame for request ${id2}`))
     );
   const presented = answer2;
   const encodeFrom = clock.monotonic();
@@ -77309,8 +77330,9 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
   try {
     resp = RENDER_ANSWERS[req.encoding](presented.frame);
   } catch (e) {
-    done2(presented, `encoding its frame threw: ${renderFailed(e).error}`);
-    return failed2(host, e, "its frame could not be encoded: ");
+    const failure = failureOf(e);
+    done2(presented, `encoding its frame threw: ${failure.message}`);
+    return failed2(host, failure, "its frame could not be encoded: ");
   }
   noteFacts(facts, { encoded: `${elapsedMs(clock, encodeFrom)}ms` });
   return {
@@ -77900,12 +77922,15 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     ).catch(
       // [LAW:no-silent-failure] The driver hands every turn's failure back
       // as a value; a throw here is its own bug, answered as any throw is.
-      (error) => ({
-        outcome: { kind: "threw", error },
-        resp: renderFailed(error),
-        seen: "failed",
-        settled: NOTHING_TO_SETTLE
-      })
+      (error) => {
+        const failure = renderFailure(failureOf(error));
+        return {
+          outcome: failure,
+          resp: failedWith(failure.message),
+          seen: "failed",
+          settled: NOTHING_TO_SETTLE
+        };
+      }
     );
     try {
       sighted(checked.req, answered.seen);
@@ -77922,7 +77947,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         accepted,
         timedOut,
         clientLeft,
-        (facts, gone) => clickOutcome(parts, req, facts, gone)
+        (facts, click3) => clickOutcome(parts, req, facts, click3)
       )
     );
   }
@@ -78028,8 +78053,11 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
     ["req", String(accepted.id)],
     ["queued", `${spanMs(accepted.at, t0)}ms`]
   ];
-  const gone = () => timedOut() || clientLeft();
-  const outcome = await run3(facts, gone);
+  const click3 = {
+    id: accepted.id,
+    gone: () => timedOut() || clientLeft()
+  };
+  const outcome = await run3(facts, click3);
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
@@ -78043,19 +78071,16 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
   parts.log(level, line);
   return clickReply(outcome);
 }
-async function clickOutcome(parts, req, facts, gone) {
+async function clickOutcome(parts, req, facts, click3) {
   const arrival = { via: "link", delivery: { kind: "cli" } };
   noteFacts(facts, { via: "cli" });
   const { verb, value } = req;
   if (typeof verb !== "string" || typeof value !== "string") {
-    return {
-      kind: "bad-request",
-      problems: [
-        `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`
-      ]
-    };
+    return badRequest(
+      `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`
+    );
   }
-  return clickRan(() => handleClick(parts, verb, value, arrival, facts, gone));
+  return clickRan(() => handleClick(parts, verb, value, arrival, facts, click3));
 }
 async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
   return clickEvent(
@@ -78063,31 +78088,25 @@ async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
     accepted,
     timedOut,
     clientLeft,
-    async (facts, gone) => {
+    async (facts, click3) => {
       const { urlV, url } = frame2;
       noteFacts(facts, { via: "forwarder", urlV: String(urlV) });
       if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV)) {
-        return {
-          kind: "bad-request",
-          problems: [
-            `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
-          ]
-        };
+        return badRequest(
+          `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
+        );
       }
       if (typeof url !== "string") {
-        return {
-          kind: "bad-request",
-          problems: [`the URL handler's frame carries no url string`]
-        };
+        return badRequest(`the URL handler's frame carries no url string`);
       }
       const link = parseHandlerUrl(url);
-      if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
+      if (!link.ok) return badRequest(link.problem);
       const arrival = {
         via: "link",
         delivery: { kind: "forwarder", urlV }
       };
       return clickRan(
-        () => handleClick(parts, link.verb, link.value, arrival, facts, gone)
+        () => handleClick(parts, link.verb, link.value, arrival, facts, click3)
       );
     }
   );
@@ -78096,41 +78115,45 @@ async function clickRan(click3) {
   try {
     return await click3();
   } catch (error) {
-    if (error instanceof BadVerbArgs)
-      return { kind: "bad-request", problems: [error.message] };
-    if (error instanceof DaemonClosing) return { kind: "closing", error };
-    if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
-    return { kind: "threw", error };
+    return failureOf(error);
   }
 }
 var VERB_FACT = {
   link: "verb",
   "tmux-status": "linkVerb"
 };
-async function handleClick(parts, verb, value, arrival, facts, clientGone) {
-  if (verb === VERB_TMUX_STATUS_CLICK) {
-    noteFacts(facts, { verb });
-    return statusLineClick(parts, value, facts, clientGone);
-  }
-  noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
-  const session = clickSessionOf(verb, value);
-  if (session === null) noteFacts(facts, { sid: "-" });
-  else if (session.ok) {
-    noteFacts(facts, { sid: session.id });
-    parts.collector.clicked(session.id);
-  }
-  const delivered = await parts.renderer.answer({
-    kind: "event",
-    at: instantAt(parts.clock),
-    event: { kind: "click", verb, value, session, arrival, gone: clientGone }
-  });
-  switch (delivered.kind) {
-    case "answered":
-      facts.push(...delivered.output.record);
-      return { kind: "ok" };
-    case "threw":
-      facts.push(...delivered.record);
-      throw delivered.error;
+async function handleClick(parts, verb, value, arrival, facts, click3) {
+  var _stack = [];
+  try {
+    if (verb === VERB_TMUX_STATUS_CLICK) {
+      noteFacts(facts, { verb });
+      return statusLineClick(parts, value, facts, click3);
+    }
+    noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
+    const session = clickSessionOf(verb, value);
+    if (session === null) noteFacts(facts, { sid: "-" });
+    else if (session.ok) {
+      noteFacts(facts, { sid: session.id });
+      parts.collector.clicked(session.id);
+    }
+    const _held = __using(_stack, parts.clicks.hold(click3));
+    const delivered = await parts.renderer.answer({
+      kind: "event",
+      at: instantAt(parts.clock),
+      event: { kind: "click", verb, value, session, arrival, id: click3.id }
+    });
+    switch (delivered.kind) {
+      case "answered":
+        facts.push(...delivered.record);
+        return { kind: "ok" };
+      case "threw":
+        facts.push(...delivered.record);
+        return delivered.failure;
+    }
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
   }
 }
 function clickReply(outcome) {
@@ -78140,47 +78163,43 @@ function clickReply(outcome) {
     case "bad-request":
       return {
         ok: false,
-        error: outcome.problems.join("; "),
+        error: outcome.message,
         code: "BAD_REQUEST",
         daemonV: PROTOCOL_VERSION
       };
     case "threw":
     case "closing":
     case "abandoned":
-      return renderFailed(outcome.error);
+      return failedWith(outcome.message);
   }
 }
-async function statusLineClick(parts, value, facts, clientGone) {
+async function statusLineClick(parts, value, facts, click3) {
   const { tmuxStatusLines } = parts;
-  const refused = (problem) => ({
-    kind: "bad-request",
-    problems: [problem]
-  });
-  const click3 = tmuxStatusLines.linkAt(value);
-  if (click3.kind === "refused") return refused(click3.reason);
-  noteFacts(facts, { link: click3.url });
-  if (click3.url.startsWith("cc-candybar://")) {
-    const parsed2 = parseHandlerUrl(click3.url);
-    if (!parsed2.ok) return refused(parsed2.problem);
+  const link = tmuxStatusLines.linkAt(value);
+  if (link.kind === "refused") return badRequest(link.reason);
+  noteFacts(facts, { link: link.url });
+  if (link.url.startsWith("cc-candybar://")) {
+    const parsed2 = parseHandlerUrl(link.url);
+    if (!parsed2.ok) return badRequest(parsed2.problem);
     if (parsed2.verb === VERB_TMUX_STATUS_CLICK)
-      return refused("a status-line link names another status-line click");
+      return badRequest("a status-line link names another status-line click");
     return handleClick(
       parts,
       parsed2.verb,
       parsed2.value,
       { via: "tmux-status" },
       facts,
-      clientGone
+      click3
     );
   }
   await clickHandoff(
     parts.launcher,
     {
       bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-      args: [click3.url],
+      args: [link.url],
       category: "click.open"
     },
-    `opening ${click3.url}`,
+    `opening ${link.url}`,
     parts.log,
     CLICK_PROGRAM_TIMEOUT_MS,
     parts.tmp
@@ -78188,7 +78207,7 @@ async function statusLineClick(parts, value, facts, clientGone) {
   return { kind: "ok" };
 }
 var refusedRender = (problems) => ({
-  outcome: { kind: "bad-request", problems },
+  outcome: badRequest(...problems),
   resp: {
     ok: false,
     error: `malformed hookData: ${problems.join("; ")}`,
@@ -82192,7 +82211,7 @@ var RenderCache = class {
   // next output's.
   subscriptions() {
     return {
-      sources: new Map(
+      sources: Object.fromEntries(
         [...this.views].map(([session, view]) => [
           session,
           subscriptionsOf(view)
@@ -82888,7 +82907,10 @@ var Collector = class {
   // a session whose set moved is declared again, and one absent from them has
   // no plugin sources. A retiring session takes its set too, and holds none
   // of it.
-  subscribed({ sources }) {
+  subscribed(subscriptions) {
+    const sources = new Map(
+      Object.entries(subscriptions.sources)
+    );
     for (const session of sources.keys()) {
       if (!this.records.has(session))
         this.deps.log(
@@ -84899,44 +84921,29 @@ var JournalTurns = class {
 
 // src/daemon/renderer-host.ts
 init_globals();
-
-// src/renderer/interface.ts
-init_globals();
-var TurnThrew = class extends Error {
-  constructor(record2, thrown2, subscriptions) {
-    super(thrown2 instanceof Error ? thrown2.message : String(thrown2));
-    this.record = record2;
-    this.thrown = thrown2;
-    this.subscriptions = subscriptions;
-    this.name = "TurnThrew";
-  }
-  record;
-  thrown;
-  subscriptions;
-};
-
-// src/daemon/renderer-host.ts
 function rendererHost(name, clock, renderer, log, collector) {
-  const turn = async (input) => {
+  const held = async (input) => {
     const session = sessionOf(input.event);
     const release4 = session === null ? () => {
     } : collector.holding(session);
     try {
-      const output = await renderer.answer(input);
-      collector.subscribed(output.subscriptions);
-      if (input.event.kind !== "request")
+      const { subscriptions, ...output } = await renderer.answer(input);
+      collector.subscribed(subscriptions);
+      if (output.kind === "answered" && input.event.kind !== "request")
         for (const effect of output.effects)
           refuse4(effect, `a ${input.event.kind} turn answers no request`);
-      return { kind: "answered", output };
-    } catch (e) {
-      if (!(e instanceof TurnThrew))
-        return { kind: "threw", error: e, record: [] };
-      collector.subscribed(e.subscriptions);
-      return { kind: "threw", error: e.thrown, record: e.record };
+      return output;
     } finally {
       release4();
     }
   };
+  const turn = (input) => held(input).catch(
+    (thrown2) => ({
+      kind: "threw",
+      failure: failureOf(thrown2),
+      record: []
+    })
+  );
   const refuse4 = (effect, reason) => void deliver(
     {
       kind: "event",
@@ -84960,16 +84967,16 @@ function rendererHost(name, clock, renderer, log, collector) {
     ];
     switch (delivered.kind) {
       case "answered":
-        if (delivered.output.record.length > 0)
-          log("info", eventLine("turn", [...head, ...delivered.output.record]));
+        if (delivered.record.length > 0)
+          log("info", eventLine("turn", [...head, ...delivered.record]));
         return;
       case "threw":
         log(
-          "error",
+          LEVEL[delivered.failure.kind],
           eventLine("turn", [
             ...head,
             ...delivered.record,
-            ["error", inspect(delivered.error)]
+            ["error", delivered.failure.detail]
           ])
         );
     }
@@ -85002,7 +85009,7 @@ init_globals();
 
 // src/renderer/click.ts
 init_globals();
-async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, gone }, record2) {
+async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, id: id2 }, record2) {
   const handler = verbs.handler(verb);
   if (handler === void 0)
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
@@ -85014,7 +85021,7 @@ async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, g
       placeWaited: (ms) => noteFacts(record2, { placeWait: `${ms}ms` }),
       gatherTook: (ms) => noteFacts(record2, { gather: `${ms}ms` }),
       turnWaited: (ms) => noteFacts(record2, { turnWait: `${ms}ms` }),
-      clientGone: gone
+      click: id2
     });
   } finally {
     if (pending2 !== null) menuIdle.clickSettled(pending2);
@@ -85025,46 +85032,38 @@ async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, g
 function mainRenderer(parts) {
   const deliveries = /* @__PURE__ */ new Map();
   let minted = 0;
-  const answered = (effects, record2) => ({
-    effects,
-    subscriptions: parts.renderCache.subscriptions(),
-    record: record2
-  });
   const turn = async (event, at, record2) => {
     switch (event.kind) {
       case "config":
         configureSession(parts, event.context, event.worldState, at, record2);
-        return answered([], record2);
+        return [];
       case "request": {
         const { frame: frame2, delivered } = await answerRequest(
           parts,
           event.context,
           at,
-          event.waitEndsAt,
+          event.waitMs,
           record2
         );
         const id2 = ++minted;
         deliveries.set(id2, delivered);
-        return answered(
-          [
-            {
-              kind: "present",
-              id: id2,
-              session: event.context.hookData.session_id,
-              surface: "statusline",
-              request: event.id,
-              frame: frame2
-            }
-          ],
-          record2
-        );
+        return [
+          {
+            kind: "present",
+            id: id2,
+            session: event.context.hookData.session_id,
+            surface: "statusline",
+            request: event.id,
+            frame: frame2
+          }
+        ];
       }
       case "world-state":
         parts.worldStates.take(event.worldState);
-        return answered([], record2);
+        return [];
       case "retire":
         retireSession(parts, event.session);
-        return answered([], record2);
+        return [];
       case "effect-done": {
         const delivered = deliveries.get(event.of);
         if (delivered === void 0)
@@ -85073,39 +85072,67 @@ function mainRenderer(parts) {
           );
         deliveries.delete(event.of);
         if (event.outcome.kind === "ok") delivered();
-        return answered([], record2);
+        return [];
       }
       case "click":
         await clickTurn(parts, event, record2);
-        return answered([], record2);
+        return [];
       case "menu-idle":
-        await parts.verbs.closeIdle(event.session, event.idle);
-        return answered([], record2);
+        await parts.verbs.closeIdle(event.session, {
+          ...event.idle,
+          confirm: () => parts.menuIdle.confirmClose(event.session, event.idle.firedAt)
+        });
+        return [];
     }
   };
   return {
     answer: async ({ event, at }) => {
       const record2 = [];
-      try {
-        return await turn(event, at, record2);
-      } catch (thrown2) {
-        throw new TurnThrew(record2, thrown2, parts.renderCache.subscriptions());
-      }
+      const ended = await turn(event, at, record2).then(
+        (effects) => ({ kind: "answered", effects }),
+        // [LAW:single-enforcer] Classified here, where it was thrown: a class
+        // crosses no process.
+        (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
+      );
+      return {
+        ...ended,
+        record: record2,
+        subscriptions: parts.renderCache.subscriptions()
+      };
     }
   };
 }
 
 // src/renderer/verbs.ts
 init_globals();
-function verbsOver(ctx) {
+function verbsOver(ctx, clicks) {
   return {
     handler: (verb) => {
       const handler = VERBS.get(verb);
-      return handler && ((value, click3) => handler(value, { ...ctx, ...click3 }));
+      return handler && ((value, { click: click3, ...facts }) => handler(value, {
+        ...ctx,
+        ...facts,
+        clientGone: () => clicks.gone(click3)
+      }));
     },
     closeIdle: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, ctx)
   };
 }
+
+// src/daemon/clicks-in-flight.ts
+init_globals();
+var ClicksInFlight = class {
+  held = /* @__PURE__ */ new Map();
+  hold({ id: id2, gone }) {
+    this.held.set(id2, gone);
+    return { [Symbol.dispose]: () => void this.held.delete(id2) };
+  }
+  gone(click3) {
+    const gone = this.held.get(click3);
+    if (gone === void 0) throw new Error(`click ${click3} is not in flight`);
+    return gone();
+  }
+};
 
 // src/daemon/menu-idle.ts
 init_globals();
@@ -85115,7 +85142,7 @@ async function closeByTurn(host, at, sessionId2, idle) {
     at: at(),
     event: { kind: "menu-idle", session: sessionId2, idle }
   });
-  if (delivered.kind === "threw") throw delivered.error;
+  return delivered.kind === "threw" ? delivered.failure : null;
 }
 var MAX_SESSIONS6 = 256;
 var MenuIdle = class {
@@ -85170,6 +85197,18 @@ var MenuIdle = class {
     idle.timeoutS = timeoutS;
     this.settle(sessionId2);
   }
+  // In the turn of the close the timer fired at `firedAt`: whether it goes
+  // ahead, the session still known idle since. A click arrived after the
+  // firing is queued behind the close, and a record evicted meanwhile stops
+  // counting, so neither is known idle: a record made since closes by its own
+  // firing, never by this one. Read without making a record, which would
+  // count as a session touched. When it goes ahead, the record follows it.
+  confirmClose(sessionId2, firedAt) {
+    const idle = this.sessions.get(sessionId2);
+    if (idle?.closing !== firedAt || this.pending.has(sessionId2)) return false;
+    this.shut(idle, firedAt);
+    return true;
+  }
   // The sessions whose clocks are kept, those whose close timer is armed, and
   // the clicks in flight.
   getStats() {
@@ -85191,7 +85230,7 @@ var MenuIdle = class {
       shown: false,
       drawnAt: at,
       timer: null,
-      closing: false
+      closing: null
     };
     this.sessions.delete(sessionId2);
     this.sessions.set(sessionId2, idle);
@@ -85205,7 +85244,7 @@ var MenuIdle = class {
   // [LAW:single-enforcer] The one place the timer follows the record.
   settle(sessionId2) {
     const idle = this.sessions.get(sessionId2);
-    const due = idle.shown && !idle.closing && !this.disposed && !this.pending.has(sessionId2) ? closesAt(idle.since, idle.timeoutS) : null;
+    const due = idle.shown && idle.closing === null && !this.disposed && !this.pending.has(sessionId2) ? closesAt(idle.since, idle.timeoutS) : null;
     if (idle.timer?.at === due) return;
     this.disarm(idle);
     if (due === null) return;
@@ -85215,6 +85254,12 @@ var MenuIdle = class {
       { unref: true }
     );
     idle.timer = { at: due, clear };
+  }
+  // A close went ahead or failed: what the last frame drew no longer stands,
+  // and a new idle period begins when it fired.
+  shut(idle, at) {
+    idle.since = at;
+    idle.shown = false;
   }
   disarm(idle) {
     idle.timer?.clear();
@@ -85228,30 +85273,24 @@ var MenuIdle = class {
   // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
   // among the journals, so whether the session is still idle is read in that
   // turn: a click since this firing keeps what it opened. The record follows
-  // that decision (`closed`), and until the close settles no frame arms
+  // that decision (`confirmClose`), and until the close settles no frame arms
   // another. A close that failed waits a timeout too, so it is retried at that
   // pace and not at every frame.
   fire(sessionId2) {
     const idle = this.sessions.get(sessionId2);
     idle.timer = null;
     const now2 = this.deps.now();
-    const closing = {
+    idle.closing = now2;
+    void this.deps.close(sessionId2, {
+      firedAt: now2,
       idleS: now2 - idle.since,
-      timeoutS: idle.timeoutS,
-      // A click arrived after this firing is queued behind the close, and an
-      // evicted record stops counting, so its session is no longer known idle.
-      stillIdle: () => this.sessions.get(sessionId2) === idle && !this.pending.has(sessionId2),
-      closed: () => {
-        idle.since = now2;
-        idle.shown = false;
-      }
-    };
-    idle.closing = true;
-    this.deps.close(sessionId2, closing).catch((e) => {
-      closing.closed();
-      this.deps.failed(sessionId2, e);
+      timeoutS: idle.timeoutS
+    }).then((failure) => {
+      if (failure === null) return;
+      this.shut(idle, now2);
+      this.deps.failed(sessionId2, failure);
     }).finally(() => {
-      idle.closing = false;
+      idle.closing = null;
       if (this.sessions.get(sessionId2) === idle) this.settle(sessionId2);
     });
   }
@@ -85357,9 +85396,9 @@ function createDaemon(inputs) {
     clock,
     now: instant,
     close: (sessionId2, idle) => closeByTurn(parts.renderer, instant, sessionId2, idle),
-    failed: (sessionId2, error) => log(
-      error instanceof DaemonClosing ? "info" : "error",
-      `menu-idle: close failed (session=${sessionId2}): ${inspect(error)}`
+    failed: (sessionId2, failure) => log(
+      LEVEL[failure.kind],
+      `menu-idle: close failed (session=${sessionId2}): ${failure.detail}`
     )
   });
   const linkSigner2 = inputs.linkSigner;
@@ -85636,7 +85675,9 @@ function createDaemon(inputs) {
     deliver: (event) => parts.renderer.deliver({ kind: "event", event, at: instant() }, []),
     log
   });
+  const clicks = new ClicksInFlight();
   const parts = {
+    clicks,
     home: host.home,
     tmp: host.tmp,
     launcher,
@@ -85690,7 +85731,7 @@ function createDaemon(inputs) {
         launcher,
         laneSetups,
         tmuxStatusLines,
-        verbs: verbsOver(verbCtx)
+        verbs: verbsOver(verbCtx, clicks)
       }),
       log,
       collector
