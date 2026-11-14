@@ -4,15 +4,22 @@
     {
       "version": "pr-746",
       "ref": "refs/pull/746/merge",
-      "sha": "ba314c15335149b4d7dc446f25172f77a784ad7d",
-      "timestamp": "2026-11-14T22:30:38.673Z",
+      "sha": "673e7dddd9092447ef7eeeeb9b6347d092fddcfb",
+      "timestamp": "2026-11-14T22:32:02.720Z",
       "commits": [
         {
-          "sha": "ba314c15335149b4d7dc446f25172f77a784ad7d",
+          "sha": "673e7dddd9092447ef7eeeeb9b6347d092fddcfb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T22:29:43Z",
-          "message": "Merge 090be03007f7a9f67067da9fef4e13c8d0a648b2 into f4dfec9b8d1658304a1dfb841c3c26df44855662\n"
+          "timestamp": "2026-11-14T22:31:10Z",
+          "message": "Merge 023a3ad0b3e3e0d22375ea041903819733072929 into f4dfec9b8d1658304a1dfb841c3c26df44855662\n"
+        },
+        {
+          "sha": "023a3ad0b3e3e0d22375ea041903819733072929",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T15:31:00-07:00",
+          "message": "fix(lint): the zones rule keys a file in a directory not yet made through its nearest real ancestor (candybar-host-renderer-x96a.fro)\n"
         },
         {
           "sha": "090be03007f7a9f67067da9fef4e13c8d0a648b2",
