@@ -25,6 +25,7 @@ import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
 import type { CheckedRenderRequest } from "../src/renderer/request-context";
 import { systemTimekeeper } from "../src/time";
+import { instantAt, type Instant } from "../src/utils/instant";
 import {
   AT,
   PROJECT,
@@ -149,7 +150,7 @@ const request = async (t: { r: Renderer; rig: SessionRig }) => {
       kind: "request",
       id: REQUEST,
       context,
-      waitEndsAt: systemTimekeeper.monotonic() + 5_000,
+      waitEndsAt: (instantAt(systemTimekeeper) + 5) as Instant,
     },
   });
 };
@@ -218,7 +219,7 @@ describe("a statusline request", () => {
         kind: "request",
         id: REQUEST,
         context,
-        waitEndsAt: systemTimekeeper.monotonic() + 5_000,
+        waitEndsAt: (instantAt(systemTimekeeper) + 5) as Instant,
       },
     });
     expect(presentOf(effects)).toMatchObject({ request: REQUEST });
@@ -275,7 +276,7 @@ describe("the world state the host hands in", () => {
       session: SESSION,
     });
     expect(viewOf(t.rig)).toBeNull();
-    expect(subscriptions.sources).toEqual(new Map());
+    expect(subscriptions.sources).toEqual({});
     expect(() => t.rig.served.worldStates.of(SESSION)).toThrow(
       /no world state for session/,
     );
@@ -312,18 +313,13 @@ describe("the world state the host hands in", () => {
     const t = renderer();
     const { subscriptions } = await request(t);
     const view = viewOf(t.rig)!;
-    expect(subscriptions.sources).toEqual(
-      new Map([
-        [
-          SESSION,
-          [...view.state.sources].map(([source, storage]) => ({
-            kind: "plugin",
-            source,
-            storage,
-          })),
-        ],
-      ]),
-    );
+    expect(subscriptions.sources).toEqual({
+      [SESSION]: [...view.state.sources].map(([source, storage]) => ({
+        kind: "plugin",
+        source,
+        storage,
+      })),
+    });
   });
 });
 
@@ -334,16 +330,13 @@ describe("the session's config, ahead of its request", () => {
     expect(effects).toEqual([]);
     const view = viewOf(t.rig)!;
     expect(subscriptions.sources).toEqual(
-      new Map([
-        [
-          SESSION,
-          [...view.state.sources].map(([source, storage]) => ({
-            kind: "plugin",
-            source,
-            storage,
-          })),
-        ],
-      ]),
+      {
+        [SESSION]: [...view.state.sources].map(([source, storage]) => ({
+          kind: "plugin",
+          source,
+          storage,
+        })),
+      },
     );
     expect(presentOf((await request(t)).effects)).toMatchObject({
       kind: "present",
@@ -377,7 +370,7 @@ describe("the session's config, ahead of its request", () => {
       checked(),
       REQUEST,
       AT,
-      systemTimekeeper.monotonic() + 5_000,
+      (instantAt(systemTimekeeper) + 5) as Instant,
       facts as never,
     );
     expect(kinds).toEqual(["config"]);
@@ -402,7 +395,7 @@ describe("the session's config, ahead of its request", () => {
         kind: "request",
         id: REQUEST,
         context: checked(),
-        waitEndsAt: systemTimekeeper.monotonic() + 5_000,
+        waitEndsAt: (instantAt(systemTimekeeper) + 5) as Instant,
       },
     });
     await expect(answering).rejects.toBeInstanceOf(TurnThrew);
@@ -457,7 +450,7 @@ describe("two requests of one session at different keys", () => {
         checked(pane),
         id as RequestId,
         AT,
-        systemTimekeeper.monotonic() + 10_000,
+        (instantAt(systemTimekeeper) + 10) as Instant,
         [],
       );
 
@@ -513,10 +506,10 @@ describe("a click", () => {
       t.rig.cache.retireSession(SESSION);
     };
     const before = await request(t);
-    expect([...before.subscriptions.sources.keys()]).toEqual([SESSION]);
+    expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
     const { effects, subscriptions, record } = await handIn(t.r, click("act"));
     expect(effects).toEqual([]);
-    expect(subscriptions.sources).toEqual(new Map());
+    expect(subscriptions.sources).toEqual({});
     // The host records what it knows of the click; this act waited on nothing.
     expect(record).toEqual([]);
   });
@@ -532,10 +525,10 @@ describe("a click", () => {
       throw new Error("a later step broke");
     };
     const before = await request(t);
-    expect([...before.subscriptions.sources.keys()]).toEqual([SESSION]);
+    expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
     const thrown = await handIn(t.r, click("act")).catch((e: TurnThrew) => e);
     expect(thrown).toBeInstanceOf(TurnThrew);
-    expect(thrown.subscriptions.sources).toEqual(new Map());
+    expect(thrown.subscriptions.sources).toEqual({});
   });
 
   test("of a verb the renderer does not have is its bad request", async () => {

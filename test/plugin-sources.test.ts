@@ -47,7 +47,7 @@ import { VariableStore } from "../src/var-system/store";
 import { resolvePath, SourceRegistry } from "../src/var-system/sources";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { checkConfig, type CheckOutcome } from "../src/check";
-import { instantOf } from "../src/utils/instant";
+import { instantAt, instantOf, type Instant } from "../src/utils/instant";
 import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
 import type { Run } from "../src/facts/source-identity";
 import { settledLane } from "../src/utils/reading";
@@ -858,7 +858,7 @@ function statusline(r: Rig, configFile: string) {
       checked.req,
       ++id as RequestId,
       instantOf(new Date()),
-      systemTimekeeper.monotonic() + 5_000,
+      (instantAt(systemTimekeeper) + 5) as Instant,
       facts,
     );
     answered.settled(true);

@@ -1776,7 +1776,7 @@ export class RenderCache<
   // next output's.
   subscriptions(): Subscriptions {
     return {
-      sources: new Map(
+      sources: Object.fromEntries(
         [...this.views].map(([session, view]) => [
           session,
           subscriptionsOf(view),

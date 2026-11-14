@@ -193,7 +193,7 @@ async function renderFrames(): Promise<void> {
   // What the view needs read, handed back after every world state as the
   // host hands back every turn's output: a run named once a fact landed is
   // subscribed by the turn that landed it. Nothing until the view opens.
-  let subscriptions = (): Subscriptions => ({ sources: new Map() });
+  let subscriptions = (): Subscriptions => ({ sources: {} });
   const collector = new Collector({
     owners: providers,
     update: () => updateFact.get(),
@@ -228,7 +228,7 @@ async function renderFrames(): Promise<void> {
     // [LAW:one-source-of-truth] The view's subscriptions reach the collector as
     // a turn's output takes them to the daemon's.
     subscriptions = () => ({
-      sources: new Map([[sessionId, subscriptionsOf(view)]]),
+      sources: { [sessionId]: subscriptionsOf(view) },
     });
     collector.subscribed(subscriptions());
     try {

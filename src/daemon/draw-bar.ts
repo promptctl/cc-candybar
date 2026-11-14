@@ -95,7 +95,7 @@ import {
   type DiagnosticGeometry,
 } from "../render/diagnostics.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
-import { type Instant } from "../utils/instant.js";
+import { instantAt, type Instant } from "../utils/instant.js";
 import { waitWithin } from "../utils/reading.js";
 import { noteFacts, requestEvent, type RequestFacts } from "./request-event.js";
 
@@ -122,7 +122,7 @@ import type { DaemonLogger } from "../utils/logger";
 // loads (plan step 3). `worldStates` is the renderer's own: the world states
 // the host handed in, which its views read.
 export interface RendererParts {
-  readonly clock: Pick<Timekeeper, "monotonic" | "after">;
+  readonly clock: Pick<Timekeeper, "monotonic" | "after" | "now">;
   readonly log: DaemonLogger;
   readonly sessionState: SessionState;
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
@@ -1066,7 +1066,7 @@ export async function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
   at: Instant,
-  waitEndsAt: number,
+  waitEndsAt: Instant,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   const { clock, frameFeeds, log } = parts;
@@ -1085,7 +1085,7 @@ export async function answerRequest(
   // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
   // reading. Setup has spent part of what the request arrived with, and below
   // zero says by how much it overran: the timer fires at once.
-  const budget = waitEndsAt - waitFrom;
+  const budget = (waitEndsAt - instantAt(clock)) * 1000;
   noteFacts(facts, {
     deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
   });

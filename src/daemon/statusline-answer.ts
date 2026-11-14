@@ -86,7 +86,7 @@ export async function answerStatusline(
   arrived: CheckedRenderRequest,
   id: RequestId,
   at: Instant,
-  waitEndsAt: number,
+  waitEndsAt: Instant,
   facts: RequestFacts,
 ): Promise<StatuslineAnswer> {
   const req = located(arrived);

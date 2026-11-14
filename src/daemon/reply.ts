@@ -45,7 +45,7 @@ import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
-import { instantAt, instantOf } from "../utils/instant.js";
+import { instantAt, instantOf, type Instant } from "../utils/instant.js";
 import { waitBudgetMs } from "./request-deadline.js";
 import {
   noteFacts,
@@ -398,12 +398,15 @@ export async function replyTo(
       at,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to
-      // draw (src/daemon/request-deadline.ts).
-      t0 +
+      // draw (src/daemon/request-deadline.ts). An instant on the wall, which
+      // every process reads alike, never a monotonic reading, whose origin is
+      // its own process's.
+      (at +
         waitBudgetMs(checked.req.deadline, accepted.at, {
           epochMs: started.getTime(),
           monoMs: t0,
-        }),
+        }) /
+          1000) as Instant,
       facts,
     ).catch(
       // [LAW:no-silent-failure] The driver hands every turn's failure back

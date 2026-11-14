@@ -151,16 +151,13 @@ const subscribing = (
   session: SessionId,
   ...folders: string[]
 ): Subscriptions => ({
-  sources: new Map([
-    [
-      session,
-      folders.map((folder) => ({
-        kind: "plugin" as const,
-        source: folder,
-        storage: { folder, generation: 1 },
-      })),
-    ],
-  ]),
+  sources: {
+    [session]: folders.map((folder) => ({
+      kind: "plugin" as const,
+      source: folder,
+      storage: { folder, generation: 1 },
+    })),
+  },
 });
 
 // Retires the renderer answers only when the case says, in the order sent.
@@ -289,7 +286,7 @@ describe("the renderer's subscriptions", () => {
       kind: "world-state",
       worldState: { sources: { "/plugin": { kind: "ok" } } },
     });
-    collector.subscribed({ sources: new Map() });
+    collector.subscribed({ sources: {} });
     expect(held.has("source:/plugin")).toBe(false);
   });
 
@@ -308,7 +305,7 @@ describe("the renderer's subscriptions", () => {
       refresh: { kind: "never" },
     });
     const subscription: Subscriptions = {
-      sources: new Map([[SID, [{ kind: "run" as const, run }]]]),
+      sources: { [SID]: [{ kind: "run" as const, run }] },
     };
     collector.requested(requestAt("/a"));
     collector.subscribed(subscription);

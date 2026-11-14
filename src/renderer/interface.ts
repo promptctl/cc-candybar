@@ -64,12 +64,11 @@ export type Event =
       readonly kind: "request";
       readonly id: RequestId;
       readonly context: CheckedRenderRequest;
-      // The monotonic moment the request's wait ends, from its client's
-      // deadline: the renderer still waits inside this turn, over the world
-      // states the host hands in, until the mailbox moves the wait, so its
-      // turns overlap: other inputs, other requests' included, arrive while
-      // this one waits.
-      readonly waitEndsAt: number;
+      // The instant the request's wait ends, from its client's deadline: the
+      // renderer still waits inside this turn, over the world states the host
+      // hands in, until the mailbox moves the wait, so its turns overlap:
+      // other inputs, other requests' included, arrive while this one waits.
+      readonly waitEndsAt: Instant;
     }
   | {
       // A session's world state moved since the one the renderer holds: read
@@ -156,9 +155,10 @@ export type Subscription =
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
 // renderer holds needs read. The host diffs it; nothing is declared by
 // message. A session absent from it needs nothing read.
-// [LAW:types-are-the-program] Keyed by session, so no session is listed twice.
+// [LAW:types-are-the-program] Keyed by session, so no session is listed twice,
+// and a record, so it crosses a process as it is.
 export interface Subscriptions {
-  readonly sources: ReadonlyMap<SessionId, readonly Subscription[]>;
+  readonly sources: Readonly<Partial<Record<SessionId, readonly Subscription[]>>>;
 }
 
 export interface RendererOutput {

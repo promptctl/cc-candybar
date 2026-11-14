@@ -254,7 +254,7 @@ export class Collector {
     // [LAW:no-silent-failure] A renderer subscribes only for sessions the host
     // handed it, and the host keeps a session's record until its retire
     // settles: a session with no record is the host's bug.
-    for (const session of sources.keys()) {
+    for (const session of Object.keys(sources) as SessionId[]) {
       if (!this.records.has(session))
         this.deps.log(
           "error",
@@ -264,7 +264,7 @@ export class Collector {
     runInAction(() => {
       for (const record of this.records.values()) {
         const next = sourcesOf(
-          sources.get(record.session) ?? [],
+          sources[record.session] ?? [],
           record.subscriptions,
         );
         if (sameSources(next, record.subscriptions)) continue;

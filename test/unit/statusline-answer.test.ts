@@ -26,7 +26,7 @@ import {
 } from "../../src/renderer/interface";
 import type { WorldState } from "../../src/facts/world-state";
 import type { CheckedRenderRequest } from "../../src/renderer/request-context";
-import { instantOf } from "../../src/utils/instant";
+import { instantOf, type Instant } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
 
 const SESSION = sessionIdOf("a-session");
@@ -41,7 +41,7 @@ const REQ = {
 } as unknown as CheckedRenderRequest;
 // The world state the collector reads at the request's keys.
 const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
-const NO_SUBSCRIPTIONS: Subscriptions = { sources: new Map() };
+const NO_SUBSCRIPTIONS: Subscriptions = { sources: {} };
 const CLOCK = {
   monotonic: () => 0 as Monotonic,
   now: () => 1_700_000_000_000,
@@ -134,7 +134,7 @@ async function answer(
     REQ,
     REQUEST,
     AT,
-    0,
+    0 as Instant,
     facts,
   );
   return { answered, facts: new Map(facts) };
@@ -245,7 +245,7 @@ test("a turn that throws is a failure naming the renderer, with what it learned 
 
 test("a turn that throws still hands the host what its open views read", async () => {
   const left: Subscriptions = {
-    sources: new Map([[SESSION, []]]),
+    sources: { [SESSION]: [] },
   };
   const subscribed: Subscriptions[] = [];
   const { renderer } = scripted(
@@ -276,9 +276,9 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
 
 test("the session's config reaches the renderer first, with the world state read at the request's keys, and its subscriptions reach the host before the request does", async () => {
   const opened: Subscriptions = {
-    sources: new Map([[SESSION, []]]),
+    sources: { [SESSION]: [] },
   };
-  const drawn: Subscriptions = { sources: new Map() };
+  const drawn: Subscriptions = { sources: {} };
   const subscribed: Subscriptions[] = [];
   const { renderer, configs, requests } = scripted(
     { ...output([present(1)]), subscriptions: drawn },
