@@ -77128,10 +77128,11 @@ function laneClicked(parts, sessionId2, before, after) {
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(sessionId2, latest.hints.tmux, after.tmuxStatus);
 }
-async function answerRequest(parts, req, at, waitEndsAt, facts) {
+async function answerRequest(parts, req, at, waitMs, facts) {
   var _stack = [];
   try {
     const { clock, frameFeeds, log } = parts;
+    const turnFrom = clock.monotonic();
     const setup = __using(_stack, setUpRender(parts, req, at, facts));
     arrived2(
       parts,
@@ -77139,7 +77140,7 @@ async function answerRequest(parts, req, at, waitEndsAt, facts) {
       laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
     );
     const waitFrom = clock.monotonic();
-    const budget = (waitEndsAt - instantAt(clock)) * 1e3;
+    const budget = waitMs - (waitFrom - turnFrom);
     noteFacts(facts, {
       deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
     });
@@ -77229,7 +77230,7 @@ var NOTHING_TO_SETTLE = (_delivered) => {
 };
 function failed2(host, failure, doing = "") {
   return {
-    outcome: failure,
+    outcome: { ...failure, kind: "threw" },
     resp: failedWith(`renderer ${host.name}: ${doing}${failure.message}`),
     seen: "failed",
     settled: NOTHING_TO_SETTLE
@@ -77281,7 +77282,14 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
   const delivered = await host.answer({
     kind: "event",
     at,
-    event: { kind: "request", id: id2, context: req, waitEndsAt }
+    // [LAW:no-ambient-temporal-coupling] The wait crosses as what is left of
+    // it at delivery, so the renderer counts it on its own clock.
+    event: {
+      kind: "request",
+      id: id2,
+      context: req,
+      waitMs: waitEndsAt - clock.monotonic()
+    }
   });
   recorded(facts, delivered);
   if (delivered.kind === "threw") {
@@ -77319,8 +77327,9 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
   try {
     resp = RENDER_ANSWERS[req.encoding](presented.frame);
   } catch (e) {
-    done2(presented, `encoding its frame threw: ${renderFailed(e).error}`);
-    return failed2(host, failureOf(e), "its frame could not be encoded: ");
+    const failure = failureOf(e);
+    done2(presented, `encoding its frame threw: ${failure.message}`);
+    return failed2(host, failure, "its frame could not be encoded: ");
   }
   noteFacts(facts, { encoded: `${elapsedMs(clock, encodeFrom)}ms` });
   return {
@@ -77901,23 +77910,24 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       at,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to
-      // draw (src/daemon/request-deadline.ts). An instant on the wall, which
-      // every process reads alike, never a monotonic reading, whose origin is
-      // its own process's.
-      at + waitBudgetMs(checked.req.deadline, accepted.at, {
+      // draw (src/daemon/request-deadline.ts).
+      t0 + waitBudgetMs(checked.req.deadline, accepted.at, {
         epochMs: started2.getTime(),
         monoMs: t0
-      }) / 1e3,
+      }),
       facts
     ).catch(
       // [LAW:no-silent-failure] The driver hands every turn's failure back
       // as a value; a throw here is its own bug, answered as any throw is.
-      (error) => ({
-        outcome: failureOf(error),
-        resp: renderFailed(error),
-        seen: "failed",
-        settled: NOTHING_TO_SETTLE
-      })
+      (error) => {
+        const failure = failureOf(error);
+        return {
+          outcome: failure,
+          resp: failedWith(failure.message),
+          seen: "failed",
+          settled: NOTHING_TO_SETTLE
+        };
+      }
     );
     try {
       sighted(checked.req, answered.seen);
@@ -82894,8 +82904,11 @@ var Collector = class {
   // a session whose set moved is declared again, and one absent from them has
   // no plugin sources. A retiring session takes its set too, and holds none
   // of it.
-  subscribed({ sources }) {
-    for (const session of Object.keys(sources)) {
+  subscribed(subscriptions) {
+    const sources = new Map(
+      Object.entries(subscriptions.sources)
+    );
+    for (const session of sources.keys()) {
       if (!this.records.has(session))
         this.deps.log(
           "error",
@@ -82905,7 +82918,7 @@ var Collector = class {
     runInAction(() => {
       for (const record2 of this.records.values()) {
         const next = sourcesOf2(
-          sources[record2.session] ?? [],
+          sources.get(record2.session) ?? [],
           record2.subscriptions
         );
         if (sameSources(next, record2.subscriptions)) continue;
@@ -84911,12 +84924,14 @@ function rendererHost(name, clock, renderer, log, collector) {
     const release4 = session === null ? () => {
     } : collector.holding(session);
     try {
-      const output = await renderer.answer(input);
-      collector.subscribed(output.subscriptions);
+      const { subscriptions, ...output } = await renderer.answer(input);
+      collector.subscribed(subscriptions);
       if (output.kind === "answered" && input.event.kind !== "request")
         for (const effect of output.effects)
           refuse4(effect, `a ${input.event.kind} turn answers no request`);
       return output;
+    } catch (thrown2) {
+      return { kind: "threw", failure: failureOf(thrown2), record: [] };
     } finally {
       release4();
     }
@@ -85019,7 +85034,7 @@ function mainRenderer(parts) {
           parts,
           event.context,
           at,
-          event.waitEndsAt,
+          event.waitMs,
           record2
         );
         const id2 = ++minted;
@@ -85057,7 +85072,7 @@ function mainRenderer(parts) {
       case "menu-idle":
         await parts.verbs.closeIdle(event.session, {
           ...event.idle,
-          confirm: () => parts.menuIdle.confirmClose(event.session)
+          confirm: () => parts.menuIdle.confirmClose(event.session, event.idle.firedAt)
         });
         return [];
     }
@@ -85174,15 +85189,16 @@ var MenuIdle = class {
     idle.timeoutS = timeoutS;
     this.settle(sessionId2);
   }
-  // In the turn of a close the timer fired: whether it goes ahead, the session
-  // still known idle since. A click arrived after the firing is queued behind
-  // the close, and a record evicted meanwhile stops counting, so neither is
-  // known idle. Read without making a record, which would count as a session
-  // touched. When it goes ahead, the record follows it.
-  confirmClose(sessionId2) {
+  // In the turn of the close the timer fired at `firedAt`: whether it goes
+  // ahead, the session still known idle since. A click arrived after the
+  // firing is queued behind the close, and a record evicted meanwhile stops
+  // counting, so neither is known idle: a record made since closes by its own
+  // firing, never by this one. Read without making a record, which would
+  // count as a session touched. When it goes ahead, the record follows it.
+  confirmClose(sessionId2, firedAt) {
     const idle = this.sessions.get(sessionId2);
-    if (idle?.closing == null || this.pending.has(sessionId2)) return false;
-    this.shut(idle, idle.closing);
+    if (idle?.closing !== firedAt || this.pending.has(sessionId2)) return false;
+    this.shut(idle, firedAt);
     return true;
   }
   // The sessions whose clocks are kept, those whose close timer is armed, and
@@ -85257,7 +85273,11 @@ var MenuIdle = class {
     idle.timer = null;
     const now2 = this.deps.now();
     idle.closing = now2;
-    void this.deps.close(sessionId2, { idleS: now2 - idle.since, timeoutS: idle.timeoutS }).then((failure) => {
+    void this.deps.close(sessionId2, {
+      firedAt: now2,
+      idleS: now2 - idle.since,
+      timeoutS: idle.timeoutS
+    }).then((failure) => {
       if (failure === null) return;
       this.shut(idle, now2);
       this.deps.failed(sessionId2, failure);

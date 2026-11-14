@@ -4,15 +4,22 @@
     {
       "version": "pr-744",
       "ref": "refs/pull/744/merge",
-      "sha": "55240d195527137ad9049f96d5b30be12c0a8c0b",
-      "timestamp": "2026-11-14T10:54:44.292Z",
+      "sha": "928a4085b738531a0cdbeb583277ec31ea81ff18",
+      "timestamp": "2026-11-14T11:10:57.638Z",
       "commits": [
         {
-          "sha": "55240d195527137ad9049f96d5b30be12c0a8c0b",
+          "sha": "928a4085b738531a0cdbeb583277ec31ea81ff18",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T03:53:46-07:00",
-          "message": "Merge d79128fc184e5695576394c4d8d48bde5d6300f3 into e0e964426de0dc976ed7a9554314baa162697a6d\n"
+          "timestamp": "2026-11-14T11:09:58Z",
+          "message": "Merge ae7e857be3ebd32935f4fec826518598fd948717 into e0e964426de0dc976ed7a9554314baa162697a6d\n"
+        },
+        {
+          "sha": "ae7e857be3ebd32935f4fec826518598fd948717",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T04:09:46-07:00",
+          "message": "fix(renderer): a turn never rejects to its caller, a request's wait crosses as a span, and an idle close confirms its own firing (candybar-host-renderer-x96a.265)\n\n- The host's turn is the one place a renderer's rejection, or an output the\n  host cannot take, becomes the turn's failure, so a fire-and-forget delivery\n  never leaves an unhandled rejection. Its callers take a TurnOutcome; the\n  renderer's output adds the subscriptions the host consumes.\n- A request's wait crosses as the milliseconds left at delivery, which each\n  process counts on its own monotonic clock, so a wall clock stepped mid-wait\n  moves nothing.\n- An idle close names the firing it was born of, so a record made since can\n  only close by its own firing.\n- A render's failure is the daemon's whatever was thrown, as its reply says.\n- The collector reads only a subscriptions record's own keys, so a session\n  named like an inherited member subscribes to nothing.\n"
         },
         {
           "sha": "d79128fc184e5695576394c4d8d48bde5d6300f3",
