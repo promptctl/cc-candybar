@@ -436,8 +436,8 @@ describe("the idle clock", () => {
     const closes: string[] = [];
     const idle = new MenuIdle({ clock: systemTimekeeper,
       now: () => instantOf(new Date(now * 1000)),
-      close: async (sid, closing) => {
-        closing.closed();
+      close: async (sid) => {
+        idle.confirmClose(sid);
         closes.push(sid);
         return null;
       },

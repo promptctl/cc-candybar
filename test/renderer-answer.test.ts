@@ -562,12 +562,7 @@ describe("the idle close", () => {
         closed.push(sessionId);
       },
     });
-    const idle = {
-      idleS: 30,
-      timeoutS: 30,
-      stillIdle: () => true,
-      closed: () => {},
-    };
+    const idle = { idleS: 30, timeoutS: 30 };
     const { effects } = answered(await handIn(t.r, {
       kind: "menu-idle",
       session: SESSION,

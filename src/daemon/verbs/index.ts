@@ -2361,14 +2361,17 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
 ]) as readonly string[];
 
 // How long a session's menus sat with no click before its timer closed them.
-export interface IdleClose {
+// How long the session was idle when its timer fired, and the timeout it ran.
+export interface IdleSpan {
   readonly idleS: number;
   readonly timeoutS: number;
-  // Whether the session is still known idle since the timer fired, read in the
-  // close's turn: a click, or its record's eviction, ends that.
-  readonly stillIdle: () => boolean;
-  // The close decided to write: the clock's record follows it.
-  readonly closed: () => void;
+}
+
+export interface IdleClose extends IdleSpan {
+  // Whether the close goes ahead, read in its turn: the session still known
+  // idle since the timer fired, which a click, or its record's eviction, ends.
+  // When it does, the clock's record follows it.
+  readonly confirm: () => boolean;
 }
 
 // [LAW:single-enforcer] The idle timer's close (brandon-menus-sjhy.my3) takes
@@ -2391,11 +2394,10 @@ export function closeIdleMenus(
     },
     (turn) =>
       journaled(sid, ctx, turn, async (c) => {
-        if (!idle.stillIdle()) {
+        if (!idle.confirm()) {
           c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
           return;
         }
-        idle.closed();
         const roots = openRoots(nestOf(c, sid), (key) =>
           c.navigating.get(sid, key),
         );

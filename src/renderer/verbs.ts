@@ -38,10 +38,13 @@ export interface RendererVerbs {
 
 // The main renderer's parts: the draw's, which the host's own frames share,
 // the verbs its click and menu-idle turns act through, and the idle clock's
-// count of the clicks in flight.
+// count of the clicks in flight and its say over whether a close goes ahead.
 export type MainRendererParts = RendererParts & {
   readonly verbs: RendererVerbs;
-  readonly menuIdle: Pick<MenuIdle, "clickArrived" | "clickSettled">;
+  readonly menuIdle: Pick<
+    MenuIdle,
+    "clickArrived" | "clickSettled" | "confirmClose"
+  >;
 };
 
 // [LAW:single-enforcer] The verb table over the one verb context the daemon

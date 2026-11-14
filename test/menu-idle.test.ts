@@ -84,8 +84,8 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     failures = [];
     idle = new MenuIdle({ clock: systemTimekeeper,
       now: () => at(now),
-      close: async (sid, { idleS, timeoutS, closed }) => {
-        closed();
+      close: async (sid, { idleS, timeoutS }) => {
+        idle.confirmClose(sid);
         closes.push({ sid, idleS, timeoutS });
         return null;
       },
@@ -256,12 +256,7 @@ describe("the close as a renderer turn", () => {
       subscriptions: { sources: {} },
       record: [],
     });
-    const idle = {
-      idleS: 30,
-      timeoutS: 30,
-      stillIdle: () => true,
-      closed: () => {},
-    };
+    const idle = { idleS: 30, timeoutS: 30 };
     await closeByTurn(host, () => at(now), S, idle);
     expect(inputs).toEqual([
       {
@@ -336,6 +331,48 @@ describe("a close that waits its turn", () => {
     }
     expect(closes).toBe(1);
     expect(idle.since(S, at(now))).toBe(since);
+    release();
+    await jest.advanceTimersByTimeAsync(0);
+    idle.dispose();
+  });
+
+  test("goes ahead in its turn only while no click of the session is in flight, and then nothing drawn before it stands", async () => {
+    let release = (): void => {};
+    const idle = new MenuIdle({ clock: systemTimekeeper,
+      now: () => at(now),
+      close: () => new Promise((resolve) => (release = () => resolve(null))),
+      failed: () => {},
+    });
+    idle.observe(S, at(now), true, 30);
+    tick(30);
+    idle.clickArrived(S);
+    expect(idle.confirmClose(S)).toBe(false);
+    idle.clickSettled(S);
+    expect(idle.confirmClose(S)).toBe(true);
+    expect(idle.since(S, at(now))).toBeUndefined();
+    release();
+    await jest.advanceTimersByTimeAsync(0);
+    // Settled, no close is in flight to confirm.
+    expect(idle.confirmClose(S)).toBe(false);
+    idle.dispose();
+  });
+
+  test("whose record was evicted meanwhile is not confirmed, and asking makes no record", async () => {
+    let release = (): void => {};
+    const idle = new MenuIdle({ clock: systemTimekeeper,
+      now: () => at(now),
+      close: () => new Promise((resolve) => (release = () => resolve(null))),
+      failed: () => {},
+    });
+    idle.observe(S, at(now), true, 30);
+    tick(30);
+    for (let i = 0; i < 256; i++)
+      idle.observe(sessionIdOf(`other-${i}`), at(now), false, 30);
+    expect(idle.confirmClose(S)).toBe(false);
+    expect(idle.getStats().sessions).toBe(256);
+    // A record made since is not the one whose close fired.
+    idle.observe(S, at(now), true, 30);
+    expect(idle.confirmClose(S)).toBe(false);
     release();
     await jest.advanceTimersByTimeAsync(0);
     idle.dispose();
@@ -422,7 +459,7 @@ const menuRows = (frame: Frame): number =>
   frame.rows.filter((row) => row.kind === "menu").length;
 
 const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
-const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true, closed: () => {} };
+const IDLE = { idleS: 30, timeoutS: 30, confirm: () => true };
 
 describe("the close is the write the door's ✕ makes, on a click's own path", () => {
 

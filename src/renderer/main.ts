@@ -82,7 +82,13 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
         await clickTurn(parts, event, record);
         return [];
       case "menu-idle":
-        await parts.verbs.closeIdle(event.session, event.idle);
+        // [LAW:no-ambient-temporal-coupling] Whether the session is still
+        // idle is the clock's to say, in the close's own journal turn: a
+        // click since the firing keeps what it opened.
+        await parts.verbs.closeIdle(event.session, {
+          ...event.idle,
+          confirm: () => parts.menuIdle.confirmClose(event.session),
+        });
         return [];
     }
   };

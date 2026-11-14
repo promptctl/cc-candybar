@@ -11,7 +11,7 @@
 import type { StorageKey } from "../daemon/cache/managed-storage";
 import type { ParsedSessionId, SessionId } from "../daemon/session-id";
 import type { Failure } from "../daemon/verb-error";
-import type { IdleClose } from "../daemon/verbs";
+import type { IdleSpan } from "../daemon/verbs";
 import type { ClickArrival } from "../doctor/sightings";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
@@ -114,11 +114,9 @@ export type Event =
       // ✕ does.
       readonly kind: "menu-idle";
       readonly session: SessionId;
-      // [LAW:no-ambient-temporal-coupling] exception: whether the session is
-      // still idle, read in the close's journal turn, and the clock's record
-      // of the close. They go once the renderer schedules its own close with
-      // a `schedule` effect and is woken by `due`.
-      readonly idle: IdleClose;
+      // How long the session was idle when its clock ran out, for the close's
+      // line. Whether it is still idle is read in the close's journal turn.
+      readonly idle: IdleSpan;
     };
 
 export type EffectOutcome =
