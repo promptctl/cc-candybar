@@ -84922,7 +84922,7 @@ var JournalTurns = class {
 // src/daemon/renderer-host.ts
 init_globals();
 function rendererHost(name, clock, renderer, log, collector) {
-  const turn = async (input) => {
+  const held = async (input) => {
     const session = sessionOf(input.event);
     const release4 = session === null ? () => {
     } : collector.holding(session);
@@ -84933,12 +84933,17 @@ function rendererHost(name, clock, renderer, log, collector) {
         for (const effect of output.effects)
           refuse4(effect, `a ${input.event.kind} turn answers no request`);
       return output;
-    } catch (thrown2) {
-      return { kind: "threw", failure: failureOf(thrown2), record: [] };
     } finally {
       release4();
     }
   };
+  const turn = (input) => held(input).catch(
+    (thrown2) => ({
+      kind: "threw",
+      failure: failureOf(thrown2),
+      record: []
+    })
+  );
   const refuse4 = (effect, reason) => void deliver(
     {
       kind: "event",
