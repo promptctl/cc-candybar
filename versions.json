@@ -2,74 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-746",
-      "ref": "refs/pull/746/merge",
-      "sha": "673e7dddd9092447ef7eeeeb9b6347d092fddcfb",
-      "timestamp": "2026-11-14T22:32:02.720Z",
-      "commits": [
-        {
-          "sha": "673e7dddd9092447ef7eeeeb9b6347d092fddcfb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T22:31:10Z",
-          "message": "Merge 023a3ad0b3e3e0d22375ea041903819733072929 into f4dfec9b8d1658304a1dfb841c3c26df44855662\n"
-        },
-        {
-          "sha": "023a3ad0b3e3e0d22375ea041903819733072929",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T15:31:00-07:00",
-          "message": "fix(lint): the zones rule keys a file in a directory not yet made through its nearest real ancestor (candybar-host-renderer-x96a.fro)\n"
-        },
-        {
-          "sha": "090be03007f7a9f67067da9fef4e13c8d0a648b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T15:29:32-07:00",
-          "message": "fix(renderer): the zones rule fails closed and reads every import spelling, and shared shapes have one home (candybar-host-renderer-x96a.fro)\n\n- A file keyed outside the repo, or a computed import source, is refused\n  rather than called rest; modules key through realpath, so a symlinked\n  checkout keys as the modules it holds. The rule reads import = require,\n  require() and static template sources too. The zone test runs every case\n  from the root, from src/ and through a symlink.\n- Host's type moves to a shared module (src/host-facts.ts) so config-hint\n  picks from it instead of copying it; the world state names Update, not a\n  second UpdateNotice; ExplicitLoad lives with the render cache that reads it.\n- readingsHost is the one wiring of the host's refresh and cache tallies,\n  for the daemon and the test rig alike.\n- A stale DoctorStores pointer.\n"
-        },
-        {
-          "sha": "2298005d8d7ec055877094ddbd5111cf13f9d34c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T15:14:55-07:00",
-          "message": "fix(renderer): only the entry reaches a root, the PR fields are shared, and a click error is held through the loaded renderer (candybar-host-renderer-x96a.fro)\n\n- The host reached src/renderer/ through a root (the doctor's data needs read\n  PR_FIELDS from the render payload). The PR field shape moves beside PrState\n  in segments/git, data-needs is shared, and rest may no longer import a root:\n  src/index.ts is the root that dispatches to them. The zone test refuses\n  every non-entry edge into a root.\n- Runs and LaneSetups held click errors through closures over parts declared\n  later in createDaemon. The hold needs only the session state the load reads,\n  so the loaded renderer offers it (AdapterToLoadedRenderer) and both owners\n  take it before the start.\n- Leftovers: two spellings of one import merged, a stale SEGMENTED_VERBS\n  pointer, and the bench suite back to main's formatting with its one moved\n  import.\n"
-        },
-        {
-          "sha": "abee1a377369c342bb10757e097768018738bb33",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T15:05:43-07:00",
-          "message": "fix(renderer): the zones rule keys modules from the repo root, the sync-launch ban covers the renderer, and moved law markers sit by their code (candybar-host-renderer-x96a.fro)\n\n- Zone keys resolve against the config's own directory, so ESLint started in\n  src/ (an editor) still holds the seam; the zone test lints from both cwds,\n  and covers the start zone's limits and a directory import through src.\n- The launchSync/runTmux ban reaches src/renderer/, where the daemon-served\n  verbs now live.\n- Headers the moves dropped are back beside their code: the verb table, the\n  click fold, typing over the tmux edge, the update notice, runtime stats,\n  the auto-compact window, and the session usage store.\n- Duplicate and mid-file imports the moves left are merged; stale pointers\n  to src/doctor/edge.ts, src/claude-input/edge.ts and reply.ts's dispatcher\n  name where the code is now.\n- The stats reply reads the renderer's stats once.\n"
-        },
-        {
-          "sha": "9c5795cbdfceb03c4486d8ad6b74da5a8f6f5472",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T14:49:09-07:00",
-          "message": "refactor(renderer): the renderer side is a directory, and a zones lint run both ways holds its seam (candybar-host-renderer-x96a.fro)\n\nA table of zones in eslint.config.mjs (renderer, its start, shared, rest,\nroots; the longest prefix wins) and an inline rule fail any import into\nsrc/renderer/ but its start and any import out of it but shared code. It\ncertifies import direction only.\n\nThe contract moves to src/renderer-interface/ (interface, request context,\nsession-state and history ports, adapter). The renderer's modules move under\nsrc/renderer/: the verb table, the render cache and its budget, payload\nassembly, session state, the histories, render warnings, debug. Pure modules\nboth sides name move into src/daemon/foundations/ or join the shared row.\n\nAdapterToHost lists what the renderer reaches in the host and is handed in\nat the start; AdapterToRenderer lists what the host reaches in the renderer\nand is returned beside `answer`. Each entry carries its\n[LAW:effects-at-boundaries] exception. The main renderer loads its storage\nwhere the daemon did and starts once the host's parts exist, so construction\norder stays. The foundations rule and its test fold into the zones rule and\nits test.\n"
-        },
-        {
-          "sha": "49d46bc4182ab385c75027ba7f37e4293d55f6b8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T13:50:10-07:00",
-          "message": "docs(spec): a file the renderer opens itself is not an adapter entry; the step that removes it adds its rule (candybar-host-renderer-x96a.fro)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f4dfec9b8d1658304a1dfb841c3c26df44855662",
-      "timestamp": "2026-11-14T20:43:28.370Z",
+      "sha": "71fcc390ab9296c2d28351a24c8bc5fab3a2d6b3",
+      "timestamp": "2026-11-14T22:38:03.854Z",
       "commits": [
         {
-          "sha": "f4dfec9b8d1658304a1dfb841c3c26df44855662",
+          "sha": "71fcc390ab9296c2d28351a24c8bc5fab3a2d6b3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T13:42:38-07:00",
-          "message": "chore(testing): remove the e2e-signoff hook (candybar-testing-ihvy.ums) (#745)\n\n* chore(testing): remove the e2e-signoff hook; the sign-off file and the cap and assertion checks stay (candybar-testing-ihvy.ums)\n\nThe hook refused any tool call whose text named a guarded path, read-only\nones included, so it blocked agents' ordinary work. The checks it guarded\nare what CI enforces, and they are unchanged.\n\n* chore(testing): drop the removed hook from the required-CI-steps comment (candybar-testing-ihvy.ums)"
+          "timestamp": "2026-11-14T15:37:09-07:00",
+          "message": "refactor(renderer): the renderer side is a directory, and a zones lint run both ways holds its seam (candybar-host-renderer-x96a.fro) (#746)\n\n* docs(spec): a file the renderer opens itself is not an adapter entry; the step that removes it adds its rule (candybar-host-renderer-x96a.fro)\n\n* refactor(renderer): the renderer side is a directory, and a zones lint run both ways holds its seam (candybar-host-renderer-x96a.fro)\n\nA table of zones in eslint.config.mjs (renderer, its start, shared, rest,\nroots; the longest prefix wins) and an inline rule fail any import into\nsrc/renderer/ but its start and any import out of it but shared code. It\ncertifies import direction only.\n\nThe contract moves to src/renderer-interface/ (interface, request context,\nsession-state and history ports, adapter). The renderer's modules move under\nsrc/renderer/: the verb table, the render cache and its budget, payload\nassembly, session state, the histories, render warnings, debug. Pure modules\nboth sides name move into src/daemon/foundations/ or join the shared row.\n\nAdapterToHost lists what the renderer reaches in the host and is handed in\nat the start; AdapterToRenderer lists what the host reaches in the renderer\nand is returned beside `answer`. Each entry carries its\n[LAW:effects-at-boundaries] exception. The main renderer loads its storage\nwhere the daemon did and starts once the host's parts exist, so construction\norder stays. The foundations rule and its test fold into the zones rule and\nits test.\n\n* fix(renderer): the zones rule keys modules from the repo root, the sync-launch ban covers the renderer, and moved law markers sit by their code (candybar-host-renderer-x96a.fro)\n\n- Zone keys resolve against the config's own directory, so ESLint started in\n  src/ (an editor) still holds the seam; the zone test lints from both cwds,\n  and covers the start zone's limits and a directory import through src.\n- The launchSync/runTmux ban reaches src/renderer/, where the daemon-served\n  verbs now live.\n- Headers the moves dropped are back beside their code: the verb table, the\n  click fold, typing over the tmux edge, the update notice, runtime stats,\n  the auto-compact window, and the session usage store.\n- Duplicate and mid-file imports the moves left are merged; stale pointers\n  to src/doctor/edge.ts, src/claude-input/edge.ts and reply.ts's dispatcher\n  name where the code is now.\n- The stats reply reads the renderer's stats once.\n\n* fix(renderer): only the entry reaches a root, the PR fields are shared, and a click error is held through the loaded renderer (candybar-host-renderer-x96a.fro)\n\n- The host reached src/renderer/ through a root (the doctor's data needs read\n  PR_FIELDS from the render payload). The PR field shape moves beside PrState\n  in segments/git, data-needs is shared, and rest may no longer import a root:\n  src/index.ts is the root that dispatches to them. The zone test refuses\n  every non-entry edge into a root.\n- Runs and LaneSetups held click errors through closures over parts declared\n  later in createDaemon. The hold needs only the session state the load reads,\n  so the loaded renderer offers it (AdapterToLoadedRenderer) and both owners\n  take it before the start.\n- Leftovers: two spellings of one import merged, a stale SEGMENTED_VERBS\n  pointer, and the bench suite back to main's formatting with its one moved\n  import.\n\n* fix(renderer): the zones rule fails closed and reads every import spelling, and shared shapes have one home (candybar-host-renderer-x96a.fro)\n\n- A file keyed outside the repo, or a computed import source, is refused\n  rather than called rest; modules key through realpath, so a symlinked\n  checkout keys as the modules it holds. The rule reads import = require,\n  require() and static template sources too. The zone test runs every case\n  from the root, from src/ and through a symlink.\n- Host's type moves to a shared module (src/host-facts.ts) so config-hint\n  picks from it instead of copying it; the world state names Update, not a\n  second UpdateNotice; ExplicitLoad lives with the render cache that reads it.\n- readingsHost is the one wiring of the host's refresh and cache tallies,\n  for the daemon and the test rig alike.\n- A stale DoctorStores pointer.\n\n* fix(lint): the zones rule keys a file in a directory not yet made through its nearest real ancestor (candybar-host-renderer-x96a.fro)"
         }
       ]
     }
