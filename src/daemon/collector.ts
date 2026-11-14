@@ -250,7 +250,14 @@ export class Collector {
   // a session whose set moved is declared again, and one absent from them has
   // no plugin sources. A retiring session takes its set too, and holds none
   // of it.
-  subscribed({ sources }: Subscriptions): void {
+  subscribed(subscriptions: Subscriptions): void {
+    // A record's own keys only, so a session named like an inherited member
+    // (`constructor`) is a key absent.
+    const sources = new Map(
+      Object.entries(subscriptions.sources) as Array<
+        [SessionId, readonly Subscription[]]
+      >,
+    );
     // [LAW:no-silent-failure] A renderer subscribes only for sessions the host
     // handed it, and the host keeps a session's record until its retire
     // settles: a session with no record is the host's bug.

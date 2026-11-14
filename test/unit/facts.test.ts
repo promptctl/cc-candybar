@@ -6,6 +6,10 @@ import {
   type Fact,
 } from "../../src/facts/fact";
 import type { WorldState } from "../../src/facts/world-state";
+import type {
+  RendererInput,
+  RendererOutput,
+} from "../../src/renderer/interface";
 import type { GitInfo, PullRequest } from "../../src/segments/git";
 import type { Current } from "../../src/utils/reading";
 import { instantOf, type Instant } from "../../src/utils/instant";
@@ -18,6 +22,10 @@ const at = (seconds: number): Instant => instantOf(new Date(seconds * 1000));
 // the compile-time half of the contract: typecheck fails here, naming the type.
 describe("what can cross as JSON", () => {
   const worldStateCross: AssertWire<WorldState> = true;
+  // Every input the host hands its renderer and every output it answers
+  // with, so the renderer can leave the host's process as it is.
+  const inputCrosses: AssertWire<RendererInput> = true;
+  const outputCrosses: AssertWire<RendererOutput> = true;
   // @ts-expect-error a Map becomes `{}`
   const mapDoesNot: AssertWire<{ sums: ReadonlyMap<string, number> }> = true;
   // @ts-expect-error a waiting reading carries a Promise
@@ -26,7 +34,11 @@ describe("what can cross as JSON", () => {
   const composedGitDoesNot: AssertWire<GitInfo> = true;
 
   it("holds for the whole facts document", () => {
-    expect(worldStateCross).toBe(true);
+    expect([worldStateCross, inputCrosses, outputCrosses]).toEqual([
+      true,
+      true,
+      true,
+    ]);
     // The three above only exist to be refused.
     expect([mapDoesNot, waitingDoesNot, composedGitDoesNot]).toHaveLength(3);
   });

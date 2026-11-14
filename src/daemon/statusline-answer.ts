@@ -4,16 +4,17 @@
 // encoding the client asked for.
 
 import path from "node:path";
-import type { Effect, RequestId } from "../renderer/interface.js";
+import type { Effect, RequestId, TurnOutcome } from "../renderer/interface.js";
 import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { checkoutLocation } from "../utils/git-root.js";
 import { instantAt, type Instant } from "../utils/instant.js";
-import { RENDER_ANSWERS, renderFailed } from "./draw-bar.js";
+import { failedWith, RENDER_ANSWERS, renderFailure } from "./draw-bar.js";
+import { failureOf, type Failure } from "./verb-error.js";
 import type { Response } from "./protocol";
 import type { FrameSeen } from "./render-sightings";
 import type { Collector } from "./collector.js";
-import type { Delivered, RendererHost } from "./renderer-host.js";
+import type { RendererHost } from "./renderer-host.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -35,20 +36,16 @@ export const NOTHING_TO_SETTLE = (_delivered: boolean): void => {};
 
 // [LAW:no-silent-failure] A request whose turn did not answer it is answered
 // with a failure naming the renderer, never with an empty bar. `error` is what
-// the request's event records: the thrown value itself, its stack included,
-// when the turn threw; the client reads it after the renderer and `doing`.
+// the request's event records: the failure's detail, an Error's stack
+// included; the client reads its message after the renderer and `doing`.
 function failed(
   host: RendererHost,
-  error: unknown,
+  failure: Failure,
   doing = "",
 ): StatuslineAnswer {
-  const refusal = renderFailed(error);
   return {
-    outcome: { kind: "threw", error },
-    resp: {
-      ...refusal,
-      error: `renderer ${host.name}: ${doing}${refusal.error}`,
-    },
+    outcome: renderFailure(failure),
+    resp: failedWith(`renderer ${host.name}: ${doing}${failure.message}`),
     seen: "failed",
     settled: NOTHING_TO_SETTLE,
   };
@@ -71,12 +68,8 @@ function located(req: CheckedRenderRequest): CheckedRenderRequest {
 
 // [LAW:nothing-unseen] What a turn the request's answer took learned, on the
 // request's own event.
-function recorded(facts: RequestFacts, delivered: Delivered): void {
-  facts.push(
-    ...(delivered.kind === "answered"
-      ? delivered.output.record
-      : delivered.record),
-  );
+function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
+  facts.push(...delivered.record);
 }
 
 export async function answerStatusline(
@@ -86,6 +79,7 @@ export async function answerStatusline(
   arrived: CheckedRenderRequest,
   id: RequestId,
   at: Instant,
+  // The monotonic moment the request's wait ends, the host's own reading.
   waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<StatuslineAnswer> {
@@ -131,19 +125,26 @@ export async function answerStatusline(
   recorded(facts, configured);
   if (configured.kind === "threw") {
     noteFacts(facts, { renderer: host.name });
-    return failed(host, configured.error, "its config turn: ");
+    return failed(host, configured.failure, "its config turn: ");
   }
   const delivered = await host.answer({
     kind: "event",
     at,
-    event: { kind: "request", id, context: req, waitEndsAt },
+    // [LAW:no-ambient-temporal-coupling] The wait crosses as what is left of
+    // it at delivery, so the renderer counts it on its own clock.
+    event: {
+      kind: "request",
+      id,
+      context: req,
+      waitMs: waitEndsAt - clock.monotonic(),
+    },
   });
   recorded(facts, delivered);
   if (delivered.kind === "threw") {
     noteFacts(facts, { renderer: host.name });
-    return failed(host, delivered.error);
+    return failed(host, delivered.failure);
   }
-  const { effects } = delivered.output;
+  const { effects } = delivered;
   noteFacts(facts, {
     renderer: host.name,
     effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
@@ -169,7 +170,7 @@ export async function answerStatusline(
   if (answer === null)
     return failed(
       host,
-      new Error(`presented no statusline frame for request ${id}`),
+      failureOf(new Error(`presented no statusline frame for request ${id}`)),
     );
   const presented = answer;
   const encodeFrom = clock.monotonic();
@@ -177,8 +178,9 @@ export async function answerStatusline(
   try {
     resp = RENDER_ANSWERS[req.encoding](presented.frame);
   } catch (e) {
-    done(presented, `encoding its frame threw: ${renderFailed(e).error}`);
-    return failed(host, e, "its frame could not be encoded: ");
+    const failure = failureOf(e);
+    done(presented, `encoding its frame threw: ${failure.message}`);
+    return failed(host, failure, "its frame could not be encoded: ");
   }
   // [LAW:nothing-unseen] The bytes' share of the draw's reserve, beside the
   // renderer's `drew=`.

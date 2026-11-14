@@ -9,7 +9,7 @@ import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { clickParts } from "./helpers/click-parts";
 import { replyTo } from "../src/daemon/reply";
-import { DaemonClosing } from "../src/daemon/verb-error";
+import { DaemonClosing, failureOf, type Failure } from "../src/daemon/verb-error";
 import { SessionState } from "../src/daemon/session-state";
 import { closeIdleMenus, VERBS, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
@@ -35,7 +35,12 @@ import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/session-id";
 
 const SID = sessionIdOf("s1");
-const IDLE = { idleS: 30, timeoutS: 30, stillIdle: () => true, closed: () => {} };
+const IDLE = {
+  firedAt: instantOf(new Date(0)),
+  idleS: 30,
+  timeoutS: 30,
+  confirm: () => true,
+};
 
 function gate(): { wait: Promise<void>; open: () => void } {
   let open = (): void => {};
@@ -139,14 +144,21 @@ describe("journals take turns", () => {
 describe("the idle close decides in its turn", () => {
   function idleOver(ctx: VerbContext) {
     let now = 1000;
-    const failures: unknown[] = [];
+    const failures: Failure[] = [];
     const fired: Array<Promise<void>> = [];
     const idle = new MenuIdle({ clock: systemTimekeeper,
       now: () => instantOf(new Date(now * 1000)),
       close: async (sid, closing) => {
-        const running = closeIdleMenus(sid, closing, ctx);
+        const running = closeIdleMenus(
+          sid,
+          { ...closing, confirm: () => idle.confirmClose(sid, closing.firedAt) },
+          ctx,
+        );
         fired.push(running);
-        return running;
+        return running.then(
+          () => null,
+          (e: unknown) => failureOf(e),
+        );
       },
       failed: (_sid, e) => failures.push(e),
     });
@@ -225,7 +237,7 @@ describe("the idle close decides in its turn", () => {
     await jest.advanceTimersByTimeAsync(0);
     process.off("unhandledRejection", heard);
     expect(m.failures).toHaveLength(1);
-    expect(String(m.failures[0])).toContain("the daemon closed");
+    expect(m.failures[0]!.message).toContain("the daemon closed");
     expect(unhandled).toEqual([]);
     m.idle.dispose();
   });

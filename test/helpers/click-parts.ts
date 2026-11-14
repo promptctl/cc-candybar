@@ -5,6 +5,7 @@
 // these in.
 
 import type { Collector } from "../../src/daemon/collector";
+import { ClicksInFlight } from "../../src/daemon/clicks-in-flight";
 import type { DaemonParts } from "../../src/daemon/daemon-parts";
 import type { MenuIdle } from "../../src/daemon/menu-idle";
 import { rendererHost } from "../../src/daemon/renderer-host";
@@ -23,13 +24,14 @@ export function clickParts(
     holding: () => () => {},
     clicked: () => {},
   },
-): Pick<DaemonParts, "renderer"> & {
+): Pick<DaemonParts, "renderer" | "clicks"> & {
   collector: Pick<Collector, "holding" | "clicked">;
 } {
   // A click's turn reads the verbs, the idle clock and, for its output, the
   // open views' subscriptions: this rig opens none.
+  const clicks = new ClicksInFlight();
   const parts = {
-    verbs: verbsOver(verbCtx),
+    verbs: verbsOver(verbCtx, clicks),
     menuIdle,
     renderCache: { subscriptions: () => ({ sources: {} }) },
   } as unknown as MainRendererParts;
@@ -41,6 +43,7 @@ export function clickParts(
       () => {},
       { subscribed: () => {}, holding: collector.holding },
     ),
+    clicks,
     collector,
   };
 }

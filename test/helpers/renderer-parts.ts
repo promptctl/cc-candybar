@@ -52,6 +52,7 @@ export function rendererParts({
       since: () => undefined,
       clickArrived: () => {},
       clickSettled: () => {},
+      confirmClose: () => true,
     },
     launcher: { launcherWarnings: () => [], answeredPipeEvent: () => {} },
     laneSetups: { noted: () => {} },

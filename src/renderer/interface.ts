@@ -10,7 +10,8 @@
 
 import type { StorageKey } from "../daemon/cache/managed-storage";
 import type { ParsedSessionId, SessionId } from "../daemon/session-id";
-import type { IdleClose } from "../daemon/verbs";
+import type { Failure } from "../daemon/verb-error";
+import type { IdleSpan } from "../daemon/verbs";
 import type { ClickArrival } from "../doctor/sightings";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
@@ -64,12 +65,14 @@ export type Event =
       readonly kind: "request";
       readonly id: RequestId;
       readonly context: CheckedRenderRequest;
-      // The monotonic moment the request's wait ends, from its client's
-      // deadline: the renderer still waits inside this turn, over the world
-      // states the host hands in, until the mailbox moves the wait, so its
-      // turns overlap: other inputs, other requests' included, arrive while
-      // this one waits.
-      readonly waitEndsAt: number;
+      // How long the request may still wait, in milliseconds from this
+      // turn's start, from its client's deadline: a span, which each process
+      // counts on its own monotonic clock, so no clock is shared and none
+      // stepped moves it. The renderer still waits inside this turn, over the
+      // world states the host hands in, until the mailbox moves the wait, so
+      // its turns overlap: other inputs, other requests' included, arrive
+      // while this one waits.
+      readonly waitMs: number;
     }
   | {
       // A session's world state moved since the one the renderer holds: read
@@ -102,23 +105,21 @@ export type Event =
       // null when the click names none.
       readonly session: ParsedSessionId | null;
       readonly arrival: ClickArrival;
-      // [LAW:no-ambient-temporal-coupling] exception: whether the click's
-      // client left or its deadline passed, read while the turn waits inside
-      // itself for the click's place and its journal turn, as a request's
-      // turn waits on its world state. It goes once the mailbox refuses an
-      // abandoned click before delivering it.
-      readonly gone: () => boolean;
+      // The request the click arrived in. Whether its client left or its
+      // deadline passed is the host's to say, from the click's connection,
+      // asked by this id while the turn waits for the click's place and its
+      // journal turn.
+      readonly id: RequestId;
     }
   | {
       // The session's idle clock ran out: the turn closes its menus as the
       // ✕ does.
       readonly kind: "menu-idle";
       readonly session: SessionId;
-      // [LAW:no-ambient-temporal-coupling] exception: whether the session is
-      // still idle, read in the close's journal turn, and the clock's record
-      // of the close. They go once the renderer schedules its own close with
-      // a `schedule` effect and is woken by `due`.
-      readonly idle: IdleClose;
+      // The firing of the session's idle clock: the close's line says its
+      // span, and the close's journal turn names it when it asks the clock
+      // whether the session is still idle since.
+      readonly idle: IdleSpan;
     };
 
 export type EffectOutcome =
@@ -156,29 +157,24 @@ export type Subscription =
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
 // renderer holds needs read. The host diffs it; nothing is declared by
 // message. A session absent from it needs nothing read.
-// [LAW:types-are-the-program] Keyed by session, so no session is listed twice.
+// [LAW:types-are-the-program] Keyed by session, so no session is listed twice,
+// and a record, so it crosses a process as it is: a session absent is a key
+// absent, never one holding `undefined`, which JSON does not carry.
 export interface Subscriptions {
-  readonly sources: ReadonlyMap<SessionId, readonly Subscription[]>;
+  readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
 }
 
-export interface RendererOutput {
-  readonly effects: readonly Effect[];
+// How a turn ended, a turn that threw included: its failure as data, a class
+// crossing no process. Either way it carries the record it reached.
+export type TurnOutcome = { readonly record: TurnRecord } & (
+  | { readonly kind: "answered"; readonly effects: readonly Effect[] }
+  | { readonly kind: "threw"; readonly failure: Failure }
+);
+
+// [LAW:no-silent-failure] Every turn answers, so `answer` never rejects. Its
+// output names the open views' subscriptions as they stand after it, however
+// it ended: an act can land before its turn throws (a click that committed
+// and followed its view), and its view is read all the same.
+export type RendererOutput = TurnOutcome & {
   readonly subscriptions: Subscriptions;
-  readonly record: TurnRecord;
-}
-
-// [LAW:no-silent-failure] A turn that threw, with the record it reached, so the
-// host still writes what the turn learned before it stopped.
-// [LAW:one-source-of-truth] It names the open views' subscriptions as they
-// stand after the throw too: an act can land before its turn throws (a click
-// that committed and followed its view), and its view is read all the same.
-export class TurnThrew extends Error {
-  constructor(
-    readonly record: TurnRecord,
-    readonly thrown: unknown,
-    readonly subscriptions: Subscriptions,
-  ) {
-    super(thrown instanceof Error ? thrown.message : String(thrown));
-    this.name = "TurnThrew";
-  }
-}
+};

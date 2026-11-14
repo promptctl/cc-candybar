@@ -6,14 +6,12 @@
 // whose own event records the turn takes it by `answer`; every other input is
 // taken by `deliver`, which writes the turn's own line.
 
-import { inspect } from "node:util";
 import {
-  TurnThrew,
   type Effect,
   type Event,
   type Renderer,
   type RendererInput,
-  type RendererOutput,
+  type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
 } from "../renderer/interface.js";
@@ -22,27 +20,20 @@ import { instantAt } from "../utils/instant.js";
 import type { Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 import type { SessionId } from "./session-id.js";
+import { LEVEL } from "./request-event.js";
+import { failureOf } from "./verb-error.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";
-
-export type Delivered =
-  | { readonly kind: "answered"; readonly output: RendererOutput }
-  | {
-      readonly kind: "threw";
-      readonly error: unknown;
-      // What the turn learned before it threw.
-      readonly record: TurnRecord;
-    };
 
 export interface RendererHost {
   readonly name: RendererName;
   // One turn, recorded by the caller: a request's answer writes both its
   // turns on the request's render event.
-  answer(input: RendererInput): Promise<Delivered>;
+  answer(input: RendererInput): Promise<TurnOutcome>;
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
-  deliver(input: RendererInput, about: TurnRecord): Promise<Delivered>;
+  deliver(input: RendererInput, about: TurnRecord): Promise<TurnOutcome>;
 }
 
 export function rendererHost(
@@ -61,28 +52,35 @@ export function rendererHost(
     readonly holding: (session: SessionId) => () => void;
   },
 ): RendererHost {
-  const turn = async (input: RendererInput): Promise<Delivered> => {
+  const held = async (input: RendererInput): Promise<TurnOutcome> => {
     const session = sessionOf(input.event);
     const release = session === null ? () => {} : collector.holding(session);
     try {
-      const output = await renderer.answer(input);
-      collector.subscribed(output.subscriptions);
+      const { subscriptions, ...output } = await renderer.answer(input);
+      collector.subscribed(subscriptions);
       // [LAW:single-enforcer] A present answers the request whose turn
       // returned it, so every effect another turn returns is refused here,
       // and none is left owed its `effect-done`.
-      if (input.event.kind !== "request")
+      if (output.kind === "answered" && input.event.kind !== "request")
         for (const effect of output.effects)
           refuse(effect, `a ${input.event.kind} turn answers no request`);
-      return { kind: "answered", output };
-    } catch (e) {
-      if (!(e instanceof TurnThrew))
-        return { kind: "threw", error: e, record: [] };
-      collector.subscribed(e.subscriptions);
-      return { kind: "threw", error: e.thrown, record: e.record };
+      return output;
     } finally {
       release();
     }
   };
+  // [LAW:single-enforcer] Every turn's caller, a fire-and-forget one included,
+  // hears how the whole turn ended as a value: a hold that failed, a renderer
+  // that rejected, or an output the host could not take, is the turn's
+  // failure. Nothing of it was taken, so the subscriptions last taken stand.
+  const turn = (input: RendererInput): Promise<TurnOutcome> =>
+    held(input).catch(
+      (thrown: unknown): TurnOutcome => ({
+        kind: "threw",
+        failure: failureOf(thrown),
+        record: [],
+      }),
+    );
   const refuse = (effect: Effect, reason: string): void =>
     void deliver(
       {
@@ -101,7 +99,7 @@ export function rendererHost(
   const record = (
     input: RendererInput,
     about: TurnRecord,
-    delivered: Delivered,
+    delivered: TurnOutcome,
   ): void => {
     const session = sessionOf(input.event);
     const head: TurnRecord = [
@@ -112,17 +110,17 @@ export function rendererHost(
     ];
     switch (delivered.kind) {
       case "answered":
-        if (delivered.output.record.length > 0)
-          log("info", eventLine("turn", [...head, ...delivered.output.record]));
+        if (delivered.record.length > 0)
+          log("info", eventLine("turn", [...head, ...delivered.record]));
         return;
       case "threw":
         // [LAW:no-silent-failure] No turn's failure is left unhandled.
         log(
-          "error",
+          LEVEL[delivered.failure.kind],
           eventLine("turn", [
             ...head,
             ...delivered.record,
-            ["error", inspect(delivered.error)],
+            ["error", delivered.failure.detail],
           ]),
         );
     }
@@ -132,7 +130,7 @@ export function rendererHost(
   const deliver = async (
     input: RendererInput,
     about: TurnRecord,
-  ): Promise<Delivered> => {
+  ): Promise<TurnOutcome> => {
     const delivered = await turn(input);
     record(input, about, delivered);
     return delivered;

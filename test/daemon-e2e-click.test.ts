@@ -16,6 +16,7 @@ import {
   type Response,
 } from "../src/daemon/protocol";
 import type { RequestId } from "../src/renderer/interface";
+import { badRequest } from "../src/daemon/verb-error";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
 import {
   requestEvent,
@@ -106,10 +107,9 @@ test("a click answered TIMEOUT lands by the daemon's own event, sent once", asyn
 });
 
 test("a click answered TIMEOUT that the daemon then refused fails with the refusal", async () => {
-  const daemon = await timingOut({
-    kind: "bad-request",
-    problems: ["apply-update: already rebuilding…"],
-  });
+  const daemon = await timingOut(
+    badRequest("apply-update: already rebuilding…"),
+  );
   try {
     await expect(click(daemon.sockPath, URL)).rejects.toThrow(
       /already rebuilding/,

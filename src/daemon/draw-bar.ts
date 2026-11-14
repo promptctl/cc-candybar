@@ -112,6 +112,7 @@ import type { LaneSetups } from "./lane-setup.js";
 import type { TmuxStatusLines } from "./tmux-status.js";
 import type { Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
+import { failureOf, type Failure } from "./verb-error.js";
 
 // [LAW:one-way-deps] exception: what the renderer side still reaches of the
 // host, each by the methods it calls, so the reach is named by type. Each
@@ -147,13 +148,24 @@ export interface RendererParts {
 // nothing to record.
 export const NOTHING_DELIVERED = (): void => {};
 
-// [LAW:single-enforcer] The one reply to a request whose handler threw — a
-// render's own throw, or any other handler's that reached the connection.
-export const renderFailed = (err: unknown): Refusal => ({
+// [LAW:single-enforcer] The one reply to a request that failed — a render's own
+// throw, a turn's failure, or any other handler's throw that reached the
+// connection — saying the failure's message.
+export const failedWith = (message: string): Refusal => ({
   ok: false,
-  error: err instanceof Error ? err.message : inspect(err),
+  error: message,
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION,
+});
+
+export const renderFailed = (err: unknown): Refusal =>
+  failedWith(failureOf(err).message);
+
+// [LAW:single-enforcer] A render's failure is the daemon's, whatever kind was
+// thrown: the request passed its checkpoint, and its reply is RENDER_FAILED.
+export const renderFailure = (failure: Failure): Failure => ({
+  ...failure,
+  kind: "threw",
 });
 
 // [LAW:dataflow-not-control-flow] A render's answer in each encoding, looked up
@@ -215,14 +227,14 @@ export function renderFrame(
       failure: null,
     };
   } catch (error) {
-    const outcome = { kind: "threw", error } as const;
+    const outcome = renderFailure(failureOf(error));
     const { level, line } = requestEvent(
       "render",
       facts,
       outcome,
       elapsedMs(clock, started),
     );
-    const failed = renderFailed(error);
+    const failed = failedWith(outcome.message);
     return {
       bar: renderFailedFrame(failed.error),
       resp: failed,
@@ -1066,10 +1078,13 @@ export async function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
   at: Instant,
-  waitEndsAt: number,
+  waitMs: number,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   const { clock, frameFeeds, log } = parts;
+  // [LAW:no-ambient-temporal-coupling] The wait is counted from this turn's
+  // start on the renderer's own clock.
+  const turnFrom = clock.monotonic();
   using setup = setUpRender(parts, req, at, facts);
   arrived(
     parts,
@@ -1085,7 +1100,7 @@ export async function answerRequest(
   // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
   // reading. Setup has spent part of what the request arrived with, and below
   // zero says by how much it overran: the timer fires at once.
-  const budget = waitEndsAt - waitFrom;
+  const budget = waitMs - (waitFrom - turnFrom);
   noteFacts(facts, {
     deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
   });

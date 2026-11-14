@@ -1,9 +1,8 @@
-import { inspect } from "node:util";
-
 import type { RequestId } from "../renderer/interface.js";
 import type { Monotonic } from "../time.js";
 import type { LogLevel } from "../utils/logger";
 import { eventLine, type Field } from "../utils/logfmt.js";
+import type { Failure } from "./verb-error.js";
 
 // The requests that each write one event: a statusline render and a click.
 export type RequestKind = "render" | "click";
@@ -22,13 +21,7 @@ export interface Acceptance {
 // one event records all three (brandon-unfiled-3248.87p): `bad-request` is
 // the client's fault, `threw` the daemon's — a program it ran, or a bug —
 // and its stack says which.
-export type RequestOutcome =
-  | { readonly kind: "ok" }
-  | { readonly kind: "bad-request"; readonly problems: readonly string[] }
-  | { readonly kind: "threw"; readonly error: unknown }
-  // The click met the daemon's close, or its client had left: neither failed.
-  | { readonly kind: "closing"; readonly error: Error }
-  | { readonly kind: "abandoned"; readonly error: Error };
+export type RequestOutcome = { readonly kind: "ok" } | Failure;
 
 // What a request has learned so far, in the order it learned it. A request
 // that stops early carries only the facts it reached, so a field absent from
@@ -42,7 +35,10 @@ export function noteFacts(
   for (const entry of Object.entries(learned)) facts.push(entry);
 }
 
-const LEVEL: Record<RequestOutcome["kind"], LogLevel> = {
+// [LAW:single-enforcer] The level an outcome is logged at, on a request's
+// event and on a turn's line alike: a close that cut a click off, or a client
+// that left, failed at nothing of its own.
+export const LEVEL: Record<RequestOutcome["kind"], LogLevel> = {
   ok: "info",
   "bad-request": "warn",
   threw: "error",
@@ -50,18 +46,17 @@ const LEVEL: Record<RequestOutcome["kind"], LogLevel> = {
   abandoned: "info",
 };
 
-// The outcome's own detail. A thrown value is described by `inspect`, which
-// is total over anything a handler can throw and carries an Error's stack.
+// The outcome's own detail: a failure's detail carries an Error's stack.
 function detailOf(outcome: RequestOutcome): RequestFacts {
   switch (outcome.kind) {
     case "ok":
       return [];
     case "bad-request":
-      return [["problems", outcome.problems.join("; ")]];
+      return [["problems", outcome.message]];
     case "threw":
-      return [["error", inspect(outcome.error)]];
+      return [["error", outcome.detail]];
     case "closing":
-      return [["closing", outcome.error.message]];
+      return [["closing", outcome.message]];
     case "abandoned":
       return [["abandoned", "1"]];
   }

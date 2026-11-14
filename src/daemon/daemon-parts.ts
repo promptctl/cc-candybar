@@ -23,6 +23,7 @@ import type { UpdateWatch } from "./update-notice";
 import type { DoctorStores } from "../doctor/edge";
 import type { JournalTurns } from "./journal-turns";
 import type { RendererHost } from "./renderer-host.js";
+import type { ClicksInFlight } from "./clicks-in-flight.js";
 import type { ProbeArrivals } from "../doctor/handler-probe";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
@@ -69,6 +70,8 @@ export interface DaemonParts {
   readonly journalTurns: Pick<JournalTurns, "getStats">;
   // The host's one path to the main renderer (src/daemon/renderer-host.ts).
   readonly renderer: RendererHost;
+  // The clicks whose turns run, and whether each one's client has left.
+  readonly clicks: ClicksInFlight;
   // [LAW:single-enforcer] The host's one reader of every session's world
   // (src/daemon/collector.ts).
   readonly collector: Collector;
