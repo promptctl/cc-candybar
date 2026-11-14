@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-747",
+      "ref": "refs/pull/747/merge",
+      "sha": "64c26712029a3e1c16b2f9b5e26b0e212a6dbe28",
+      "timestamp": "2026-11-14T23:49:32.057Z",
+      "commits": [
+        {
+          "sha": "64c26712029a3e1c16b2f9b5e26b0e212a6dbe28",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T16:48:39-07:00",
+          "message": "Merge 4efd086f911b21846a92a87fde5110d26bb472bc into 71fcc390ab9296c2d28351a24c8bc5fab3a2d6b3\n"
+        },
+        {
+          "sha": "4efd086f911b21846a92a87fde5110d26bb472bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T16:48:00-07:00",
+          "message": "refactor(renderer): the host's pushes cross a process, each an adapter input answered by its reply alone (candybar-host-renderer-x96a.8rc)\n\nEvery reach of the host into the renderer is now an AdapterPush, plain\ndata checked at build time to cross a process (Crosses<T>), answered by\nan AdapterOutput: the reply of the push's own kind, or how it threw.\nrendererHost.ask is the one judge of a reply's kind; tell logs a\nfailure nothing awaits.\n\n- The feed asks for its frame and its lanes, so a frame lands later: a\n  wake while it is out is owed the next frame at the spacing, however\n  the frame ended, and a subscribe is admitted once its lanes answer,\n  opening nothing for one refused or gone meanwhile.\n- The pin owns the session's state wake, so the wake lives as long as\n  the feed.\n- Journal turns are the renderer's. The daemon's close awaits the\n  renderer's three teardown steps in today's order, and shutdown awaits\n  the close before it exits.\n- A render's wait ends when the render cache closes, said as\n  ended=closed, so a render the close interrupts holds no timer past it.\n- A heap-retainer test draws in a frame of its own, so the suspended\n  test frame's registers cannot hold the drawn store.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "71fcc390ab9296c2d28351a24c8bc5fab3a2d6b3",
