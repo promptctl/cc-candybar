@@ -4,15 +4,22 @@
     {
       "version": "pr-744",
       "ref": "refs/pull/744/merge",
-      "sha": "928a4085b738531a0cdbeb583277ec31ea81ff18",
-      "timestamp": "2026-11-14T11:10:57.638Z",
+      "sha": "12c8bea5cd66971cb02902d50d5621a7b1bc7989",
+      "timestamp": "2026-11-14T11:19:06.498Z",
       "commits": [
         {
-          "sha": "928a4085b738531a0cdbeb583277ec31ea81ff18",
+          "sha": "12c8bea5cd66971cb02902d50d5621a7b1bc7989",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T11:09:58Z",
-          "message": "Merge ae7e857be3ebd32935f4fec826518598fd948717 into e0e964426de0dc976ed7a9554314baa162697a6d\n"
+          "timestamp": "2026-11-14T11:18:05Z",
+          "message": "Merge 299d30c8e79a40c14ce69f2091cddc711d9d8fd1 into e0e964426de0dc976ed7a9554314baa162697a6d\n"
+        },
+        {
+          "sha": "299d30c8e79a40c14ce69f2091cddc711d9d8fd1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T04:17:53-07:00",
+          "message": "fix(renderer): a render's failure is the daemon's on every path it can fail by, through one rule (candybar-host-renderer-x96a.265)\n"
         },
         {
           "sha": "ae7e857be3ebd32935f4fec826518598fd948717",

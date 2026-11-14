@@ -76612,7 +76612,10 @@ var failedWith = (message) => ({
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION
 });
-var renderFailed = (err) => failedWith(failureOf(err).message);
+var renderFailure = (failure) => ({
+  ...failure,
+  kind: "threw"
+});
 var RENDER_ANSWERS = {
   ansi: (frame2) => ({ ok: true, output: composeBar(frame2) }),
   frame: (frame2) => ({ ok: true, frame: frame2 })
@@ -76653,14 +76656,14 @@ function renderFrame(parts, sessionId2, fps, at) {
       __callDispose(_stack, _error, _hasError);
     }
   } catch (error) {
-    const outcome = failureOf(error);
+    const outcome = renderFailure(failureOf(error));
     const { level, line } = requestEvent(
       "render",
       facts,
       outcome,
       elapsedMs(clock, started2)
     );
-    const failed3 = renderFailed(error);
+    const failed3 = failedWith(outcome.message);
     return {
       bar: renderFailedFrame(failed3.error),
       resp: failed3,
@@ -77230,7 +77233,7 @@ var NOTHING_TO_SETTLE = (_delivered) => {
 };
 function failed2(host, failure, doing = "") {
   return {
-    outcome: { ...failure, kind: "threw" },
+    outcome: renderFailure(failure),
     resp: failedWith(`renderer ${host.name}: ${doing}${failure.message}`),
     seen: "failed",
     settled: NOTHING_TO_SETTLE
@@ -77920,7 +77923,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       // [LAW:no-silent-failure] The driver hands every turn's failure back
       // as a value; a throw here is its own bug, answered as any throw is.
       (error) => {
-        const failure = failureOf(error);
+        const failure = renderFailure(failureOf(error));
         return {
           outcome: failure,
           resp: failedWith(failure.message),
