@@ -112,7 +112,7 @@ import type { LaneSetups } from "./lane-setup.js";
 import type { TmuxStatusLines } from "./tmux-status.js";
 import type { Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
-import { failureOf } from "./verb-error.js";
+import { failureOf, type Failure } from "./verb-error.js";
 
 // [LAW:one-way-deps] exception: what the renderer side still reaches of the
 // host, each by the methods it calls, so the reach is named by type. Each
@@ -160,6 +160,13 @@ export const failedWith = (message: string): Refusal => ({
 
 export const renderFailed = (err: unknown): Refusal =>
   failedWith(failureOf(err).message);
+
+// [LAW:single-enforcer] A render's failure is the daemon's, whatever kind was
+// thrown: the request passed its checkpoint, and its reply is RENDER_FAILED.
+export const renderFailure = (failure: Failure): Failure => ({
+  ...failure,
+  kind: "threw",
+});
 
 // [LAW:dataflow-not-control-flow] A render's answer in each encoding, looked up
 // by the value the checkpoint parsed. Keyed by the type, so a new encoding names
@@ -220,14 +227,14 @@ export function renderFrame(
       failure: null,
     };
   } catch (error) {
-    const outcome = failureOf(error);
+    const outcome = renderFailure(failureOf(error));
     const { level, line } = requestEvent(
       "render",
       facts,
       outcome,
       elapsedMs(clock, started),
     );
-    const failed = renderFailed(error);
+    const failed = failedWith(outcome.message);
     return {
       bar: renderFailedFrame(failed.error),
       resp: failed,

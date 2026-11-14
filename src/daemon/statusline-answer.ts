@@ -9,7 +9,7 @@ import type { CheckedRenderRequest } from "../renderer/request-context.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { checkoutLocation } from "../utils/git-root.js";
 import { instantAt, type Instant } from "../utils/instant.js";
-import { failedWith, RENDER_ANSWERS } from "./draw-bar.js";
+import { failedWith, RENDER_ANSWERS, renderFailure } from "./draw-bar.js";
 import { failureOf, type Failure } from "./verb-error.js";
 import type { Response } from "./protocol";
 import type { FrameSeen } from "./render-sightings";
@@ -38,16 +38,13 @@ export const NOTHING_TO_SETTLE = (_delivered: boolean): void => {};
 // with a failure naming the renderer, never with an empty bar. `error` is what
 // the request's event records: the failure's detail, an Error's stack
 // included; the client reads its message after the renderer and `doing`.
-// [LAW:types-are-the-program] A render that reached its turns passed the
-// checkpoint, so whatever failed in them is the daemon's, as its reply says,
-// whatever kind was thrown.
 function failed(
   host: RendererHost,
   failure: Failure,
   doing = "",
 ): StatuslineAnswer {
   return {
-    outcome: { ...failure, kind: "threw" },
+    outcome: renderFailure(failure),
     resp: failedWith(`renderer ${host.name}: ${doing}${failure.message}`),
     seen: "failed",
     settled: NOTHING_TO_SETTLE,

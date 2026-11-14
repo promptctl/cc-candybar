@@ -3,7 +3,7 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import { failedWith } from "./draw-bar.js";
+import { failedWith, renderFailure } from "./draw-bar.js";
 import type { ClickInFlight } from "./clicks-in-flight.js";
 import {
   answerStatusline,
@@ -409,7 +409,7 @@ export async function replyTo(
       // [LAW:no-silent-failure] The driver hands every turn's failure back
       // as a value; a throw here is its own bug, answered as any throw is.
       (error: unknown): StatuslineAnswer => {
-        const failure = failureOf(error);
+        const failure = renderFailure(failureOf(error));
         return {
           outcome: failure,
           resp: failedWith(failure.message),
