@@ -1,7 +1,6 @@
 // The daemon as a value: what it holds, built from its inputs, and its one close.
 
 import { Runs } from "./runs.js";
-import { inspect } from "node:util";
 import { locations, type DaemonPaths } from "./paths";
 import type { Host } from "../host";
 import type { DaemonLog } from "./log";
@@ -36,7 +35,7 @@ import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
 import { FileEventDelivery } from "./cache/file-events";
 import type { Timekeeper } from "../time";
-import type { Acceptance } from "./request-event.js";
+import { LEVEL, type Acceptance } from "./request-event.js";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import { SourceRuns } from "./source-runs";
 import {
@@ -66,7 +65,6 @@ import {
 } from "./pane-visibility.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxAtExit } from "./tmux-status.js";
-import { DaemonClosing } from "./verb-error.js";
 import { TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
@@ -384,10 +382,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     now: instant,
     close: (sessionId, idle) =>
       closeByTurn(parts.renderer, instant, sessionId, idle),
-    failed: (sessionId, error) =>
+    failed: (sessionId, failure) =>
       log(
-        error instanceof DaemonClosing ? "info" : "error",
-        `menu-idle: close failed (session=${sessionId}): ${inspect(error)}`,
+        LEVEL[failure.kind],
+        `menu-idle: close failed (session=${sessionId}): ${failure.detail}`,
       ),
   });
   // [LAW:single-enforcer] The one signer of every `run` link this daemon draws

@@ -18,24 +18,25 @@ import type { Instant } from "../utils/instant.js";
 import type { IdleClose } from "./verbs/index.js";
 import type { RendererHost } from "./renderer-host.js";
 import type { SessionId } from "./session-id.js";
+import type { Failure } from "./verb-error.js";
 import type { Timekeeper } from "../time";
 
 // [LAW:no-silent-failure] The idle close as a `menu-idle` turn of the
-// renderer. The clock hears a close that failed as a rejection: it then waits
-// a timeout before trying again, and its `failed` writes the one line. So a
-// turn that threw rejects with what it threw, and nothing else is logged here.
+// renderer, answering with its failure, or null when it closed. The clock
+// hears a failure, then waits a timeout before trying again, and its `failed`
+// writes the one line, so nothing else is logged here.
 export async function closeByTurn(
   host: Pick<RendererHost, "answer">,
   at: () => Instant,
   sessionId: SessionId,
   idle: IdleClose,
-): Promise<void> {
+): Promise<Failure | null> {
   const delivered = await host.answer({
     kind: "event",
     at: at(),
     event: { kind: "menu-idle", session: sessionId, idle },
   });
-  if (delivered.kind === "threw") throw delivered.error;
+  return delivered.kind === "threw" ? delivered.failure : null;
 }
 
 interface Idle {
@@ -64,10 +65,13 @@ export interface MenuIdleDeps {
   // Close the session's menus: the journaled write a ✕ makes
   // (`closeIdleMenus`, src/daemon/verbs/index.ts), as a renderer turn
   // (`closeByTurn`).
-  readonly close: (sessionId: SessionId, idle: IdleClose) => Promise<void>;
-  // [LAW:no-silent-failure] A close that rejected: a timer has no caller to
-  // reject to, and an unhandled rejection would end the daemon.
-  readonly failed: (sessionId: SessionId, error: unknown) => void;
+  readonly close: (
+    sessionId: SessionId,
+    idle: IdleClose,
+  ) => Promise<Failure | null>;
+  // [LAW:no-silent-failure] A close that failed: a timer has no caller to
+  // fail to.
+  readonly failed: (sessionId: SessionId, failure: Failure) => void;
 }
 
 // The sessions whose clocks are kept, as many as the daemon keeps effects for;
@@ -227,11 +231,12 @@ export class MenuIdle {
       },
     };
     idle.closing = true;
-    this.deps
+    void this.deps
       .close(sessionId, closing)
-      .catch((e: unknown) => {
+      .then((failure) => {
+        if (failure === null) return;
         closing.closed();
-        this.deps.failed(sessionId, e);
+        this.deps.failed(sessionId, failure);
       })
       .finally(() => {
         idle.closing = false;

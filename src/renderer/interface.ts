@@ -10,6 +10,7 @@
 
 import type { StorageKey } from "../daemon/cache/managed-storage";
 import type { ParsedSessionId, SessionId } from "../daemon/session-id";
+import type { Failure } from "../daemon/verb-error";
 import type { IdleClose } from "../daemon/verbs";
 import type { ClickArrival } from "../doctor/sightings";
 import type { Run } from "../facts/source-identity";
@@ -158,27 +159,21 @@ export type Subscription =
 // [LAW:types-are-the-program] Keyed by session, so no session is listed twice,
 // and a record, so it crosses a process as it is.
 export interface Subscriptions {
-  readonly sources: Readonly<Partial<Record<SessionId, readonly Subscription[]>>>;
+  readonly sources: Readonly<
+    Partial<Record<SessionId, readonly Subscription[]>>
+  >;
 }
 
-export interface RendererOutput {
-  readonly effects: readonly Effect[];
+// [LAW:no-silent-failure] Every turn answers, a turn that threw included: its
+// failure as data, a class crossing no process, so `answer` never rejects.
+// Either way it carries the record it reached and the open views'
+// subscriptions as they stand after it: an act can land before its turn
+// throws (a click that committed and followed its view), and its view is read
+// all the same.
+export type RendererOutput = {
   readonly subscriptions: Subscriptions;
   readonly record: TurnRecord;
-}
-
-// [LAW:no-silent-failure] A turn that threw, with the record it reached, so the
-// host still writes what the turn learned before it stopped.
-// [LAW:one-source-of-truth] It names the open views' subscriptions as they
-// stand after the throw too: an act can land before its turn throws (a click
-// that committed and followed its view), and its view is read all the same.
-export class TurnThrew extends Error {
-  constructor(
-    readonly record: TurnRecord,
-    readonly thrown: unknown,
-    readonly subscriptions: Subscriptions,
-  ) {
-    super(thrown instanceof Error ? thrown.message : String(thrown));
-    this.name = "TurnThrew";
-  }
-}
+} & (
+  | { readonly kind: "answered"; readonly effects: readonly Effect[] }
+  | { readonly kind: "threw"; readonly failure: Failure }
+);

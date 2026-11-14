@@ -14,12 +14,12 @@ import os from "node:os";
 import path from "node:path";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
-import {
-  TurnThrew,
-  type Effect,
-  type Renderer,
-  type Event,
-  type RequestId,
+import type {
+  Effect,
+  Event,
+  Renderer,
+  RendererOutput,
+  RequestId,
 } from "../src/renderer/interface";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
@@ -38,7 +38,6 @@ import { ok } from "../src/utils/outcome";
 import { fakeTmux } from "./helpers/payload-owners";
 import { rendererHost } from "../src/daemon/renderer-host";
 import type { RendererVerbs } from "../src/renderer/verbs";
-import { BadVerbArgs } from "../src/daemon/verb-error";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { WorldState } from "../src/facts/world-state";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
@@ -178,6 +177,17 @@ const done = (r: Renderer, { session, id: of }: Effect, ok: boolean) =>
     },
   });
 
+// A turn's output, as the turn that answered or the one that threw.
+const answered = (output: RendererOutput) => {
+  if (output.kind !== "answered")
+    throw new Error(`the turn threw: ${output.failure.detail}`);
+  return output;
+};
+const threw = (output: RendererOutput) => {
+  if (output.kind !== "threw") throw new Error("the turn answered");
+  return output;
+};
+
 const presentOf = (effects: readonly Effect[]): Effect => {
   expect(effects).toHaveLength(1);
   return effects[0]!;
@@ -185,7 +195,7 @@ const presentOf = (effects: readonly Effect[]): Effect => {
 
 describe("a statusline request", () => {
   test("is answered by one present for the statusline, carrying its request and the drawn bar", async () => {
-    const { effects, record } = await request(renderer());
+    const { effects, record } = answered(await request(renderer()));
     const present = presentOf(effects);
     expect(present).toMatchObject({
       kind: "present",
@@ -212,7 +222,7 @@ describe("a statusline request", () => {
     // An eviction between the two turns.
     t.rig.cache.retireSession(SESSION);
     expect(viewOf(t.rig)).toBeNull();
-    const { effects } = await t.r.answer({
+    const { effects } = answered(await t.r.answer({
       kind: "event",
       at: AT,
       event: {
@@ -221,14 +231,14 @@ describe("a statusline request", () => {
         context,
         waitEndsAt: (instantAt(systemTimekeeper) + 5) as Instant,
       },
-    });
+    }));
     expect(presentOf(effects)).toMatchObject({ request: REQUEST });
     expect(viewOf(t.rig)?.facts()).toBe(context);
   });
 
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
     const { r, recorded, rig } = renderer();
-    const { effects } = await request({ r, rig });
+    const { effects } = answered(await request({ r, rig }));
     expect(recorded).toEqual([]);
     await done(r, presentOf(effects), true);
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
@@ -236,11 +246,10 @@ describe("a statusline request", () => {
 
   test("records nothing for a present its client never took, and hears of each present once", async () => {
     const { r, recorded, rig } = renderer();
-    const present = presentOf((await request({ r, rig })).effects);
+    const present = presentOf(answered(await request({ r, rig })).effects);
     await done(r, present, false);
     expect(recorded).toEqual([]);
-    await expect(done(r, present, true)).rejects.toThrow(TurnThrew);
-    await expect(done(r, present, true)).rejects.toThrow(
+    expect(threw(await done(r, present, true)).failure.message).toMatch(
       /not a present on its way/,
     );
   });
@@ -256,15 +265,16 @@ describe("the world state the host hands in", () => {
       seq: held.seq + 1,
       builtins: { ...held.builtins, hostName: { ...ok("elsewhere"), at: AT } },
     };
-    const { effects } = await handIn(t.r, {
+    const { effects } = answered(await handIn(t.r, {
       kind: "world-state",
       worldState: next,
-    });
+    }));
     expect(effects).toEqual([]);
     expect(viewOf(t.rig)?.source.facts()).toBe(next);
-    await expect(
-      handIn(t.r, { kind: "world-state", worldState: held }),
-    ).rejects.toThrow(/does not follow the held seq/);
+    expect(
+      threw(await handIn(t.r, { kind: "world-state", worldState: held }))
+        .failure.message,
+    ).toMatch(/does not follow the held seq/);
   });
 
   test("a retire closes the session's view and drops its world state, and logs no error", async () => {
@@ -298,9 +308,10 @@ describe("the world state the host hands in", () => {
       retireSession(session);
       throw new Error("the view's teardown threw");
     };
-    await expect(
-      handIn(t.r, { kind: "retire", session: SESSION }),
-    ).rejects.toThrow(TurnThrew);
+    expect(
+      threw(await handIn(t.r, { kind: "retire", session: SESSION })).failure
+        .message,
+    ).toBe("the view's teardown threw");
     expect(() => t.rig.served.worldStates.of(SESSION)).toThrow(
       /no world state for session/,
     );
@@ -326,7 +337,7 @@ describe("the world state the host hands in", () => {
 describe("the session's config, ahead of its request", () => {
   test("opens the session's view and names what it reads, with no effect", async () => {
     const t = renderer();
-    const { effects, subscriptions } = await configure(t, checked());
+    const { effects, subscriptions } = answered(await configure(t, checked()));
     expect(effects).toEqual([]);
     const view = viewOf(t.rig)!;
     expect(subscriptions.sources).toEqual(
@@ -338,7 +349,7 @@ describe("the session's config, ahead of its request", () => {
         })),
       },
     );
-    expect(presentOf((await request(t)).effects)).toMatchObject({
+    expect(presentOf(answered(await request(t)).effects)).toMatchObject({
       kind: "present",
       request: REQUEST,
     });
@@ -388,7 +399,7 @@ describe("the session's config, ahead of its request", () => {
 
   test("a request with no config before it is refused, naming the session", async () => {
     const t = renderer();
-    const answering = t.r.answer({
+    const answering = await t.r.answer({
       kind: "event",
       at: AT,
       event: {
@@ -398,8 +409,7 @@ describe("the session's config, ahead of its request", () => {
         waitEndsAt: (instantAt(systemTimekeeper) + 5) as Instant,
       },
     });
-    await expect(answering).rejects.toBeInstanceOf(TurnThrew);
-    await expect(answering).rejects.toThrow(
+    expect(threw(answering).failure.message).toMatch(
       new RegExp(`no world state for session "${SESSION}"`),
     );
   });
@@ -409,7 +419,9 @@ describe("the session's config, ahead of its request", () => {
     t.rig.cache.holdSession = (() => {
       throw new Error("the opening broke");
     }) as never;
-    await expect(configure(t, checked())).rejects.toThrow(/the opening broke/);
+    expect(threw(await configure(t, checked())).failure.message).toBe(
+      "the opening broke",
+    );
     expect(
       t.rig.sessionState.get(SESSION, SESSION_RENDER_ORIGIN_KEY),
     ).toContain(path.join(dir, "config.json5"));
@@ -507,7 +519,7 @@ describe("a click", () => {
     };
     const before = await request(t);
     expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
-    const { effects, subscriptions, record } = await handIn(t.r, click("act"));
+    const { effects, subscriptions, record } = answered(await handIn(t.r, click("act")));
     expect(effects).toEqual([]);
     expect(subscriptions.sources).toEqual({});
     // The host records what it knows of the click; this act waited on nothing.
@@ -526,18 +538,18 @@ describe("a click", () => {
     };
     const before = await request(t);
     expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
-    const thrown = await handIn(t.r, click("act")).catch((e: TurnThrew) => e);
-    expect(thrown).toBeInstanceOf(TurnThrew);
+    const thrown = threw(await handIn(t.r, click("act")));
+    expect(thrown.failure.message).toBe("a later step broke");
     expect(thrown.subscriptions.sources).toEqual({});
   });
 
   test("of a verb the renderer does not have is its bad request", async () => {
     const t = renderer();
-    const answered = handIn(t.r, click("nope"));
-    await expect(answered).rejects.toThrow(TurnThrew);
-    const thrown = await answered.catch((e: TurnThrew) => e.thrown);
-    expect(thrown).toBeInstanceOf(BadVerbArgs);
-    expect((thrown as Error).message).toBe("unknown click verb: nope");
+    const { failure } = threw(await handIn(t.r, click("nope")));
+    expect(failure).toMatchObject({
+      kind: "bad-request",
+      message: "unknown click verb: nope",
+    });
   });
 });
 
@@ -556,11 +568,11 @@ describe("the idle close", () => {
       stillIdle: () => true,
       closed: () => {},
     };
-    const { effects } = await handIn(t.r, {
+    const { effects } = answered(await handIn(t.r, {
       kind: "menu-idle",
       session: SESSION,
       idle,
-    });
+    }));
     expect(effects).toEqual([]);
     expect(closed).toEqual([SESSION]);
   });

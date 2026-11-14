@@ -8,6 +8,7 @@ import {
   requestEvent,
   type RequestFacts,
 } from "../../src/daemon/request-event";
+import { failureOf } from "../../src/daemon/verb-error";
 
 describe("requestEvent", () => {
   test("a throw is an error event carrying the facts it reached, then the thrown value with its stack", () => {
@@ -17,7 +18,7 @@ describe("requestEvent", () => {
     const { level, line } = requestEvent(
       "render",
       facts,
-      { kind: "threw", error },
+      failureOf(error),
       7,
     );
     expect(level).toBe("error");

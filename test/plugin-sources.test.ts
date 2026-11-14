@@ -66,16 +66,12 @@ import type { WorldStates } from "../src/renderer/world-states";
 import { UNREAD_RUN } from "../src/facts/world-state";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
-import {
-  rendererHost,
-  type Delivered,
-  type RendererHost,
-} from "../src/daemon/renderer-host";
+import { rendererHost, type RendererHost } from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import type { Frame } from "../src/render/frame";
-import type { RequestId } from "../src/renderer/interface";
+import type { RendererOutput, RequestId } from "../src/renderer/interface";
 import type { RequestFacts } from "../src/daemon/request-event";
 
 import { sessionIdOf } from "../src/daemon/session-id";
@@ -814,7 +810,8 @@ function statusline(r: Rig, configFile: string) {
     {
       answer: async (input) => {
         const output = await renderer.answer(input);
-        for (const effect of output.effects) presented.push(effect.frame);
+        if (output.kind === "answered")
+          for (const effect of output.effects) presented.push(effect.frame);
         return output;
       },
     },
@@ -824,7 +821,7 @@ function statusline(r: Rig, configFile: string) {
   // [LAW:no-ambient-temporal-coupling] An ask returns once every turn its
   // request delivered has settled, the present's `effect-done` among them, so
   // no turn still holds the session when the test moves on.
-  const delivering: Promise<Delivered>[] = [];
+  const delivering: Promise<RendererOutput>[] = [];
   const host: RendererHost = {
     ...rendered,
     deliver: (input, about) => {

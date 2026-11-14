@@ -112,6 +112,7 @@ import type { LaneSetups } from "./lane-setup.js";
 import type { TmuxStatusLines } from "./tmux-status.js";
 import type { Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
+import { failureOf } from "./verb-error.js";
 
 // [LAW:one-way-deps] exception: what the renderer side still reaches of the
 // host, each by the methods it calls, so the reach is named by type. Each
@@ -147,14 +148,18 @@ export interface RendererParts {
 // nothing to record.
 export const NOTHING_DELIVERED = (): void => {};
 
-// [LAW:single-enforcer] The one reply to a request whose handler threw — a
-// render's own throw, or any other handler's that reached the connection.
-export const renderFailed = (err: unknown): Refusal => ({
+// [LAW:single-enforcer] The one reply to a request that failed — a render's own
+// throw, a turn's failure, or any other handler's throw that reached the
+// connection — saying the failure's message.
+export const failedWith = (message: string): Refusal => ({
   ok: false,
-  error: err instanceof Error ? err.message : inspect(err),
+  error: message,
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION,
 });
+
+export const renderFailed = (err: unknown): Refusal =>
+  failedWith(failureOf(err).message);
 
 // [LAW:dataflow-not-control-flow] A render's answer in each encoding, looked up
 // by the value the checkpoint parsed. Keyed by the type, so a new encoding names
@@ -215,7 +220,7 @@ export function renderFrame(
       failure: null,
     };
   } catch (error) {
-    const outcome = { kind: "threw", error } as const;
+    const outcome = failureOf(error);
     const { level, line } = requestEvent(
       "render",
       facts,

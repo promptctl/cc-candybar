@@ -3,7 +3,7 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import { renderFailed } from "./draw-bar.js";
+import { failedWith, renderFailed } from "./draw-bar.js";
 import {
   answerStatusline,
   NOTHING_TO_SETTLE,
@@ -25,9 +25,8 @@ import {
   CLICK_PROGRAM_TIMEOUT_MS,
   clickHandoff,
   clickSessionOf,
-  BadVerbArgs,
 } from "./verbs";
-import { ClickAbandoned, DaemonClosing } from "./verb-error";
+import { badRequest, failureOf } from "./verb-error";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
@@ -412,7 +411,7 @@ export async function replyTo(
       // [LAW:no-silent-failure] The driver hands every turn's failure back
       // as a value; a throw here is its own bug, answered as any throw is.
       (error: unknown): StatuslineAnswer => ({
-        outcome: { kind: "threw", error },
+        outcome: failureOf(error),
         resp: renderFailed(error),
         seen: "failed",
         settled: NOTHING_TO_SETTLE,
@@ -643,12 +642,9 @@ async function clickOutcome(
   noteFacts(facts, { via: "cli" });
   const { verb, value } = req as { verb: unknown; value: unknown };
   if (typeof verb !== "string" || typeof value !== "string") {
-    return {
-      kind: "bad-request",
-      problems: [
-        `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`,
-      ],
-    };
+    return badRequest(
+      `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`,
+    );
   }
   return clickRan(() => handleClick(parts, verb, value, arrival, facts, gone));
 }
@@ -674,21 +670,15 @@ async function urlClick(
       const { urlV, url } = frame;
       noteFacts(facts, { via: "forwarder", urlV: String(urlV) });
       if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV)) {
-        return {
-          kind: "bad-request",
-          problems: [
-            `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`,
-          ],
-        };
+        return badRequest(
+          `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`,
+        );
       }
       if (typeof url !== "string") {
-        return {
-          kind: "bad-request",
-          problems: [`the URL handler's frame carries no url string`],
-        };
+        return badRequest(`the URL handler's frame carries no url string`);
       }
       const link = parseHandlerUrl(url);
-      if (!link.ok) return { kind: "bad-request", problems: [link.problem] };
+      if (!link.ok) return badRequest(link.problem);
       const arrival: ClickArrival = {
         via: "link",
         delivery: { kind: "forwarder", urlV },
@@ -708,11 +698,7 @@ async function clickRan(
   try {
     return await click();
   } catch (error) {
-    if (error instanceof BadVerbArgs)
-      return { kind: "bad-request", problems: [error.message] };
-    if (error instanceof DaemonClosing) return { kind: "closing", error };
-    if (error instanceof ClickAbandoned) return { kind: "abandoned", error };
-    return { kind: "threw", error };
+    return failureOf(error);
   }
 }
 
@@ -728,10 +714,10 @@ const VERB_FACT: Readonly<Record<ClickArrival["via"], string>> = {
 // which decides what it means and acts on it (src/renderer/click.ts); the
 // host parses its session at the one session-id checkpoint, holds the session
 // for as long as the turn runs, and records the turn on the click's event.
-// [LAW:types-are-the-program] A turn that threw is the click's outcome by the
-// class of what it threw, never by its message: BadVerbArgs (an unknown verb,
-// invalid arguments) is a bad request, anything else the daemon's failure
-// (`clickRan`).
+// [LAW:types-are-the-program] A turn that threw is the click's outcome by its
+// failure's kind, never by its message (`failureOf`): a bad argument (an
+// unknown verb, invalid arguments) is a bad request, anything else the
+// daemon's failure.
 async function handleClick(
   parts: DaemonParts,
   verb: string,
@@ -762,11 +748,11 @@ async function handleClick(
   });
   switch (delivered.kind) {
     case "answered":
-      facts.push(...delivered.output.record);
+      facts.push(...delivered.record);
       return { kind: "ok" };
     case "threw":
       facts.push(...delivered.record);
-      throw delivered.error;
+      return delivered.failure;
   }
 }
 
@@ -778,14 +764,14 @@ function clickReply(outcome: RequestOutcome): Response {
     case "bad-request":
       return {
         ok: false,
-        error: outcome.problems.join("; "),
+        error: outcome.message,
         code: "BAD_REQUEST",
         daemonV: PROTOCOL_VERSION,
       };
     case "threw":
     case "closing":
     case "abandoned":
-      return renderFailed(outcome.error);
+      return failedWith(outcome.message);
   }
 }
 
@@ -800,22 +786,18 @@ async function statusLineClick(
   clientGone: () => boolean,
 ): Promise<RequestOutcome> {
   const { tmuxStatusLines } = parts;
-  const refused = (problem: string): RequestOutcome => ({
-    kind: "bad-request",
-    problems: [problem],
-  });
   const click = tmuxStatusLines.linkAt(value);
-  if (click.kind === "refused") return refused(click.reason);
+  if (click.kind === "refused") return badRequest(click.reason);
   noteFacts(facts, { link: click.url });
   if (click.url.startsWith("cc-candybar://")) {
     // A link a config wrote with a malformed escape is refused, as any
     // click's malformed wire encoding is.
     const parsed = parseHandlerUrl(click.url);
-    if (!parsed.ok) return refused(parsed.problem);
+    if (!parsed.ok) return badRequest(parsed.problem);
     // [LAW:no-silent-failure] A link the bar draws never names this verb; one
     // that did would be a click that only ever clicks another.
     if (parsed.verb === VERB_TMUX_STATUS_CLICK)
-      return refused("a status-line link names another status-line click");
+      return badRequest("a status-line link names another status-line click");
     return handleClick(
       parts,
       parsed.verb,
@@ -842,7 +824,7 @@ async function statusLineClick(
 
 // The answer to a request the checkpoint refused.
 const refusedRender = (problems: string[]) => ({
-  outcome: { kind: "bad-request", problems } as const,
+  outcome: badRequest(...problems),
   resp: {
     ok: false,
     error: `malformed hookData: ${problems.join("; ")}`,

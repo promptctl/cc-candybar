@@ -14,8 +14,8 @@ import { sessionIdOf } from "../../src/daemon/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { answerStatusline } from "../../src/daemon/statusline-answer";
 import type { RequestFacts } from "../../src/daemon/request-event";
+import { failureOf } from "../../src/daemon/verb-error";
 import {
-  TurnThrew,
   type Effect,
   type EffectId,
   type Event,
@@ -60,12 +60,29 @@ const present = (id: number, request = REQUEST): Effect => ({
 const output = (
   effects: readonly Effect[],
   record: RendererOutput["record"] = [],
-): RendererOutput => ({ effects, subscriptions: NO_SUBSCRIPTIONS, record });
+): RendererOutput => ({
+  kind: "answered",
+  effects,
+  subscriptions: NO_SUBSCRIPTIONS,
+  record,
+});
 
-// A renderer whose request turn answers `output` (or throws it), whose config
+// A turn that threw `message`, having reached `record`.
+const threwWith = (
+  record: RendererOutput["record"],
+  message: string,
+  subscriptions: Subscriptions = NO_SUBSCRIPTIONS,
+): RendererOutput => ({
+  kind: "threw",
+  failure: failureOf(new Error(message)),
+  subscriptions,
+  record,
+});
+
+// A renderer whose request turn answers `request`, whose config
 // turn answers `configured`, and which keeps every event it hears.
 function scripted(
-  request: RendererOutput | TurnThrew,
+  request: RendererOutput,
   configured: RendererOutput = output([]),
 ): {
   readonly renderer: Renderer;
@@ -88,7 +105,6 @@ function scripted(
             return configured;
           case "request":
             requests.push(event);
-            if (request instanceof TurnThrew) throw request;
             return request;
           default:
             heard.push(event);
@@ -227,11 +243,7 @@ test("a config turn's effects are refused, each owed its effect-done, and the re
 
 test("a turn that throws is a failure naming the renderer, with what it learned on the request's event", async () => {
   const { renderer } = scripted(
-    new TurnThrew(
-      [["lanes", "-"]],
-      new Error("the draw broke"),
-      NO_SUBSCRIPTIONS,
-    ),
+    threwWith([["lanes", "-"]], "the draw broke"),
   );
   const { answered, facts } = await answer(renderer);
   expect(answered.resp).toMatchObject({
@@ -249,7 +261,7 @@ test("a turn that throws still hands the host what its open views read", async (
   };
   const subscribed: Subscriptions[] = [];
   const { renderer } = scripted(
-    new TurnThrew([], new Error("the draw broke"), left),
+    threwWith([], "the draw broke", left),
   );
   await answer(renderer, [], subscribed);
   expect(subscribed).toEqual([NO_SUBSCRIPTIONS, left]);
@@ -261,7 +273,7 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
     answer: async ({ event }) => {
       if (event.kind === "config") return output([]);
       if (event.kind === "request") return output([present(1)]);
-      throw new TurnThrew([], new Error("no such present"), NO_SUBSCRIPTIONS);
+      return threwWith([], "no such present");
     },
   };
   const { answered } = await answer(renderer, logged);
@@ -306,7 +318,7 @@ test("the session's config reaches the renderer first, with the world state read
 });
 
 test("the host holds the session through each of its turns, with nothing held by the request's own code, and lets go once each answers or throws", async () => {
-  const threw = () => new TurnThrew([], new Error("x"), NO_SUBSCRIPTIONS);
+  const threw = () => threwWith([], "x");
   for (const [config, request] of [
     [output([]), output([present(1)])],
     [output([]), threw()],
@@ -318,13 +330,12 @@ test("the host holds the session through each of its turns, with nothing held by
       answer: async ({ event }) => {
         const turn = event.kind === "config" ? config : request;
         heldDuring.push(`${event.kind}:${holds.count}`);
-        if (turn instanceof TurnThrew) throw turn;
         return turn;
       },
     };
     await answer(renderer, [], [], holds);
     expect(heldDuring).toEqual(
-      config instanceof TurnThrew ? ["config:1"] : ["config:1", "request:1"],
+      config.kind === "threw" ? ["config:1"] : ["config:1", "request:1"],
     );
     // Each turn's hold names the session the request's document was read for.
     expect(new Set(holds.sessions)).toEqual(new Set([REQ.hookData.session_id]));

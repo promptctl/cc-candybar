@@ -19,13 +19,8 @@ import type { RequestFacts } from "../daemon/request-event.js";
 import { clickTurn } from "./click.js";
 import type { MainRendererParts } from "./verbs.js";
 import type { Instant } from "../utils/instant.js";
-import {
-  TurnThrew,
-  type EffectId,
-  type Event,
-  type Renderer,
-  type RendererOutput,
-} from "./interface.js";
+import { failureOf } from "../daemon/verb-error.js";
+import type { Effect, EffectId, Event, Renderer } from "./interface.js";
 
 export function mainRenderer(parts: MainRendererParts): Renderer {
   // [LAW:single-enforcer] What each present's frame records once it reached
@@ -35,26 +30,15 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
   const deliveries = new Map<EffectId, () => void>();
   let minted = 0;
 
-  // [LAW:one-source-of-truth] What a turn's output says the renderer needs
-  // read: the open views' subscriptions as they stand when it answers.
-  const answered = (
-    effects: RendererOutput["effects"],
-    record: RequestFacts,
-  ): RendererOutput => ({
-    effects,
-    subscriptions: parts.renderCache.subscriptions(),
-    record,
-  });
-
   const turn = async (
     event: Event,
     at: Instant,
     record: RequestFacts,
-  ): Promise<RendererOutput> => {
+  ): Promise<readonly Effect[]> => {
     switch (event.kind) {
       case "config":
         configureSession(parts, event.context, event.worldState, at, record);
-        return answered([], record);
+        return [];
       case "request": {
         const { frame, delivered } = await answerRequest(
           parts,
@@ -65,26 +49,23 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
         );
         const id = ++minted as EffectId;
         deliveries.set(id, delivered);
-        return answered(
-          [
-            {
-              kind: "present",
-              id,
-              session: event.context.hookData.session_id,
-              surface: "statusline",
-              request: event.id,
-              frame,
-            },
-          ],
-          record,
-        );
+        return [
+          {
+            kind: "present",
+            id,
+            session: event.context.hookData.session_id,
+            surface: "statusline",
+            request: event.id,
+            frame,
+          },
+        ];
       }
       case "world-state":
         parts.worldStates.take(event.worldState);
-        return answered([], record);
+        return [];
       case "retire":
         retireSession(parts, event.session);
-        return answered([], record);
+        return [];
       case "effect-done": {
         const delivered = deliveries.get(event.of);
         // [LAW:no-silent-failure] An effect this renderer never returned, or
@@ -95,25 +76,35 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
           );
         deliveries.delete(event.of);
         if (event.outcome.kind === "ok") delivered();
-        return answered([], record);
+        return [];
       }
       case "click":
         await clickTurn(parts, event, record);
-        return answered([], record);
+        return [];
       case "menu-idle":
         await parts.verbs.closeIdle(event.session, event.idle);
-        return answered([], record);
+        return [];
     }
   };
 
   return {
     answer: async ({ event, at }) => {
       const record: RequestFacts = [];
-      try {
-        return await turn(event, at, record);
-      } catch (thrown) {
-        throw new TurnThrew(record, thrown, parts.renderCache.subscriptions());
-      }
+      const ended = await turn(event, at, record).then(
+        (effects) => ({ kind: "answered", effects }) as const,
+        // [LAW:single-enforcer] Classified here, where it was thrown: a class
+        // crosses no process.
+        (thrown: unknown) =>
+          ({ kind: "threw", failure: failureOf(thrown) }) as const,
+      );
+      // [LAW:one-source-of-truth] What the renderer needs read: the open
+      // views' subscriptions as they stand when the turn ends, however it
+      // ended.
+      return {
+        ...ended,
+        record,
+        subscriptions: parts.renderCache.subscriptions(),
+      };
     },
   };
 }
