@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-744",
+      "ref": "refs/pull/744/merge",
+      "sha": "55240d195527137ad9049f96d5b30be12c0a8c0b",
+      "timestamp": "2026-11-14T10:54:44.292Z",
+      "commits": [
+        {
+          "sha": "55240d195527137ad9049f96d5b30be12c0a8c0b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T03:53:46-07:00",
+          "message": "Merge d79128fc184e5695576394c4d8d48bde5d6300f3 into e0e964426de0dc976ed7a9554314baa162697a6d\n"
+        },
+        {
+          "sha": "d79128fc184e5695576394c4d8d48bde5d6300f3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T03:52:07-07:00",
+          "message": "test(renderer): the renderer's every input and output crosses a process as JSON, checked at compile time (candybar-host-renderer-x96a.265)\n"
+        },
+        {
+          "sha": "64cb3a995a15d6019fa344b23ce70dfaddca6871",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T03:47:35-07:00",
+          "message": "refactor(renderer): a click crosses to its renderer by its request's id, and the host answers whether its client left (candybar-host-renderer-x96a.265)\n"
+        },
+        {
+          "sha": "9f4f9a4cad45f150afe00a5364c903289792f159",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T03:42:08-07:00",
+          "message": "refactor(renderer): the idle close's event carries its span, and its turn asks the clock whether it goes ahead (candybar-host-renderer-x96a.265)\n"
+        },
+        {
+          "sha": "28a5313df3b3476a71a9a9beb3cd4c391757f801",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T03:39:03-07:00",
+          "message": "refactor(renderer): a turn's failure is data the renderer classifies where it was thrown, and a request's outcome is ok or that failure (candybar-host-renderer-x96a.265)\n"
+        },
+        {
+          "sha": "dc3c8719b03818a9a5145600981d1cc4f6576cf1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T03:26:25-07:00",
+          "message": "refactor(renderer): subscriptions are a record and a request's wait ends at an instant, so neither depends on its process (candybar-host-renderer-x96a.265)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "e0e964426de0dc976ed7a9554314baa162697a6d",
@@ -13,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-13T18:34:12-07:00",
           "message": "docs(spec): one kind of renderer, out of process first through an adapter, and a config write is a change guarded per setting (candybar-host-renderer-x96a.4ol) (#743)\n\n* docs(spec): one kind of renderer, out of process first through an adapter, and a config write is a change guarded per setting (candybar-host-renderer-x96a.4ol)\n\n* docs(spec): a change's read tells absence from a value, and a landed change reaches every session holding its file through discovery (candybar-host-renderer-x96a.4ol)"
-        }
-      ]
-    },
-    {
-      "version": "pr-740",
-      "ref": "refs/pull/740/merge",
-      "sha": "55fc9455d8ed98b1d498de2a4c827405d79f94e4",
-      "timestamp": "2026-11-12T18:43:00.816Z",
-      "commits": [
-        {
-          "sha": "55fc9455d8ed98b1d498de2a4c827405d79f94e4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T11:42:06-07:00",
-          "message": "Merge 12d2593abaa31207af294dbac43dbf40745a048c into 62d68333106c04b0083e0576a630ef2bc03762ce\n"
-        },
-        {
-          "sha": "12d2593abaa31207af294dbac43dbf40745a048c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-12T11:41:42-07:00",
-          "message": "feat(renderer): a copy click's clipboard write is a copy effect the host performs, inside the click's turn (candybar-host-renderer-x96a.zty)\n\nThe click's order (its session's place, the daemon-wide journal turn, the\nclose that cuts it off) is taken inside its turn while the other verbs act in\nplace, so the turn waits out its own copy rather than returning it: a batch's\nsteps stay in order, a failed copy is still the click's reply, and the\nlaunch-outcome rule stays the verb's one rule.\n"
         }
       ]
     }
