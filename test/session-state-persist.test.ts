@@ -8,11 +8,11 @@ import fs, {
 } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { FileSessionStorage } from "../src/daemon/session-state-file";
 import { throughout, until } from "./helpers/until";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");

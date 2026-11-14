@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { NAME_PERIOD_MS, TmuxService } from "../src/segments/tmux";
+import { NAME_PERIOD_MS, TmuxService } from "../src/daemon/cache/tmux";
 import { Holds } from "../src/utils/holds";
 import { systemLauncher } from "../src/proc/system-launcher";
-import type { Launcher } from "../src/proc/launch";
-import type { LaunchCategory } from "../src/proc/launch";
+import type { Launcher } from "../src/proc/launcher";
+import type { LaunchCategory } from "../src/proc/launcher";
 import type { LaunchStatsHandle } from "../src/proc/stats-handle";
 import type { TmuxHint } from "../src/tmux-hint";
 import { laneOutcome } from "../src/utils/reading";

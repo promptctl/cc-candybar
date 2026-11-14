@@ -195,7 +195,7 @@ A **recording** is a file of lines `{ at: Instant, facts: SessionFacts }`, writt
 
 ## 15. Gather's process
 
-- **Address.** `<runtime dir>/gather.v<N>.sock`, where `<runtime dir>` is `/tmp/cc-candybar-<uid>/`, the directory the socket lives in today, under the same owner and mode checks `ensureSocketParentSafe` applies now. `N` is `FACTS_PROTOCOL_MAJOR`, one constant in `src/daemon/protocol.ts`, mirrored into `scripts/check-protocol.mjs` and nowhere else; the Rust client and the Swift forwarder never dial Gather.
+- **Address.** `<runtime dir>/gather.v<N>.sock`, where `<runtime dir>` is `/tmp/cc-candybar-<uid>/`, the directory the socket lives in today, under the same owner and mode checks `ensureSocketParentSafe` applies now. `N` is `FACTS_PROTOCOL_MAJOR`, one constant in `src/daemon/foundations/protocol.ts`, mirrored into `scripts/check-protocol.mjs` and nowhere else; the Rust client and the Swift forwarder never dial Gather.
 - **Start.** A renderer that gets a refused connect takes the spawn lock beside the Gather socket (the daemon's own `spawn.lock` rules, keyed by socket) and runs `node <its own bundle> gather`, detached, then dials again with the existing backoff. Two renderers racing start one Gather because the lock is one.
 - **Lease.** `<gather socket>.lease`, the daemon's `LeaseRecord` and `arbitrateSocket` reused as they are; `binPath` names the bundle it runs.
 - **End.** Gather exits when its bundle changes (the daemon's `binaryWatch`, same 60 s stat), when its memory backstop fires (the daemon's `limits`, as it is), or when it has had no connected renderer for the idle grace. The grace is 120 s, a parameter. There is no idle shutdown for renderers, as today, and nothing here adds one.

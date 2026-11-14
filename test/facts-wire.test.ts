@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseFact, restamp } from "../src/facts/fact";
 import { parseGithubPr } from "../src/segments/git";
-import { readAutoCompactWindow } from "../src/segments/autocompact";
+import { readAutoCompactWindow } from "../src/daemon/cache/autocompact";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { jsonParser } from "../src/var-system/parse";
 

@@ -34,8 +34,8 @@ import { rootNode } from "../src/config/root";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { PRESET_FLOOR, presetGlobals, presetRoot } from "../src/config/presets";
 import { checkConfig } from "../src/check";
-import { daemonGates } from "../src/daemon/update-keys";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-presets");
 const THEME = "textual-dark";

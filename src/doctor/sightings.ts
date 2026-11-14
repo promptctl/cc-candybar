@@ -11,8 +11,14 @@
 import type {
   FrameSighting,
   RenderSighting,
-} from "../daemon/render-sightings.js";
-import { RECENT_CLIENT_S } from "./checks.js";
+  RoledSaid,
+} from "../daemon/foundations/sightings.js";
+import {
+  RECENT_CLIENT_S,
+  type Asked,
+  type Width,
+  type UrlHandlerFacts,
+} from "./checks.js";
 
 // [LAW:types-are-the-program] Who delivered a link to the daemon: the URL
 // handler app, forwarding it raw in a frame of the version it spells, or
@@ -106,3 +112,52 @@ export const barsOf = (
       claudeConfigDir,
     }),
   );
+
+// [LAW:parse-dont-validate] The nonce is the CLI's `randomUUID()`; anything
+// else on the wire is not a probe this code sent.
+const NONCE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
+
+export function parseProbeNonce(value: string): string | null {
+  return NONCE.test(value) ? value : null;
+}
+
+// A click that arrived as a link IS a link that came back through the URL
+// handler, and who delivered it says whether that handler is the forwarder;
+// one from the tmux status line came through tmux, and says nothing of it.
+export function clickArrived(arrival: ClickArrival): UrlHandlerFacts {
+  switch (arrival.via) {
+    case "link":
+      return { kind: "arrived", delivery: arrival.delivery };
+    case "tmux-status":
+      return {
+        kind: "unprobed",
+        reason:
+          "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler — run `cc-candybar doctor` to probe the handler",
+      };
+  }
+}
+
+// [LAW:single-enforcer] The width one session's statusline client measured,
+// read off that session's latest renders — the click's own, or the sightings
+// `cc-candybar doctor` was answered for the session it runs in. The daemon
+// holds no such render when it has drawn the session's statusline none since
+// it started (the bar on screen is an earlier daemon's), when it has dropped
+// it for newer sessions' renders, or when only a `frames` client draws it.
+export function sessionWidth(
+  sessionId: string,
+  said: ReadonlyArray<Pick<RoledSaid, "role" | "termCols">>,
+): Asked<Width> {
+  const statusline = said.find((s) => s.role === "statusline");
+  return statusline === undefined
+    ? {
+        kind: "failed",
+        reason: `the daemon holds no statusline render of session ${sessionId} — none since it started, or dropped for newer sessions' renders, or only a frames display draws it, which reports no width — so no width a statusline client measured is known; run this again once the statusline has redrawn`,
+      }
+    : {
+        kind: "ok",
+        value: {
+          columns: statusline.termCols,
+          of: { kind: "session", sessionId },
+        },
+      };
+}

@@ -6,7 +6,7 @@ import { textOf } from "../src/render/frame";
 import { buildRig } from "./helpers/rig";
 import { linkUrls } from "./helpers/frame";
 import { effectsOf } from "./helpers/click";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import {
   ConfigError,
   loadConfigSource,

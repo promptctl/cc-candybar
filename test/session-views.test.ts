@@ -10,23 +10,23 @@ import {
   SOURCES_NOTHING,
   RenderCache,
   type SessionView,
-} from "../src/daemon/cache/render";
-import type { ViewFacts } from "../src/daemon/render-payload";
+} from "../src/renderer/render-cache";
+import type { ViewFacts } from "../src/renderer-interface/request-context";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT } from "../src/utils/outcome";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { systemLauncher } from "../src/proc/system-launcher";
-import { type Launcher } from "../src/proc/launch";
+import { type Launcher } from "../src/proc/launcher";
 import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S_A = sessionIdOf("s-a");
 const S_COPY = sessionIdOf("s-copy");
 

@@ -3,13 +3,13 @@
 // first, less the draw's reserve — and, from a client too old to state one,
 // by the earliest an old client gives up at.
 
-import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS } from "../../src/daemon/protocol";
+import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS } from "../../src/daemon/foundations/protocol";
 import {
   DRAW_RESERVE_MS,
   REQUEST_TIMEOUT_MS,
   parseClientDeadline,
   waitBudgetMs,
-} from "../../src/daemon/request-deadline";
+} from "../../src/daemon/foundations/request-deadline";
 
 // A request accepted at 1000 ms on the monotonic clock, beginning 10 ms later,
 // at a wall-clock instant of 5_000_000 ms.

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Invalidation, WatcherHandle, WatcherRegistry } from "./watchers";
+import type { WatcherRegistry } from "./watchers";
+import type { Invalidation, WatcherHandle } from "../foundations/watch-targets";
 import {
   sameIdentity,
   statIdentity,
@@ -11,6 +12,8 @@ import type { Release } from "../../utils/holds";
 import type { DaemonLogger } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
 import type { Timekeeper } from "../../time";
+import type { FileEventsStats, Delivery } from "../foundations/stats-snapshot";
+import { iso, stopped } from "../foundations/file-events-warnings";
 
 // [LAW:no-ambient-temporal-coupling] How often the owner writes a probe: a
 // probe's event gets one full period, far above the watch's debounce.
@@ -23,31 +26,6 @@ export const STALL_AFTER = 2;
 // The file the owner rewrites in its folder to test its watch.
 export const PROBE_FILE = "probe";
 
-// [LAW:types-are-the-program] Whether the OS is delivering this daemon's file
-// events. `delivering`: the times of the probes written since the watch last
-// reported. `stalled`: STALL_AFTER probes in a row went unreported.
-// `unmeasured`: the daemon cannot check, since a time and for a reason.
-//
-// `missedSince` is the start of the span in which the daemon cannot vouch
-// that it heard every event: opened by a stall's first unreported probe or by
-// a move into `unmeasured`, whichever comes first, carried through every
-// later state, and closed only by an event the watch reports. Closing it is
-// the catch-up, so the catch-up runs however the span ended. A stall always
-// has one; only an owner never started is unmeasured without one.
-export type Delivery =
-  | {
-      readonly kind: "delivering";
-      readonly unreported: readonly number[];
-      readonly missedSince: number | null;
-    }
-  | { readonly kind: "stalled"; readonly missedSince: number }
-  | {
-      readonly kind: "unmeasured";
-      readonly since: number;
-      readonly reason: string;
-      readonly missedSince: number | null;
-    };
-
 // What subscribers are told: a period passed; delivery moved to another
 // state; or a span closed, starting at `since`, in which an event may have
 // gone unheard.
@@ -55,16 +33,6 @@ export type DeliveryNotice =
   | { readonly kind: "period" }
   | { readonly kind: "moved" }
   | { readonly kind: "caught-up"; readonly since: number };
-
-export interface FileEventsStats {
-  readonly delivery: Delivery;
-  // Every move into a stall, every span closed, and the probes written and
-  // failed.
-  readonly stalls: number;
-  readonly catchUps: number;
-  readonly probes: number;
-  readonly probeFailures: number;
-}
 
 // What a consumer of the one fact reads.
 export type FileEvents = Pick<FileEventDelivery, "delivery" | "subscribe">;
@@ -97,8 +65,6 @@ type Instrument =
   | { readonly kind: "ended"; readonly stopPeriod: () => void };
 
 type Probing = Extract<Instrument, { kind: "probing" }>;
-
-const iso = (at: number): string => new Date(at).toISOString();
 
 // One state per label: a move is a change of label, so a second probe write
 // failing for the same reason is not one.
@@ -393,44 +359,12 @@ export class FileEventDelivery {
   }
 }
 
-const stopped = (since: number): string =>
-  `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
-
 // [LAW:one-source-of-truth] Why nothing that refreshes on file events can
 // refresh now, or `null` while delivery is not stalled: what each such
 // consumer shows. Unmeasured is no finding about delivery, so it is not one
 // here: those consumers read as usual, and the bar's row says it cannot check.
 export const stallReason = (d: Delivery): string | null =>
   d.kind === "stalled" ? stopped(d.missedSince) : null;
-
-// [LAW:no-silent-failure] The bar's row for as long as the span is open,
-// whatever state delivery is in: an edit made after the span's start may never
-// have been heard, and only an event the watch reports closes it. With no span
-// open nothing can have gone unheard, so a delivering watch draws none, and
-// neither does an owner never started: the page's simulated machine watches
-// nothing an edit could depend on, and a test's daemon in a jest worker proves
-// the watches it reads by a delivered event.
-export interface FileEventsWarning {
-  readonly kind: "file-events";
-  readonly state: Delivery["kind"];
-  readonly message: string;
-}
-
-export function fileEventsWarnings(d: Delivery): FileEventsWarning[] {
-  if (d.missedSince === null) return [];
-  const since = iso(d.missedSince);
-  const message = (): string => {
-    switch (d.kind) {
-      case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
-      case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
-      case "unmeasured":
-        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
-    }
-  };
-  return [{ kind: "file-events", state: d.kind, message: message() }];
-}
 
 // daemon-stats' `fileEvents` line: the state, then the span's start whenever
 // one is open, the same instant the bar's row names.

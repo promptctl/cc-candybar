@@ -35,7 +35,7 @@ import { buildRig } from "./helpers/rig";
 import type { DslConfig } from "../src/config/dsl-types";
 import { EDIT_LIVE_DISPLAY } from "../src/config/edit-chrome";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-glyphs";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-help");
 const ALLOWED = new Set(listResolvablePaletteNames());

@@ -17,7 +17,7 @@ import { linksOf } from "../../../src/click/read.js";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure.js";
 import { tryClickViaDaemon } from "../../../src/daemon/client.js";
 import { describeFailure } from "../../../src/daemon/client-transport.js";
-import type { StatsSnapshot } from "../../../src/daemon/stats.js";
+import type { StatsSnapshot } from "../../../src/daemon/foundations/stats-snapshot.js";
 import { clickOf } from "../../../src/click/read.js";
 import { composeBar } from "../../../src/render/frame.js";
 import type { RepoShape } from "../fixtures.js";

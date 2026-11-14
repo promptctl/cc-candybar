@@ -127,7 +127,7 @@ function segmentDeltas(
 // A preset's own `globals` is a globals fragment, so it merges FIELD by field
 // like every other one: a file retuning `presets.compact.globals.padding` —
 // what `💾 save` writes for a field the active preset authors
-// (src/daemon/setting-drafts.ts) — says nothing about the fragment's other
+// (src/renderer/setting-drafts.ts) — says nothing about the fragment's other
 // fields. The delta's fragment is laid over the base's before the overlay
 // replaces the member's `globals` field whole.
 function presetDeltas(

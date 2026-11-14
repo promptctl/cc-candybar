@@ -4,19 +4,20 @@ import { parseArgs } from "node:util";
 import { isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
 import { requestedConfigTarget } from "../config-hint";
-import { parseClientHints, RENDER_ENCODINGS } from "./protocol";
-import type {
-  ReaderRenderRequest,
-  RefusedArg,
-  RenderEncoding,
-} from "./protocol";
-import { parseSessionId } from "./session-id";
+import {
+  parseClientHints,
+  RENDER_ENCODINGS,
+  type ReaderRenderRequest,
+  type RefusedArg,
+  type RenderEncoding,
+} from "./foundations/protocol";
+import { parseSessionId } from "./foundations/session-id";
 import type { RuntimeStats } from "./stats";
 import type { DaemonLogger } from "../utils/logger";
 import { validateHookData } from "../utils/schema-validator.js";
 import { rateLimitsSeen } from "./render-sightings";
-import type { CheckedRenderRequest } from "../renderer/request-context.js";
-import { parseClientDeadline } from "./request-deadline.js";
+import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import { parseClientDeadline } from "./foundations/request-deadline.js";
 
 // [LAW:single-enforcer][LAW:no-silent-failure] Parse render-path args with
 // the standard util at the trust boundary. `--config <path>` is the sole

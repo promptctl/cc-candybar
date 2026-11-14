@@ -35,11 +35,11 @@ import {
   ENTRY_BYTES,
   COMPILE_BYTES,
   VIEW_BYTES,
-} from "../src/daemon/cache/render";
-import { SessionState } from "../src/daemon/session-state";
-import { parseClientHints } from "../src/daemon/protocol";
-import type { ViewFacts } from "../src/daemon/render-payload";
-import { sessionIdOf } from "../src/daemon/session-id";
+} from "../src/renderer/render-cache";
+import { SessionState } from "../src/renderer/session-state";
+import { parseClientHints } from "../src/daemon/foundations/protocol";
+import type { ViewFacts } from "../src/renderer-interface/request-context";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { Holds } from "../src/utils/holds";
 import { stateGate } from "./helpers/gates";
 import {
@@ -62,7 +62,7 @@ import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
-import { repoConfigsDir, repoConfigsPath } from "../src/daemon/repo-configs";
+import { repoConfigsDir, repoConfigsPath } from "../src/renderer/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";

@@ -29,7 +29,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -42,14 +42,14 @@ import {
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { GROUP_NS } from "../src/config/reserved-names";
 import type { RichText } from "@promptctl/rich-js";
-import { VERBS } from "../src/daemon/verbs";
-import type { VerbContext } from "../src/daemon/verbs";
+import { VERBS } from "../src/renderer/verbs";
+import type { VerbContext } from "../src/renderer/verbs";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";

@@ -8,7 +8,7 @@
 // the user's and package managers' plugin roots never ask.
 //
 // [LAW:effects-at-boundaries] Pure: the answers are read at each caller's
-// edge (src/daemon/repo-configs.ts) and handed in.
+// edge (src/renderer/repo-configs.ts) and handed in.
 
 import type { WorktreeLink } from "../../utils/git-root.js";
 import type { Asked } from "../../utils/outcome.js";

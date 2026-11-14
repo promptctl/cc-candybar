@@ -20,7 +20,7 @@ import {
 } from "../config/disclosure.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import { linkFragment } from "./action.js";
-import type { SessionId } from "../daemon/session-id.js";
+import type { SessionId } from "../daemon/foundations/session-id.js";
 
 export function disclosureCloseFragment(
   sessionId: SessionId,

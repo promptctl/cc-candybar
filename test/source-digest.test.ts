@@ -7,13 +7,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  isSourceEntry,
-  SHORT_DIGEST_LENGTH,
-  shortDigest,
-  sourceDigest,
-  crateDigest,
-} from "../src/source-digest";
+import { isSourceEntry, sourceDigest, crateDigest } from "../src/source-digest";
+import { SHORT_DIGEST_LENGTH, shortDigest } from "../src/facts/world-state";
 
 const HOUR_S = 60 * 60;
 
@@ -36,7 +31,10 @@ function bumpMtimes(dir: string): void {
   }
 }
 
-const BASE = { "index.ts": "export const a = 1;\n", "daemon/cache/render.ts": "render\n" };
+const BASE = {
+  "index.ts": "export const a = 1;\n",
+  "daemon/cache/render.ts": "render\n",
+};
 const roots: string[] = [];
 const scratch = (files: Record<string, string> = BASE): string => {
   const r = tree(files);
@@ -44,7 +42,8 @@ const scratch = (files: Record<string, string> = BASE): string => {
   return r;
 };
 afterEach(() => {
-  for (const r of roots.splice(0)) fs.rmSync(r, { recursive: true, force: true });
+  for (const r of roots.splice(0))
+    fs.rmSync(r, { recursive: true, force: true });
 });
 
 describe("sourceDigest", () => {
@@ -114,9 +113,9 @@ describe("sourceDigest", () => {
   // [LAW:no-silent-failure] A tree that cannot be read has no digest — a
   // digest over part of the source would be a lie.
   test("a missing tree throws", () => {
-    expect(() => sourceDigest(path.join(os.tmpdir(), "ccb-digest-absent"))).toThrow(
-      /ENOENT/,
-    );
+    expect(() =>
+      sourceDigest(path.join(os.tmpdir(), "ccb-digest-absent")),
+    ).toThrow(/ENOENT/);
   });
 });
 
@@ -141,13 +140,18 @@ describe("crateDigest", () => {
   test("cargo's output and the crate's other files are not", () => {
     const root = scratch(CRATE);
     const before = crateDigest(root);
-    fs.writeFileSync(path.join(root, "target", "release", "cc-candybar"), "rebuilt\n");
+    fs.writeFileSync(
+      path.join(root, "target", "release", "cc-candybar"),
+      "rebuilt\n",
+    );
     fs.writeFileSync(path.join(root, "README.md"), "edited\n");
     expect(crateDigest(root)).toBe(before);
   });
 
   test("a missing crate throws", () => {
-    expect(() => crateDigest(path.join(os.tmpdir(), "ccb-crate-absent"))).toThrow(/ENOENT/);
+    expect(() =>
+      crateDigest(path.join(os.tmpdir(), "ccb-crate-absent")),
+    ).toThrow(/ENOENT/);
   });
 });
 

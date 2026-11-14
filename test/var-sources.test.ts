@@ -12,7 +12,7 @@ import path from "path";
 import { spawnSync } from "child_process";
 import { EventEmitter } from "events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import type { Delivery } from "../src/daemon/cache/file-events";
+import type { Delivery } from "../src/daemon/foundations/stats-snapshot";
 import {
   VariableStore,
   SourceRegistry,
@@ -27,7 +27,7 @@ import {
   type SourceRunsDeps,
 } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
-import { MIN_SHELL_TTL_MS } from "../src/daemon/judge-run";
+import { MIN_SHELL_TTL_MS } from "../src/daemon/foundations/judge-run";
 import { PendingValueError } from "../src/var-system/types";
 import { instantOf } from "../src/utils/instant";
 import { timeoutSignal } from "../src/time";
@@ -40,7 +40,7 @@ import {
   ignoring,
   shell,
 } from "../src/proc/spawner-fake";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
@@ -48,7 +48,7 @@ import { pendingOf } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 import { buildScope } from "../src/template-engine/scope";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 const A_ID = sessionIdOf("a");
 const B_ID = sessionIdOf("b");

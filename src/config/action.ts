@@ -52,13 +52,13 @@ export type { OptionDomain } from "./option-domain.js";
 // bundled default outright (the coarse "forget this setting" case); `undo`/`redo` step the session's
 // history of every settings change — session picks and config-file writes
 // alike — back and forth. Neither carries a key: the history is one stack per
-// session (src/daemon/settings-history.ts), so the action is a bare marker,
+// session (src/renderer/settings-history.ts), so the action is a bare marker,
 // like `int: true` is for a set-int cursor. `save` is the third marker: it
-// writes every setting the session holds unsaved (src/daemon/setting-drafts.ts)
+// writes every setting the session holds unsaved (src/renderer/setting-drafts.ts)
 // to the config file, and the daemon — not the click — knows which they are.
 // `back` is undo's twin over what is OPEN rather than what is set: it restores
 // the menus, tabs, pickers and edit mode the session's last navigating click
-// changed (src/daemon/navigation-history.ts), and leaves every setting alone.
+// changed (src/renderer/navigation-history.ts), and leaves every setting alone.
 export const ACTION_KEYS = [
   "set",
   "persist",

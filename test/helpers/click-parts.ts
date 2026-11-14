@@ -15,7 +15,7 @@ import {
   verbsOver,
   type DaemonVerbContext,
   type MainRendererParts,
-} from "../../src/renderer/verbs";
+} from "../../src/renderer/verbs/port";
 
 export function clickParts(
   verbCtx: DaemonVerbContext,

@@ -62,7 +62,7 @@ import {
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { menuPageKey } from "../src/config/menu-keys";
 
-import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 

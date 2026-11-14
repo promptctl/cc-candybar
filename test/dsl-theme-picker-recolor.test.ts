@@ -5,7 +5,7 @@ import type { Frame } from "../src/render/frame";
 // omit the theme selection entirely — so they render the floor theme every time
 // and never exercise the recolor. The recolor lives in the daemon's PER-RENDER
 // theme resolution (resolveThemeSelection), OUTSIDE drawDsl. This test
-// replicates that resolution exactly as src/daemon/draw-bar.ts does, so it proves
+// replicates that resolution exactly as src/renderer/draw-bar.ts does, so it proves
 // the end-to-end loop: a set-state `theme` click changes the colours a
 // non-picker segment renders.
 //
@@ -26,7 +26,7 @@ import { buildRig } from "./helpers/rig";
 import { effectsOf } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-recolor");
 const BASE_THEME = "textual-dark";

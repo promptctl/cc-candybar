@@ -4,7 +4,7 @@
 // apart: each takes a turn here, daemon-wide and not per session, because a
 // session's history is its own but the config files it writes are shared. The
 // turn is taken only around a journal (`click` and `closeIdleMenus`,
-// src/daemon/verbs/index.ts), which never nests, so a turn never waits on itself.
+// src/renderer/verbs/index.ts), which never nests, so a turn never waits on itself.
 //
 // A click's read-only launches come before its turn (`click`), so a slow doctor
 // gather holds up no other session. What keeps one session's clicks in arrival
@@ -22,47 +22,17 @@
 
 import { elapsedMs, spanMs, type Monotonic } from "../time.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
-import { ClickAbandoned, DaemonClosing } from "./verb-error.js";
+import { ClickAbandoned, DaemonClosing } from "./foundations/verb-error.js";
+import type { JournalTurnStats } from "./foundations/stats-snapshot";
+import type {
+  JournalTurn,
+  TurnAsker,
+  ClickAsker,
+} from "../renderer-interface/adapter";
 
 interface InFlight {
   readonly verb: string;
   readonly commit: () => void;
-}
-
-export interface JournalTurn {
-  // Names the commit `close` runs if the turn is cut off, and answers the one
-  // way to run it: true when this call committed, false when `close` already
-  // had and the turn is over.
-  readonly holds: (commit: () => void) => () => boolean;
-  // [LAW:single-enforcer] Where a handler resumes: what follows an await runs
-  // only if the turn outlived it, so a click `close` cut off writes nothing
-  // more, whichever store it would have reached. `p` settling either way
-  // counts: a launch the close aborted rejects.
-  readonly landed: <T>(p: Promise<T>) => Promise<T>;
-}
-
-export interface JournalTurnStats {
-  // The verb holding the turn and for how long; `queued` wait behind it.
-  readonly holder: string | null;
-  readonly heldMs: number;
-  readonly queued: number;
-  // Gathers running or queued, which hold no turn: one that never settles
-  // reads here and nowhere else.
-  readonly gathers: number;
-}
-
-// How a click asks for its turn: `waited` hears how many ms it took to come,
-// and `gone` says whether whoever asked has left.
-export interface TurnAsker {
-  readonly waited: (ms: number) => void;
-  readonly gone: () => boolean;
-}
-
-// The same, for a click that may gather first: `placed` hears how long it
-// waited behind its session's earlier clicks, `gathered` how long it took.
-export interface ClickAsker extends TurnAsker {
-  readonly placed: (ms: number) => void;
-  readonly gathered: (ms: number) => void;
 }
 
 const DAEMON_WIDE = "journals";

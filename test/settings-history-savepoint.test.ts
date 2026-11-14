@@ -8,14 +8,15 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { SessionState } from "../src/daemon/session-state";
-import {
-  fileHistoryStorage,
-  SettingsHistory,
-} from "../src/daemon/settings-history";
+import { SessionState } from "../src/renderer/session-state";
+import { SettingsHistory } from "../src/renderer/settings-history";
+import { fileHistoryStorage } from "../src/daemon/history-file";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
-import { readConfigText, writeConfigText } from "../src/daemon/config-file-store";
-import { sessionIdOf } from "../src/daemon/session-id";
+import {
+  readConfigText,
+  writeConfigText,
+} from "../src/renderer/config-file-store";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s1");
 let dir: string;
@@ -329,7 +330,9 @@ describe("the savepoint survives a restart", () => {
       JSON.stringify({ [SID]: { past: [], future: [], savepoint: 3 } }),
     );
     const logs: string[] = [];
-    const storage = fileHistoryStorage(historyFile, (_level, m) => logs.push(m));
+    const storage = fileHistoryStorage(historyFile, (_level, m) =>
+      logs.push(m),
+    );
     expect(Object.fromEntries(storage.load())).toEqual({});
     expect(logs.join("\n")).toMatch(/unexpected shape/);
   });
@@ -350,15 +353,25 @@ describe("the savepoint survives a restart", () => {
       historyFile,
       JSON.stringify({
         [SID]: {
-          past: [[change("look")], [change("style"), change("progression")], [file]],
+          past: [
+            [change("look")],
+            [change("style"), change("progression")],
+            [file],
+          ],
           future: [[change("look")]],
-          savepoint: { at: 2, net: [change("look"), file], below: [[change("look")]] },
+          savepoint: {
+            at: 2,
+            net: [change("look"), file],
+            below: [[change("look")]],
+          },
         },
         other: { past: [[file]], future: [] },
       }),
     );
     const logs: string[] = [];
-    const storage = fileHistoryStorage(historyFile, (_level, m) => logs.push(m));
+    const storage = fileHistoryStorage(historyFile, (_level, m) =>
+      logs.push(m),
+    );
     expect(Object.fromEntries(storage.load())).toEqual({
       [SID]: {
         past: [[change("style")], [file]],

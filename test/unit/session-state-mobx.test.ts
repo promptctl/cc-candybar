@@ -6,8 +6,8 @@
 // relies on.
 
 import { computed, autorun } from "mobx";
-import { SessionState } from "../../src/daemon/session-state";
-import { sessionIdOf } from "../../src/daemon/session-id";
+import { SessionState } from "../../src/renderer/session-state";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 

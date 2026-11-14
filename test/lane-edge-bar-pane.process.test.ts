@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { productionLaneEdge } from "../src/daemon/lane-edge";
-import { type Launcher } from "../src/proc/launch";
+import { type Launcher } from "../src/proc/launcher";
 import type { TmuxHint } from "../src/tmux-hint";
 import { systemTimekeeper } from "../src/time";
 
@@ -79,7 +79,13 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
         return result;
       },
     };
-    const edge = productionLaneEdge(launcher, () => new Set(), closing.signal, systemTimekeeper, processProbe);
+    const edge = productionLaneEdge(
+      launcher,
+      () => new Set(),
+      closing.signal,
+      systemTimekeeper,
+      processProbe,
+    );
 
     const opened = await edge.openBarPane(hint, barPane(), {});
 
@@ -87,7 +93,9 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     const tagged = productionLaneEdge(
       processLauncher,
       () => new Set(),
-      new AbortController().signal, systemTimekeeper, processProbe
+      new AbortController().signal,
+      systemTimekeeper,
+      processProbe,
     );
     expect(await tagged.barPanes(hint)).toEqual([opened]);
     expect(active()).toBe(hint.pane);
@@ -108,7 +116,9 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     const edge = productionLaneEdge(
       processLauncher,
       () => new Set(),
-      new AbortController().signal, systemTimekeeper, processProbe
+      new AbortController().signal,
+      systemTimekeeper,
+      processProbe,
     );
 
     await edge.openBarPane(hint, barPane(), {});
@@ -122,7 +132,9 @@ const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
     const edge = productionLaneEdge(
       processLauncher,
       () => new Set(),
-      new AbortController().signal, systemTimekeeper, processProbe
+      new AbortController().signal,
+      systemTimekeeper,
+      processProbe,
     );
 
     await expect(edge.openBarPane(hint, barPane(), {})).rejects.toThrow(

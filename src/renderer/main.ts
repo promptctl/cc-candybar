@@ -1,5 +1,5 @@
 // The main renderer, in process: today's request answer behind the renderer
-// interface (src/renderer/interface.ts). A `config` turn records the
+// interface (src/renderer-interface/interface.ts). A `config` turn records the
 // session's context and opens its view there, so its output names what the
 // view reads before the request after it waits. A request's turn holds that
 // view at its own context, draws the bar and returns it as a `present`; that
@@ -13,14 +13,66 @@
 import {
   answerRequest,
   configureSession,
+  laneClicked,
+  lanesAt,
+  renderFrame,
   retireSession,
-} from "../daemon/draw-bar.js";
-import type { RequestFacts } from "../daemon/request-event.js";
+  viewLanes,
+  type RendererParts,
+} from "./draw-bar.js";
+import type { RequestFacts } from "../daemon/foundations/request-event.js";
 import { clickTurn } from "./click.js";
-import type { MainRendererParts } from "./verbs.js";
+import {
+  verbsOver,
+  type DaemonVerbContext,
+  type MainRendererParts,
+} from "./verbs/port.js";
+import type { Timekeeper } from "../time.js";
+import type { DaemonLogger } from "../utils/logger.js";
+import type { SessionStorage } from "../renderer-interface/session-state.js";
+import type { HistoryStorage } from "../renderer-interface/history-storage.js";
+import type { Locations } from "../config/loader/discovery.js";
+import type { Gates } from "../daemon/foundations/gates.js";
+import type { RenderOrigin } from "../config-hint.js";
+import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import type {
+  AdapterToHost,
+  AdapterToLoadedRenderer,
+  AdapterToRenderer,
+} from "../renderer-interface/adapter.js";
+import type {
+  DebugSnapshot,
+  DebugWhat,
+} from "../daemon/foundations/debug-types.js";
+import { holdClickError } from "../daemon/foundations/click-error.js";
+import { floorOf } from "../config/globals-fields.js";
+import { EffectSessions } from "../render/effect.js";
+import type { RenderedLine } from "../dsl/node-registry.js";
+import { SessionState } from "./session-state.js";
+import { SettingsHistory } from "./settings-history.js";
+import { NavigationHistory } from "./navigation-history.js";
+import { RenderWarningRecords } from "./render-warnings.js";
+import { WorldStates } from "./world-states.js";
+import { sessionSource, type SessionSource } from "./session-source.js";
+import {
+  configLoadedLine,
+  RenderCache,
+  renderCacheBudget,
+  type SessionView,
+} from "./render-cache.js";
+import {
+  buildDebugSnapshot,
+  EMPTY_RENDER_MAP,
+  serializeSegmentCells,
+} from "./debug.js";
 import type { Instant } from "../utils/instant.js";
-import { failureOf } from "../daemon/verb-error.js";
-import type { Effect, EffectId, Event, Renderer } from "./interface.js";
+import { failureOf } from "../daemon/foundations/verb-error.js";
+import type {
+  Effect,
+  EffectId,
+  Event,
+  Renderer,
+} from "../renderer-interface/interface.js";
 
 export function mainRenderer(parts: MainRendererParts): Renderer {
   // [LAW:single-enforcer] What each present's frame records once it reached
@@ -116,4 +168,276 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
       };
     },
   };
+}
+
+// What the main renderer is built from besides the host's parts: its clock and
+// log, the storage its session state and history load from, and the facts of
+// the machine its loads resolve under.
+export interface MainRendererInputs {
+  readonly clock: Timekeeper;
+  readonly log: DaemonLogger;
+  readonly now: () => Instant;
+  readonly storage: {
+    readonly session: SessionStorage;
+    readonly history: HistoryStorage;
+  };
+  // The state directory whose answers book a load reads and a click records in.
+  readonly stateDir: string;
+  // Where the user's config and installed plugins live.
+  readonly locations: Locations;
+  // The environment an `env` source reads: the daemon's host.
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly home: string;
+  // What this daemon's clicks may write: the gates its root built.
+  readonly gates: Gates;
+  // The bundle this daemon runs, which the doctor judges the clients against.
+  readonly bundle: string;
+  // The memory limit the render cache's budget is a share of.
+  readonly memoryLimitBytes: number;
+}
+
+// The loaded main renderer, and its start, handed the host's parts it
+// reaches: the start builds the rest of the renderer's own state over them and
+// returns the renderer with what the host reaches in it.
+export interface LoadedMainRenderer extends AdapterToLoadedRenderer {
+  start(host: AdapterToHost): Renderer & AdapterToRenderer;
+}
+
+// [LAW:single-enforcer] The main renderer, in two steps of the daemon's
+// construction. [LAW:no-ambient-temporal-coupling] Loading reads the storage,
+// so the daemon loads before any owner of its own arms a timer, and a storage
+// that cannot be read refuses the build with nothing running; the start comes
+// once the host's parts exist.
+export function loadMainRenderer(
+  inputs: MainRendererInputs,
+): LoadedMainRenderer {
+  const { log } = inputs;
+  const sessionState = new SessionState(inputs.storage.session);
+  const settingsHistory = new SettingsHistory(
+    sessionState,
+    log,
+    inputs.storage.history,
+  );
+  return {
+    holdClickError: (sessionId, text, at) =>
+      holdClickError(sessionState, sessionId, text, at),
+    start: (host) => startOver(inputs, sessionState, settingsHistory, host),
+  };
+}
+
+function startOver(
+  inputs: MainRendererInputs,
+  sessionState: SessionState,
+  settingsHistory: SettingsHistory,
+  host: AdapterToHost,
+): Renderer & AdapterToRenderer {
+  const { clock, log, now, gates } = inputs;
+  const navigationHistory = new NavigationHistory();
+  // Each session's effect memory — when its effect came into force — held in
+  // daemon memory only: a restarted daemon starts every session's effect again.
+  const effectSessions = new EffectSessions<RenderedLine>();
+  // [LAW:single-enforcer] What each session's renderers could not honour, as
+  // their frames recorded it (src/renderer/render-warnings.ts).
+  const renderWarnings = new RenderWarningRecords();
+  // The world states the host hands the renderer, which its views read.
+  const worldStates = new WorldStates();
+  const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
+    {
+      clock,
+      stateDir: inputs.stateDir,
+      locations: inputs.locations,
+      env: inputs.env,
+      sessionState,
+      watchers: host.watchers,
+      log,
+      storage: host.managedStorage,
+      signer: host.linkSigner,
+      gates,
+      // [LAW:single-enforcer] What every session's view draws from: its payload
+      // composed over its world state, its request, its picks and its
+      // histories' depths.
+      source: sessionSource({
+        sessionState,
+        worldStates,
+        home: inputs.home,
+        history: (sessionId) => settingsHistory.depth(sessionId),
+        // Measured against the gate of the config the view draws with.
+        navigation: (sessionId, config) =>
+          navigationHistory.depth(
+            sessionId,
+            sessionState,
+            gates.state.gateFor(config),
+          ),
+      }),
+    },
+    {
+      budgetBytes: () => renderCacheBudget(inputs.memoryLimitBytes),
+      observers: {
+        // [LAW:no-silent-failure] Every config (re)load's outcome lands in
+        // daemon.log with its cause — the operator's only record of why a load
+        // ran, and whether a save was picked up cleanly, kept rendering
+        // last-known-good behind an error, or resolved to a different file.
+        onReload: (entry, sessions, cause, settled) => {
+          log("info", configLoadedLine(entry, cause, settled));
+          // A reload changes the bar of every session drawn from the entry,
+          // even one that failed and kept the old config: its indicator says so.
+          for (const sessionId of sessions)
+            host.frameFeeds.wake(sessionId, "reload");
+        },
+        // [LAW:single-enforcer] What a session's view draws from moved: its
+        // feed's next frame is brought forward, whatever moved it: a request's
+        // facts, a refresh landing after its deadline, a source publishing, a
+        // pick. The dump link, which no view holds, wakes the same way.
+        onViewChanged: (sessionId) => host.frameFeeds.wake(sessionId, "data"),
+      },
+    },
+  );
+  const parts: RendererParts = {
+    ...host,
+    clock,
+    log,
+    sessionState,
+    renderCache,
+    worldStates,
+    renderWarnings,
+    effectSessions,
+  };
+  const reloadConfig = (origin: RenderOrigin): void =>
+    renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
+      kind: "write",
+    });
+  const verbCtx: DaemonVerbContext = {
+    gates,
+    sessionState,
+    stateDir: inputs.stateDir,
+    locations: inputs.locations,
+    journalTurns: host.journalTurns,
+    clickLanded: (sessionId) => host.menuIdle.clicked(sessionId, now()),
+    log,
+    launcher: host.launcher,
+    now,
+    applyUpdate: host.applyUpdate,
+    // The load the session's bar is drawn from: its cache entry's load
+    // outcome, and what the config that entry renders left unused.
+    // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
+    // doctor click is a verdict on the files as they are now, not on
+    // whether the fs watcher has caught up with an edit made a moment ago.
+    doctor: host.doctor.edge((origin) => {
+      const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
+      renderCache.reload(...at, { kind: "doctor" });
+      const entry = renderCache.getOrCreate(...at);
+      return {
+        layers: entry.configLayers,
+        error: entry.lastError,
+        warning: entry.lastWarning,
+        unused: entry.state.unused,
+        config: entry.state.config,
+      };
+    }),
+    doctorStores: host.doctor.stores,
+    doctorProbes: host.doctor,
+    probes: host.probes,
+    clients: host.renderSightings,
+    bundle: inputs.bundle,
+    serving: host.serving,
+    claudeInput: host.claudeInput,
+    history: settingsHistory,
+    navigation: navigationHistory,
+    // The config a session's last render resolved from — the same entry the
+    // render drew the bar with, so a save compares against the bar the user saw.
+    configFor: (origin) =>
+      renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
+        .state.config,
+    reloadConfig,
+    // The storage keys of the same entry `configFor` reads the config of.
+    sourcesFor: (origin) =>
+      renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
+        .state.sources,
+    links: host.linkSigner,
+    runs: host.runs,
+    lanes: {
+      of: (origin, sessionId) => lanesAt(parts, origin, sessionId),
+      clicked: (sessionId, before, after) =>
+        laneClicked(parts, sessionId, before, after),
+    },
+    views: {
+      follow: (sessionId, origin) =>
+        renderCache.follow(
+          sessionId,
+          origin.projectDir,
+          origin.cwd,
+          origin.target.path,
+        ),
+    },
+    diagnosticCopy: (sessionId, by, key) =>
+      renderCache.drawnCopy(sessionId, by, key),
+  };
+  const renderer = mainRenderer({
+    ...parts,
+    verbs: verbsOver(verbCtx, host.clicks),
+  });
+  return {
+    ...renderer,
+    renderFrame: (sessionId, fps, at) => renderFrame(parts, sessionId, fps, at),
+    viewLanes: (sessionId) => viewLanes(parts, sessionId),
+    // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
+    // moment the feed stops drawing, so its drawn copies retire with it.
+    pin: (sessionId) => {
+      const unpin = renderCache.pin(sessionId);
+      return () => {
+        renderCache.stopDrawing(sessionId, "feed");
+        unpin();
+      };
+    },
+    revision: (sessionId) => sessionState.revision(sessionId),
+    stats: () => ({
+      renderCache: renderCache.stats,
+      effectCache: effectSessions.getStats(),
+      sessionState: {
+        sessions: sessionState.size(),
+        observers: sessionState.observers(),
+        revision: sessionState.latestRevision(),
+      },
+    }),
+    debug: (what) => debugOf(renderCache.latestView(), what),
+    reloadEvery: (cause) => renderCache.reloadEvery(cause),
+    reloadConfig,
+    closeViews: () => renderCache.close(),
+    closeSessionState: () => sessionState.close(),
+  };
+}
+
+// [LAW:dataflow-not-control-flow] The debug projection samples whatever DSL
+// state the cache currently holds. With cache keys scoped on (projectDir, cwd)
+// and the debug request carrying neither, it samples the most recently
+// rendered session's view — sufficient for `debug vars`, `debug segments`,
+// `debug config` against the active workload. latestView reads existing views
+// only; it does NOT open one, so debug introspection never stands up a new
+// cache entry tied to the daemon's own process.cwd().
+// [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the cache
+// stores StripCell arrays (cheap, written by drawDsl), and only the `segments`
+// projection needs strings, so a normal render pays no serializer cost.
+function debugOf(
+  view: SessionView<SessionSource, CheckedRenderRequest> | null,
+  what: DebugWhat,
+): DebugSnapshot {
+  return buildDebugSnapshot(
+    what,
+    view === null
+      ? null
+      : {
+          store: view.store,
+          registry: view.registry,
+          config: view.state.config,
+          compiled: view.state.compiled,
+          lastRenderBySegment:
+            what === "segments"
+              ? serializeSegmentCells(
+                  view.lastRenderCellsBySegment,
+                  view.state.config.globals.colorCompatibility ??
+                    floorOf("colorCompatibility"),
+                )
+              : EMPTY_RENDER_MAP,
+        },
+  );
 }

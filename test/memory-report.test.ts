@@ -20,7 +20,7 @@ import {
   platformProbes,
   type MemoryProbe,
 } from "../src/daemon/memory-report";
-import type { LaunchResult } from "../src/proc/launch";
+import type { LaunchResult } from "../src/proc/launcher";
 
 const answering = (name: string, text: string): MemoryProbe => ({
   name,
@@ -62,7 +62,9 @@ describe("memoryReport", () => {
       refusing("vmmap --summary 7", "non-zero: exit 1 (not permitted)"),
     ]);
     expect(report).toContain("no probe answered");
-    expect(report).toContain("footprint -p 7: unavailable — spawn-error: ENOENT");
+    expect(report).toContain(
+      "footprint -p 7: unavailable — spawn-error: ENOENT",
+    );
     expect(report).toContain(
       "vmmap --summary 7: unavailable — non-zero: exit 1 (not permitted)",
     );
@@ -79,17 +81,15 @@ describe("platformProbes", () => {
   // The rows are the platform fact — asserted by the command each one would run,
   // because that string is what a human re-runs by hand from the report.
   test("darwin prefers footprint, then vmmap, both naming the pid", async () => {
-    expect(platformProbes(processLauncher, "darwin", 4242).map((p) => p.name)).toEqual([
-      "/usr/bin/footprint -p 4242",
-      "/usr/bin/vmmap --summary 4242",
-    ]);
+    expect(
+      platformProbes(processLauncher, "darwin", 4242).map((p) => p.name),
+    ).toEqual(["/usr/bin/footprint -p 4242", "/usr/bin/vmmap --summary 4242"]);
   });
 
   test("linux reads the rollup first, then status — no subprocess either way", async () => {
-    expect(platformProbes(processLauncher, "linux", 4242).map((p) => p.name)).toEqual([
-      "/proc/self/smaps_rollup",
-      "/proc/self/status",
-    ]);
+    expect(
+      platformProbes(processLauncher, "linux", 4242).map((p) => p.name),
+    ).toEqual(["/proc/self/smaps_rollup", "/proc/self/status"]);
   });
 
   test("an unknown platform contributes no probes rather than a wrong one", async () => {
@@ -106,7 +106,9 @@ const REAL = os.platform() === "darwin" || os.platform() === "linux";
 (REAL ? test : test.skip)(
   "the real probes attribute this process on this host",
   async () => {
-    const report = await memoryReport(platformProbes(processLauncher, os.platform(), process.pid));
+    const report = await memoryReport(
+      platformProbes(processLauncher, os.platform(), process.pid),
+    );
     expect(report).toContain("# memory report from:");
     expect(report).not.toContain("no probe answered");
     // Whatever answered, it must carry a size — the one thing every probe on
@@ -128,7 +130,12 @@ describe("the memory charge", () => {
     "    phys_footprint: 224953704 B",
     "    phys_footprint_peak: 432772224 B",
   ].join("\n");
-  const ran = (stdout: string): LaunchResult => ({ ok: true, stdout, stderr: "", exitCode: 0 });
+  const ran = (stdout: string): LaunchResult => ({
+    ok: true,
+    stdout,
+    stderr: "",
+    exitCode: 0,
+  });
 
   test("footprint's byte output is read off its phys_footprint line, never the peak", async () => {
     expect(physFootprintOf(FOOTPRINT)).toBe(224953704);
@@ -142,7 +149,11 @@ describe("the memory charge", () => {
       asked.push(args);
       return ran(FOOTPRINT);
     });
-    expect(await probe(1)).toEqual({ kind: "charged", measure: "phys_footprint", bytes: 224953704 });
+    expect(await probe(1)).toEqual({
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes: 224953704,
+    });
     expect(asked).toEqual([["-p", "77", "--noCategories", "-f", "bytes"]]);
   });
 
@@ -155,7 +166,11 @@ describe("the memory charge", () => {
       exitCode: null,
       signal: "SIGTERM",
     }));
-    expect(await failed(5)).toEqual({ kind: "stand-in", bytes: 5, unread: "footprint timeout: footprint: hung" });
+    expect(await failed(5)).toEqual({
+      kind: "stand-in",
+      bytes: 5,
+      unread: "footprint timeout: footprint: hung",
+    });
     const garbled = footprintCharge(77, async () => ran("nothing here"));
     expect(await garbled(5)).toEqual({
       kind: "stand-in",
@@ -165,12 +180,26 @@ describe("the memory charge", () => {
   });
 
   test("off macOS, RSS is the charge", async () => {
-    expect(await chargeProbe(processLauncher, "linux", 1)(42)).toEqual({ kind: "charged", measure: "rss", bytes: 42 });
+    expect(await chargeProbe(processLauncher, "linux", 1)(42)).toEqual({
+      kind: "charged",
+      measure: "rss",
+      bytes: 42,
+    });
   });
 
-  (os.platform() === "darwin" ? test : test.skip)("on this Mac, footprint answers for this process", async () => {
-    const charge = await chargeProbe(processLauncher, "darwin", process.pid)(process.memoryUsage().rss);
-    expect(charge).toMatchObject({ kind: "charged", measure: "phys_footprint" });
-    expect(charge.bytes).toBeGreaterThan(0);
-  });
+  (os.platform() === "darwin" ? test : test.skip)(
+    "on this Mac, footprint answers for this process",
+    async () => {
+      const charge = await chargeProbe(
+        processLauncher,
+        "darwin",
+        process.pid,
+      )(process.memoryUsage().rss);
+      expect(charge).toMatchObject({
+        kind: "charged",
+        measure: "phys_footprint",
+      });
+      expect(charge.bytes).toBeGreaterThan(0);
+    },
+  );
 });

@@ -9,12 +9,7 @@
 
 import { ABSENT, failed, type Outcome } from "../utils/outcome";
 import { timeoutSignal, type Timekeeper } from "../time";
-
-// [LAW:types-are-the-program] A release version is exactly MAJOR.MINOR.PATCH.
-// semantic-release on `main` mints nothing else, and the ordering the currency
-// verdict needs is total only over that shape — so the parser refuses anything
-// else rather than admitting a prerelease it could not order.
-export type Version = readonly [major: number, minor: number, patch: number];
+import type { Version } from "../facts/world-state";
 
 const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 

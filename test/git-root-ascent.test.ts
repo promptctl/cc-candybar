@@ -17,7 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { GitService } from "../src/segments/git";
+import { GitService } from "../src/daemon/cache/git-service";
 
 function run(cmd: string, cwd: string): void {
   execSync(cmd, { cwd, stdio: "pipe" });

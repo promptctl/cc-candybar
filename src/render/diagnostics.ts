@@ -90,7 +90,7 @@ export const APPROVAL_SEVERITY: DiagnosticSeverity = {
   glyph: "🔒",
 };
 // The statusline handing the bar off to an animation lane that draws it
-// elsewhere (src/daemon/lane-handoff.ts): it says where the bar is drawn for as
+// elsewhere (src/renderer/lane-handoff.ts): it says where the bar is drawn for as
 // long as a lane is on, and its glyph is the lanes' own.
 export const HANDOFF_SEVERITY: DiagnosticSeverity = {
   level: "info",
@@ -478,7 +478,7 @@ export function viewerRows(
   }
 }
 
-// [LAW:single-enforcer] The statusline's handoff line (src/daemon/lane-handoff.ts)
+// [LAW:single-enforcer] The statusline's handoff line (src/renderer/lane-handoff.ts)
 // with the indicator after it: the bar it hands off carries the indicator
 // beside its door, and the statusline is what a person reads when that bar is
 // somewhere they are not looking. The indicator is the door's own — the same

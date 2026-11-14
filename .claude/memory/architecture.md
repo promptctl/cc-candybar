@@ -4,6 +4,8 @@
 
 Claude Code spawns the client on every statusline tick. The client connects to the daemon's unix socket, sends the hook JSON and prints the answer. The daemon is the only renderer. The client has no render path of its own, on purpose: a second renderer is a second source of truth, and it drifts. [LAW:one-source-of-truth]
 
+Inside the daemon the renderer side is a directory, and a lint rule over a table of zones fails any import into it but its start and any import out of it but shared code. The contract between the two (the renderer interface and the adapter) is shared, because the host and the wire both name it, and every reach across the seam is an adapter entry, so the adapter is the list of work left before the renderer runs in a process of its own. A zone is only what the rule checks, which is import direction: node's builtins and globals reach the world without a relative import, so a shared module may still open a file or write stderr, and the rule for each such effect lands with the change that removes the effect. [LAW:one-way-deps]
+
 A request is answered by the frame its renderer presents, and the renderer keeps what that frame showed (its copies, the click error it carried) until the host says whether the client took it. So the connection settles every reply on every exit, including a reply superseded by the backstop's and a write that threw: an exit that forgets leaks one record per request, and nothing shows it.
 
 The shipped client is native (Rust) and handles only the render hot path. It hands every other subcommand to the Node entry. On a daemon miss it spawns a detached daemon and prints an empty line, so the next refresh finds the daemon running.

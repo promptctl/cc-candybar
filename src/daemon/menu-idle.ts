@@ -15,11 +15,12 @@
 
 import { closesAt } from "../config/menu-timeout.js";
 import type { Instant } from "../utils/instant.js";
-import type { IdleSpan } from "./verbs/index.js";
+import type { IdleSpan } from "../renderer-interface/interface.js";
 import type { RendererHost } from "./renderer-host.js";
-import type { SessionId } from "./session-id.js";
-import type { Failure } from "./verb-error.js";
+import type { SessionId } from "./foundations/session-id.js";
+import type { Failure } from "./foundations/verb-error.js";
 import type { Timekeeper } from "../time";
+import type { MenuIdleStats } from "./foundations/stats-snapshot";
 
 // [LAW:no-silent-failure] The idle close as a `menu-idle` turn of the
 // renderer, answering with its failure, or null when it closed. The clock
@@ -51,20 +52,13 @@ interface Idle {
   closing: Instant | null;
 }
 
-export interface MenuIdleStats {
-  readonly sessions: number;
-  readonly armed: number;
-  // Clicks in flight, from arrival until they land or are refused.
-  readonly pending: number;
-}
-
 export interface MenuIdleDeps {
   // The daemon's clock, which the close timers run on.
   readonly clock: Pick<Timekeeper, "after">;
   // The instant now, on the clock renders are drawn by.
   readonly now: () => Instant;
   // Close the session's menus: the journaled write a ✕ makes
-  // (`closeIdleMenus`, src/daemon/verbs/index.ts), as a renderer turn
+  // (`closeIdleMenus`, src/renderer/verbs/index.ts), as a renderer turn
   // (`closeByTurn`), which asks `confirmClose` in its turn.
   readonly close: (
     sessionId: SessionId,

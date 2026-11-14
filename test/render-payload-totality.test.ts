@@ -9,8 +9,8 @@ import os from "node:os";
 import path from "node:path";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
-import type { Refreshed } from "../src/daemon/render-payload";
-import { REFRESH_LANES } from "../src/daemon/refresh-faults";
+import type { Refreshed } from "../src/renderer-interface/request-context";
+import { REFRESH_LANES } from "../src/facts/world-state";
 import { sessionRig, settledRequest } from "./helpers/session-rig";
 import { until } from "./helpers/until";
 

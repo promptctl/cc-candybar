@@ -4,7 +4,7 @@
 // keeps in `$.state`.
 //
 // [LAW:one-source-of-truth] The daemon's band encoding (src/band/frames.ts)
-// and its wire response type (src/daemon/protocol.ts) import the line's types
+// and its wire response type (src/daemon/foundations/protocol.ts) import the line's types
 // from here; this file is the one statement of the line the daemon and the mod
 // share.
 

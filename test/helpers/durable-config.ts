@@ -25,14 +25,17 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import JSON5 from "json5";
-import type { SessionStateRW } from "../../src/daemon/session-state";
-import { sessionIdOf, type SessionId } from "../../src/daemon/session-id";
+import type { SessionStateRW } from "../../src/renderer-interface/session-state";
 import {
-  SettingsHistory,
-  fileHistoryStorage,
+  sessionIdOf,
+  type SessionId,
+} from "../../src/daemon/foundations/session-id";
+import { SettingsHistory } from "../../src/renderer/settings-history";
+import {
   type SessionHistory,
   type Step,
-} from "../../src/daemon/settings-history";
+} from "../../src/renderer-interface/history-storage";
+import { fileHistoryStorage } from "../../src/daemon/history-file";
 import { settingsHistoryPath } from "../../src/daemon/paths";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
@@ -69,7 +72,6 @@ export interface DurableConfig {
   ): void;
   dispose(): void;
 }
-
 
 export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   const root = mkdtempSync(join(tmpdir(), prefix));

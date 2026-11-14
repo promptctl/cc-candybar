@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { autorun } from "mobx";
-import { AutoCompactProvider } from "../src/segments/autocompact-provider";
+import { AutoCompactProvider } from "../src/daemon/cache/autocompact";
 import { ok } from "../src/utils/outcome";
 import { systemTimekeeper } from "../src/time";
 

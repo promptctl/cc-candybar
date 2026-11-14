@@ -35,7 +35,7 @@ import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import {
   getThemePalette,
   contrastRatio,
@@ -55,7 +55,7 @@ import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { checkPayload } from "../src/check";
 import {
   renderOptionsOf,
-} from "../src/daemon/render-payload";
+} from "../src/renderer/render-payload";
 import { resolveEffectiveGlobals, type EffectiveGlobals } from "../src/config/effective-globals";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
@@ -64,7 +64,7 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 // The powerline cap glyphs, which visible segment text is read without.
 const CAPS = /[\u{E0B0}-\u{E0BC}]/gu;
@@ -540,7 +540,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         undefined,
         // Both `.effective` fields are drawDsl's to publish, so the payload
         // carries neither and the SELECTION is what crosses the seam — resolved
-        // over the session's picks, as src/daemon/draw-bar.ts resolves it.
+        // over the session's picks, as src/renderer/draw-bar.ts resolves it.
         selectionFor(parsed, {}, (key) => sessionState.get(SID, key)),
       ).frame;
     };

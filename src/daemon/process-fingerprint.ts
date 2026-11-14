@@ -1,4 +1,4 @@
-import type { Launcher } from "../proc/launch";
+import type { Launcher } from "../proc/launcher";
 
 // ─── Process start-time fingerprint ──────────────────────────────────────────
 //

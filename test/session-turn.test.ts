@@ -16,16 +16,13 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { presetNames } from "../src/config/presets";
 import { assembleFacts } from "../src/daemon/facts-assembly";
-import {
-  composePayload,
-  settleWorld,
-  type Readings,
-} from "../src/daemon/render-payload";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { composePayload, settleWorld } from "../src/renderer/render-payload";
+import { refreshPayload, type Readings } from "../src/daemon/readings";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { instantOf } from "../src/utils/instant";
 import { ok, pendingOf } from "../src/utils/outcome";
 import type { Fact } from "../src/facts/fact";
-import type { UpdateNotice } from "../src/facts/world-state";
+import type { Update } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -185,7 +182,7 @@ describe("what wakes a view", () => {
   async function woken() {
     const changed: string[] = [];
     const depth = observable.box(0);
-    const update = observable.box<Fact<UpdateNotice>>(pendingOf("unread"));
+    const update = observable.box<Fact<Update>>(pendingOf("unread"));
     const rig = sessionRig(dir, cleanups, {
       update: () => update.get(),
       source: {
@@ -229,14 +226,17 @@ describe("what wakes a view", () => {
     // The same request refreshes every lane again: each owner stores an equal
     // answer in a new object.
     await settleWorld(
-      {
-        hookData: requestOf(dir).hookData,
-        deps: rig.providers as never,
-        cwd: PROJECT,
-        hints: requestOf(dir).hints,
-      },
-      AT,
-      new Map(),
+      () =>
+        refreshPayload(
+          {
+            hookData: requestOf(dir).hookData,
+            deps: rig.providers as never,
+            cwd: PROJECT,
+            hints: requestOf(dir).hints,
+          },
+          AT,
+          new Map(),
+        ),
       () => rig.served.worldStates.of(SID),
       () => view.registry.namedRuns().values(),
       new AbortController().signal,

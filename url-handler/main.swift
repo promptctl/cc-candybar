@@ -6,7 +6,7 @@
 // never activates such an app.
 //
 // [LAW:one-source-of-truth] The app knows two wire facts, both mirrored from
-// src/daemon/protocol.ts and src/daemon/paths.ts and pinned by
+// src/daemon/foundations/protocol.ts and src/daemon/paths.ts and pinned by
 // scripts/check-protocol.mjs: the frame (a 4-byte big-endian length, then the
 // JSON `{"kind":"url","urlV":1,"url":…}`) and the socket path, derived from
 // the uid because Launch Services starts the app with no shell's environment.
@@ -38,7 +38,7 @@ import AppKit
 import UserNotifications
 import os
 
-// Mirrored: src/daemon/protocol.ts FRAME_HEADER_BYTES, URL_FRAME_KIND and
+// Mirrored: src/daemon/foundations/protocol.ts FRAME_HEADER_BYTES, URL_FRAME_KIND and
 // URL_FRAME_VERSION.
 let FRAME_HEADER_BYTES = 4
 let URL_FRAME_KIND = "url"

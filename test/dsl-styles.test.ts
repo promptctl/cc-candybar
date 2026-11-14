@@ -28,7 +28,7 @@ import {
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { resolveStyleSelection } from "../src/themes";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-looks");
 const THEME = "textual-dark";

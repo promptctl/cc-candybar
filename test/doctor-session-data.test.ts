@@ -20,7 +20,7 @@ import { parseTranscriptSightings } from "../src/doctor/daemon-answer";
 import { transcriptsOf } from "../src/doctor/cli";
 import { transcriptFields } from "../src/doctor/report";
 import { transcriptSaid } from "../src/daemon/render-sightings";
-import type { StatsSnapshot } from "../src/daemon/stats";
+import type { StatsSnapshot } from "../src/daemon/foundations/stats-snapshot";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 
 const sessionData = checkByName("sessionData")!;

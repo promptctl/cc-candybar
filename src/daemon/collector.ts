@@ -25,37 +25,41 @@ import {
   type IObservableValue,
 } from "mobx";
 import type { Fact } from "../facts/fact.js";
-import type { UpdateNotice, WorldState } from "../facts/world-state.js";
-import type {
-  Event,
-  Subscription,
-  Subscriptions,
-} from "../renderer/interface.js";
+import {
+  type Update,
+  type WorldState,
+  stampFailureOf,
+  shortDigest,
+} from "../facts/world-state.js";
+import {
+  type Event,
+  type Subscription,
+  type Subscriptions,
+  type StorageKey,
+} from "../renderer-interface/interface.js";
 import type { Timekeeper } from "../time.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { Holds } from "../utils/holds.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { failed } from "../utils/outcome.js";
-import { sameKey, type StorageKey } from "./cache/managed-storage.js";
-import {
-  assembleFacts,
-  failedStamp,
-  stampFailureOf,
-} from "./facts-assembly.js";
+import { sameKey } from "./cache/managed-storage.js";
+import { assembleFacts, failedStamp } from "./facts-assembly.js";
 import {
   declareLanes,
   readingsOf,
   settledLanes,
   type DeclaredLanes,
-  type Subscribed,
   type Readings,
   type RenderPayloadDeps,
+} from "./readings.js";
+import {
+  type Subscribed,
   type ViewFacts,
-} from "./render-payload.js";
-import type { SessionId } from "./session-id.js";
-import { judgeRun } from "./judge-run.js";
-import { shortDigest } from "../source-digest.js";
+} from "../renderer-interface/request-context.js";
+import type { SessionId } from "./foundations/session-id.js";
+import { judgeRun } from "./foundations/judge-run.js";
 import { valueOf } from "../utils/logfmt.js";
+import type { CollectorStats } from "./foundations/stats-snapshot";
 
 // [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
 // first session and stopped with the last: every interval it retires each
@@ -73,7 +77,7 @@ export interface CollectorDeps {
   readonly owners: RenderPayloadDeps;
   // The daemon's one update fact, stamped by its watch
   // (src/daemon/update-notice.ts): every session's document carries it.
-  readonly update: () => Fact<UpdateNotice>;
+  readonly update: () => Fact<Update>;
   readonly clock: Pick<Timekeeper, "now" | "every">;
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
   // frame feeds are the one record of who is watching.
@@ -145,14 +149,9 @@ type StampInputs =
   | {
       readonly kind: "read";
       readonly readings: Readings;
-      readonly update: Fact<UpdateNotice>;
+      readonly update: Fact<Update>;
     }
   | { readonly kind: "failed"; readonly reason: string };
-
-export interface CollectorStats {
-  readonly sessions: number;
-  readonly retiring: number;
-}
 
 // What a session's declaration keys on, of the request that named it.
 const locatorOf = (req: ViewFacts): ViewFacts => ({
@@ -531,7 +530,7 @@ export class Collector {
   // once, and its record stays `retiring` until the retire settles: an output
   // taken meanwhile may still name it. A settled retire, answered or threw,
   // leaves the renderer holding none of the session's document
-  // (src/renderer/interface.ts), so the record goes either way. It goes only
+  // (src/renderer-interface/interface.ts), so the record goes either way. It goes only
   // from the retiring period this retire began: a record a request revived,
   // or one retired again since, is not this retire's to remove.
   private retire(record: SessionRecord, live: Live): void {

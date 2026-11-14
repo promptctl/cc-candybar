@@ -8,7 +8,7 @@ import {
   STORAGE_FILE_MAX_AGE_MS,
   STORAGE_SWEEP_EVERY_MS,
 } from "../src/daemon/cache/managed-storage";
-import type { Delivery } from "../src/daemon/cache/file-events";
+import type { Delivery } from "../src/daemon/foundations/stats-snapshot";
 import {
   statIdentity,
   type FolderIdentity,
@@ -19,7 +19,7 @@ import {
   WatcherRegistry,
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { Holds } from "../src/utils/holds";
 import { ABSENT, ok } from "../src/utils/outcome";
 import type { Current } from "../src/utils/reading";

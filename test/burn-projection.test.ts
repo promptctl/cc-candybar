@@ -14,26 +14,21 @@ import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
-import {
-  projectCostPerHour,
-  type RenderPayloadDeps,
-} from "../src/daemon/render-payload";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
+import { projectCostPerHour } from "../src/renderer/render-payload";
+import { type RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
-import type { ClientHints } from "../src/daemon/protocol";
+import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { validateConfig } from "./helpers/parse-and-validate";
-import {
-  mergeWithDefault,
-  parseDslConfig,
-} from "../src/config/dsl-loader";
+import { mergeWithDefault, parseDslConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import { etaMinutes } from "../src/template-engine/funcs";
@@ -199,7 +194,10 @@ function renderBurnrate(
   // and burnrate's own `when` renders an unrelated ⚠ error cell.
   const registry = new SourceRegistry(store, "", new SessionState());
   try {
-    const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(cfg, registry, {
+      signer: TEST_SIGNER,
+      cwd: "/tmp",
+    });
     return drawPayload(
       cfg,
       compiled,
@@ -264,7 +262,9 @@ describe("burnrate segment render", () => {
       weekly: { percentage: 14, resetsAt: NOW_SEC + 6 * 86400 },
     };
     expect(textOf(renderBurnrate(payload))).toContain("4h to 5h");
-    expect(textOf(renderBurnrate(payload, NOW_MS + 3600 * 1000))).toContain("8h to 5h");
+    expect(textOf(renderBurnrate(payload, NOW_MS + 3600 * 1000))).toContain(
+      "8h to 5h",
+    );
   });
 
   test("hidden when no rate-limit window is active", () => {

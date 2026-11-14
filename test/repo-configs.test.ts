@@ -25,25 +25,25 @@ import {
   UNOWNED_STORAGE,
   type LoadCause,
   type ReloadedEntry,
-} from "../src/daemon/cache/render";
+} from "../src/renderer/render-cache";
 import {
   recordAnswer,
   repoAnswerFields,
   repoConfigs,
   repoConfigsPath,
   repoQuestions,
-} from "../src/daemon/repo-configs";
-import { SessionState } from "../src/daemon/session-state";
+} from "../src/renderer/repo-configs";
+import { SessionState } from "../src/renderer/session-state";
 import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";
 import { effectsOf } from "./helpers/click";
 import { answerRepo } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
-import { daemonGates } from "../src/daemon/update-keys";
+import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID_1 = sessionIdOf("sid-1");
 

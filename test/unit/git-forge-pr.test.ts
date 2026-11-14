@@ -12,7 +12,7 @@ import {
   prOfHead,
   type PrState,
 } from "../../src/segments/git";
-import type { LaunchResult } from "../../src/proc/launch";
+import type { LaunchResult } from "../../src/proc/launcher";
 import { ABSENT, failed, ok } from "../../src/utils/outcome";
 
 const okResult = (stdout: string): LaunchResult => ({

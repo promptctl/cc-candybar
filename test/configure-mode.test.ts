@@ -19,7 +19,7 @@ import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { configurePlacement } from "./helpers/configure";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
@@ -31,7 +31,7 @@ import {
   VERB_SAVE_PRESET,
   VERB_UNDO,
 } from "../src/click/wire";
-import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
   configureMember,
@@ -50,13 +50,13 @@ import {
 import { presetRoot } from "../src/config/presets";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import { presetRootKey } from "../src/config/loader/persist-target";
-import { placementDrafts } from "../src/daemon/setting-drafts";
+import { placementDrafts } from "../src/renderer/setting-drafts";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { picked, selectionFor } from "./helpers/selection";
 import { MENU_PAGE_NS } from "../src/config/reserved-names";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");

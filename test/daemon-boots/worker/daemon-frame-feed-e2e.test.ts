@@ -23,7 +23,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/click-error";
+import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error";
 import {
   openFrameStream,
   type FrameStream,
@@ -38,11 +38,19 @@ import {
   PROTOCOL_VERSION,
   encodeFrame,
   type Response,
-} from "../../../src/daemon/protocol";
-import type { StatsSnapshot } from "../../../src/daemon/stats";
-import { click, frameRequest, refusedClick, render, renderBody, renderRequest, urlWriting } from "../../helpers/daemon-e2e";
+} from "../../../src/daemon/foundations/protocol";
+import type { StatsSnapshot } from "../../../src/daemon/foundations/stats-snapshot";
+import {
+  click,
+  frameRequest,
+  refusedClick,
+  render,
+  renderBody,
+  renderRequest,
+  urlWriting,
+} from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
-import { HANDOFF_BUTTON } from "../../../src/daemon/lane-handoff";
+import { HANDOFF_BUTTON } from "../../../src/renderer/lane-handoff";
 import { linksOf } from "../../../src/click/read";
 import { composeBar, textOf, type Frame } from "../../../src/render/frame";
 import { pageOf, viewerLink } from "../../helpers/diagnostics-viewer";
@@ -63,10 +71,12 @@ import {
   VERB_LOAD_CONFIG,
   VERB_SET_STATE,
 } from "../../../src/click/wire";
-import { startDaemon, statsOf, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+  startDaemon,
+  statsOf,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
 
@@ -388,9 +398,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(drawn).toBeGreaterThanOrEqual(2);
     expect(drawn).toBeLessThanOrEqual(4);
     expect(pushed).toBe(drawn);
-    const glyphs = bars(frames).map(
-      (o) => /(tick|tock)/u.exec(textOf(o))![1],
-    );
+    const glyphs = bars(frames).map((o) => /(tick|tock)/u.exec(textOf(o))![1]);
     for (let i = 1; i < glyphs.length; i++)
       expect(glyphs[i]).not.toBe(glyphs[i - 1]);
   });
@@ -433,10 +441,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         // first one's frame started: it too is drawn within the feed's spacing,
         // not when the still bar's next frame falls due, about 900 ms after it.
         await sleep(100);
-        await click(
-          sockPath,
-          urlWriting(bars(received)[1]!, "face", "shut"),
-        );
+        await click(sockPath, urlWriting(bars(received)[1]!, "face", "shut"));
         secondAt = elapsed();
         await waitFor(() => received.length > 2, "the bar clicked again");
       },
@@ -739,7 +744,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     logLines(env).filter(
       (l) => l.includes(" lane: ") && l.includes(`(session=${sid})`),
     );
-  const setState = async (sid: string, key: string, value: string): Promise<void> =>
+  const setState = async (
+    sid: string,
+    key: string,
+    value: string,
+  ): Promise<void> =>
     await click(
       sockPath,
       effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
@@ -1102,7 +1111,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a failed click's error shows on Claude Code's bar", async () => {
     const sid = "feed-click-error-bar";
     await render(sockPath, sid, projectDir, {}, args("toggle"));
-    const bad = effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "face", "bogus"] }]);
+    const bad = effectsUrl([
+      { verb: VERB_SET_STATE, args: [sid, "face", "bogus"] },
+    ]);
     // The statusline lane draws the bar where Claude Code does, so with it
     // followed a render answers the bar, where a lane that draws it elsewhere
     // would answer the handoff row.

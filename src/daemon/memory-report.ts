@@ -19,7 +19,8 @@ import {
   failureText,
   type LaunchResult,
   type Launcher,
-} from "../proc/launch.js";
+} from "../proc/launcher.js";
+import type { MemoryCharge } from "./foundations/memory-limit";
 
 // [LAW:parse-dont-validate] A probe either produced text or could not, and the
 // reason travels with the failure — it is what the post-mortem reads when no
@@ -99,32 +100,6 @@ export function platformProbes(
   }
   return [];
 }
-
-// [FRAMING:representation] What the platform charges a process for its
-// memory — the number the budget is on. RSS is that charge on Linux, but not on
-// macOS: there resident memory still counts the pages malloc has freed and
-// marked reusable, which the kernel reclaims whenever it needs them, while the
-// charge is `phys_footprint` (what Activity Monitor and jetsam read). Measured
-// on the live daemon 2026-10-21 (brandon-unfiled-3248.2j3m): RSS 335 MB against
-// a 218 MB footprint, and two backstop breaches at a 342 and a 386 MB
-// footprint, under a 512 MB limit.
-export type ChargeMeasure = "phys_footprint" | "rss";
-
-// [LAW:types-are-the-program] `charged` is the platform's own measure;
-// `stand-in` is RSS judged in its place, carrying why the platform's measure
-// could not be read — so a footprint reading never carries a reason, and an
-// RSS reading on Linux never claims a probe failed.
-export type MemoryCharge =
-  | {
-      readonly kind: "charged";
-      readonly measure: ChargeMeasure;
-      readonly bytes: number;
-    }
-  | {
-      readonly kind: "stand-in";
-      readonly bytes: number;
-      readonly unread: string;
-    };
 
 // Reads the charge, given the RSS read at the same moment (the charge itself
 // where the platform charges RSS, and the stand-in where its probe fails).

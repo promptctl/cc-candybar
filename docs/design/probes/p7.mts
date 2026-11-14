@@ -9,7 +9,7 @@ const { drawnLinks, describeLink } = await import(`${W}/test/helpers/drive-bar.t
 const { PARENT_PID_ENV } = await import(`${W}/src/daemon/parent-watchdog.ts`);
 const { BAR_SESSION_ID } = await import(`${W}/scripts/lib/hook-data.ts`);
 const { withStamp } = await import(`${W}/scripts/version-stamp.cjs`);
-const { encodeFrame, makeFrameReader } = await import(`${W}/src/daemon/protocol.ts`);
+const { encodeFrame, makeFrameReader } = await import(`${W}/src/daemon/foundations/protocol.ts`);
 
 const cwd = "/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming-wind";
 const spawn = async (prefix: string) => {

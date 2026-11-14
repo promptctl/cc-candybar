@@ -8,7 +8,7 @@ import { locs } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 
-import { applyLayoutOp, writeValues } from "../src/daemon/config-file-store";
+import { applyLayoutOp, writeValues } from "../src/renderer/config-file-store";
 import type { ConfigHome } from "../src/config/loader/discovery";
 
 const store = {

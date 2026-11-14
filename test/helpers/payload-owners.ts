@@ -1,4 +1,4 @@
-// Fake owners of the payload's lanes (src/daemon/render-payload.ts), each over a
+// Fake owners of the payload's lanes (src/renderer/render-payload.ts), each over a
 // reader a test writes: what the lane's source answers for the arguments the
 // payload reads it with.
 //
@@ -16,16 +16,14 @@ import type { Holds } from "../../src/utils/holds";
 import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-store";
 import { HOST } from "./host";
 import type { ClaudeHookData } from "../../src/utils/claude";
-import type { CheckedHookData } from "../../src/renderer/request-context";
+import type { CheckedHookData } from "../../src/renderer-interface/request-context";
 import type { GitInfo } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
 import type { MetricsFold } from "../../src/segments/metrics";
 import type { ActivityInfo } from "../../src/segments/activity";
 import type { TranscriptUsage } from "../../src/segments/session";
-import type {
-  DaySums,
-  SpeedObservation,
-} from "../../src/daemon/cache/session-usage-store";
+import type { DaySums } from "../../src/daemon/cache/session-usage-store";
+import type { SpeedObservation } from "../../src/facts/world-state";
 import type { AutoCompactWindow } from "../../src/segments/autocompact";
 import type { Instant } from "../../src/utils/instant";
 import {
@@ -44,27 +42,31 @@ import { assembleFacts } from "../../src/daemon/facts-assembly";
 import { instantOf } from "../../src/utils/instant";
 import {
   composePayload,
-  declareLanes,
-  readingsOf,
   settleWorld,
   todayOf,
   type ConfigFileFacts,
-  type DeclaredLanes,
   type DrawInputs,
   type DrawnPayload,
+} from "../../src/renderer/render-payload";
+import {
+  declareLanes,
+  readingsOf,
+  refreshPayload,
+  type DeclaredLanes,
   type KeyedOwners,
   type PayloadInputs,
   type RenderPayloadDeps,
-} from "../../src/daemon/render-payload";
+} from "../../src/daemon/readings";
 import type { EffectiveGlobals } from "../../src/config/effective-globals";
-import type { ClientHints } from "../../src/daemon/protocol";
-import { EMPTY_HISTORY_DEPTH } from "../../src/daemon/settings-history";
+import type { ClientHints } from "../../src/daemon/foundations/protocol";
+import type { Refreshed } from "../../src/renderer-interface/request-context";
+import { EMPTY_HISTORY_DEPTH } from "../../src/renderer/settings-history";
 import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { Holds as HoldsClass } from "../../src/utils/holds";
 import { CacheExpiryProvider } from "../../src/segments/cache";
 import { RefreshFaults } from "../../src/daemon/refresh-faults";
 import { systemTimekeeper } from "../../src/time";
-import { sessionIdOf } from "../../src/daemon/session-id";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { unscriptedRuns } from "./fake-launcher";
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
@@ -164,12 +166,10 @@ export function todayReadingOf(inputs: LanedInputs) {
 export async function settleLanes(
   inputs: LanedInputs,
   at: Instant,
-  refreshed: Parameters<typeof settleWorld>[2] = new Map(),
+  refreshed: Refreshed = new Map(),
 ): Promise<void> {
   await settleWorld(
-    inputs,
-    at,
-    refreshed,
+    () => refreshPayload(inputs, at, refreshed),
     () => documentOf(inputs),
     () => [],
     new AbortController().signal,
@@ -423,12 +423,10 @@ function openHome(
   facts: Parameters<typeof declareLanes>[2],
 ): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
   const holds = new HoldsClass();
-  const { lanes, faults } = declareLanes(
-    owners as KeyedOwners,
-    holds,
-    facts,
-    { plugins: new Map(), runs: new Map() },
-  );
+  const { lanes, faults } = declareLanes(owners as KeyedOwners, holds, facts, {
+    plugins: new Map(),
+    runs: new Map(),
+  });
   // [LAW:no-silent-failure] An owner whose declaration throws is a broken
   // fixture, failed here with its stack, as the daemon logs it as an error.
   if (faults.length > 0) {

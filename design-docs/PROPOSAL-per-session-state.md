@@ -53,7 +53,7 @@ These are sketches. Pick one or hybridize.
 
 ### Direction B: Daemon-mediated, with disk fallback
 - Daemon owns an in-memory `Map<sessionId, SessionState>` with the same TTL/LRU pattern as `usageCache`
-- Click handler talks to the daemon (existing protocol at `src/daemon/protocol.ts`) — fast, no disk
+- Click handler talks to the daemon (existing protocol at `src/daemon/foundations/protocol.ts`) — fast, no disk
 - If daemon is down, fall back to a Direction-A-style JSON file so behavior survives daemon restarts
 - Pros: cheap reads, well-understood eviction (matches `usageCache`), discoverable via existing daemon-stats command
 - Cons: two storage paths; cross-path consistency requires care (in-memory state lost on daemon restart, falls back to stale disk)

@@ -27,6 +27,9 @@ import {
   toBool,
   type VarType,
   type VarValue,
+  PendingValueError,
+  readPending,
+  type JsonValue,
 } from "./types.js";
 import { VariableStore, type Derivation, type StoredValue } from "./store.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
@@ -44,9 +47,8 @@ import {
   type Reading,
 } from "../utils/outcome.js";
 import type { SourceParse } from "./parse.js";
-import { PendingValueError, readPending, type JsonValue } from "./types.js";
-import type { SessionStateReader } from "../daemon/session-state.js";
-import type { SessionId } from "../daemon/session-id.js";
+import type { SessionStateReader } from "../renderer-interface/session-state.js";
+import type { SessionId } from "../daemon/foundations/session-id.js";
 import {
   keyHashOf,
   runOf,

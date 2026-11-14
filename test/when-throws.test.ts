@@ -15,7 +15,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, type RenderWarning } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { THEME_FLOOR } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";

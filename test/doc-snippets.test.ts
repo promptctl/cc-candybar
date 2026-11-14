@@ -48,7 +48,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkConfig, checkPlan } from "../src/check";
 import { textOf } from "../src/render/frame";
-import { daemonGates } from "../src/daemon/update-keys";
+import { daemonGates } from "../src/daemon/foundations/update-keys";
 
 const ROOT = path.join(__dirname, "..");
 

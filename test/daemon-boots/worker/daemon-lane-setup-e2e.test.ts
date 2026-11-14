@@ -28,7 +28,7 @@ import {
 import { rangeOf } from "../../../src/tmux-status/frames";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
-import type { ClientHints } from "../../../src/daemon/protocol";
+import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import { click, clickAnswer, render, saidOf, toldOf } from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";

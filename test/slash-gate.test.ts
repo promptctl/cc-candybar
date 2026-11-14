@@ -17,16 +17,14 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
-import {
-  type RenderPayloadDeps,
-} from "../src/daemon/render-payload";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
+import { type RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
-import type { ClientHints } from "../src/daemon/protocol";
+import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { VERB_SLASH } from "../src/click/wire";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { effectsOf } from "./helpers/click";
@@ -44,7 +42,7 @@ import {
   requestPayload,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("slash-gate");
 const OPTS = {
@@ -107,7 +105,10 @@ async function bar(
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: "/tmp",
+  });
   const render = (): Frame =>
     drawPayload(
       config,
@@ -136,7 +137,6 @@ async function bar(
 }
 
 describe("slash controls and the session's tmux pane", () => {
-
   test.each<[string, ClientHints]>([
     ["not in tmux", { tmux: null }],
     ["a client too old to say", {}],

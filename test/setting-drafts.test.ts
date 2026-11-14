@@ -12,11 +12,11 @@ import {
   persistPath,
 } from "../src/config/loader/persist-target";
 import { presetGlobals } from "../src/config/presets";
-import { settingDrafts } from "../src/daemon/setting-drafts";
+import { settingDrafts } from "../src/renderer/setting-drafts";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { SETTINGS } from "../src/config/setting-projections";
-import { writeValues } from "../src/daemon/config-file-store";
+import { writeValues } from "../src/renderer/config-file-store";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

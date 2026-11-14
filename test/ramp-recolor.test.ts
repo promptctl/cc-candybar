@@ -16,7 +16,7 @@ import { runUnder } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
 import { buildRig, type Rig } from "./helpers/rig";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-ramp-recolor");
 const BASE_THEME = "textual-dark";

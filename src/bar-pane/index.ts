@@ -18,7 +18,7 @@ import { describeFailure } from "../daemon/client-transport";
 import { followFrames, type FrameFollower } from "../daemon/frame-follow";
 import { obtainDaemonKick } from "../daemon/acquire";
 import { socketPath } from "../daemon/paths";
-import { planOutcome } from "../render/outcome-plan";
+import { planOutcome } from "../outcome-plan";
 import { detectTmuxHint, type TmuxHint } from "../tmux-hint";
 import type { World } from "../host";
 import { sleep, type Timekeeper } from "../time";

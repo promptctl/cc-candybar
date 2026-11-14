@@ -5,7 +5,7 @@
 // The resolution lives in the daemon's per-render globals pass
 // (resolveEffectiveGlobals -> BuildLineOptions), OUTSIDE drawDsl —
 // the exact twin of how an endcaps click reshapes (see dsl-endcaps-picker-reshape).
-// This test replicates that resolution as src/daemon/draw-bar.ts performs it and
+// This test replicates that resolution as src/renderer/draw-bar.ts performs it and
 // drives the real click wire, so what it proves is the loop a user runs, not a
 // function in isolation.
 
@@ -28,7 +28,7 @@ import {
 import type { EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 
-import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
 
 const S_BYSTANDER = sessionIdOf("s-bystander");
 const S_CLICKER = sessionIdOf("s-clicker");

@@ -3,7 +3,7 @@ import { processLauncher } from "./helpers/host";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GitService } from "../src/segments/git";
+import { GitService } from "../src/daemon/cache/git-service";
 
 // [LAW:behavior-not-structure] Real repos + a real `git worktree add`, not a
 // child_process mock. The previous mock targeted `exec`, which the launch

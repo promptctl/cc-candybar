@@ -9,8 +9,17 @@ import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { RenderSightings } from "../src/daemon/render-sightings";
-import type { ServingDaemon } from "../src/daemon/limits";
-import { emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient, renderSaid } from "./helpers/doctor-facts";
+import type { ServingDaemon } from "../src/daemon/foundations/memory-limit";
+import {
+  emptyStores,
+  healthyDaemonEdge,
+  healthyDataEdge,
+  noManagedSettings,
+  HEALTHY_SERVING,
+  HEALTHY_INSTALL_EDGE,
+  healthyClient,
+  renderSaid,
+} from "./helpers/doctor-facts";
 import type { ClientHint } from "../src/client-hint";
 import {
   BUNDLED_GLYPHS,
@@ -41,16 +50,16 @@ import {
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
 } from "../src/click/wire";
-import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
+import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
-import type { VerbContext } from "../src/daemon/verbs";
+import type { VerbContext } from "../src/renderer/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
-import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/edge";
+import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/ports";
 import type { TmuxHint } from "../src/tmux-hint";
 import type { TerminalEnvHint } from "../src/terminal-hint";
 import { instantOf } from "../src/utils/instant";
 
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 
@@ -106,7 +115,9 @@ function doctorBar(
   tmux: TmuxHint | null,
   load: LoadOutcome = CLEAN_LOAD,
   terminal: TerminalFixture = GHOSTTY,
-  clicked: ReturnType<typeof memoryStateFile<readonly string[]>> = memoryStateFile<readonly string[]>([]),
+  clicked: ReturnType<
+    typeof memoryStateFile<readonly string[]>
+  > = memoryStateFile<readonly string[]>([]),
   // The `client` hint the session's last render carried, as the daemon's
   // sightings hold it; none is a client too old to report one.
   client: { readonly hint?: ClientHint } = { hint: healthyClient() },
@@ -131,7 +142,12 @@ function doctorBar(
     }),
   );
   const clients = new RenderSightings();
-  clients.see(S1, renderSaid(client.hint, sessionAt()), instantOf(new Date()), 0);
+  clients.see(
+    S1,
+    renderSaid(client.hint, sessionAt()),
+    instantOf(new Date()),
+    0,
+  );
   const renderRaw = (): Frame => rig.draw({ payload: PAYLOAD }).frame;
   const render = (): string => textOf(renderRaw());
   const settingsPath = path.join(dir, "settings.json");
@@ -167,7 +183,8 @@ function doctorBar(
     doctorStores: { ...emptyStores(), clicked },
     clients,
     serving: () => serving,
-    log: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
+    log: (level, message) =>
+      logs.push(level === "warn" ? `warn: ${message}` : message),
   };
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
   const clickWriting = async (key: string, value: string): Promise<void> => {
@@ -233,7 +250,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     // The tools body leads with one ✕ (brandon-disclosure-43z), on its first
     // row; the report row leads with the blank of its width, a cell of its own
     // right after the row's lead cap, and its text follows the seam.
-    expect(lines[toolsRow + 1]!.startsWith(POWERLINE.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
+    expect(
+      lines[toolsRow + 1]!.startsWith(POWERLINE.lead + DISCLOSURE_GLYPH_CLOSE),
+    ).toBe(true);
     const reports = lines.slice(toolsRow + 2, toolsRow + 8);
     for (const report of reports) {
       expect(report.startsWith(`${POWERLINE.lead} `)).toBe(true);
@@ -283,7 +302,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     await rt.clickVerb(VERB_DOCTOR_RUN);
     const out = rt.render();
     expect(out).toContain("✓ links");
-    expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
+    expect(out).toContain(
+      "✗ Nerd Font — the doctor cannot read Terminal 455.1's font",
+    );
     expect(rt.clicked.value()).toEqual(["Terminal"]);
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
       `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset (session=s1)`,
@@ -294,7 +315,12 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // said — the record `cc-candybar doctor` reads too — not the persisted hints.
   test("the width row reads the session's latest render", async () => {
     const rt = doctorBar(null);
-    rt.clients.see(S1, { ...renderSaid(healthyClient(), sessionAt()), termCols: 97 }, instantOf(new Date()), 1);
+    rt.clients.see(
+      S1,
+      { ...renderSaid(healthyClient(), sessionAt()), termCols: 97 },
+      instantOf(new Date()),
+      1,
+    );
     await rt.openTools();
     await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.logs.at(-1)).toMatch(/ termWidth=ok .* cols=97 widthOf=session /);
@@ -303,31 +329,55 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
 
   test("a post-mortem the user has not read fails the daemon row, and [fix] files it read", async () => {
     const report = "/state/cc-candybar/memory-2026-10-19T18-01-12-345Z-77.txt";
-    const rt = doctorBar(null, CLEAN_LOAD, GHOSTTY, memoryStateFile<readonly string[]>([]), { hint: healthyClient() }, {
-      ...HEALTHY_SERVING,
-      postMortems: {
-        kind: "ok",
-        value: [{ identity: "2026-10-19T18-01-12-345Z-77", artifacts: { memoryReport: report } }],
+    const rt = doctorBar(
+      null,
+      CLEAN_LOAD,
+      GHOSTTY,
+      memoryStateFile<readonly string[]>([]),
+      { hint: healthyClient() },
+      {
+        ...HEALTHY_SERVING,
+        postMortems: {
+          kind: "ok",
+          value: [
+            {
+              identity: "2026-10-19T18-01-12-345Z-77",
+              artifacts: { memoryReport: report },
+            },
+          ],
+        },
       },
-    });
+    );
     await rt.openTools();
     await rt.clickVerb(VERB_DOCTOR_RUN);
     const failed = rt.render();
     expect(failed).toContain("✗ daemon");
-    expect(failed).toContain(`ran out of memory and restarted (2026-10-19T18-01-12-345Z-77) — post-mortem: ${report}`);
-    expect(rt.logs.at(-1)).toMatch(/ daemon=failed\(1\) .* daemons=1 others=- memory=phys_footprint:120\/512 postMortems=1\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(failed).toContain(
+      `ran out of memory and restarted (2026-10-19T18-01-12-345Z-77) — post-mortem: ${report}`,
+    );
+    expect(rt.logs.at(-1)).toMatch(
+      / daemon=failed\(1\) .* daemons=1 others=- memory=phys_footprint:120\/512 postMortems=1\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/,
+    );
     await rt.clickVerb(VERB_DOCTOR_FIX);
     expect(rt.logs).toContain(
       "doctor-fix: daemon → post-mortems-read through=2026-10-19T18-01-12-345Z-77 (session=s1)",
     );
     expect(rt.render()).toContain("✓ daemon");
-    expect(rt.logs.at(-1)).toMatch(/ daemon=ok .* postMortems=0\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(rt.logs.at(-1)).toMatch(
+      / daemon=ok .* postMortems=0\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/,
+    );
   });
 
   // brandon-doctor-v62x.tfb: the click judges the client that drew the bar
   // it came from — one too old to say what it is is the install's failure.
   test("a bar drawn by a client too old to say what it is fails the install row", async () => {
-    const rt = doctorBar(null, CLEAN_LOAD, GHOSTTY, memoryStateFile<readonly string[]>([]), {});
+    const rt = doctorBar(
+      null,
+      CLEAN_LOAD,
+      GHOSTTY,
+      memoryStateFile<readonly string[]>([]),
+      {},
+    );
     await rt.openTools();
     await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain(
@@ -354,7 +404,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.logs).toContain(
       'warn: doctor: clicked terminal not filed for "Ghostty": EROFS: read-only file system',
     );
-    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(
+      / clicked=no cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/,
+    );
   });
 
   test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", async () => {
@@ -393,7 +445,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const rt = doctorBar(HINT);
     const url = `cc-candybar://${VERB_DOCTOR_RUN}/never-rendered`;
     await expect(rt.click(url)).rejects.toThrow(BadVerbArgs);
-    await expect(rt.click(url)).rejects.toThrow(/never-rendered has not rendered yet/);
+    await expect(rt.click(url)).rejects.toThrow(
+      /never-rendered has not rendered yet/,
+    );
   });
 
   // [LAW:no-silent-failure] A stale `[fix]` URL (the world moved since the
@@ -437,7 +491,11 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
 
     await rt.clickVerb(VERB_DOCTOR_FIX);
     expect(JSON.parse(fs.readFileSync(rt.settingsPath, "utf8"))).toEqual({
-      statusLine: { type: "command", command: "cc-candybar", refreshInterval: 1 },
+      statusLine: {
+        type: "command",
+        command: "cc-candybar",
+        refreshInterval: 1,
+      },
     });
     // A pass names the file the interval is set in.
     expect(rt.render()).toContain(
@@ -467,7 +525,11 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         fontCalls.push(args);
         return {
           kind: "ok",
-          value: { font: "Menlo-Regular", from: 'iTerm2 profile "Default"', lacks: [...args[2]] },
+          value: {
+            font: "Menlo-Regular",
+            from: 'iTerm2 profile "Default"',
+            lacks: [...args[2]],
+          },
         };
       },
     };
@@ -516,7 +578,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs).toContain(
         `doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|${BUNDLED_GLYPHS_NAMED} (session=s1)`,
       );
-      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/);
+      expect(rt.logs.at(-1)).toMatch(
+        /nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/,
+      );
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", async () => {
@@ -525,7 +589,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       await rt.clickVerb(VERB_DOCTOR_RUN);
       await rt.click(markUrl(rt, "boxes")!);
       const out = rt.render();
-      expect(out).toContain(`✗ Nerd Font — iTerm2 3.7.2 draws ${BUNDLED_GLYPHS_NAMED} as boxes`);
+      expect(out).toContain(
+        `✗ Nerd Font — iTerm2 3.7.2 draws ${BUNDLED_GLYPHS_NAMED} as boxes`,
+      );
       expect(markUrl(rt, "drawn")).toBeDefined();
     });
 
@@ -535,9 +601,11 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       await rt.clickVerb(VERB_DOCTOR_RUN);
       expect(rt.render()).toContain("✓ Nerd Font");
       expect(markUrl(rt, "drawn")).toBeUndefined();
-      await expect(VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", rt.ctx),
+      await expect(
+        VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", rt.ctx),
       ).rejects.toThrow(BadVerbArgs);
-      await expect(VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
+      await expect(
+        VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
       ).rejects.toThrow(/the mark is "perhaps"/);
     });
 
@@ -555,12 +623,14 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
           read: () => ({ kind: "ok", value: {} }),
           update: fileMarkBook(dir).update,
         };
-        const ctx = { ...rt.ctx, doctorStores: { ...rt.ctx.doctorStores, marks } };
-        const mark = async () => await VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
+        const ctx = {
+          ...rt.ctx,
+          doctorStores: { ...rt.ctx.doctorStores, marks },
+        };
+        const mark = async () =>
+          await VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
         await expect(mark).rejects.toThrow(BadVerbArgs);
-        await expect(mark).rejects.toThrow(
-          `doctor-mark: ${file} is not JSON`,
-        );
+        await expect(mark).rejects.toThrow(`doctor-mark: ${file} is not JSON`);
         expect(fs.readFileSync(file, "utf8")).toBe("junk");
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
@@ -577,7 +647,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       const rt = doctorBar(null, CLEAN_LOAD, busy);
       await rt.openTools();
       await expect(VERBS.get(VERB_DOCTOR_RUN)!("s1", rt.ctx)).rejects.toThrow(
-        new BadVerbArgs("the doctor looked at the font less than a second ago — click again"),
+        new BadVerbArgs(
+          "the doctor looked at the font less than a second ago — click again",
+        ),
       );
       expect(rt.render()).not.toContain("Nerd Font");
     });

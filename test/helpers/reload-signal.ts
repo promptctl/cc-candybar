@@ -2,7 +2,7 @@ import fs from "node:fs";
 import type {
   ReloadedEntry,
   RenderCacheObservers,
-} from "../../src/daemon/cache/render";
+} from "../../src/renderer/render-cache";
 import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
 import { holdsWithin, nameOf, type Condition, type What } from "./until";
 

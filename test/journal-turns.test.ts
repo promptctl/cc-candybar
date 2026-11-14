@@ -9,9 +9,13 @@ import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { clickParts } from "./helpers/click-parts";
 import { replyTo } from "../src/daemon/reply";
-import { DaemonClosing, failureOf, type Failure } from "../src/daemon/verb-error";
-import { SessionState } from "../src/daemon/session-state";
-import { closeIdleMenus, VERBS, type VerbContext } from "../src/daemon/verbs";
+import {
+  DaemonClosing,
+  failureOf,
+  type Failure,
+} from "../src/daemon/foundations/verb-error";
+import { SessionState } from "../src/renderer/session-state";
+import { closeIdleMenus, VERBS, type VerbContext } from "../src/renderer/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   VERB_COPY,
@@ -22,17 +26,23 @@ import {
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
-import type { Launcher, LaunchResult } from "../src/proc/launch";
+import type { Launcher, LaunchResult } from "../src/proc/launcher";
 import { instantOf } from "../src/utils/instant";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { DoctorBusy } from "../src/doctor/busy";
-import type { DoctorEdge } from "../src/doctor/edge";
-import { emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_INSTALL_EDGE } from "./helpers/doctor-facts";
+import type { DoctorEdge } from "../src/doctor/ports";
+import {
+  emptyStores,
+  healthyDaemonEdge,
+  healthyDataEdge,
+  noManagedSettings,
+  HEALTHY_INSTALL_EDGE,
+} from "./helpers/doctor-facts";
 import { VERB_DOCTOR_RUN } from "../src/click/wire";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s1");
 const IDLE = {
@@ -104,8 +114,7 @@ async function drain(): Promise<void> {
   for (let i = 0; i < 30; i++) await Promise.resolve();
 }
 
-const undoDepth = (ctx: VerbContext): number =>
-  ctx.history.depth(SID).undo;
+const undoDepth = (ctx: VerbContext): number => ctx.history.depth(SID).undo;
 
 describe("journals take turns", () => {
   test("two clicks together apply in order, one undo step each, across an awaited handler", async () => {
@@ -146,12 +155,16 @@ describe("the idle close decides in its turn", () => {
     let now = 1000;
     const failures: Failure[] = [];
     const fired: Array<Promise<void>> = [];
-    const idle = new MenuIdle({ clock: systemTimekeeper,
+    const idle = new MenuIdle({
+      clock: systemTimekeeper,
       now: () => instantOf(new Date(now * 1000)),
       close: async (sid, closing) => {
         const running = closeIdleMenus(
           sid,
-          { ...closing, confirm: () => idle.confirmClose(sid, closing.firedAt) },
+          {
+            ...closing,
+            confirm: () => idle.confirmClose(sid, closing.firedAt),
+          },
           ctx,
         );
         fired.push(running);
@@ -197,8 +210,12 @@ describe("the idle close decides in its turn", () => {
     await jest.advanceTimersByTimeAsync(0);
     await Promise.all([other, ...m.fired]);
     m.idle.clickSettled(SID);
-    expect(logged).toContain(`menu-idle: no longer idle, kept (session=${SID})`);
-    expect(logged.filter((l) => l.startsWith("menu-idle: closed="))).toEqual([]);
+    expect(logged).toContain(
+      `menu-idle: no longer idle, kept (session=${SID})`,
+    );
+    expect(logged.filter((l) => l.startsWith("menu-idle: closed="))).toEqual(
+      [],
+    );
     m.idle.dispose();
   });
 
@@ -216,12 +233,15 @@ describe("the idle close decides in its turn", () => {
     });
     await drain();
     m.advance(30);
-    for (let i = 0; i < 256; i++) m.idle.clicked(sessionIdOf(`other${i}`), m.at());
+    for (let i = 0; i < 256; i++)
+      m.idle.clicked(sessionIdOf(`other${i}`), m.at());
     m.idle.clicked(SID, m.at());
     held.open();
     await jest.advanceTimersByTimeAsync(0);
     await Promise.all([other, ...m.fired]);
-    expect(logged).toContain(`menu-idle: no longer idle, kept (session=${SID})`);
+    expect(logged).toContain(
+      `menu-idle: no longer idle, kept (session=${SID})`,
+    );
     m.idle.dispose();
   });
 
@@ -253,7 +273,9 @@ test("a navigation commit that throws leaves the settings journal committed", as
     },
   }));
   const click = VERBS.get(VERB_SET_STATE)!;
-  await expect(click(encodeSegments([SID, "theme", "nord"]), ctx)).rejects.toThrow("navigation broke");
+  await expect(
+    click(encodeSegments([SID, "theme", "nord"]), ctx),
+  ).rejects.toThrow("navigation broke");
   expect(undoDepth(ctx)).toBe(1);
   ctx.history.undo(SID);
   expect(sessionState.get(SID, "theme")).toBeNull();
@@ -279,7 +301,9 @@ describe("close", () => {
     const cut = click("nord", "plain", held.wait);
     await drain();
     turns.close();
-    expect(logged).toContain("journal: dispatch cut off by close, committing what landed");
+    expect(logged).toContain(
+      "journal: dispatch cut off by close, committing what landed",
+    );
     expect(undoDepth(ctx)).toBe(1);
     held.open();
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
@@ -445,7 +469,12 @@ test("stats name the holder and what waits", async () => {
   expect(turns.getStats()).toMatchObject({ holder: "dispatch", queued: 1 });
   held.open();
   await Promise.all([slow, queued]);
-  expect(turns.getStats()).toEqual({ holder: null, heldMs: 0, queued: 0, gathers: 0 });
+  expect(turns.getStats()).toEqual({
+    holder: null,
+    heldMs: 0,
+    queued: 0,
+    gathers: 0,
+  });
 });
 
 describe("a doctor click", () => {
@@ -455,7 +484,12 @@ describe("a doctor click", () => {
       ...healthyDaemonEdge(),
       ...healthyDataEdge(),
       ...noManagedSettings(),
-      loadConfig: () => ({ layers: [], error: null, advisories: [], config: EMPTY_DEFAULT }),
+      loadConfig: () => ({
+        layers: [],
+        error: null,
+        advisories: [],
+        config: EMPTY_DEFAULT,
+      }),
       probeTmux: async () => ({ kind: "failed", reason: "no tmux" }),
       ...over,
     }) as DoctorEdge;
@@ -498,11 +532,20 @@ describe("a doctor click", () => {
 describe("a click's real launch", () => {
   test("hung, it times out and gives the turn back", async () => {
     const { ctx, turns } = setup();
-    const launcher = systemLauncher({ inherited: process.env }, systemTimekeeper);
+    const launcher = systemLauncher(
+      { inherited: process.env },
+      systemTimekeeper,
+    );
     const hung = {
       ...launcher,
       launch: (opts: Parameters<Launcher["launch"]>[0]) =>
-        launcher.launch({ ...opts, bin: "/bin/sleep", args: ["30"], timeoutMs: 100, stdinInput: undefined }),
+        launcher.launch({
+          ...opts,
+          bin: "/bin/sleep",
+          args: ["30"],
+          timeoutMs: 100,
+          stdinInput: undefined,
+        }),
     } as Launcher;
     await expect(
       VERBS.get(VERB_COPY)!("x", { ...ctx, launcher: hung }),
@@ -512,12 +555,21 @@ describe("a click's real launch", () => {
 
   test("a setsid descendant holding stdout leaves the loop answering while it lives", async () => {
     const { ctx } = setup();
-    const launcher = systemLauncher({ inherited: process.env }, systemTimekeeper);
-    const script = "import os,time\nif os.fork()==0:\n  os.setsid()\n  time.sleep(3)\n  os._exit(0)\nos._exit(0)\n";
+    const launcher = systemLauncher(
+      { inherited: process.env },
+      systemTimekeeper,
+    );
+    const script =
+      "import os,time\nif os.fork()==0:\n  os.setsid()\n  time.sleep(3)\n  os._exit(0)\nos._exit(0)\n";
     const holder = {
       ...launcher,
       launch: (opts: Parameters<Launcher["launch"]>[0]) =>
-        launcher.launch({ ...opts, bin: "python3", args: ["-c", script], stdinInput: undefined }),
+        launcher.launch({
+          ...opts,
+          bin: "python3",
+          args: ["-c", script],
+          stdinInput: undefined,
+        }),
     } as Launcher;
     let ticks = 0;
     const ticking = setInterval(() => ticks++, 10);

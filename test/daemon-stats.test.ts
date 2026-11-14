@@ -1,4 +1,5 @@
-import { RuntimeStats, type SourceSnapshots } from "../src/daemon/stats";
+import { RuntimeStats } from "../src/daemon/stats";
+import { type SourceSnapshots } from "../src/daemon/foundations/stats-snapshot";
 import { EMPTY_STORES } from "./helpers/doctor-facts";
 import {
   formatStats,
@@ -6,11 +7,11 @@ import {
   shapeSkew,
   statsPlan,
 } from "../src/daemon/client-stats";
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 

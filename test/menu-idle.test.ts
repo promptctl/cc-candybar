@@ -8,7 +8,7 @@ import {
   DaemonClosing,
   failureOf,
   type Failure,
-} from "../src/daemon/verb-error";
+} from "../src/daemon/foundations/verb-error";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import {
@@ -19,9 +19,13 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
-import { closeIdleMenus, clickSessionOf, type VerbContext } from "../src/daemon/verbs/index";
+import { closeIdleMenus, type VerbContext } from "../src/renderer/verbs/index";
+import { clickSessionOf } from "../src/click/wire";
 import { instantOf, type Instant } from "../src/utils/instant";
-import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/door";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
@@ -37,7 +41,10 @@ import {
   litAt,
 } from "../src/config/menu-timeout";
 import { closeByTurn, MenuIdle } from "../src/daemon/menu-idle";
-import type { RendererInput, RendererOutput } from "../src/renderer/interface";
+import type {
+  RendererInput,
+  RendererOutput,
+} from "../src/renderer-interface/interface";
 import { selectionFor } from "./helpers/selection";
 import { textOf, type Frame, type Row } from "../src/render/frame";
 import { systemTimekeeper } from "../src/time";
@@ -82,7 +89,8 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     now = 1000;
     closes = [];
     failures = [];
-    idle = new MenuIdle({ clock: systemTimekeeper,
+    idle = new MenuIdle({
+      clock: systemTimekeeper,
       now: () => at(now),
       close: async (sid, { firedAt, idleS, timeoutS }) => {
         idle.confirmClose(sid, firedAt);
@@ -206,7 +214,8 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
   });
 
   test("a close that fails is reported, and retried a timeout after the next render that draws the menu", async () => {
-    const failing = new MenuIdle({ clock: systemTimekeeper,
+    const failing = new MenuIdle({
+      clock: systemTimekeeper,
       now: () => at(now),
       close: async () => failureOf(new Error("no config")),
       failed: (sid, f) => failures.push(`${sid}: ${f.message}`),
@@ -314,7 +323,8 @@ describe("a close that waits its turn", () => {
   test("frames during the wait queue no second close, and a kept close changes nothing", async () => {
     let release = (): void => {};
     let closes = 0;
-    const idle = new MenuIdle({ clock: systemTimekeeper,
+    const idle = new MenuIdle({
+      clock: systemTimekeeper,
       now: () => at(now),
       close: () => {
         closes++;
@@ -339,7 +349,8 @@ describe("a close that waits its turn", () => {
   test("goes ahead in its turn only while no click of the session is in flight, and then nothing drawn before it stands", async () => {
     let release = (): void => {};
     const fired: Instant[] = [];
-    const idle = new MenuIdle({ clock: systemTimekeeper,
+    const idle = new MenuIdle({
+      clock: systemTimekeeper,
       now: () => at(now),
       close: (_sid, { firedAt }) => {
         fired.push(firedAt);
@@ -365,7 +376,8 @@ describe("a close that waits its turn", () => {
   test("whose record was evicted meanwhile is not confirmed, and asking makes no record", async () => {
     const releases: Array<() => void> = [];
     const fired: Instant[] = [];
-    const idle = new MenuIdle({ clock: systemTimekeeper,
+    const idle = new MenuIdle({
+      clock: systemTimekeeper,
       now: () => at(now),
       close: (_sid, { firedAt }) => {
         fired.push(firedAt);
@@ -399,7 +411,8 @@ describe("a close that waits its turn", () => {
     const heard: unknown[] = [];
     const note = (e: unknown): void => void heard.push(e);
     process.on("unhandledRejection", note);
-    const idle = new MenuIdle({ clock: systemTimekeeper,
+    const idle = new MenuIdle({
+      clock: systemTimekeeper,
       now: () => at(now),
       close: () => new Promise((resolve) => (settle = resolve)),
       failed: (_sid, f) => failures.push(f),
@@ -447,7 +460,10 @@ function idleBar(src: string) {
       payload: PAYLOAD,
       at: when,
       observers: { perSegmentSink: sink },
-      selection: selectionFor(config, idleSince === undefined ? {} : { idleSince }),
+      selection: selectionFor(
+        config,
+        idleSince === undefined ? {} : { idleSince },
+      ),
     }).frame;
   };
   const logged: string[] = [];
@@ -482,7 +498,6 @@ const IDLE = {
 };
 
 describe("the close is the write the door's ✕ makes, on a click's own path", () => {
-
   test("edit mode exits with the door, and its savepoint goes with it", async () => {
     const rt = idleBar(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);

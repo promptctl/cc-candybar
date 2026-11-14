@@ -2,7 +2,7 @@
 // them.
 
 import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-store";
-import type { SessionId } from "../../src/daemon/session-id";
+import type { SessionId } from "../../src/daemon/foundations/session-id";
 
 export function usageFold(
   store: SessionUsageStore,

@@ -5,8 +5,8 @@ import type {
   LoadedSessions,
   SessionSnapshot,
   SessionStorage,
-} from "./session-state";
-import { sessionKeyed, type SessionId } from "./session-id";
+} from "../renderer-interface/session-state";
+import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
 // [LAW:no-silent-failure] Corrupt/missing file → empty state is the *defined*

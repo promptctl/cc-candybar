@@ -2,7 +2,7 @@
 // table for the checkpoint's own cases and for the daemon's doors, so a door
 // cannot refuse a different set.
 
-import { SESSION_ID_MAX_BYTES } from "../../src/daemon/session-id";
+import { SESSION_ID_MAX_BYTES } from "../../src/daemon/foundations/session-id";
 
 export const REFUSED: ReadonlyArray<readonly [string, string, RegExp]> = [
   ["empty", "", /is empty/],

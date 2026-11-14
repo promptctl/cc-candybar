@@ -5,7 +5,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PROTOCOL_VERSION, type Response } from "../../src/daemon/protocol";
+import { PROTOCOL_VERSION, type Response } from "../../src/daemon/foundations/protocol";
 import { isRefusal, type StreamEnd } from "../../src/daemon/client-frames";
 import {
   afterStreamEnd,

@@ -4,9 +4,9 @@
 // verbs are here; the doors at a daemon are test/daemon-boots/worker/session-id-at-the-daemon.test.ts.
 
 import { randomUUID } from "node:crypto";
-import { parseSessionId, sessionIdOf } from "../src/daemon/session-id";
-import { SessionState } from "../src/daemon/session-state";
-import { BadVerbArgs, VERBS } from "../src/daemon/verbs";
+import { parseSessionId, sessionIdOf } from "../src/daemon/foundations/session-id";
+import { SessionState } from "../src/renderer/session-state";
+import { BadVerbArgs, VERBS } from "../src/renderer/verbs";
 import { encodeSegments } from "../src/click/wire";
 import { testVerbContext } from "./helpers/click";
 import { REFUSED } from "./helpers/session-id-refused";

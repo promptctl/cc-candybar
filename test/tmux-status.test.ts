@@ -17,7 +17,7 @@ import type { TmuxRun } from "../src/proc/tmux";
 import { rangeOf } from "../src/tmux-status/frames";
 import { barOf } from "./helpers/drawn-frame";
 
-import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
 
 const S2 = sessionIdOf("s2");
 

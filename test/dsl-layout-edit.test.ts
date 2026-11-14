@@ -59,10 +59,10 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
-import { authoredFragment } from "../src/daemon/config-file-store";
+import { authoredFragment } from "../src/renderer/config-file-store";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import {
@@ -72,8 +72,8 @@ import {
   VERB_DISPATCH,
   VERB_RESET_CONFIG,
 } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
-import type { VerbContext } from "../src/daemon/verbs";
+import { VERBS } from "../src/renderer/verbs";
+import type { VerbContext } from "../src/renderer/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";
 import { memoryLimitBytes } from "../src/daemon/limits";
@@ -81,8 +81,8 @@ import {
   SOURCES_NOTHING,
   RenderCache,
   renderCacheBudget,
-} from "../src/daemon/cache/render";
-import type { CacheEntry } from "../src/daemon/cache/render";
+} from "../src/renderer/render-cache";
+import type { CacheEntry } from "../src/renderer/render-cache";
 import {
   EDIT_MODE_KEY,
   EDIT_MODE_ARRANGE,
@@ -112,7 +112,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 

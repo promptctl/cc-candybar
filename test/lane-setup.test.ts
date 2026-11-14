@@ -3,7 +3,7 @@
 // the pure readers the production edge folds tmux's and ps's answers with
 // (src/daemon/lane-edge.ts).
 
-import { sessionEnv } from "../src/daemon/session-env";
+import { sessionEnv } from "../src/daemon/foundations/session-env";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -17,31 +17,31 @@ import {
   type LaneEdge,
   type LaneHost,
   type LaneOutcome,
-  type LaneSession,
   type PaneClaude,
 } from "../src/daemon/lane-setup";
+import { type LaneSession } from "../src/renderer-interface/adapter";
 import {
   relaunchArgs,
   sessionArgs,
   startPlace,
 } from "../src/daemon/claude-relaunch";
 import { attachCommandLine } from "../src/attach-launcher";
-import {
-  refusalOf,
-  runsAttached,
-  barPanesOf,
-} from "../src/daemon/lane-edge";
+import { refusalOf, runsAttached, barPanesOf } from "../src/daemon/lane-edge";
 import { draftShown, turnRunning } from "../src/claude-input/prompt-screen";
-import { BadVerbArgs } from "../src/daemon/verb-error";
-import { SessionState } from "../src/daemon/session-state";
-import { holdClickError } from "../src/daemon/click-error";
+import { BadVerbArgs } from "../src/daemon/foundations/verb-error";
+import { SessionState } from "../src/renderer/session-state";
+import { holdClickError } from "../src/daemon/foundations/click-error";
 import { instantOf } from "../src/utils/instant";
 import type { Lane, LaneSwitches } from "../src/config/lanes";
 import type { TmuxHint } from "../src/tmux-hint";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("1f6e0c2a-0d0e-4a52-9d1b-2b0b0f0e0a11");
-const TMUX: TmuxHint = { socket: "/tmp/tmux-1/default", pane: "%7", truecolor: null };
+const TMUX: TmuxHint = {
+  socket: "/tmp/tmux-1/default",
+  pane: "%7",
+  truecolor: null,
+};
 const READY_SCREEN = ["─".repeat(30), "❯ ", "─".repeat(30)];
 
 // A checkout: `src/` beside `dist/`, the native client built.
@@ -64,7 +64,10 @@ const session = (
 });
 
 // Every effect recorded, in the order it ran.
-function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[] } {
+function fakeEdge(over: Partial<LaneEdge> = {}): {
+  edge: LaneEdge;
+  did: string[];
+} {
   const did: string[] = [];
   const claude: PaneClaude = {
     pid: 4242,
@@ -86,12 +89,16 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     },
     barPanes: async () => [],
     openBarPane: async (hint, argv, env) => {
-      did.push(`open under ${hint.pane}: ${argv.join(" ")} ${JSON.stringify(env)}`);
+      did.push(
+        `open under ${hint.pane}: ${argv.join(" ")} ${JSON.stringify(env)}`,
+      );
       return "%9";
     },
     closePane: async (_hint, pane) => void did.push(`close ${pane}`),
     claude: async (args, session) =>
-      void did.push(`claude ${args.join(" ")} [${session.claudeConfigDir ?? "-"}]`),
+      void did.push(
+        `claude ${args.join(" ")} [${session.claudeConfigDir ?? "-"}]`,
+      ),
     fileExists: () => true,
     presence: () => "present",
     paneClaude: async () => claude,
@@ -152,9 +159,13 @@ describe("lane C, pane", () => {
 
   test("off in a session with no tmux pane has nothing to close, and says so", async () => {
     const { edge, did } = fakeEdge();
-    expect(await LANE_SETUP.pane.off(session({ tmux: null }), HOST, edge)).toEqual({
+    expect(
+      await LANE_SETUP.pane.off(session({ tmux: null }), HOST, edge),
+    ).toEqual({
       kind: "done",
-      said: expect.stringMatching(/^no bar pane to close: .*not running inside tmux/),
+      said: expect.stringMatching(
+        /^no bar pane to close: .*not running inside tmux/,
+      ),
     });
     expect(did).toEqual([]);
   });
@@ -168,12 +179,15 @@ describe("lane C, pane", () => {
   test.each([
     [undefined, "predates this daemon"],
     [null, "not running inside tmux"],
-  ])("a session with tmux hint %p is refused, saying why", async (tmux, why) => {
-    const { edge } = fakeEdge();
-    await expect(LANE_SETUP.pane.on(session({ tmux }), HOST, edge)).rejects.toThrow(
-      new RegExp(why),
-    );
-  });
+  ])(
+    "a session with tmux hint %p is refused, saying why",
+    async (tmux, why) => {
+      const { edge } = fakeEdge();
+      await expect(
+        LANE_SETUP.pane.on(session({ tmux }), HOST, edge),
+      ).rejects.toThrow(new RegExp(why));
+    },
+  );
 });
 
 describe("lane C, tmux status line", () => {
@@ -183,21 +197,24 @@ describe("lane C, tmux status line", () => {
       kind: "done",
       said: "the daemon draws %7's bar in its status line",
     });
-    expect((await LANE_SETUP.tmuxStatus.off(session(), HOST, edge)).kind).toBe("done");
+    expect((await LANE_SETUP.tmuxStatus.off(session(), HOST, edge)).kind).toBe(
+      "done",
+    );
     expect(did).toEqual([]);
   });
 
   test("on in a session outside tmux is refused, saying why", async () => {
     const { edge } = fakeEdge();
-    await expect(LANE_SETUP.tmuxStatus.on(session({ tmux: null }), HOST, edge)).rejects.toThrow(
-      /not running inside tmux/,
-    );
+    await expect(
+      LANE_SETUP.tmuxStatus.on(session({ tmux: null }), HOST, edge),
+    ).rejects.toThrow(/not running inside tmux/);
   });
 });
 
 // The part of a setup that outlives its click.
 function finished(out: LaneOutcome): Promise<string> {
-  if (out.kind !== "underway") throw new Error(`expected underway: ${out.said}`);
+  if (out.kind !== "underway")
+    throw new Error(`expected underway: ${out.said}`);
   return out.finished;
 }
 
@@ -222,16 +239,18 @@ describe("lane A, band", () => {
 
   test("a daemon not run from a checkout is refused in the click, before anything is installed", async () => {
     const { edge, did } = fakeEdge();
-    await expect(LANE_SETUP.band.on(session(), HOST, edge)).rejects.toThrow(BadVerbArgs);
+    await expect(LANE_SETUP.band.on(session(), HOST, edge)).rejects.toThrow(
+      BadVerbArgs,
+    );
     expect(did).toEqual([]);
   });
 
   test("an unbuilt native client is refused in the click, naming the build", async () => {
     const { bundle } = checkout();
     const { edge, did } = fakeEdge({ fileExists: () => false });
-    await expect(LANE_SETUP.band.on(session(), { ...HOST, bundle }, edge)).rejects.toThrow(
-      /just install-rust/,
-    );
+    await expect(
+      LANE_SETUP.band.on(session(), { ...HOST, bundle }, edge),
+    ).rejects.toThrow(/just install-rust/);
     expect(did).toEqual([]);
   });
 
@@ -245,7 +264,9 @@ describe("lane A, band", () => {
     });
     await expect(
       finished(await LANE_SETUP.band.on(session(), { ...HOST, bundle }, edge)),
-    ).rejects.toThrow(/installed, but \/reload-plugins was not typed: .*copy mode/);
+    ).rejects.toThrow(
+      /installed, but \/reload-plugins was not typed: .*copy mode/,
+    );
   });
 });
 
@@ -283,7 +304,10 @@ describe("lane B, statusline", () => {
   // so a node it would refuse ends nothing.
   test("a PATH with no node the launcher can run under leaves Claude Code running", async () => {
     const { edge, did } = fakeEdge({
-      launcherNode: () => ({ kind: "refused", why: "no `node` on PATH to run the attach launcher" }),
+      launcherNode: () => ({
+        kind: "refused",
+        why: "no `node` on PATH to run the attach launcher",
+      }),
     });
     await expect(
       finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
@@ -296,7 +320,9 @@ describe("lane B, statusline", () => {
   // Claude Code's auto-update removes the release a path names; `claude`
   // reruns from history after it.
   test("a release the shell would not find as `claude` is named by its path", async () => {
-    const { edge, did } = fakeEdge({ onPath: () => "/usr/local/bin/claude-other" });
+    const { edge, did } = fakeEdge({
+      onPath: () => "/usr/local/bin/claude-other",
+    });
     await finished(await LANE_SETUP.statusline.on(session(), HOST, edge));
     expect(did).toContain(
       `shell cd /work && BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' /u/.local/share/claude/versions/2.1.299 --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
@@ -367,15 +393,18 @@ describe("lane B, statusline", () => {
   test.each([
     ["attach-preload.cjs", "/opt/candybar/dist/attach-preload.cjs"],
     ["bun-attach.js", "/opt/candybar/dist/cc-extra/src/bun-attach.js"],
-  ])("a build with no %s is refused before anything in the pane is touched", async (missing, file) => {
-    const { edge, did } = fakeEdge({
-      fileExists: (f) => !f.endsWith(missing),
-    });
-    await expect(LANE_SETUP.statusline.on(session(), HOST, edge)).rejects.toThrow(
-      `${file} is not there — run \`cc-candybar install\``,
-    );
-    expect(did).toEqual([]);
-  });
+  ])(
+    "a build with no %s is refused before anything in the pane is touched",
+    async (missing, file) => {
+      const { edge, did } = fakeEdge({
+        fileExists: (f) => !f.endsWith(missing),
+      });
+      await expect(
+        LANE_SETUP.statusline.on(session(), HOST, edge),
+      ).rejects.toThrow(`${file} is not there — run \`cc-candybar install\``);
+      expect(did).toEqual([]);
+    },
+  );
 
   // Claude Code writes a session's transcript with its first message, and
   // `--resume` of one with none finds no conversation: such a session starts
@@ -384,8 +413,16 @@ describe("lane B, statusline", () => {
   test("a session with no conversation yet starts afresh on the same id, and its statusline follows lane B", async () => {
     const { edge, did } = fakeEdge({ presence: () => "absent" });
     await expect(
-      finished(await LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
-    ).resolves.toContain(`starting ${SID} afresh, since it had no conversation yet`);
+      finished(
+        await LANE_SETUP.statusline.on(
+          session({ tmux: TMUX }, "no"),
+          HOST,
+          edge,
+        ),
+      ),
+    ).resolves.toContain(
+      `starting ${SID} afresh, since it had no conversation yet`,
+    );
     expect(did.slice(-2)).toEqual([
       `shell ${RESTART_LINE(`--session-id ${SID}`)}`,
       `followed ${SID} statusline`,
@@ -405,7 +442,13 @@ describe("lane B, statusline", () => {
       },
     });
     await expect(
-      finished(await LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
+      finished(
+        await LANE_SETUP.statusline.on(
+          session({ tmux: TMUX }, "no"),
+          HOST,
+          edge,
+        ),
+      ),
     ).resolves.toContain(`resuming ${SID}`);
     expect(did.indexOf(`shell ${RESTART_LINE()}`)).toBeGreaterThan(
       did.indexOf("terminate 4242"),
@@ -422,7 +465,13 @@ describe("lane B, statusline", () => {
     async (answered, reason) => {
       const { edge, did } = fakeEdge({ presence: () => "absent" });
       await expect(
-        finished(await LANE_SETUP.statusline.on(session({ tmux: TMUX }, answered), HOST, edge)),
+        finished(
+          await LANE_SETUP.statusline.on(
+            session({ tmux: TMUX }, answered),
+            HOST,
+            edge,
+          ),
+        ),
       ).rejects.toThrow(reason);
       expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
     },
@@ -437,7 +486,9 @@ describe("lane B, statusline", () => {
     });
     await expect(
       finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
-    ).rejects.toThrow(/was left running: whether session .* could not be seen \(EACCES\)/);
+    ).rejects.toThrow(
+      /was left running: whether session .* could not be seen \(EACCES\)/,
+    );
     expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });
 
@@ -451,7 +502,9 @@ describe("lane B, statusline", () => {
     });
     await expect(
       finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
-    ).rejects.toThrow(`(ELOOP), so it was not started again — start it with \`${RESTART_LINE()}\``);
+    ).rejects.toThrow(
+      `(ELOOP), so it was not started again — start it with \`${RESTART_LINE()}\``,
+    );
     expect(did.some((d) => d.startsWith("shell"))).toBe(false);
   });
 
@@ -463,7 +516,13 @@ describe("lane B, statusline", () => {
       },
     });
     await expect(
-      finished(await LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
+      finished(
+        await LANE_SETUP.statusline.on(
+          session({ tmux: TMUX }, "no"),
+          HOST,
+          edge,
+        ),
+      ),
     ).rejects.toThrow(
       `exited, but the line could not be typed into its pane (server exited), so it was not started again — start it with \`${RESTART_LINE(`--session-id ${SID}`)}\``,
     );
@@ -504,17 +563,31 @@ describe("lane B, statusline", () => {
   // nothing can be read past.
   test.each([
     ["copy mode", { inMode: true, screen: READY_SCREEN }, /copy mode/],
-    ["a held stash", { inMode: false, screen: ["  › stashed", ...READY_SCREEN] }, /stashed prompt/],
-    ["a dialog", { inMode: false, screen: ["Allow this tool call?", "  ❯ 1. Yes"] }, /not at its prompt/],
-  ])("a pane showing %s is refused before Claude Code is ended", async (_what, snapshot, reason) => {
-    const { edge, did } = fakeEdge({
-      claudeInput: { read: async () => snapshot, type: async () => ({ kind: "typed" }) },
-    });
-    await expect(
-      finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
-    ).rejects.toThrow(reason);
-    expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
-  });
+    [
+      "a held stash",
+      { inMode: false, screen: ["  › stashed", ...READY_SCREEN] },
+      /stashed prompt/,
+    ],
+    [
+      "a dialog",
+      { inMode: false, screen: ["Allow this tool call?", "  ❯ 1. Yes"] },
+      /not at its prompt/,
+    ],
+  ])(
+    "a pane showing %s is refused before Claude Code is ended",
+    async (_what, snapshot, reason) => {
+      const { edge, did } = fakeEdge({
+        claudeInput: {
+          read: async () => snapshot,
+          type: async () => ({ kind: "typed" }),
+        },
+      });
+      await expect(
+        finished(await LANE_SETUP.statusline.on(session(), HOST, edge)),
+      ).rejects.toThrow(reason);
+      expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
+    },
+  );
 
   test("a Claude Code the pane no longer shows by the time of the kill is not killed", async () => {
     const { edge: base } = fakeEdge();
@@ -607,14 +680,23 @@ describe("lane B, statusline", () => {
   });
 
   test.each([
-    ['{"ok":false,"reason":"no-bun-module-graph-trailer"}\n', "no-bun-module-graph-trailer"],
-    ['{"ok":false,"reason":"binary-unreadable","detail":"EACCES"}', "binary-unreadable: EACCES"],
+    [
+      '{"ok":false,"reason":"no-bun-module-graph-trailer"}\n',
+      "no-bun-module-graph-trailer",
+    ],
+    [
+      '{"ok":false,"reason":"binary-unreadable","detail":"EACCES"}',
+      "binary-unreadable: EACCES",
+    ],
     ["", null],
     ["Error: Cannot find module", null],
     ['{"ok":true}', null],
-  ])("the module graph reader's output %j refuses with %p", async (stdout, reason) => {
-    expect(refusalOf(stdout)).toBe(reason);
-  });
+  ])(
+    "the module graph reader's output %j refuses with %p",
+    async (stdout, reason) => {
+      expect(refusalOf(stdout)).toBe(reason);
+    },
+  );
 
   test("a flag cc-candybar cannot carry refuses the restart before Claude Code is ended", async () => {
     const { edge, did } = fakeEdge({
@@ -637,73 +719,99 @@ describe("lane B, statusline", () => {
 
   test("a session with no tmux pane is refused in the click", async () => {
     const { edge } = fakeEdge();
-    await expect(LANE_SETUP.statusline.on(session({ tmux: null }), HOST, edge)).rejects.toThrow(/not running inside tmux/);
+    await expect(
+      LANE_SETUP.statusline.on(session({ tmux: null }), HOST, edge),
+    ).rejects.toThrow(/not running inside tmux/);
   });
 
   test("off stops nothing", async () => {
     const { edge, did } = fakeEdge();
-    expect((await LANE_SETUP.statusline.off(session(), HOST, edge)).kind).toBe("done");
+    expect((await LANE_SETUP.statusline.off(session(), HOST, edge)).kind).toBe(
+      "done",
+    );
     expect(did).toEqual([]);
   });
 });
 
 // [LAW:behavior-not-structure] The line is typed into whatever shell the
 // pane runs, and kept in its history: every shell installed here runs it.
-const SHELLS = ["/bin/sh", "/opt/homebrew/bin/zsh", "/opt/homebrew/bin/bash", "/opt/homebrew/bin/fish"]
-  .filter((shell) => fs.existsSync(shell));
+const SHELLS = [
+  "/bin/sh",
+  "/opt/homebrew/bin/zsh",
+  "/opt/homebrew/bin/bash",
+  "/opt/homebrew/bin/fish",
+].filter((shell) => fs.existsSync(shell));
 
 describe("the line a restart types", () => {
-  test.each(SHELLS)("runs under %s: in its directory, with its variables, as `claude` on PATH", (shell) => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lane line's "));
-    const bin = path.join(dir, "bin");
-    fs.mkdirSync(bin);
-    const record = path.join(dir, "ran");
-    fs.writeFileSync(
-      path.join(bin, "claude"),
-      `#!/bin/sh\npwd -P > "$RECORD"\nprintf '%s\\n' "$CLAUDE_CONFIG_DIR" "$BUN_OPTIONS" "$@" >> "$RECORD"\n`,
-      { mode: 0o755 },
-    );
-    const start = path.join(dir, "start here");
-    fs.mkdirSync(start);
-    const line = attachCommandLine("/a dir/attach-preload.cjs", {
-      dir: start,
-      env: [["CLAUDE_CONFIG_DIR", "/u/.claude $zai"]],
-      program: "claude",
-      args: ["--model", "it's a b", "--resume", SID],
-    });
-    const { status, stderr } = spawnSync(shell, ["-c", line], {
-      env: { PATH: `${bin}:/usr/bin:/bin`, RECORD: record, HOME: dir },
-      encoding: "utf8",
-    });
-    expect(stderr).toBe("");
-    expect(status).toBe(0);
-    expect(fs.readFileSync(record, "utf8").split("\n")).toEqual([
-      fs.realpathSync(start),
-      "/u/.claude $zai",
-      "--preload /a\\ dir/attach-preload.cjs",
-      "--model",
-      "it's a b",
-      "--resume",
-      SID,
-      "",
-    ]);
-  });
+  test.each(SHELLS)(
+    "runs under %s: in its directory, with its variables, as `claude` on PATH",
+    (shell) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lane line's "));
+      const bin = path.join(dir, "bin");
+      fs.mkdirSync(bin);
+      const record = path.join(dir, "ran");
+      fs.writeFileSync(
+        path.join(bin, "claude"),
+        `#!/bin/sh\npwd -P > "$RECORD"\nprintf '%s\\n' "$CLAUDE_CONFIG_DIR" "$BUN_OPTIONS" "$@" >> "$RECORD"\n`,
+        { mode: 0o755 },
+      );
+      const start = path.join(dir, "start here");
+      fs.mkdirSync(start);
+      const line = attachCommandLine("/a dir/attach-preload.cjs", {
+        dir: start,
+        env: [["CLAUDE_CONFIG_DIR", "/u/.claude $zai"]],
+        program: "claude",
+        args: ["--model", "it's a b", "--resume", SID],
+      });
+      const { status, stderr } = spawnSync(shell, ["-c", line], {
+        env: { PATH: `${bin}:/usr/bin:/bin`, RECORD: record, HOME: dir },
+        encoding: "utf8",
+      });
+      expect(stderr).toBe("");
+      expect(status).toBe(0);
+      expect(fs.readFileSync(record, "utf8").split("\n")).toEqual([
+        fs.realpathSync(start),
+        "/u/.claude $zai",
+        "--preload /a\\ dir/attach-preload.cjs",
+        "--model",
+        "it's a b",
+        "--resume",
+        SID,
+        "",
+      ]);
+    },
+  );
 });
 
 describe("relaunchArgs", () => {
   test.each([
     [["claude"], []],
-    [["claude", "--dangerously-skip-permissions"], ["--dangerously-skip-permissions"]],
+    [
+      ["claude", "--dangerously-skip-permissions"],
+      ["--dangerously-skip-permissions"],
+    ],
     [["claude", "--resume", "old-id", "--verbose"], ["--verbose"]],
     [["claude", "-r", "--verbose"], ["--verbose"]],
     [["claude", "-c", "--session-id", "u", "--fork-session"], []],
-    [["claude", "--add-dir", "a", "b", "--model=opus"], ["--add-dir", "a", "b", "--model=opus"]],
-    [["claude", "fix the bug", "--effort", "high"], ["--effort", "high"]],
+    [
+      ["claude", "--add-dir", "a", "b", "--model=opus"],
+      ["--add-dir", "a", "b", "--model=opus"],
+    ],
+    [
+      ["claude", "fix the bug", "--effort", "high"],
+      ["--effort", "high"],
+    ],
     [["claude", "--", "--not-a-flag"], []],
-    [["claude", "--append-system-prompt", "-be terse"], ["--append-system-prompt", "-be terse"]],
+    [
+      ["claude", "--append-system-prompt", "-be terse"],
+      ["--append-system-prompt", "-be terse"],
+    ],
     // The worktree is read off the directory the session runs in.
     [["claude", "--worktree", "gone"], []],
-    [["claude", "-w", "fix", "--model", "opus"], ["--model", "opus"]],
+    [
+      ["claude", "-w", "fix", "--model", "opus"],
+      ["--model", "opus"],
+    ],
   ])("%j carries %j", async (argv, kept) => {
     expect(relaunchArgs(argv)).toEqual({ kind: "args", args: kept });
   });
@@ -720,8 +828,14 @@ describe("relaunchArgs", () => {
   // `--resume` of a session with no transcript finds no conversation; a fresh
   // start on the same id keeps the id the session's picks are held under.
   test("a session is resumed, or with no conversation yet started afresh, on the same id", async () => {
-    expect(sessionArgs({ kind: "resume", sessionId: SID })).toEqual(["--resume", SID]);
-    expect(sessionArgs({ kind: "fresh", sessionId: SID })).toEqual(["--session-id", SID]);
+    expect(sessionArgs({ kind: "resume", sessionId: SID })).toEqual([
+      "--resume",
+      SID,
+    ]);
+    expect(sessionArgs({ kind: "fresh", sessionId: SID })).toEqual([
+      "--session-id",
+      SID,
+    ]);
   });
 });
 
@@ -731,26 +845,64 @@ describe("startPlace", () => {
   // whether the session was started with `--worktree` or entered it later.
   test.each([
     ["/src", "/src", "/src", []],
-    ["/src", "/src/.claude/worktrees/tidy-sunset", "/src", ["--worktree", "tidy-sunset"]],
-    ["/src", "/src/.claude/worktrees/feat+x.y", "/src", ["--worktree", "feat/x.y"]],
-    ["/src/sub", "/src/.claude/worktrees/fix/sub/dir", "/src/sub", ["--worktree", "fix"]],
+    [
+      "/src",
+      "/src/.claude/worktrees/tidy-sunset",
+      "/src",
+      ["--worktree", "tidy-sunset"],
+    ],
+    [
+      "/src",
+      "/src/.claude/worktrees/feat+x.y",
+      "/src",
+      ["--worktree", "feat/x.y"],
+    ],
+    [
+      "/src/sub",
+      "/src/.claude/worktrees/fix/sub/dir",
+      "/src/sub",
+      ["--worktree", "fix"],
+    ],
     ["/", "/.claude/worktrees/top", "/", ["--worktree", "top"]],
     // Started inside the worktree: it starts there again as it is.
-    ["/src/.claude/worktrees/fix", "/src/.claude/worktrees/fix", "/src/.claude/worktrees/fix", []],
-    ["/src/.claude/worktrees/fix/sub", "/src/.claude/worktrees/fix/other", "/src/.claude/worktrees/fix/sub", []],
+    [
+      "/src/.claude/worktrees/fix",
+      "/src/.claude/worktrees/fix",
+      "/src/.claude/worktrees/fix",
+      [],
+    ],
+    [
+      "/src/.claude/worktrees/fix/sub",
+      "/src/.claude/worktrees/fix/other",
+      "/src/.claude/worktrees/fix/sub",
+      [],
+    ],
     // Started in another worktree — a sibling whose name extends this one's
     // included: `--worktree` from there would make one inside it.
-    ["/src/.claude/worktrees/fix2", "/src/.claude/worktrees/fix", "/src", ["--worktree", "fix"]],
-    ["/src/.claude/worktrees/a/sub", "/src/.claude/worktrees/b", "/src", ["--worktree", "b"]],
+    [
+      "/src/.claude/worktrees/fix2",
+      "/src/.claude/worktrees/fix",
+      "/src",
+      ["--worktree", "fix"],
+    ],
+    [
+      "/src/.claude/worktrees/a/sub",
+      "/src/.claude/worktrees/b",
+      "/src",
+      ["--worktree", "b"],
+    ],
     // A directory named like a worktree holder but holding none is no worktree.
     ["/src", "/src/.claude/worktrees", "/src", []],
     // Where it was started not known: the worktree's repository, else where
     // it runs.
     [null, "/src/.claude/worktrees/fix/sub", "/src", ["--worktree", "fix"]],
     [null, "/src/sub", "/src/sub", []],
-  ])("started in %s, running in %s, starts in %s with %j", async (startDir, cwd, dir, args) => {
-    expect(startPlace(startDir, cwd)).toEqual({ dir, args });
-  });
+  ])(
+    "started in %s, running in %s, starts in %s with %j",
+    async (startDir, cwd, dir, args) => {
+      expect(startPlace(startDir, cwd)).toEqual({ dir, args });
+    },
+  );
 });
 
 describe("the production edge's readers", () => {
@@ -786,11 +938,13 @@ describe("the production edge's readers", () => {
     ].join("\n");
     expect(runsAttached(table, 10, 10)).toBe(true);
     // Nothing above the pane's first process is the pane's.
-    expect(runsAttached("  20 10 /bin/zsh\n  10 1 cc-attach", 20, 20)).toBe(false);
+    expect(runsAttached("  20 10 /bin/zsh\n  10 1 cc-attach", 20, 20)).toBe(
+      false,
+    );
   });
 
   test("the claude CLI runs under the session's directory, never the daemon's", async () => {
-    // The session's process environment (src/daemon/session-env.ts) the
+    // The session's process environment (src/daemon/foundations/session-env.ts) the
     // edge's `claude` spawns with.
     const facts = { sessionId: sessionIdOf("s1"), projectDir: "/p" };
     // Unset in the overlay, so the daemon's own (whichever shell spawned it)
@@ -800,7 +954,8 @@ describe("the production edge's readers", () => {
       undefined,
     );
     expect(
-      sessionEnv({ ...facts, claudeConfigDir: "/u/.claude.zai" }).CLAUDE_CONFIG_DIR,
+      sessionEnv({ ...facts, claudeConfigDir: "/u/.claude.zai" })
+        .CLAUDE_CONFIG_DIR,
     ).toBe("/u/.claude.zai");
   });
 });
@@ -813,7 +968,8 @@ describe("LaneSetups", () => {
     const setups = new LaneSetups({
       edge,
       host: HOST,
-      state,
+      holdClickError: (sessionId, text, at) =>
+        holdClickError(state, sessionId, text, at),
       log: (level, msg) => logs.push(`${level} ${msg}`),
       now: () => instantOf(new Date(0)),
       defer: (run) => void deferred.push(run),
@@ -838,7 +994,7 @@ describe("LaneSetups", () => {
 
   // Whatever control moved the switch — the toggle, ↺, ↶ undo, a preset, a
   // save — reaches the setup the same way: the click measured before and
-  // after its commit (journaled, src/daemon/verbs/index.ts).
+  // after its commit (journaled, src/renderer/verbs/index.ts).
   test("a click that moves a switch sets its lane up in the turn after, and only its lane", async () => {
     const { edge, did } = fakeEdge();
     const { setups, logs, settle } = owner(edge);
@@ -850,7 +1006,12 @@ describe("LaneSetups", () => {
       `info lane: pane on — opened bar pane %9 under %7 by=click (session=${SID})`,
     ]);
     // A click that moves no switch sets nothing up.
-    setups.clicked(SID, session(), switches({ pane: true }), switches({ pane: true }));
+    setups.clicked(
+      SID,
+      session(),
+      switches({ pane: true }),
+      switches({ pane: true }),
+    );
     await settle();
     expect(did).toHaveLength(1);
   });
@@ -879,8 +1040,18 @@ describe("LaneSetups", () => {
   test("a lane toggled on and off again before the session's first request owes nothing", async () => {
     const { edge, did } = fakeEdge();
     const { setups, logs, settle } = owner(edge);
-    setups.clicked(SID, null, switches({}), switches({ pane: true, band: true }));
-    setups.clicked(SID, null, switches({ pane: true, band: true }), switches({ band: true }));
+    setups.clicked(
+      SID,
+      null,
+      switches({}),
+      switches({ pane: true, band: true }),
+    );
+    setups.clicked(
+      SID,
+      null,
+      switches({ pane: true, band: true }),
+      switches({ band: true }),
+    );
     setups.clicked(SID, null, switches({ band: true }), switches({}));
     setups.noted(session(), switches({}));
     await settle();
@@ -948,7 +1119,12 @@ describe("LaneSetups", () => {
     const { edge } = fakeEdge();
     const { setups, logs } = owner(edge);
     for (let i = 0; i <= 1024; i++)
-      setups.clicked(sessionIdOf(`s${i}`), null, switches({}), switches({ pane: true }));
+      setups.clicked(
+        sessionIdOf(`s${i}`),
+        null,
+        switches({}),
+        switches({ pane: true }),
+      );
     expect(logs.filter((l) => l.startsWith("warn"))).toEqual([
       `warn lane: owed dropped sid="s0" lanes=pane`,
     ]);
@@ -962,16 +1138,36 @@ describe("LaneSetups", () => {
       exited: () => new Promise((r) => (exit = r)),
     });
     const { setups, settle } = owner(edge);
-    setups.clicked(SID, session(), switches({}), switches({ statusline: true }));
-    setups.clicked(SID, session(), switches({ statusline: true }), switches({}));
-    setups.clicked(SID, session(), switches({}), switches({ statusline: true }));
+    setups.clicked(
+      SID,
+      session(),
+      switches({}),
+      switches({ statusline: true }),
+    );
+    setups.clicked(
+      SID,
+      session(),
+      switches({ statusline: true }),
+      switches({}),
+    );
+    setups.clicked(
+      SID,
+      session(),
+      switches({}),
+      switches({ statusline: true }),
+    );
     await settle();
     // The first restart waits for Claude Code to exit; nothing else has run.
-    expect(did.filter((d) => d.startsWith("terminate"))).toEqual(["terminate 4242"]);
+    expect(did.filter((d) => d.startsWith("terminate"))).toEqual([
+      "terminate 4242",
+    ]);
     exit(true);
     await new Promise((r) => setTimeout(r, 20));
     // Off, then on: the second restart starts only after the first ended.
-    expect(did.filter((d) => d.startsWith("terminate"))).toEqual(["terminate 4242", "terminate 4242"]);
+    expect(did.filter((d) => d.startsWith("terminate"))).toEqual([
+      "terminate 4242",
+      "terminate 4242",
+    ]);
   });
 
   test("a switch turned off brings the lane down", async () => {
@@ -991,14 +1187,23 @@ describe("LaneSetups", () => {
   test("a setup refused at once is logged and held on the bar like a click's failure", async () => {
     const { edge, did } = fakeEdge();
     const { setups, state, logs, settle } = owner(edge);
-    setups.clicked(SID, session({ tmux: null }), switches({}), switches({ pane: true }));
+    setups.clicked(
+      SID,
+      session({ tmux: null }),
+      switches({}),
+      switches({ pane: true }),
+    );
     await settle();
     expect(did).toEqual([]);
     expect(logs).toEqual([
       expect.stringMatching(/^warn lane: pane on: .*not running inside tmux/),
     ]);
     expect(state.get(SID, "click.error")).toBe(
-      held(logs[0]!.replace(/^warn /, "").replace(` by=click (session=${SID})`, "")),
+      held(
+        logs[0]!
+          .replace(/^warn /, "")
+          .replace(` by=click (session=${SID})`, ""),
+      ),
     );
   });
 
@@ -1014,7 +1219,12 @@ describe("LaneSetups", () => {
       },
     });
     const { setups, state, logs, settle } = owner(edge);
-    setups.clicked(SID, session(), switches({}), switches({ statusline: true }));
+    setups.clicked(
+      SID,
+      session(),
+      switches({}),
+      switches({ statusline: true }),
+    );
     await settle();
     await waiting;
     expect(logs).toEqual([
@@ -1022,9 +1232,16 @@ describe("LaneSetups", () => {
     ]);
     gone(false);
     await new Promise((r) => setImmediate(r));
-    expect(logs.at(-1)).toMatch(/^warn lane: statusline on: Claude Code in %7 did not exit/);
+    expect(logs.at(-1)).toMatch(
+      /^warn lane: statusline on: Claude Code in %7 did not exit/,
+    );
     expect(state.get(SID, "click.error")).toBe(
-      held(logs.at(-1)!.replace(/^warn /, "").replace(` by=click (session=${SID})`, "")),
+      held(
+        logs
+          .at(-1)!
+          .replace(/^warn /, "")
+          .replace(` by=click (session=${SID})`, ""),
+      ),
     );
   });
 });

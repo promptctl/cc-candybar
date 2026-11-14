@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { PROTOCOL_VERSION } from "../../../src/daemon/protocol";
+import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { killAndWait, renderBody } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import {

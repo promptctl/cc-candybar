@@ -15,7 +15,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { GitService } from "../src/segments/git";
+import { GitService } from "../src/daemon/cache/git-service";
 
 function run(cmd: string, cwd: string): string {
   return execSync(cmd, { cwd, stdio: "pipe", encoding: "utf8" });

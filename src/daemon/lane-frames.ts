@@ -15,7 +15,7 @@ import { bandFrame } from "../band/frames";
 import type { Frame } from "../render/frame";
 import { tmuxStatusFrame } from "../tmux-status/frames";
 import type { Lane } from "../config/lanes";
-import type { Response } from "./protocol";
+import type { Response } from "./foundations/protocol";
 
 // A frame's JSON as its lane's subscriber receives it: from the bar, or the
 // JSON the feed serialized once for every subscriber of the lane.

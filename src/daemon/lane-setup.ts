@@ -24,9 +24,9 @@
 // record holding every effect (tmux, the `claude` CLI, the process table, the
 // pane's prompt), so a test drives every plan with fakes. A refusal is the
 // user's to act on, thrown as BadVerbArgs with what to do, and the click shows
-// it (src/daemon/click-error.ts).
+// it (src/daemon/foundations/click-error.ts).
 
-import type { SessionId } from "./session-id.js";
+import type { SessionId } from "./foundations/session-id.js";
 import path from "node:path";
 import { CLAUDE_CONFIG_DIR_ENV } from "../claude-settings.js";
 import { CONFIG_ENV } from "../config-hint.js";
@@ -36,18 +36,14 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { holdClickError } from "./click-error.js";
-import type { SessionFacts } from "./session-env.js";
-import type { SessionStateRW } from "./session-state.js";
+import type { SessionFacts } from "./foundations/session-env.js";
 import type { Instant } from "../utils/instant.js";
-import type { ClientHints } from "./protocol.js";
-import type { RenderOrigin } from "../config-hint.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import {
   tmuxPaneOf,
   typeSlash,
   type ClaudeInputEdge,
-} from "../claude-input/edge.js";
+} from "../claude-input/typing.js";
 import { slashLine } from "../claude-input/slash-line.js";
 import {
   draftShown,
@@ -62,7 +58,6 @@ import {
   startPlace,
   type SessionStart,
 } from "./claude-relaunch.js";
-import type { Answered } from "./foundations/sighting-roles.js";
 import type { Presence } from "../utils/presence.js";
 import { sourceCheckoutOf } from "./build-currency.js";
 import {
@@ -71,8 +66,9 @@ import {
   moduleGraphReaderOf,
 } from "../attach-launcher.js";
 import type { LauncherNode } from "../attach-preload.js";
-import { BadVerbArgs } from "./verb-error.js";
+import { BadVerbArgs } from "./foundations/verb-error.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
+import type { LaneSession } from "../renderer-interface/adapter";
 
 // The band mod, as the checkout's marketplace (`.claude-plugin/
 // marketplace.json`) names it.
@@ -178,20 +174,6 @@ export interface LaneHost {
   readonly node: readonly string[];
   readonly socket: string;
   readonly preload: string;
-}
-
-export interface LaneSession {
-  readonly sessionId: SessionId;
-  readonly hints: ClientHints;
-  // The inputs its last render resolved its config from.
-  readonly origin: RenderOrigin;
-  // Its conversation, as Claude Code names it in the statusline JSON: a
-  // session resumes from it, and has none until its first message.
-  readonly transcript: string;
-  // Whether Claude Code has answered in it, by the one mark it leaves
-  // (`answeredOf`): a session it has answered in has a conversation, whether
-  // or not a transcript of it is on disk.
-  readonly answered: Answered;
 }
 
 // [LAW:types-are-the-program] What a lane's setup came to: finished in the
@@ -629,7 +611,7 @@ type Owed = Map<Lane, boolean>;
 // menu's toggle, its ↺, ↶ undo, a preset picked, a save — so no control
 // carries the setup itself (review of brandon-menus-sjhy.amf). The click path
 // measures the session's switches before the click and after its commit
-// (`journaled`, src/daemon/verbs/index.ts), and each lane that differs is
+// (`journaled`, src/renderer/verbs/index.ts), and each lane that differs is
 // brought in line once, after the click. A switch moved by anything but the
 // session's own click — another session's save, a hand edit, a restart, a
 // `cd` — sets nothing up: it changes what every session reading that file
@@ -643,7 +625,7 @@ type Owed = Map<Lane, boolean>;
 // session's save — owes nothing. One session's setups run one at a time,
 // each after the last has finished — two restarts of one pane would type over
 // each other. How each setup ends is logged, and a failure is held on the bar
-// as a click's failure is (src/daemon/click-error.ts).
+// as a click's failure is (src/daemon/foundations/click-error.ts).
 export class LaneSetups {
   // Each session's owed lanes, least recently owed first.
   private readonly owed = new Map<SessionId, Owed>();
@@ -654,7 +636,12 @@ export class LaneSetups {
     private readonly deps: {
       readonly edge: LaneEdge;
       readonly host: LaneHost;
-      readonly state: SessionStateRW;
+      // Holds a failed setup's error in the session's state for its bar.
+      readonly holdClickError: (
+        sessionId: SessionId,
+        text: string,
+        at: Instant,
+      ) => void;
       readonly log: (level: "info" | "warn", msg: string) => void;
       readonly now: () => Instant;
       // [LAW:effects-at-boundaries] Runs a setup in the turn after the click
@@ -768,7 +755,7 @@ export class LaneSetups {
     const failed = (error: unknown): void => {
       const text = `lane: ${lane} ${on ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
       this.deps.log("warn", `${text} ${where}`);
-      holdClickError(this.deps.state, session.sessionId, text, this.deps.now());
+      this.deps.holdClickError(session.sessionId, text, this.deps.now());
     };
     let outcome: LaneOutcome;
     try {

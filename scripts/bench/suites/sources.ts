@@ -10,8 +10,8 @@ import path from "node:path";
 import { processWorld } from "../../../src/host.js";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
-import { sessionIdOf } from "../../../src/daemon/session-id.js";
-import { GitService } from "../../../src/segments/git.js";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id.js";
+import { GitService } from "../../../src/daemon/cache/git-service.js";
 import {
   appendTurn,
   makeRepo,

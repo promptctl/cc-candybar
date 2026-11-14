@@ -1,5 +1,5 @@
 // The main renderer answers a statusline request through `answer` alone
-// (src/renderer/interface.ts): the request's turn returns one `present` for
+// (src/renderer-interface/interface.ts): the request's turn returns one `present` for
 // the statusline, carrying the request it answers and the frame drawn, and the
 // present's `effect-done` is what records what the frame showed. A world state
 // the host hands in is what its session's view draws from, a retire closes the
@@ -12,7 +12,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
@@ -20,10 +20,10 @@ import type {
   Renderer,
   RendererOutput,
   RequestId,
-} from "../src/renderer/interface";
+} from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
-import type { CheckedRenderRequest } from "../src/renderer/request-context";
+import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
 import { instantAt, type Instant } from "../src/utils/instant";
 import {
@@ -37,7 +37,7 @@ import {
 import { ok } from "../src/utils/outcome";
 import { fakeTmux } from "./helpers/payload-owners";
 import { rendererHost } from "../src/daemon/renderer-host";
-import type { RendererVerbs } from "../src/renderer/verbs";
+import type { RendererVerbs } from "../src/renderer/verbs/port";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { WorldState } from "../src/facts/world-state";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";

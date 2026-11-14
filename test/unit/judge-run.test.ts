@@ -2,7 +2,7 @@
 // it and refuses one that breaks it, naming why.
 import { ok } from "../../src/utils/outcome";
 
-import { judgeRun, MIN_SHELL_TTL_MS } from "../../src/daemon/judge-run";
+import { judgeRun, MIN_SHELL_TTL_MS } from "../../src/daemon/foundations/judge-run";
 import { runOf, type SourceIdentity } from "../../src/facts/source-identity";
 
 const shell: SourceIdentity = {

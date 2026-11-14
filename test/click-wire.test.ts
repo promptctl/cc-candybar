@@ -42,8 +42,8 @@ import {
 } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
-import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
-import { SessionState } from "../src/daemon/session-state";
+import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
+import { SessionState } from "../src/renderer/session-state";
 import {
   recordRender,
   testVerbContext,
@@ -51,8 +51,8 @@ import {
   clickUrl,
 } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
-import { lastClickError } from "../src/daemon/click-error";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { lastClickError } from "../src/daemon/foundations/click-error";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s1");
 // A session that has rendered a config declaring no action: its gate holds

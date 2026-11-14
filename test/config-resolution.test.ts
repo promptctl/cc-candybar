@@ -17,7 +17,8 @@ import {
   writeFileSync,
   mkdirSync,
 } from "node:fs";
-import { locations, type Locations } from "../src/daemon/paths";
+import { locations } from "../src/daemon/paths";
+import { type Locations } from "../src/config/loader/discovery";
 import { hostOf } from "./helpers/host";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -125,7 +126,8 @@ describe("dslConfigCandidatePaths", () => {
     const { dir, cleanup } = mkdir();
     const L = isolated(dir);
     try {
-      const candidates = dslConfigCandidatePaths(L, 
+      const candidates = dslConfigCandidatePaths(
+        L,
         "/proj",
         "/cwd",
         "/explicit/path/to/config.json",
@@ -145,7 +147,7 @@ describe("dslConfigCandidatePaths", () => {
     const { dir, cleanup } = mkdir();
     const L = isolated(dir);
     try {
-            expect(dslConfigCandidatePaths(L, "/proj", "/cwd")).toEqual(
+      expect(dslConfigCandidatePaths(L, "/proj", "/cwd")).toEqual(
         dslConfigCandidatePaths(L, "/proj", "/cwd", undefined),
       );
       expect(dslConfigCandidatePaths(L, "/proj", "/cwd")).not.toContain(
@@ -557,7 +559,8 @@ describe("the layer chain", () => {
     }
   }
   const layersOf = (projectDir: string, cwd: string, configFile?: string) => {
-    const r = resolveDslConfig(L, 
+    const r = resolveDslConfig(
+      L,
       approving(projectDir),
       projectDir,
       cwd,

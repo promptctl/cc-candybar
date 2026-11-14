@@ -21,7 +21,7 @@ import {
   classifyInbound,
   PROTOCOL_VERSION,
   type Request,
-} from "../../../src/daemon/protocol";
+} from "../../../src/daemon/foundations/protocol";
 import type { DaemonLogger } from "../../../src/utils/logger";
 import { answeredEvents, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, logLines, renderEventsOf } from "../../helpers/daemon-log";

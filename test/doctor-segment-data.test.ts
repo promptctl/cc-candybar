@@ -23,10 +23,10 @@ import { rateLimitsOf } from "../src/doctor/cli";
 import { parseRateLimitSightings } from "../src/doctor/daemon-answer";
 import { rateLimitsSeen } from "../src/daemon/render-sightings";
 import { RuntimeStats } from "../src/daemon/stats";
-import type { StatsSnapshot } from "../src/daemon/stats";
+import type { StatsSnapshot } from "../src/daemon/foundations/stats-snapshot";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
@@ -116,13 +116,17 @@ describe("segment data row", () => {
 
   test("one session carrying the windows is this Claude Code sending them", async () => {
     expect(
-      verdict({ rateLimits: rateNeed({ kind: "ok", value: ["carried", "missing"] }) }),
+      verdict({
+        rateLimits: rateNeed({ kind: "ok", value: ["carried", "missing"] }),
+      }),
     ).toEqual({ ok: true });
   });
 
   test("a response with no render carrying rate_limits fails", async () => {
     expect(
-      verdict({ rateLimits: rateNeed({ kind: "ok", value: ["missing", "unanswered"] }) }),
+      verdict({
+        rateLimits: rateNeed({ kind: "ok", value: ["missing", "unanswered"] }),
+      }),
     ).toMatchObject({
       ok: false,
       reason:
@@ -139,7 +143,12 @@ describe("segment data row", () => {
   test("no render seen is a failure saying so, not a pass", async () => {
     expect(
       verdict({ rateLimits: rateNeed({ kind: "ok", value: [] }) }),
-    ).toMatchObject({ ok: false, reason: expect.stringMatching(/^block, weekly: no session of this Claude Code has drawn a bar/) });
+    ).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(
+        /^block, weekly: no session of this Claude Code has drawn a bar/,
+      ),
+    });
   });
 
   test("a click from a bar this daemon never served says the daemon restarted", async () => {
@@ -168,9 +177,7 @@ describe("segment data row", () => {
 
 describe("the doctor's event field", () => {
   test("names what each source found, `-` where nothing needs it", async () => {
-    expect(dataFields(HEALTHY_FACTS.data)).toBe(
-      "data=pr:-,rateLimits:-",
-    );
+    expect(dataFields(HEALTHY_FACTS.data)).toBe("data=pr:-,rateLimits:-");
     expect(
       dataFields({
         pullRequests: login({ loggedOut: "x" }),
@@ -242,7 +249,12 @@ describe("the command's rate-limit sightings", () => {
     value: [
       { rateLimits: "carried", claudeConfigDir: "/a", sessionId: S1, ago: 1 },
       { rateLimits: "missing", claudeConfigDir: "/zai", sessionId: S2, ago: 1 },
-      { rateLimits: "missing", claudeConfigDir: "/a", sessionId: S3, ago: 100000 },
+      {
+        rateLimits: "missing",
+        claudeConfigDir: "/a",
+        sessionId: S3,
+        ago: 100000,
+      },
     ],
   } as const;
 
@@ -262,7 +274,13 @@ describe("the command's rate-limit sightings", () => {
   });
 
   test("a daemon that could not be asked stays failed", async () => {
-    expect(rateLimitsOf({ kind: "recent" }, { kind: "failed", reason: "down" }, "/a")).toEqual({
+    expect(
+      rateLimitsOf(
+        { kind: "recent" },
+        { kind: "failed", reason: "down" },
+        "/a",
+      ),
+    ).toEqual({
       kind: "failed",
       reason: "down",
     });
@@ -312,9 +330,9 @@ describe("the forge CLI's own word", () => {
   test("ran, absent, logged out, or could not be asked", async () => {
     const base = { stdout: "", stderr: "", exitCode: null };
     const failure = { ...base, signal: null };
-    expect(forgeLoginOf("gh", "h", "logged-out", { ok: true, ...base })).toEqual(
-      { kind: "ok", value: { cli: "gh", host: "h", status: "ready" } },
-    );
+    expect(
+      forgeLoginOf("gh", "h", "logged-out", { ok: true, ...base }),
+    ).toEqual({ kind: "ok", value: { cli: "gh", host: "h", status: "ready" } });
     expect(
       forgeLoginOf("gh", "h", "logged-out", {
         ok: false,
@@ -380,12 +398,18 @@ describe("the forge probe over a real checkout", () => {
   };
 
   test("a directory in no checkout names no forge", async () => {
-    expect(await forgeLogin(processLauncher, bin)).toEqual({ kind: "ok", value: null });
+    expect(await forgeLogin(processLauncher, bin)).toEqual({
+      kind: "ok",
+      value: null,
+    });
   });
 
   test("a checkout with no forge remote names none", async () => {
     remote("/srv/git/mirror.git");
-    expect(await forgeLogin(processLauncher, repo())).toEqual({ kind: "ok", value: null });
+    expect(await forgeLogin(processLauncher, repo())).toEqual({
+      kind: "ok",
+      value: null,
+    });
   });
 
   test("gh asked for the remote's own host, and logged in", async () => {

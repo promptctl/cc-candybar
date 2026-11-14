@@ -6,19 +6,20 @@
 // The render budgets are wire facts, declared in ./protocol.
 
 import type { ClaudeHookData } from "../utils/claude";
-import { interpretResponse, requestOutcome } from "./client-transport";
-import type {
-  ClientWorld,
-  RoundTripBudgets,
-  RoundTripOutcome,
+import {
+  interpretResponse,
+  requestOutcome,
+  type ClientWorld,
+  type RoundTripBudgets,
+  type RoundTripOutcome,
 } from "./client-transport";
 import {
   CONNECT_TIMEOUT_MS,
   TOTAL_BUDGET_MS,
   type ClientHints,
   type Response,
-} from "./protocol";
-import { REQUEST_TIMEOUT_MS } from "./request-deadline";
+} from "./foundations/protocol";
+import { REQUEST_TIMEOUT_MS } from "./foundations/request-deadline";
 
 export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,

@@ -10,11 +10,11 @@ import {
 } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import {
-  GitService,
   type GitInfo,
   type GitRead,
   type PullRequest,
 } from "../src/segments/git";
+import { GitService } from "../src/daemon/cache/git-service";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { answered } from "../src/utils/reading";
@@ -22,8 +22,7 @@ import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 
 class StubGitService extends GitService {
-  public computeCalls: Array<{ workingDir: string; projectDir?: string }> =
-    [];
+  public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
   public resolveCalls: Array<{ workingDir: string; projectDir?: string }> = [];
   public gitDirCalls: string[] = [];
   // Per-workingDir override for resolveGitDir. Worktree tests use this to
@@ -209,7 +208,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 
 // A declaration's answer, waited for while it — or the PR inside it — is not
 // answered yet: what a request's wait reads of the lane its session's
-// declaration took (`awaitsReading`, src/daemon/render-payload.ts).
+// declaration took (`awaitsReading`, src/renderer/render-payload.ts).
 function gitOf(
   svc: GitDataProvider,
   holds: Holds,
@@ -1048,8 +1047,7 @@ describe("GitDataProvider PR source", () => {
     inner.repoRootByDir = { "/a": "/a", "/b": "/b", "/c": "/c" };
     inner.prGate = deferred();
 
-    for (const dir of ["/a", "/b", "/c"])
-      svc.declare(holds, dir);
+    for (const dir of ["/a", "/b", "/c"]) svc.declare(holds, dir);
     await tick(10);
     expect(inner.prCalls).toHaveLength(2);
 
@@ -1133,17 +1131,13 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     inner.remoteGate.resolve();
     await tick();
     // b's PR is a key never answered, which a request waits for.
-    const now = svc
-      .declare(holds, "/repo")
-      .current();
+    const now = svc.declare(holds, "/repo").current();
     expect(now.kind === "ok" && now.value.pullRequest).toMatchObject({
       kind: "pending",
       why: "unread",
     });
     let read: Outcome<GitInfo> | null = null;
-    void gitOf(svc, holds, "/repo").then(
-      (out) => (read = out),
-    );
+    void gitOf(svc, holds, "/repo").then((out) => (read = out));
     await tick();
     expect(read).toBeNull();
     inner.prGate.resolve();
@@ -1224,9 +1218,7 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     );
     expect(inner.prCalls).toHaveLength(2);
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
-      expect.stringMatching(
-        / asked=first pr=looked-up watch=kept by=first /,
-      ),
+      expect.stringMatching(/ asked=first pr=looked-up watch=kept by=first /),
       expect.stringMatching(/ asked=watch pr=looked-up watch=kept by=change /),
       expect.stringMatching(/ asked=watch pr=recalled watch=kept by=change /),
     ]);

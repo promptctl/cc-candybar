@@ -19,7 +19,7 @@ import {
   type ClickRequest,
   type ClientHints,
   type Response,
-} from "../../src/daemon/protocol";
+} from "../../src/daemon/foundations/protocol";
 import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { linkClick } from "./click";
@@ -65,7 +65,7 @@ const TIMEOUT_RETRY_BUDGET = 5;
 
 // [LAW:no-ambient-temporal-coupling] The same contract for an answer drawn at
 // its deadline: a request is answered by its client's deadline, and a source
-// still reading then draws as pending (src/daemon/request-deadline.ts) — a
+// still reading then draws as pending (src/daemon/foundations/request-deadline.ts) — a
 // new repo's first git reads, a config's first compile. A real client shows
 // those cells and the next tick shows them answered; a test asks again
 // inline, bounded, and reads which answer it got from the request's own
@@ -121,7 +121,7 @@ async function renderAnswer(
     // [LAW:one-source-of-truth] The deadline it states is the one it waits
     // to: like a real client, it says when it will hang up, so the daemon's
     // wait for its refreshes ends by that or by its own backstop
-    // (src/daemon/request-deadline.ts). A case's own deadline wins.
+    // (src/daemon/foundations/request-deadline.ts). A case's own deadline wins.
     const resp = await sendDaemonRequest(
       target,
       {

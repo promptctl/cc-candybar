@@ -28,7 +28,7 @@ import {
   stampOf,
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
-import { parseSessionId, type SessionId } from "../session-id";
+import { parseSessionId, type SessionId } from "../foundations/session-id";
 import {
   ABSENT,
   failed,
@@ -50,7 +50,12 @@ import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
 import { elapsedMs, type Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
-import { addDay, dayKey, EMPTY_DAY, type DayUsage } from "./today-facts";
+import { addDay, dayKey, EMPTY_DAY } from "../foundations/today-facts";
+import type {
+  DayUsage,
+  SpeedObservation,
+  SpeedSample,
+} from "../../facts/world-state";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
 // Per-session records are canonical; the `session` projection (whole-session
@@ -76,32 +81,6 @@ import { addDay, dayKey, EMPTY_DAY, type DayUsage } from "./today-facts";
 // records live in an observable map, and each directory's day sums are a kept
 // computed over it, so a frame's `today` is one lookup that changes in the
 // turn a record does (brandon-unfiled-3248.8ro6, step 3).
-
-// [LAW:one-source-of-truth] One observation of the active session's cumulative
-// token counts at a single instant. tok/s is the delta between two of these —
-// the prior sample lives in this store (the single owner of per-session token
-// totals), never in a parallel counter. `input` folds the cache lanes into the
-// prompt-side total so `total === input + output`. `atMs` is the render's clock
-// instant (the daemon's single-enforcer clock), so a frozen test clock makes
-// the rate deterministic.
-export interface SpeedSample {
-  readonly input: number;
-  readonly output: number;
-  readonly total: number;
-  readonly atMs: number;
-}
-
-// The prior observation (absent on the very first render of a session), the one
-// just taken, and the recent ring (oldest→newest, INCLUDING `cur`). The pure
-// projections live at the render-payload boundary; this store only remembers and
-// reports. [LAW:one-source-of-truth] `prev === samples[samples.length - 2]` — the
-// tok/s baseline and the burn-rate history fold from the SAME owned ring, not two
-// parallel stores. tok/s reads the last pair; the sparkline reads every pair.
-export interface SpeedObservation {
-  readonly prev?: SpeedSample;
-  readonly cur: SpeedSample;
-  readonly samples: readonly SpeedSample[];
-}
 
 // How many recent samples the burn-rate ring retains per session. A render-cadence
 // trend, not an archive: enough to fill a wide sparkline cell, capped so an
@@ -623,7 +602,7 @@ export class SessionUsageStore {
   // happened to have rendered.
 
   // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
-  // src/daemon/render-payload.ts): the directory set's scans, held, so a set
+  // src/renderer/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
   // frame that reads it. The lane answers the set's day sums once a scan has
   // answered; which day of them is the draw's (`projectToday`).

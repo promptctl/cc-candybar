@@ -10,42 +10,21 @@ import {
   failureText,
   type LaunchResult,
   type Launcher,
-} from "../proc/launch.js";
-import type { SessionId } from "./session-id.js";
-import type { StorageKey } from "./cache/managed-storage.js";
+} from "../proc/launcher.js";
+import type { SessionId } from "./foundations/session-id.js";
+import type { StorageKey } from "../renderer-interface/interface.js";
 import type { Resume } from "../utils/keyed-source.js";
 import type { DaemonLogger } from "../utils/logger.js";
-import type { SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
-import { holdClickError } from "./click-error.js";
 import { valueOf } from "../utils/logfmt.js";
+import type { RunStats } from "./foundations/stats-snapshot";
+import type { RunRequest } from "../renderer-interface/adapter";
 
 // One timeout for every run: long enough for a program that reads a file and
 // writes another, short enough that a hung one does not hold its sources
 // pending for good.
 export const RUN_TIMEOUT_MS = 10_000;
-
-// A source a run makes stale: its full name, for the event, and its file's key
-// in the storage owner.
-export interface RunRefresh {
-  readonly name: string;
-  readonly storage: StorageKey;
-}
-
-// [LAW:types-are-the-program] One run, as the verb hands it over: everything
-// was settled at the click — the program and its arguments as the draw
-// evaluated them, the environment, the directory, the sources it refreshes —
-// so the owner decides nothing about what runs.
-export interface RunRequest {
-  readonly sessionId: SessionId;
-  readonly action: string;
-  readonly argv: readonly [string, ...string[]];
-  // Set over the owner's launcher's inherited environment.
-  readonly envOverlay: Readonly<Record<string, string | undefined>>;
-  readonly cwd: string;
-  readonly refreshes: readonly RunRefresh[];
-}
 
 // How a run ended. `aborted`: the owner closed under it.
 export type RunOutcome =
@@ -57,24 +36,17 @@ export type RunOutcome =
   | "pipe"
   | "aborted";
 
-export interface RunStats {
-  readonly started: number;
-  // Ended with a non-zero exit, or could not be started.
-  readonly failed: number;
-  readonly timedOut: number;
-  // Links refused before anything ran.
-  readonly refused: number;
-  // In flight now.
-  readonly running: number;
-}
-
 export interface RunsDeps {
   // [LAW:one-source-of-truth] The storage owner's one supersede.
   readonly supersede: (storage: StorageKey, sessionId: SessionId) => Resume;
   readonly launch: Launcher["launch"];
-  // The daemon's session state, where a failed run's error is held for the
-  // session's bar — not a click's journal, which committed long before.
-  readonly state: SessionStateRW;
+  // Holds a failed run's error in the session's state for its bar — not a
+  // click's journal, which committed long before.
+  readonly holdClickError: (
+    sessionId: SessionId,
+    text: string,
+    at: Instant,
+  ) => void;
   readonly log: DaemonLogger;
   readonly now: () => Instant;
   // [LAW:effects-at-boundaries] The daemon's clock, which times each run.
@@ -203,8 +175,7 @@ export class Runs {
     // An aborted run is the daemon going down, not the program failing.
     if (result.ok || outcome === "aborted") return;
     if (outcome !== "timeout") this.failed++;
-    holdClickError(
-      this.deps.state,
+    this.deps.holdClickError(
       run.sessionId,
       `run ${run.action}: ${failureText(result)}`,
       this.deps.now(),

@@ -80,7 +80,7 @@ Today the path is read → parse → publish, in `declareSource`.
 | State | Today | Reaches |
 |---|---|---|
 | Scalar first read outstanding | Box already holds default, or `default_empty_value`, or `""`. **No pending state** | Bar shows the fallback; `newKeys` makes requests wait |
-| Scalar failed (read or regex no-match) | `orElse(outcome, fallback)`; reason only in `lastErrors` | Bar shows fallback, indistinguishable. `getLastError` has one reader, `src/daemon/debug.ts` (`cc-candybar vars`) |
+| Scalar failed (read or regex no-match) | `orElse(outcome, fallback)`; reason only in `lastErrors` | Bar shows fallback, indistinguishable. `getLastError` has one reader, `src/renderer/debug.ts` (`cc-candybar vars`) |
 | Json, no default, unanswered | `PENDING` | Loading cell |
 | Json with default | `ok(default)` before the first scan | Default |
 | Json read failed, or blank (blank→`ABSENT`) | Default stands in if declared | Otherwise failed/absent, surfaced by the scope proxy |
@@ -107,7 +107,7 @@ Today the path is read → parse → publish, in `declareSource`.
 
 ## 3. Repo gate
 
-**Where:** `gateRepos` (pure, `src/config/loader/repo-gate.ts`) is called from `resolveDslConfig` in `src/config/loader/discovery.ts`. Answers come from `repoConfigs().read()` (`src/daemon/repo-configs.ts`) in `loadFromDisk`; `durableConfig` uses the same resolve.
+**Where:** `gateRepos` (pure, `src/config/loader/repo-gate.ts`) is called from `resolveDslConfig` in `src/config/loader/discovery.ts`. Answers come from `repoConfigs().read()` (`src/renderer/repo-configs.ts`) in `loadFromDisk`; `durableConfig` uses the same resolve.
 
 **What it gates:**
 - cwd and project config layers, filtered by `repos.approved` *before merge*
@@ -125,7 +125,7 @@ Today the path is read → parse → publish, in `declareSource`.
 **Checks that assume the daemon loaded the config:**
 - `ApprovedRepo` is a compile-time stamp and does not survive a wire.
 - `ValidatedConfig` has `validateRenderable` as sole producer; wire data is not one. The instant and cycle checks live in the loader; the regex capture and absolute path checks are the host's run judge.
-- `runOf` reads `ctx.configFor(origin).actions` to rebuild the signed declaration, and `ctx.sourcesFor(origin)` for storage keys (`src/daemon/verbs/index.ts`).
+- `runOf` reads `ctx.configFor(origin).actions` to rebuild the signed declaration, and `ctx.sourcesFor(origin)` for storage keys (`src/renderer/verbs/index.ts`).
 - `stateGate` and `configGate` read `sessionConfig`.
 - `navigation` depth uses the session config's gate.
 - `ManagedStorage` assumes builds in the daemon. `UNOWNED_STORAGE` is what a build outside uses, and it creates and watches nothing.
@@ -198,7 +198,7 @@ All are composed in `drawRender` (`src/daemon/server.ts`).
 | `questions` | `repoQuestions(entry.repos, …)` signed | Draw, since awaiting depends on its chain |
 | Standing `file-events`, `lifeline`, `launch-pipes` | `fileEventsWarnings`; `launcherWarnings(at, by)` in `src/proc/launch.ts`, whose pipe event shows by the event hold | Facts |
 | Standing `config-watch`, `load` | Entry | Draw (watch fault arrives from Facts if Facts holds it) |
-| Render warnings `rule`, `when` | Draw walk, `RenderWarningRecords` (`src/daemon/render-warnings.ts`) | Draw |
+| Render warnings `rule`, `when` | Draw walk, `RenderWarningRecords` (`src/renderer/render-warnings.ts`) | Draw |
 | Render warning `refresh` | `cachePolicyFaults` | Mixed: key faults are Draw's, watch faults arrive on the reading |
 | `feeds` | `frameFeeds.feedsOf(sessionId, at)` | Whoever delivers frames |
 | `drawing` | Caller | Draw |

@@ -1,5 +1,8 @@
-import type { Host } from "./host";
+import type { Host } from "./host-facts";
 import { explicitConfigPath } from "./utils/user-path";
+
+// What a hint reads of the machine.
+type HostPaths = Pick<Host, "env" | "home">;
 
 // The client's explicit-config probe — the `CC_CANDYBAR_CONFIG` the shell
 // Claude Code spawned the statusline in carries, read from the client's own
@@ -30,7 +33,7 @@ export const CONFIG_ENV = "CC_CANDYBAR_CONFIG";
 // no cwd of their own. So the daemon accepts only an absolute hint, like
 // `claudeConfigDir` (src/claude-settings.ts).
 export function detectConfigEnv(
-  { env, home }: Pick<Host, "env" | "home">,
+  { env, home }: HostPaths,
   cwd: string,
 ): string | undefined {
   return explicitConfigPath(cwd, env[CONFIG_ENV], home);
@@ -73,7 +76,7 @@ export function requestedConfigTarget(
 // `explicitConfigPath` reading.
 export function cliConfigTarget(
   arg: string | undefined,
-  host: Pick<Host, "env" | "home">,
+  host: HostPaths,
   cwd: string,
 ): RequestedTarget {
   return requestedConfigTarget(

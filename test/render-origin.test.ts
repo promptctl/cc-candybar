@@ -2,11 +2,11 @@
 // sits at one unversioned path, so builds of either age read this record.
 
 import type { RequestedOrigin } from "../src/config-hint";
-import { BadVerbArgs } from "../src/daemon/verb-error";
-import { parseRenderOrigin, sessionRenderOrigin } from "../src/daemon/verbs/index";
+import { BadVerbArgs } from "../src/daemon/foundations/verb-error";
+import { parseRenderOrigin, sessionRenderOrigin } from "../src/renderer/verbs/index";
 import { SESSION_CONFIG_OVERRIDE_KEY } from "../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 

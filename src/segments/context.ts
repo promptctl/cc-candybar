@@ -11,7 +11,7 @@ import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import { debug, quietLogger, type DaemonLogger } from "../utils/logger";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import type { Timekeeper } from "../time";
-import type { SessionId } from "../daemon/session-id";
+import type { SessionId } from "../daemon/foundations/session-id";
 
 export interface ContextInfo {
   totalTokens: number;

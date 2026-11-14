@@ -1,5 +1,13 @@
-import { MAX_CAPTURED_BYTES, type LaunchResult } from "../../src/proc/launch";
-import { exits, floods, hangs, ignoring, runsFor, shell } from "../../src/proc/spawner-fake";
+import { MAX_CAPTURED_BYTES } from "../../src/proc/launch";
+import { type LaunchResult } from "../../src/proc/launcher";
+import {
+  exits,
+  floods,
+  hangs,
+  ignoring,
+  runsFor,
+  shell,
+} from "../../src/proc/spawner-fake";
 import { fakeLauncher, turns } from "../helpers/fake-launcher";
 import { heldClock } from "../helpers/held-clock";
 
@@ -17,7 +25,10 @@ function rig() {
   return { clock, advance, ...fake };
 }
 
-const sh = (command: string, extra: { timeoutMs?: number; signal?: AbortSignal } = {}) => ({
+const sh = (
+  command: string,
+  extra: { timeoutMs?: number; signal?: AbortSignal } = {},
+) => ({
   bin: "/bin/sh",
   args: ["-c", command],
   category: "user-shell" as const,
@@ -114,21 +125,31 @@ describe("a launch over a scripted OS", () => {
     r.spawner.program(shell("yes"), floods(MAX_CAPTURED_BYTES + 100_000));
     const result = await settled(r, r.launcher.launch(sh("yes")), 10);
     expect(result).toMatchObject({ ok: false, reason: "output-limit" });
-    expect((result as { stdout: string }).stdout).toHaveLength(MAX_CAPTURED_BYTES);
+    expect((result as { stdout: string }).stdout).toHaveLength(
+      MAX_CAPTURED_BYTES,
+    );
   });
 
   test("a category's minimum interval refuses a second start without starting one", async () => {
     const r = rig();
     r.spawner.program(shell("pbcopy"), exits(0));
-    const click = { bin: "/bin/sh", args: ["-c", "pbcopy"], category: "click.pbcopy" as const };
-    expect(await settled(r, r.launcher.launch(click))).toMatchObject({ ok: true });
+    const click = {
+      bin: "/bin/sh",
+      args: ["-c", "pbcopy"],
+      category: "click.pbcopy" as const,
+    };
+    expect(await settled(r, r.launcher.launch(click))).toMatchObject({
+      ok: true,
+    });
     expect(await r.launcher.launch(click)).toMatchObject({
       ok: false,
       reason: "rate-limited",
     });
     expect(r.started()).toHaveLength(1);
     await r.advance(1000);
-    expect(await settled(r, r.launcher.launch(click))).toMatchObject({ ok: true });
+    expect(await settled(r, r.launcher.launch(click))).toMatchObject({
+      ok: true,
+    });
   });
 
   test("a program that runs for a while is waited for, on the clock", async () => {
@@ -147,7 +168,9 @@ describe("an owner's launcher over a scripted OS", () => {
   test("closing the owner ends what is in flight and refuses what comes after", async () => {
     const clock = heldClock(new Date(1_000_000));
     const closing = new AbortController();
-    const { launcher, spawner, started } = fakeLauncher(clock, { signal: closing.signal });
+    const { launcher, spawner, started } = fakeLauncher(clock, {
+      signal: closing.signal,
+    });
     spawner.program(shell("sleep 60"), hangs());
     const inFlight = launcher.launch(sh("sleep 60"));
     clock.advance(10);

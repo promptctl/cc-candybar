@@ -16,8 +16,8 @@ import {
   VERB_DISPATCH,
   VERB_LOAD_CONFIG,
   VERB_OPEN_VSCODE,
+  SEGMENTED_VERBS,
 } from "./wire";
-import { SEGMENTED_VERBS } from "../daemon/verbs";
 
 /** One link the bar drew: its visible text and its URL. */
 export interface DrawnLink {
@@ -58,7 +58,7 @@ export interface DecodedEffect {
 }
 
 // [LAW:one-source-of-truth] Decode an effect's value the way its daemon handler
-// does, from the daemon's own list (src/daemon/verbs SEGMENTED_VERBS): those
+// does, from the wire's own list (src/click/wire.ts SEGMENTED_VERBS): those
 // verbs' values are `/`-separated segments; load-config is `<session>/<path>`,
 // split at the first slash only, since a path has slashes; every other verb
 // takes ONE argument, the whole value decoded once, so a direct `copy/a/b`

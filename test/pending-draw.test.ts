@@ -12,7 +12,7 @@ import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
 import { heldClock } from "./helpers/held-clock";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import {
@@ -36,7 +36,7 @@ import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S = sessionIdOf("s");
 
 const AT = 1_800_000_000 as Instant;

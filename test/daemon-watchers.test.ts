@@ -5,15 +5,16 @@ import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import {
-  WatcherRegistry,
   watchFault,
   watchTargetsOf,
   type Deafness,
   type Invalidation,
-} from "../src/daemon/cache/watchers";
+} from "../src/daemon/foundations/watch-targets";
 import { GitDataProvider } from "../src/daemon/cache/git";
-import { GitService, type GitRead } from "../src/segments/git";
+import { type GitRead } from "../src/segments/git";
+import { GitService } from "../src/daemon/cache/git-service";
 import { ABSENT, ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { until } from "./helpers/until";

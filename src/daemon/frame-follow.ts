@@ -12,7 +12,7 @@ import {
   type FrameStream,
   type StreamEnd,
 } from "./client-frames";
-import { PROTOCOL_VERSION, type Response } from "./protocol";
+import { PROTOCOL_VERSION, type Response } from "./foundations/protocol";
 import type { Lane } from "../config/lanes";
 
 export const RECONNECT_FIRST_MS = 250;

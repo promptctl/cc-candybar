@@ -2,7 +2,7 @@
 // two values share nothing, and a daemon's gates hold the update notice's keys
 // from construction.
 
-import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD, UPDATE_NOTICE_SESSION_KEY, daemonGates } from "../../src/daemon/update-keys";
+import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD, UPDATE_NOTICE_SESSION_KEY, daemonGates } from "../../src/daemon/foundations/update-keys";
 import { createGates } from "../../src/daemon/foundations/gates";
 import { EMPTY_DEFAULT } from "../helpers/parse-and-validate";
 

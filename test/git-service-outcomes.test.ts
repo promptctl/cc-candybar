@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { GitService } from "../src/segments/git";
+import { GitService } from "../src/daemon/cache/git-service";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { systemTimekeeper } from "../src/time";
@@ -151,7 +151,10 @@ describe("GitService outcome classification", () => {
     // No commit and no identity: reading `.git/config` needs neither, and a
     // repo fixture that depends on an ambient global git identity passes on a
     // developer machine and fails on a runner that has none.
-    writeFileSync(join(broken, ".git", "config"), '[remote "origin"\n  url = x\n');
+    writeFileSync(
+      join(broken, ".git", "config"),
+      '[remote "origin"\n  url = x\n',
+    );
 
     const remotes = await svc.getRemotesAsync(broken);
     expect(remotes.kind).toBe("failed");
@@ -173,9 +176,12 @@ describe("GitService outcome classification", () => {
     );
     // The git the service launches inherits a global config of its own.
     const shadowed = new GitService(
-      systemLauncher({
-        inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
-      }, systemTimekeeper),
+      systemLauncher(
+        {
+          inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
+        },
+        systemTimekeeper,
+      ),
     );
     try {
       const remotes = await shadowed.getRemotesAsync(repo);

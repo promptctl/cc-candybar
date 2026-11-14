@@ -5,7 +5,7 @@
 // 1M-context variants where a hardcoded 200k would report wildly wrong "left"
 // percentages.
 
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { appendFileSync, mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

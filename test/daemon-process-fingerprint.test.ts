@@ -6,14 +6,17 @@ import {
   sameLiveProcess,
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
-import { type LaunchResult, type Launcher } from "../src/proc/launch";
+import { type LaunchResult, type Launcher } from "../src/proc/launcher";
 
 const realRead = (pid: number): Promise<StartTimeRead> =>
   readStartTime(pid, processLauncher.launch);
 
 // A fake launcher yielding a fixed LaunchResult, so readStartTime's parse/branch
 // logic is exercised without a real `ps`.
-const launcher = (res: LaunchResult): Launcher["launch"] => async () => res;
+const launcher =
+  (res: LaunchResult): Launcher["launch"] =>
+  async () =>
+    res;
 const okStdout = (stdout: string): LaunchResult => ({
   ok: true,
   stdout,
@@ -87,14 +90,19 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
   // edge the code-review flagged: never false-dead a live owner from a `ps`
   // exit code.
   test("non-zero exit + empty stdout → unavailable (could be an access failure, not death)", async () => {
-    expect((await readStartTime(123, launcher(fail("non-zero", "")))).kind).toBe(
-      "unavailable",
-    );
+    expect(
+      (await readStartTime(123, launcher(fail("non-zero", "")))).kind,
+    ).toBe("unavailable");
   });
 
   test("non-zero exit + non-empty stdout → unavailable", async () => {
     expect(
-      (await readStartTime(123, launcher(fail("non-zero", "Mon Jan  1 00:00:00 2024")))).kind,
+      (
+        await readStartTime(
+          123,
+          launcher(fail("non-zero", "Mon Jan  1 00:00:00 2024")),
+        )
+      ).kind,
     ).toBe("unavailable");
   });
 
@@ -133,21 +141,23 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
 
   test("start + token matches lease → true (same process alive)", async () => {
     const d = deps({ kind: "start", token: "T" }, false);
-    expect(
-      await sameLiveProcess(10, "T", d)).toBe(true);
+    expect(await sameLiveProcess(10, "T", d)).toBe(true);
     expect(d.pidAliveCalls).toBe(0); // fingerprint decided; no fallback
   });
 
   test("start + token differs → false (recycled / restarted process)", async () => {
     const d = deps({ kind: "start", token: "OTHER" }, true);
-    expect(
-      await sameLiveProcess(10, "T", d)).toBe(false);
+    expect(await sameLiveProcess(10, "T", d)).toBe(false);
     expect(d.pidAliveCalls).toBe(0);
   });
 
   test("unavailable → falls back to kill(pid,0)", async () => {
     expect(
-      await sameLiveProcess(10, "T", deps({ kind: "unavailable", detail: "x" }, true)),
+      await sameLiveProcess(
+        10,
+        "T",
+        deps({ kind: "unavailable", detail: "x" }, true),
+      ),
     ).toBe(true);
     expect(
       await sameLiveProcess(
@@ -167,8 +177,7 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
       detail: "unused",
     }));
     const d = { startTime: read, alive: () => true };
-    expect(
-      await sameLiveProcess(10, null, d)).toBe(true);
+    expect(await sameLiveProcess(10, null, d)).toBe(true);
     expect(read).not.toHaveBeenCalled();
   });
 });

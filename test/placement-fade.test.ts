@@ -16,8 +16,8 @@ import {
   resolveColorRef,
 } from "@promptctl/rich-js";
 
-import { SessionState } from "../src/daemon/session-state";
-import { SettingsHistory } from "../src/daemon/settings-history";
+import { SessionState } from "../src/renderer/session-state";
+import { SettingsHistory } from "../src/renderer/settings-history";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { compileDslConfig, compileInputOf, compileKey, declareDslVariables, EVERY_SCOPE, type CompiledConfig } from "../src/dsl/render";
@@ -38,7 +38,7 @@ import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID_S = sessionIdOf("s");
 const T = sessionIdOf("t");

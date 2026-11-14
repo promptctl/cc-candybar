@@ -5,7 +5,7 @@
 // interface and hands it to `createLauncher()`. Other runtimes pass none; the
 // launcher no-ops.
 
-import type { LaunchCategory } from "./launch";
+import type { LaunchCategory } from "./launcher";
 
 export interface LaunchStatsHandle {
   onStart(category: LaunchCategory): void;

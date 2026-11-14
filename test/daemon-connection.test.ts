@@ -4,7 +4,7 @@
 // one would answer inside the backstop. A connection to a daemon built in the
 // worker is the other half (test/daemon-boots/worker/daemon-built-connection.test.ts).
 
-import type { Acceptance } from "../src/daemon/request-event";
+import type { Acceptance } from "../src/daemon/foundations/request-event";
 import { setImmediate } from "node:timers";
 
 import {
@@ -21,10 +21,10 @@ import {
   sendOne,
   type Request,
   type Response,
-} from "../src/daemon/protocol";
+} from "../src/daemon/foundations/protocol";
 import type { HandledRequest, Reply } from "../src/daemon/reply";
-import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { REQUEST_TIMEOUT_MS } from "../src/daemon/foundations/request-deadline";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { barOf } from "./helpers/drawn-frame";
 import { RuntimeStats } from "../src/daemon/stats";
 import { memoryConnection } from "./helpers/memory-connection";

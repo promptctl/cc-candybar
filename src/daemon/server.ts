@@ -41,11 +41,12 @@ import { runTmuxAtExit } from "../proc/tmux";
 import type { TmuxAtExit } from "./tmux-status";
 import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
 import { productionAdapters } from "./production-adapters.js";
-import { daemonGates } from "./update-keys.js";
+import { daemonGates } from "./foundations/update-keys.js";
 import { handleConnection } from "./connection.js";
 import { REGISTRY_URL } from "../install/currency";
-import { PROTOCOL_VERSION } from "./protocol";
-import { mb, memoryLimitBytes } from "./limits";
+import { PROTOCOL_VERSION } from "./foundations/protocol";
+import { memoryLimitBytes } from "./limits";
+import { mb } from "./foundations/memory-limit";
 import { armParentWatchdog, anchorFromEnv } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
 

@@ -6,9 +6,9 @@
 // collector, as the host hands back every output's (src/daemon/renderer-host.ts).
 
 import { Collector, type CollectorDeps } from "../../src/daemon/collector";
-import { retireSession } from "../../src/daemon/draw-bar";
-import type { RenderCache } from "../../src/daemon/cache/render";
-import type { ViewFacts } from "../../src/daemon/render-payload";
+import { retireSession } from "../../src/renderer/draw-bar";
+import type { RenderCache } from "../../src/renderer/render-cache";
+import type { ViewFacts } from "../../src/renderer-interface/request-context";
 import { WorldStates } from "../../src/renderer/world-states";
 import { systemTimekeeper } from "../../src/time";
 

@@ -20,8 +20,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { GitService } from "../src/segments/git";
-import type { LaunchResult } from "../src/proc/launch";
+import { GitService } from "../src/daemon/cache/git-service";
+import type { LaunchResult } from "../src/proc/launcher";
 
 class CountingGitService extends GitService {
   readonly invocations: string[] = [];

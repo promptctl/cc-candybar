@@ -6,29 +6,31 @@
 // (`daemon`, src/daemon/limits.ts `serving`).
 
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
-import type { StatsSnapshot } from "../daemon/stats.js";
+import type {
+  StatsSnapshot,
+  StoresRead,
+} from "../daemon/foundations/stats-snapshot.js";
 import {
   describeFailure,
   type ClientWorld,
 } from "../daemon/client-transport.js";
-import { sanitizeClient } from "../daemon/protocol.js";
+import { sanitizeClient } from "../daemon/foundations/protocol.js";
 import {
   FRAMES_SEEN,
   RATE_LIMITS_SEEN,
   type RenderSighting,
-} from "../daemon/render-sightings.js";
+} from "../daemon/foundations/sightings.js";
 import { SIGHTING_ROLES } from "../daemon/foundations/sighting-roles.js";
 import type { Asked } from "./checks.js";
 import type {
   MemoryReading,
   PostMortem,
   ServingDaemon,
-} from "../daemon/limits.js";
-import type { StoresRead } from "./edge.js";
+} from "../daemon/foundations/memory-limit.js";
 import { parseMarkBook } from "./mark-book.js";
 import { parseClickedTerminals } from "./clicked-terminals.js";
 import { parsePostMortemsRead } from "./post-mortems-read.js";
-import { parseSessionId } from "../daemon/session-id.js";
+import { parseSessionId } from "../daemon/foundations/session-id.js";
 
 export interface DaemonClients {
   readonly bundle: string;

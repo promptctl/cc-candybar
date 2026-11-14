@@ -32,11 +32,11 @@ import {
 } from "../src/config/loader/persist-target";
 import {
   renderOptionsOf,
-} from "../src/daemon/render-payload";
+} from "../src/renderer/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { registerDslConfig } from "../src/dsl/render";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";

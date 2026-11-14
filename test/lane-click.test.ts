@@ -1,17 +1,17 @@
 // What a click hands the lane setup's owner: the clicking session's lane
 // switches as the click found them and as its commit left them, measured by
-// the click path itself (journaled, src/daemon/verbs/index.ts). No render,
+// the click path itself (journaled, src/renderer/verbs/index.ts). No render,
 // frame or other session's write is measured, so none can start a setup.
 
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { LANES, type Lane, type LaneSwitches } from "../src/config/lanes";
-import type { VerbContext } from "../src/daemon/verbs";
+import type { VerbContext } from "../src/renderer/verbs";
 import { clickUrl, recordRender, testVerbContext } from "./helpers/click";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("lane-click");
 // The bundled bar, whose settings menu declares every lane's switch.

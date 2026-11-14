@@ -1,8 +1,4 @@
-import type { SpeedObservation } from "../daemon/cache/session-usage-store";
-import type { TodayFacts } from "../daemon/cache/today-facts";
-import type { RefreshLane } from "../daemon/refresh-faults";
-import type { SessionId } from "../daemon/session-id";
-import type { Update } from "../daemon/update-notice";
+import type { SessionId } from "../daemon/foundations/session-id";
 import type { ActivityInfo } from "../segments/activity";
 import type { AutoCompactWindow } from "../segments/autocompact";
 import type { GitRead, PullRequest } from "../segments/git";
@@ -49,9 +45,6 @@ export interface TmuxFacts {
   readonly session: string;
 }
 
-// The release check: something newer than the running code, or absent.
-export type UpdateNotice = Update;
-
 // A fault of the collector's own: one lane of the session whose refresh threw,
 // or the stamp itself, which kept the readings of the document before it.
 export interface LaneDiagnostic {
@@ -97,6 +90,117 @@ export interface WorldState {
   readonly builtins: BuiltinFacts;
   readonly sources: Readonly<Record<SourceId, Fact<SourceValue>>>;
   readonly runs: Readonly<Record<string, RunFact>>;
-  readonly update: Fact<UpdateNotice>;
+  readonly update: Fact<Update>;
   readonly diagnostics: readonly FactsDiagnostic[];
+}
+
+// [LAW:one-source-of-truth] One observation of the active session's cumulative
+// token counts at a single instant. tok/s is the delta between two of these —
+// the prior sample lives in the session usage store (the single owner of
+// per-session token totals), never in a parallel counter. `input` folds the cache lanes into the
+// prompt-side total so `total === input + output`. `atMs` is the render's clock
+// instant (the daemon's single-enforcer clock), so a frozen test clock makes
+// the rate deterministic.
+export interface SpeedSample {
+  readonly input: number;
+  readonly output: number;
+  readonly total: number;
+  readonly atMs: number;
+}
+
+// The prior observation (absent on the very first render of a session), the one
+// just taken, and the recent ring (oldest→newest, INCLUDING `cur`). The pure
+// projections live at the render-payload boundary; the session usage store only
+// remembers and reports. [LAW:one-source-of-truth] `prev === samples[samples.length - 2]` — the
+// tok/s baseline and the burn-rate history fold from the SAME owned ring, not two
+// parallel stores. tok/s reads the last pair; the sparkline reads every pair.
+export interface SpeedObservation {
+  readonly prev?: SpeedSample;
+  readonly cur: SpeedSample;
+  readonly samples: readonly SpeedSample[];
+}
+
+// The `today` fact and its projection, apart from the store that remembers the
+// records (session-usage-store.ts): a draw's day is a pure function of the
+// fact and the draw's instant, so what reads it (the draw, `check`, the demo)
+// does not load the store's pricing, transcript reads or observables.
+
+// Per-(session, day) scalar contribution — the only granularity the today fold
+// needs. Raw entries are discarded after bucketing, so per-session retained
+// memory is O(retained-days), not O(entries).
+export interface DayUsage {
+  cost: number;
+  input: number;
+  output: number;
+  cacheCreation: number;
+  cacheRead: number;
+}
+
+// [LAW:types-are-the-program] Everything the `today` projection reads: the
+// directory set's day sums, and the rendering session's own days the sums do
+// not hold (a session whose transcript lies outside the set's projects; one
+// under them is in `sums` already, so its `own` is empty). The session's
+// ingest failing is not a field, it is the fact failing.
+export interface TodayFacts {
+  readonly sums: Readonly<Record<string, DayUsage>>;
+  readonly own: Readonly<Record<string, DayUsage>>;
+}
+
+// The lanes a request's own arrival refreshes (refreshPayload). [LAW:one-source-of-truth]
+// The list is the one declaration: the type derives from it, and a facts
+// document's diagnostics walk it in this order.
+export const REFRESH_LANES = [
+  "session",
+  "today",
+  "context",
+  "metrics",
+  "activity",
+  "cache",
+  "speed",
+  "autocompact",
+] as const;
+
+export type RefreshLane = (typeof REFRESH_LANES)[number];
+
+// [LAW:types-are-the-program] What is newer than the running code. `source`
+// is a checkout whose tree no longer matches the bundle; `release` is an
+// install behind the registry. Each carries both sides of the comparison
+// under one name pair, so the sentence reads the same fields off either.
+export type Update =
+  | {
+      readonly kind: "source";
+      readonly root: string;
+      readonly newer: SourceStamp;
+      readonly running: SourceStamp;
+    }
+  | {
+      readonly kind: "release";
+      readonly newer: Version;
+      readonly running: Version;
+    };
+
+// [LAW:types-are-the-program] A release version is exactly MAJOR.MINOR.PATCH.
+// semantic-release on `main` mints nothing else, and the ordering the currency
+// verdict needs is total only over that shape — so the parser refuses anything
+// else rather than admitting a prerelease it could not order.
+export type Version = readonly [major: number, minor: number, patch: number];
+
+// What identifies a build to a person: the version it reports and the
+// digest of the source it was built from.
+export interface SourceStamp {
+  readonly version: string;
+  readonly digest: string;
+}
+
+// How much of a digest a person is shown: seven hex characters, the length
+// git abbreviates a commit to, so the identifier reads as the familiar
+// short hash rather than a wall of hex.
+export const SHORT_DIGEST_LENGTH = 7;
+
+export const shortDigest = (digest: string): string =>
+  digest.slice(0, SHORT_DIGEST_LENGTH);
+
+// Why the document is drawn from older facts, or null when its stamp held.
+export function stampFailureOf(document: WorldState): string | null {
+  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
 }

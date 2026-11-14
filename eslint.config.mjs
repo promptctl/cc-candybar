@@ -3,6 +3,8 @@ import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
 import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
+import fs from "node:fs";
+import path from "node:path";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -109,8 +111,7 @@ const FAKE_IMPORTS = [
       "**/process-probe-fake",
       "**/process-probe-fake.js",
     ],
-    message:
-      "A fake is a test's: src never imports one. [LAW:single-enforcer]",
+    message: "A fake is a test's: src never imports one. [LAW:single-enforcer]",
   },
 ];
 
@@ -286,31 +287,181 @@ const HOST_NAMED_IMPORTS = [
   },
 ];
 
-// [LAW:one-way-deps] Foundations (src/daemon/foundations/) is the row every
-// piece of the daemon may reach, so it reaches none of them: a relative import
-// out of it into the rest of src/daemon fails. The two regexes are the two
-// spellings of that edge, `../x` and `../../daemon/x` (through src, too); `./x`
-// and the modules outside src/daemon (`../../config/x`) stay legal.
-const FOUNDATIONS_FILES = "src/daemon/foundations/**/*.ts";
-const FOUNDATIONS_IMPORTS = [
-  {
-    regex: "^(\\./)?\\.\\.(/([^.]|$)|$)",
-    message:
-      "Foundations sits below every piece of the daemon: import nothing from them. [LAW:one-way-deps]",
+// [LAW:one-way-deps] Every module of src sits in a zone, and a zone may import
+// only the zones it lists. The renderer is the code a renderer's process is
+// built from, so it reaches the host only through the adapter in the shared
+// contract, and the host reaches it only through its start. Shared code loads
+// in both processes and imports neither side. The longest prefix wins, and an
+// unlisted file is rest, so a new module is the host's until it is placed.
+// The roots build the renderer side in process, so they may import any zone:
+// an exception owned by candybar-host-renderer-x96a.9a7, which draws them
+// through `Renderer.answer`. The list may shrink, and no file joins it. The
+// entry is a root because it dispatches to them; no other host module may
+// import a root, so none reaches the renderer through one.
+const ZONE_ROWS = {
+  "src/renderer/": "renderer",
+  "src/renderer/main.ts": "start",
+  "src/renderer-interface/": "shared",
+  "src/daemon/foundations/": "shared",
+  "src/render/": "shared",
+  "src/var-system/": "shared",
+  "src/template-engine/": "shared",
+  "src/dsl/": "shared",
+  "src/themes/": "shared",
+  "src/config/": "shared",
+  "src/facts/": "shared",
+  "src/segments/": "shared",
+  "src/band/": "shared",
+  "src/utils/": "shared",
+  "src/time.ts": "shared",
+  "src/claude-settings.ts": "shared",
+  "src/proc/launcher.ts": "shared",
+  "src/doctor/report.ts": "shared",
+  "src/doctor/sightings.ts": "shared",
+  "src/doctor/terminal.ts": "shared",
+  "src/doctor/busy.ts": "shared",
+  "src/doctor/mark-book.ts": "shared",
+  "src/doctor/clicked-terminals.ts": "shared",
+  "src/doctor/post-mortems-read.ts": "shared",
+  "src/doctor/state-file.ts": "shared",
+  "src/claude-resume.ts": "shared",
+  "src/claude-command-line.ts": "shared",
+  "src/shell-word.ts": "shared",
+  "src/client-hint.ts": "shared",
+  "src/config-hint.ts": "shared",
+  "src/host-facts.ts": "shared",
+  "src/terminal-hint.ts": "shared",
+  "src/tmux-hint.ts": "shared",
+  "src/click/wire.ts": "shared",
+  "src/click/link-signer.ts": "shared",
+  "src/tmux-status/frames.ts": "shared",
+  "src/cli-flags.ts": "shared",
+  "mod/": "shared",
+  "src/claude-input/slash-line.ts": "shared",
+  "src/claude-input/typing.ts": "shared",
+  "src/claude-input/prompt-screen.ts": "shared",
+  "src/doctor/ports.ts": "shared",
+  "src/doctor/checks.ts": "shared",
+  "src/help-text.ts": "shared",
+  "src/doctor/data-needs.ts": "shared",
+  "src/index.ts": "root",
+  "src/check.ts": "root",
+  "src/check-runs.ts": "root",
+  "src/demo/": "root",
+  "src/doctor/cli.ts": "root",
+};
+const ZONE_IMPORTS = {
+  renderer: ["renderer", "start", "shared"],
+  start: ["renderer", "start", "shared"],
+  shared: ["shared"],
+  rest: ["rest", "start", "shared"],
+  root: ["renderer", "start", "shared", "rest", "root"],
+};
+const ZONE_MESSAGE = {
+  renderer:
+    "The renderer reaches the host only through its adapter (src/renderer-interface/).",
+  start:
+    "The renderer reaches the host only through its adapter (src/renderer-interface/).",
+  shared: "Shared code loads in both processes and imports neither side.",
+  rest: "The host reaches the renderer only through its start (src/renderer/main.ts).",
+};
+
+// A module's key is its repo-relative path without its extension, so
+// `../time.js`, `./time` and `src/time.ts` are one module, and a directory's
+// import (`../verbs`) is its index's. Relative to this file, not ESLint's cwd,
+// so an editor or runner started in a subdirectory keys the same modules.
+const REPO_ROOT = fs.realpathSync(import.meta.dirname);
+const withoutExtension = (p) => p.replace(/\.(m?ts|m?js)$/, "");
+const moduleKey = (abs) => withoutExtension(path.relative(REPO_ROOT, abs));
+const ZONE_KEYS = Object.entries(ZONE_ROWS)
+  .map(([row, zone]) => ({
+    row: row.endsWith("/") ? row : withoutExtension(row),
+    zone,
+  }))
+  .sort((a, b) => b.row.length - a.row.length);
+const zoneOf = (key) =>
+  ZONE_KEYS.find(({ row }) =>
+    row.endsWith("/") ? `${key}/`.startsWith(row) : key === row,
+  )?.zone ?? "rest";
+// A directory's real path, through its nearest ancestor on disk, so an unsaved
+// buffer in a directory not yet made keys like its saved self.
+const realDir = (dir) =>
+  fs.existsSync(dir)
+    ? fs.realpathSync(dir)
+    : path.join(realDir(path.dirname(dir)), path.basename(dir));
+
+const importDirection = {
+  meta: { type: "problem", schema: [] },
+  create(context) {
+    // Through the real path of the file's directory, so a file reached by a
+    // symlinked path keys as the module it is.
+    const dir = realDir(path.resolve(path.dirname(context.filename)));
+    const from = moduleKey(path.join(dir, path.basename(context.filename)));
+    // [LAW:no-silent-failure] A key outside the repo is in no zone, so the rule
+    // refuses it rather than calling it rest and passing every edge.
+    const outside = (key) => key.startsWith("..") || path.isAbsolute(key);
+    if (outside(from)) {
+      return {
+        Program: (node) =>
+          context.report({
+            node,
+            message: `${context.filename} is outside ${REPO_ROOT}, so it is in no zone. [LAW:one-way-deps]`,
+          }),
+      };
+    }
+    const fromZone = zoneOf(from);
+    const check = (node, source) => {
+      if (source === null) {
+        context.report({
+          node,
+          message: `An import whose source is computed is in no zone. [LAW:one-way-deps]`,
+        });
+        return;
+      }
+      if (!source.startsWith(".")) {
+        return;
+      }
+      const to = moduleKey(path.resolve(dir, source));
+      const toZone = outside(to) ? "outside the repo" : zoneOf(to);
+      if (!ZONE_IMPORTS[fromZone].includes(toZone)) {
+        context.report({
+          node,
+          message: `${fromZone} ${from} imports ${toZone} ${to}. ${ZONE_MESSAGE[fromZone]} [LAW:one-way-deps]`,
+        });
+      }
+    };
+    // A source is a string literal or a template with nothing interpolated;
+    // anything else is computed.
+    const sourceOf = (node) =>
+      node.type === "Literal" && typeof node.value === "string"
+        ? node.value
+        : node.type === "TemplateLiteral" && node.expressions.length === 0
+          ? node.quasis[0].value.cooked
+          : null;
+    // Every spelling of an edge: `import`, `export … from`, `import()`, the
+    // type `import("…").T`, `import x = require("…")` and `require("…")`.
+    const fromSource = (node) =>
+      node.source && check(node, sourceOf(node.source));
+    return {
+      ImportDeclaration: fromSource,
+      ExportNamedDeclaration: fromSource,
+      ExportAllDeclaration: fromSource,
+      ImportExpression: fromSource,
+      TSImportType: (node) => check(node, sourceOf(node.source)),
+      TSExternalModuleReference: (node) =>
+        check(node, sourceOf(node.expression)),
+      "CallExpression[callee.type='Identifier'][callee.name='require']": (
+        node,
+      ) => check(node, node.arguments[0] ? sourceOf(node.arguments[0]) : null),
+    };
   },
-  {
-    regex: "^\\.{1,2}/(\\.\\./)*(src/)?daemon(/|$)",
-    message:
-      "Foundations sits below every piece of the daemon: import nothing from them. [LAW:one-way-deps]",
-  },
-];
+};
 
 // A file's whole rule: flat config replaces a rule per file rather than merging
-// it, so each block carries the child_process paths and every name but its own,
-// and the import edges its row forbids (`rowPatterns`).
+// it, so each block carries the child_process paths and every name but its own.
 // `patterns`, not `paths`: a path matches only the literal import string, and
 // these are imported by relative spellings that differ file to file.
-function restrictedImports(file, rowPatterns = []) {
+function restrictedImports(file) {
   return [
     "error",
     {
@@ -325,7 +476,6 @@ function restrictedImports(file, rowPatterns = []) {
           })),
         ...HOST_NAMED_IMPORTS,
         ...FAKE_IMPORTS,
-        ...rowPatterns,
       ],
     },
   ];
@@ -366,12 +516,6 @@ function ownedImportBlocks() {
       files: [file],
       rules: { "no-restricted-imports": restrictedImports(file) },
     })),
-    {
-      files: [FOUNDATIONS_FILES],
-      rules: {
-        "no-restricted-imports": restrictedImports(null, FOUNDATIONS_IMPORTS),
-      },
-    },
   ];
 }
 
@@ -445,6 +589,11 @@ export default [
   },
   prettierConfig,
   ...ownedImportBlocks(),
+  {
+    files: ["src/**/*.{ts,mts}"],
+    plugins: { zones: { rules: { "import-direction": importDirection } } },
+    rules: { "zones/import-direction": "error" },
+  },
   // `no-restricted-properties` is its own rule, so the per-file replacement of
   // `no-restricted-imports` and `no-restricted-syntax` above leaves it alone.
   // It also catches the destructured spelling (`const { env } = process`); an
@@ -474,11 +623,7 @@ export default [
   {
     files: HOST_READERS,
     rules: {
-      "no-restricted-properties": [
-        "error",
-        ...CLOCK_PROPERTIES,
-        KILL_PROPERTY,
-      ],
+      "no-restricted-properties": ["error", ...CLOCK_PROPERTIES, KILL_PROPERTY],
     },
   },
   {
@@ -505,6 +650,7 @@ export default [
   {
     files: [
       "src/daemon/**/*.ts",
+      "src/renderer/**/*.ts",
       "src/claude-input/**/*.ts",
       "src/segments/**/*.ts",
       "src/var-system/**/*.ts",

@@ -5,7 +5,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { Locations } from "../../daemon/paths.js";
 import { presence, type Unchecked } from "../../utils/presence.js";
 import { listFolders, REPO_PLUGIN_DIR } from "./plugin-folders.js";
 import { worktreeLink } from "../../utils/git-root.js";
@@ -429,4 +428,17 @@ export function detectConfigCollisions(
     return `${winner} shadows ${shadowed.join(", ")}`;
   });
   return `config-extension collision: ${lines.join("; ")} — remove the duplicate`;
+}
+
+// [LAW:one-source-of-truth] Where the user's config and installed plugins live,
+// and the home they default under: the one derivation the config loader, the
+// plugin installer and the doctor share, so an empty `XDG_CONFIG_HOME` means
+// the default in all of them (the XDG rule `xdgEnv` applies to every variable
+// here). Pure over the host, parsed once by the root and handed down.
+export interface Locations {
+  readonly home: string;
+  readonly configHome: string;
+  readonly dataHome: string;
+  // Most-preferred first, as `XDG_DATA_DIRS` orders them.
+  readonly dataDirs: readonly string[];
 }

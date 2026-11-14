@@ -32,7 +32,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { childStep, type CompiledContainerNode, type CompiledNode } from "../src/dsl/node-registry";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DECOR } from "./helpers/decor";
 import { PRESET_FLOOR } from "../src/config/presets";
@@ -55,15 +55,15 @@ import {
 
 // The decor the bundled config renders under.
 const BAR = DEFAULT_DECOR;
-import { VERBS } from "../src/daemon/verbs";
-import type { VerbContext } from "../src/daemon/verbs";
+import { VERBS } from "../src/renderer/verbs";
+import type { VerbContext } from "../src/renderer/verbs";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";

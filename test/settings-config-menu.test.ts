@@ -28,7 +28,7 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { POLLED, PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
 import { ConfigError, loadConfigSource } from "../src/config/dsl-loader";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig } from "../src/dsl/render";
@@ -36,14 +36,14 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   effectiveInputs,
   renderOptionsOf,
-} from "../src/daemon/render-payload";
+} from "../src/renderer/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
-import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   fileHeldSettings,
   settingCounts,
-} from "../src/daemon/setting-drafts";
+} from "../src/renderer/setting-drafts";
 import { chmodSync } from "node:fs";
 import { dirname } from "node:path";
 import { linkClick } from "./helpers/click";
@@ -64,7 +64,7 @@ import { LANE_HELP } from "../src/help-text";
 import { settingMenuPath } from "../src/config/menu-places";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("settings-ui-aok-3");

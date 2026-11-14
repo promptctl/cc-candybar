@@ -23,16 +23,16 @@
 
 import { readFile as fsReadFile } from "node:fs/promises";
 import { observable, runInAction } from "mobx";
-import { failureText, type Launcher } from "../proc/launch";
+import { failureText, type Launcher } from "../proc/launcher";
 import type { SourceRead, ReadMode } from "../facts/source-identity.js";
+import { WatcherRegistry } from "./cache/watchers.js";
 import {
-  WatcherRegistry,
   watchFault,
   watchTargetsOf,
   type BoundWatch,
   type Invalidation,
   type PathsWatch,
-} from "./cache/watchers.js";
+} from "./foundations/watch-targets.js";
 import {
   NO_FILE_EVENTS,
   stallReason,
@@ -40,21 +40,18 @@ import {
   type FileEvents,
 } from "./cache/file-events.js";
 import type { Holds } from "../utils/holds.js";
-import {
-  KeyedSource,
-  NO_WATCH,
-  type KeyedSourceStats,
-} from "../utils/keyed-source.js";
+import { KeyedSource, NO_WATCH } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { failed, ok, type Outcome } from "../utils/outcome.js";
 import { settledLane, type Current } from "../utils/reading.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
-import { shortDigest } from "../source-digest.js";
+import { shortDigest } from "../facts/world-state.js";
 import type { Timekeeper } from "../time";
-import type { AcceptedRun, Judged } from "./judge-run.js";
+import type { AcceptedRun, Judged } from "./foundations/judge-run.js";
 import type { Parser } from "../var-system/parse.js";
 import type { JsonValue } from "../var-system/types.js";
+import type { SourceRunsStats } from "./foundations/stats-snapshot";
 
 // [LAW:no-silent-failure] How long one run of a shell source may take. The
 // launcher's output bound ends a child that writes without end; this ends one
@@ -358,12 +355,6 @@ export interface SourceRunsDeps {
   // delivering file events, which the watches ride. Only the daemon measures
   // delivery.
   readonly fileEvents?: FileEvents;
-}
-
-export interface SourceRunsStats {
-  readonly shell: KeyedSourceStats;
-  readonly file: KeyedSourceStats;
-  readonly watches: number;
 }
 
 export class SourceRuns {

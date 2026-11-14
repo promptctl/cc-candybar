@@ -4,9 +4,9 @@
 // the daemon draws.
 
 import { autorun } from "mobx";
-import { SessionState } from "../../src/daemon/session-state";
-import { SettingsHistory } from "../../src/daemon/settings-history";
-import { sessionIdOf, type SessionId } from "../../src/daemon/session-id";
+import { SessionState } from "../../src/renderer/session-state";
+import { SettingsHistory } from "../../src/renderer/settings-history";
+import { sessionIdOf, type SessionId } from "../../src/daemon/foundations/session-id";
 
 const A = sessionIdOf("a");
 const B = sessionIdOf("b");

@@ -28,7 +28,7 @@ import {
 import { daemonPool } from "./daemon-pool";
 import { sendDaemonRequest, type ExitResult } from "./daemon-wire";
 import { logPath } from "../../src/daemon/paths";
-import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
+import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
 
 export interface IsolatedDaemonEnv {
   env: NodeJS.ProcessEnv;

@@ -9,18 +9,27 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { PermanentOutcome } from "../../src/daemon/client-transport";
+import type { PermanentOutcome } from "../../src/daemon/foundations/protocol";
 import {
   ANSI_RESET,
   DIAGNOSTIC_ERROR_BG,
   DIAGNOSTIC_ERROR_FG,
 } from "../../src/render/diagnostic-style";
-import { sanitizeAndTruncate, sanitizeText } from "../../src/render/diagnostic-text";
+import {
+  sanitizeAndTruncate,
+  sanitizeText,
+} from "../../src/render/diagnostic-text";
 import { formatPermanentGlyph } from "../../src/render/error-glyph";
 
 interface Cases {
-  readonly glyph: readonly { readonly outcome: PermanentOutcome; readonly output: string }[];
-  readonly sanitize: readonly { readonly input: string; readonly output: string }[];
+  readonly glyph: readonly {
+    readonly outcome: PermanentOutcome;
+    readonly output: string;
+  }[];
+  readonly sanitize: readonly {
+    readonly input: string;
+    readonly output: string;
+  }[];
   readonly clip: readonly {
     readonly input: string;
     readonly budget: number;
@@ -29,7 +38,10 @@ interface Cases {
 }
 
 const CASES = JSON.parse(
-  readFileSync(join(__dirname, "..", "fixtures", "diagnostic-text-cases.json"), "utf8"),
+  readFileSync(
+    join(__dirname, "..", "fixtures", "diagnostic-text-cases.json"),
+    "utf8",
+  ),
 ) as Cases;
 
 // The title spells every code point outside printable ASCII as \uXXXX: the
@@ -37,7 +49,10 @@ const CASES = JSON.parse(
 // them raw re-styles the failure report. (%j is not enough: JSON leaves
 // U+009B and U+202E raw.)
 const escaped = (s: string): string =>
-  s.replace(/[^\x20-\x7e]/gu, (ch) => `\\u${ch.codePointAt(0)!.toString(16).padStart(4, "0")}`);
+  s.replace(
+    /[^\x20-\x7e]/gu,
+    (ch) => `\\u${ch.codePointAt(0)!.toString(16).padStart(4, "0")}`,
+  );
 
 test.each(CASES.glyph.map((c) => [escaped(c.output), c] as const))(
   'formatPermanentGlyph "%s"',

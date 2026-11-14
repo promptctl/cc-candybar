@@ -1,11 +1,11 @@
 import path from "node:path";
 import {
-  type GitService,
   gitInfoFailures,
   type GitInfo,
   type GitRead,
   type PullRequest,
 } from "../../segments/git";
+import { type GitService } from "./git-service";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
 import { quietLogger } from "../../utils/logger";
 import { valueOf as logfmtValue } from "../../utils/logfmt";
@@ -14,13 +14,13 @@ import {
   type RefreshTrigger,
   type Refreshes,
 } from "../../utils/refresh-ledger";
+import { WatcherRegistry } from "./watchers";
 import {
-  WatcherRegistry,
   type DirTarget,
   type HeldWatch,
   type WatchMove,
   type WatchSpec,
-} from "./watchers";
+} from "../foundations/watch-targets";
 import { boundKey, boundOf } from "../../utils/folder-identity";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
 import { TrailingEdge } from "../../utils/trailing-edge";
@@ -38,6 +38,7 @@ import {
   type Readable,
 } from "../../utils/reading";
 import type { Holds, Release } from "../../utils/holds";
+import type { GitCacheStats } from "../foundations/stats-snapshot";
 
 // Logger callable for cache refresh / eviction events.
 // Daemon passes its log so these land in daemon.log at the right level for
@@ -193,17 +194,6 @@ interface RepoState {
 interface ResolutionCacheEntry {
   readonly known: Outcome<string>;
   readonly computedAt: Monotonic;
-}
-
-// `held` counts the repos a home holds — the ones the period visits.
-// `changes` counts the watch fires on a known repo.
-export interface GitCacheStats {
-  size: number;
-  held: number;
-  hits: number;
-  misses: number;
-  changes: number;
-  watchers: number;
 }
 
 // [LAW:single-enforcer] What one hold holds: the repo, its value and its PR —

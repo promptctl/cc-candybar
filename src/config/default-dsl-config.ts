@@ -183,7 +183,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
 
   // ─── Variables ─────────────────────────────────────────────────────────────
   // Every value the segment templates read. Sources:
-  //   • input — daemon's augmented payload (see src/daemon/render-payload.ts)
+  //   • input — daemon's augmented payload (see src/renderer/render-payload.ts)
   //   • env   — process environment
   //   • shell — subprocess; cached
   //   • state — per-session daemon state
@@ -941,7 +941,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       // [LAW:dataflow-not-control-flow] Each part guards on its own value
       // rather than gating the whole segment on a single dimension. With
       // MetricsPayload's fields independently optional and pickNonNull
-      // dropping nulls (see src/daemon/render-payload.ts), an absent field
+      // dropping nulls (see src/renderer/render-payload.ts), an absent field
       // resolves through the var-system fallback chain to 0 — the same
       // falsy shape the per-part `if` test treats as hidden. The segment-
       // level `when` survives as a weak any-present check so a payload

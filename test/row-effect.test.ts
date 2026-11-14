@@ -1,4 +1,4 @@
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { runUnder, sameDraw } from "./helpers/frame";
@@ -21,7 +21,7 @@ import {
   render as drawSegments,
 } from "@promptctl/rich-js";
 
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";

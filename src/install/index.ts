@@ -1,4 +1,4 @@
-import { whyFailed } from "../proc/launch.js";
+import { whyFailed } from "../proc/launcher.js";
 import {
   ATTACH_DIR,
   ATTACH_PRELOAD,
@@ -12,10 +12,8 @@ import { locations } from "../daemon/paths";
 import type { Host, World } from "../host";
 import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
-import type {
-  FailureOutcome,
-  PermanentOutcome,
-} from "../daemon/client-transport";
+import type { FailureOutcome } from "../daemon/client-transport";
+import type { PermanentOutcome } from "../daemon/foundations/protocol";
 import { obtainDaemonKick } from "../daemon/acquire";
 import { APP_NAME, parseHandlerUrl, URL_SCHEME } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
@@ -26,9 +24,11 @@ import {
   claudeSettingsPath,
   detectClaudeConfigDir,
   isJsonObject,
+} from "../claude-settings";
+import {
   readClaudeSettings,
   readClaudeSettingsText,
-} from "../claude-settings";
+} from "../claude-settings-read";
 import { JSON_DIALECT, setValue } from "../config/json5-edit";
 import {
   assessCurrency,

@@ -6,7 +6,7 @@
 // introspector.
 
 import { debugPlan, formatDebug } from "../../src/daemon/client-debug";
-import type { DebugSnapshot, VarSnapshot } from "../../src/daemon/debug-types";
+import type { DebugSnapshot, VarSnapshot } from "../../src/daemon/foundations/debug-types";
 
 describe("formatDebug", () => {
   it("renders populated vars with name, source, and value", () => {

@@ -108,7 +108,7 @@ class BoxNode implements VarNode {
   }
 
   // A box written pending is not answered yet again: what its payload holds
-  // is a source that has not answered (src/daemon/render-payload.ts).
+  // is a source that has not answered (src/renderer/render-payload.ts).
   set(value: VarValue | Pending): void {
     if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
     // [LAW:single-enforcer] ONE comparison decides both halves of a write:
@@ -601,7 +601,7 @@ export class VariableStore {
     }
   }
 
-  // [LAW:types-are-the-program] Introspection (src/daemon/debug.ts) needs
+  // [LAW:types-are-the-program] Introspection (src/renderer/debug.ts) needs
   // the whole node — type, kind, lastUpdatedMs — in one lookup, but
   // returning the BoxNode directly would leak `.set` structurally even
   // though VarNode does not advertise it. The returned wrapper is a fresh

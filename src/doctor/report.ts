@@ -3,7 +3,7 @@
 //
 // [LAW:one-source-of-truth] The settings menu (src/config/settings-menu.ts)
 // declares a `state` variable for every key this module names, and the
-// doctor verbs (src/daemon/verbs/index.ts) write those same keys — both spell
+// doctor verbs (src/renderer/verbs/index.ts) write those same keys — both spell
 // them through `doctorReportKeys`, so the row a check renders and the write
 // its click lands cannot address different variables.
 //
@@ -38,9 +38,12 @@ import {
 } from "./checks.js";
 import type { SettingsSource } from "../claude-settings.js";
 import { SETTINGS_NS } from "../config/reserved-names.js";
-import { mb, measureOf } from "../daemon/limits.js";
+import { mb, measureOf } from "../daemon/foundations/memory-limit.js";
 import { valueOf } from "../utils/logfmt.js";
-import { FRAMES_SEEN, type FrameSeen } from "../daemon/render-sightings.js";
+import {
+  FRAMES_SEEN,
+  type FrameSeen,
+} from "../daemon/foundations/sightings.js";
 
 export const DOCTOR_NS = `${SETTINGS_NS}doctor.`;
 

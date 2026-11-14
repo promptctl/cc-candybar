@@ -2,30 +2,27 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
-import type { CollectorStats } from "./collector.js";
-import type { MenuIdleStats } from "./menu-idle.js";
-import type { RunStats } from "./runs.js";
-import type { TmuxStatusStats } from "./tmux-status.js";
+import type {
+  RunStats,
+  TmuxStatusStats,
+  FeedStats,
+  FileEventsStats,
+  SourceRunsStats,
+  ProbeArrival,
+  StoresRead,
+  SourceSnapshots,
+  StatsSnapshot,
+} from "./foundations/stats-snapshot.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
-import type { FeedStats } from "./frame-feed";
-import type { RenderCacheStats } from "./cache/render";
-import type { GitCacheStats } from "./cache/git";
-import type { SourceRecord, SourceScope } from "../utils/refresh-ledger";
-import type { ManagedStorageStats } from "./cache/managed-storage";
-import type { FileEventsStats } from "./cache/file-events";
-import type { SourceRunsStats } from "./source-runs";
-import type { JournalTurnStats } from "./journal-turns";
-import type { ProbeArrival } from "../doctor/handler-probe";
-import type { RenderSighting } from "./render-sightings";
-import type { ServingDaemon } from "./limits";
-import type { StoresRead } from "../doctor/edge";
-import type { LaunchCategory } from "../proc/launch";
+import type { RenderSighting } from "./foundations/sightings";
+import type { ServingDaemon } from "./foundations/memory-limit";
+import type { LaunchCategory } from "../proc/launcher";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
-import { PROTOCOL_VERSION } from "./protocol";
+import { PROTOCOL_VERSION } from "./foundations/protocol";
 import { PACKAGE_VERSION } from "../version";
 import type { Monotonic, Timekeeper } from "../time";
-import type { RequestId } from "../renderer/interface.js";
-import type { Acceptance } from "./request-event.js";
+import type { RequestId } from "../renderer-interface/interface.js";
+import type { Acceptance } from "./foundations/request-event.js";
 
 // A read kind no run of which has happened yet.
 const NO_RUNS: SourceRunsStats["shell"] = {
@@ -56,163 +53,6 @@ const ROLLING_BUFFER_CAP = 16384;
 // counter-mod-N strategy: deterministic and adequate for human-eyeball
 // dashboards (no statistical claim of unbiased sampling).
 const HISTOGRAM_CAP = 16;
-
-// The keyed sources whose entries a view holds, so a period visits only
-// those held: a repo's, a pane's, the host's name and user, a directory
-// set's scans, a plugin's session files.
-export type HeldSource = "git" | "tmux" | "host" | "today" | "pluginStorage";
-
-// [LAW:nothing-unseen] Every source and every home, from the owners that keep
-// them (design-docs/SOURCES-AND-FRAMES.md, "Seen").
-export interface SourceSnapshots {
-  // Every source declared, from the one ledger: its scope, its refreshes by
-  // the trigger that asked, its failures and its last refresh's length.
-  readonly records: readonly SourceRecord[];
-  // How many homes of each scope are kept now.
-  readonly homes: Readonly<Record<SourceScope, number>>;
-  // How many entries of each keyed source a view holds now.
-  readonly held: Readonly<Record<HeldSource, number>>;
-  // Every plugin's managed storage: the folders watched now, watch faults by
-  // cause, and folders found gone or replaced.
-  readonly pluginStorage: Pick<
-    ManagedStorageStats,
-    "folders" | "faults" | "lost"
-  >;
-}
-
-export interface StatsSnapshot {
-  pid: number;
-  // [LAW:one-source-of-truth] The daemon's own baked package stamp — set
-  // against `cc-candybar --version` to diagnose client-vs-daemon skew in one
-  // step. The wire contract number is a different fact under its own name.
-  version: string;
-  // The digest of the source the daemon's bundle was built from (`null` for a
-  // bundle carrying none) — with `version`, the build's identity: a source
-  // checkout rebuilds without bumping the version, and a client of another
-  // build cannot read this snapshot's shape as its own.
-  sourceDigest: string | null;
-  protocolVersion: number;
-  startedAt: string;
-  uptimeSec: number;
-  rssBytes: number;
-  heapUsedBytes: number;
-  heapTotalBytes: number;
-  externalBytes: number;
-  arrayBuffersBytes: number;
-  requests: {
-    total: number;
-    errored: number;
-    timedOut: number;
-    inFlight: number;
-  };
-  // Hook-data fields this daemon has been sent that its schema does not know:
-  // what Anthropic has added since the schema was written.
-  unknownHookFields: string[];
-  gitCache: GitCacheStats;
-  usageCache: {
-    size: number;
-    hits: number;
-    misses: number;
-    sweeps: number;
-  };
-  sources: SourceSnapshots;
-  // [LAW:nothing-unseen] Whether the OS is delivering file events, and since
-  // when the daemon cannot vouch that it heard every one.
-  fileEvents: FileEventsStats;
-  // [LAW:nothing-unseen] The declared sources' runs: per read kind, the
-  // entries, how many are held, and the ledger's tallies; and the path
-  // watches armed for them.
-  sourceRuns: SourceRunsStats;
-  // [LAW:nothing-unseen] Every forward transcript read since start: gated
-  // reads, bytes off disk, lines longer than the fold window read whole and
-  // the longest of them — what bounds a fold's memory beyond its window
-  // (brandon-unfiled-3248.bfnj).
-  transcriptReads: TranscriptReads;
-  // Config states: entries the map serves, those a render is drawing with
-  // now, and those retired (evicted or reloaded over) whose teardown waits
-  // on one. `retired` climbing while `size` holds is a render that never
-  // returned. `compiles` below `size` is entries sharing one; `accountedBytes`
-  // is what the entries are charged against `budgetBytes`.
-  renderCache: RenderCacheStats;
-  // Sessions the host's collector reads, and those whose retire is on its way
-  // to the renderer: `sessions` climbing with no requests is a session the
-  // sweep never retires.
-  collector: CollectorStats;
-  effectCache: {
-    sessions: number;
-    effects: number;
-  };
-  // Sessions whose idle clock is kept, and those with a timer armed to close
-  // their menus (src/daemon/menu-idle.ts).
-  menuIdle: MenuIdleStats;
-  journalTurns: JournalTurnStats;
-  // `run` clicks (src/daemon/runs.ts): programs started, those that failed
-  // (a non-zero exit or no start), timed out, links refused before anything
-  // ran, and runs in flight now.
-  runs: RunStats;
-  // The per-session click store: how many sessions it holds, how many
-  // derivations are subscribed to it, and its revision — how many changes it
-  // has taken. Observers climbing while renderCache holds steady is a
-  // disposed config's store still held; the revision climbing while nobody
-  // clicks is something writing session state on every render.
-  sessionState: {
-    sessions: number;
-    observers: number;
-    revision: number;
-  };
-  // Subscribed sessions, their subscribers, and the frames drawn for them and
-  // pushed (a drawn frame identical to the last is not pushed).
-  frameFeeds: FeedStats;
-  // The tmux status line lane's writes (src/daemon/tmux-status.ts): sessions
-  // it draws, status lines it has laid out, tmux invocations, failed ones.
-  tmuxStatus: TmuxStatusStats;
-  // Watch slots: open now, opened with every target watched, closed, opened
-  // with a target the OS refused, and errors watches reported after opening.
-  // `dirs`: the OS directory watches the slots share, open now, opened and
-  // closed, a reopen counting one of each; on macOS each open or close
-  // rebuilds the one FSEvents stream, so this is the churn that costs.
-  watchers: {
-    active: number;
-    opened: number;
-    closed: number;
-    refused: number;
-    errors: number;
-    dirs: { active: number; opened: number; closed: number };
-  };
-  subprocesses: {
-    total: number;
-    inFlight: number;
-    lastMinute: number;
-    byCategory: Record<string, number>;
-    refused: Record<string, number>;
-    // Pipes held open past their launch, the bytes read from them and dropped,
-    // how many the launcher cut at the bound, and the launched pipes that
-    // failed to read.
-    draining: number;
-    drainedBytes: number;
-    drainsCut: number;
-    pipeErrors: number;
-    p50DurationMs: Record<string, number>;
-    p99DurationMs: Record<string, number>;
-  };
-  nextRestartReason: string | null;
-  // The `doctor-probe` links that reached this daemon, newest last — what
-  // `cc-candybar doctor` reads to learn whether the link it opened arrived.
-  handlerProbes: readonly ProbeArrival[];
-  // Each session's latest client, as this daemon process saw its last render
-  // request (src/daemon/render-sightings.ts), and the bundle this daemon
-  // runs — what `cc-candybar doctor` judges the install by.
-  clients: readonly RenderSighting[];
-  bundle: string;
-  // This daemon as `cc-candybar doctor` judges it: its memory against its
-  // budget and its post-mortems (src/daemon/limits.ts `serving`).
-  daemon: ServingDaemon;
-  // What the doctor's stores hold, read by the daemon that files them
-  // (src/doctor/edge.ts `DoctorStores`): `cc-candybar doctor` reads the
-  // marks, the terminals clicked from and the post-mortems read here, never
-  // under its own shell's state directory.
-  doctorStores: StoresRead;
-}
 
 export class RuntimeStats {
   readonly startedAt: Date;

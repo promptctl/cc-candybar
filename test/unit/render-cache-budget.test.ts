@@ -3,7 +3,7 @@ import {
   ENTRY_BYTES,
   renderCacheBudget,
   VIEW_BYTES,
-} from "../../src/daemon/cache/render";
+} from "../../src/renderer/render-cache";
 import { memoryLimitBytes } from "../../src/daemon/limits";
 
 const MB = 1024 * 1024;

@@ -15,26 +15,20 @@ import { randomUUID } from "node:crypto";
 import { sleep, type Monotonic } from "../time.js";
 import fs from "node:fs";
 import { URL_SCHEME, VERB_DOCTOR_PROBE } from "../click/wire.js";
-import { describeFailure } from "../daemon/client-transport.js";
+import {
+  describeFailure,
+  type ClientWorld,
+} from "../daemon/client-transport.js";
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
-import type { ClientWorld } from "../daemon/client-transport.js";
 import { defaultSocketPath, socketPath } from "../daemon/paths.js";
 import { forwarderExecutable } from "../install/index.js";
-import {
-  failureText,
-  type LaunchCategory,
-  type OneShotLauncher,
-} from "../proc/launch.js";
+import { type OneShotLauncher } from "../proc/launch.js";
+import { failureText, type LaunchCategory } from "../proc/launcher.js";
 import type { Asked, HandlerApp, UrlHandlerFacts } from "./checks.js";
-import type { Delivery } from "./sightings.js";
+import type { ProbeArrival } from "../daemon/foundations/stats-snapshot";
 
 const ok = <T>(value: T): Asked<T> => ({ kind: "ok", value });
 const failed = (reason: string): Asked<never> => ({ kind: "failed", reason });
-
-export interface ProbeArrival {
-  readonly nonce: string;
-  readonly delivery: Delivery;
-}
 
 // The daemon's record of the probe links that reached it — the newest few,
 // since a probe is read back within seconds of being sent.
@@ -50,13 +44,6 @@ export class ProbeArrivals {
   list(): readonly ProbeArrival[] {
     return this.arrivals;
   }
-}
-
-// [LAW:parse-dont-validate] The nonce is the CLI's `randomUUID()`; anything
-// else on the wire is not a probe this code sent.
-const NONCE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
-export function parseProbeNonce(value: string): string | null {
-  return NONCE.test(value) ? value : null;
 }
 
 // What the CLI needs of the running daemon: the probes that reached it.

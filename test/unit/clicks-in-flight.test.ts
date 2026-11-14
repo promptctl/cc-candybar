@@ -2,7 +2,7 @@
 // left, by the click's id (src/daemon/clicks-in-flight.ts).
 
 import { ClicksInFlight } from "../../src/daemon/clicks-in-flight";
-import type { RequestId } from "../../src/renderer/interface";
+import type { RequestId } from "../../src/renderer-interface/interface";
 
 const CLICK = 4 as RequestId;
 

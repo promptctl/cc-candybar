@@ -16,17 +16,15 @@ import type { ColorDepth, RichText, ThemeKey } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
 import type { ClockFactory } from "../template-engine/clock.js";
-import type {
-  ValidatedConfig,
-  VariableDecl,
-  CacheDecl,
-  LayoutNode,
-  ParseDecl,
-  SegmentNode,
-  SettingValue,
-  SourceDefault,
-} from "../config/dsl-types.js";
 import {
+  type ValidatedConfig,
+  type VariableDecl,
+  type CacheDecl,
+  type LayoutNode,
+  type ParseDecl,
+  type SegmentNode,
+  type SettingValue,
+  type SourceDefault,
   parseArm,
   placementSetting,
   settingsOf,
@@ -37,12 +35,15 @@ import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { configOptionDomains } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/reserved-names.js";
 import type { Derivation, VariableStore } from "../var-system/store.js";
-import type { SourceRegistry } from "../var-system/sources.js";
-import { parseDuration, type CachePolicy } from "../var-system/sources.js";
+import {
+  type SourceRegistry,
+  parseDuration,
+  type CachePolicy,
+} from "../var-system/sources.js";
 import type { SourceParse } from "../var-system/parse.js";
 import type { JsonValue } from "../var-system/types.js";
-import type { BuildLineOptions } from "../render/strip.js";
 import {
+  type BuildLineOptions,
   drawStripCells,
   stripChromeCols,
   stripSeamCols,
@@ -83,7 +84,7 @@ import {
 import type { LinkSigner } from "../click/link-signer.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
-import type { SessionId } from "../daemon/session-id.js";
+import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { RunFact } from "../facts/world-state.js";
 import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
@@ -298,7 +299,7 @@ function declareOne(
 
     // [LAW:single-enforcer] A plugin source's reading is read by the managed
     // storage owner and carried by the view's payload at the source's name
-    // (src/daemon/render-payload.ts); the view derives the document from it.
+    // (src/renderer/render-payload.ts); the view derives the document from it.
     case "source":
       registry.declareSourceDocument(name);
       break;
@@ -1197,7 +1198,7 @@ export interface RenderObservers {
   // Optional for the same reason the two above are: a caller that passes none has
   // said it is not listening (a compile-only test, the demo). Both shipping
   // callers listen — the daemon records each for the bar's diagnostics
-  // (src/daemon/render-warnings.ts), and `cc-candybar check` fails a globals rule, a gate or a
+  // (src/renderer/render-warnings.ts), and `cc-candybar check` fails a globals rule, a gate or a
   // variable that cannot refresh, so each is visible whether or not anyone is
   // looking at a bar.
   readonly onRenderWarning?: (warning: RenderWarning) => void;

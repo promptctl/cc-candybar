@@ -5,8 +5,8 @@
 import { effectsUrl, VERB_RESET_CONFIG } from "../../src/click/wire";
 import { laneSwitches } from "../../src/config/effective-globals";
 import type { EffectiveGlobals } from "../../src/config/effective-globals";
-import { HANDOFF_BUTTON, laneHandoff } from "../../src/daemon/lane-handoff";
-import { sessionIdOf } from "../../src/daemon/session-id";
+import { HANDOFF_BUTTON, laneHandoff } from "../../src/renderer/lane-handoff";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 

@@ -5,7 +5,7 @@
 // failing segment costs one ⚠ cell; a failing rule costs its slot.
 //
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate, then
-// registerDslConfig + drawDsl, the style resolved as src/daemon/draw-bar.ts
+// registerDslConfig + drawDsl, the style resolved as src/renderer/draw-bar.ts
 // resolves it and the theme and effect from the config's own globals.
 
 import { drawPayload } from "./helpers/draw-payload";
@@ -16,7 +16,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, type RenderWarning } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { EFFECT_FLOOR, STYLE_FLOOR, THEME_FLOOR } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";

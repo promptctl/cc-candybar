@@ -27,7 +27,7 @@ import { RichText as RichTextValue } from "@promptctl/rich-js";
 import type { Palette, RichText, TextStyle, ThemeKey } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig } from "../src/dsl/render";
@@ -36,7 +36,7 @@ import type {
   ColorCompatibility,
   Endcaps,
 } from "../src/themes/policy";
-import { VERBS } from "../src/daemon/verbs";
+import { VERBS } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
@@ -62,7 +62,7 @@ import { presetNames } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("ef6");

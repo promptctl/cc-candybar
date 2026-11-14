@@ -1,15 +1,17 @@
-import { describeFailure, requestOutcome } from "./client-transport";
-import type { CliPlan } from "../cli-plan";
-import type {
-  ClientWorld,
-  RoundTripBudgets,
-  RoundTripOutcome,
+import {
+  describeFailure,
+  requestOutcome,
+  type ClientWorld,
+  type RoundTripBudgets,
+  type RoundTripOutcome,
 } from "./client-transport";
-import { RuntimeStats, type StatsSnapshot } from "./stats";
+import type { CliPlan } from "../cli-plan";
+import { RuntimeStats } from "./stats";
+import { type StatsSnapshot } from "./foundations/stats-snapshot";
 import { fileEventsLine } from "./cache/file-events";
 import { PACKAGE_VERSION } from "../version";
 import { bakedDigest } from "./build-currency";
-import { shortDigest } from "../source-digest";
+import { shortDigest } from "../facts/world-state";
 
 // Operator-driven introspection path: legitimately slower budgets than the
 // render hot path, carried as this caller's values through the shared

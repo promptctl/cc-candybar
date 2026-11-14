@@ -10,16 +10,14 @@ import {
   interpretException,
   interpretResponse,
 } from "../../src/daemon/client-transport";
-import type {
-  PermanentOutcome,
-  TransientOutcome,
-} from "../../src/daemon/client-transport";
+import type { TransientOutcome } from "../../src/daemon/client-transport";
+import type { PermanentOutcome } from "../../src/daemon/foundations/protocol";
 import {
   ClientTimeoutError,
   PROTOCOL_VERSION,
   type Response,
-} from "../../src/daemon/protocol";
-import type { RequestId } from "../../src/renderer/interface";
+} from "../../src/daemon/foundations/protocol";
+import type { RequestId } from "../../src/renderer-interface/interface";
 
 const HINT = "daemon may not be running";
 

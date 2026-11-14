@@ -37,7 +37,7 @@ import {
   type PlacementEffect,
 } from "../themes/policy.js";
 import type { AnimationTime, Instant } from "../utils/instant.js";
-import type { SessionId } from "../daemon/session-id.js";
+import type { SessionId } from "../daemon/foundations/session-id.js";
 import { CLOSING_FLASH, flashBegins } from "../config/menu-timeout.js";
 import type {
   Drawing,

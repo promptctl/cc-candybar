@@ -9,7 +9,7 @@ import type { WorldState } from "../../src/facts/world-state";
 import type {
   RendererInput,
   RendererOutput,
-} from "../../src/renderer/interface";
+} from "../../src/renderer-interface/interface";
 import type { GitInfo, PullRequest } from "../../src/segments/git";
 import type { Current } from "../../src/utils/reading";
 import { instantOf, type Instant } from "../../src/utils/instant";

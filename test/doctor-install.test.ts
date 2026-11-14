@@ -8,7 +8,8 @@
 
 import { installOf } from "../src/doctor/cli";
 import { RECENT_CLIENT_S } from "../src/doctor/checks";
-import { RuntimeStats, type StatsSnapshot } from "../src/daemon/stats";
+import { RuntimeStats } from "../src/daemon/stats";
+import { type StatsSnapshot } from "../src/daemon/foundations/stats-snapshot";
 import { shapeSkew } from "../src/daemon/client-stats";
 import {
   checkByName,
@@ -17,15 +18,21 @@ import {
   type DoctorFacts,
   type InstallFacts,
 } from "../src/doctor/checks";
-import { installFacts, type InstallEdge } from "../src/doctor/edge";
+import { installFacts } from "../src/doctor/edge";
+import { type InstallEdge } from "../src/doctor/ports";
 import { installFields } from "../src/doctor/report";
 import { parseDaemonClients } from "../src/doctor/daemon-answer";
-import { RenderSightings, SIGHTINGS_KEPT } from "../src/daemon/render-sightings";
-import { parseClientHints } from "../src/daemon/protocol";
+import { RenderSightings } from "../src/daemon/render-sightings";
+import { SIGHTINGS_KEPT } from "../src/daemon/foundations/sightings";
+import { parseClientHints } from "../src/daemon/foundations/protocol";
 import type { Instant } from "../src/utils/instant";
-import { HEALTHY_FACTS, HEALTHY_INSTALL_EDGE, renderSaid } from "./helpers/doctor-facts";
+import {
+  HEALTHY_FACTS,
+  HEALTHY_INSTALL_EDGE,
+  renderSaid,
+} from "./helpers/doctor-facts";
 
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
@@ -91,13 +98,11 @@ describe("install probe", () => {
       reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${BUNDLE} — re-run \`cc-candybar install\``,
       more: [],
     });
-    expect(verdict(CHECKOUT, [native("/old/dist/index.mjs", "abc")])).toEqual(
-      {
-        ok: false,
-        reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — run \`just install-rust\` and point the statusLine command at ${ROOT}/bin/cc-candybar-native`,
-        more: [],
-      },
-    );
+    expect(verdict(CHECKOUT, [native("/old/dist/index.mjs", "abc")])).toEqual({
+      ok: false,
+      reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — run \`just install-rust\` and point the statusLine command at ${ROOT}/bin/cc-candybar-native`,
+      more: [],
+    });
     expect(
       verdict(CHECKOUT, [
         {
@@ -170,8 +175,7 @@ describe("install probe", () => {
   test("in a checkout the Node fallback fails on any platform: `just install-rust` builds a native client", () => {
     expect(verdict(CHECKOUT, [node("node", CHECKOUT_BUNDLE)], false)).toEqual({
       ok: false,
-      reason:
-        `the bar is drawn by the Node fallback, which starts node on every render — run \`just install-rust\` and point the statusLine command at ${ROOT}/bin/cc-candybar-native`,
+      reason: `the bar is drawn by the Node fallback, which starts node on every render — run \`just install-rust\` and point the statusLine command at ${ROOT}/bin/cc-candybar-native`,
       more: [],
     });
   });
@@ -222,7 +226,11 @@ describe("install probe", () => {
       value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
     };
     expect(
-      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, sighted: { kind: "clicked", sessionId: "s1", via: "link" } }),
+      checkByName("install")!.probe({
+        ...HEALTHY_FACTS,
+        install,
+        sighted: { kind: "clicked", sessionId: "s1", via: "link" },
+      }),
     ).toEqual({
       ok: false,
       reason:
@@ -239,7 +247,11 @@ describe("install probe", () => {
       value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
     } as const;
     expect(
-      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, sighted: { kind: "shell", sessionId: "s1" } }),
+      checkByName("install")!.probe({
+        ...HEALTHY_FACTS,
+        install,
+        sighted: { kind: "shell", sessionId: "s1" },
+      }),
     ).toEqual({
       ok: false,
       reason:
@@ -376,43 +388,71 @@ describe("installFields: the doctor's event", () => {
 
 describe("installOf: the clients the command judges", () => {
   test("only a session that drew within the window is one the bar runs", () => {
-    const stale = { kind: "native", bundle: "/old/dist/index.mjs", source: null } as const;
+    const stale = {
+      kind: "native",
+      bundle: "/old/dist/index.mjs",
+      source: null,
+    } as const;
     const current = { kind: "native", bundle: BUNDLE, source: null } as const;
-    const facts = installOf(HEALTHY_INSTALL_EDGE, { kind: "recent" }, {
-      kind: "ok",
-      value: {
-        bundle: BUNDLE,
-        clients: [
-          { client: stale, sessionId: S1, ago: RECENT_CLIENT_S + 1 },
-          { client: current, sessionId: S2, ago: RECENT_CLIENT_S },
-        ],
+    const facts = installOf(
+      HEALTHY_INSTALL_EDGE,
+      { kind: "recent" },
+      {
+        kind: "ok",
+        value: {
+          bundle: BUNDLE,
+          clients: [
+            { client: stale, sessionId: S1, ago: RECENT_CLIENT_S + 1 },
+            { client: current, sessionId: S2, ago: RECENT_CLIENT_S },
+          ],
+        },
       },
-    });
-    expect(facts.kind === "ok" && facts.value.clients).toEqual([native(BUNDLE)]);
+    );
+    expect(facts.kind === "ok" && facts.value.clients).toEqual([
+      native(BUNDLE),
+    ]);
   });
 });
 
 describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
   // A snapshot of this build's shape, as the daemon would send it.
   const stats = (fields: object): StatsSnapshot =>
-    ({ ...RuntimeStats.referenceSnapshot(), version: "1.0.0", ...fields }) as StatsSnapshot;
+    ({
+      ...RuntimeStats.referenceSnapshot(),
+      version: "1.0.0",
+      ...fields,
+    }) as StatsSnapshot;
 
   test("a sighting's client crosses the hint checkpoint; a malformed one is unreported", () => {
     expect(
-      parseDaemonClients(stats({
-        bundle: BUNDLE,
-        clients: [
-          { client: { kind: "native", bundle: BUNDLE, source: null }, sessionId: "s1", ago: 2 },
-          { client: { kind: "native", bundle: "relative", source: null }, sessionId: "s2", ago: 1 },
-          { client: null, sessionId: "s3", ago: 0 },
-        ],
-      })),
+      parseDaemonClients(
+        stats({
+          bundle: BUNDLE,
+          clients: [
+            {
+              client: { kind: "native", bundle: BUNDLE, source: null },
+              sessionId: "s1",
+              ago: 2,
+            },
+            {
+              client: { kind: "native", bundle: "relative", source: null },
+              sessionId: "s2",
+              ago: 1,
+            },
+            { client: null, sessionId: "s3", ago: 0 },
+          ],
+        }),
+      ),
     ).toEqual({
       kind: "ok",
       value: {
         bundle: BUNDLE,
         clients: [
-          { client: { kind: "native", bundle: BUNDLE, source: null }, sessionId: "s1", ago: 2 },
+          {
+            client: { kind: "native", bundle: BUNDLE, source: null },
+            sessionId: "s1",
+            ago: 2,
+          },
           { client: null, sessionId: "s2", ago: 1 },
           { client: null, sessionId: "s3", ago: 0 },
         ],
@@ -428,16 +468,22 @@ describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
       kind: "failed",
       reason: shapeSkew(older, ["bundle", "clients"]),
     });
-    expect(asked.kind === "failed" && asked.reason).toMatch(/reports no clients;/);
+    expect(asked.kind === "failed" && asked.reason).toMatch(
+      /reports no clients;/,
+    );
     expect(
-      parseDaemonClients(stats({ bundle: BUNDLE, clients: [{ client: null }] })),
+      parseDaemonClients(
+        stats({ bundle: BUNDLE, clients: [{ client: null }] }),
+      ),
     ).toEqual({
       kind: "failed",
       reason:
         'the running daemon (1.0.0) reported clients without their age: [{"client":null}]',
     });
     expect(
-      parseDaemonClients(stats({ bundle: BUNDLE, clients: [{ client: null, ago: 1 }] })),
+      parseDaemonClients(
+        stats({ bundle: BUNDLE, clients: [{ client: null, ago: 1 }] }),
+      ),
     ).toMatchObject({ kind: "failed" });
   });
 });
@@ -453,7 +499,12 @@ describe("RenderSightings: each session's latest client", () => {
     sightings.see(S1, renderSaid(client(BUNDLE)), at(105), 105);
     sightings.see(S2, renderSaid(undefined), at(103), 103);
     expect(sightings.list(at(110))).toEqual([
-      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 5 },
+      {
+        ...renderSaid(client(BUNDLE)),
+        role: "statusline",
+        sessionId: "s1",
+        ago: 5,
+      },
       { ...renderSaid(null), role: "statusline", sessionId: "s2", ago: 7 },
     ]);
   });
@@ -463,7 +514,12 @@ describe("RenderSightings: each session's latest client", () => {
     sightings.see(S1, renderSaid(client(BUNDLE)), at(100), 100);
     sightings.see(S2, renderSaid(undefined), at(104), 104);
     expect(sightings.ofSession(S1, at(110))).toEqual([
-      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 10 },
+      {
+        ...renderSaid(client(BUNDLE)),
+        role: "statusline",
+        sessionId: "s1",
+        ago: 10,
+      },
     ]);
     expect(sightings.ofSession(RESTARTED_UNDER_ME, at(110))).toEqual([]);
   });
@@ -471,7 +527,12 @@ describe("RenderSightings: each session's latest client", () => {
   test("two clients drawing one session are both kept: the last to render hides neither", () => {
     const sightings = new RenderSightings();
     const frames = { kind: "frames", bundle: BUNDLE, source: null } as const;
-    sightings.see(S1, renderSaid(client("/stale/dist/index.mjs")), at(100), 100);
+    sightings.see(
+      S1,
+      renderSaid(client("/stale/dist/index.mjs")),
+      at(100),
+      100,
+    );
     sightings.see(S1, renderSaid(frames), at(101), 101);
     sightings.see(S1, renderSaid(frames), at(102), 102);
     expect(sightings.ofSession(S1, at(110))).toMatchObject([
@@ -494,7 +555,12 @@ describe("RenderSightings: each session's latest client", () => {
     }
     const kept = sightings.list(at(1000));
     expect(kept).toHaveLength(SIGHTINGS_KEPT);
-    expect(kept[0]).toEqual({ ...renderSaid(null), role: "statusline", sessionId: "s1", ago: 999 });
+    expect(kept[0]).toEqual({
+      ...renderSaid(null),
+      role: "statusline",
+      sessionId: "s1",
+      ago: 999,
+    });
   });
 
   // Renders settle out of order: an older request settling after a newer one
@@ -504,7 +570,12 @@ describe("RenderSightings: each session's latest client", () => {
     sightings.see(S1, renderSaid(client(BUNDLE)), at(105), 2);
     sightings.see(S1, renderSaid(client("/old/dist/index.mjs")), at(100), 1);
     expect(sightings.list(at(110))).toEqual([
-      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 5 },
+      {
+        ...renderSaid(client(BUNDLE)),
+        role: "statusline",
+        sessionId: "s1",
+        ago: 5,
+      },
     ]);
   });
 });

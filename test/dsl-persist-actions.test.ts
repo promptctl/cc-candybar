@@ -38,7 +38,7 @@ import type { DslConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers";
@@ -46,11 +46,11 @@ import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { encodeSegments, parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
-import type { VerbContext } from "../src/daemon/verbs";
+import { VERBS } from "../src/renderer/verbs";
+import type { VerbContext } from "../src/renderer/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";
-import { persistValueText, writeValues } from "../src/daemon/config-file-store";
+import { persistValueText, writeValues } from "../src/renderer/config-file-store";
 import { isGlobalsField } from "../src/config/loader/globals";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { memoryLimitBytes } from "../src/daemon/limits";
@@ -58,7 +58,7 @@ import {
   SOURCES_NOTHING,
   RenderCache,
   renderCacheBudget,
-} from "../src/daemon/cache/render";
+} from "../src/renderer/render-cache";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { PRESET_FLOOR, presetGlobals } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
@@ -67,7 +67,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 const S2_NO_PICK = sessionIdOf("s2-no-pick");

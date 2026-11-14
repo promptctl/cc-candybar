@@ -39,7 +39,7 @@ import { instantOf } from "../src/utils/instant";
 import { todayInfo, todayNow } from "./helpers/today";
 import { until } from "./helpers/until";
 import { usageFold } from "./helpers/usage-fold";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const INC_2 = sessionIdOf("INC");
 const FULL_2 = sessionIdOf("FULL");

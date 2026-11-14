@@ -10,14 +10,32 @@ import {
   viewerRows,
 } from "../src/render/diagnostics";
 import { plainOf } from "../src/render/frame";
-import { describeStamp, factsOf, updateIdentity, updateNotice, updateReading, type Update } from "../src/daemon/update-notice";
-import { ABSENT, failed, ok, pendingOf, type Sampled } from "../src/utils/outcome";
-import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD, UPDATE_NOTICE_SESSION_KEY } from "../src/daemon/update-keys";
+import {
+  describeStamp,
+  factsOf,
+  updateIdentity,
+  updateNotice,
+  updateReading,
+} from "../src/daemon/update-notice";
+import { type Update } from "../src/facts/world-state";
+import {
+  ABSENT,
+  failed,
+  ok,
+  pendingOf,
+  type Sampled,
+} from "../src/utils/outcome";
+import {
+  UPDATE_DISMISSED_KEY,
+  UPDATE_NOTICE_FIELD,
+  UPDATE_NOTICE_SESSION_KEY,
+} from "../src/daemon/foundations/update-keys";
 import type { ActState } from "../src/daemon/update-act";
-import type { BuildCurrency, SourceStamp } from "../src/daemon/build-currency";
+import type { BuildCurrency } from "../src/daemon/build-currency";
+import type { SourceStamp } from "../src/facts/world-state";
 import type { Currency } from "../src/install/currency";
 import { effectsOf as decode } from "./helpers/click";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 // A span's click, decoded; a plain span has none.
 const clicksOf = (link: string | null) => (link === null ? [] : decode(link));
@@ -70,7 +88,7 @@ const ctx = (over: Partial<Parameters<typeof updateNotice>[2]> = {}) => ({
   ...over,
 });
 
-const sampled = <T,>(value: T): Sampled<T> => ok(value);
+const sampled = <T>(value: T): Sampled<T> => ok(value);
 const UNPOLLED: Sampled<Currency> = pendingOf("unread");
 
 describe("updateReading", () => {
@@ -91,7 +109,10 @@ describe("updateReading", () => {
       ABSENT,
     );
     expect(
-      updateReading(sampled(INSTALL), sampled({ kind: "ahead", installed: [2, 0, 0], latest: [1, 0, 0] })),
+      updateReading(
+        sampled(INSTALL),
+        sampled({ kind: "ahead", installed: [2, 0, 0], latest: [1, 0, 0] }),
+      ),
     ).toEqual(ABSENT);
   });
 
@@ -109,7 +130,10 @@ describe("updateReading", () => {
 
   test("a sample that could not be assessed is a failed read, naming which", () => {
     expect(
-      updateReading(sampled({ kind: "unchecked", reason: "x" }), sampled(STALE_RELEASE)),
+      updateReading(
+        sampled({ kind: "unchecked", reason: "x" }),
+        sampled(STALE_RELEASE),
+      ),
     ).toEqual(failed("build: unchecked: x", "read"));
     expect(
       updateReading(
@@ -154,11 +178,8 @@ describe("updateNotice", () => {
 
   test("a dismissal of something else has lapsed: the notice is back", () => {
     expect(
-      updateNotice(
-        SOURCE,
-        { kind: "idle" },
-        ctx({ dismissed: "older-digest" }),
-      ).offer,
+      updateNotice(SOURCE, { kind: "idle" }, ctx({ dismissed: "older-digest" }))
+        .offer,
     ).toHaveLength(1);
   });
 

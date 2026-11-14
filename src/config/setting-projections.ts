@@ -1,7 +1,7 @@
 // The settings the daemon resolves once per render and publishes as an
-// `.effective` projection (src/daemon/render-payload.ts), each with the two keys
+// `.effective` projection (src/renderer/render-payload.ts), each with the two keys
 // that write it: the SessionState key a pick (`set`) writes and the config field
-// a save (src/daemon/setting-drafts.ts) or a `persist` writes.
+// a save (src/renderer/setting-drafts.ts) or a `persist` writes.
 //
 // [LAW:one-source-of-truth] A PROJECTION of the globals rows
 // (src/config/globals-fields.ts), never a table of its own: every row the bar

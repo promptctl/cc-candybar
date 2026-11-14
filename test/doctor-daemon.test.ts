@@ -5,14 +5,32 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkByName, unreadPostMortems, type DaemonFacts, type Verdict } from "../src/doctor/checks";
+import {
+  checkByName,
+  unreadPostMortems,
+  type DaemonFacts,
+  type Verdict,
+} from "../src/doctor/checks";
 import { applyFix, daemonProcesses, ownsEntry } from "../src/doctor/edge";
-import { parseDoctorStores, parseServingDaemon } from "../src/doctor/daemon-answer";
+import {
+  parseDoctorStores,
+  parseServingDaemon,
+} from "../src/doctor/daemon-answer";
 import { daemonFields } from "../src/doctor/report";
-import { filePostMortemsRead, parsePostMortemsRead } from "../src/doctor/post-mortems-read";
+import {
+  filePostMortemsRead,
+  parsePostMortemsRead,
+} from "../src/doctor/post-mortems-read";
 import { RuntimeStats } from "../src/daemon/stats";
-import { postMortemsOf, type ServingDaemon } from "../src/daemon/limits";
-import { EMPTY_STORES, HEALTHY_FACTS, HEALTHY_PROCESS, HEALTHY_SERVING, emptyStores } from "./helpers/doctor-facts";
+import { postMortemsOf } from "../src/daemon/limits";
+import { type ServingDaemon } from "../src/daemon/foundations/memory-limit";
+import {
+  EMPTY_STORES,
+  HEALTHY_FACTS,
+  HEALTHY_PROCESS,
+  HEALTHY_SERVING,
+  emptyStores,
+} from "./helpers/doctor-facts";
 
 const MB = 1024 * 1024;
 const NEWER = "2026-10-19T18-01-12-345Z-77";
@@ -54,18 +72,30 @@ describe("the daemon probe", () => {
     expect(verdictOf(withPostMortems)).toEqual({
       ok: false,
       reason: `the daemon ran out of memory and restarted (${NEWER}) — post-mortem: ${NEWER_REPORT}`,
-      more: [`the daemon ran out of memory and restarted (${OLDER}) — post-mortem: ${OLDER_HEAP}`],
+      more: [
+        `the daemon ran out of memory and restarted (${OLDER}) — post-mortem: ${OLDER_HEAP}`,
+      ],
       fix: { kind: "post-mortems-read", through: NEWER },
     });
   });
 
   test("only post-mortems newer than the one filed read are reported", () => {
-    expect(verdictOf({ ...withPostMortems, read: { kind: "ok", value: { through: OLDER } } })).toMatchObject({
+    expect(
+      verdictOf({
+        ...withPostMortems,
+        read: { kind: "ok", value: { through: OLDER } },
+      }),
+    ).toMatchObject({
       ok: false,
       more: [],
       fix: { kind: "post-mortems-read", through: NEWER },
     });
-    expect(verdictOf({ ...withPostMortems, read: { kind: "ok", value: { through: NEWER } } })).toEqual({ ok: true });
+    expect(
+      verdictOf({
+        ...withPostMortems,
+        read: { kind: "ok", value: { through: NEWER } },
+      }),
+    ).toEqual({ ok: true });
   });
 
   // The charge as the platform measures it, RSS beside it well over.
@@ -78,7 +108,12 @@ describe("the daemon probe", () => {
 
   test("past three quarters of the budget by the charge fails, naming the measure; at it does not", () => {
     const at = (bytes: number) =>
-      verdictOf({ serving: { kind: "ok", value: { ...HEALTHY_SERVING, memory: charged(bytes) } } });
+      verdictOf({
+        serving: {
+          kind: "ok",
+          value: { ...HEALTHY_SERVING, memory: charged(bytes) },
+        },
+      });
     expect(at(384 * MB)).toEqual({ ok: true });
     expect(at(400 * MB)).toEqual({
       ok: false,
@@ -89,7 +124,10 @@ describe("the daemon probe", () => {
   });
 
   // A stand-in judged at `bytes`: RSS less `gap`.
-  const standInFacts = (bytes: number, gap: number): Pick<DaemonFacts, "serving"> => ({
+  const standInFacts = (
+    bytes: number,
+    gap: number,
+  ): Pick<DaemonFacts, "serving"> => ({
     serving: {
       kind: "ok",
       value: {
@@ -103,12 +141,17 @@ describe("the daemon probe", () => {
       },
     },
   });
-  const standIn = (bytes: number, gap: number) => verdictOf(standInFacts(bytes, gap));
+  const standIn = (bytes: number, gap: number) =>
+    verdictOf(standInFacts(bytes, gap));
 
   test("RSS standing in with no gap read is a finding however far under the limit, and is judged too", () => {
     const unread =
       "the daemon could not read what macOS charges it (footprint timeout), so its memory limit judges RSS, which counts pages macOS has reclaimed";
-    expect(standIn(100 * MB, 0)).toEqual({ ok: false, reason: unread, more: [] });
+    expect(standIn(100 * MB, 0)).toEqual({
+      ok: false,
+      reason: unread,
+      more: [],
+    });
     expect(standIn(450 * MB, 0)).toEqual({
       ok: false,
       reason: unread,
@@ -123,10 +166,16 @@ describe("the daemon probe", () => {
   test("RSS standing in less its gap is a finding naming the estimate, near the limit by it", () => {
     const unread =
       "the daemon could not read what macOS charges it (footprint timeout), so its memory limit judges RSS less the 150 MB it last ran over that charge, an estimate";
-    expect(standIn(300 * MB, 150 * MB)).toEqual({ ok: false, reason: unread, more: [] });
+    expect(standIn(300 * MB, 150 * MB)).toEqual({
+      ok: false,
+      reason: unread,
+      more: [],
+    });
     // A footprint over RSS (compressed pages count toward it) is a gap too.
     expect(standIn(300 * MB, -20 * MB)).toMatchObject({
-      reason: expect.stringContaining("judges RSS less the -20 MB it last ran over that charge, an estimate"),
+      reason: expect.stringContaining(
+        "judges RSS less the -20 MB it last ran over that charge, an estimate",
+      ),
     });
     expect(standIn(450 * MB, 150 * MB)).toEqual({
       ok: false,
@@ -138,16 +187,31 @@ describe("the daemon probe", () => {
   });
 
   test("the doctor's event carries the gap a stand-in is judged less, and a charge as it was", () => {
-    const facts = { ...HEALTHY_FACTS.daemon, ...standInFacts(450 * MB, 150 * MB) };
-    expect(daemonFields(facts)).toMatch(/ memory=rss-stand-in\(-150\):450\/512 /);
-    const over = { ...HEALTHY_FACTS.daemon, ...standInFacts(305 * MB, -5 * MB) };
+    const facts = {
+      ...HEALTHY_FACTS.daemon,
+      ...standInFacts(450 * MB, 150 * MB),
+    };
+    expect(daemonFields(facts)).toMatch(
+      / memory=rss-stand-in\(-150\):450\/512 /,
+    );
+    const over = {
+      ...HEALTHY_FACTS.daemon,
+      ...standInFacts(305 * MB, -5 * MB),
+    };
     expect(daemonFields(over)).toMatch(/ memory=rss-stand-in\(\+5\):305\/512 /);
-    expect(daemonFields(HEALTHY_FACTS.daemon)).toMatch(/ memory=phys_footprint:120\/512 /);
+    expect(daemonFields(HEALTHY_FACTS.daemon)).toMatch(
+      / memory=phys_footprint:120\/512 /,
+    );
   });
 
   test("a daemon that has not measured its memory passes saying so", () => {
     expect(
-      verdictOf({ serving: { kind: "ok", value: { ...HEALTHY_SERVING, memory: { kind: "unmeasured" } } } }),
+      verdictOf({
+        serving: {
+          kind: "ok",
+          value: { ...HEALTHY_SERVING, memory: { kind: "unmeasured" } },
+        },
+      }),
     ).toEqual({ ok: true, note: "the daemon has not measured its memory yet" });
   });
 
@@ -157,8 +221,18 @@ describe("the daemon probe", () => {
         kind: "ok",
         value: [
           HEALTHY_PROCESS,
-          { pid: 4200, ppid: 1, rss: 300 * MB, started: "Sun Oct 18 09:00:00 2026 UTC" },
-          { pid: 4300, ppid: 999, rss: 90 * MB, started: "Mon Oct 19 18:20:01 2026 UTC" },
+          {
+            pid: 4200,
+            ppid: 1,
+            rss: 300 * MB,
+            started: "Sun Oct 18 09:00:00 2026 UTC",
+          },
+          {
+            pid: 4300,
+            ppid: 999,
+            rss: 90 * MB,
+            started: "Mon Oct 19 18:20:01 2026 UTC",
+          },
         ],
       },
     });
@@ -179,13 +253,20 @@ describe("the daemon probe", () => {
         value: { ...withPostMortems.serving.value, memory: charged(500 * MB) },
       },
     });
-    expect(verdict).toMatchObject({ ok: false, fix: { kind: "post-mortems-read", through: NEWER } });
-    expect(verdict.ok === false && verdict.more?.at(-1)).toMatch(/^the daemon holds phys_footprint 500 MB/);
+    expect(verdict).toMatchObject({
+      ok: false,
+      fix: { kind: "post-mortems-read", through: NEWER },
+    });
+    expect(verdict.ok === false && verdict.more?.at(-1)).toMatch(
+      /^the daemon holds phys_footprint 500 MB/,
+    );
   });
 
   test("no daemon answering is the failure, naming any daemon running, never as a stray", () => {
     expect(
-      verdictOf({ serving: { kind: "failed", reason: "connect ENOENT /tmp/s" } }),
+      verdictOf({
+        serving: { kind: "failed", reason: "connect ENOENT /tmp/s" },
+      }),
     ).toEqual({
       ok: false,
       reason: "connect ENOENT /tmp/s — daemon 4100 running",
@@ -204,9 +285,19 @@ describe("the daemon probe", () => {
       "/s/memory-2026-10-19T18-01-12-345Z-999.txt",
       "/s/memory-2026-10-19T18-01-12-345Z-1000.txt",
     ]);
-    const serving = { ...HEALTHY_SERVING, postMortems: { kind: "ok", value: listed } } as const;
-    expect(unreadPostMortems(serving, { kind: "ok", value: { through: null } })).toHaveLength(2);
-    expect(unreadPostMortems(serving, { kind: "ok", value: { through: listed[0]!.identity } })).toEqual([]);
+    const serving = {
+      ...HEALTHY_SERVING,
+      postMortems: { kind: "ok", value: listed },
+    } as const;
+    expect(
+      unreadPostMortems(serving, { kind: "ok", value: { through: null } }),
+    ).toHaveLength(2);
+    expect(
+      unreadPostMortems(serving, {
+        kind: "ok",
+        value: { through: listed[0]!.identity },
+      }),
+    ).toEqual([]);
   });
 
   test("no daemon answering keeps the process table's failure; which were read decides nothing with none listed", () => {
@@ -221,22 +312,35 @@ describe("the daemon probe", () => {
       reason: "connect ENOENT /tmp/s",
       more: ["the process table could not be read: ps failed (timeout)"],
     });
-    expect(verdictOf({ read: { kind: "failed", reason: "/s/read.json is not JSON" } })).toEqual({ ok: true });
+    expect(
+      verdictOf({
+        read: { kind: "failed", reason: "/s/read.json is not JSON" },
+      }),
+    ).toEqual({ ok: true });
   });
 
   test("a list that cannot be read is its own problem, and no post-mortem is judged — or fixed — without the record", () => {
     expect(
-      verdictOf({ processes: { kind: "failed", reason: "ps failed (spawn-error: ENOENT)" } }),
+      verdictOf({
+        processes: {
+          kind: "failed",
+          reason: "ps failed (spawn-error: ENOENT)",
+        },
+      }),
     ).toEqual({
       ok: false,
-      reason: "the process table could not be read: ps failed (spawn-error: ENOENT)",
+      reason:
+        "the process table could not be read: ps failed (spawn-error: ENOENT)",
       more: [],
     });
     expect(
       verdictOf({
         serving: {
           kind: "ok",
-          value: { ...HEALTHY_SERVING, postMortems: { kind: "failed", reason: "EACCES /state" } },
+          value: {
+            ...HEALTHY_SERVING,
+            postMortems: { kind: "failed", reason: "EACCES /state" },
+          },
         },
       }),
     ).toEqual({
@@ -245,10 +349,14 @@ describe("the daemon probe", () => {
       more: [],
     });
     expect(
-      verdictOf({ ...withPostMortems, read: { kind: "failed", reason: "/r.json is not JSON" } }),
+      verdictOf({
+        ...withPostMortems,
+        read: { kind: "failed", reason: "/r.json is not JSON" },
+      }),
     ).toEqual({
       ok: false,
-      reason: "which post-mortems were read could not be read: /r.json is not JSON",
+      reason:
+        "which post-mortems were read could not be read: /r.json is not JSON",
       more: [],
     });
     // A list that could not be read may hold breaches, so the record still counts.
@@ -256,14 +364,19 @@ describe("the daemon probe", () => {
       verdictOf({
         serving: {
           kind: "ok",
-          value: { ...HEALTHY_SERVING, postMortems: { kind: "failed", reason: "EACCES /state" } },
+          value: {
+            ...HEALTHY_SERVING,
+            postMortems: { kind: "failed", reason: "EACCES /state" },
+          },
         },
         read: { kind: "failed", reason: "/r.json is not JSON" },
       }),
     ).toEqual({
       ok: false,
       reason: "the daemon's post-mortems could not be listed: EACCES /state",
-      more: ["which post-mortems were read could not be read: /r.json is not JSON"],
+      more: [
+        "which post-mortems were read could not be read: /r.json is not JSON",
+      ],
     });
   });
 });
@@ -297,10 +410,30 @@ describe("daemonProcesses", () => {
       return !entry.startsWith("/tmp/other/");
     });
     expect(found).toEqual([
-      { pid: 22179, ppid: 1, rss: 341552 * 1024, started: "Mon Oct 19 17:59:51 2026 UTC" },
-      { pid: 501, ppid: 1, rss: 300000 * 1024, started: "Mon Oct 19 09:00:00 2026 UTC" },
-      { pid: 28227, ppid: 28214, rss: 200000 * 1024, started: "Mon Oct 19 18:20:01 2026 UTC" },
-      { pid: 600, ppid: 1, rss: 1000 * 1024, started: "Mon Oct 5 01:02:03 2026 UTC" },
+      {
+        pid: 22179,
+        ppid: 1,
+        rss: 341552 * 1024,
+        started: "Mon Oct 19 17:59:51 2026 UTC",
+      },
+      {
+        pid: 501,
+        ppid: 1,
+        rss: 300000 * 1024,
+        started: "Mon Oct 19 09:00:00 2026 UTC",
+      },
+      {
+        pid: 28227,
+        ppid: 28214,
+        rss: 200000 * 1024,
+        started: "Mon Oct 19 18:20:01 2026 UTC",
+      },
+      {
+        pid: 600,
+        ppid: 1,
+        rss: 1000 * 1024,
+        started: "Mon Oct 5 01:02:03 2026 UTC",
+      },
     ]);
     // The entry is the whole absolute path before ` daemon`, space and all;
     // a relative one and a non-daemon command are never asked about.
@@ -333,18 +466,25 @@ describe("ownsEntry", () => {
     touch(path.join(pkg, "bin", "cc-candybar"));
     touch(path.join(pkg, "dist", "index.mjs"));
     touch(path.join(pkg, "src", "index.ts"));
-    expect(ownsEntry(path.join(pkg, "bin", "..", "dist", "index.mjs"))).toBe(true);
+    expect(ownsEntry(path.join(pkg, "bin", "..", "dist", "index.mjs"))).toBe(
+      true,
+    );
     expect(ownsEntry(path.join(pkg, "src", "index.ts"))).toBe(true);
     expect(ownsEntry(path.join(pkg, "bin", "cc-candybar"))).toBe(true);
     // An npm `.bin` launcher is a link to the package's bin.
     const dotBin = path.join(root, "node_modules", ".bin");
     fs.mkdirSync(dotBin, { recursive: true });
-    fs.symlinkSync(path.join(pkg, "bin", "cc-candybar"), path.join(dotBin, "cc-candybar"));
+    fs.symlinkSync(
+      path.join(pkg, "bin", "cc-candybar"),
+      path.join(dotBin, "cc-candybar"),
+    );
     expect(ownsEntry(path.join(dotBin, "cc-candybar"))).toBe(true);
   });
 
   test("an entry of the same name with no cc-candybar beside it, or none at all, is not", () => {
-    expect(ownsEntry(touch(path.join(root, "other", "dist", "index.mjs")))).toBe(false);
+    expect(
+      ownsEntry(touch(path.join(root, "other", "dist", "index.mjs"))),
+    ).toBe(false);
     expect(ownsEntry(touch(path.join(root, "x", "server.js")))).toBe(false);
     expect(ownsEntry(path.join(root, "gone", "dist", "index.mjs"))).toBe(false);
   });
@@ -353,12 +493,20 @@ describe("ownsEntry", () => {
 describe("parseDoctorStores", () => {
   const stats = RuntimeStats.referenceSnapshot();
   const stores = (doctorStores: unknown) =>
-    parseDoctorStores({ ...stats, doctorStores: doctorStores as typeof stats.doctorStores });
+    parseDoctorStores({
+      ...stats,
+      doctorStores: doctorStores as typeof stats.doctorStores,
+    });
 
   test("what the daemon read of each store, or why it could not", () => {
     const read = { kind: "ok", value: { through: NEWER } } as const;
-    const unread = { kind: "failed", reason: "/s/doctor-marks.json is not JSON" } as const;
-    expect(stores({ ...EMPTY_STORES, marks: unread, postMortemsRead: read })).toEqual({
+    const unread = {
+      kind: "failed",
+      reason: "/s/doctor-marks.json is not JSON",
+    } as const;
+    expect(
+      stores({ ...EMPTY_STORES, marks: unread, postMortemsRead: read }),
+    ).toEqual({
       ...EMPTY_STORES,
       marks: unread,
       postMortemsRead: read,
@@ -395,7 +543,10 @@ describe("parseServingDaemon", () => {
         value: [{ identity: NEWER, artifacts: { memoryReport: NEWER_REPORT } }],
       },
     };
-    expect(parseServingDaemon({ ...stats, daemon })).toEqual({ kind: "ok", value: daemon });
+    expect(parseServingDaemon({ ...stats, daemon })).toEqual({
+      kind: "ok",
+      value: daemon,
+    });
     const unlisted = {
       ...HEALTHY_SERVING,
       postMortems: { kind: "failed" as const, reason: "EACCES" },
@@ -410,41 +561,73 @@ describe("parseServingDaemon", () => {
     const { daemon: _d, ...older } = stats;
     const skewed = parseServingDaemon(older as typeof stats);
     expect(skewed).toMatchObject({ kind: "failed" });
-    expect(skewed.kind === "failed" && skewed.reason).toContain("reports no daemon");
-    const unmeasured = { ...HEALTHY_SERVING, memory: { kind: "unmeasured" as const } };
-    expect(parseServingDaemon({ ...stats, daemon: unmeasured })).toEqual({ kind: "ok", value: unmeasured });
+    expect(skewed.kind === "failed" && skewed.reason).toContain(
+      "reports no daemon",
+    );
+    const unmeasured = {
+      ...HEALTHY_SERVING,
+      memory: { kind: "unmeasured" as const },
+    };
+    expect(parseServingDaemon({ ...stats, daemon: unmeasured })).toEqual({
+      kind: "ok",
+      value: unmeasured,
+    });
     // A build from before the charge reported RSS under its own name.
     const { memory: _m, limit: _l, ...rest } = HEALTHY_SERVING;
     const rssEra = { ...rest, rss: 1, rssLimit: 2 };
     // It is told as the build skew it is, not as a misshapen answer.
-    const rssEraRead = parseServingDaemon({ ...stats, daemon: rssEra as never });
+    const rssEraRead = parseServingDaemon({
+      ...stats,
+      daemon: rssEra as never,
+    });
     expect(rssEraRead.kind === "failed" && rssEraRead.reason).toContain(
       "reports no daemon.memory, daemon.limit; it is another build",
     );
     // RSS standing in must say why; without its reason it is misshapen.
     const reasonless = {
       ...HEALTHY_SERVING,
-      memory: { kind: "measured", charge: { kind: "stand-in", bytes: 1, gap: 0 }, rss: 1, heapTotal: 1 },
+      memory: {
+        kind: "measured",
+        charge: { kind: "stand-in", bytes: 1, gap: 0 },
+        rss: 1,
+        heapTotal: 1,
+      },
     };
-    expect(parseServingDaemon({ ...stats, daemon: reasonless as never })).toMatchObject({ kind: "failed" });
+    expect(
+      parseServingDaemon({ ...stats, daemon: reasonless as never }),
+    ).toMatchObject({ kind: "failed" });
     // A stand-in must say the gap it is judged less, or its charge is RSS
     // passed off as an estimate.
     const standInGap = (gap: unknown) => ({
       ...HEALTHY_SERVING,
       memory: {
         kind: "measured",
-        charge: { kind: "stand-in", bytes: 1, unread: "footprint timeout", gap },
+        charge: {
+          kind: "stand-in",
+          bytes: 1,
+          unread: "footprint timeout",
+          gap,
+        },
         rss: 1,
         heapTotal: 1,
       },
     });
     for (const gap of [undefined, "150", Number.NaN]) {
-      expect(parseServingDaemon({ ...stats, daemon: standInGap(gap) as never })).toMatchObject({ kind: "failed" });
+      expect(
+        parseServingDaemon({ ...stats, daemon: standInGap(gap) as never }),
+      ).toMatchObject({ kind: "failed" });
     }
-    expect(parseServingDaemon({ ...stats, daemon: standInGap(0) as never })).toMatchObject({ kind: "ok" });
+    expect(
+      parseServingDaemon({ ...stats, daemon: standInGap(0) as never }),
+    ).toMatchObject({ kind: "ok" });
     // A charged reading carries no gap, so one from before the gap still reads.
-    expect(parseServingDaemon({ ...stats, daemon: HEALTHY_SERVING })).toMatchObject({ kind: "ok" });
-    const odd = { ...HEALTHY_SERVING, postMortems: { kind: "ok", value: [{ identity: 3 }] } };
+    expect(
+      parseServingDaemon({ ...stats, daemon: HEALTHY_SERVING }),
+    ).toMatchObject({ kind: "ok" });
+    const odd = {
+      ...HEALTHY_SERVING,
+      postMortems: { kind: "ok", value: [{ identity: 3 }] },
+    };
     expect(parseServingDaemon({ ...stats, daemon: odd as never })).toEqual({
       kind: "failed",
       reason: `the running daemon (${stats.version}) reported itself as ${JSON.stringify(odd)}`,
@@ -454,9 +637,18 @@ describe("parseServingDaemon", () => {
 
 describe("the post-mortems-read record", () => {
   test("the document reads as the identity filed read, or fails saying so", () => {
-    expect(parsePostMortemsRead({ through: NEWER })).toEqual({ kind: "ok", value: { through: NEWER } });
-    expect(parsePostMortemsRead({ through: 3 })).toEqual({ kind: "failed", reason: "names no post-mortem read" });
-    expect(parsePostMortemsRead(null)).toEqual({ kind: "failed", reason: "names no post-mortem read" });
+    expect(parsePostMortemsRead({ through: NEWER })).toEqual({
+      kind: "ok",
+      value: { through: NEWER },
+    });
+    expect(parsePostMortemsRead({ through: 3 })).toEqual({
+      kind: "failed",
+      reason: "names no post-mortem read",
+    });
+    expect(parsePostMortemsRead(null)).toEqual({
+      kind: "failed",
+      reason: "names no post-mortem read",
+    });
   });
 
   test("every value the store can file reads back, none filed included", () => {
@@ -473,10 +665,19 @@ describe("the post-mortems-read record", () => {
   test("the fix files only forward: a newer breach another run filed stays filed", () => {
     const stores = emptyStores();
     const fix = { kind: "post-mortems-read", through: OLDER } as const;
-    expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({ kind: "ok", value: { daemon: { read: { kind: "ok", value: { through: OLDER } } } } });
+    expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({
+      kind: "ok",
+      value: { daemon: { read: { kind: "ok", value: { through: OLDER } } } },
+    });
     stores.postMortemsRead.update(() => ({ through: NEWER }));
-    expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({ kind: "ok", value: { daemon: { read: { kind: "ok", value: { through: NEWER } } } } });
-    expect(stores.postMortemsRead.read()).toEqual({ kind: "ok", value: { through: NEWER } });
+    expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({
+      kind: "ok",
+      value: { daemon: { read: { kind: "ok", value: { through: NEWER } } } },
+    });
+    expect(stores.postMortemsRead.read()).toEqual({
+      kind: "ok",
+      value: { through: NEWER },
+    });
   });
 
   test("a record that stopped reading before the fix refuses it, and nothing is filed", () => {
@@ -484,7 +685,10 @@ describe("the post-mortems-read record", () => {
     try {
       const file = path.join(dir, "doctor-post-mortems-read.json");
       fs.writeFileSync(file, "junk");
-      const stores = { ...emptyStores(), postMortemsRead: filePostMortemsRead(dir) };
+      const stores = {
+        ...emptyStores(),
+        postMortemsRead: filePostMortemsRead(dir),
+      };
       const fix = { kind: "post-mortems-read", through: NEWER } as const;
       expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({
         kind: "failed",

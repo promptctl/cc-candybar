@@ -5,15 +5,17 @@ import os from "node:os";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 
-import { systemLauncher, systemOneShotLauncher } from "../../src/proc/system-launcher";
+import {
+  systemLauncher,
+  systemOneShotLauncher,
+} from "../../src/proc/system-launcher";
 import {
   MAX_CAPTURED_BYTES,
   type OneShotLauncher,
-  type LaunchCategory,
   type LaunchScope,
-  type Launcher,
   type TestableLauncher,
 } from "../../src/proc/launch";
+import { type LaunchCategory, type Launcher } from "../../src/proc/launcher";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";
@@ -86,7 +88,10 @@ afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 let launcher: TestableLauncher & OneShotLauncher;
 let ending: AbortController;
 const scoped = (scope: Partial<LaunchScope>): void => {
-  launcher = systemOneShotLauncher({ inherited: process.env,  signal: ending.signal, ...scope }, systemTimekeeper);
+  launcher = systemOneShotLauncher(
+    { inherited: process.env, signal: ending.signal, ...scope },
+    systemTimekeeper,
+  );
 };
 const launch: Launcher["launch"] = (opts) => launcher.launch(opts);
 const launchSync: OneShotLauncher["launchSync"] = (opts) =>
@@ -113,7 +118,11 @@ afterEach(() => {
 
 describe("launch (async)", () => {
   it("captures stdout from a zero-exit binary", async () => {
-    const r = await launch({ bin: "/bin/echo", args: ["hi"], category: "user-shell" });
+    const r = await launch({
+      bin: "/bin/echo",
+      args: ["hi"],
+      category: "user-shell",
+    });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.stdout.trim()).toBe("hi");
@@ -140,11 +149,16 @@ describe("launch (async)", () => {
   it("is a failure when a stream fails to read mid-run, never a truncated ok", async () => {
     // The OS seam: the launcher's own spawn, whose stdout the test fails once
     // the child is running.
-    const cp = require("node:child_process") as typeof import("node:child_process");
+    const cp =
+      require("node:child_process") as typeof import("node:child_process");
     const realSpawn = cp.spawn;
-    const spy = jest.spyOn(cp, "spawn").mockImplementation(((...args: Parameters<typeof cp.spawn>) => {
+    const spy = jest.spyOn(cp, "spawn").mockImplementation(((
+      ...args: Parameters<typeof cp.spawn>
+    ) => {
       const child = realSpawn(...args);
-      child.stdout?.once("data", () => child.stdout?.destroy(new Error("EIO: i/o error, read")));
+      child.stdout?.once("data", () =>
+        child.stdout?.destroy(new Error("EIO: i/o error, read")),
+      );
       return child;
     }) as typeof cp.spawn);
     try {
@@ -163,33 +177,38 @@ describe("launch (async)", () => {
     }
   });
 
-  describe.each(["stdout", "stderr"] as const)("a child writing without end to %s", (stream) => {
-    it("is ended at the bound: output-limit, the first MAX_CAPTURED_BYTES kept, the child gone", async () => {
-      const pidFile = path.join(scratch, `endless-${stream}`);
-      const r = await launch({
-        bin: process.execPath,
-        args: [
-          "-e",
-          `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));` +
-            `const chunk = Buffer.alloc(1 << 20, 97);` +
-            `setInterval(() => process.${stream}.write(chunk), 0);`,
-        ],
-        category: "user-shell",
+  describe.each(["stdout", "stderr"] as const)(
+    "a child writing without end to %s",
+    (stream) => {
+      it("is ended at the bound: output-limit, the first MAX_CAPTURED_BYTES kept, the child gone", async () => {
+        const pidFile = path.join(scratch, `endless-${stream}`);
+        const r = await launch({
+          bin: process.execPath,
+          args: [
+            "-e",
+            `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));` +
+              `const chunk = Buffer.alloc(1 << 20, 97);` +
+              `setInterval(() => process.${stream}.write(chunk), 0);`,
+          ],
+          category: "user-shell",
+        });
+        expect(r).toMatchObject({ ok: false, reason: "output-limit" });
+        expect((r as { error?: string }).error).toContain(
+          String(MAX_CAPTURED_BYTES),
+        );
+        expect(r[stream]).toBe("a".repeat(MAX_CAPTURED_BYTES));
+        const pid = Number(fs.readFileSync(pidFile, "utf8"));
+        await until(() => {
+          try {
+            process.kill(pid, 0);
+            return false;
+          } catch {
+            return true;
+          }
+        }, "the endless writer's end");
       });
-      expect(r).toMatchObject({ ok: false, reason: "output-limit" });
-      expect((r as { error?: string }).error).toContain(String(MAX_CAPTURED_BYTES));
-      expect(r[stream]).toBe("a".repeat(MAX_CAPTURED_BYTES));
-      const pid = Number(fs.readFileSync(pidFile, "utf8"));
-      await until(() => {
-        try {
-          process.kill(pid, 0);
-          return false;
-        } catch {
-          return true;
-        }
-      }, "the endless writer's end");
-    });
-  });
+    },
+  );
 
   it("keeps no byte past the bound from what a child writes before its end lands", async () => {
     // The child ignores SIGTERM, so chunks past the first overflow keep coming
@@ -224,7 +243,11 @@ describe("launch (async)", () => {
   });
 
   it("reports non-zero exits as data, not throws", async () => {
-    const r = await launch({ bin: "/bin/sh", args: ["-c", "exit 7"], category: "user-shell" });
+    const r = await launch({
+      bin: "/bin/sh",
+      args: ["-c", "exit 7"],
+      category: "user-shell",
+    });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.reason).toBe("non-zero");
@@ -233,7 +256,10 @@ describe("launch (async)", () => {
   });
 
   it("reports spawn-error for a nonexistent binary", async () => {
-    const r = await launch({ bin: "/nonexistent/binary-x9k7", category: "user-shell" });
+    const r = await launch({
+      bin: "/nonexistent/binary-x9k7",
+      category: "user-shell",
+    });
     expect(r.ok).toBe(false);
   });
 
@@ -282,14 +308,18 @@ describe("launch (async)", () => {
       await until(() => fs.existsSync(marker), "the child's SIGTERM handler");
       controller.abort();
       const r = await pending;
-      expect(r).toMatchObject({ ok: false, reason: "aborted", signal: "SIGKILL" });
+      expect(r).toMatchObject({
+        ok: false,
+        reason: "aborted",
+        signal: "SIGKILL",
+      });
       expect(sent).toEqual(["SIGTERM", "SIGKILL"]);
     } finally {
       restore();
     }
   });
 
-  it("aborting the signal terminates the child's whole group and reports \"aborted\" once it is reaped", async () => {
+  it('aborting the signal terminates the child\'s whole group and reports "aborted" once it is reaped', async () => {
     // `sh` stays the parent of a two-statement command, so the `sleep` is a
     // grandchild: only a process-group signal reaches it. The marker names
     // the sh; the per-run duration names the sleep (both computed here, so
@@ -403,7 +433,9 @@ describe("launch (async)", () => {
         () => fs.existsSync(survived),
         "the refused child's last write",
       );
-      const read = decoded.mock.calls.map(([chunk]) => (chunk as Buffer).length);
+      const read = decoded.mock.calls.map(
+        ([chunk]) => (chunk as Buffer).length,
+      );
       expect(read.reduce((sum, length) => sum + length, 0)).toBeLessThan(
         300_000,
       );
@@ -536,9 +568,7 @@ describe("launch (async)", () => {
         () => fs.existsSync(counted) && fs.readFileSync(counted, "utf8") !== "",
         "the reader's count",
       );
-      expect(fs.readFileSync(counted, "utf8").trim()).toBe(
-        String(1024 * 1024),
-      );
+      expect(fs.readFileSync(counted, "utf8").trim()).toBe(String(1024 * 1024));
       await until(
         () => drains.closed.length === drains.opened.length,
         "every held pipe closed",
@@ -593,7 +623,11 @@ describe("launch (async)", () => {
 
 describe("launchSync", () => {
   it("captures stdout from a zero-exit binary", () => {
-    const r = launchSync({ bin: "/bin/echo", args: ["sync"], category: "user-shell" });
+    const r = launchSync({
+      bin: "/bin/echo",
+      args: ["sync"],
+      category: "user-shell",
+    });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.stdout.trim()).toBe("sync");
@@ -601,7 +635,11 @@ describe("launchSync", () => {
   });
 
   it("reports non-zero exits as data", () => {
-    const r = launchSync({ bin: "/bin/sh", args: ["-c", "exit 3"], category: "user-shell" });
+    const r = launchSync({
+      bin: "/bin/sh",
+      args: ["-c", "exit 3"],
+      category: "user-shell",
+    });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.exitCode).toBe(3);
@@ -930,10 +968,10 @@ describe("a launcher's scope", () => {
   it("a closed launcher stays closed while another launches", async () => {
     const closing = new AbortController();
     const closed = makeSpyHandle();
-    const first = systemLauncher({ inherited: process.env, 
-      stats: closed.handle,
-      signal: closing.signal,
-    }, systemTimekeeper);
+    const first = systemLauncher(
+      { inherited: process.env, stats: closed.handle, signal: closing.signal },
+      systemTimekeeper,
+    );
     closing.abort();
     const next = makeSpyHandle();
     scoped({ stats: next.handle });
@@ -951,7 +989,10 @@ describe("a launcher's scope", () => {
   });
 
   it("a daemon's launcher has no blocking launch to reach", () => {
-    const daemons = systemLauncher({ inherited: process.env }, systemTimekeeper);
+    const daemons = systemLauncher(
+      { inherited: process.env },
+      systemTimekeeper,
+    );
     // @ts-expect-error A Launcher offers no launchSync.
     expect(daemons.launchSync).toBeUndefined();
     expect("launchSync" in daemons).toBe(false);
@@ -964,7 +1005,10 @@ describe("a launcher's scope", () => {
       ok: false,
       reason: "rate-limited",
     });
-    const next = systemOneShotLauncher({ inherited: process.env,  signal: ending.signal }, systemTimekeeper);
+    const next = systemOneShotLauncher(
+      { inherited: process.env, signal: ending.signal },
+      systemTimekeeper,
+    );
     expect(next.launchSync(once)).toMatchObject({ ok: true });
   });
 
@@ -1048,7 +1092,10 @@ describe("a launcher's scope", () => {
     await launch({ bin: "/bin/echo", category: "user-shell" });
 
     expect(lifeline().pid).toBeUndefined();
-    await until(() => spawnSync("kill", ["-0", String(pid)]).status !== 0, "the lifeline exiting");
+    await until(
+      () => spawnSync("kill", ["-0", String(pid)]).status !== 0,
+      "the lifeline exiting",
+    );
     expect(heard.filter((fault) => fault !== null)).toEqual([]);
   });
 });
@@ -1073,7 +1120,12 @@ describe("launch input a child does not read", () => {
       args: ["-c", "echo refused >&2; exit 1"],
       stdinInput: unread,
     });
-    expect(r).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1, stderr: "refused\n" });
+    expect(r).toMatchObject({
+      ok: false,
+      reason: "non-zero",
+      exitCode: 1,
+      stderr: "refused\n",
+    });
     expect(r).not.toHaveProperty("error");
   });
 
@@ -1086,23 +1138,54 @@ describe("launch input a child does not read", () => {
       timeoutMs: 100,
     });
     // The error names the bound, not the unread input.
-    expect(r).toMatchObject({ ok: false, reason: "timeout", error: "timed out after 0.1 s" });
+    expect(r).toMatchObject({
+      ok: false,
+      reason: "timeout",
+      error: "timed out after 0.1 s",
+    });
   });
 
   it("names the bound when the blocking launch times out", () => {
-    const r = launchSync({ category: "user-shell", bin: "sleep", args: ["5"], timeoutMs: 100 });
-    expect(r).toMatchObject({ ok: false, reason: "timeout", error: "timed out after 0.1 s" });
+    const r = launchSync({
+      category: "user-shell",
+      bin: "sleep",
+      args: ["5"],
+      timeoutMs: 100,
+    });
+    expect(r).toMatchObject({
+      ok: false,
+      reason: "timeout",
+      error: "timed out after 0.1 s",
+    });
   });
 
   it("gives the blocking launch the same verdicts", () => {
     const run = (script: string) =>
-      launchSync({ category: "user-shell", bin: "sh", args: ["-c", script], stdinInput: unread });
+      launchSync({
+        category: "user-shell",
+        bin: "sh",
+        args: ["-c", script],
+        stdinInput: unread,
+      });
     expect(run("exit 0").ok).toBe(true);
-    expect(run("exit 1")).toMatchObject({ ok: false, reason: "non-zero", exitCode: 1 });
+    expect(run("exit 1")).toMatchObject({
+      ok: false,
+      reason: "non-zero",
+      exitCode: 1,
+    });
     expect(run("head -c 1 >/dev/null").ok).toBe(true);
     expect(
-      launchSync({ category: "user-shell", bin: "sh", args: ["-c", "kill -TERM $$"], timeoutMs: 5000 }),
+      launchSync({
+        category: "user-shell",
+        bin: "sh",
+        args: ["-c", "kill -TERM $$"],
+        timeoutMs: 5000,
+      }),
     ).toMatchObject({ ok: false, reason: "signal", signal: "SIGTERM" });
-    expect(run("kill -KILL $$")).toMatchObject({ ok: false, reason: "signal", signal: "SIGKILL" });
+    expect(run("kill -KILL $$")).toMatchObject({
+      ok: false,
+      reason: "signal",
+      signal: "SIGKILL",
+    });
   });
 });

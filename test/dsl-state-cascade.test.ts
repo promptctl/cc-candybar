@@ -5,16 +5,16 @@
 // daemon uses, not a parallel test rig.
 //
 // [LAW:single-enforcer] The verb dispatch goes through the registry in
-// src/daemon/verbs/index.ts directly. That is the same handler the daemon
+// src/renderer/verbs/index.ts directly. That is the same handler the daemon
 // invokes for a wire-level click; no duplication.
 
 import { textOf } from "../src/render/frame";
 import { feedInputs } from "./helpers/inputs";
 import { autorun } from "mobx";
-import { VERBS } from "../src/daemon/verbs";
+import { VERBS } from "../src/renderer/verbs";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { buildRig } from "./helpers/rig";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 

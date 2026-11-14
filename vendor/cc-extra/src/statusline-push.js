@@ -26,7 +26,7 @@
 
 'use strict';
 
-// cc-candybar's wire contract (its src/daemon/protocol.ts): every frame a 4-byte big-endian length
+// cc-candybar's wire contract (its src/daemon/foundations/protocol.ts): every frame a 4-byte big-endian length
 // and a UTF-8 JSON body; a request names the protocol version it speaks; the daemon listens on the
 // socket `CC_CANDYBAR_SOCKET` names, else the one derived from the user's uid. A daemon on another
 // version answers VERSION_MISMATCH, which this module reports and stops on — never guesses past.

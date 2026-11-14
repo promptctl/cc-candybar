@@ -21,7 +21,7 @@ import type { Palette, RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { bindRender } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import {
   FOLLOW_BAR,
   listResolvablePaletteNames,
@@ -32,7 +32,7 @@ import { settingsOf } from "../src/config/dsl-types";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { VERB_SAVE } from "../src/click/wire";
-import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
   configureMember,
@@ -41,7 +41,7 @@ import {
 } from "../src/config/loader/edit-mode";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");

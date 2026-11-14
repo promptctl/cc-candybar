@@ -19,14 +19,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { readJobEnd } from "../proc/launch";
 import {
   type JobEnding,
-  readJobEnd,
   type JobEnd,
   type JobFiles,
   type LaunchOpts,
   type Launcher,
-} from "../proc/launch";
+} from "../proc/launcher";
 import { readTailSync } from "../utils/transcript-fs";
 import type { StartTimeRead } from "./process-fingerprint";
 import type { Timekeeper } from "../time.js";

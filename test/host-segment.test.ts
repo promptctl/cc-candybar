@@ -20,16 +20,20 @@ import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import os from "node:os";
 
-import { HostService, shortHostname, HOST_PERIOD_MS } from "../src/segments/host";
+import {
+  HostService,
+  shortHostname,
+  HOST_PERIOD_MS,
+} from "../src/segments/host";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { Holds } from "../src/utils/holds";
-import type { RenderPayloadDeps } from "../src/daemon/render-payload";
+import type { RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
-import type { ClientHints } from "../src/daemon/protocol";
+import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { ABSENT } from "../src/utils/outcome";
 import {
   RAW_DEFAULT_DSL_CONFIG,
@@ -39,7 +43,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import {
@@ -150,9 +154,7 @@ describe("the host's sources", () => {
       hostname.mockReturnValue("after.vpn");
       await jest.advanceTimersByTimeAsync(HOST_PERIOD_MS);
       expect(name.current()).toEqual({ kind: "ok", value: "after" });
-      expect(
-        ledger.snapshot().map((r) => [r.name, r.refreshes]),
-      ).toEqual([
+      expect(ledger.snapshot().map((r) => [r.name, r.refreshes])).toEqual([
         ["host.name", { first: 1, period: 1, change: 0, supersede: 0 }],
         ["host.user", { first: 1, period: 1, change: 0, supersede: 0 }],
       ]);
@@ -214,10 +216,7 @@ describe("the bundled host segment", () => {
 
   function render(host: Record<string, unknown>): Frame {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
-      "",
-      new SessionState(),
-    );
+    const registry = new SourceRegistry(store, "", new SessionState());
     try {
       const compiled = registerDslConfig(CONFIG, registry, {
         signer: TEST_SIGNER,
@@ -244,9 +243,9 @@ describe("the bundled host segment", () => {
   }
 
   test("renders user@host when the session came in over SSH", () => {
-    expect(textOf(render({ name: "bigbox", user: "brandon", ssh: true }))).toContain(
-      "⇄ brandon@bigbox",
-    );
+    expect(
+      textOf(render({ name: "bigbox", user: "brandon", ssh: true })),
+    ).toContain("⇄ brandon@bigbox");
   });
 
   // [LAW:dataflow-not-control-flow] Presence IS the signal — no mode, no flag.
@@ -257,7 +256,9 @@ describe("the bundled host segment", () => {
   });
 
   test("is absent when the client never reported, matching pre-feature output", () => {
-    expect(textOf(render({ name: "bigbox", user: "brandon" }))).not.toContain("bigbox");
+    expect(textOf(render({ name: "bigbox", user: "brandon" }))).not.toContain(
+      "bigbox",
+    );
   });
 
   // A failed hostname/username read must still say "you are remote" rather than
