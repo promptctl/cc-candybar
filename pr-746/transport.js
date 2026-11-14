@@ -66995,6 +66995,13 @@ init_globals();
 function settingsPathOf(hints, home) {
   return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir, home));
 }
+var readingsHost = (deps) => ({
+  refresh: (facts, at, refreshed) => refreshPayload({ ...facts, deps }, at, refreshed),
+  cacheTallies: () => ({
+    git: deps.gitProvider.getStats(),
+    usage: deps.usageStore.getStats()
+  })
+});
 async function refreshPayload(inputs, at, refreshed) {
   const { hookData: hookData2, deps, hints } = inputs;
   const sessionId2 = hookData2.session_id;
@@ -85621,11 +85628,7 @@ function createDaemon(inputs) {
     laneSetups,
     tmuxStatusLines,
     clicks,
-    refresh: (facts, at, refreshed) => refreshPayload({ ...facts, deps: payloadProviders }, at, refreshed),
-    cacheTallies: () => ({
-      git: gitService.getStats(),
-      usage: usageStore.getStats()
-    }),
+    ...readingsHost(payloadProviders),
     managedStorage,
     watchers: watcherRegistry,
     linkSigner: linkSigner2,
