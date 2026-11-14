@@ -1,7 +1,7 @@
 // [LAW:one-source-of-truth] The end-to-end cap and assertion limit live in
 // .claude/e2e-signoff.json and nowhere else; the cap reporter, the assertion
 // check and the fixtures all read them through this file. Only Brandon changes
-// the file (.claude/hooks/e2e-signoff.mjs refuses an agent's edit).
+// the file.
 //
 // [LAW:parse-dont-validate] The one place the file is checked. A caller gets two
 // positive integers or an error naming the file and the field.
