@@ -52,7 +52,7 @@ export function rendererHost(
     readonly holding: (session: SessionId) => () => void;
   },
 ): RendererHost {
-  const turn = async (input: RendererInput): Promise<TurnOutcome> => {
+  const held = async (input: RendererInput): Promise<TurnOutcome> => {
     const session = sessionOf(input.event);
     const release = session === null ? () => {} : collector.holding(session);
     try {
@@ -65,16 +65,22 @@ export function rendererHost(
         for (const effect of output.effects)
           refuse(effect, `a ${input.event.kind} turn answers no request`);
       return output;
-    } catch (thrown) {
-      // [LAW:single-enforcer] Every turn's caller, a fire-and-forget one
-      // included, hears how it ended as a value: a renderer that rejected, or
-      // an output the host could not take, is the turn's failure. Nothing of
-      // it was taken, so the subscriptions last taken stand.
-      return { kind: "threw", failure: failureOf(thrown), record: [] };
     } finally {
       release();
     }
   };
+  // [LAW:single-enforcer] Every turn's caller, a fire-and-forget one included,
+  // hears how the whole turn ended as a value: a hold that failed, a renderer
+  // that rejected, or an output the host could not take, is the turn's
+  // failure. Nothing of it was taken, so the subscriptions last taken stand.
+  const turn = (input: RendererInput): Promise<TurnOutcome> =>
+    held(input).catch(
+      (thrown: unknown): TurnOutcome => ({
+        kind: "threw",
+        failure: failureOf(thrown),
+        record: [],
+      }),
+    );
   const refuse = (effect: Effect, reason: string): void =>
     void deliver(
       {
