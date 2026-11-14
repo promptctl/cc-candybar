@@ -16,7 +16,7 @@ import { unscriptedLauncher } from "./fake-launcher";
 import type { Host } from "../../src/host";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
-import { JournalTurns } from "../../src/daemon/journal-turns";
+import { JournalTurns } from "../../src/renderer/journal-turns";
 import { NavigationHistory } from "../../src/renderer/navigation-history";
 import {
   HEALTHY_INSTALL_EDGE,

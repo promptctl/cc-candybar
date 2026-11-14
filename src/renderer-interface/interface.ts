@@ -20,6 +20,8 @@ import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest } from "./request-context";
+import type { AdapterPush, AdapterReply } from "./adapter";
+import type { Crosses } from "./crosses";
 
 // Which request a statusline frame answers: the host's count of the requests
 // of every kind it accepted, in arrival order, so renders' ids have gaps.
@@ -32,18 +34,44 @@ declare const EFFECT_ID: unique symbol;
 export type EffectId = number & { readonly [EFFECT_ID]: true };
 
 // [LAW:one-type-per-behavior] One interface over every transport: in process
-// for now, a socket to the renderer's own process later.
+// for now, a socket to the renderer's own process later. Each kind of input
+// answers with its own output, so an input pays only for what it is.
 export interface Renderer {
-  answer(input: RendererInput): Promise<RendererOutput>;
+  answer(input: EventInput): Promise<RendererOutput>;
+  answer(input: AdapterInput): Promise<AdapterOutput>;
 }
 
-export interface RendererInput {
+export type RendererInput = EventInput | AdapterInput;
+
+export interface EventInput {
   readonly kind: "event";
   readonly event: Event;
   // [LAW:effects-at-boundaries] The instant the turn runs at, read by the host:
   // the renderer reads no clock for it.
   readonly at: Instant;
 }
+
+// [LAW:effects-at-boundaries] exception: a reach of the host's into the
+// renderer that is not yet an event, listed in the adapter
+// (src/renderer-interface/adapter.ts). A push opens no view and names no
+// session's subscriptions, so it carries none of an event's turn: its output
+// is its reply alone.
+export interface AdapterInput {
+  readonly kind: "adapter";
+  readonly push: AdapterPush;
+  readonly at: Instant;
+}
+
+// [LAW:no-silent-failure] A push's turn answers its reply, of its push's own
+// kind, or how it threw, as data.
+export type AdapterOutput =
+  | { readonly kind: "replied"; readonly reply: AdapterReply }
+  | { readonly kind: "threw"; readonly failure: Failure };
+
+// [LAW:types-are-the-program] Every input and output of a turn is plain data:
+// the build fails on one a process could not carry.
+export const INPUTS_CROSS: Crosses<RendererInput> = true;
+export const OUTPUTS_CROSS: Crosses<RendererOutput | AdapterOutput> = true;
 
 export type Event =
   | {

@@ -50,12 +50,10 @@ import {
 import { runTmuxAsync } from "../proc/tmux.js";
 import { type TmuxAtExit, TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
-import { reaction } from "mobx";
 import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import { instantOf, type Instant } from "../utils/instant.js";
-import { JournalTurns } from "./journal-turns.js";
 import { rendererHost } from "./renderer-host.js";
 import { loadMainRenderer } from "../renderer/main.js";
 import { readingsHost } from "./readings.js";
@@ -213,10 +211,11 @@ export interface Daemon {
   arm(): void;
   // [LAW:no-ambient-temporal-coupling] After this nothing launches, no timer
   // stays armed once what was in flight has settled, and only the log is
-  // written. A read already under way may finish. Its value settles when the
+  // written. A read already under way may finish. It resolves once every
+  // teardown step has run, the renderer's included, and its `settled` once the
   // launches and lifeline it ended have ended. `atExit` is what puts the tmux
-  // status lines back: synchronous, because shutdown is.
-  close(atExit: TmuxAtExit): Promise<Settled>;
+  // status lines back: synchronous, because shutdown's exit follows at once.
+  close(atExit: TmuxAtExit): Promise<{ readonly settled: Promise<Settled> }>;
 }
 
 export function createDaemon(inputs: DaemonInputs): Daemon {
@@ -389,7 +388,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     supersede: (storage, sessionId) =>
       managedStorage.supersede(storage, sessionId),
     launch: launcher.launch,
-    holdClickError: loadedRenderer.holdClickError,
+    holdClickError: (sessionId, text, at) =>
+      parts.renderer.tell(
+        { kind: "hold-click-error", session: sessionId, text },
+        at,
+      ),
     log,
     now: instant,
     clock,
@@ -412,7 +415,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       socket: paths.socket,
       preload: stableAttachPreload(bundle.path, host),
     },
-    holdClickError: loadedRenderer.holdClickError,
+    holdClickError: (sessionId, text, at) =>
+      parts.renderer.tell(
+        { kind: "hold-click-error", session: sessionId, text },
+        at,
+      ),
     log,
     now: instant,
     defer: (run) => void clock.defer(run),
@@ -445,15 +452,28 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
   // click — brings its next frame forward.
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
-    render: (sessionId, fps, at) =>
-      parts.toRenderer.renderFrame(sessionId, fps, at),
-    // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
-    // which fires in a later turn. A click that awaits gives up the loop, so a
-    // frame may show its writes ahead of its commit; the step stays whole.
-    watch: (sessionId, onChange) =>
-      reaction(() => parts.toRenderer.revision(sessionId), onChange),
-    lanes: (sessionId) => parts.toRenderer.viewLanes(sessionId),
-    pin: (sessionId) => parts.toRenderer.pin(sessionId),
+    frame: async (sessionId, fps, at, following, feeds) =>
+      (
+        await parts.renderer.ask(
+          { kind: "frame", session: sessionId, fps, following, feeds },
+          at,
+        )
+      ).frame,
+    lanes: async (sessionId) =>
+      (
+        await parts.renderer.ask(
+          { kind: "lanes", session: sessionId },
+          instant(),
+        )
+      ).lanes,
+    // [LAW:no-ambient-temporal-coupling] The pin's wake of the session's
+    // state only moves the feed's timer, which fires in a later turn. A click
+    // that awaits gives up the loop, so a frame may show its writes ahead of
+    // its commit; the step stays whole.
+    pin: (sessionId) =>
+      parts.renderer.tell({ kind: "pin", session: sessionId }, instant()),
+    unpin: (sessionId) =>
+      parts.renderer.tell({ kind: "unpin", session: sessionId }, instant()),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     refreshes: () => refreshLedger.totals(),
@@ -518,10 +538,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         watcherRegistry.judge();
         return;
       case "caught-up":
-        parts.toRenderer.reloadEvery({
-          kind: "events-resumed",
-          since: notice.since,
-        });
+        parts.renderer.tell(
+          { kind: "reload-every", since: notice.since },
+          instant(),
+        );
         frameFeeds.wakeWhere("data", () => true);
         return;
       case "moved":
@@ -574,11 +594,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
   });
 
-  // [LAW:single-enforcer] The one queue every journal waits its turn in.
-  const journalTurns = new JournalTurns({
-    log,
-    monotonic: () => clock.monotonic(),
-  });
   // [LAW:single-enforcer] The host's one reader of every session's world. What
   // it hands in alone goes through the host's one path to the renderer, which
   // the parts below hold; a delivery is first asked for by an owner landing
@@ -597,7 +612,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:one-way-deps] The main renderer's start, handed the host's parts it
   // reaches: the compiler checks each against its entry in `AdapterToHost`
   // here, so no renderer file names a host type.
-  const toRenderer = loadedRenderer.start({
+  const renderer = loadedRenderer.start({
     frameFeeds,
     updateWatch,
     fileEvents,
@@ -610,7 +625,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     managedStorage,
     watchers: watcherRegistry,
     linkSigner,
-    journalTurns,
     runs,
     serving: () => limits.serving(),
     renderSightings,
@@ -645,7 +659,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     fileEvents,
     payloadProviders,
     menuIdle,
-    journalTurns,
     linkSigner,
     runs,
     sourceRuns,
@@ -655,8 +668,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     updateWatch,
     limits,
     collector,
-    toRenderer,
-    renderer: rendererHost("main", clock, toRenderer, log, collector),
+    renderer: rendererHost("main", clock, renderer, log, collector),
   };
 
   return {
@@ -668,7 +680,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     exit,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
     // the way in. A click that got in is gathering, or holds or waits for a journal's turn,
-    // and close ends those (src/daemon/journal-turns.ts); a subscribe its request
+    // and close ends those (src/renderer/journal-turns.ts); a subscribe its request
     // reached as the daemon closed is refused here and opens no feed.
     handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
@@ -684,7 +696,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
     reloadConfig: (origin) => {
       closing.signal.throwIfAborted();
-      toRenderer.reloadConfig(origin);
+      parts.renderer.tell({ kind: "reload-config", origin }, instant());
     },
     arm() {
       closing.signal.throwIfAborted();
@@ -693,14 +705,22 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       updateWatch.arm();
       limits.arm();
     },
-    close(atExit) {
+    async close(atExit) {
+      // The renderer's three steps of the teardown, each awaited where it
+      // stands: the renderer takes them in the order they are sent.
+      const rendererStep =
+        (kind: "close-journal" | "close-views" | "close-session-state") =>
+        (): Promise<unknown> =>
+          parts.renderer.ask({ kind }, instant());
       // [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every teardown step
       // runs, each in order, and one that throws is logged by name without
       // skipping the rest: the session state still flushes after a close failed.
-      const teardown: ReadonlyArray<readonly [string, () => void]> = [
+      const teardown: ReadonlyArray<
+        readonly [string, () => void | Promise<unknown>]
+      > = [
         // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
         // the journal in flight commits what landed; none opens after.
-        ["journalTurns close", () => journalTurns.close()],
+        ["journalTurns close", rendererStep("close-journal")],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts).
         ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
@@ -715,7 +735,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["limits disarm", () => limits.disarm()],
         // Before the sources and the storage its states hold.
         ["collector close", () => collector.close()],
-        ["renderer views close", () => toRenderer.closeViews()],
+        ["renderer views close", rendererStep("close-views")],
         ["gitService close", () => gitService.close()],
         ["usageStore close", () => usageStore.close()],
         ["tmuxService close", () => tmuxService.close()],
@@ -727,17 +747,18 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => toRenderer.closeSessionState()],
+        // Last: a run that ends in the teardown holds its click error first.
+        ["sessionState close", rendererStep("close-session-state")],
       ];
       for (const [step, run] of teardown) {
         try {
-          run();
+          await run();
         } catch (e) {
           log("warn", `${step} failed: ${(e as Error).message}`);
         }
       }
       closed = true;
-      return launcher.settled();
+      return { settled: launcher.settled() };
     },
   };
 }

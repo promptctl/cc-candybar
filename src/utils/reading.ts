@@ -109,14 +109,16 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
   }
 }
 
-// How a bounded wait ended: what it waited on answered, or its time ran out.
-export type WaitEnd = "answered" | "deadline";
+// How a bounded wait ended: what it waited on answered, its time ran out, or
+// its owner closed.
+export type WaitEnd = "answered" | "deadline" | "closed";
 
 // [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one bounded
 // wait over work that does not end at a signal of its own (a wait that does,
 // as `SourceRegistry.inFlight` does, is bounded by the signal it is given):
-// `work`, or `ms`, whichever ends first. `work` is handed the wait's
-// signal, aborted when the wait ends on either arm, with its timer cleared:
+// `work`, or `ms`, or `closing`, whichever ends first; a wait begun after
+// `closing` aborted ends at once. `work` is handed the wait's signal, aborted
+// when the wait ends on any arm, with its timer cleared:
 // what it listens on through the signal stops with the wait, so a wait leaves
 // nothing behind. What it does not, a run it started, goes on, and a failure
 // of it after the deadline is no one's answer: it goes to `late`, its owner's
@@ -126,11 +128,17 @@ export function waitWithin(
   ms: number,
   late: (e: unknown) => void,
   after: Timekeeper["after"],
+  closing: AbortSignal,
 ): Promise<WaitEnd> {
   const wait = new AbortController();
-  const clear = after(Math.max(0, ms), () => wait.abort());
+  const end = (why: "deadline" | "closed") => () => wait.abort(why);
+  const clear = after(Math.max(0, ms), end("deadline"));
   const ended = new Promise<WaitEnd>((resolve, reject) => {
-    wait.signal.addEventListener("abort", () => resolve("deadline"));
+    wait.signal.addEventListener("abort", () =>
+      resolve(wait.signal.reason as WaitEnd),
+    );
+    closing.addEventListener("abort", end("closed"), { signal: wait.signal });
+    if (closing.aborted) end("closed")();
     void work(wait.signal).then(
       () => resolve("answered"),
       // [LAW:no-silent-failure] Every rejection is reported: the wait's own

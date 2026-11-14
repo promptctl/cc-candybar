@@ -65,6 +65,7 @@ import {
   ANSWERING,
   type Drawing,
   type Lane,
+  type LaneFeeds,
   type LaneSwitches,
 } from "../config/lanes.js";
 import {
@@ -126,10 +127,6 @@ export interface RendererState {
 
 export type RendererParts = RendererState & AdapterToHost;
 
-// What a reply's sender records once the client holds a response carrying
-// nothing to record.
-export const NOTHING_DELIVERED = (): void => {};
-
 // One frame of a subscribed session, drawn from its latest request at this
 // instant, by the render a request gets. The response is what that request
 // would draw, in the bytes its lanes read whatever encoding it asked its own
@@ -149,8 +146,11 @@ export function renderFrame(
   sessionId: SessionId,
   fps: number,
   at: Instant,
+  // What the feed knows of its own lanes as it asks for the frame: which
+  // follow the session and draw it now, and what each was sent of late.
+  feed: { readonly following: ReadonlySet<Lane>; readonly feeds: LaneFeeds },
 ): FeedFrame | null {
-  const { clock, frameFeeds } = parts;
+  const { clock } = parts;
   const started = clock.monotonic();
   const facts: RequestFacts = [];
   try {
@@ -160,13 +160,19 @@ export function renderFrame(
       parts,
       setup,
       { by: "feed", fps },
+      feed.feeds,
     );
     const answer = RENDER_ANSWERS.ansi(drawn.body);
     const statusline = statuslineOf(
       sessionId,
       drawn,
-      handedOffTo(lanes, frameFeeds.following(sessionId)),
+      handedOffTo(lanes, feed.following),
     );
+    // [LAW:one-source-of-truth] What the frame's copy clicks copy, recorded
+    // as it is handed to the feed: a frame whose bytes match the last shows
+    // the same links, and one whose lanes are all off ends its feed, whose
+    // unpin retires what the feed drew.
+    delivered();
     return {
       bar: drawn.body,
       resp: answer,
@@ -175,7 +181,7 @@ export function renderFrame(
         statusline === drawn.body ? answer : RENDER_ANSWERS.ansi(statusline),
       evaluated,
       cellBreaks,
-      delivered,
+      lanes,
       failure: null,
     };
   } catch (error) {
@@ -193,7 +199,7 @@ export function renderFrame(
       statusline: failed,
       evaluated: 0,
       cellBreaks: 0,
-      delivered: NOTHING_DELIVERED,
+      lanes: null,
       failure: { level, line: `frame ${line}` },
     };
   }
@@ -493,6 +499,9 @@ export function drawRender(
   parts: RendererParts,
   setup: RenderSetup,
   drawing: Drawing,
+  // What each lane following the session was sent of late, as the bar's rate
+  // cell shows it.
+  feeds: LaneFeeds,
 ): {
   drawn: DrawnBar;
   evaluated: number;
@@ -508,7 +517,6 @@ export function drawRender(
 } {
   const {
     sessionState,
-    frameFeeds,
     renderCache,
     updateWatch,
     linkSigner,
@@ -663,7 +671,7 @@ export function drawRender(
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing,
-    feeds: frameFeeds.feedsOf(sessionId, at),
+    feeds,
     today: todayOf(document.builtins.today, at),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
@@ -1071,6 +1079,7 @@ export async function answerRequest(
         `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`,
       ),
     clock.after,
+    parts.renderCache.closing,
   );
   // [LAW:nothing-unseen] How the wait went, on the render event: an answer
   // drawn with values pending says so by name.
@@ -1080,12 +1089,13 @@ export async function answerRequest(
     ended,
     refreshed: refreshedFact(refreshed),
   });
+  const sessionId = req.hookData.session_id;
   const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
     parts,
     setup,
     ANSWERING,
+    frameFeeds.feedsOf(sessionId, setup.at),
   );
-  const sessionId = req.hookData.session_id;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.

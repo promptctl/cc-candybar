@@ -36,9 +36,9 @@ import type { Gates } from "../daemon/foundations/gates.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type {
+  AdapterPush,
+  AdapterReply,
   AdapterToHost,
-  AdapterToLoadedRenderer,
-  AdapterToRenderer,
 } from "../renderer-interface/adapter.js";
 import type {
   DebugSnapshot,
@@ -68,13 +68,26 @@ import {
 import type { Instant } from "../utils/instant.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
 import type {
+  AdapterInput,
+  AdapterOutput,
   Effect,
   EffectId,
   Event,
+  EventInput,
   Renderer,
+  RendererInput,
+  RendererOutput,
 } from "../renderer-interface/interface.js";
+import { JournalTurns } from "./journal-turns.js";
+import { reaction } from "mobx";
+import type { SessionId } from "../daemon/foundations/session-id.js";
 
-export function mainRenderer(parts: MainRendererParts): Renderer {
+export function mainRenderer(
+  parts: MainRendererParts,
+  // [LAW:effects-at-boundaries] exception: the host's pushes, each answered
+  // in its own turn, synchronously.
+  pushed: (push: AdapterPush, at: Instant) => AdapterReply,
+): Renderer {
   // [LAW:single-enforcer] What each present's frame records once it reached
   // its client, held from the turn that returned it until its one
   // `effect-done`: the host settles every present it is handed, so this
@@ -148,26 +161,41 @@ export function mainRenderer(parts: MainRendererParts): Renderer {
     }
   };
 
-  return {
-    answer: async ({ event, at }) => {
-      const record: RequestFacts = [];
-      const ended = await turn(event, at, record).then(
-        (effects) => ({ kind: "answered", effects }) as const,
-        // [LAW:single-enforcer] Classified here, where it was thrown: a class
-        // crosses no process.
-        (thrown: unknown) =>
-          ({ kind: "threw", failure: failureOf(thrown) }) as const,
-      );
-      // [LAW:one-source-of-truth] What the renderer needs read: the open
-      // views' subscriptions as they stand when the turn ends, however it
-      // ended.
-      return {
-        ...ended,
-        record,
-        subscriptions: parts.renderCache.subscriptions(),
-      };
-    },
-  };
+  function answer(input: EventInput): Promise<RendererOutput>;
+  function answer(input: AdapterInput): Promise<AdapterOutput>;
+  async function answer(
+    input: RendererInput,
+  ): Promise<RendererOutput | AdapterOutput> {
+    switch (input.kind) {
+      case "adapter":
+        // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the
+        // input after it lands after its writes.
+        try {
+          return { kind: "replied", reply: pushed(input.push, input.at) };
+        } catch (thrown) {
+          return { kind: "threw", failure: failureOf(thrown) };
+        }
+      case "event": {
+        const record: RequestFacts = [];
+        const ended = await turn(input.event, input.at, record).then(
+          (effects) => ({ kind: "answered", effects }) as const,
+          // [LAW:single-enforcer] Classified here, where it was thrown: a
+          // class crosses no process.
+          (thrown: unknown) =>
+            ({ kind: "threw", failure: failureOf(thrown) }) as const,
+        );
+        // [LAW:one-source-of-truth] What the renderer needs read: the open
+        // views' subscriptions as they stand when the turn ends, however it
+        // ended.
+        return {
+          ...ended,
+          record,
+          subscriptions: parts.renderCache.subscriptions(),
+        };
+      }
+    }
+  }
+  return { answer };
 }
 
 // What the main renderer is built from besides the host's parts: its clock and
@@ -199,8 +227,8 @@ export interface MainRendererInputs {
 // The loaded main renderer, and its start, handed the host's parts it
 // reaches: the start builds the rest of the renderer's own state over them and
 // returns the renderer with what the host reaches in it.
-export interface LoadedMainRenderer extends AdapterToLoadedRenderer {
-  start(host: AdapterToHost): Renderer & AdapterToRenderer;
+export interface LoadedMainRenderer {
+  start(host: AdapterToHost): Renderer;
 }
 
 // [LAW:single-enforcer] The main renderer, in two steps of the daemon's
@@ -219,8 +247,6 @@ export function loadMainRenderer(
     inputs.storage.history,
   );
   return {
-    holdClickError: (sessionId, text, at) =>
-      holdClickError(sessionState, sessionId, text, at),
     start: (host) => startOver(inputs, sessionState, settingsHistory, host),
   };
 }
@@ -230,8 +256,14 @@ function startOver(
   sessionState: SessionState,
   settingsHistory: SettingsHistory,
   host: AdapterToHost,
-): Renderer & AdapterToRenderer {
+): Renderer {
   const { clock, log, now, gates } = inputs;
+  // [LAW:single-enforcer] The one queue every journal waits its turn in, the
+  // renderer's own: no host part takes a turn.
+  const journalTurns = new JournalTurns({
+    log,
+    monotonic: () => clock.monotonic(),
+  });
   const navigationHistory = new NavigationHistory();
   // Each session's effect memory — when its effect came into force — held in
   // daemon memory only: a restarted daemon starts every session's effect again.
@@ -311,7 +343,7 @@ function startOver(
     sessionState,
     stateDir: inputs.stateDir,
     locations: inputs.locations,
-    journalTurns: host.journalTurns,
+    journalTurns,
     clickLanded: (sessionId) => host.menuIdle.clicked(sessionId, now()),
     log,
     launcher: host.launcher,
@@ -372,39 +404,103 @@ function startOver(
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
   };
-  const renderer = mainRenderer({
-    ...parts,
-    verbs: verbsOver(verbCtx, host.clicks),
-  });
-  return {
-    ...renderer,
-    renderFrame: (sessionId, fps, at) => renderFrame(parts, sessionId, fps, at),
-    viewLanes: (sessionId) => viewLanes(parts, sessionId),
-    // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
-    // moment the feed stops drawing, so its drawn copies retire with it.
-    pin: (sessionId) => {
-      const unpin = renderCache.pin(sessionId);
-      return () => {
-        renderCache.stopDrawing(sessionId, "feed");
-        unpin();
-      };
-    },
-    revision: (sessionId) => sessionState.revision(sessionId),
-    stats: () => ({
-      renderCache: renderCache.stats,
-      effectCache: effectSessions.getStats(),
-      sessionState: {
-        sessions: sessionState.size(),
-        observers: sessionState.observers(),
-        revision: sessionState.latestRevision(),
-      },
-    }),
-    debug: (what) => debugOf(renderCache.latestView(), what),
-    reloadEvery: (cause) => renderCache.reloadEvery(cause),
-    reloadConfig,
-    closeViews: () => renderCache.close(),
-    closeSessionState: () => sessionState.close(),
+  // [LAW:single-enforcer] Each open feed's pin, from its `pin` to its
+  // `unpin`: the view's hold and the reaction that wakes the feed when the
+  // session's state moves, so the reaction lives exactly as long as the feed
+  // that hears it.
+  const pins = new Map<SessionId, () => void>();
+  const pin = (sessionId: SessionId): void => {
+    // [LAW:no-silent-failure] A feed opens once per session, so a second pin
+    // is the host's bug.
+    if (pins.has(sessionId))
+      throw new Error(`pin of session ${sessionId}, whose feed is pinned`);
+    const unhold = renderCache.pin(sessionId);
+    const unwatch = reaction(
+      () => sessionState.revision(sessionId),
+      () => host.frameFeeds.wake(sessionId, "state"),
+    );
+    pins.set(sessionId, () => {
+      unwatch();
+      // [LAW:single-enforcer] A feed's pin is its life: releasing it is the
+      // one moment the feed stops drawing, so its drawn copies retire with it.
+      renderCache.stopDrawing(sessionId, "feed");
+      unhold();
+    });
   };
+  const unpin = (sessionId: SessionId): void => {
+    const release = pins.get(sessionId);
+    if (release === undefined)
+      throw new Error(
+        `unpin of session ${sessionId}, whose feed is not pinned`,
+      );
+    pins.delete(sessionId);
+    release();
+  };
+  // [LAW:types-are-the-program] Exhaustive over the pushes: a new arm is a
+  // compile error here until the renderer answers it.
+  const pushed = (push: AdapterPush, at: Instant): AdapterReply => {
+    switch (push.kind) {
+      case "frame":
+        return {
+          kind: "frame",
+          frame: renderFrame(parts, push.session, push.fps, at, {
+            following: new Set(push.following),
+            feeds: push.feeds,
+          }),
+        };
+      case "lanes":
+        return { kind: "lanes", lanes: viewLanes(parts, push.session) };
+      case "pin":
+        pin(push.session);
+        return { kind: "pin" };
+      case "unpin":
+        unpin(push.session);
+        return { kind: "unpin" };
+      case "stats":
+        return {
+          kind: "stats",
+          stats: {
+            renderCache: renderCache.stats,
+            effectCache: effectSessions.getStats(),
+            sessionState: {
+              sessions: sessionState.size(),
+              observers: sessionState.observers(),
+              revision: sessionState.latestRevision(),
+            },
+            journalTurns: journalTurns.getStats(),
+          },
+        };
+      case "debug":
+        return {
+          kind: "debug",
+          snapshot: debugOf(renderCache.latestView(), push.what),
+        };
+      case "hold-click-error":
+        holdClickError(sessionState, push.session, push.text, at);
+        return { kind: "hold-click-error" };
+      case "reload-every":
+        renderCache.reloadEvery({ kind: "events-resumed", since: push.since });
+        return { kind: "reload-every" };
+      case "reload-config":
+        reloadConfig(push.origin);
+        return { kind: "reload-config" };
+      // [LAW:no-ambient-temporal-coupling] The journal in flight commits what
+      // landed before the host's abort cuts it off.
+      case "close-journal":
+        journalTurns.close();
+        return { kind: "close-journal" };
+      case "close-views":
+        renderCache.close();
+        return { kind: "close-views" };
+      case "close-session-state":
+        sessionState.close();
+        return { kind: "close-session-state" };
+    }
+  };
+  return mainRenderer(
+    { ...parts, verbs: verbsOver(verbCtx, host.clicks) },
+    pushed,
+  );
 }
 
 // [LAW:dataflow-not-control-flow] The debug projection samples whatever DSL

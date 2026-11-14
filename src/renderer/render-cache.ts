@@ -1335,7 +1335,14 @@ export class RenderCache<
   // falls back to the state directory, where the daemon's log writes on every
   // request.
   private readonly answersWatch: WatcherHandle;
-  private closed = false;
+  // [LAW:one-source-of-truth] Whether the cache has closed, and the signal a
+  // wait over one of its views ends at: one fact, so a render waiting as the
+  // close drops its view ends then, not at its deadline.
+  private readonly lifetime = new AbortController();
+  readonly closing: AbortSignal = this.lifetime.signal;
+  private get closed(): boolean {
+    return this.closing.aborted;
+  }
   // [LAW:one-source-of-truth] The entries an every-entry reload asked for that
   // have not re-read the disk since, each with the cause of the latest batch
   // that asked. Keyed by the entry itself, so an entry evicted and opened
@@ -1769,7 +1776,7 @@ export class RenderCache<
   // as the process runs.
   close(): void {
     if (this.closed) return;
-    this.closed = true;
+    this.lifetime.abort(new Error("the render cache closed"));
     // The drops below empty the due set, so no turn is armed again.
     this.walk?.();
     this.walk = null;

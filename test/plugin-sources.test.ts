@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { eventRenderer, NO_PUSHES } from "./helpers/renderers";
 import { TEST_SESSION } from "./helpers/payload-session";
 import { reaction, runInAction } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
@@ -806,18 +807,17 @@ function statusline(r: Rig, configFile: string) {
       worldStates: r.worldStates,
       providers: r.providers,
     }),
+    NO_PUSHES,
   );
   const rendered = rendererHost(
     "main",
     systemTimekeeper,
-    {
-      answer: async (input) => {
-        const output = await renderer.answer(input);
-        if (output.kind === "answered")
-          for (const effect of output.effects) presented.push(effect.frame);
-        return output;
-      },
-    },
+    eventRenderer(async (input) => {
+      const output = await renderer.answer(input);
+      if (output.kind === "answered")
+        for (const effect of output.effects) presented.push(effect.frame);
+      return output;
+    }),
     () => {},
     r.collector,
   );

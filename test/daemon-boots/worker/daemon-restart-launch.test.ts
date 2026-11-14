@@ -23,8 +23,8 @@ import {
   type Request,
 } from "../../../src/daemon/foundations/protocol";
 import type { DaemonLogger } from "../../../src/utils/logger";
-import { answeredEvents, renderBody } from "../../helpers/daemon-e2e";
-import { loggedLines, logLines, renderEventsOf } from "../../helpers/daemon-log";
+import { renderBody } from "../../helpers/daemon-e2e";
+import { loggedLines } from "../../helpers/daemon-log";
 import {
   startDaemon,
   type DaemonOverrides,
@@ -125,7 +125,7 @@ esac
       .catch(() => null);
     await until(() => asked().includes("log"), "the pass's commit read");
 
-    await first.daemon.close(NO_TMUX_AT_EXIT);
+    await (await first.daemon.close(NO_TMUX_AT_EXIT)).settled;
     const second = start();
 
     // What says the launch was tried: a count of the calls `git` saw reads the
@@ -138,7 +138,7 @@ esac
     expect(second.daemon.stats.subprocessTotal).toBe(0);
     expect(second.daemon.stats.subprocessRefused.size).toBe(0);
 
-    await second.daemon.close(NO_TMUX_AT_EXIT);
+    await (await second.daemon.close(NO_TMUX_AT_EXIT)).settled;
     expect(refused()).toBe(1);
     expect(asked().sort()).toEqual(["config", "log", "status"]);
     for (const daemon of up.splice(0).reverse()) await daemon.stop();
@@ -155,7 +155,7 @@ esac
       reason: "rate-limited",
     });
 
-    await first.daemon.close(NO_TMUX_AT_EXIT);
+    await (await first.daemon.close(NO_TMUX_AT_EXIT)).settled;
     const second = start();
 
     expect(await second.daemon.launcher.launch(open)).toMatchObject({
@@ -163,7 +163,10 @@ esac
     });
   });
 
-  test("a line of its work says whose it is, and no count of the next daemon's events reads it", async () => {
+  // The close ends what it interrupts: a render waiting on its world ends
+  // its wait at the close, so its event is the closing daemon's own, said
+  // once, however the next daemon's start falls against it.
+  test("a render the close interrupts ends with it, its event said once by the daemon that drew it", async () => {
     const sid = "restart-late-line";
     const first = start();
     const answer = first.daemon
@@ -175,19 +178,19 @@ esac
       )
       .catch(() => null);
 
-    await first.daemon.close(NO_TMUX_AT_EXIT);
-    const second = start();
+    await (await first.daemon.close(NO_TMUX_AT_EXIT)).settled;
+    start();
     await answer;
 
-    const late = await loggedLines(
+    // Said as the close's last steps run or once it returned, as the turns
+    // fall: either way the closing daemon's, and once.
+    const said = await loggedLines(
       env,
-      (lines) => lines.filter((l) => l.includes(`after close: render sid=`)),
+      (lines) => lines.filter((l) => l.includes(`render sid=${sid} `)),
       (picked) => picked.length === 1,
-      "the render event of a daemon that closed under it",
+      "the render event of the daemon the close interrupted",
     );
-    expect(late[0]).toContain(sid);
-    expect(renderEventsOf(logLines(env), sid)).toEqual([]);
-    expect(answeredEvents(second.log, sid)).toEqual([]);
+    expect(said[0]).toContain(" ended=closed ");
   });
 
   // A debounced write already awaiting its file when the close runs finishes
@@ -203,7 +206,7 @@ esac
       },
     });
 
-    await first.daemon.close(NO_TMUX_AT_EXIT);
+    await (await first.daemon.close(NO_TMUX_AT_EXIT)).settled;
     start();
     storageLog("warn", "a write that outlived its daemon");
 

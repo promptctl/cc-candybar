@@ -1,0 +1,30 @@
+// The check that every value the renderer and the host hand each other
+// crosses a process (src/renderer-interface/crosses.ts). Its cases are types:
+// each `@ts-expect-error` fails the typecheck if the check stops refusing what
+// it names, so the check cannot pass vacuously.
+
+import type { Crosses } from "../../src/renderer-interface/crosses";
+import type { AdapterPush } from "../../src/renderer-interface/adapter";
+
+// @ts-expect-error a closure does not cross
+const closure: Crosses<{ readonly done: () => void }> = true;
+// @ts-expect-error a Map does not cross
+const map: Crosses<{ readonly seen: ReadonlyMap<string, number> }> = true;
+// @ts-expect-error a list's undefined arrives as null
+const holes: Crosses<readonly (string | undefined)[]> = true;
+// @ts-expect-error a function deep in a value is found
+const deep: Crosses<{ a: { b: { c: { d: () => void } } } }> = true;
+// @ts-expect-error a push that held a closure would not cross
+const push: Crosses<AdapterPush | { kind: "x"; run: () => void }> = true;
+// A field left out arrives left out, so an optional one crosses.
+const plain: Crosses<{
+  readonly name?: string;
+  readonly sizes: readonly number[];
+  readonly none: null;
+}> = true;
+
+describe("Crosses", () => {
+  it("is a check the typecheck runs", () => {
+    expect([closure, map, holes, deep, push, plain]).toHaveLength(6);
+  });
+});

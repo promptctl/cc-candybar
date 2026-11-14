@@ -570,6 +570,9 @@ export default [
         "warn",
         { argsIgnorePattern: "^_", ignoreRestSiblings: true },
       ],
+      // tsc refuses a name declared twice, and this rule reads each overload
+      // signature of a function as one.
+      "no-redeclare": "off",
       "no-console": "off",
       "prefer-const": "warn",
       "no-var": "error",

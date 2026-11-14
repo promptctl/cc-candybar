@@ -137,13 +137,13 @@ import {
   sessionOfEffects,
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
+import type { JournalTurn, JournalTurns } from "../journal-turns";
 import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
 import type { RepoAnswer } from "../../config/loader/repo-gate";
 import type {
   RunRequest,
   AdapterToHost,
   DoctorProbes,
-  JournalTurn,
 } from "../../renderer-interface/adapter";
 import type { DeclaredSources } from "../../renderer-interface/request-context";
 import { sessionEnv } from "../../daemon/foundations/session-env";
@@ -253,8 +253,8 @@ export interface DaemonContext {
   // beside the settings history.
   readonly navigation: NavigationHistory;
   // [LAW:no-ambient-temporal-coupling] Whose turn it is to hold those journals
-  // (src/daemon/journal-turns.ts).
-  readonly journalTurns: AdapterToHost["journalTurns"];
+  // (src/renderer/journal-turns.ts).
+  readonly journalTurns: Pick<JournalTurns, "take" | "click" | "gathering">;
   // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
   // turn: the session's idle clock restarts (src/daemon/menu-idle.ts).
   readonly clickLanded: (sessionId: SessionId) => void;
@@ -2004,7 +2004,7 @@ function throwAll(failures: readonly unknown[]): void {
 // brings the session's view to the config its origin now resolves to.
 //
 // [LAW:single-enforcer] It runs in the journal's turn `click` took
-// (src/daemon/journal-turns.ts), begin through view-follow, so an awaited
+// (src/renderer/journal-turns.ts), begin through view-follow, so an awaited
 // handler keeps its step whole. A turn the daemon's close cut off was committed
 // there, and the daemon is gone from under what follows the commit.
 async function journaled<C extends DaemonContext>(
@@ -2100,7 +2100,7 @@ async function journaled<C extends DaemonContext>(
 }
 
 // [LAW:single-enforcer] A click: its place in its session's order, the gather
-// ahead of its turn, then a journal around the rest (src/daemon/journal-turns.ts).
+// ahead of its turn, then a journal around the rest (src/renderer/journal-turns.ts).
 function click(
   verb: string,
   gather: (value: string, ctx: VerbContext) => Promise<ClickStep | undefined>,

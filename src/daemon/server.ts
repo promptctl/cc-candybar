@@ -491,7 +491,17 @@ function shutdown(code: number): void {
   // process.exit; the stale path that remains is recovered by the
   // existing handleAddressInUse logic on the next daemon's startup
   // (probe → dead → unlink + rebind, ~50ms one-shot cost).
-  serving?.close(tmuxAtExit(daemonProcess().world.launcher));
+  void closeThenExit(code);
+}
+
+// [LAW:no-ambient-temporal-coupling] The daemon's close awaits the renderer's
+// steps of its teardown, so the journal in flight commits before the abort and
+// the session state flushes last, whichever process the renderer runs in; the
+// exit follows the close, still inside the backstop armed above.
+async function closeThenExit(code: number): Promise<void> {
+  // Each teardown step logs its own failure and the rest still run, so the
+  // close always resolves.
+  await serving?.close(tmuxAtExit(daemonProcess().world.launcher));
   // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
   // displaced daemon (socket stolen, thief wrote its own lease) must not delete
   // the live owner's lease on its way out, or the next EADDRINUSE would read

@@ -1,10 +1,10 @@
 // [LAW:one-way-deps] The adapter: every reach between the renderer and the
-// host, as two interfaces spelled in shared types. The host's parts satisfy
-// `AdapterToHost` structurally where it calls the renderer's start, so no
-// renderer file names a host type, and the start's return satisfies
-// `AdapterToRenderer` the same way. Each entry is a reach a later step removes:
-// in process it is a call nobody counts, so the list is what shows the work
-// left.
+// host, spelled in shared types. The host's parts satisfy `AdapterToHost`
+// structurally where it calls the renderer's start, so no renderer file names
+// a host type. The host reaches the renderer only by an `AdapterPush`, plain
+// data a process can carry, answered by its `AdapterReply`. Each entry is a
+// reach a later step removes: in process it is a call nobody counts, so the
+// list is what shows the work left.
 
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { DiagnosticMessage, SourcedText } from "../render/diagnostics";
@@ -16,6 +16,7 @@ import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant.js";
 import type { Release } from "../utils/holds.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
+import type { Crosses } from "./crosses.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { ClientHint } from "../client-hint.js";
 import type { Launcher } from "../proc/launcher.js";
@@ -98,32 +99,6 @@ export interface LaneSession {
   readonly answered: Answered;
 }
 
-export interface JournalTurn {
-  // Names the commit `close` runs if the turn is cut off, and answers the one
-  // way to run it: true when this call committed, false when `close` already
-  // had and the turn is over.
-  readonly holds: (commit: () => void) => () => boolean;
-  // [LAW:single-enforcer] Where a handler resumes: what follows an await runs
-  // only if the turn outlived it, so a click `close` cut off writes nothing
-  // more, whichever store it would have reached. `p` settling either way
-  // counts: a launch the close aborted rejects.
-  readonly landed: <T>(p: Promise<T>) => Promise<T>;
-}
-
-// How a click asks for its turn: `waited` hears how many ms it took to come,
-// and `gone` says whether whoever asked has left.
-export interface TurnAsker {
-  readonly waited: (ms: number) => void;
-  readonly gone: () => boolean;
-}
-
-// The same, for a click that may gather first: `placed` hears how long it
-// waited behind its session's earlier clicks, `gathered` how long it took.
-export interface ClickAsker extends TurnAsker {
-  readonly placed: (ms: number) => void;
-  readonly gathered: (ms: number) => void;
-}
-
 // A source a run makes stale: its full name, for the event, and its file's key
 // in the storage owner.
 export interface RunRefresh {
@@ -167,8 +142,10 @@ export interface FeedFrame {
   readonly evaluated: number;
   // How many strip items dividing cells too wide for a line added.
   readonly cellBreaks: number;
-  // Records what the frame's copy clicks copy, once it went out to a follower.
-  readonly delivered: () => void;
+  // The lanes the session's settings switched on as it drew, which the feed's
+  // lane gate reads as the frame goes out: null for a frame that failed,
+  // which read no settings and so ends no lane.
+  readonly lanes: LaneSwitches | null;
   readonly failure: LogLine | null;
 }
 
@@ -313,23 +290,6 @@ export interface AdapterToHost {
   // [LAW:effects-at-boundaries] exception: the signer over the state
   // directory's key.
   readonly linkSigner: LinkSigner;
-  // [LAW:effects-at-boundaries] exception: the one queue every journal waits
-  // its turn in.
-  readonly journalTurns: {
-    take<T>(
-      verb: string,
-      asker: TurnAsker,
-      body: (turn: JournalTurn) => Promise<T>,
-    ): Promise<T>;
-    click<G, T>(
-      verb: string,
-      session: string | null,
-      asker: ClickAsker,
-      gather: () => Promise<G>,
-      body: (gathering: G, turn: JournalTurn) => Promise<T>,
-    ): Promise<T>;
-    gathering<G>(gather: () => Promise<G>): Promise<G>;
-  };
   // [LAW:effects-at-boundaries] exception: the one owner of `run` programs in
   // flight.
   readonly runs: {
@@ -374,52 +334,73 @@ export type EveryEntryLoad =
   | { readonly kind: "answers-watch"; readonly heard: Invalidation }
   | { readonly kind: "events-resumed"; readonly since: number };
 
-// What the host reaches in the renderer once it is loaded, before its start:
-// what a host part built before the start writes through. Each member keeps
-// its in-process shape.
-export interface AdapterToLoadedRenderer {
-  // [LAW:effects-at-boundaries] exception: a host part's write of a click
-  // error into the session's state: a run's end, a lane setup's failure.
-  holdClickError(sessionId: SessionId, text: string, at: Instant): void;
-}
+// [LAW:effects-at-boundaries] exception: what the host reaches in the
+// renderer, each a push it hands in as an `adapter` input
+// (src/renderer-interface/interface.ts), answered by a reply of its own kind.
+// The list is the work left: each later step deletes an arm.
+export type AdapterPush =
+  // The feed's draw of one frame of a subscribed session, with the lanes that
+  // follow it and draw it now, and what each lane was sent of late.
+  | {
+      readonly kind: "frame";
+      readonly session: SessionId;
+      readonly fps: number;
+      readonly following: readonly Lane[];
+      readonly feeds: LaneFeeds;
+    }
+  // The lanes the session's view switches on, which a subscribe is gated by.
+  | { readonly kind: "lanes"; readonly session: SessionId }
+  // The feed's pin on the session's view, from its open to its close.
+  | { readonly kind: "pin"; readonly session: SessionId }
+  | { readonly kind: "unpin"; readonly session: SessionId }
+  // The stats reply's reads of the renderer's state.
+  | { readonly kind: "stats" }
+  // The debug reply's projection of the most recently drawn view.
+  | { readonly kind: "debug"; readonly what: DebugWhat }
+  // A host part's write of a click error into the session's state, at the
+  // input's instant: a run's end, a lane setup's failure.
+  | {
+      readonly kind: "hold-click-error";
+      readonly session: SessionId;
+      readonly text: string;
+    }
+  // Every entry's reload, when file events resume after `since`.
+  | { readonly kind: "reload-every"; readonly since: number }
+  // The reload of the config `origin` resolves to, after a write.
+  | { readonly kind: "reload-config"; readonly origin: RenderOrigin }
+  // The daemon's teardown, in its three renderer steps: the journal in flight
+  // commits, the views close, and the session state flushes, last.
+  | { readonly kind: "close-journal" }
+  | { readonly kind: "close-views" }
+  | { readonly kind: "close-session-state" };
 
-// What the host reaches in the renderer, returned by its start beside
-// `answer`. Each member keeps its in-process shape.
-export interface AdapterToRenderer {
-  // [LAW:effects-at-boundaries] exception: the feed's draw of one frame of a
-  // subscribed session, null while the session has no view.
-  renderFrame(sessionId: SessionId, fps: number, at: Instant): FeedFrame | null;
-  // [LAW:effects-at-boundaries] exception: the lanes the session's view
-  // switches on, null while it has no view.
-  viewLanes(sessionId: SessionId): LaneSwitches | null;
-  // [LAW:effects-at-boundaries] exception: the feed's pin on the session's
-  // view; releasing it retires what the feed drew.
-  pin(sessionId: SessionId): () => void;
-  // [LAW:effects-at-boundaries] exception: the session's state revision, which
-  // the feed's watch reacts to.
-  revision(sessionId: SessionId): number;
-  // [LAW:effects-at-boundaries] exception: the stats reply's reads of the
-  // renderer's state.
-  stats(): RendererStats;
-  // [LAW:effects-at-boundaries] exception: the debug reply's projection of
-  // the most recently drawn view.
-  debug(what: DebugWhat): DebugSnapshot;
-  // [LAW:effects-at-boundaries] exception: every entry's reload, when file
-  // events resume.
-  reloadEvery(cause: EveryEntryLoad): void;
-  // [LAW:effects-at-boundaries] exception: the reload of the config `origin`
-  // resolves to, after a write.
-  reloadConfig(origin: RenderOrigin): void;
-  // [LAW:effects-at-boundaries] exception: the daemon's close of the
-  // renderer's views, and of its session state, which flushes it: two steps of
-  // its teardown, the session state last.
-  closeViews(): void;
-  closeSessionState(): void;
-}
+// The kinds of push whose reply carries data.
+type ReadingPush = "frame" | "lanes" | "stats" | "debug";
+
+// What each push answers, of its own kind: what it read, or nothing.
+export type AdapterReply =
+  // Null while the session has no view.
+  | { readonly kind: "frame"; readonly frame: FeedFrame | null }
+  // Null while the session has no view.
+  | { readonly kind: "lanes"; readonly lanes: LaneSwitches | null }
+  | { readonly kind: "stats"; readonly stats: RendererStats }
+  | { readonly kind: "debug"; readonly snapshot: DebugSnapshot }
+  | { readonly kind: Exclude<AdapterPush["kind"], ReadingPush> };
+
+// The reply a push of kind `K` answers.
+export type ReplyTo<K extends AdapterPush["kind"]> = K extends ReadingPush
+  ? Extract<AdapterReply, { readonly kind: K }>
+  : { readonly kind: K };
+
+// [LAW:types-are-the-program] Every push and reply is plain data: the build
+// fails on one a process could not carry, naming where it fails.
+export const PUSHES_CROSS: Crosses<AdapterPush> = true;
+export const REPLIES_CROSS: Crosses<AdapterReply> = true;
 
 // What the stats reply reads of the renderer's state.
 export interface RendererStats {
   readonly renderCache: RenderCacheStats;
   readonly effectCache: StatsSnapshot["effectCache"];
   readonly sessionState: StatsSnapshot["sessionState"];
+  readonly journalTurns: StatsSnapshot["journalTurns"];
 }

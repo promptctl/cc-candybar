@@ -40,6 +40,7 @@ import { rendererHost } from "../src/daemon/renderer-host";
 import type { RendererVerbs } from "../src/renderer/verbs/port";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { WorldState } from "../src/facts/world-state";
+import { hearingEvents, NO_PUSHES } from "./helpers/renderers";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
 let dir: string;
@@ -86,7 +87,7 @@ function renderer(verbs?: RendererVerbs): {
     recorded.push([...copies.values()]);
     record(sessionId, by, copies);
   };
-  return { r: mainRenderer(parts), recorded, logged, rig };
+  return { r: mainRenderer(parts, NO_PUSHES), recorded, logged, rig };
 }
 
 // A statusline request for the rig's session, through the host's checkpoint.
@@ -364,12 +365,7 @@ describe("the session's config, ahead of its request", () => {
     const host = rendererHost(
       "main",
       systemTimekeeper,
-      {
-        answer: (input) => {
-          kinds.push(input.event.kind);
-          return t.r.answer(input);
-        },
-      },
+      hearingEvents(t.r, (input) => kinds.push(input.event.kind)),
       () => {},
       t.rig.served.collector,
     );
@@ -444,13 +440,10 @@ describe("two requests of one session at different keys", () => {
     const host = rendererHost(
       "main",
       systemTimekeeper,
-      {
-        answer: (input) => {
-          if (input.event.kind === "config")
-            requests.push(input.event.worldState);
-          return t.r.answer(input);
-        },
-      },
+      hearingEvents(t.r, (input) => {
+        if (input.event.kind === "config")
+          requests.push(input.event.worldState);
+      }),
       () => {},
       t.rig.served.collector,
     );

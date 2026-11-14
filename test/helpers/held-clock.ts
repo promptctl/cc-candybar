@@ -12,6 +12,11 @@ export interface HeldClock extends Timekeeper {
   // carries the clock past the end asked for. Nothing here takes a turn of the
   // real loop, so a case decides when.
   advance(ms: number): void;
+  // `advance` for work a timer starts that awaits: after each timer fires,
+  // what it queued settles before the next due one is sought, so a draw that
+  // awaits its frame lands, and arms what follows, inside the span, as on a
+  // real loop.
+  settle(ms: number): Promise<void>;
   // Time a synchronous piece of work uses: moves time forward without firing
   // any timer, so what fell due while it ran waits for the next `advance`, as
   // it waits for the loop in a real process. A timer due during the burn runs
@@ -38,16 +43,29 @@ export function heldClock(start: Date): HeldClock {
     [...timers].filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
   // Each timer fires at its own moment, and one cleared by an earlier firing
   // does not fire at all.
+  const fire = (due: { at: number; fire: () => void; period?: number }) => {
+    // Time never runs back: a burn may have passed the moment this was set for.
+    elapsed = Math.max(elapsed, due.at);
+    if (due.period === undefined) {
+      timers.delete(due);
+    } else {
+      due.at = elapsed + due.period;
+    }
+    due.fire();
+  };
   const fireThrough = (end: number): void => {
+    for (let due = nextDue(end); due; due = nextDue(end)) fire(due);
+    elapsed = Math.max(elapsed, end);
+  };
+  // The real loop's next check phase, which runs once every queued microtask
+  // has: the held clock arms no real timer, so this is the case's only wait.
+  const queuedSettled = () =>
+    new Promise<void>((resolve) => setImmediate(resolve));
+  const settleThrough = async (end: number): Promise<void> => {
+    await queuedSettled();
     for (let due = nextDue(end); due; due = nextDue(end)) {
-      // Time never runs back: a burn may have passed the moment this was set for.
-      elapsed = Math.max(elapsed, due.at);
-      if (due.period === undefined) {
-        timers.delete(due);
-      } else {
-        due.at = elapsed + due.period;
-      }
-      due.fire();
+      fire(due);
+      await queuedSettled();
     }
     elapsed = Math.max(elapsed, end);
   };
@@ -74,6 +92,7 @@ export function heldClock(start: Date): HeldClock {
     every: (ms, fire) => arm(Math.max(1, ms), fire, Math.max(1, ms)),
     defer: (fire) => arm(0, fire),
     advance: (ms) => fireThrough(elapsed + span(ms)),
+    settle: (ms) => settleThrough(elapsed + span(ms)),
     burn: (ms) => {
       elapsed += span(ms);
     },

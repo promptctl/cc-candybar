@@ -22,13 +22,37 @@
 
 import { elapsedMs, spanMs, type Monotonic } from "../time.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
-import { ClickAbandoned, DaemonClosing } from "./foundations/verb-error.js";
-import type { JournalTurnStats } from "./foundations/stats-snapshot";
-import type {
-  JournalTurn,
-  TurnAsker,
-  ClickAsker,
-} from "../renderer-interface/adapter";
+import {
+  ClickAbandoned,
+  DaemonClosing,
+} from "../daemon/foundations/verb-error.js";
+import type { JournalTurnStats } from "../daemon/foundations/stats-snapshot";
+
+export interface JournalTurn {
+  // Names the commit `close` runs if the turn is cut off, and answers the one
+  // way to run it: true when this call committed, false when `close` already
+  // had and the turn is over.
+  readonly holds: (commit: () => void) => () => boolean;
+  // [LAW:single-enforcer] Where a handler resumes: what follows an await runs
+  // only if the turn outlived it, so a click `close` cut off writes nothing
+  // more, whichever store it would have reached. `p` settling either way
+  // counts: a launch the close aborted rejects.
+  readonly landed: <T>(p: Promise<T>) => Promise<T>;
+}
+
+// How a click asks for its turn: `waited` hears how many ms it took to come,
+// and `gone` says whether whoever asked has left.
+export interface TurnAsker {
+  readonly waited: (ms: number) => void;
+  readonly gone: () => boolean;
+}
+
+// The same, for a click that may gather first: `placed` hears how long it
+// waited behind its session's earlier clicks, `gathered` how long it took.
+export interface ClickAsker extends TurnAsker {
+  readonly placed: (ms: number) => void;
+  readonly gathered: (ms: number) => void;
+}
 
 interface InFlight {
   readonly verb: string;

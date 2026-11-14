@@ -4,6 +4,7 @@
 // the test hands in its own. A test that builds its daemon parts by hand spreads
 // these in.
 
+import { NO_PUSHES } from "./renderers";
 import type { Collector } from "../../src/daemon/collector";
 import { ClicksInFlight } from "../../src/daemon/clicks-in-flight";
 import type { DaemonParts } from "../../src/daemon/daemon-parts";
@@ -39,7 +40,7 @@ export function clickParts(
     renderer: rendererHost(
       "main",
       systemTimekeeper,
-      mainRenderer(parts),
+      mainRenderer(parts, NO_PUSHES),
       () => {},
       { subscribed: () => {}, holding: collector.holding },
     ),

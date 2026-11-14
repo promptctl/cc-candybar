@@ -18,7 +18,6 @@ import {
   readingsHost,
   type RenderPayloadDeps,
 } from "../../src/daemon/readings";
-import { JournalTurns } from "../../src/daemon/journal-turns";
 import {
   applyFix,
   gatherFacts,
@@ -82,10 +81,6 @@ export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
     managedStorage: UNOWNED_STORAGE,
     watchers: { acquire: unhosted("watchers"), follow: unhosted("watchers") },
     linkSigner: TEST_SIGNER,
-    journalTurns: new JournalTurns({
-      log: () => {},
-      monotonic: () => systemTimekeeper.monotonic(),
-    }),
     runs: { start: unhosted("runs"), refused: unhosted("runs") },
     serving: unhosted("serving"),
     renderSightings: { ofSession: () => [] },
