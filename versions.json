@@ -2,46 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-743",
-      "ref": "refs/pull/743/merge",
-      "sha": "a13821f143db8fd5285092964f0e29bdb8d94e44",
-      "timestamp": "2026-11-14T01:34:34.085Z",
-      "commits": [
-        {
-          "sha": "a13821f143db8fd5285092964f0e29bdb8d94e44",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-13T18:33:34-07:00",
-          "message": "Merge 1c7c5da9d7fe5c9647cf47cb3ed6809e7d15deda into bed3a320b4dbe9ec1564e342882074461d91102d\n"
-        },
-        {
-          "sha": "1c7c5da9d7fe5c9647cf47cb3ed6809e7d15deda",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-13T18:33:18-07:00",
-          "message": "docs(spec): a change's read tells absence from a value, and a landed change reaches every session holding its file through discovery (candybar-host-renderer-x96a.4ol)\n"
-        },
-        {
-          "sha": "a9b8629157a8cd7299c50339d3bf41fb90a66247",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-13T18:29:53-07:00",
-          "message": "docs(spec): one kind of renderer, out of process first through an adapter, and a config write is a change guarded per setting (candybar-host-renderer-x96a.4ol)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "bed3a320b4dbe9ec1564e342882074461d91102d",
-      "timestamp": "2026-11-13T09:52:19.057Z",
+      "sha": "e0e964426de0dc976ed7a9554314baa162697a6d",
+      "timestamp": "2026-11-14T01:35:09.307Z",
       "commits": [
         {
-          "sha": "bed3a320b4dbe9ec1564e342882074461d91102d",
+          "sha": "e0e964426de0dc976ed7a9554314baa162697a6d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-13T02:51:23-07:00",
-          "message": "docs(spec): save offers every layer of the session's chain (candybar-host-renderer-x96a.nyy) (#742)\n\n* docs(spec): save offers every layer of the session's chain, user, project and an excluded local file among them, each named by its role (candybar-host-renderer-x96a.nyy)\n\n* docs(spec): the chain is user, project and local, or --config alone, with no cwd layer (candybar-host-renderer-x96a.nyy)"
+          "timestamp": "2026-11-13T18:34:12-07:00",
+          "message": "docs(spec): one kind of renderer, out of process first through an adapter, and a config write is a change guarded per setting (candybar-host-renderer-x96a.4ol) (#743)\n\n* docs(spec): one kind of renderer, out of process first through an adapter, and a config write is a change guarded per setting (candybar-host-renderer-x96a.4ol)\n\n* docs(spec): a change's read tells absence from a value, and a landed change reaches every session holding its file through discovery (candybar-host-renderer-x96a.4ol)"
         }
       ]
     },
