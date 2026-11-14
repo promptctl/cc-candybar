@@ -28,7 +28,7 @@ import { detectConfigEnv } from "../src/config-hint";
 import { ansiOf, textOf } from "../src/render/frame";
 import { barOf } from "./helpers/drawn-frame";
 import { answerRepo } from "./helpers/repo-approval";
-import { daemonGates } from "../src/daemon/update-keys";
+import { daemonGates } from "../src/daemon/foundations/update-keys";
 
 // The budget a verdict waits for a source that will not answer in time: long
 // enough that a settling source is not mistaken for a straggler, short enough

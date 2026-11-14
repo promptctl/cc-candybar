@@ -8,9 +8,9 @@ import {
   SOURCES_NOTHING,
   type LoadCause,
   type Settled,
-} from "../src/daemon/cache/render";
+} from "../src/renderer/render-cache";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";

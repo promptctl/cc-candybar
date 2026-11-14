@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Host } from "../host.js";
+import type { Locations } from "../config/loader/discovery";
 
 // XDG Base Directory split:
 //   - daemon runtime (pid, log, heap snapshots, spawn.lock) → $XDG_STATE_HOME/cc-candybar
@@ -156,7 +157,7 @@ export function sessionStatePath(host: Host): string {
 }
 
 // [LAW:one-source-of-truth] Each session's undo/redo history over every
-// settings change it made (src/daemon/settings-history.ts). Daemon-owned
+// settings change it made (src/renderer/settings-history.ts). Daemon-owned
 // runtime state, so it sits beside session-state.json — the config files its
 // steps snapshot are the user's, wherever discovery resolved them.
 export function settingsHistoryPath(host: Host): string {
@@ -250,19 +251,6 @@ export function daemonPaths(host: Host): DaemonPaths {
     watchProbe: watchProbeDir(host),
     spawnBackoff: spawnBackoffPath(host),
   };
-}
-
-// [LAW:one-source-of-truth] Where the user's config and installed plugins live,
-// and the home they default under: the one derivation the config loader, the
-// plugin installer and the doctor share, so an empty `XDG_CONFIG_HOME` means
-// the default in all of them (the XDG rule `xdgEnv` applies to every variable
-// here). Pure over the host, parsed once by the root and handed down.
-export interface Locations {
-  readonly home: string;
-  readonly configHome: string;
-  readonly dataHome: string;
-  // Most-preferred first, as `XDG_DATA_DIRS` orders them.
-  readonly dataDirs: readonly string[];
 }
 
 export function locations(host: Host): Locations {

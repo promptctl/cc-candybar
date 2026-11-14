@@ -1,4 +1,4 @@
-// A click's launch of a program (src/daemon/verbs/index.ts): one that fails
+// A click's launch of a program (src/renderer/verbs/index.ts): one that fails
 // says what the launch itself said of why, so the click's reply and its event
 // carry the cause, not only the class of failure.
 
@@ -6,7 +6,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { HOST } from "./helpers/host";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { clickHandoff, clickLaunch } from "../src/daemon/verbs";
+import { clickLaunch } from "../src/renderer/verbs";
+import { clickHandoff } from "../src/daemon/click-handoff";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { systemTimekeeper } from "../src/time";
 
@@ -72,14 +73,7 @@ describe("clickHandoff", () => {
       systemTimekeeper,
     );
     const opts = { bin: "/usr/bin/true", category: "click.open" } as const;
-    await clickHandoff(
-      launcher,
-      opts,
-      "first",
-      () => {},
-      2000,
-      HOST.tmp,
-    );
+    await clickHandoff(launcher, opts, "first", () => {}, 2000, HOST.tmp);
     const logged: string[] = [];
     await clickHandoff(
       launcher,
@@ -140,8 +134,6 @@ describe("clickLaunch", () => {
         "opening https://example.com",
         () => {},
       ),
-    ).rejects.toThrow(
-      /^opening https:\/\/example\.com failed \(.*ENOENT\)$/,
-    );
+    ).rejects.toThrow(/^opening https:\/\/example\.com failed \(.*ENOENT\)$/);
   });
 });

@@ -12,7 +12,7 @@ import {
   type Monotonic,
   type Timekeeper,
 } from "../../../src/time";
-import { PROTOCOL_VERSION, type Request, type Response } from "../../../src/daemon/protocol";
+import { PROTOCOL_VERSION, type Request, type Response } from "../../../src/daemon/foundations/protocol";
 import { textOf } from "../../../src/render/frame";
 import { render, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";

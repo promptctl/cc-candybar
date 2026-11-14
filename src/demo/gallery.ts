@@ -26,7 +26,7 @@ import { ansiOf } from "../render/frame.js";
 import { homeLayer } from "../config/dsl-loader.js";
 import { stateDir } from "../daemon/paths.js";
 import { processWorld } from "../host.js";
-import { repoGateAt } from "../daemon/repo-configs.js";
+import { repoGateAt } from "../renderer/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 import { instantOf } from "../utils/instant.js";

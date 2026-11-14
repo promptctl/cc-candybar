@@ -12,14 +12,14 @@ import { loadConfig, validateConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { registerDslConfig } from "../src/dsl/render";
 import { checkPayload } from "../src/check";
 import {
   renderOptionsOf,
   renderSelectionOf,
   resolveEffectiveGlobals,
-} from "../src/daemon/render-payload";
+} from "../src/renderer/render-payload";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/reserved-names";

@@ -19,7 +19,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
@@ -29,18 +29,18 @@ import {
   SESSION_RENDER_ORIGIN_KEY,
 } from "../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
-import type { ClaudeInputEdge } from "../src/claude-input/edge";
+import type { ClaudeInputEdge } from "../src/claude-input/typing";
 import {
   AUTOCOMPACT_WINDOWS,
   autoCompactControls,
-  readAutoCompactWindow,
   type AutoCompactWindow,
 } from "../src/segments/autocompact";
-import { projectAutoCompact } from "../src/daemon/render-payload";
+import { readAutoCompactWindow } from "../src/daemon/cache/autocompact";
+import { projectAutoCompact } from "../src/renderer/render-payload";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -77,10 +77,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
     JSON.stringify({ tmux: HINT }),
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store,
-    "",
-    sessionState,
-  );
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: "/tmp/proj",

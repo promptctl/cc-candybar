@@ -6,24 +6,10 @@
 // the failure until a refresh of it runs clean; without it a lane whose first
 // refresh threw would read as not answered yet for good.
 
-import type { SessionId } from "./session-id.js";
+import type { SessionId } from "./foundations/session-id.js";
 import { observable, runInAction } from "mobx";
 import { failed, type Failed } from "../utils/outcome.js";
-
-// The lanes a request's own arrival refreshes (refreshPayload). [LAW:one-source-of-truth]
-// The list is the one declaration: the type derives from it, and a facts
-// document's diagnostics walk it in this order.
-export const REFRESH_LANES = [
-  "session",
-  "today",
-  "context",
-  "metrics",
-  "activity",
-  "cache",
-  "speed",
-  "autocompact",
-] as const;
-export type RefreshLane = (typeof REFRESH_LANES)[number];
+import type { RefreshLane } from "../facts/world-state";
 
 export class RefreshFaults {
   private readonly bySession = observable.map<

@@ -9,13 +9,13 @@ import { linkUrls } from "./helpers/frame";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
-import { closingView } from "../src/daemon/closing-view";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { closingView } from "../src/renderer/closing-view";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";

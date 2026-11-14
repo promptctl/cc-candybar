@@ -138,12 +138,12 @@ function actionKeySpecs(
 
 // [LAW:one-source-of-truth] Every key a config's action table can CLEAR is a
 // key of its gate, so `reset-config`'s membership check
-// (src/daemon/verbs/index.ts's resetConfig) passes for exactly the keys some
+// (src/renderer/verbs/index.ts's resetConfig) passes for exactly the keys some
 // declared action targets — a `reset` names its key outright, and a structural
 // `persist` on `presets.<name>.root` makes that root a key its own reset may
 // empty. Membership rides on the reset itself, never on a sibling write action
 // happening to name the same key: the settings menu's ↺ targets fields no
-// action writes by click (a save writes them — src/daemon/setting-drafts.ts),
+// action writes by click (a save writes them — src/renderer/setting-drafts.ts),
 // and a preset edited down to zero addable segments contributes no layout op
 // for its root, yet its reset must still resolve.
 //

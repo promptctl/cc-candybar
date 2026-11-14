@@ -22,12 +22,12 @@ import {
   type DaemonView,
   type HandlerProbeEdge,
 } from "../src/doctor/handler-probe";
-import { clickArrived } from "../src/doctor/edge";
+import { clickArrived } from "../src/doctor/sightings";
 import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
-import { BadVerbArgs, VERBS, type VerbContext } from "../src/daemon/verbs";
+import { BadVerbArgs, VERBS, type VerbContext } from "../src/renderer/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -43,7 +43,7 @@ import {
   healthyClient,
   renderSaid,
 } from "./helpers/doctor-facts";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 
 const probe = checkByName("urlHandler")!.probe;

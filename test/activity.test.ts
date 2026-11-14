@@ -1,4 +1,7 @@
-import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 // [LAW:behavior-not-structure] The gate for brandon-activity-ue7: what the bar
@@ -10,7 +13,7 @@ import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import {
   mkdtempSync,
   writeFileSync,
@@ -21,7 +24,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { ActivityProvider, type ActivityInfo } from "../src/segments/activity";
-import type { RenderPayloadDeps } from "../src/daemon/render-payload";
+import type { RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import { ABSENT, ok } from "../src/utils/outcome";
@@ -36,7 +39,7 @@ import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import {
@@ -164,10 +167,9 @@ function hook(path: string, session: string): ClaudeHookData {
 
 async function activityOf(...lines: string[]) {
   const { path, session } = transcript(...lines);
-  const outcome = await new ActivityProvider({ clock: systemTimekeeper }).getActivityInfo(
-    session,
-    hook(path, session),
-  );
+  const outcome = await new ActivityProvider({
+    clock: systemTimekeeper,
+  }).getActivityInfo(session, hook(path, session));
   if (outcome.kind !== "ok")
     throw new Error(`expected ok, got ${outcome.kind}`);
   return outcome.value;
@@ -498,10 +500,9 @@ describe("the fold reports what is happening now", () => {
       done: [{ name: "Bash", count: 1 }],
     });
 
-    const whole = await new ActivityProvider({ clock: systemTimekeeper }).getActivityInfo(
-      session,
-      hook(path, session),
-    );
+    const whole = await new ActivityProvider({
+      clock: systemTimekeeper,
+    }).getActivityInfo(session, hook(path, session));
     expect(whole.kind === "ok" && whole.value).toEqual(
       second.kind === "ok" && second.value,
     );
@@ -509,10 +510,9 @@ describe("the fold reports what is happening now", () => {
 
   test("a session with no transcript yet is an empty record, not a failure", async () => {
     const session = sessionIdOf("missing");
-    const outcome = await new ActivityProvider({ clock: systemTimekeeper }).getActivityInfo(
-      session,
-      hook(join(dir, "nope.jsonl"), session),
-    );
+    const outcome = await new ActivityProvider({
+      clock: systemTimekeeper,
+    }).getActivityInfo(session, hook(join(dir, "nope.jsonl"), session));
     expect(outcome).toEqual({
       kind: "ok",
       value: { command: null, todos: [], running: [], done: [] },
@@ -631,10 +631,7 @@ describe("the bundled activity segment renders the payload", () => {
       "activity",
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
-      "",
-      new SessionState(),
-    );
+    const registry = new SourceRegistry(store, "", new SessionState());
     try {
       const compiled = registerDslConfig(narrowed, registry, {
         signer: TEST_SIGNER,
@@ -685,33 +682,41 @@ describe("the bundled activity segment renders the payload", () => {
 
   test("the in-progress todo reads as its position over the total", () => {
     expect(
-      textOf(render({
-        todo: {
-          total: 7,
-          completed: 2,
-          position: 3,
-          active: "Writing the gate",
-        },
-      })).trim(),
+      textOf(
+        render({
+          todo: {
+            total: 7,
+            completed: 2,
+            position: 3,
+            active: "Writing the gate",
+          },
+        }),
+      ).trim(),
     ).toBe("☐ 3/7 Writing the gate");
   });
 
   // `completed`, not `position`, is what tells a finished list from an
   // all-pending one: both have no item in progress, and both readings are true.
   test("a list with nothing in progress reads as completed over total", () => {
-    expect(textOf(render({ todo: { total: 7, completed: 7 } })).trim()).toBe("☑ 7/7");
-    expect(textOf(render({ todo: { total: 7, completed: 0 } })).trim()).toBe("☑ 0/7");
+    expect(textOf(render({ todo: { total: 7, completed: 7 } })).trim()).toBe(
+      "☑ 7/7",
+    );
+    expect(textOf(render({ todo: { total: 7, completed: 0 } })).trim()).toBe(
+      "☑ 0/7",
+    );
   });
 
   test("a long task is abbreviated rather than widening the bar without bound", () => {
-    const out = textOf(render({
-      todo: {
-        total: 1,
-        completed: 0,
-        position: 1,
-        active: "Writing the open-source voice replacement spec",
-      },
-    })).trim();
+    const out = textOf(
+      render({
+        todo: {
+          total: 1,
+          completed: 0,
+          position: 1,
+          active: "Writing the open-source voice replacement spec",
+        },
+      }),
+    ).trim();
     // sprig's `abbrev` ellipsis is three dots, not U+2026.
     expect(out).toContain("...");
     expect(out.length).toBeLessThan(45);
@@ -724,15 +729,15 @@ describe("the bundled activity segment renders the payload", () => {
   });
 
   test("a tally past two names is capped with an overflow count", () => {
-    expect(textOf(render({ tool: { running: "A:1,B:1,C:1,D:2" } })).trim()).toBe(
-      "⟳ A B +2",
-    );
+    expect(
+      textOf(render({ tool: { running: "A:1,B:1,C:1,D:2" } })).trim(),
+    ).toBe("⟳ A B +2");
   });
 
   test("running and completed tools read through the same helper", () => {
-    expect(textOf(render({ tool: { running: "Bash:1", done: "Read:4" } })).trim()).toBe(
-      "⟳ Bash ✓ Read×4",
-    );
+    expect(
+      textOf(render({ tool: { running: "Bash:1", done: "Read:4" } })).trim(),
+    ).toBe("⟳ Bash ✓ Read×4");
   });
 
   test("the slash command leads the cell", () => {
@@ -741,11 +746,13 @@ describe("the bundled activity segment renders the payload", () => {
 
   test("every part composes in one cell", () => {
     expect(
-      textOf(render({
-        command: "/next",
-        todo: { total: 4, completed: 1, position: 2, active: "Mutating it" },
-        tool: { running: "Bash:2", done: "Read:3" },
-      })).trim(),
+      textOf(
+        render({
+          command: "/next",
+          todo: { total: 4, completed: 1, position: 2, active: "Mutating it" },
+          tool: { running: "Bash:2", done: "Read:3" },
+        }),
+      ).trim(),
     ).toBe("⌘ /next ☐ 2/4 Mutating it ⟳ Bash×2 ✓ Read×3");
   });
 });

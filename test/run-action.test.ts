@@ -6,11 +6,12 @@
 // cache over the payload providers, read by the host's collector, drawn from
 // `sessionSource`.
 
+import { holdClickError } from "../src/daemon/foundations/click-error";
 import { linkUrls } from "./helpers/frame";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { HOST, WORLD, locs, processLauncher } from "./helpers/host";
-import { type Launcher } from "../src/proc/launch";
+import { type Launcher } from "../src/proc/launcher";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import fs from "node:fs";
 import os from "node:os";
@@ -22,15 +23,15 @@ import {
   loadFromDisk,
   RenderCache,
   type SessionView,
-} from "../src/daemon/cache/render";
-import { renderOptionsOf } from "../src/daemon/render-payload";
+} from "../src/renderer/render-cache";
+import { renderOptionsOf } from "../src/renderer/render-payload";
 import { collected } from "./helpers/collected";
 import {
   sessionSource,
   type SessionSource,
-} from "../src/daemon/session-source";
-import { SessionState } from "../src/daemon/session-state";
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+} from "../src/renderer/session-source";
+import { SessionState } from "../src/renderer/session-state";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { drawDsl } from "../src/dsl/render";
 import { LOADING_GLYPH } from "../src/dsl/node-registry";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -38,21 +39,25 @@ import { checkConfig, type CheckOutcome } from "../src/check";
 import { parseDslConfig } from "../src/config/dsl-loader";
 import { ConfigError } from "../src/config/loader/diagnostics";
 import { instantOf } from "../src/utils/instant";
-import { Runs, type RunRequest } from "../src/daemon/runs";
-import { sessionEnv } from "../src/daemon/session-env";
-import { lastClickError } from "../src/daemon/click-error";
+import { Runs } from "../src/daemon/runs";
+import { type RunRequest } from "../src/renderer-interface/adapter";
+import { sessionEnv } from "../src/daemon/foundations/session-env";
+import { lastClickError } from "../src/daemon/foundations/click-error";
 import { linkSigner } from "../src/click/link-signer";
 import { linkSignerFromKeyFile } from "../src/daemon/link-key";
 import { runDeclaration, type RunAction } from "../src/config/action";
 import { effectsUrl, VERB_RUN, type EvaluatedRun } from "../src/click/wire";
-import { BadVerbArgs, type VerbContext } from "../src/daemon/verbs";
+import { BadVerbArgs, type VerbContext } from "../src/renderer/verbs";
 import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
 } from "../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
-import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
-import type { StorageKey } from "../src/daemon/cache/managed-storage";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
+import type { StorageKey } from "../src/renderer-interface/interface";
 import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
@@ -61,7 +66,7 @@ import { untilHeard } from "./helpers/reload-signal";
 import { textOf } from "../src/render/frame";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { daemonGates } from "../src/daemon/update-keys";
+import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { pendingOf } from "../src/utils/outcome";
 import { SourceRuns } from "../src/daemon/source-runs";
@@ -214,7 +219,10 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     }),
     logger: log,
     ledger: new RefreshLedger(log),
-    sourceRuns: new SourceRuns({ launcher: processLauncher, clock: systemTimekeeper }),
+    sourceRuns: new SourceRuns({
+      launcher: processLauncher,
+      clock: systemTimekeeper,
+    }),
   });
   const sessionState = new SessionState();
   const served = collected(
@@ -248,7 +256,8 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     clock: systemTimekeeper,
     supersede: (key, sid) => providers.managedStorage.supersede(key, sid),
     launch,
-    state: sessionState,
+    holdClickError: (sessionId, text, at) =>
+      holdClickError(sessionState, sessionId, text, at),
     log,
     now: () => instantOf(new Date()),
   });
@@ -693,9 +702,9 @@ describe("a click on a run link", () => {
         ),
       );
       // The refusal is in the bar of the session the link names.
-      expect(lastClickError(r.sessionState, sessionIdOf(tampered.sid))?.text).toContain(
-        "signature does not match",
-      );
+      expect(
+        lastClickError(r.sessionState, sessionIdOf(tampered.sid))?.text,
+      ).toContain("signature does not match");
       expect(fs.existsSync(path.join(storage(), `${SID}.json`))).toBe(false);
     },
   );
@@ -863,7 +872,8 @@ describe("the run owner", () => {
         return () => held.push(`resume ${key.folder} ${sid}`);
       },
       launch,
-      state: sessionState,
+      holdClickError: (sessionId, text, at) =>
+        holdClickError(sessionState, sessionId, text, at),
       log: (level, message) => lines.push(`${level} ${message}`),
       now: () => instantOf(new Date()),
       timeoutMs,
@@ -889,7 +899,9 @@ describe("the run owner", () => {
     o.runs.start(o.run(`echo "  it broke  " >&2; exit 3`));
     expect(o.held).toEqual([`supersede /s ${SID}`]);
     await until(() => o.runs.stats().running === 0, "the run's end");
-    expect(lastClickError(o.sessionState, SID)?.text).toBe("run act: exited with code 3: it broke");
+    expect(lastClickError(o.sessionState, SID)?.text).toBe(
+      "run act: exited with code 3: it broke",
+    );
     expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
     expect(o.runs.stats()).toMatchObject({
       started: 1,
@@ -907,7 +919,9 @@ describe("the run owner", () => {
     const o = owner();
     o.runs.start(o.run("exit 4"));
     await until(() => o.runs.stats().running === 0, "the run's end");
-    expect(lastClickError(o.sessionState, SID)?.text).toBe("run act: exited with code 4");
+    expect(lastClickError(o.sessionState, SID)?.text).toBe(
+      "run act: exited with code 4",
+    );
   });
 
   test("a timeout puts the reason in the bar, resumes its sources, and counts as timed out", async () => {

@@ -42,7 +42,7 @@ import { until } from "./helpers/until";
 import { todayInfo, todayNow } from "./helpers/today";
 import { usageFold } from "./helpers/usage-fold";
 
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID_W = sessionIdOf("W");
 const OTHER_LATE = sessionIdOf("other-late");

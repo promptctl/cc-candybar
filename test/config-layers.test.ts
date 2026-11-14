@@ -16,18 +16,18 @@ import {
   deleteValues,
   writePreset,
   writeValues,
-} from "../src/daemon/config-file-store";
+} from "../src/renderer/config-file-store";
 import { resolveDslConfig } from "../src/config/loader/discovery";
 import { instantOf } from "../src/utils/instant";
-import { repoConfigs } from "../src/daemon/repo-configs";
+import { repoConfigs } from "../src/renderer/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 import { answerRepo } from "./helpers/repo-approval";
-import { applyLayoutOp } from "../src/daemon/config-file-store";
+import { applyLayoutOp } from "../src/renderer/config-file-store";
 import { walkNodes } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { loadConfigOnce } from "../src/doctor/cli";
 import { textOf, type Frame } from "../src/render/frame";
-import { daemonGates } from "../src/daemon/update-keys";
+import { daemonGates } from "../src/daemon/foundations/update-keys";
 
 let dir: string;
 let project: string;

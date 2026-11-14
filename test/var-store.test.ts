@@ -267,7 +267,7 @@ describe("type-checked cast helpers", () => {
 // [LAW:behavior-not-structure] A document node holds an Outcome, is read by its
 // own accessor, and is refused by the scalar reads by name — the contract the
 // scope proxy and the registry's publishers build on.
-// brandon-var-system-1tl. `lastUpdatedMs` is surfaced by src/daemon/debug.ts as
+// brandon-var-system-1tl. `lastUpdatedMs` is surfaced by src/renderer/debug.ts as
 // the node's AGE, and both its name and the reason anyone reads it say "when did
 // this last change" — which is exactly the question being asked when debugging a
 // source that re-runs without effect. It used to be stamped on every write.

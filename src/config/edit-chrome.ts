@@ -97,7 +97,7 @@ export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 // were written as they were made), then leave.
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
 // `↩ cancel`: put back everything changed since edit mode opened, then leave
-// (src/daemon/settings-history.ts `rewind`).
+// (src/renderer/settings-history.ts `rewind`).
 export const EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
 const EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
 // How many targets differ from when edit mode opened (HistoryDepth.sinceEdit)

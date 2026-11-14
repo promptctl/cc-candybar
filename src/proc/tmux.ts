@@ -5,14 +5,14 @@
 // (src/tmux-hint.ts); this is the one place that spells `tmux -S <socket>`,
 // its timeout, and how a failure reads.
 
+import { type OneShotLauncher } from "./launch.js";
 import {
   failureText,
   type LaunchCategory,
   type LaunchOpts,
   type LaunchResult,
   type Launcher,
-  type OneShotLauncher,
-} from "./launch.js";
+} from "./launcher.js";
 import type { TmuxHint } from "../tmux-hint.js";
 
 // `rate-limited`: launch.ts refused to spawn, so tmux never ran — a fact about

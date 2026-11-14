@@ -14,7 +14,7 @@ const DISARMED = "disarmed";
 
 // [LAW:one-source-of-truth] Every confirm's SessionState key ends here, so the
 // daemon can tell one from every other key without a list: an armed confirm
-// is one click from firing, so going back (src/daemon/navigation-history.ts)
+// is one click from firing, so going back (src/renderer/navigation-history.ts)
 // must never restore one — it is armed only by its own click.
 const CONFIRM_KEY_SUFFIX = ".armed";
 export const isConfirmKey = (key: string): boolean =>

@@ -13,8 +13,8 @@ import net from "node:net";
 import path from "node:path";
 
 import { logPath } from "../../src/daemon/paths";
-import { sendOne } from "../../src/daemon/protocol";
-import type { Request, Response } from "../../src/daemon/protocol";
+import { sendOne } from "../../src/daemon/foundations/protocol";
+import type { Request, Response } from "../../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "../../src/time";
 
 const DEFAULT_REPLY_BUDGET_MS = 5000;
@@ -59,7 +59,7 @@ export function sendDaemonRequest(
 }
 
 // [LAW:one-source-of-truth] A thin connect-then-delegate wrapper around
-// src/daemon/protocol.ts's own `sendOne` — the canonical, already-hardened
+// src/daemon/foundations/protocol.ts's own `sendOne` — the canonical, already-hardened
 // single-frame-request implementation (a settled guard, so a `close` racing a
 // just-arrived frame can never clobber an already-resolved response). An
 // earlier version of this helper hand-rolled its own finish/timer/reader logic

@@ -1,4 +1,4 @@
-// How long a failed click's errors stay on the bar (src/daemon/click-error.ts):
+// How long a failed click's errors stay on the bar (src/daemon/foundations/click-error.ts):
 // every render whose instant falls before the hold ends shows them, a request
 // shows them past it until an answer has carried them, and no render changes
 // what the next one sees.
@@ -9,10 +9,10 @@ import {
   clickErrorAt,
   holdClickError,
   lastClickError,
-} from "../../src/daemon/click-error";
-import { SessionState } from "../../src/daemon/session-state";
+} from "../../src/daemon/foundations/click-error";
+import { SessionState } from "../../src/renderer/session-state";
 import type { Instant } from "../../src/utils/instant";
-import { sessionIdOf } from "../../src/daemon/session-id";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s");
 const at = (seconds: number): Instant => seconds as Instant;

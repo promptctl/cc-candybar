@@ -17,9 +17,8 @@ import {
 import { inspect } from "node:util";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
-import { PROTOCOL_VERSION, type Response } from "./protocol";
+import { PROTOCOL_VERSION } from "./foundations/protocol";
 import {
-  LANE_NAMES,
   LANES,
   MOVING_FPS,
   perLane,
@@ -31,40 +30,11 @@ import {
 } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
 import type { Timekeeper } from "../time";
-import type { SessionId } from "./session-id";
-
-// What one frame of the feed drew: the bar, the responses its subscribers
-// receive, and — for a render that threw — the render event describing it,
-// logged when that failure is first pushed. It is drawn for the feed
-// (`drawing.by` "feed"), so it shows the feed's ceiling where a render
-// request's answer shows that it is polled.
-// [LAW:decomposition] A frame says only what was drawn. Whether anyone can see
-// it is the feed's question, asked when it schedules the next.
-// A frame's two answers: `resp`, which a lane drawing the bar elsewhere is sent,
-// and `statusline`, what Claude Code's statusline shows — the bar, or the
-// handoff line in its place while a lane draws it elsewhere
-// (src/daemon/lane-handoff.ts).
-export interface FeedFrame {
-  // [LAW:types-are-the-program] Every frame has a bar: one that failed draws
-  // its diagnostic Frame, so a lane holds no failure branch. Its `nextChange`
-  // is when the feed draws next, within its spacing.
-  readonly bar: Frame;
-  readonly resp: Response;
-  readonly statusline: Response;
-  // How many of the view's parts the frame evaluated (src/dsl/parts.ts).
-  readonly evaluated: number;
-  // How many strip items dividing cells too wide for a line added.
-  readonly cellBreaks: number;
-  // Records what the frame's copy clicks copy, once it went out to a follower.
-  readonly delivered: () => void;
-  readonly failure: LogLine | null;
-}
-
-type Level = "info" | "warn" | "error";
-export interface LogLine {
-  readonly level: Level;
-  readonly line: string;
-}
+import type { SessionId } from "./foundations/session-id";
+import type { FeedStats } from "./foundations/stats-snapshot";
+import type { Refusal } from "./foundations/protocol";
+import type { FeedFrame, Level } from "../renderer-interface/adapter";
+import { WAKE_CAUSES, type WakeCause } from "../renderer-interface/adapter";
 
 // Milliseconds from the start of one frame to the next: the closest a feed
 // draws a bar on a screen, and the furthest apart it draws any bar — what a
@@ -104,8 +74,6 @@ const TIMER_RESOLUTION_S = 0.002;
 // that lane.
 export type Sink = (bar: Frame, json: string) => void;
 
-export type Refusal = Extract<Response, { ok: false }>;
-
 // One subscription: the lane it serves, where its frames go, where its
 // refusal goes — the last thing it receives, since a refused subscription is
 // over — and whether it draws the bar where its lane puts it now. A client's
@@ -134,7 +102,7 @@ export interface FeedDeps<Req> {
   // [LAW:effects-at-boundaries] Synchronous by type: a frame only reads what
   // its sources stored, so drawing one can await nothing and refresh nothing.
   // [LAW:types-are-the-program] Null when the session has no view to draw
-  // yet: a frame opens none (src/daemon/cache/render.ts `holdView`), so the
+  // yet: a frame opens none (src/renderer/render-cache.ts `holdView`), so the
   // feed waits for the event that opens one.
   render(sessionId: SessionId, fps: number, at: Instant): FeedFrame | null;
   // Which animation lanes the session's settings switch on now, as its view
@@ -165,12 +133,6 @@ export interface FeedDeps<Req> {
   instant(): Instant;
   log(level: Level, line: string): void;
 }
-
-// Why a feed's next frame was brought forward: a value its bar reads changed
-// (`data`), its session's own state moved (`state`), its config reloaded
-// (`reload`), or which panes are on a screen changed (`visibility`).
-const WAKE_CAUSES = ["data", "state", "reload", "visibility"] as const;
-export type WakeCause = (typeof WAKE_CAUSES)[number];
 
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
 // state: no view to draw yet; the next frame due `at` a timer, on the
@@ -234,19 +196,6 @@ interface Feed {
   readonly refreshesAtOpen: Readonly<Record<RefreshTrigger, number>>;
 }
 
-// The render event's `feeds=` field: each lane following the session as
-// `<lane>:<subscribers>sub/<fps>fps/shown|offscreen`, `-` when none does.
-export function feedsFact(feeds: LaneFeeds): string {
-  return (
-    LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0)
-      .map((lane) => {
-        const { subscribers, fps, shown } = feeds[lane];
-        return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
-      })
-      .join(",") || "-"
-  );
-}
-
 // Note a frame going out to a lane at `at`, keeping only the sends of the
 // window ending there, so a lane holds at most one window's worth however long
 // it runs — and a wall clock stepped back, which leaves earlier sends stamped
@@ -286,19 +235,6 @@ const MAX_REQUESTS = 256;
 interface Noted<Req> {
   readonly req: Req;
   readonly order: number;
-}
-
-export interface FeedStats {
-  readonly feeds: number;
-  readonly subscribers: number;
-  readonly drawn: number;
-  readonly pushed: number;
-  // Subscriptions refused or ended because their lane was off.
-  readonly refused: number;
-  // `newestWhere` lookups (a tmux bar pane asking whose bar its pane holds),
-  // and how many found a session.
-  readonly lookups: number;
-  readonly found: number;
 }
 
 /**

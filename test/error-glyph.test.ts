@@ -4,12 +4,12 @@ import { memoryConnection } from "./helpers/memory-connection";
 import { RENDER_BUDGETS } from "../src/daemon/client";
 import { exchangeOutcome } from "../src/daemon/client-transport";
 import { formatPermanentGlyph } from "../src/render/error-glyph";
-import type { PermanentOutcome } from "../src/daemon/client-transport";
+import type { PermanentOutcome } from "../src/daemon/foundations/protocol";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
   makeFrameReader,
-} from "../src/daemon/protocol";
+} from "../src/daemon/foundations/protocol";
 
 // [LAW:behavior-not-structure] These tests assert the contract — the glyph's
 // visible text, single-line shape, prefix, and reset tail — not the
@@ -23,7 +23,7 @@ const PREFIX = "⚠ cc-candybar: ";
 // [LAW:one-source-of-truth] Fixtures derive both versions from the canonical
 // PROTOCOL_VERSION imported at the top of this file. Expected strings are
 // built via template literals against the same source. A PROTOCOL_VERSION
-// bump in src/daemon/protocol.ts flows through here automatically.
+// bump in src/daemon/foundations/protocol.ts flows through here automatically.
 const CLIENT_V = PROTOCOL_VERSION;
 const OTHER_V = PROTOCOL_VERSION + 1;
 

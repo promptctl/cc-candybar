@@ -36,7 +36,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, type RenderWarning } from "../src/dsl/render";
 import { bindRender, renderLook } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
 import type { RichText } from "@promptctl/rich-js";
 import { decideThemeName, resolveThemeSelection, THEME_FLOOR } from "../src/themes";
@@ -48,7 +48,7 @@ import {
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-theme-expr");
 // Four visibly different installed themes: the floor, plus three the expression

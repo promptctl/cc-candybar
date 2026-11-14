@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { SessionId } from "../session-id";
+import type { SessionId } from "../foundations/session-id";
 import { elapsedMs, type Timekeeper } from "../../time";
-import type { WatcherHandle, WatcherRegistry, Invalidation } from "./watchers";
+import type { WatcherRegistry } from "./watchers";
+import type { WatcherHandle, Invalidation } from "../foundations/watch-targets";
 import {
   stallReason,
   type DeliveryNotice,
@@ -15,12 +16,7 @@ import {
   type IdentityRead,
 } from "../../utils/folder-identity";
 import type { Holds, Release } from "../../utils/holds";
-import {
-  KeyedSource,
-  NO_WATCH,
-  type KeyedSourceStats,
-  type Resume,
-} from "../../utils/keyed-source";
+import { KeyedSource, NO_WATCH, type Resume } from "../../utils/keyed-source";
 import type { Lane } from "../../utils/reading";
 import { ABSENT, failed, type Outcome } from "../../utils/outcome";
 import type { DaemonLogger } from "../../utils/logger";
@@ -29,6 +25,9 @@ import { valueOf } from "../../utils/logfmt";
 import { jsonParser } from "../../var-system/parse";
 import { sessionFileName } from "../../config/loader/plugins";
 import type { JsonValue } from "../../var-system/types";
+import type { StorageKey } from "../../renderer-interface/interface";
+import type { ManagedStorageStats } from "../foundations/stats-snapshot";
+import type { FaultCause } from "../foundations/stats-snapshot";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // A file its program has not written for this long belongs to a session that
@@ -38,28 +37,6 @@ export const STORAGE_SWEEP_EVERY_MS = DAY_MS;
 // Entries nobody holds that are kept, so a session back from idle draws its
 // last value while it is re-read.
 const MAX_ENTRIES = 256;
-
-// [LAW:types-are-the-program] A storage folder as the owner keys it: the real
-// path the loader resolved, and the generation the owner has reached for it.
-// Only a loss moves the generation, so a folder replaced at the same path is a
-// new key, read fresh, with a watch of its own.
-export interface StorageKey {
-  readonly folder: string;
-  readonly generation: number;
-}
-
-// The faults a folder can stand in, by cause: it could not be created or read,
-// the OS refused to open its watch, or the watch reported an error after it
-// opened on a folder still there.
-export type FaultCause = "unusable" | "refused" | "error";
-
-export interface ManagedStorageStats extends KeyedSourceStats {
-  // Folders watched now.
-  readonly folders: number;
-  readonly faults: Readonly<Record<FaultCause, number>>;
-  // Folders found gone or replaced under their watch.
-  readonly lost: number;
-}
 
 // One session's file: the folder's key and the session it is for.
 interface SessionFile {

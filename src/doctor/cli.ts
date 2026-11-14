@@ -15,7 +15,7 @@
 
 import type { World } from "../host.js";
 import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
-import { daemonGates } from "../daemon/update-keys.js";
+import { daemonGates } from "../daemon/foundations/update-keys.js";
 import { locations, stateDir } from "../daemon/paths.js";
 import { openSync } from "node:fs";
 import process from "node:process";
@@ -48,15 +48,9 @@ import {
   type TranscriptSightings,
   type WidthSightings,
 } from "./daemon-answer.js";
-import {
-  gatherFacts,
-  installFacts,
-  productionEdge,
-  sessionWidth,
-  type ConfigLoad,
-  type InstallEdge,
-  type DoctorEdge,
-} from "./edge.js";
+import { gatherFacts, installFacts, productionEdge } from "./edge.js";
+import { sessionWidth } from "./sightings.js";
+import { type ConfigLoad, type InstallEdge, type DoctorEdge } from "./ports.js";
 import {
   probeUrlHandler,
   productionHandlerProbeEdge,
@@ -67,13 +61,13 @@ import {
   fallbackState,
   loadFromDisk,
   UNOWNED_STORAGE,
-} from "../daemon/cache/render.js";
-import { SessionState } from "../daemon/session-state.js";
+} from "../renderer/render-cache.js";
+import { SessionState } from "../renderer/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
   RateLimitsSeen,
   TranscriptSaid,
-} from "../daemon/render-sightings.js";
+} from "../daemon/foundations/sightings.js";
 
 const EXIT_OK = 0;
 const EXIT_FAILED = 1;

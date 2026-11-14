@@ -13,8 +13,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import {
   PROTOCOL_VERSION,
   TOTAL_BUDGET_MS,
-} from "../../../src/daemon/protocol";
-import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/request-deadline";
+} from "../../../src/daemon/foundations/protocol";
+import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { killAndWait, renderBody } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { field, landedEvents, only } from "../../helpers/request-event";

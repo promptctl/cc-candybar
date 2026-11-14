@@ -4,8 +4,12 @@
 // restarts is the caller's (src/frames-cli.ts).
 
 import net from "node:net";
-import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
-import type { Response, SubscribeRequest } from "./protocol";
+import {
+  PROTOCOL_VERSION,
+  encodeFrame,
+  makeFrameReader,
+} from "./foundations/protocol";
+import type { Response, SubscribeRequest } from "./foundations/protocol";
 import type { Lane } from "../config/lanes";
 
 // [LAW:types-are-the-program] Why a stream ended: the caller closed it, the

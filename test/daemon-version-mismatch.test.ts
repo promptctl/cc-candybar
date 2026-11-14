@@ -8,16 +8,14 @@ import {
   PROTOCOL_VERSION,
   encodeFrame,
   makeFrameReader,
-} from "../src/daemon/protocol";
-import type { Response } from "../src/daemon/protocol";
+} from "../src/daemon/foundations/protocol";
+import type { Response } from "../src/daemon/foundations/protocol";
 import { RENDER_BUDGETS, renderOutcomeOf } from "../src/daemon/client";
 import type { ClientOutcome } from "../src/daemon/client";
 import { exchangeOutcome } from "../src/daemon/client-transport";
-import type {
-  PermanentOutcome,
-  TransientOutcome,
-} from "../src/daemon/client-transport";
-import { planOutcome } from "../src/render/outcome-plan";
+import type { TransientOutcome } from "../src/daemon/client-transport";
+import type { PermanentOutcome } from "../src/daemon/foundations/protocol";
+import { planOutcome } from "../src/outcome-plan";
 
 // [LAW:behavior-not-structure] These tests assert the contract — what a
 // version-mismatched client sees and how the daemon responds — not the

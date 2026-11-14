@@ -10,11 +10,11 @@
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
 import { renderFailedFrame, standIn } from "../../src/render/frame";
-import { sessionIdOf } from "../../src/daemon/session-id";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { answerStatusline } from "../../src/daemon/statusline-answer";
-import type { RequestFacts } from "../../src/daemon/request-event";
-import { BadVerbArgs, failureOf } from "../../src/daemon/verb-error";
+import type { RequestFacts } from "../../src/daemon/foundations/request-event";
+import { BadVerbArgs, failureOf } from "../../src/daemon/foundations/verb-error";
 import {
   type Effect,
   type EffectId,
@@ -23,9 +23,9 @@ import {
   type RendererOutput,
   type RequestId,
   type Subscriptions,
-} from "../../src/renderer/interface";
+} from "../../src/renderer-interface/interface";
 import type { WorldState } from "../../src/facts/world-state";
-import type { CheckedRenderRequest } from "../../src/renderer/request-context";
+import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
 import { instantOf } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
 

@@ -10,7 +10,7 @@ import {
   sanitizeSsh,
   sanitizeTermExtent,
   sanitizeTmux,
-} from "../../src/daemon/protocol";
+} from "../../src/daemon/foundations/protocol";
 
 describe("sanitizeTermExtent (wire trust boundary)", () => {
   test.each([

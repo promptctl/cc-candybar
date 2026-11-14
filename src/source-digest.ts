@@ -91,10 +91,3 @@ export function crateDigest(crateDir: string): string {
     ),
   );
 }
-
-// How much of a digest a person is shown: seven hex characters, the length
-// git abbreviates a commit to, so the identifier reads as the familiar
-// short hash rather than a wall of hex.
-export const SHORT_DIGEST_LENGTH = 7;
-export const shortDigest = (digest: string): string =>
-  digest.slice(0, SHORT_DIGEST_LENGTH);

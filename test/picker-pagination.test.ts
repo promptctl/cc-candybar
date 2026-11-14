@@ -22,7 +22,7 @@ import { swatch } from "../src/render/swatch";
 import { menuPageKey } from "../src/config/menu-keys";
 import { buildRig } from "./helpers/rig";
 
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 

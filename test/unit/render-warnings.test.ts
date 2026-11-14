@@ -3,9 +3,9 @@
 // about the frame moved is counted, or cleared, by the next frame; each
 // renderer keeps its own.
 
-import { RenderWarningRecords } from "../../src/daemon/render-warnings";
+import { RenderWarningRecords } from "../../src/renderer/render-warnings";
 import type { RenderWarning } from "../../src/dsl/render";
-import { sessionIdOf } from "../../src/daemon/session-id";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 
 const S_2 = sessionIdOf("s");
 const T = sessionIdOf("t");

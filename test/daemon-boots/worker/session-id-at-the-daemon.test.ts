@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { PROTOCOL_VERSION } from "../../../src/daemon/protocol";
+import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { hookData, renderRequest } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";

@@ -27,7 +27,7 @@
 
 import fs from "node:fs";
 import JSON5 from "json5";
-import type { Locations } from "../daemon/paths.js";
+import type { Locations } from "./loader/discovery.js";
 import {
   type DslConfig,
   type InsertCell,

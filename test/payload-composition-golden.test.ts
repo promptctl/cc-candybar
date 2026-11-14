@@ -17,7 +17,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { presetNames } from "../src/config/presets";
-import { renderOptionsOf, todayOf } from "../src/daemon/render-payload";
+import { renderOptionsOf, todayOf } from "../src/renderer/render-payload";
 import { drawDsl } from "../src/dsl/render";
 import { ansiOf } from "../src/render/frame";
 import { listResolvablePaletteNames } from "../src/themes/policy";

@@ -3,8 +3,8 @@
 // settings pick in the same click stays with undo, and going back is not
 // itself a step.
 
-import { SessionState } from "../src/daemon/session-state";
-import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
+import { SessionState } from "../src/renderer/session-state";
+import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
   encodeSegments,
@@ -15,9 +15,9 @@ import {
 import { recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
-import { UPDATE_DISMISSED_KEY } from "../src/daemon/update-keys";
-import { NavigationHistory } from "../src/daemon/navigation-history";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { UPDATE_DISMISSED_KEY } from "../src/daemon/foundations/update-keys";
+import { NavigationHistory } from "../src/renderer/navigation-history";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 

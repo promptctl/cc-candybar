@@ -10,7 +10,7 @@ import path from "node:path";
 
 import { linksOf } from "../../../src/click/read";
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
-import { PROTOCOL_VERSION, type Response } from "../../../src/daemon/protocol";
+import { PROTOCOL_VERSION, type Response } from "../../../src/daemon/foundations/protocol";
 import { composeBar, parseFrame } from "../../../src/render/frame";
 import {
   COLOR_COMPATIBILITIES,

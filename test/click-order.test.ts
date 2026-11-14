@@ -3,6 +3,7 @@
 // clicks here are real verbs over a fake doctor edge whose process probe parks
 // on a gate; the click-path cases drive `replyTo`, the daemon's real click arm.
 
+import { ProbeArrivals } from "../src/doctor/handler-probe";
 import { RuntimeStats } from "../src/daemon/stats";
 import { JournalTurns } from "../src/daemon/journal-turns";
 import { HOST, locs } from "./helpers/host";
@@ -10,8 +11,12 @@ import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { clickParts } from "./helpers/click-parts";
 import { replyTo } from "../src/daemon/reply";
-import { SessionState } from "../src/daemon/session-state";
-import { VERBS, type VerbContext, type VerbHandler } from "../src/daemon/verbs";
+import { SessionState } from "../src/renderer/session-state";
+import {
+  VERBS,
+  type VerbContext,
+  type VerbHandler,
+} from "../src/renderer/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   VERB_COPY,
@@ -26,10 +31,11 @@ import {
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
-import { ClickAbandoned } from "../src/daemon/verb-error";
+import { ClickAbandoned } from "../src/daemon/foundations/verb-error";
 import { systemLauncher } from "../src/proc/system-launcher";
-import { type Launcher, type LaunchResult } from "../src/proc/launch";
-import { productionEdge, type DoctorEdge } from "../src/doctor/edge";
+import { type Launcher, type LaunchResult } from "../src/proc/launcher";
+import { productionEdge } from "../src/doctor/edge";
+import { type DoctorEdge } from "../src/doctor/ports";
 import { instantOf } from "../src/utils/instant";
 import {
   emptyStores,
@@ -44,19 +50,41 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 const SESSION_C = sessionIdOf("session-c");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const RULE = "─".repeat(60);
-const IDLE_SCREEN = ["⏺ Done.", "", "", `${RULE} probe ─`, "❯ ", RULE, "  ⏸ manual mode on"];
+const IDLE_SCREEN = [
+  "⏺ Done.",
+  "",
+  "",
+  `${RULE} probe ─`,
+  "❯ ",
+  RULE,
+  "  ⏸ manual mode on",
+];
 const NONCE = "01234567-89ab-cdef-0123-456789abcdef";
 const A = sessionIdOf("session-a");
 const B = sessionIdOf("session-b");
 const S = sessionIdOf("s");
-const LAUNCHED = { ok: true, stdout: "", stderr: "", exitCode: 0 } as LaunchResult;
+const LAUNCHED = {
+  ok: true,
+  stdout: "",
+  stderr: "",
+  exitCode: 0,
+} as LaunchResult;
 type Load = ReturnType<DoctorEdge["loadConfig"]>;
-const LOAD = { layers: [], error: null, warning: null, unused: [], config: EMPTY_DEFAULT } as unknown as Load;
+const LOAD = {
+  layers: [],
+  error: null,
+  warning: null,
+  unused: [],
+  config: EMPTY_DEFAULT,
+} as unknown as Load;
 // As production: a reload that fails keeps the config it had.
 const FAILED_LOAD = { ...LOAD, error: "the file changed" } as Load;
 
@@ -95,8 +123,10 @@ function setup(over: Partial<DoctorEdge> = {}) {
   const held = gate();
   const healthy = healthyDaemonEdge().daemons;
   const gathers: string[] = [];
+  const probes = new ProbeArrivals();
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
+    probes,
     journalTurns: turns,
     log: (_level, line) => logged.push(line),
     doctorStores: emptyStores(),
@@ -122,7 +152,20 @@ function setup(over: Partial<DoctorEdge> = {}) {
     return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), c);
   };
   const reports = () => logged.filter((l) => l.startsWith("doctor: "));
-  return { sessionState, logged, turns, held, gathers, ctx, toggled, doctor, toggle, doDoctorThen, reports };
+  return {
+    sessionState,
+    logged,
+    turns,
+    held,
+    gathers,
+    ctx,
+    probes,
+    toggled,
+    doctor,
+    toggle,
+    doDoctorThen,
+    reports,
+  };
 }
 
 describe("a gather holds no turn", () => {
@@ -183,16 +226,22 @@ describe("a gather holds no turn", () => {
       { verb: VERB_DOCTOR_RUN, args: [A] },
       { verb: VERB_DOCTOR_RUN, args: [A] },
     ]);
-    const twice = VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), ctx);
+    const twice = VERBS.get(VERB_DISPATCH)!(
+      url.slice(url.lastIndexOf("/") + 1),
+      ctx,
+    );
     held.open();
     await twice;
     expect(gathers).toEqual(["holder=null", `holder=${VERB_DISPATCH}`]);
   });
 
   test("doctor-probe answers at once with the turn held", async () => {
-    const { ctx, turns } = setup();
+    const { ctx, probes, turns } = setup();
     const parked = gate();
-    const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
+    const launcher = {
+      ...ctx.launcher,
+      launch: () => parked.wait.then(() => LAUNCHED),
+    } as Launcher;
     const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
     await drain();
     expect(turns.getStats().holder).toBe(VERB_COPY);
@@ -201,7 +250,7 @@ describe("a gather holds no turn", () => {
       clientGone: () => true,
       arrival: { via: "link", delivery: { kind: "cli" } },
     });
-    expect(ctx.probes.list().map((p) => p.nonce)).toEqual([NONCE]);
+    expect(probes.list().map((p) => p.nonce)).toEqual([NONCE]);
     expect(turns.getStats().holder).toBe(VERB_COPY);
     parked.open();
     await holding;
@@ -234,12 +283,17 @@ describe("one session's order", () => {
     const logging: VerbContext = {
       ...ctx,
       log: (_l, line) => {
-        if (line.startsWith("doctor: ")) order.push(`report${order.length + 1}`);
+        if (line.startsWith("doctor: "))
+          order.push(`report${order.length + 1}`);
       },
     };
     const refuse = (m: string) =>
-      VERBS.get(VERB_DOCTOR_MARK)!(encodeSegments([A, "nerdFont", m]), logging)
-        .catch((e: unknown) => order.push(`${m}: ${String(e).includes("mark") ? "refused" : e}`));
+      VERBS.get(VERB_DOCTOR_MARK)!(
+        encodeSegments([A, "nerdFont", m]),
+        logging,
+      ).catch((e: unknown) =>
+        order.push(`${m}: ${String(e).includes("mark") ? "refused" : e}`),
+      );
     const one = refuse("drawn");
     const two = refuse("boxes");
     await drain();
@@ -265,7 +319,10 @@ describe("one session's order", () => {
     const { held, doDoctorThen, ctx, toggled, reports } = setup();
     const parked = gate();
     let gone = false;
-    const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
+    const launcher = {
+      ...ctx.launcher,
+      launch: () => parked.wait.then(() => LAUNCHED),
+    } as Launcher;
     const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
     await drain();
     const a = doDoctorThen({ ...ctx, clientGone: () => gone });
@@ -297,7 +354,12 @@ describe("a gather is a snapshot of one config", () => {
       const seen: Array<string | null> = [];
       const healthy = healthyDaemonEdge().daemons;
       const ctx: VerbContext = {
-        ...testVerbContext(sessionState, fixture.historyFor(sessionState), config, fixture.host),
+        ...testVerbContext(
+          sessionState,
+          fixture.historyFor(sessionState),
+          config,
+          fixture.host,
+        ),
         doctorStores: emptyStores(),
         doctor: edge({
           daemons: () => {
@@ -320,7 +382,9 @@ describe("a gather is a snapshot of one config", () => {
 
   test("a config write landing during a gather makes the click re-gather in its turn, and the report matches it", async () => {
     let load = LOAD;
-    const { held, gathers, doctor, reports } = setup({ loadConfig: () => load });
+    const { held, gathers, doctor, reports } = setup({
+      loadConfig: () => load,
+    });
     const a = doctor(A);
     await drain();
     load = FAILED_LOAD;
@@ -332,7 +396,10 @@ describe("a gather is a snapshot of one config", () => {
   });
 
   test("the re-gather asks the real rate limiter nothing twice", async () => {
-    const launcher = systemLauncher({ inherited: process.env }, systemTimekeeper);
+    const launcher = systemLauncher(
+      { inherited: process.env },
+      systemTimekeeper,
+    );
     let load = LOAD;
     const real = productionEdge(launcher, () => load, HOST);
     const parked = gate();
@@ -342,7 +409,13 @@ describe("a gather is a snapshot of one config", () => {
     sessionState.set(
       A,
       SESSION_CLIENT_HINTS_KEY,
-      JSON.stringify({ tmux: { pane: "%1", socket: "/tmp/fqw-no-such-socket", truecolor: null } }),
+      JSON.stringify({
+        tmux: {
+          pane: "%1",
+          socket: "/tmp/fqw-no-such-socket",
+          truecolor: null,
+        },
+      }),
     );
     const c: VerbContext = {
       ...ctx,
@@ -412,17 +485,25 @@ test("a slash click re-checks nothing outside the turn: read and typing share it
 test("a watcher reload during a parked pbcopy starts no `by=click` setup", async () => {
   const { ctx } = setup();
   const parked = gate();
-  const quiet = { band: false } as never as ReturnType<VerbContext["lanes"]["of"]>;
+  const quiet = { band: false } as never as ReturnType<
+    VerbContext["lanes"]["of"]
+  >;
   const moved = { band: true } as never as typeof quiet;
   let now = quiet;
   const moves: unknown[][] = [];
-  const launcher = { ...ctx.launcher, launch: () => parked.wait.then(() => LAUNCHED) } as Launcher;
-  const copying = VERBS.get(VERB_COPY_DIAGNOSTIC)!(encodeSegments([A, "request", "k"]), {
-    ...ctx,
-    launcher,
-    diagnosticCopy: () => "text",
-    lanes: { of: () => now, clicked: (...args) => moves.push(args) },
-  });
+  const launcher = {
+    ...ctx.launcher,
+    launch: () => parked.wait.then(() => LAUNCHED),
+  } as Launcher;
+  const copying = VERBS.get(VERB_COPY_DIAGNOSTIC)!(
+    encodeSegments([A, "request", "k"]),
+    {
+      ...ctx,
+      launcher,
+      diagnosticCopy: () => "text",
+      lanes: { of: () => now, clicked: (...args) => moves.push(args) },
+    },
+  );
   await drain();
   now = moved;
   parked.open();
@@ -434,7 +515,8 @@ describe("the idle clock", () => {
   function clock() {
     let now = 1000;
     const closes: string[] = [];
-    const idle = new MenuIdle({ clock: systemTimekeeper,
+    const idle = new MenuIdle({
+      clock: systemTimekeeper,
       now: () => instantOf(new Date(now * 1000)),
       close: async (sid, { firedAt }) => {
         idle.confirmClose(sid, firedAt);
@@ -490,7 +572,8 @@ describe("the idle clock", () => {
     const c = clock();
     c.idle.clicked(S, c.at());
     c.idle.clickArrived(S);
-    for (let i = 0; i < 256; i++) c.idle.clicked(sessionIdOf(`other${i}`), c.at());
+    for (let i = 0; i < 256; i++)
+      c.idle.clicked(sessionIdOf(`other${i}`), c.at());
     expect(c.idle.getStats().pending).toBe(1);
     expect(() => c.idle.clickSettled(S)).not.toThrow();
     expect(c.idle.getStats().pending).toBe(0);
@@ -500,12 +583,20 @@ describe("the idle clock", () => {
 
 test("the click path counts a click pending from arrival, through a refusal, and logs its gather", async () => {
   const { ctx, held } = setup();
-  const idle = new MenuIdle({ clock: systemTimekeeper,
+  const idle = new MenuIdle({
+    clock: systemTimekeeper,
     now: () => instantOf(new Date()),
     close: async () => null,
     failed: () => {},
   });
-  const { arrival: _a, turnWaited: _t, placeWaited: _p, gatherTook: _g, clientGone: _c, ...verbCtx } = ctx;
+  const {
+    arrival: _a,
+    turnWaited: _t,
+    placeWaited: _p,
+    gatherTook: _g,
+    clientGone: _c,
+    ...verbCtx
+  } = ctx;
   const events: string[] = [];
   const parts = {
     clock: { monotonic: () => performance.now(), now: () => Date.now() },
@@ -517,7 +608,11 @@ test("the click path counts a click pending from arrival, through a refusal, and
   const send = (gone: () => boolean) =>
     replyTo(
       parts,
-      { kind: "click", verb: VERB_DOCTOR_RUN, value: encodeURIComponent(A) } as Parameters<typeof replyTo>[1],
+      {
+        kind: "click",
+        verb: VERB_DOCTOR_RUN,
+        value: encodeURIComponent(A),
+      } as Parameters<typeof replyTo>[1],
       () => false,
       new RuntimeStats(systemTimekeeper).accept(),
       gone,
@@ -536,12 +631,20 @@ test("the click path counts a click pending from arrival, through a refusal, and
 
 test("a click's turn holds its session in the collector while it runs, with nothing held by the click path, and lets go whether it lands or is refused", async () => {
   const { ctx, held } = setup();
-  const idle = new MenuIdle({ clock: systemTimekeeper,
+  const idle = new MenuIdle({
+    clock: systemTimekeeper,
     now: () => instantOf(new Date()),
     close: async () => null,
     failed: () => {},
   });
-  const { arrival: _a, turnWaited: _t, placeWaited: _p, gatherTook: _g, clientGone: _c, ...verbCtx } = ctx;
+  const {
+    arrival: _a,
+    turnWaited: _t,
+    placeWaited: _p,
+    gatherTook: _g,
+    clientGone: _c,
+    ...verbCtx
+  } = ctx;
   // The collector's holds, as the sweep reads them: how many are taken and
   // not yet let go, per session.
   const holds = new Map<string, number>();
@@ -561,7 +664,11 @@ test("a click's turn holds its session in the collector while it runs, with noth
   const send = (gone: () => boolean) =>
     replyTo(
       parts,
-      { kind: "click", verb: VERB_DOCTOR_RUN, value: encodeURIComponent(A) } as Parameters<typeof replyTo>[1],
+      {
+        kind: "click",
+        verb: VERB_DOCTOR_RUN,
+        value: encodeURIComponent(A),
+      } as Parameters<typeof replyTo>[1],
       () => false,
       new RuntimeStats(systemTimekeeper).accept(),
       gone,
@@ -580,7 +687,14 @@ test("a click's turn holds its session in the collector while it runs, with noth
 
 test("a click whose session will not decode is a bad request whose event still names its verb", async () => {
   const { ctx } = setup();
-  const { arrival: _a, turnWaited: _t, placeWaited: _p, gatherTook: _g, clientGone: _c, ...verbCtx } = ctx;
+  const {
+    arrival: _a,
+    turnWaited: _t,
+    placeWaited: _p,
+    gatherTook: _g,
+    clientGone: _c,
+    ...verbCtx
+  } = ctx;
   const events: string[] = [];
   const parts = {
     clock: { monotonic: () => performance.now(), now: () => Date.now() },
@@ -590,13 +704,17 @@ test("a click whose session will not decode is a bad request whose event still n
   } as unknown as DaemonParts;
   const { resp } = await replyTo(
     parts,
-    { kind: "click", verb: VERB_DOCTOR_RUN, value: "%ZZ" } as Parameters<typeof replyTo>[1],
+    { kind: "click", verb: VERB_DOCTOR_RUN, value: "%ZZ" } as Parameters<
+      typeof replyTo
+    >[1],
     () => false,
     new RuntimeStats(systemTimekeeper).accept(),
     () => false,
   );
   expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
-  expect(events).toEqual([expect.stringMatching(new RegExp(` verb=${VERB_DOCTOR_RUN} `))]);
+  expect(events).toEqual([
+    expect.stringMatching(new RegExp(` verb=${VERB_DOCTOR_RUN} `)),
+  ]);
 });
 
 test("tsc refuses `ctx.launcher` in a VerbHandler", () => {
@@ -622,7 +740,12 @@ test("a click waiting behind its session's gather reports the wait; a menu with 
   expect(waits).toHaveLength(1);
   expect(waits[0]).toBeGreaterThan(0);
 
-  const idle = new MenuIdle({ clock: systemTimekeeper, now: () => instantOf(new Date(100000)), close: async () => null, failed: () => {} });
+  const idle = new MenuIdle({
+    clock: systemTimekeeper,
+    now: () => instantOf(new Date(100000)),
+    close: async () => null,
+    failed: () => {},
+  });
   idle.observe(A, instantOf(new Date(100000)), true, 30);
   expect(idle.since(A, instantOf(new Date(100000)))).toBeDefined();
   idle.clickArrived(A);

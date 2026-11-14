@@ -118,7 +118,7 @@ These are word matches across the 301 test files. `links(` is a heuristic, and t
   - **Frame need:** a `Frame` constructor taking text and diagnostic colours.
   - **Catch:** the glyph writes `BG` then `FG` as two sequences, but rich-js writes fg then bg in one SGR. An encoded Frame cannot match today's glyph bytes, so either the glyph bytes change on both runtimes or terminals keep the literal.
 - `rust-client/src/error_glyph.rs`: a byte mirror of the above. It is a client-side terminal sink with no Frame available, so it can stay bytes. It stays held to TS by `scripts/check-protocol.mjs` and paired fixtures.
-- `src/render/outcome-plan.ts`: `planOutcome` produces three outputs: `outcome.value`, a literal `"\n"` for transient, and the glyph for permanent.
+- `src/outcome-plan.ts`: `planOutcome` produces three outputs: `outcome.value`, a literal `"\n"` for transient, and the glyph for permanent.
   - It is a shared seam for the terminal client (`src/index.ts`, `src/bar-pane/index.ts`) and for band and tmux.
   - **Frame need:** daemon lanes stop calling it and build from a Frame or a failure. Clients keep it.
   - Every `Response` that reaches lanes decides ok or permanent, except `TIMEOUT`, which `interpretResponse` treats as a kick-and-blank path. I read that arm only up to its comment.
@@ -127,7 +127,7 @@ These are word matches across the 301 test files. `links(` is a heuristic, and t
   - It goes through `renderStripCells`, never `drawDsl`, and it has no `nextChange` of its own.
   - **Frame need:** return Frame rows through the shared strip draw.
   - `messageRows` has no caller in `src` or `test/helpers`, so check it is dead before migrating it.
-- `src/render/diagnostics.ts`, `handoffRows`, with `src/daemon/lane-handoff.ts`: strip-drawn rows, chosen in `statuslineOf` after the draw. **Frame need:** a second Frame in the `Reply`, because a feed sends `resp` (bar) and `statusline` separately. Statusline-role clients and the statusline lane receive this one.
+- `src/render/diagnostics.ts`, `handoffRows`, with `src/renderer/lane-handoff.ts`: strip-drawn rows, chosen in `statuslineOf` after the draw. **Frame need:** a second Frame in the `Reply`, because a feed sends `resp` (bar) and `statusline` separately. Statusline-role clients and the statusline lane receive this one.
 - `src/daemon/server.ts`:
   - `renderFailed`, `refusedRender` and `refuse` are `ok: false` responses with no bytes, turned into the glyph client-side.
   - `serializeSegmentCells` makes per-segment ANSI for debug, a `DEBUG_RENDER_OPTS` infinite-width path that can use the Frame encoder directly.
@@ -144,7 +144,7 @@ These are word matches across the 301 test files. `links(` is a heuristic, and t
 - rich-js `stripOscTerminators` runs in `osc8Open`, so a Frame carries unsanitized URLs until encoding unless a Frame builder cleans them.
 - `escaped()` in `src/tmux-status/frames.ts` is encoder-side and stays.
 
-**Not an output path:** `src/daemon/closing-view.ts` only wraps session-state writes. It draws nothing. The closing flash is drawn inside `drawDsl`.
+**Not an output path:** `src/renderer/closing-view.ts` only wraps session-state writes. It draws nothing. The closing flash is drawn inside `drawDsl`.
 
 `candybar-lite.mjs` showed no hits for output handling, but I did not read it.
 
@@ -160,8 +160,8 @@ These are word matches across the 301 test files. `links(` is a heuristic, and t
 - `src/render/carousel.ts`: two sites.
 - `src/render/diagnostics.ts`: `copyLink`, `viewerLink`.
 - `src/daemon/update-notice.ts`: three sites.
-- `src/daemon/repo-configs.ts`: `repoQuestions`, signed.
-- `src/daemon/lane-handoff.ts`: `laneHandoff`.
+- `src/renderer/repo-configs.ts`: `repoQuestions`, signed.
+- `src/renderer/lane-handoff.ts`: `laneHandoff`.
 - Click drivers only: `scripts/load-gate.ts` and `scripts/bench/suites/wire.ts`. 21 test files also call it.
 
 **Not through it**
@@ -277,7 +277,7 @@ Unverified:
 ---
 
 # Decisions the plan must make
-1. **Wire.** `drive-bar`, `bar-web`, bench, `daemon-e2e` and 32 test files hold only `Response.output`. Either the Frame or link list crosses the socket, or those decoders cannot be deleted. Adding it touches `src/daemon/protocol.ts`, `scripts/check-protocol.mjs`, and Rust, which reads only `output`.
+1. **Wire.** `drive-bar`, `bar-web`, bench, `daemon-e2e` and 32 test files hold only `Response.output`. Either the Frame or link list crosses the socket, or those decoders cannot be deleted. Adding it touches `src/daemon/foundations/protocol.ts`, `scripts/check-protocol.mjs`, and Rust, which reads only `output`.
 2. **Glyph bytes.** Keep the literal client-side, or change both runtimes.
 3. **Config-authored links.** Rewrite at Frame construction, or leave unaddressed.
 4. **Draw-id lifetime.** It must be stable per view or session, not per frame.

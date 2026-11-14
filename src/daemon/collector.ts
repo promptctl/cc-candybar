@@ -30,32 +30,33 @@ import type {
   Event,
   Subscription,
   Subscriptions,
-} from "../renderer/interface.js";
+} from "../renderer-interface/interface.js";
 import type { Timekeeper } from "../time.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { Holds } from "../utils/holds.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { failed } from "../utils/outcome.js";
-import { sameKey, type StorageKey } from "./cache/managed-storage.js";
-import {
-  assembleFacts,
-  failedStamp,
-  stampFailureOf,
-} from "./facts-assembly.js";
+import { sameKey } from "./cache/managed-storage.js";
+import { type StorageKey } from "../renderer-interface/interface.js";
+import { assembleFacts, failedStamp } from "./facts-assembly.js";
+import { stampFailureOf } from "../facts/world-state.js";
 import {
   declareLanes,
   readingsOf,
   settledLanes,
   type DeclaredLanes,
-  type Subscribed,
   type Readings,
   type RenderPayloadDeps,
+} from "./readings.js";
+import {
+  type Subscribed,
   type ViewFacts,
-} from "./render-payload.js";
-import type { SessionId } from "./session-id.js";
-import { judgeRun } from "./judge-run.js";
-import { shortDigest } from "../source-digest.js";
+} from "../renderer-interface/request-context.js";
+import type { SessionId } from "./foundations/session-id.js";
+import { judgeRun } from "./foundations/judge-run.js";
+import { shortDigest } from "../facts/world-state.js";
 import { valueOf } from "../utils/logfmt.js";
+import type { CollectorStats } from "./foundations/stats-snapshot";
 
 // [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
 // first session and stopped with the last: every interval it retires each
@@ -148,11 +149,6 @@ type StampInputs =
       readonly update: Fact<UpdateNotice>;
     }
   | { readonly kind: "failed"; readonly reason: string };
-
-export interface CollectorStats {
-  readonly sessions: number;
-  readonly retiring: number;
-}
 
 // What a session's declaration keys on, of the request that named it.
 const locatorOf = (req: ViewFacts): ViewFacts => ({
@@ -531,7 +527,7 @@ export class Collector {
   // once, and its record stays `retiring` until the retire settles: an output
   // taken meanwhile may still name it. A settled retire, answered or threw,
   // leaves the renderer holding none of the session's document
-  // (src/renderer/interface.ts), so the record goes either way. It goes only
+  // (src/renderer-interface/interface.ts), so the record goes either way. It goes only
   // from the retiring period this retire began: a record a request revived,
   // or one retired again since, is not this retire's to remove.
   private retire(record: SessionRecord, live: Live): void {

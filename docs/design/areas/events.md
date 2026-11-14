@@ -46,7 +46,7 @@ Not done. A future session should have a subagent produce:
 
 - **Ordering.** Every wake today happens after a click's writes and journal commit. Prove a frame never draws a half-applied event.
 - **Effects that need Gather's facts.** Surface setup needs a session's pid and pane. The proposal is that Apply performs it from facts Gather sent, untested.
-- **Click timing.** `src/daemon/verbs/index.ts` relies on a click's writes landing before its reply and the feed's next frame. Prove the queue keeps that, or define what replaces it.
+- **Click timing.** `src/renderer/verbs/index.ts` relies on a click's writes landing before its reply and the feed's next frame. Prove the queue keeps that, or define what replaces it.
 
 ## Done when
 

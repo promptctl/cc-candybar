@@ -1,4 +1,4 @@
-import type { PluginStorage } from "../../src/daemon/cache/render";
+import type { PluginStorage } from "../../src/renderer/render-cache";
 
 // The storage a state's build is handed in a test whose configs declare no
 // plugin source: a build asks it nothing, so any ask is the test's mistake,

@@ -1,5 +1,12 @@
-import type { Host } from "./host";
 import { explicitConfigPath } from "./utils/user-path";
+
+// [LAW:one-way-deps] What a hint reads of the machine: the Host's environment
+// and home (src/host.ts), spelled here so the renderer's side parses a hint
+// without importing the process's own reader. A Host is one by its shape.
+interface HostPaths {
+  readonly env: Readonly<NodeJS.ProcessEnv>;
+  readonly home: string;
+}
 
 // The client's explicit-config probe — the `CC_CANDYBAR_CONFIG` the shell
 // Claude Code spawned the statusline in carries, read from the client's own
@@ -30,7 +37,7 @@ export const CONFIG_ENV = "CC_CANDYBAR_CONFIG";
 // no cwd of their own. So the daemon accepts only an absolute hint, like
 // `claudeConfigDir` (src/claude-settings.ts).
 export function detectConfigEnv(
-  { env, home }: Pick<Host, "env" | "home">,
+  { env, home }: HostPaths,
   cwd: string,
 ): string | undefined {
   return explicitConfigPath(cwd, env[CONFIG_ENV], home);
@@ -73,7 +80,7 @@ export function requestedConfigTarget(
 // `explicitConfigPath` reading.
 export function cliConfigTarget(
   arg: string | undefined,
-  host: Pick<Host, "env" | "home">,
+  host: HostPaths,
   cwd: string,
 ): RequestedTarget {
   return requestedConfigTarget(

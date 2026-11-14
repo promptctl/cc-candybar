@@ -6,7 +6,7 @@
 // report a session differently from the other. The Rust client mirrors it.
 
 import type { Host } from "./host";
-import type { ClientHints } from "./daemon/protocol";
+import type { ClientHints } from "./daemon/foundations/protocol";
 import { detectClaudeConfigDir } from "./claude-settings";
 import { detectConfigEnv } from "./config-hint";
 import { detectTermExtent } from "./term-extent";

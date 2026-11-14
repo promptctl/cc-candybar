@@ -32,7 +32,7 @@ Each reason is paired with what it changes in this codebase; a reason with no co
 
 **Sum types with exhaustive matching.** The daemon is built on discriminated unions, and the compiler checks their totality only where a `switch` happens to be written as one total projection. In Rust each becomes an enum the compiler refuses to `match` with an arm missing: `Outcome` (absent / failed / ok), `Presence` (present / absent / Unchecked), `ConfigResolution` (file / default / missing / unreadable), `BuildCurrency` (current / stale / not-source-checkout / unchecked), `Region` (bar / band), the `ActionDecl` union (`src/config/action.ts` is the source of its arm list: `set` and `persist` each with their value sources, the structural `persist` edits, `copy`, `open`, `reset`, `undo`, `redo`, `doctor`, and the dual form), and `LayoutNode` (container / segment). `[LAW:types-are-the-program]` is what the codebase already claims; the port makes the compiler enforce it.
 
-**Ownership and `Drop`.** The render cache's contract, "the `SourceRegistry` owns the async handles; dispose before swap" (`reloadInto` in `src/daemon/cache/render.ts`), is a discipline the code follows. In Rust the registry's watchers, timers, and git subscriptions are fields whose `Drop` runs when the old registry is dropped, so a swap that forgot to dispose cannot be written. `[LAW:single-enforcer]` becomes structural rather than reviewed.
+**Ownership and `Drop`.** The render cache's contract, "the `SourceRegistry` owns the async handles; dispose before swap" (`reloadInto` in `src/renderer/render-cache.ts`), is a discipline the code follows. In Rust the registry's watchers, timers, and git subscriptions are fields whose `Drop` runs when the old registry is dropped, so a swap that forgot to dispose cannot be written. `[LAW:single-enforcer]` becomes structural rather than reviewed.
 
 **One crate for client and daemon.** The Rust client mirrors the wire protocol as literal consts, and `scripts/check-protocol.mjs` diffs every one against the TypeScript source so `prepublishOnly` fails on drift. With both halves in one workspace sharing one `protocol` module, the script, its `CHECKS` table, and the lockstep rule in CLAUDE.md are deleted. `[LAW:one-source-of-truth]` is satisfied by having one source.
 
@@ -112,9 +112,9 @@ The TypeScript daemon is 39,534 lines of `src/` and 47,711 lines of `test/`. The
 | `rust-client/` | 1,848 | `cc-candybar` crate (exists; `rust-client/Cargo.toml`) | Becomes the client half of one workspace; its mirrored protocol consts are replaced by the shared `protocol` module |
 | rich-js (styled text, colour) | 22,775 | `cc-rich` crate, own port | Ported from rich-js's own test suite; `palette` for OKLCH/OKLab, `unicode-width` for cells (versions not verified) |
 | go-template-js (`text/template` + Sprig) | 16,907 | `cc-gotmpl` crate, own port | Named apart from the published `gotmpl`, which Template engine below evaluates and rejects |
-| MobX subset (`src/var-system/store.ts`, `sources.ts`, `src/daemon/session-state.ts`) | — | Reactive runtime | `reactive_graph` or an own runtime; see Reactive runtime below |
+| MobX subset (`src/var-system/store.ts`, `sources.ts`, `src/renderer/session-state.ts`) | — | Reactive runtime | `reactive_graph` or an own runtime; see Reactive runtime below |
 | `src/daemon/server.ts`, `protocol.ts`, `paths.ts`, `limits.ts`, `parent-watchdog.ts` | — | `daemon` module | Socket, framing, pid mutex, parent-death watchdog; `limits.ts` is deleted, not ported |
-| `src/daemon/cache/git.ts`, `src/daemon/cache/session-usage-store.ts`, `src/daemon/cache/render.ts`, `src/daemon/session-state.ts` | — | `cache` module | Git watchers, PR TTL cache, byte-cursor usage fold, render LRU with `Drop`-driven dispose |
+| `src/daemon/cache/git.ts`, `src/daemon/cache/session-usage-store.ts`, `src/renderer/render-cache.ts`, `src/renderer/session-state.ts` | — | `cache` module | Git watchers, PR TTL cache, byte-cursor usage fold, render LRU with `Drop`-driven dispose |
 | `src/var-system/` | — | `var_system` module | Boxes, computeds, the nine source kinds, `SourceParse`, documents |
 | `src/dsl/render.ts`, `src/render/`, `src/themes/` | — | `render` module | `registerDslConfig` + `drawDsl`, decor and bands, actions, picker, diagnostic strip |
 | `src/config/` (loader, merge, schema emitter, `json5-edit.ts`) | — | `config` module | Validation with the same error text; the span-tracking JSON5 editor; the JSON schema emitter stays one source with the validator |
@@ -125,7 +125,7 @@ Line counts for individual daemon modules were not measured; the 39,534 total co
 
 ## Reactive runtime
 
-The variable system uses a small, exact subset of MobX. Three files import it (`src/var-system/store.ts`, `src/var-system/sources.ts`, `src/daemon/session-state.ts`) and nothing else does. The subset is:
+The variable system uses a small, exact subset of MobX. Three files import it (`src/var-system/store.ts`, `src/var-system/sources.ts`, `src/renderer/session-state.ts`) and nothing else does. The subset is:
 
 - `observable.box(initial, { deep: false })` for `BoxNode` and `DocumentCell` in `store.ts`.
 - `computed(fn, { keepAlive: true })` for `ComputedNode`. The comment in the source explains the flag: without `keepAlive`, MobX treats an unobserved computed as uncached and re-runs it on every read, and the render path is pull-only, with no `autorun`.

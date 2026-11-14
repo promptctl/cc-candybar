@@ -8,11 +8,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import {
-  assessBuild,
-  bundleStamp,
-  type SourceStamp,
-} from "../src/daemon/build-currency";
+import { assessBuild, bundleStamp } from "../src/daemon/build-currency";
+import { type SourceStamp } from "../src/facts/world-state";
 import { sourceDigest } from "../src/source-digest";
 
 const HOUR_S = 60 * 60;
@@ -78,7 +75,10 @@ describe("assessBuild", () => {
   });
 
   test("a content edit is stale, naming the checkout's version and digest beside the running ones", () => {
-    fs.appendFileSync(path.join(c.src, "daemon", "cache", "render.ts"), "// edit\n");
+    fs.appendFileSync(
+      path.join(c.src, "daemon", "cache", "render.ts"),
+      "// edit\n",
+    );
     expect(assessBuild(c.entryUrl, () => c.running)).toEqual({
       kind: "stale",
       root: c.root,
@@ -113,7 +113,8 @@ describe("assessBuild", () => {
     fs.writeFileSync(path.join(c.root, "package.json"), "{}");
     const v = assessBuild(c.entryUrl, () => c.running);
     expect(v.kind).toBe("unchecked");
-    if (v.kind === "unchecked") expect(v.reason).toMatch(/package\.json has no version/);
+    if (v.kind === "unchecked")
+      expect(v.reason).toMatch(/package\.json has no version/);
   });
 
   test("a running stamp that cannot be read is unchecked with its reason", () => {
@@ -124,7 +125,9 @@ describe("assessBuild", () => {
   });
 
   test("a non-file entry URL is unchecked", () => {
-    expect(assessBuild("data:text/javascript,", () => c.running).kind).toBe("unchecked");
+    expect(assessBuild("data:text/javascript,", () => c.running).kind).toBe(
+      "unchecked",
+    );
   });
 
   // Root ignores directory permissions, so the condition cannot be built.

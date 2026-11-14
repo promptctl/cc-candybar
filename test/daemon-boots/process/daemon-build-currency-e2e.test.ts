@@ -9,7 +9,7 @@ import path from "node:path";
 
 import { DIAGNOSTICS_VIEWING } from "../../../src/config/door";
 import { sessionStatePath } from "../../../src/daemon/paths";
-import type { SessionSnapshot } from "../../../src/daemon/session-state";
+import type { SessionSnapshot } from "../../../src/renderer-interface/session-state";
 import { sourceDigest } from "../../../src/source-digest";
 import { effectsUrl, VERB_APPLY_UPDATE } from "../../../src/click/wire";
 import { click, killAndWait } from "../../helpers/daemon-e2e";

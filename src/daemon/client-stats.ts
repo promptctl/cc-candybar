@@ -5,11 +5,12 @@ import type {
   RoundTripBudgets,
   RoundTripOutcome,
 } from "./client-transport";
-import { RuntimeStats, type StatsSnapshot } from "./stats";
+import { RuntimeStats } from "./stats";
+import { type StatsSnapshot } from "./foundations/stats-snapshot";
 import { fileEventsLine } from "./cache/file-events";
 import { PACKAGE_VERSION } from "../version";
 import { bakedDigest } from "./build-currency";
-import { shortDigest } from "../source-digest";
+import { shortDigest } from "../facts/world-state";
 
 // Operator-driven introspection path: legitimately slower budgets than the
 // render hot path, carried as this caller's values through the shared

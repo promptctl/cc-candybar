@@ -37,6 +37,11 @@ import {
   MENU_NS,
   MENU_PAGE_NS,
 } from "../config/reserved-names.js";
+import { decodeWire } from "../daemon/foundations/verb-error";
+import {
+  parseSessionId,
+  type ParsedSessionId,
+} from "../daemon/foundations/session-id";
 
 // [LAW:one-source-of-truth] The scheme string lives here, with the codec that
 // emits it; install/ (Launch Services registration) imports it.
@@ -80,7 +85,7 @@ export const VERB_SET_CONFIG = "set-config";
 // `[sessionId, key, by]`.
 export const VERB_STEP_CONFIG = "step-config";
 // [LAW:no-ambient-temporal-coupling] Write every one of the session's unsaved
-// settings (src/daemon/setting-drafts.ts) to its config file, then release
+// settings (src/renderer/setting-drafts.ts) to its config file, then release
 // them from the session — one handler, so a refused write keeps every draft.
 // Args: `[sessionId]`: which settings are drafts, and their values, are read
 // at click time from the session itself, never carried by the URL.
@@ -101,7 +106,7 @@ export const VERB_SAVE_THEME_DEFAULT = "save-theme-default";
 export const VERB_DELETE_PRESET = "delete-preset";
 // [LAW:one-source-of-truth] Return each named config key to its bundled
 // default at every layer that holds it — its paths in the config file, in one
-// write, and the session's pick (resetLayers, src/daemon/setting-drafts.ts).
+// write, and the session's pick (resetLayers, src/renderer/setting-drafts.ts).
 // Args: `[sessionId, key, …key]`.
 export const VERB_RESET_CONFIG = "reset-config";
 // [LAW:one-type-per-behavior] brandon-layout-edit-2gc.1's structural-edit
@@ -115,7 +120,7 @@ export const VERB_RESET_CONFIG = "reset-config";
 // own verb rather than another VERB_SET_CONFIG value.
 export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
 // [LAW:one-source-of-truth] A step of the session's settings history
-// (src/daemon/settings-history.ts) — the fine-grained sibling of
+// (src/renderer/settings-history.ts) — the fine-grained sibling of
 // VERB_RESET_CONFIG's coarse "back to the bundled default". Args: `[sessionId]` — there is
 // no key: the history is one stack of clicks per session, not a per-key log.
 // An empty stack, or a target changed since the step, is a loud BAD_REQUEST
@@ -124,12 +129,12 @@ export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
 export const VERB_UNDO = "undo";
 export const VERB_REDO = "redo";
 // Restore what the session's last navigating click opened or closed
-// (src/daemon/navigation-history.ts). Args: `[sessionId]`, like undo. An empty
+// (src/renderer/navigation-history.ts). Args: `[sessionId]`, like undo. An empty
 // history is a loud BAD_REQUEST, never a silent no-op.
 export const VERB_BACK = "back";
 // [LAW:one-source-of-truth] Cancel for edit mode: put back everything the
 // session changed since edit mode opened, from the savepoint it took then
-// (src/daemon/settings-history.ts `rewind`). Args: `[sessionId]`, like undo.
+// (src/renderer/settings-history.ts `rewind`). Args: `[sessionId]`, like undo.
 // Saving is the settings menu's `save`; leaving edit mode releases the
 // savepoint.
 export const VERB_REWIND = "rewind";
@@ -173,7 +178,7 @@ export const VERB_RUN = "run";
 // [LAW:effects-at-boundaries] Answer the bar's question about a repository's
 // cc-candybar config. Args: `[sessionId, dir, answer, mac]` — `answer` is
 // approved or declined, and `mac` signs the session, directory and answer
-// (src/daemon/repo-configs.ts), so only an answer the bar drew is recorded.
+// (src/renderer/repo-configs.ts), so only an answer the bar drew is recorded.
 export const VERB_REPO_CONFIG = "repo-config";
 
 // Copy what a diagnostic message copies (src/render/diagnostics.ts): its text,
@@ -451,4 +456,114 @@ export function parseHandlerUrl(rawUrl: string): HandlerUrl {
   } catch {
     return { ok: false, problem: `the link's verb is malformed: ${encoded}` };
   }
+}
+
+// [LAW:one-source-of-truth] The verbs whose handler splits its value into
+// `/`-separated segments (decodeSegments); every other verb decodes its whole
+// value as one argument (oneArg, or load-config's split at the first slash).
+// It is what src/click/read.ts decodes a click's effects by, to describe them
+// as the handler will read them; a handler that changes codec changes its row.
+export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
+  VERB_SET_STATE,
+  VERB_STEP_STATE,
+  VERB_SET_CONFIG,
+  VERB_STEP_CONFIG,
+  VERB_RESET_CONFIG,
+  VERB_SAVE,
+  VERB_SAVE_PRESET,
+  VERB_SAVE_THEME_DEFAULT,
+  VERB_DELETE_PRESET,
+  VERB_APPLY_LAYOUT_OP,
+  VERB_UNDO,
+  VERB_REDO,
+  VERB_DOCTOR_FIX,
+  VERB_DOCTOR_MARK,
+  VERB_SLASH,
+  VERB_RUN,
+  VERB_REPO_CONFIG,
+  VERB_COPY_DIAGNOSTIC,
+]);
+
+// [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
+// id — the set `dispatch` reads to know which session a failing click should
+// surface its error in. Membership here is the fact; a verb that carries the
+// session id first joins by one row, not one more `||`.
+const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
+  VERB_SET_STATE,
+  VERB_STEP_STATE,
+  VERB_SET_CONFIG,
+  VERB_STEP_CONFIG,
+  VERB_RESET_CONFIG,
+  VERB_SAVE,
+  VERB_SAVE_PRESET,
+  VERB_SAVE_THEME_DEFAULT,
+  VERB_DELETE_PRESET,
+  VERB_APPLY_LAYOUT_OP,
+  VERB_UNDO,
+  VERB_REDO,
+  VERB_BACK,
+  VERB_REWIND,
+  VERB_TOOLBAR_TOGGLE,
+  VERB_APPLY_UPDATE,
+  VERB_DOCTOR_RUN,
+  VERB_DOCTOR_FIX,
+  VERB_DOCTOR_MARK,
+  VERB_SLASH,
+  VERB_RUN,
+  VERB_REPO_CONFIG,
+  VERB_LOAD_CONFIG,
+  VERB_COPY_DIAGNOSTIC,
+]);
+
+// [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
+// dispatcher folds the list, running EVERY effect through the leaf table, after
+// batchAdjacentWrites has joined each run of adjacent set-state (or
+// reset-config) effects into the one batch that lands whole. The
+// effect count is data — N=1 and N=100 walk the identical loop, no plain-vs-
+// compound branch. [LAW:no-silent-failure] Every effect runs even if an
+// earlier one failed; failures accumulate in `errors`. An unknown or
+// non-leaf (e.g. nested `dispatch`) verb is a miss in LEAF_VERBS — reported,
+// never executed.
+//
+// [LAW:types-are-the-program] The aggregate PRESERVES the dispatcher's
+// input-vs-operational error classification: a leaf throws BadVerbArgs for bad
+// input (→ BAD_REQUEST) and a plain Error for an operational failure (e.g. a
+// pbcopy/open launch failure → RENDER_FAILED). If ANY effect failed
+// operationally, the whole click failed operationally (plain Error); only when
+// every failure is an input error does the aggregate stay BadVerbArgs. An
+// unknown verb is bad input — it does not flip the classification.
+//
+// [LAW:one-source-of-truth] Per-effect errors are written to session state
+// so the bar shows WHICH effect(s) failed, for the hold src/daemon/foundations/click-error.ts
+// sets. Only possible when a session ID
+// is available from a set-state or toolbar-toggle effect in the same click.
+// [LAW:one-source-of-truth] The session a click is in: the first segment of
+// its first session-bearing effect — every SESSION_FIRST_VERBS member carries
+// it there — or none. Dispatch surfaces a failed step in that session's bar,
+// and the daemon counts the click as that session's activity
+// (src/daemon/menu-idle.ts). [LAW:single-enforcer] It is read as it crosses
+// the one session-id checkpoint, so every reader of a click's session reads
+// the same checked value; one that fails is no session's, and its verb
+// refuses the click.
+export function clickSessionOf(
+  verb: string,
+  value: string,
+): ParsedSessionId | null {
+  return sessionOfEffects(
+    verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }],
+  );
+}
+
+export function sessionOfEffects(
+  effects: readonly ParsedEffect[],
+): ParsedSessionId | null {
+  const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
+  // Only the session's own segment is read: a step's malformed argument is
+  // that step's error to hold on the bar, after the click has found its
+  // session.
+  const sid =
+    bearing === undefined
+      ? ""
+      : decodeWire(() => decodeFirstSegment(bearing.value));
+  return sid === "" ? null : parseSessionId(sid);
 }

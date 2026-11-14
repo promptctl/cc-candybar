@@ -33,7 +33,7 @@ import { tryRenderViaDaemon } from "./daemon/client";
 import { followFrames, type FrameFollower } from "./daemon/frame-follow";
 import { describeFailure } from "./daemon/client-transport";
 import { obtainDaemonKick } from "./daemon/acquire";
-import { planOutcome } from "./render/outcome-plan";
+import { planOutcome } from "./outcome-plan";
 import { socketPath } from "./daemon/paths";
 import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";

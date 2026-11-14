@@ -3,7 +3,7 @@
 // reshape lives in the daemon's PER-RENDER strip-style resolution
 // (resolveEffectiveGlobals -> renderOpts.endcaps), OUTSIDE drawDsl — the exact twin
 // of how a theme click recolors via basePalette (see dsl-theme-picker-recolor).
-// This test replicates that resolution exactly as src/daemon/draw-bar.ts does, so
+// This test replicates that resolution exactly as src/renderer/draw-bar.ts does, so
 // it proves the end-to-end loop: a set-state `style` click changes what the
 // joiner draws between cells.
 //
@@ -19,7 +19,7 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { ENDCAPS_SHAPES } from "../src/themes";
 import { globalsFor } from "./helpers/selection";
 import { buildRig } from "./helpers/rig";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-reshape");
 const BASE_THEME = "textual-dark";

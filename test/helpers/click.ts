@@ -3,6 +3,13 @@
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 
+import {
+  applyFix,
+  gatherFacts,
+  installFacts,
+  oneAskPerClick,
+  readStores,
+} from "../../src/doctor/edge";
 import { bareGates } from "./gates";
 import { HOST } from "./host";
 import { unscriptedLauncher } from "./fake-launcher";
@@ -10,20 +17,20 @@ import type { Host } from "../../src/host";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
 import { JournalTurns } from "../../src/daemon/journal-turns";
-import { NavigationHistory } from "../../src/daemon/navigation-history";
+import { NavigationHistory } from "../../src/renderer/navigation-history";
 import {
   HEALTHY_INSTALL_EDGE,
   HEALTHY_SERVING,
   noManagedSettings,
 } from "./doctor-facts";
 import { clickOf } from "../../src/click/read";
-import { VERBS } from "../../src/daemon/verbs";
+import { VERBS } from "../../src/renderer/verbs";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
-import type { VerbContext } from "../../src/daemon/verbs";
-import type { SessionStateRW } from "../../src/daemon/session-state";
-import type { SessionId } from "../../src/daemon/session-id";
-import { SettingsHistory } from "../../src/daemon/settings-history";
+import type { VerbContext } from "../../src/renderer/verbs";
+import type { SessionStateRW } from "../../src/renderer-interface/session-state";
+import type { SessionId } from "../../src/daemon/foundations/session-id";
+import { SettingsHistory } from "../../src/renderer/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { ProbeArrivals } from "../../src/doctor/handler-probe";
 import { RenderSightings } from "../../src/daemon/render-sightings";
@@ -58,6 +65,15 @@ export function recordRender(
   );
 }
 
+// The doctor's world probes as the daemon hands them in.
+export const DOCTOR_PROBES = {
+  gatherFacts,
+  applyFix,
+  installFacts,
+  readStores,
+  oneAskPerClick,
+};
+
 // [LAW:one-source-of-truth] THE VerbContext a test hands the click path: a
 // silent log and an update act that refuses loudly — no test here has an
 // update watch, so an apply-update click reaching it is a test bug, never a
@@ -73,7 +89,8 @@ export function testVerbContext(
 ): VerbContext {
   return {
     gates: bareGates(),
-    stateDir: stateDir(host), locations: locations(host),
+    stateDir: stateDir(host),
+    locations: locations(host),
     sessionState,
     history,
     navigation: new NavigationHistory(),
@@ -149,6 +166,7 @@ export function testVerbContext(
     // daemon's for a probe to land: a test that reads arrivals hands in its own.
     arrival: { via: "link", delivery: { kind: "forwarder", urlV: 1 } },
     probes: new ProbeArrivals(),
+    doctorProbes: DOCTOR_PROBES,
     clients: new RenderSightings(),
     bundle: HEALTHY_BUNDLE,
     serving: () => HEALTHY_SERVING,

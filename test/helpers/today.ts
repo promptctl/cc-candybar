@@ -2,14 +2,14 @@ import type {
   DaySums,
   SessionUsageStore,
 } from "../../src/daemon/cache/session-usage-store";
-import { oneDay, projectToday } from "../../src/daemon/cache/today-facts";
-import { todayReading } from "../../src/daemon/render-payload";
+import { oneDay, projectToday } from "../../src/daemon/foundations/today-facts";
+import { todayReading } from "../../src/daemon/readings";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import type { Holds } from "../../src/utils/holds";
 import type { Instant } from "../../src/utils/instant";
 import { pendingOf } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
-import { sessionIdOf } from "../../src/daemon/session-id";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 
 // `today` once its set's first scan has landed: the set declared, the
 // session's own refresh and the scan awaited here (a request awaits only the

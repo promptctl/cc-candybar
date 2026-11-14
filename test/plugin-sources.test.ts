@@ -25,23 +25,23 @@ import {
   pluginLoadLine,
   RenderCache,
   type SessionView,
-} from "../src/daemon/cache/render";
+} from "../src/renderer/render-cache";
 import type { Collector } from "../src/daemon/collector";
 import { collected } from "./helpers/collected";
 import {
   projectSources,
   renderOptionsOf,
   sourcesFactOf,
-} from "../src/daemon/render-payload";
+} from "../src/renderer/render-payload";
 import {
   sessionSource,
   type SessionSource,
-} from "../src/daemon/session-source";
-import { SessionState } from "../src/daemon/session-state";
+} from "../src/renderer/session-source";
+import { SessionState } from "../src/renderer/session-state";
 import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
-import type { Update } from "../src/daemon/update-notice";
+import type { Update } from "../src/facts/world-state";
 import { restamp } from "../src/facts/fact";
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { drawDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { resolvePath, SourceRegistry } from "../src/var-system/sources";
@@ -59,7 +59,7 @@ import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { daemonGates } from "../src/daemon/update-keys";
+import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import type { WorldStates } from "../src/renderer/world-states";
@@ -69,12 +69,15 @@ import { rendererParts } from "./helpers/renderer-parts";
 import { rendererHost, type RendererHost } from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import type { Frame } from "../src/render/frame";
-import type { RequestId, TurnOutcome } from "../src/renderer/interface";
-import type { RequestFacts } from "../src/daemon/request-event";
+import type {
+  RequestId,
+  TurnOutcome,
+} from "../src/renderer-interface/interface";
+import type { RequestFacts } from "../src/daemon/foundations/request-event";
 
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 

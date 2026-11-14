@@ -7,7 +7,7 @@
 // either.
 
 import type { EffectiveGlobals } from "../config/effective-globals.js";
-import type { SessionId } from "../daemon/session-id.js";
+import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { RunFact } from "../facts/world-state.js";
 
 // The selections whose config rung may hold a rule, as the resolution left

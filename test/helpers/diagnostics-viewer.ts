@@ -7,7 +7,7 @@ import { plainOf, textOf, type Frame } from "../../src/render/frame";
 import { linksOf } from "../../src/click/read";
 import { DIAGNOSTICS_VIEWING } from "../../src/config/door";
 import { DIAGNOSTIC_LEVELS } from "../../src/render/diagnostics";
-import type { ClientHints } from "../../src/daemon/protocol";
+import type { ClientHints } from "../../src/daemon/foundations/protocol";
 import { effectsOf } from "./click";
 import { click, render } from "./daemon-e2e";
 import type { DaemonTarget } from "./daemon-wire";

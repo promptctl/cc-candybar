@@ -152,20 +152,20 @@ Other points:
 
 ## Key files
 
-- `src/daemon/verbs/index.ts`
+- `src/renderer/verbs/index.ts`
 - `src/daemon/server.ts`
 - `src/daemon/menu-idle.ts`
 - `src/daemon/lane-setup.ts`
 - `src/daemon/lane-edge.ts`
-- `src/daemon/settings-history.ts`
-- `src/daemon/navigation-history.ts`
-- `src/daemon/config-file-store.ts`
-- `src/daemon/repo-configs.ts`
+- `src/renderer/settings-history.ts`
+- `src/renderer/navigation-history.ts`
+- `src/renderer/config-file-store.ts`
+- `src/renderer/repo-configs.ts`
 - `src/daemon/runs.ts`
 - `src/daemon/update-notice.ts`
 - `src/daemon/update-act.ts`
 - `src/daemon/tmux-status.ts`
-- `src/daemon/cache/render.ts`
+- `src/renderer/render-cache.ts`
 - `src/doctor/edge.ts`
 - `src/claude-input/edge.ts`
 - `src/click/read.ts` (`HOST_VERBS` is an existing, narrower list of the same idea)

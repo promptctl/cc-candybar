@@ -16,12 +16,9 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { presetNames } from "../src/config/presets";
 import { assembleFacts } from "../src/daemon/facts-assembly";
-import {
-  composePayload,
-  settleWorld,
-  type Readings,
-} from "../src/daemon/render-payload";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { composePayload, settleWorld } from "../src/renderer/render-payload";
+import { refreshPayload, type Readings } from "../src/daemon/readings";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { instantOf } from "../src/utils/instant";
 import { ok, pendingOf } from "../src/utils/outcome";
 import type { Fact } from "../src/facts/fact";
@@ -229,14 +226,17 @@ describe("what wakes a view", () => {
     // The same request refreshes every lane again: each owner stores an equal
     // answer in a new object.
     await settleWorld(
-      {
-        hookData: requestOf(dir).hookData,
-        deps: rig.providers as never,
-        cwd: PROJECT,
-        hints: requestOf(dir).hints,
-      },
-      AT,
-      new Map(),
+      () =>
+        refreshPayload(
+          {
+            hookData: requestOf(dir).hookData,
+            deps: rig.providers as never,
+            cwd: PROJECT,
+            hints: requestOf(dir).hints,
+          },
+          AT,
+          new Map(),
+        ),
       () => rig.served.worldStates.of(SID),
       () => view.registry.namedRuns().values(),
       new AbortController().signal,

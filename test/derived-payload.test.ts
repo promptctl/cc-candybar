@@ -23,7 +23,7 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { bindView } from "../src/dsl/parts";
 import { drawDsl, registerDslConfig } from "../src/dsl/render";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { SourceRegistry, VariableStore } from "../src/var-system";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";

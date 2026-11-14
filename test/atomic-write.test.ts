@@ -128,7 +128,7 @@ describe("linkChain", () => {
 // target behind a dangling link, never the link.
 test("writeConfigText(null) through a link removes the target, keeps the link", async () => {
   const { writeConfigText } =
-    await import("../src/daemon/config-file-store.js");
+    await import("../src/renderer/config-file-store.js");
   const link = path.join(dir, "config.json5");
   fs.symlinkSync("dotfiles-config.json5", link);
   writeConfigText(link, "{}", () => {});

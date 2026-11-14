@@ -14,14 +14,14 @@ import {
   makeFrameReader,
   PROTOCOL_VERSION,
   type Response,
-} from "../src/daemon/protocol";
-import type { RequestId } from "../src/renderer/interface";
-import { badRequest } from "../src/daemon/verb-error";
-import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
+} from "../src/daemon/foundations/protocol";
+import type { RequestId } from "../src/renderer-interface/interface";
+import { badRequest } from "../src/daemon/foundations/verb-error";
+import { REQUEST_TIMEOUT_MS } from "../src/daemon/foundations/request-deadline";
 import {
   requestEvent,
   type RequestOutcome,
-} from "../src/daemon/request-event";
+} from "../src/daemon/foundations/request-event";
 import { click } from "./helpers/daemon-e2e";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 

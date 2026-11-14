@@ -7,10 +7,10 @@ import {
   PROBE_EVERY_MS,
   PROBE_FILE,
   fileEventsLine,
-  fileEventsWarnings,
-  type Delivery,
   type DeliveryNotice,
 } from "../src/daemon/cache/file-events";
+import { fileEventsWarnings } from "../src/daemon/foundations/file-events-warnings";
+import { type Delivery } from "../src/daemon/foundations/stats-snapshot";
 import { DEBOUNCE_MS, WatcherRegistry } from "../src/daemon/cache/watchers";
 import { statIdentity, type IdentityRead } from "../src/utils/folder-identity";
 import {

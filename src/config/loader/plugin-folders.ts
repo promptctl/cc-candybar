@@ -12,7 +12,7 @@ import {
   type PluginDefinition,
 } from "./plugins.js";
 import type { PluginScope } from "./plugin-scope.js";
-import type { Locations } from "../../daemon/paths.js";
+import type { Locations } from "./discovery.js";
 import type { Unchecked } from "../../utils/presence.js";
 import type { ApprovedRepo } from "./repo-gate.js";
 

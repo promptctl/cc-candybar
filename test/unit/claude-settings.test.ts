@@ -10,7 +10,7 @@ import {
   claudeConfigDir,
   detectClaudeConfigDir,
 } from "../../src/claude-settings";
-import { parseClientHints } from "../../src/daemon/protocol";
+import { parseClientHints } from "../../src/daemon/foundations/protocol";
 
 const hint = (raw: string | undefined) =>
   detectClaudeConfigDir({ [CLAUDE_CONFIG_DIR_ENV]: raw }, "/work/proj");

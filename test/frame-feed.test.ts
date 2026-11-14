@@ -7,17 +7,17 @@
 import type { Monotonic } from "../src/time";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { ok } from "../src/utils/outcome";
-import type { DaemonParts } from "../src/daemon/daemon-parts";
-import { renderFrame } from "../src/daemon/draw-bar";
+import type { RendererParts } from "../src/renderer/draw-bar";
+import { renderFrame } from "../src/renderer/draw-bar";
 import {
-  feedsFact,
   FrameFeeds,
   noteSent,
-  type FeedFrame,
-  type Refusal,
   type Subscriber,
 } from "../src/daemon/frame-feed";
-import type { Response } from "../src/daemon/protocol";
+import { feedsFact } from "../src/config/lanes";
+import { type FeedFrame } from "../src/renderer-interface/adapter";
+import { type Refusal } from "../src/daemon/foundations/protocol";
+import type { Response } from "../src/daemon/foundations/protocol";
 import { plainOf, renderFailedFrame, type Frame } from "../src/render/frame";
 import { barOf } from "./helpers/drawn-frame";
 import {
@@ -29,7 +29,10 @@ import {
 import { instantOf, type Instant } from "../src/utils/instant";
 import { heldClock } from "./helpers/held-clock";
 
-import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 
 const C = sessionIdOf("c");
 const BEFORE_CLEAR = sessionIdOf("before-clear");
@@ -1458,7 +1461,7 @@ test("a frame whose render threw is the failure's Frame, a still bar in the erro
       holdView: () => null,
       openFailure: () => ({ error: new Error("the view would not open") }),
     },
-  } as unknown as DaemonParts;
+  } as unknown as RendererParts;
   const frame = renderFrame(parts, S, 30, instantOf(new Date(START_MS)))!;
   expect(frame.bar).toEqual(renderFailedFrame("the view would not open"));
   expect(frame.bar.nextChange).toBe(Infinity);

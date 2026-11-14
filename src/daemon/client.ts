@@ -17,8 +17,8 @@ import {
   TOTAL_BUDGET_MS,
   type ClientHints,
   type Response,
-} from "./protocol";
-import { REQUEST_TIMEOUT_MS } from "./request-deadline";
+} from "./foundations/protocol";
+import { REQUEST_TIMEOUT_MS } from "./foundations/request-deadline";
 
 export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,

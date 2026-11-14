@@ -1,7 +1,7 @@
 import { observable, type IObservableValue } from "mobx";
 import type { Fact } from "../facts/fact";
 import { pendingOf } from "../utils/outcome";
-import type { Update } from "./update-notice";
+import type { Update } from "../facts/world-state";
 
 // [LAW:one-source-of-truth] The update as a fact, stamped once by the watch
 // that owns it (src/daemon/update-notice.ts) and read by every session's

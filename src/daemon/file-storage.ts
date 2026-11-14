@@ -1,7 +1,7 @@
 import type { DaemonStorage } from "./daemon";
 import type { DaemonPaths } from "./paths";
 import { FileSessionStorage } from "./session-state-file";
-import { fileHistoryStorage } from "./settings-history";
+import { fileHistoryStorage } from "./history-file";
 import type { DaemonLogger } from "../utils/logger";
 import type { Timekeeper } from "../time";
 

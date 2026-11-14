@@ -1,4 +1,4 @@
-// The `today` fact (src/daemon/cache/today-facts.ts, TodayFacts) is
+// The `today` fact (src/daemon/foundations/today-facts.ts, TodayFacts) is
 // everything a draw's `today` reads, so the draw's day is a pure function of
 // the document's fact and the draw's instant. These tests state that
 // contract: the sum, the rendering session's days beside the set's, the day
@@ -7,13 +7,10 @@
 // store's read (test/daemon-session-usage-store.test.ts).
 
 import type { DaySums } from "../src/daemon/cache/session-usage-store";
-import {
-  dayKey,
-  projectToday,
-  type DayUsage,
-  type TodayFacts,
-} from "../src/daemon/cache/today-facts";
-import { todayOf, todayReading } from "../src/daemon/render-payload";
+import { dayKey, projectToday } from "../src/daemon/foundations/today-facts";
+import { type DayUsage, type TodayFacts } from "../src/facts/world-state";
+import { todayOf } from "../src/renderer/render-payload";
+import { todayReading } from "../src/daemon/readings";
 import { dateOf, instantOf } from "../src/utils/instant";
 import {
   ABSENT,
@@ -23,7 +20,7 @@ import {
   type Outcome,
 } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const NOON = instantOf(new Date(2031, 0, 2, 12, 0, 0));
 const NEXT_DAY = instantOf(new Date(2031, 0, 3, 12, 0, 0));
@@ -96,31 +93,19 @@ describe("todayReading", () => {
 
   test("folds the set with the session's days outside its roots", () => {
     const store = usage(ok(own));
-    const fact = todayReading(
-      settledLane(ok(SET)),
-      store,
-      SID,
-    );
+    const fact = todayReading(settledLane(ok(SET)), store, SID);
     expect(fact).toEqual(ok({ sums: SET.sums, own }));
     expect(store.asked).toEqual([SET.roots]);
   });
 
   test("a session with no days outside the set has none of its own", () => {
-    const fact = todayReading(
-      settledLane(ok(SET)),
-      usage(ABSENT),
-      SID,
-    );
+    const fact = todayReading(settledLane(ok(SET)), usage(ABSENT), SID);
     expect(fact).toEqual(ok({ sums: SET.sums, own: {} }));
   });
 
   test("the session's ingest failing is the fact failing", () => {
     const fault = failed("transcript unreadable", "read");
-    const fact = todayReading(
-      settledLane(ok(SET)),
-      usage(fault),
-      SID,
-    );
+    const fact = todayReading(settledLane(ok(SET)), usage(fault), SID);
     expect(fact).toEqual(fault);
   });
 

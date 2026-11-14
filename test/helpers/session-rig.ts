@@ -10,19 +10,21 @@ import {
   RenderCache,
   type RenderCacheObservers,
   type SessionView,
-} from "../../src/daemon/cache/render";
+} from "../../src/renderer/render-cache";
 import { WatcherRegistry } from "../../src/daemon/cache/watchers";
 import { stateDir } from "../../src/daemon/paths";
 import type { CollectorDeps } from "../../src/daemon/collector";
 import { collected } from "./collected";
-import { settleWorld, type Refreshed } from "../../src/daemon/render-payload";
+import { settleWorld } from "../../src/renderer/render-payload";
+import { refreshPayload } from "../../src/daemon/readings";
+import { type Refreshed } from "../../src/renderer-interface/request-context";
 import {
   sessionSource,
   type SessionSource,
   type SessionSourceDeps,
-} from "../../src/daemon/session-source";
-import { SessionState } from "../../src/daemon/session-state";
-import { EMPTY_HISTORY_DEPTH } from "../../src/daemon/settings-history";
+} from "../../src/renderer/session-source";
+import { SessionState } from "../../src/renderer/session-state";
+import { EMPTY_HISTORY_DEPTH } from "../../src/renderer/settings-history";
 import { systemTimekeeper } from "../../src/time";
 import { instantOf } from "../../src/utils/instant";
 import { ABSENT, failed, ok, pendingOf } from "../../src/utils/outcome";
@@ -44,7 +46,7 @@ import {
 } from "./payload-owners";
 import { sumsOf } from "./today";
 import { viewFacts } from "./view-facts";
-import { sessionIdOf } from "../../src/daemon/session-id";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 
 export const SESSION = sessionIdOf("golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a");
 export const AT = instantOf(new Date(1_700_000_000_000));
@@ -247,14 +249,17 @@ export async function settledRequest(
   );
   cleanups.push(() => held[Symbol.dispose]());
   await settleWorld(
-    {
-      hookData: request.hookData,
-      deps: rig.providers as never,
-      cwd: PROJECT,
-      hints: request.hints,
-    },
-    AT,
-    refreshed,
+    () =>
+      refreshPayload(
+        {
+          hookData: request.hookData,
+          deps: rig.providers as never,
+          cwd: PROJECT,
+          hints: request.hints,
+        },
+        AT,
+        refreshed,
+      ),
     () => rig.served.worldStates.of(request.hookData.session_id),
     () => held.view.registry.namedRuns().values(),
     new AbortController().signal,

@@ -23,9 +23,9 @@
 // populate, exactly as the daemon re-renders on each status-line tick.
 
 import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
-import { daemonGates } from "../daemon/update-keys.js";
+import { daemonGates } from "../daemon/foundations/update-keys.js";
 import { locations, stateDir } from "../daemon/paths.js";
-import { repoGateAt } from "../daemon/repo-configs.js";
+import { repoGateAt } from "../renderer/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
 import { fileURLToPath } from "node:url";
@@ -45,36 +45,37 @@ import {
   subscriptionsOf,
   UNOWNED_STORAGE,
   type DslRenderState,
-} from "../daemon/cache/render.js";
+} from "../renderer/render-cache.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import { NO_FILE_EVENTS } from "../daemon/cache/file-events.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
 import { processWorld } from "../host.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
-import { parseClientHints } from "../daemon/protocol.js";
+import { parseClientHints } from "../daemon/foundations/protocol.js";
 import {
   renderOptionsOf,
   renderWidth,
   settleWorld,
   todayOf,
-} from "../daemon/render-payload.js";
+} from "../renderer/render-payload.js";
 import { Collector } from "../daemon/collector.js";
+import { refreshPayload } from "../daemon/readings.js";
 import { WorldStates } from "../renderer/world-states.js";
-import { sessionIdOf } from "../daemon/session-id.js";
-import { sessionSource } from "../daemon/session-source.js";
-import { SessionState } from "../daemon/session-state.js";
+import { sessionIdOf } from "../daemon/foundations/session-id.js";
+import { sessionSource } from "../renderer/session-source.js";
+import { SessionState } from "../renderer/session-state.js";
 import { newUpdateFact } from "../daemon/update-fact.js";
-import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
+import { EMPTY_HISTORY_DEPTH } from "../renderer/settings-history.js";
 import { drawDsl } from "../dsl/render.js";
 import { SessionEffects } from "../render/effect.js";
 import { ansiOf } from "../render/frame.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
-import type { CheckedHookData } from "../renderer/request-context.js";
+import type { CheckedHookData } from "../renderer-interface/request-context.js";
 import { debug, setDebug } from "../utils/logger.js";
 import { instantOf } from "../utils/instant.js";
 import { SourceRuns } from "../daemon/source-runs.js";
-import type { Subscriptions } from "../renderer/interface.js";
+import type { Subscriptions } from "../renderer-interface/interface.js";
 
 const FRAMES = 4;
 const FRAME_INTERVAL_MS = 450;
@@ -248,9 +249,12 @@ async function renderFrames(): Promise<void> {
         // instant, sampled here as the daemon samples it per request.
         const at = instantOf(new Date(world.clock.now()));
         await settleWorld(
-          { hookData, deps: providers, cwd, hints },
-          at,
-          new Map(),
+          () =>
+            refreshPayload(
+              { hookData, deps: providers, cwd, hints },
+              at,
+              new Map(),
+            ),
           () => worldStates.of(sessionId),
           () => view.registry.namedRuns().values(),
           // The demo's frames have no client to hang up.

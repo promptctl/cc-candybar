@@ -7,7 +7,7 @@
 // span per edit; every byte outside that span survives verbatim.
 //
 // [LAW:effects-at-boundaries] Pure: text in, text out. No fs, no clock. The
-// daemon's config-file store (src/daemon/config-file-store.ts) is the one
+// daemon's config-file store (src/renderer/config-file-store.ts) is the one
 // edge that reads and writes the file.
 //
 // [LAW:single-enforcer] The scanner finds token BOUNDARIES only; every leaf

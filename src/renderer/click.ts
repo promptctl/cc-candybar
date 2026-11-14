@@ -2,10 +2,13 @@
 // acted on in this turn, so the turn's output reads the subscriptions as they
 // stand once the act has landed (its commit, and its view's follow).
 
-import { noteFacts, type RequestFacts } from "../daemon/request-event.js";
-import { BadVerbArgs } from "../daemon/verb-error.js";
-import type { Event } from "./interface.js";
-import type { MainRendererParts } from "./verbs.js";
+import {
+  noteFacts,
+  type RequestFacts,
+} from "../daemon/foundations/request-event.js";
+import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
+import type { Event } from "../renderer-interface/interface.js";
+import type { MainRendererParts } from "./verbs/port.js";
 
 type ClickEvent = Extract<Event, { kind: "click" }>;
 

@@ -7,7 +7,7 @@
 // later closes with its parent with no list to keep.
 //
 // [LAW:effects-at-boundaries] Pure: the daemon's closing view
-// (src/daemon/closing-view.ts) reads the session's state and writes what
+// (src/renderer/closing-view.ts) reads the session's state and writes what
 // `closeNested` returns.
 
 import {

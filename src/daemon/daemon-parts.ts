@@ -1,35 +1,29 @@
 import type { Collector } from "./collector.js";
-import type { WorldStates } from "../renderer/world-states.js";
+import type { AdapterToRenderer } from "../renderer-interface/adapter.js";
 import type { Timekeeper } from "../time.js";
 import type { FileEventDelivery } from "./cache/file-events";
-import type { RenderCache } from "./cache/render";
 import type { WatcherRegistry } from "./cache/watchers";
-import type { CheckedRenderRequest } from "../renderer/request-context.js";
+import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type { FrameFeeds } from "./frame-feed.js";
 import type { LaneSetups } from "./lane-setup.js";
 import type { LimitsHandle } from "./limits";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { MenuIdle } from "./menu-idle.js";
-import type { RenderPayloadDeps } from "./render-payload";
+import type { RenderPayloadDeps } from "./readings";
 import type { RenderSightings } from "./render-sightings";
-import type { RenderWarningRecords } from "./render-warnings.js";
 import type { Runs } from "./runs.js";
 import type { SourceRuns } from "./source-runs.js";
 import type { RuntimeStats } from "./stats";
-import type { SessionSource } from "./session-source.js";
-import type { SessionState } from "./session-state";
 import type { TmuxStatusLines } from "./tmux-status.js";
 import type { UpdateWatch } from "./update-notice";
-import type { DoctorStores } from "../doctor/edge";
+import type { DoctorStores } from "../doctor/ports";
 import type { JournalTurns } from "./journal-turns";
 import type { RendererHost } from "./renderer-host.js";
 import type { ClicksInFlight } from "./clicks-in-flight.js";
 import type { ProbeArrivals } from "../doctor/handler-probe";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
-import type { Launcher } from "../proc/launch";
-import type { EffectSessions } from "../render/effect.js";
-import type { RenderedLine } from "../dsl/node-registry.js";
+import type { Launcher } from "../proc/launcher";
 
 // [LAW:one-source-of-truth] What one daemon holds, built once by `createDaemon`
 // (src/daemon/daemon.ts) and read by the request handling, which keeps none of
@@ -52,8 +46,6 @@ export interface DaemonParts {
   readonly refreshLedger: RefreshLedger;
   readonly fileEvents: FileEventDelivery;
   readonly payloadProviders: RenderPayloadDeps;
-  readonly sessionState: SessionState;
-  readonly effectSessions: EffectSessions<RenderedLine>;
   readonly menuIdle: MenuIdle;
   readonly linkSigner: LinkSigner;
   readonly runs: Runs;
@@ -63,8 +55,6 @@ export interface DaemonParts {
   readonly laneSetups: LaneSetups;
   readonly tmuxStatusLines: TmuxStatusLines;
   readonly frameFeeds: FrameFeeds<CheckedRenderRequest>;
-  readonly renderWarnings: RenderWarningRecords;
-  readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
   readonly updateWatch: UpdateWatch;
   readonly limits: LimitsHandle;
   readonly journalTurns: Pick<JournalTurns, "getStats">;
@@ -75,7 +65,7 @@ export interface DaemonParts {
   // [LAW:single-enforcer] The host's one reader of every session's world
   // (src/daemon/collector.ts).
   readonly collector: Collector;
-  // The world states handed to the main renderer, which its views read: the
-  // renderer's own, here while it runs in process (RendererParts).
-  readonly worldStates: WorldStates;
+  // What the host reaches in the main renderer, returned by its start
+  // (src/renderer/main.ts) beside the renderer it wraps.
+  readonly toRenderer: AdapterToRenderer;
 }

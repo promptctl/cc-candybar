@@ -39,9 +39,9 @@ import {
   VERB_COPY,
   VERB_OPEN_VSCODE,
 } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
+import { VERBS } from "../src/renderer/verbs";
 import { CHECKS } from "../src/doctor/checks";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());

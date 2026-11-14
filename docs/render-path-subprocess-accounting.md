@@ -52,7 +52,7 @@ Spawns originate from cache-policy callbacks registered against the MobX store a
 | `kind: "shell"` | `depends_on` | MobX reaction: any listed var changes |
 | `kind: "shell"` | `key` | MobX reaction: rendered key template changes |
 | `kind: "shell"` | `never` | once, at declaration |
-| `kind: "tmux"` | (provider-internal cache) | `src/segments/tmux.ts` provider TTL |
+| `kind: "tmux"` | (provider-internal cache) | `src/daemon/cache/tmux.ts` provider TTL |
 
 None of these run inside the render request lifecycle. They fire asynchronously on their own clocks/events and write into the store; the render request reads whatever value is already there.
 
@@ -77,7 +77,7 @@ subprocesses
 
 ### Rate limits
 
-`src/proc/launch.ts:RATE_LIMITS` caps click verbs at 1 spawn/sec each. No other categories have per-spawn floors at the launch layer; `kind: "shell"` with `cache: { ttl: ... }` below 500ms is refused where the run is subscribed (`src/daemon/judge-run.ts`), so it never spawns.
+`src/proc/launch.ts:RATE_LIMITS` caps click verbs at 1 spawn/sec each. No other categories have per-spawn floors at the launch layer; `kind: "shell"` with `cache: { ttl: ... }` below 500ms is refused where the run is subscribed (`src/daemon/foundations/judge-run.ts`), so it never spawns.
 
 ## Known gaps (not regressions, just things the type system doesn't enforce)
 

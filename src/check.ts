@@ -28,7 +28,7 @@
 
 import { linkKeyFile, linkSignerFromKeyFile } from "./daemon/link-key.js";
 import { locations, stateDir } from "./daemon/paths.js";
-import { repoConfigs } from "./daemon/repo-configs.js";
+import { repoConfigs } from "./renderer/repo-configs.js";
 import { repoGateLines } from "./config/loader/repo-gate.js";
 import type { ConfigResolution } from "./config/loader/discovery.js";
 import fs from "node:fs";
@@ -56,7 +56,7 @@ import { timeoutSignal } from "./time";
 import { SourceRegistry } from "./var-system/sources.js";
 import { SourceRuns } from "./daemon/source-runs.js";
 import { CheckRuns } from "./check-runs.js";
-import { SessionState } from "./daemon/session-state.js";
+import { SessionState } from "./renderer/session-state.js";
 import {
   bindPayload,
   drawDsl,
@@ -66,7 +66,7 @@ import {
 } from "./dsl/render.js";
 import { ansiOf, type Frame } from "./render/frame.js";
 import type { Gates } from "./daemon/foundations/gates.js";
-import { daemonGates } from "./daemon/update-keys.js";
+import { daemonGates } from "./daemon/foundations/update-keys.js";
 import { instantOf, type Instant } from "./utils/instant.js";
 import { perSetting } from "./config/setting-projections.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
@@ -74,19 +74,20 @@ import {
   composePayload,
   renderOptionsOf,
   todayOf,
-  type Readings,
   type RenderPayload,
   type ViewPayload,
-} from "./daemon/render-payload.js";
+} from "./renderer/render-payload.js";
+import { type Readings } from "./daemon/readings.js";
 import { assembleFacts } from "./daemon/facts-assembly.js";
-import { sessionIdOf } from "./daemon/session-id.js";
-import type { ClientHints } from "./daemon/protocol.js";
-import type { CheckedHookData } from "./renderer/request-context.js";
+import { sessionIdOf } from "./daemon/foundations/session-id.js";
+import type { ClientHints } from "./daemon/foundations/protocol.js";
+import type { CheckedHookData } from "./renderer-interface/request-context.js";
 import type { GitInfo } from "./segments/git.js";
 import type { TranscriptUsage } from "./segments/session.js";
 import type { MetricsFold } from "./segments/metrics.js";
 import type { AutoCompactWindow } from "./segments/autocompact.js";
-import { oneDay, type TodayFacts } from "./daemon/cache/today-facts.js";
+import { oneDay } from "./daemon/foundations/today-facts.js";
+import { type TodayFacts } from "./facts/world-state.js";
 import { ABSENT, ok } from "./utils/outcome.js";
 import {
   resolveEffectiveGlobals,
@@ -371,7 +372,7 @@ export function checkPayload(
           () => true,
         ) satisfies RenderPayload["resettable"],
         // The field the theme gear's `⤓ default for <theme>` reads, spelled as
-        // the daemon spells it (themeDefaultSave, src/daemon/setting-drafts.ts):
+        // the daemon spells it (themeDefaultSave, src/renderer/setting-drafts.ts):
         // the theme in force, whose swatch the cell draws, and no save under a
         // rule-chosen theme. Check opens no trigger, so it never draws the cell;
         // a render that opens the gear over this payload does

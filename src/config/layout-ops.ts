@@ -8,7 +8,7 @@
 // that offered the click and the click.
 //
 // [LAW:one-source-of-truth] An op is applied ONCE, to the authored tree in
-// the config file (candybar-config-dqe: src/daemon/config-file-store.ts over
+// the config file (candybar-config-dqe: src/renderer/config-file-store.ts over
 // src/config/json5-edit.ts's removeSegmentRef/insertSegmentRef) — the file
 // then IS the edited tree, and every reload reads it like any hand-written
 // root. This module owns only the op's shape, its wire codec, and the id an

@@ -21,26 +21,26 @@ import {
   SESSION_SWEEP_MS,
   type HandedIn,
 } from "../src/daemon/collector";
-import { stampFailureOf } from "../src/daemon/facts-assembly";
-import { judgeRun, type Judged } from "../src/daemon/judge-run";
+import { stampFailureOf } from "../src/facts/world-state";
+import { judgeRun, type Judged } from "../src/daemon/foundations/judge-run";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { parseClientHints } from "../src/daemon/protocol";
-import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+import { parseClientHints } from "../src/daemon/foundations/protocol";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 import {
   declareLanes,
   type KeyedOwners,
   type RenderPayloadDeps,
-  type ViewFacts,
-} from "../src/daemon/render-payload";
-import type { StorageKey } from "../src/daemon/cache/managed-storage";
+} from "../src/daemon/readings";
+import { type ViewFacts } from "../src/renderer-interface/request-context";
+import type { StorageKey } from "../src/renderer-interface/interface";
 import type { Fact } from "../src/facts/fact";
 import type { UpdateNotice, WorldState } from "../src/facts/world-state";
-import type { Subscriptions } from "../src/renderer/interface";
-import {
-  GitService,
-  type GitRead,
-  type PullRequest,
-} from "../src/segments/git";
+import type { Subscriptions } from "../src/renderer-interface/interface";
+import { type GitRead, type PullRequest } from "../src/segments/git";
+import { GitService } from "../src/daemon/cache/git-service";
 import { Holds } from "../src/utils/holds";
 import { runOf } from "../src/facts/source-identity";
 import {

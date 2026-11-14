@@ -1,0 +1,378 @@
+// [LAW:single-enforcer] One module owns the projection from daemon DSL
+// state (VariableStore + SourceRegistry + DslConfig + CompiledConfig) to
+// the wire-level DebugSnapshot. buildDebugSnapshot dispatches via an
+// exhaustive switch on `what` — TypeScript enforces every DebugWhat arm
+// at compile time (the function's return-type narrowing fails if a case
+// is missing), so adding a new `what` requires one new arm here, one new
+// DEBUG_WHATS entry, and one new DebugSnapshot variant — the type system
+// keeps the three sites in lockstep.
+//
+// [LAW:one-source-of-truth] The introspector reads through the live
+// VariableStore (current values), SourceRegistry (lastErrors), VarNode
+// (lastUpdatedMs — when the value last changed), and DslConfig (declared source
+// kinds, segment templates).
+// There is no parallel cache, no shadow snapshot kept in sync — the daemon
+// has one DSL state and this module projects it.
+//
+// [LAW:dataflow-not-control-flow] The state slot (DaemonDslState | null) is
+// the only branch: null state → empty snapshots; populated state → real
+// snapshots. No special-case introspection paths for the "DSL not active
+// yet" case — the same code produces both outcomes from the same data.
+//
+// Today the daemon does not yet hold a DSL state (bzh.2 has not fired); all
+// snapshots are empty in production. When bzh.2 wires the store, the
+// snapshots populate without any change to this module or the protocol.
+
+import type { StoreNode, VariableStore } from "../var-system/store";
+import type { SourceRegistry } from "../var-system/sources";
+import type { DslConfig, VariableDecl } from "../config/dsl-types";
+import { placementId, walkNodes } from "../config/dsl-types";
+import { presetNames, presetRoot } from "../config/presets";
+import { rootNode } from "../config/root";
+import { templateReads, variableRead } from "../config/loader/refs";
+import type { CompiledConfig } from "../dsl/render";
+import type { Timekeeper } from "../time";
+import type {
+  DebugSnapshot,
+  DebugWhat,
+  SegmentSnapshot,
+  VarSnapshot,
+} from "../daemon/foundations/debug-types";
+import {
+  renderStripCells,
+  type BuildLineOptions,
+  type ColorCompatibility,
+} from "../render/strip.js";
+import { floorOf } from "../config/globals-fields.js";
+import type { RichText } from "@promptctl/rich-js";
+
+// The daemon's DSL state. Bundled because the four fields are co-installed
+// by registerDslConfig — exposing them as independently-optional would let
+// callers represent illegal combinations (e.g. store with no config).
+export interface DaemonDslState {
+  readonly store: VariableStore;
+  readonly registry: SourceRegistry;
+  readonly config: DslConfig;
+  readonly compiled: CompiledConfig;
+  // [LAW:dataflow-not-control-flow] Per-segment last-render strings live in
+  // the same state bundle the renderer mutates. Today (legacy renderer) it
+  // is empty; bzh.2 populates it from inside drawDsl.
+  readonly lastRenderBySegment: ReadonlyMap<string, string>;
+}
+
+// ─── Dispatcher ──────────────────────────────────────────────────────────────
+
+// [LAW:dataflow-not-control-flow] One arm per `what` — the discriminator is
+// data; the branch chooses the projection function, not whether projection
+// runs. Adding a new `what` is one new arm + one new projection + one new
+// DebugSnapshot variant — the type system enforces all three.
+export function buildDebugSnapshot(
+  what: DebugWhat,
+  state: DaemonDslState | null,
+): DebugSnapshot {
+  switch (what) {
+    case "vars":
+      return { what, vars: introspectVars(state) };
+    case "segments":
+      return { what, segments: introspectSegments(state) };
+    case "config":
+      return { what, config: introspectConfig(state) };
+  }
+}
+
+// ─── vars ────────────────────────────────────────────────────────────────────
+
+// Project every variable currently registered in the store into one
+// VarSnapshot. Names sorted for deterministic snapshot tests. Source kind
+// is looked up from the DslConfig (top-level variables + per-segment
+// `vars` blocks); a variable not found in either is reported with
+// source=null so it still appears in introspection.
+export function introspectVars(
+  state: DaemonDslState | null,
+): readonly VarSnapshot[] {
+  if (state === null) return [];
+
+  const { store, registry, config } = state;
+  const sourceByName = buildSourceKindIndex(config);
+  const names = store.names().sort();
+
+  const out: VarSnapshot[] = [];
+  for (const name of names) {
+    // [LAW:single-enforcer] One requireNode lookup per row. Reading the
+    // value through node.read() instead of store.read(name) avoids a
+    // second Map.get + requireNode round-trip in the inner loop and
+    // makes the per-row data dependency obvious: every field below
+    // comes from this one node.
+    const node = store.getNode(name);
+    // The value first: reading a derived variable is what records (or clears)
+    // its error, so the error beside it is the one this read produced.
+    const value = valueOf(node);
+    const err = registry.getLastError(name);
+    // A read CAN throw, and the premise that it could not no longer holds:
+    // declareShell/declareFile still write a typed fallback, but an
+    // input reads as not answered yet until its view's first payload, and a
+    // `template` variable with no authored `default` reads as its failure since
+    // brandon-var-sources-1p6. `valueOf` renders that
+    // message as the value, exactly as it already does for a failed document —
+    // it is a runtime condition, which is what this snapshot is for.
+    //
+    // [LAW:single-enforcer] lastError is still sourced from SourceRegistry
+    // only. `valueOf` synthesizes no timestamp, so there is no second
+    // timestamp-producer to drift from the registry's record.
+    out.push({
+      name,
+      source: sourceByName.get(name) ?? null,
+      ...value,
+      lastError:
+        err !== undefined
+          ? { timestampMs: err.timestamp, message: err.message }
+          : null,
+      ageMs: ageFromNode(node.lastUpdatedMs(), store.clock),
+    });
+  }
+  return out;
+}
+
+// [LAW:one-type-per-behavior] One total projection of a store node onto the
+// snapshot's (type, value) pair: a scalar node reads its typed value; a
+// document reads as its JSON text, or — before its first scan, after one with
+// nothing to read, or after a failed one — as the state a template read of it
+// would surface.
+function valueOf(node: StoreNode): Pick<VarSnapshot, "type" | "value"> {
+  // A projection has a value only at a frame's instant, and a snapshot is no
+  // frame: it says so rather than reading it, and the error its last draw
+  // recorded, if any, stands beside it as the variable's lastError.
+  if (node.kind === "projection") {
+    return { type: node.type, value: "(read at each frame's instant)" };
+  }
+  if (node.kind !== "document") {
+    // [LAW:no-silent-failure] A `template` variable with no authored `default`
+    // now READS as its failure rather than as an empty string
+    // (brandon-var-sources-1p6), so a read here can throw for the same reason a
+    // failed document reads as its reason — which is a runtime condition this
+    // snapshot exists to show, not a programming error. It is surfaced the way
+    // the document arm below surfaces one: the message stands in for the value,
+    // beside the registry's own lastError record. Masking it would be the one
+    // thing worse than either — the variable is the reason someone ran `debug`.
+    try {
+      return { type: node.type, value: node.read() };
+    } catch (e) {
+      return {
+        type: node.type,
+        value: e instanceof Error ? e.message : String(e),
+      };
+    }
+  }
+  const doc = node.read();
+  switch (doc.kind) {
+    case "ok":
+      return { type: "document", value: JSON.stringify(doc.value) };
+    case "pending":
+      return { type: "document", value: "(not yet scanned)" };
+    case "absent":
+      return { type: "document", value: "(nothing to read, and no default)" };
+    case "failed":
+      return { type: "document", value: doc.reason };
+  }
+}
+
+// [LAW:one-source-of-truth] Read on the clock the store stamped `lastUpdatedMs`
+// with, so an age never mixes two clocks.
+function ageFromNode(
+  lastUpdatedMs: number | null,
+  clock: Pick<Timekeeper, "now">,
+): number | null {
+  if (lastUpdatedMs === null) return null;
+  return Math.max(0, clock.now() - lastUpdatedMs);
+}
+
+// Build a name → SourceKind index from the DslConfig. Walks top-level
+// variables and each segment's per-segment vars block; segment-local vars
+// live under the namespaced key `<segName>.<varName>` in the store (same
+// shape registerDslConfig uses to declare them).
+function buildSourceKindIndex(
+  config: DslConfig,
+): ReadonlyMap<string, VariableDecl["kind"]> {
+  const index = new Map<string, VariableDecl["kind"]>();
+  for (const [name, decl] of Object.entries(config.variables)) {
+    index.set(name, sourceKindOf(decl));
+  }
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    if (!seg.vars) continue;
+    for (const [varName, decl] of Object.entries(seg.vars)) {
+      index.set(`${segName}.${varName}`, sourceKindOf(decl));
+    }
+  }
+  return index;
+}
+
+function sourceKindOf(decl: VariableDecl): VariableDecl["kind"] {
+  return decl.kind;
+}
+
+// ─── segments ────────────────────────────────────────────────────────────────
+
+export function introspectSegments(
+  state: DaemonDslState | null,
+): readonly SegmentSnapshot[] {
+  if (state === null) return [];
+
+  const { store, config, lastRenderBySegment } = state;
+  const declaredNames = new Set(store.names());
+  // [LAW:dataflow-not-control-flow] Walk in layout order so the introspection
+  // snapshot mirrors render order — operators reading the snapshot see the
+  // same sequence the bar produces, not an alphabetical reshuffling.
+  const segNames = orderedSegmentNames(config);
+  const placed = placementsBySegment(config);
+
+  const out: SegmentSnapshot[] = [];
+  for (const name of segNames) {
+    const seg = config.segments[name];
+    if (!seg) continue;
+    out.push({
+      name,
+      description: seg.description ?? null,
+      template: seg.template,
+      referencedVars: extractReferencedVars(
+        seg.template,
+        config.helpers,
+        declaredNames,
+      ),
+      // The render sink is keyed by placement id, so each placement reads
+      // its own.
+      placements: (placed.get(name) ?? []).map((id) => ({
+        id,
+        lastRender: lastRenderBySegment.get(id) ?? null,
+      })),
+    });
+  }
+  return out;
+}
+
+// Each segment's placement ids over every tree a preset renders, in walk
+// order, one entry per id.
+function placementsBySegment(config: DslConfig): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const preset of presetNames(config.presets)) {
+    for (const node of walkNodes(presetRoot(config, preset).node)) {
+      if (node.kind !== "segment") continue;
+      const ids = out.get(node.name) ?? [];
+      const id = placementId(node);
+      if (!ids.includes(id)) out.set(node.name, [...ids, id]);
+    }
+  }
+  return out;
+}
+
+// Layout order, with any declared-but-not-laid-out segments appended in
+// declaration order so they still appear in the snapshot (an operator
+// debugging "why isn't this rendering" wants to see the segment, not have
+// it filtered out for being absent from layout).
+function orderedSegmentNames(config: DslConfig): readonly string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const node of walkNodes(rootNode(config.root))) {
+    if (node.kind !== "segment") continue;
+    if (config.segments[node.name] && !seen.has(node.name)) {
+      out.push(node.name);
+      seen.add(node.name);
+    }
+  }
+  for (const name of Object.keys(config.segments)) {
+    if (!seen.has(name)) {
+      out.push(name);
+      seen.add(name);
+    }
+  }
+  return out;
+}
+
+// [LAW:single-enforcer] Static analysis of which variables a segment
+// template references. Raw candidate extraction (find dotted paths inside
+// `{{ ... }}` actions, strip string literals so `{{ printf ".foo" }}`
+// does not falsely match a declared `foo`) is delegated to
+// templateReads in src/config/loader/refs.ts — that helper already
+// owns the template-ref parsing rules and is exercised by the loader's
+// cycle detector. Reusing it means a future improvement to the parser
+// (e.g. supporting `$x.field` variable references) lands here for free.
+//
+// Static analysis (not runtime evaluation) is the right tool here:
+// evaluation would couple introspection to a working store and would
+// vary by current values (if/with branches taken). Static finds every
+// potentially-referenced name regardless of current state — which is
+// what an operator debugging "what does this segment depend on" needs.
+//
+// Each read lands on the declarations it reaches through the loader's one
+// resolver (`variableRead`): `.session.id.extra` credits the declared
+// `session.id`, and a namespace read `.git` credits every `git.*`. Sorted for
+// deterministic snapshots.
+export function extractReferencedVars(
+  template: string,
+  helpers: Readonly<Record<string, string>>,
+  declared: ReadonlySet<string>,
+): readonly string[] {
+  const found = new Set(
+    [...templateReads(template, helpers).keys()].flatMap((path) =>
+      variableRead(path, declared),
+    ),
+  );
+  return Array.from(found).sort();
+}
+
+// ─── config ──────────────────────────────────────────────────────────────────
+
+// [LAW:no-defensive-null-guards] No defensive copy. DslConfig is `readonly`
+// throughout and the wire-encoder JSON-serializes it; downstream callers
+// see a fresh value. Returning the live reference is the cheapest correct
+// answer.
+export function introspectConfig(
+  state: DaemonDslState | null,
+): DslConfig | null {
+  if (state === null) return null;
+  return state.config;
+}
+
+// [LAW:single-enforcer] Style + color compatibility shared by the render
+// path and the lazy debug-side per-segment serializer. Per-request `width`
+// is composed on top at the wire boundary (replyTo's render arm) and
+// passed through as renderOpts. Debug serialization composes its own
+// per-segment opts with width: Number.POSITIVE_INFINITY since each segment
+// is rendered standalone (wrap doesn't apply to a one-segment projection).
+const RENDER_OPTS_BASE = {
+  endcaps: floorOf("endcaps"),
+  colorCompatibility: floorOf("colorCompatibility"),
+  wrap: floorOf("autoWrap"),
+  padding: floorOf("padding"),
+};
+
+const DEBUG_RENDER_OPTS: BuildLineOptions = {
+  ...RENDER_OPTS_BASE,
+  width: Number.POSITIVE_INFINITY,
+};
+
+// [LAW:no-defensive-null-guards] Reused empty map for the `vars` /
+// `config` debug projections — they don't read lastRenderBySegment but
+// the DaemonDslState type requires the field.
+export const EMPTY_RENDER_MAP = new Map<string, string>();
+
+// [LAW:one-source-of-truth] The color depth is a serialization-time choice.
+// A debug request carries no session, so the sampled entry's CONFIG values
+// are the ones it can state — a session's own pick, like its endcaps, is not
+// visible here. The caller threads the entry-resolved values; this
+// serializer never re-defaults them.
+export function serializeSegmentCells(
+  cells: ReadonlyMap<string, readonly RichText[]>,
+  colorCompatibility: ColorCompatibility,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [name, segCells] of cells) {
+    out.set(
+      name,
+      renderStripCells(segCells, {
+        ...DEBUG_RENDER_OPTS,
+        colorCompatibility,
+      }),
+    );
+  }
+  return out;
+}

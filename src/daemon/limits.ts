@@ -7,10 +7,25 @@ import {
   memoryReport,
   platformProbes,
   type ChargeProbe,
-  type MemoryCharge,
 } from "./memory-report";
-import type { Launcher } from "../proc/launch";
+import { type MemoryCharge } from "./foundations/memory-limit";
+import type { Launcher } from "../proc/launcher";
 import type { Timekeeper } from "../time";
+import type { PostMortem, ServingDaemon } from "./foundations/memory-limit";
+import {
+  BYTES_PER_MB,
+  mb,
+  laterIdentity,
+  approachingLimit,
+  chargeWords,
+  measureOf,
+} from "./foundations/memory-limit";
+import type {
+  BreachArtifact,
+  MemoryReading,
+  ReadCharge,
+} from "./foundations/memory-limit";
+import { BREACH_ARTIFACTS } from "./foundations/memory-limit";
 
 // [LAW:single-enforcer] One module owns "when does the daemon plan to die".
 // Only the memory trigger remains — idle and age limits were removed because they
@@ -92,12 +107,6 @@ export function heapCapMb(env: NodeJS.ProcessEnv): number {
   return memoryLimitMb(env) * HEAP_CAP_OVER_RSS;
 }
 
-const BYTES_PER_MB = 1024 * 1024;
-
-// [LAW:one-source-of-truth] Bytes in the unit the budget is set in, as every
-// sentence about the daemon's memory says them.
-export const mb = (bytes: number): number => Math.round(bytes / BYTES_PER_MB);
-
 // The budget in bytes, the unit every MemoryCharge is read in.
 export function memoryLimitBytes(env: NodeJS.ProcessEnv): number {
   return memoryLimitMb(env) * BYTES_PER_MB;
@@ -105,76 +114,6 @@ export function memoryLimitBytes(env: NodeJS.ProcessEnv): number {
 
 const DEFAULT_CHECK_INTERVAL = 60 * 1000;
 const HEAP_SNAPSHOT_KEEP = 3;
-
-// [LAW:one-source-of-truth] The artifacts a breach leaves, spelled ONCE. The
-// writer names them from this table, the real lister filters by it, and rotation
-// strips it to recover the `<stamp>-<pid>` identity the pair shares. Three
-// independent spellings of one pair — which is what adding the memory report
-// naively produced — is exactly how a rotation quietly stops matching what the
-// writer emits, leaving a directory that grows forever or a heap snapshot whose
-// attribution was evicted from under it.
-const BREACH_ARTIFACTS = {
-  memoryReport: { prefix: "memory-", suffix: ".txt" },
-  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" },
-} as const;
-
-export type BreachArtifact = keyof typeof BREACH_ARTIFACTS;
-
-// [LAW:types-are-the-program] One breach's post-mortem: its `<stamp>-<pid>`
-// identity and each artifact it left, by kind. Keyed rather than listed
-// because the two are written in separate attempts and either may be missing,
-// so a reader asks for the memory report by name instead of searching paths.
-// [LAW:one-source-of-truth] THE order of post-mortem identities, by code
-// unit as the ISO stamp is written (a collation may weigh its `-` and `:`
-// otherwise): the listing sorts by it and the doctor's "unread" filters by it,
-// so the newest it files read answers for every one it listed.
-export function laterIdentity(a: string, b: string): boolean {
-  return a > b;
-}
-
-export interface PostMortem {
-  readonly identity: string;
-  readonly artifacts: Readonly<Partial<Record<BreachArtifact, string>>>;
-}
-
-// [LAW:types-are-the-program] The backstop's latest reading, or none yet:
-// `unmeasured` until the first probe answers — the instant before a daemon's
-// first check, and for good in the browser page, which never arms its limits.
-// Never a construction-time number passed off as a reading.
-export type MemoryReading =
-  | { readonly kind: "unmeasured" }
-  | {
-      readonly kind: "measured";
-      readonly charge: ReadCharge;
-      readonly rss: number;
-      readonly heapTotal: number;
-    };
-
-// [LAW:types-are-the-program] The charge as a reading holds it: the
-// platform's own, or RSS standing in less `gap` — how far RSS ran over the
-// platform's charge at the last reading it charged, carried through every
-// stand-in since, 0 before any (and on Linux, whose charge IS RSS). `bytes` is
-// what the limit judges either way.
-export type ReadCharge =
-  | Extract<MemoryCharge, { kind: "charged" }>
-  | {
-      readonly kind: "stand-in";
-      readonly bytes: number;
-      readonly gap: number;
-      readonly unread: string;
-    };
-
-// The daemon as the doctor judges it (brandon-doctor-v62x.5mq): which process
-// it is, how much of its budget it holds, and the post-mortems its directory
-// keeps — or why they could not be listed.
-export interface ServingDaemon {
-  readonly pid: number;
-  readonly memory: MemoryReading;
-  readonly limit: number;
-  readonly postMortems:
-    | { readonly kind: "ok"; readonly value: readonly PostMortem[] }
-    | { readonly kind: "failed"; readonly reason: string };
-}
 
 // [LAW:single-enforcer] THE charge a reading holds, from what the probe
 // answered and the reading before it. macOS RSS runs ~150 MB over
@@ -196,14 +135,6 @@ export function readCharge(
         ? previous.rss - previous.charge.bytes
         : previous.charge.gap;
   return { ...probed, bytes: probed.bytes - gap, gap };
-}
-
-// [LAW:single-enforcer] THE judgment of "near the limit": the restart
-// forecast in daemon-stats and the doctor's daemon row both ask it, and the
-// render cache's share is sized under it.
-export const NEAR_LIMIT = 0.75;
-export function approachingLimit(bytes: number, limit: number): boolean {
-  return bytes > limit * NEAR_LIMIT;
 }
 
 function artifactFile(
@@ -425,20 +356,6 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   }
 
   return { check, describeNextRestart, serving, arm, disarm };
-}
-
-// [LAW:one-source-of-truth] The one spelling of a charge in a sentence: the
-// breach line, the restart forecast and the doctor's row all say it this way.
-export function chargeWords(charge: ReadCharge): string {
-  return charge.kind === "charged"
-    ? `${charge.measure} ${mb(charge.bytes)} MB`
-    : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
-}
-
-// [LAW:one-source-of-truth] The one token naming what a charge measured: the
-// per-check log line and the doctor's event both say it this way.
-export function measureOf(charge: MemoryCharge): string {
-  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
 }
 
 // The per-check log line's fields, logfmt.

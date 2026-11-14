@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { checkConfig } from "../src/check";
-import { daemonGates } from "../src/daemon/update-keys";
+import { daemonGates } from "../src/daemon/foundations/update-keys";
 
 jest.mock("../src/dsl/render", () => {
   const actual =

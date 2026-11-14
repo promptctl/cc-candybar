@@ -21,7 +21,7 @@
 // ended by SIGTERM before its first message leaves no transcript, and
 // `--session-id` then starts it again under the same id.
 
-import type { SessionId } from "./session-id.js";
+import type { SessionId } from "./foundations/session-id.js";
 import path from "node:path";
 
 // What a flag consumes after it, as commander reads it: nothing, exactly one

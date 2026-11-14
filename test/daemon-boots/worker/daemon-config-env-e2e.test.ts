@@ -21,7 +21,7 @@ import { click, configFlag, hookData, render as renderBar, renderRequest } from 
 import type { DaemonTarget } from "../../helpers/daemon-wire";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
-import type { ClientHints } from "../../../src/daemon/protocol";
+import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import {
   prepareIsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";

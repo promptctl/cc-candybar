@@ -19,9 +19,9 @@ import {
   RenderCache,
   VIEW_BYTES,
   type SessionView,
-} from "../src/daemon/cache/render";
+} from "../src/renderer/render-cache";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import {
   compileDslConfig,
   compileInputOf,
@@ -36,7 +36,7 @@ import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
 import { effectsOf } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { VERBS } from "../src/daemon/verbs";
+import { VERBS } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";

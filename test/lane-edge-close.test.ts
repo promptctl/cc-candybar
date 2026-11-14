@@ -6,7 +6,7 @@ import { productionLaneEdge } from "../src/daemon/lane-edge";
 import { processProbe } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S = sessionIdOf("s");
 

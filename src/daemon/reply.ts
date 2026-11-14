@@ -3,7 +3,7 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
-import { failedWith, renderFailure } from "./draw-bar.js";
+import { failedWith, renderFailure } from "./foundations/render-answers.js";
 import type { ClickInFlight } from "./clicks-in-flight.js";
 import {
   answerStatusline,
@@ -11,49 +11,40 @@ import {
   type StatuslineAnswer,
 } from "./statusline-answer.js";
 import { checkRenderRequest } from "./render-checkpoint.js";
-import { type CheckedRenderRequest } from "../renderer/request-context.js";
-import { PROTOCOL_VERSION, URL_FRAME_VERSIONS } from "./protocol";
+import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import { PROTOCOL_VERSION, URL_FRAME_VERSIONS } from "./foundations/protocol";
 import type {
   ClickRequest,
   Inbound,
   Request,
   Response,
   SubscribeRequest,
-} from "./protocol";
-import { parseSessionId, type SessionId } from "./session-id";
-import { type SourceSnapshots } from "./stats";
-import {
-  CLICK_PROGRAM_TIMEOUT_MS,
-  clickHandoff,
-  clickSessionOf,
-} from "./verbs";
-import { badRequest, failureOf } from "./verb-error";
+} from "./foundations/protocol";
+import { parseSessionId, type SessionId } from "./foundations/session-id";
+import { type SourceSnapshots } from "./foundations/stats-snapshot";
+import { clickHandoff } from "./click-handoff";
+import { CLICK_PROGRAM_TIMEOUT_MS } from "./foundations/click-launch";
+import { clickSessionOf } from "../click/wire";
+import { badRequest, failureOf } from "./foundations/verb-error";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/edge";
 import type { ClickArrival } from "../doctor/sightings";
-import { transcriptSaid, type FrameSeen } from "./render-sightings";
+import { transcriptSaid } from "./render-sightings";
+import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
-import { buildDebugSnapshot } from "./debug";
-import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
-import {
-  renderStripCells,
-  type BuildLineOptions,
-  type ColorCompatibility,
-} from "../render/strip.js";
-import { floorOf } from "../config/globals-fields.js";
-import type { RichText } from "@promptctl/rich-js";
+import { DEBUG_WHATS, isDebugWhat } from "./foundations/debug-types";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
 import { instantAt, instantOf } from "../utils/instant.js";
-import { waitBudgetMs } from "./request-deadline.js";
+import { waitBudgetMs } from "./foundations/request-deadline.js";
 import {
   noteFacts,
   requestEvent,
   type Acceptance,
   type RequestFacts,
   type RequestOutcome,
-} from "./request-event.js";
+} from "./foundations/request-event.js";
 
 // [LAW:no-ambient-temporal-coupling] A request whose semantics include "then
 // exit" (the shutdown verb, the stale-binary version mismatch) must not exit
@@ -216,15 +207,13 @@ export async function replyTo(
     stats,
     clock,
     frameFeeds,
-    renderCache,
+    toRenderer,
     payloadProviders: { gitProvider, usageStore },
     fileEvents,
     runs,
     sourceRuns,
-    effectSessions,
     menuIdle,
     journalTurns,
-    sessionState,
     tmuxStatusLines,
     watcherRegistry,
     limits,
@@ -277,16 +266,10 @@ export async function replyTo(
         sourceRuns: sourceRuns.stats(),
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
-        renderCache: renderCache.stats,
+        ...toRenderer.stats(),
         collector: parts.collector.stats(),
-        effectCache: effectSessions.getStats(),
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
-        sessionState: {
-          sessions: sessionState.size(),
-          observers: sessionState.observers(),
-          revision: sessionState.latestRevision(),
-        },
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
@@ -398,7 +381,7 @@ export async function replyTo(
       at,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to
-      // draw (src/daemon/request-deadline.ts).
+      // draw (src/daemon/foundations/request-deadline.ts).
       t0 +
         waitBudgetMs(checked.req.deadline, accepted.at, {
           epochMs: started.getTime(),
@@ -454,42 +437,7 @@ export async function replyTo(
         daemonV: PROTOCOL_VERSION,
       });
     }
-    // [LAW:dataflow-not-control-flow] The debug projection samples whatever
-    // DSL state the cache currently holds. With cache keys scoped on
-    // (projectDir, cwd) and the debug request carrying neither, we sample
-    // the most recently rendered session's view — sufficient for `debug vars`,
-    // `debug segments`, `debug config` against the active workload.
-    // latestView reads existing views only; it does NOT open one,
-    // so debug introspection never has the side effect of standing up a new
-    // (projectDir=undefined) cache entry tied to the daemon's own
-    // process.cwd(). A future debug-target selector would thread (session,
-    // projectDir, cwd) through the wire.
-    const dbgView = renderCache.latestView();
-    // [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the
-    // cache stores StripCell arrays (cheap, written by drawDsl).
-    // The debug projection needs strings, so serialize only for the
-    // `segments` projection (`vars` and `config` don't need it) and only
-    // when this request actually fires. Normal renders pay no per-segment
-    // serializer cost — that work shifts to debug-request time, which is
-    // operator-driven and rare.
-    const dbgState =
-      dbgView === null
-        ? null
-        : {
-            store: dbgView.store,
-            registry: dbgView.registry,
-            config: dbgView.state.config,
-            compiled: dbgView.state.compiled,
-            lastRenderBySegment:
-              req.what === "segments"
-                ? serializeSegmentCells(
-                    dbgView.lastRenderCellsBySegment,
-                    dbgView.state.config.globals.colorCompatibility ??
-                      floorOf("colorCompatibility"),
-                  )
-                : EMPTY_RENDER_MAP,
-          };
-    return stay({ ok: true, debug: buildDebugSnapshot(req.what, dbgState) });
+    return stay({ ok: true, debug: toRenderer.debug(req.what) });
   }
 
   const unanswered: never = req;
@@ -507,14 +455,14 @@ function sourceSnapshots(parts: DaemonParts): SourceSnapshots {
       managedStorage,
       hostService,
     },
-    renderCache,
+    toRenderer,
     refreshLedger,
   } = parts;
   const git = gitProvider.getStats();
   const tmux = tmuxService.getStats();
   const today = usageStore.scanStats();
   const storage = managedStorage.stats();
-  const cache = renderCache.stats;
+  const cache = toRenderer.stats().renderCache;
   return {
     records: refreshLedger.snapshot(),
     homes: {
@@ -539,50 +487,6 @@ function sourceSnapshots(parts: DaemonParts): SourceSnapshots {
       lost: storage.lost,
     },
   };
-}
-
-// [LAW:single-enforcer] Style + color compatibility shared by the render
-// path and the lazy debug-side per-segment serializer. Per-request `width`
-// is composed on top at the wire boundary (replyTo's render arm) and
-// passed through as renderOpts. Debug serialization composes its own
-// per-segment opts with width: Number.POSITIVE_INFINITY since each segment
-// is rendered standalone (wrap doesn't apply to a one-segment projection).
-const RENDER_OPTS_BASE = {
-  endcaps: floorOf("endcaps"),
-  colorCompatibility: floorOf("colorCompatibility"),
-  wrap: floorOf("autoWrap"),
-  padding: floorOf("padding"),
-};
-const DEBUG_RENDER_OPTS: BuildLineOptions = {
-  ...RENDER_OPTS_BASE,
-  width: Number.POSITIVE_INFINITY,
-};
-
-// [LAW:no-defensive-null-guards] Reused empty map for the `vars` /
-// `config` debug projections — they don't read lastRenderBySegment but
-// the DaemonDslState type requires the field.
-const EMPTY_RENDER_MAP = new Map<string, string>();
-
-// [LAW:one-source-of-truth] The color depth is a serialization-time choice.
-// A debug request carries no session, so the sampled entry's CONFIG values
-// are the ones it can state — a session's own pick, like its endcaps, is not
-// visible here. The caller threads the entry-resolved values; this
-// serializer never re-defaults them.
-function serializeSegmentCells(
-  cells: ReadonlyMap<string, readonly RichText[]>,
-  colorCompatibility: ColorCompatibility,
-): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const [name, segCells] of cells) {
-    out.set(
-      name,
-      renderStripCells(segCells, {
-        ...DEBUG_RENDER_OPTS,
-        colorCompatibility,
-      }),
-    );
-  }
-  return out;
 }
 
 // [LAW:nothing-unseen][LAW:single-enforcer] One click event per click,

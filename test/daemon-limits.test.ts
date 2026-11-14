@@ -11,7 +11,7 @@ import {
   postMortemsOf,
   realLimitsDeps,
 } from "../src/daemon/limits";
-import type { MemoryCharge } from "../src/daemon/memory-report";
+import type { MemoryCharge } from "../src/daemon/foundations/memory-limit";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -40,7 +40,10 @@ interface Recorder {
   existingFiles: string[];
 }
 
-function makeDeps(rec: Recorder, overrides: Partial<LimitsDeps> = {}): LimitsDeps {
+function makeDeps(
+  rec: Recorder,
+  overrides: Partial<LimitsDeps> = {},
+): LimitsDeps {
   return {
     clock: { now: () => rec.fakeNow, after: systemTimekeeper.after },
     pid: rec.pid,
@@ -165,8 +168,7 @@ describe("limits.check", () => {
     const limits = makeLimits(
       makeDeps(rec, {
         limitBytes: 200 * 1024 * 1024,
-        captureMemoryReport: () =>
-          new Promise((resolve) => (answer = resolve)),
+        captureMemoryReport: () => new Promise((resolve) => (answer = resolve)),
       }),
     );
     const checking = limits.check();
@@ -186,8 +188,7 @@ describe("limits.check", () => {
     const limits = makeLimits(
       makeDeps(rec, {
         limitBytes: 200 * 1024 * 1024,
-        captureMemoryReport: () =>
-          new Promise((resolve) => (answer = resolve)),
+        captureMemoryReport: () => new Promise((resolve) => (answer = resolve)),
       }),
     );
     const checking = limits.check();
@@ -235,7 +236,6 @@ describe("limits.check", () => {
   });
 });
 
-
 // brandon-daemon-limits-inw. A heap snapshot can only ever describe the V8 half,
 // and the breach that trips this backstop is the one where RSS and the heap
 // disagree — measured on the live daemon as 230 MB RSS against a 122 MB heap. So
@@ -271,7 +271,12 @@ describe("the breach records where the memory actually was", () => {
     await breach(rec);
     // What the log holds about the breach is on disk before the snapshot
     // holds the loop.
-    expect(rec.order).toEqual(["capture", "write-report", "write-log", "write-heap"]);
+    expect(rec.order).toEqual([
+      "capture",
+      "write-report",
+      "write-log",
+      "write-heap",
+    ]);
   });
 
   // [LAW:no-silent-failure] One artifact failing must not cost the other: they
@@ -371,7 +376,10 @@ describe("heap snapshot rotation", () => {
       "/d/heap-2026-02-01T00-00-00-000Z-9.heapsnapshot",
       "/d/memory-2026-01-01T00-00-00-000Z-9.txt",
     ]);
-    expect(rec.logs).toContainEqual({ level: "warn", msg: `evicting ${stuck} failed: EBUSY` });
+    expect(rec.logs).toContainEqual({
+      level: "warn",
+      msg: `evicting ${stuck} failed: EBUSY`,
+    });
   });
 });
 
@@ -379,7 +387,15 @@ describe("describeNextRestart", () => {
   test("null before any reading, and when far from the limit", async () => {
     const rec = newRec();
     rec.fakeRss = FIXTURE_LIMIT_MB * 0.8 * 1024 * 1024;
-    const limits = makeLimits(makeDeps(rec, { memoryCharge: async () => ({ kind: "charged", measure: "phys_footprint", bytes: 50 * 1024 * 1024 }) }));
+    const limits = makeLimits(
+      makeDeps(rec, {
+        memoryCharge: async () => ({
+          kind: "charged",
+          measure: "phys_footprint",
+          bytes: 50 * 1024 * 1024,
+        }),
+      }),
+    );
     expect(limits.describeNextRestart()).toBeNull();
     await limits.check();
     // RSS is past three quarters; the charge is not, and the charge decides.
@@ -392,7 +408,11 @@ describe("describeNextRestart", () => {
   test("flags the charge approaching the limit, naming its measure and the heap share", async () => {
     const rec = newRec();
     rec.fakeHeapTotal = 11 * 1024 * 1024;
-    rec.fakeCharge = { kind: "charged", measure: "phys_footprint", bytes: 400 * 1024 * 1024 };
+    rec.fakeCharge = {
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes: 400 * 1024 * 1024,
+    };
     const limits = makeLimits(makeDeps(rec));
     await limits.check();
     expect(limits.describeNextRestart()).toBe(
@@ -408,14 +428,26 @@ describe("describeNextRestart", () => {
     rec.fakeHeapTotal = 11 * MB;
     const limits = makeLimits(makeDeps(rec));
     rec.fakeRss = 350 * MB;
-    rec.fakeCharge = { kind: "charged", measure: "phys_footprint", bytes: 200 * MB };
+    rec.fakeCharge = {
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes: 200 * MB,
+    };
     await limits.check();
     rec.fakeRss = 500 * MB;
-    rec.fakeCharge = { kind: "stand-in", bytes: 500 * MB, unread: "footprint timeout" };
+    rec.fakeCharge = {
+      kind: "stand-in",
+      bytes: 500 * MB,
+      unread: "footprint timeout",
+    };
     await limits.check();
     expect(limits.describeNextRestart()).toBeNull();
     rec.fakeRss = 600 * MB;
-    rec.fakeCharge = { kind: "stand-in", bytes: 600 * MB, unread: "footprint timeout" };
+    rec.fakeCharge = {
+      kind: "stand-in",
+      bytes: 600 * MB,
+      unread: "footprint timeout",
+    };
     await limits.check();
     expect(limits.describeNextRestart()).toBe(
       "rss 600 MB less its last 150 MB gap (standing in: footprint timeout) approaching limit 512 MB (v8 heap 11 MB)",
@@ -432,7 +464,11 @@ describe("the charge is the verdict", () => {
     const rec = newRec();
     rec.fakeRss = 600 * MB;
     rec.fakeHeapTotal = 150 * MB;
-    rec.fakeCharge = { kind: "charged", measure: "phys_footprint", bytes: 300 * MB };
+    rec.fakeCharge = {
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes: 300 * MB,
+    };
     expect(await makeLimits(makeDeps(rec)).check()).toBe(false);
     expect(rec.shutdownCalls).toEqual([]);
     expect(rec.logs).toEqual([
@@ -447,7 +483,11 @@ describe("the charge is the verdict", () => {
     const rec = newRec();
     rec.fakeRss = 500 * MB;
     rec.fakeHeapTotal = 150 * MB;
-    rec.fakeCharge = { kind: "charged", measure: "phys_footprint", bytes: 539 * MB };
+    rec.fakeCharge = {
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes: 539 * MB,
+    };
     expect(await makeLimits(makeDeps(rec)).check()).toBe(true);
     expect(rec.shutdownCalls).toEqual([0]);
     expect(rec.logs).toContainEqual({
@@ -531,7 +571,9 @@ describe("the charge is the verdict", () => {
         makeDeps(rec, {
           memoryCharge: (rss) =>
             new Promise((resolve) =>
-              answers.push(() => resolve({ kind: "charged", measure: "rss", bytes: rss })),
+              answers.push(() =>
+                resolve({ kind: "charged", measure: "rss", bytes: rss }),
+              ),
             ),
         }),
       );
@@ -554,7 +596,6 @@ describe("the charge is the verdict", () => {
     }
   });
 });
-
 
 // [LAW:one-source-of-truth] These vector tables are the SAME tables
 // rust-client/src/launch.rs runs against heap_cap_mb — one grammar, pinned
@@ -587,7 +628,9 @@ describe("memoryLimitMb / heapCapMb (the memory-budget grammar)", () => {
 
   test("absent → the default; the cap is HEAP_CAP_OVER_RSS × the budget", async () => {
     expect(memoryLimitMb(env(undefined))).toBe(DEFAULT_RSS_LIMIT_MB);
-    expect(heapCapMb(env(undefined))).toBe(DEFAULT_RSS_LIMIT_MB * HEAP_CAP_OVER_RSS);
+    expect(heapCapMb(env(undefined))).toBe(
+      DEFAULT_RSS_LIMIT_MB * HEAP_CAP_OVER_RSS,
+    );
   });
 
   test.each(ACCEPT)("accepts %j as %i MB", (raw, mb) => {
@@ -617,7 +660,9 @@ describe("post-mortems", () => {
     ).toEqual([
       {
         identity: "2026-04-03T00-00-00-000Z-9",
-        artifacts: { heapSnapshot: "/s/heap-2026-04-03T00-00-00-000Z-9.heapsnapshot" },
+        artifacts: {
+          heapSnapshot: "/s/heap-2026-04-03T00-00-00-000Z-9.heapsnapshot",
+        },
       },
       {
         identity: "2026-04-02T00-00-00-000Z-9",
@@ -666,7 +711,9 @@ describe("post-mortems", () => {
         value: [
           {
             identity: "2026-03-01T00-00-00-000Z-7",
-            artifacts: { memoryReport: "/snap/memory-2026-03-01T00-00-00-000Z-7.txt" },
+            artifacts: {
+              memoryReport: "/snap/memory-2026-03-01T00-00-00-000Z-7.txt",
+            },
           },
         ],
       },
@@ -691,21 +738,25 @@ describe("post-mortems", () => {
   test("the real lister: a directory not yet made holds none; one that is a file is said so", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pm-"));
     try {
-      expect(realLimitsDeps(0, () => {}, {
-        launcher: unscriptedLauncher,
-        log: () => {},
-        clock: systemTimekeeper,
-        snapshotDir: path.join(root, "absent"),
-        writeLogNow: () => {},
-      }).listArtifacts()).toEqual([]);
+      expect(
+        realLimitsDeps(0, () => {}, {
+          launcher: unscriptedLauncher,
+          log: () => {},
+          clock: systemTimekeeper,
+          snapshotDir: path.join(root, "absent"),
+          writeLogNow: () => {},
+        }).listArtifacts(),
+      ).toEqual([]);
       fs.writeFileSync(path.join(root, "file"), "");
-      expect(() => realLimitsDeps(0, () => {}, {
-        launcher: unscriptedLauncher,
-        log: () => {},
-        clock: systemTimekeeper,
-        snapshotDir: path.join(root, "file"),
-        writeLogNow: () => {},
-      }).listArtifacts()).toThrow(/ENOTDIR/);
+      expect(() =>
+        realLimitsDeps(0, () => {}, {
+          launcher: unscriptedLauncher,
+          log: () => {},
+          clock: systemTimekeeper,
+          snapshotDir: path.join(root, "file"),
+          writeLogNow: () => {},
+        }).listArtifacts(),
+      ).toThrow(/ENOTDIR/);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

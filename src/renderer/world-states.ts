@@ -1,11 +1,11 @@
 // The world state of every session a renderer holds, as the host handed it in
-// (src/renderer/interface.ts): written only by a `config`, which carries the
+// (src/renderer-interface/interface.ts): written only by a `config`, which carries the
 // document read at its request's keys, and by a `world-state`, and dropped by
 // a `retire`. A view's source reads its session's document here
-// (src/daemon/session-source.ts), so the renderer stamps nothing.
+// (src/renderer/session-source.ts), so the renderer stamps nothing.
 
 import { compareStructural, observable, runInAction } from "mobx";
-import type { SessionId } from "../daemon/session-id";
+import type { SessionId } from "../daemon/foundations/session-id";
 import type { WorldState } from "../facts/world-state";
 
 export class WorldStates {

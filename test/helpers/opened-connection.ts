@@ -7,7 +7,7 @@ import {
   makeFrameReader,
   type Request,
   type Response,
-} from "../../src/daemon/protocol";
+} from "../../src/daemon/foundations/protocol";
 import type { memoryConnection } from "./memory-connection";
 
 export interface Opened {

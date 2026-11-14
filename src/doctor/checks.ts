@@ -31,7 +31,7 @@ import {
   type FrameSighting,
   type RateLimitsSeen,
   type TranscriptSaid,
-} from "../daemon/render-sightings.js";
+} from "../daemon/foundations/sightings.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import type { Delivery, SightingScope } from "./sightings.js";
 import {
@@ -41,7 +41,7 @@ import {
   mb,
   type PostMortem,
   type ServingDaemon,
-} from "../daemon/limits.js";
+} from "../daemon/foundations/memory-limit.js";
 import {
   LINK_TERMINALS,
   TERMINALS,

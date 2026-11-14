@@ -16,7 +16,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse as parseToml } from "smol-toml";
-import { failureText, type Launcher } from "../proc/launch.js";
+import { failureText, type Launcher } from "../proc/launcher.js";
 import type { Asked, FontInUse } from "./checks.js";
 import { itermDrawsItself, type ConfiguredTerminal } from "./terminal.js";
 import { DoctorBusy } from "./busy.js";

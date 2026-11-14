@@ -11,21 +11,18 @@
 // reads its source made, and "reads what the request stored" is the payload
 // a frame draws beside the one the request drew.
 
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { sumsOf } from "./helpers/today";
-import {
-  renderWidth,
-  todayOf,
-  type RenderPayloadDeps,
-} from "../src/daemon/render-payload";
+import { renderWidth, todayOf } from "../src/renderer/render-payload";
+import { type RenderPayloadDeps } from "../src/daemon/readings";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { globalsFor } from "./helpers/selection";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, failed, pendingOf, ok } from "../src/utils/outcome";
-import type { ClientHints } from "../src/daemon/protocol";
-import { sessionIdOf } from "../src/daemon/session-id";
-import type { CheckedHookData } from "../src/renderer/request-context";
+import type { ClientHints } from "../src/daemon/foundations/protocol";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import type { CheckedHookData } from "../src/renderer-interface/request-context";
 import type { GitRead } from "../src/segments/git";
 import {
   absentOwners,
@@ -108,7 +105,10 @@ function counted(pr: unknown = ABSENT) {
     gitProvider: fakeGit(count("git", ok({ ...GIT, pullRequest: pr }))),
     tmuxService: fakeTmux(count("tmux", ok("work"))),
     usageStore: fakeUsage({
-      usage: count("session", ok({ calculatedCost: 2, tokens: 10, tokenBreakdown: null })),
+      usage: count(
+        "session",
+        ok({ calculatedCost: 2, tokens: 10, tokenBreakdown: null }),
+      ),
       today: count("today", ok(sumsOf(AT, 5, 50))),
       speed: count("speed", ABSENT),
     }),
@@ -297,7 +297,9 @@ describe("a frame's payload", () => {
     }
     deps.contextProvider.refresh = refresh;
     await request();
-    expect(deps.faults.of(sessionIdOf(HOOK.session_id), "context")).toBeUndefined();
+    expect(
+      deps.faults.of(sessionIdOf(HOOK.session_id), "context"),
+    ).toBeUndefined();
   });
 
   // [LAW:no-silent-failure] A failed lane was logged by the refresh that

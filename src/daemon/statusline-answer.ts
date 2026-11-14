@@ -4,22 +4,30 @@
 // encoding the client asked for.
 
 import path from "node:path";
-import type { Effect, RequestId, TurnOutcome } from "../renderer/interface.js";
-import type { CheckedRenderRequest } from "../renderer/request-context.js";
+import type {
+  Effect,
+  RequestId,
+  TurnOutcome,
+} from "../renderer-interface/interface.js";
+import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { checkoutLocation } from "../utils/git-root.js";
 import { instantAt, type Instant } from "../utils/instant.js";
-import { failedWith, RENDER_ANSWERS, renderFailure } from "./draw-bar.js";
-import { failureOf, type Failure } from "./verb-error.js";
-import type { Response } from "./protocol";
-import type { FrameSeen } from "./render-sightings";
+import {
+  failedWith,
+  RENDER_ANSWERS,
+  renderFailure,
+} from "./foundations/render-answers.js";
+import { failureOf, type Failure } from "./foundations/verb-error.js";
+import type { Response } from "./foundations/protocol";
+import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
 import type { RendererHost } from "./renderer-host.js";
 import {
   noteFacts,
   type RequestFacts,
   type RequestOutcome,
-} from "./request-event.js";
+} from "./foundations/request-event.js";
 
 export interface StatuslineAnswer {
   readonly outcome: RequestOutcome;

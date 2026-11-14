@@ -18,18 +18,16 @@ import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  projectTokensPerSecond,
-  type RenderPayloadDeps,
-} from "../src/daemon/render-payload";
+import { projectTokensPerSecond } from "../src/renderer/render-payload";
+import { type RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
-import type { ClientHints } from "../src/daemon/protocol";
+import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
@@ -40,7 +38,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import {
@@ -54,7 +52,7 @@ import {
   settled,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S_2 = sessionIdOf("S");
 const C_2 = sessionIdOf("C");
@@ -278,7 +276,8 @@ function depsWith(
     ...absentOwners(),
     gitProvider: fakeGit(async () => ABSENT),
     usageStore: fakeUsage({
-      usage: async () => ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
+      usage: async () =>
+        ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
       today: () => ABSENT,
       speed: async () => {
         const prev = { input: 1000, output: 1000, total: 2000, atMs: 0 };
@@ -340,7 +339,8 @@ describe("payloadOf — speed lane", () => {
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
-          usage: async () => ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
+          usage: async () =>
+            ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
           today: () => ABSENT,
           speed: async () => {
             const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
@@ -362,7 +362,8 @@ describe("payloadOf — speed lane", () => {
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
-          usage: async () => ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
+          usage: async () =>
+            ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
           today: () => ABSENT,
           speed: async () => {
             // total/atMs: 0@0, 100@1s (+100/s), 100@2s (idle ⇒ 0), 400@3s (+300/s).
@@ -394,7 +395,8 @@ describe("payloadOf — speed lane", () => {
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
-          usage: async () => ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
+          usage: async () =>
+            ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
           today: () => ABSENT,
           speed: async () => {
             // total/atMs: 0@0, 100@1s (+100/s, in-window), 400@30s (29s gap ⇒
@@ -425,7 +427,8 @@ describe("payloadOf — speed lane", () => {
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
-          usage: async () => ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
+          usage: async () =>
+            ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
           today: () => ABSENT,
           speed: async () => {
             const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
@@ -459,10 +462,7 @@ function renderSpeed(payload: Record<string, unknown>): Frame {
   // SessionState is required to declare it (matching every other
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
   // and speed's own `when` renders an unrelated ⚠ error cell.
-  const registry = new SourceRegistry(store,
-    "",
-    new SessionState(),
-  );
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, {
       signer: TEST_SIGNER,

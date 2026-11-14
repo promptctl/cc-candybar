@@ -8,11 +8,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { __test__ as install, forwarderExecutable } from "../src/install/index";
-import type {
-  LaunchOpts,
-  LaunchResult,
-  OneShotLauncher,
-} from "../src/proc/launch";
+import type { OneShotLauncher } from "../src/proc/launch";
+import type { LaunchOpts, LaunchResult } from "../src/proc/launcher";
 import type { World } from "../src/host";
 import { URL_SCHEME } from "../src/click/wire";
 

@@ -12,8 +12,8 @@ import {
   type SourceLane,
   type SourceRuns,
 } from "./daemon/source-runs.js";
-import { awaitedReading } from "./daemon/render-payload.js";
-import { judgeRun } from "./daemon/judge-run.js";
+import { awaitedReading } from "./renderer/render-payload.js";
+import { judgeRun } from "./daemon/foundations/judge-run.js";
 import { restamp } from "./facts/fact.js";
 import { UNREAD_RUN, type RunFact } from "./facts/world-state.js";
 import { Holds } from "./utils/holds.js";

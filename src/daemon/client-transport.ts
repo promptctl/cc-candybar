@@ -22,9 +22,10 @@ import {
   ProtocolError,
   sendOne,
   type TimeoutPhase,
-} from "./protocol";
-import type { Request, Response } from "./protocol";
+} from "./foundations/protocol";
+import type { Request, Response } from "./foundations/protocol";
 import type { Timekeeper } from "../time";
+import type { PermanentOutcome } from "./foundations/protocol";
 
 // Per-caller timeout policy, carried as data. The render hot path runs tight
 // budgets (a statusline refresh must not stall the host); operator-driven
@@ -65,18 +66,6 @@ export interface BusyOutcome {
   phase: TimeoutPhase;
   message: string;
 }
-
-export type PermanentOutcome =
-  | {
-      kind: "permanent";
-      cause: "version_mismatch";
-      clientV: number;
-      daemonV: number;
-    }
-  | { kind: "permanent"; cause: "bad_request"; message: string }
-  | { kind: "permanent"; cause: "render_failed"; message: string }
-  | { kind: "permanent"; cause: "switched_off"; message: string }
-  | { kind: "permanent"; cause: "malformed_response"; message: string };
 
 // [LAW:single-enforcer] The protocol version is stamped here, on every
 // outbound request — a caller cannot mis-stamp or omit it.

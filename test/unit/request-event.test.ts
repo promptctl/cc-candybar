@@ -1,4 +1,4 @@
-// [LAW:nothing-unseen] The request event's own shape (src/daemon/request-event.ts).
+// [LAW:nothing-unseen] The request event's own shape (src/daemon/foundations/request-event.ts).
 // Nothing a config authors makes a render throw (brandon-unfiled-3248.ryf), so
 // the threw arm is reached only by a renderer bug and no real daemon request
 // can drive it: it is held here, on the function that writes the line.
@@ -7,8 +7,8 @@ import {
   noteFacts,
   requestEvent,
   type RequestFacts,
-} from "../../src/daemon/request-event";
-import { failureOf } from "../../src/daemon/verb-error";
+} from "../../src/daemon/foundations/request-event";
+import { failureOf } from "../../src/daemon/foundations/verb-error";
 
 describe("requestEvent", () => {
   test("a throw is an error event carrying the facts it reached, then the thrown value with its stack", () => {

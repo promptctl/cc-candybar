@@ -6,10 +6,12 @@ import { systemLauncher } from "../../src/proc/system-launcher";
 import {
   MAX_CAPTURED_BYTES,
   PIPE_EVENT_HOLD_S,
-  type LaunchCategory,
   type TestableLauncher,
-  type WarningChange,
 } from "../../src/proc/launch";
+import {
+  type LaunchCategory,
+  type WarningChange,
+} from "../../src/proc/launcher";
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";

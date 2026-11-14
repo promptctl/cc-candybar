@@ -14,14 +14,14 @@ import {
   type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
-} from "../renderer/interface.js";
+} from "../renderer-interface/interface.js";
 import { eventLine } from "../utils/logfmt.js";
 import { instantAt } from "../utils/instant.js";
 import type { Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
-import type { SessionId } from "./session-id.js";
-import { LEVEL } from "./request-event.js";
-import { failureOf } from "./verb-error.js";
+import type { SessionId } from "./foundations/session-id.js";
+import { LEVEL } from "./foundations/request-event.js";
+import { failureOf } from "./foundations/verb-error.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";

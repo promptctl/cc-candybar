@@ -27,7 +27,7 @@ import { quietLogger, type DaemonLogger } from "../utils/logger";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import type { Timekeeper } from "../time";
 import { failed, ok, type Outcome, type Reading } from "../utils/outcome";
-import type { SessionId } from "../daemon/session-id";
+import type { SessionId } from "../daemon/foundations/session-id";
 
 export type { TodoItem } from "../utils/transcript-activity";
 

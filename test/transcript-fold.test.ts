@@ -5,7 +5,7 @@
 // /compact rewrites a transcript, and retention only shows itself when the file
 // a fold was built from goes away.
 
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import {
   chmodSync,

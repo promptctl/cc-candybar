@@ -4,7 +4,7 @@
 // the backstop that answered it TIMEOUT, or the socket its client closed. The
 // host holds each click here for as long as its turn runs.
 
-import type { RequestId } from "../renderer/interface.js";
+import type { RequestId } from "../renderer-interface/interface.js";
 
 // A click as its connection knows it: the request it arrived in, and whether
 // its client has left.

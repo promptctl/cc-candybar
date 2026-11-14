@@ -31,9 +31,9 @@ import {
 } from "../../src/daemon/client-transport.js";
 import { logLines } from "../../src/daemon/log.js";
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog.js";
-import type { ClientHints } from "../../src/daemon/protocol.js";
+import type { ClientHints } from "../../src/daemon/foundations/protocol.js";
 import { logPath } from "../../src/daemon/paths.js";
-import type { StatsSnapshot } from "../../src/daemon/stats.js";
+import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot.js";
 import { parseFrame, type Frame } from "../../src/render/frame.js";
 import type { ClaudeHookData } from "../../src/utils/claude.js";
 import { fieldOf, valueOf } from "../../src/utils/logfmt.js";

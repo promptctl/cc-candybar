@@ -153,7 +153,7 @@ const tabRef = (tab: TabName): DisclosureRef => ({
 //
 // [LAW:one-source-of-truth] ONE control per setting, and every control writes
 // the session: a pick is a DRAFT until it is saved (brandon-save-undo-bwi.hpi).
-// The drafts are derived, never flagged — src/daemon/setting-drafts.ts compares
+// The drafts are derived, never flagged — src/renderer/setting-drafts.ts compares
 // the session with what the config file resolves — and `💾 save N` exists
 // exactly while there are N of them, writing all of them to the file in one
 // click. There is no destination selector to consult: where a click lands is
@@ -184,7 +184,7 @@ const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
 // `⤓ default for <theme>` in the theme's ⚙ gear: save the shade, variation
 // and style the bar wears — the gear's own settings — as the active theme's
 // default. The cell shows exactly while saving would change something — a fact the daemon publishes every
-// render (RenderPayload.themeDefault, src/daemon/setting-drafts.ts), never one
+// render (RenderPayload.themeDefault, src/renderer/setting-drafts.ts), never one
 // a template computes — and so is the theme it names: the one the click
 // writes, not `theme.effective`, which edit mode's staged palette can move.
 const THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
@@ -213,10 +213,10 @@ const RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
 const DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
 
 // Undo and redo step the session's one settings history
-// (src/daemon/settings-history.ts).
+// (src/renderer/settings-history.ts).
 const UNDO_ACTION = `${SETTINGS_NS}undo`;
 // [LAW:one-source-of-truth] `◁` restores what the session's last navigating
-// click opened or closed (src/daemon/navigation-history.ts). It leads the
+// click opened or closed (src/renderer/navigation-history.ts). It leads the
 // menu's first line, right after the risen door, and is always drawn — quiet
 // and inert while there is nothing to go back to — so nothing after it moves.
 const BACK_ACTION = `${SETTINGS_NS}back`;
@@ -1055,7 +1055,7 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // Every control's artifacts: the actions the generator minted for it, the ↺
 // that returns it to the bundled default — the session's pick and every layer
 // of the config file a save can write (resetLayers,
-// src/daemon/setting-drafts.ts), keyed by the config field a save writes so
+// src/renderer/setting-drafts.ts), keyed by the config field a save writes so
 // the two can never name different settings — and its segments. An inline
 // control is one cell, the ↺ beside it; a picker is `◀ label ▶`, whose label
 // opens its list on the shared accordion key, then the ↺; the rows beneath it

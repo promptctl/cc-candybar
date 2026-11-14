@@ -35,8 +35,8 @@ import {
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
   type Response,
-} from "../../../src/daemon/protocol";
-import type { SessionStorage } from "../../../src/daemon/session-state";
+} from "../../../src/daemon/foundations/protocol";
+import type { SessionStorage } from "../../../src/renderer-interface/session-state";
 import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
 import { clickBody, hookData } from "../../helpers/daemon-e2e";
@@ -44,7 +44,7 @@ import { linkUrls } from "../../helpers/frame";
 import { buildDaemon, bundleAt, statsOf } from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
 import { until } from "../../helpers/until";
-import { sessionIdOf } from "../../../src/daemon/session-id";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 
 const VALUE_REFUSED = sessionIdOf("value-refused");
 const VALUE_CLOSE = sessionIdOf("value-close");

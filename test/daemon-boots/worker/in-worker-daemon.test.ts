@@ -3,7 +3,7 @@
 // gets, stopped with nothing of it left serving, and started again over the same
 // state. Its cases hold what a migrated file would otherwise find out by failing.
 
-import type { RequestId } from "../../../src/renderer/interface";
+import type { RequestId } from "../../../src/renderer-interface/interface";
 import {
   mkdirSync,
   mkdtempSync,
@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
-import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/click-error";
+import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error";
 import { systemTimekeeper } from "../../../src/time";
 import { logLines } from "../../../src/daemon/log";
 import { logPath } from "../../../src/daemon/paths";
@@ -26,8 +26,8 @@ import {
   PROTOCOL_VERSION,
   type Request,
   type Response,
-} from "../../../src/daemon/protocol";
-import { DRAW_RESERVE_MS, REQUEST_TIMEOUT_MS } from "../../../src/daemon/request-deadline";
+} from "../../../src/daemon/foundations/protocol";
+import { DRAW_RESERVE_MS, REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { textOf, type Frame } from "../../../src/render/frame";
 import { click, frameRequest, render, renderBody, renderRequest, renderUntil, refusedClick } from "../../helpers/daemon-e2e";
 import { renderLines } from "../../helpers/daemon-log";

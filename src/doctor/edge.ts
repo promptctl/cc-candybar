@@ -17,20 +17,22 @@ import {
   claudeConfigDir,
   claudeManagedSettingsDir,
   claudeSettingsPath,
-  readClaudeSettingsText,
-  readSettingsChain,
   type SettingsChainAt,
 } from "../claude-settings.js";
+import {
+  readClaudeSettingsText,
+  readSettingsChain,
+} from "../claude-settings-read.js";
 import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import { writeAtomic } from "../utils/atomic-write.js";
-import type { ClientHints } from "../daemon/protocol.js";
+import type { ClientHints } from "../daemon/foundations/protocol.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { Host } from "../host.js";
 import {
   failureText,
   type LaunchResult,
   type Launcher,
-} from "../proc/launch.js";
+} from "../proc/launcher.js";
 import {
   FORGE_CLI,
   REMOTES_ARGS,
@@ -47,15 +49,12 @@ import { gitRootOf } from "../utils/git-root.js";
 import { dataNeeds, type DataNeeds } from "./data-needs.js";
 import type {
   RateLimitsSeen,
-  RoledSaid,
   TranscriptSaid,
-} from "../daemon/render-sightings.js";
+} from "../daemon/foundations/sightings.js";
 import { ok, type Outcome } from "../utils/outcome.js";
 import { jsonLine } from "../utils/claude.js";
 import { readTailSync } from "../utils/transcript-fs.js";
 import type { TmuxHint } from "../tmux-hint.js";
-import type { UnusedDecl } from "../config/unused.js";
-import type { DslConfig } from "../config/dsl-types.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import {
   type Asked,
@@ -67,10 +66,7 @@ import {
   type DoctorFacts,
   type Fix,
   type DataNeed,
-  type FontInUse,
   type ForgeLogin,
-  type MarkBook,
-  type PostMortemsRead,
   type SegmentDataFacts,
   type SettingsChain,
   type TerminalFacts,
@@ -80,7 +76,6 @@ import {
   type TranscriptWindow,
   type TmuxClient,
   type TmuxFacts,
-  type UrlHandlerFacts,
 } from "./checks.js";
 import type { TerminalEnvHint } from "../terminal-hint.js";
 import {
@@ -88,7 +83,6 @@ import {
   identifyInTmux,
   isBundling,
   isConfigured,
-  type ConfiguredTerminal,
 } from "./terminal.js";
 import { fontInUse } from "./font-edge.js";
 import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
@@ -101,19 +95,18 @@ import { shipsNative } from "../install/platforms.js";
 import { fileMarkBook } from "./mark-book.js";
 import { fileClickedTerminals } from "./clicked-terminals.js";
 import { filePostMortemsRead } from "./post-mortems-read.js";
-import type { StateFile } from "./state-file.js";
-import { laterIdentity, type ServingDaemon } from "../daemon/limits.js";
-import type { ClickArrival, SightedBar, SightingScope } from "./sightings.js";
-
-// [LAW:effects-at-boundaries] The install check's reads of the machine: a
-// path resolved through every link, the checkout a bundle was built in, a
-// crate's source digest, and whether a native client ships here.
-export interface InstallEdge {
-  readonly realpath: (p: string) => Asked<string>;
-  readonly checkoutOf: (bundle: string) => string | null;
-  readonly digest: (dir: string) => Asked<string>;
-  readonly nativeShipped: boolean;
-}
+import {
+  laterIdentity,
+  type ServingDaemon,
+} from "../daemon/foundations/memory-limit.js";
+import type { SightedBar, SightingScope } from "./sightings.js";
+import type { StoresRead } from "../daemon/foundations/stats-snapshot";
+import type {
+  InstallEdge,
+  DoctorStores,
+  DoctorEdge,
+  ConfigLoad,
+} from "./ports";
 
 // Every fs read here throws its own errno text; the facts carry it instead.
 function asked<T>(read: () => T): Asked<T> {
@@ -182,27 +175,6 @@ export function installFacts(
   };
 }
 
-// The documents the doctor keeps under the daemon's state directory
-// (src/doctor/state-file.ts). [LAW:one-source-of-truth] The daemon is their
-// one owner: its click files them, and `cc-candybar doctor` reads what they
-// hold in the daemon's own answer (`StoresRead`, src/doctor/daemon-answer.ts).
-export interface DoctorStores {
-  // The marks the user has made on what the doctor showed them, kept for
-  // good (src/doctor/mark-book.ts).
-  readonly marks: StateFile<MarkBook>;
-  // The terminals a doctor click has come back from, kept for good
-  // (src/doctor/clicked-terminals.ts).
-  readonly clicked: StateFile<readonly string[]>;
-  // The newest post-mortem the user filed as read
-  // (src/doctor/post-mortems-read.ts).
-  readonly postMortemsRead: StateFile<PostMortemsRead>;
-}
-
-// What each store holds, or why it could not be read.
-export type StoresRead = {
-  readonly [K in keyof DoctorStores]: ReturnType<DoctorStores[K]["read"]>;
-};
-
 export const fileStores = (dir: string): DoctorStores => ({
   marks: fileMarkBook(dir),
   clicked: fileClickedTerminals(dir),
@@ -237,59 +209,6 @@ export function oneAskPerClick(edge: DoctorEdge): DoctorEdge {
         edge.fontInUse(terminal, env, glyphs),
       ),
   };
-}
-
-export interface DoctorEdge {
-  // tmux's own word on the attached client's terminal, asked of THE server
-  // the hint names — `-S socket` and `-t pane` are why the hint carries them.
-  readonly probeTmux: (hint: TmuxHint) => Promise<Asked<TmuxClient | null>>;
-  // Whether a process came in through a remote login (sshd, mosh-server) —
-  // asked of the tmux client attached to the session's pane.
-  readonly remoteLogin: (pid: number) => Promise<Asked<boolean>>;
-  // The font a configured terminal draws the bar's glyphs with, read where
-  // the terminal reads it (src/doctor/font-edge.ts).
-  readonly fontInUse: (
-    terminal: {
-      readonly name: ConfiguredTerminal;
-      readonly version: string | null;
-    },
-    env: TerminalEnvHint,
-    glyphs: string,
-  ) => Promise<Asked<FontInUse>>;
-  // What loading the config at an origin finds now — the daemon reloads the
-  // render-cache entry the session's bar is drawn from and answers from it
-  // (so the doctor and the bar's strip report one load), the CLI runs one
-  // load of its own. Both are the one `loadFromDisk`.
-  readonly loadConfig: (origin: RenderOrigin) => ConfigLoad;
-  // The directory Claude Code's managed settings live in
-  // (`claudeManagedSettingsDir`) — a policy every session on the machine
-  // reads, so the daemon's own environment may move it, which test/setup.ts
-  // does so no test reads the host's policy.
-  readonly managedSettingsDir: string;
-  // The user's home: where Claude Code's default directory is.
-  readonly home: string;
-  readonly install: InstallEdge;
-  // Every cc-candybar daemon process this user runs (`daemonProcesses`).
-  readonly daemons: () => Promise<Asked<readonly DaemonProcess[]>>;
-  // Whether the forge CLI the checkout's remote names is installed and logged
-  // in to its host — null when it names no forge (`forgeLogin`).
-  readonly forge: (cwd: string) => Promise<Asked<ForgeLogin | null>>;
-  // The tail of a session's transcript, read as the bar reads it — absent
-  // when no file is at the path (`readTranscriptWindow`).
-  readonly transcript: (path: string) => Outcome<TranscriptWindow>;
-}
-
-// One load's outcome, as both a cache entry and a fresh load carry it: the
-// file it resolved, the error that stopped it, the advisories it earned (one
-// per line), and — for the config last loaded — what its file left unused.
-// `config` is the config the bar draws from: the one loaded, else what the
-// bar falls back to under the error.
-export interface ConfigLoad {
-  readonly layers: readonly string[];
-  readonly error: string | null;
-  readonly warning: string | null;
-  readonly unused: readonly UnusedDecl[];
-  readonly config: DslConfig;
 }
 
 // `#{client_termfeatures}` lists terminal-features + overrides + terminfo for
@@ -807,22 +726,6 @@ async function terminalFacts(
   };
 }
 
-// A click that arrived as a link IS a link that came back through the URL
-// handler, and who delivered it says whether that handler is the forwarder;
-// one from the tmux status line came through tmux, and says nothing of it.
-export function clickArrived(arrival: ClickArrival): UrlHandlerFacts {
-  switch (arrival.via) {
-    case "link":
-      return { kind: "arrived", delivery: arrival.delivery };
-    case "tmux-status":
-      return {
-        kind: "unprobed",
-        reason:
-          "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler — run `cc-candybar doctor` to probe the handler",
-      };
-  }
-}
-
 // [LAW:dataflow-not-control-flow] A source is asked exactly when a segment
 // needs it: the segments are the arm's discriminator, and a source no segment
 // needs is never probed.
@@ -846,31 +749,6 @@ async function segmentDataFacts(
     pullRequests: await need(needs.pullRequests, () => edge.forge(origin.cwd)),
     rateLimits: await need(needs.rateLimits, () => rateLimits),
   };
-}
-
-// [LAW:single-enforcer] The width one session's statusline client measured,
-// read off that session's latest renders — the click's own, or the sightings
-// `cc-candybar doctor` was answered for the session it runs in. The daemon
-// holds no such render when it has drawn the session's statusline none since
-// it started (the bar on screen is an earlier daemon's), when it has dropped
-// it for newer sessions' renders, or when only a `frames` client draws it.
-export function sessionWidth(
-  sessionId: string,
-  said: ReadonlyArray<Pick<RoledSaid, "role" | "termCols">>,
-): Asked<Width> {
-  const statusline = said.find((s) => s.role === "statusline");
-  return statusline === undefined
-    ? {
-        kind: "failed",
-        reason: `the daemon holds no statusline render of session ${sessionId} — none since it started, or dropped for newer sessions' renders, or only a frames display draws it, which reports no width — so no width a statusline client measured is known; run this again once the statusline has redrawn`,
-      }
-    : {
-        kind: "ok",
-        value: {
-          columns: statusline.termCols,
-          of: { kind: "session", sessionId },
-        },
-      };
 }
 
 // [LAW:single-enforcer] Every fact comes from what the CLIENT saw: its tmux,

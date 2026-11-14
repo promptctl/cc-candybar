@@ -47,7 +47,7 @@ import {
   URL_FRAME_KIND,
   URL_FRAME_VERSION,
   encodeFrame,
-} from "../../../src/daemon/protocol";
+} from "../../../src/daemon/foundations/protocol";
 import { checkByName } from "../../../src/doctor/checks";
 import {
   probeUrlHandler,
@@ -67,7 +67,7 @@ import {
   claudeConfigDir,
   detectClaudeConfigDir,
 } from "../../../src/claude-settings";
-import type { ClientHints } from "../../../src/daemon/protocol";
+import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import { answerRepo } from "../../helpers/repo-approval";
 
 jest.setTimeout(30_000);

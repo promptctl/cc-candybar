@@ -12,10 +12,10 @@ import { terminalFeatureFields } from "../src/doctor/report";
 import { parseWidthSightings } from "../src/doctor/daemon-answer";
 import { widthOf } from "../src/doctor/cli";
 import { scopeOf } from "../src/doctor/sightings";
-import type { StatsSnapshot } from "../src/daemon/stats";
+import type { StatsSnapshot } from "../src/daemon/foundations/stats-snapshot";
 import { DEFAULT_TERMINAL_WIDTH } from "../src/render/strip";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
@@ -98,18 +98,18 @@ describe("termWidth probe", () => {
   const probe = checkByName("termWidth")!.probe;
 
   test("a client that measured its terminal is ok, naming the width and whose it is", () => {
-    expect(
-      probe({ ...HEALTHY_FACTS, width: inSession(148) }),
-    ).toEqual({ ok: true, note: "148 columns, as session s1's statusline client measured" });
-    expect(
-      probe({ ...HEALTHY_FACTS, width: here(90) }),
-    ).toEqual({ ok: true, note: "90 columns, as this command's terminal measured" });
+    expect(probe({ ...HEALTHY_FACTS, width: inSession(148) })).toEqual({
+      ok: true,
+      note: "148 columns, as session s1's statusline client measured",
+    });
+    expect(probe({ ...HEALTHY_FACTS, width: here(90) })).toEqual({
+      ok: true,
+      note: "90 columns, as this command's terminal measured",
+    });
   });
 
   test("one that could not fails, naming the width the bar is laid out for", () => {
-    expect(
-      probe({ ...HEALTHY_FACTS, width: inSession(null) }),
-    ).toEqual({
+    expect(probe({ ...HEALTHY_FACTS, width: inSession(null) })).toEqual({
       ok: false,
       reason: `session s1's statusline client measured no width (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's diagnostics name), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
     });
@@ -123,7 +123,6 @@ describe("termWidth probe", () => {
     ).toEqual({ ok: false, reason: "why" });
   });
 });
-
 
 describe("terminalFeatureFields", () => {
   const seen = (tmuxClient: TmuxClient | null): TerminalIdentity => ({
@@ -148,10 +147,12 @@ describe("terminalFeatureFields", () => {
   });
 
   test("`-` where no client was seen", () => {
-    expect(terminalFeatureFields(seen(null), here(80))).toBe("cols=80 widthOf=command clientUtf8=-");
-    expect(terminalFeatureFields({ kind: "unasked", reason: "x" }, here(80))).toBe(
+    expect(terminalFeatureFields(seen(null), here(80))).toBe(
       "cols=80 widthOf=command clientUtf8=-",
     );
+    expect(
+      terminalFeatureFields({ kind: "unasked", reason: "x" }, here(80)),
+    ).toBe("cols=80 widthOf=command clientUtf8=-");
     expect(terminalFeatureFields({ kind: "unreported" }, here(80))).toBe(
       "cols=80 widthOf=command clientUtf8=-",
     );
@@ -183,11 +184,15 @@ describe("widthOf", () => {
   });
 
   test("in a session the daemon did not answer for, that failure", () => {
-    expect(widthOf(scopeOf("s1"), { kind: "failed", reason: "no daemon" }, 90)).toEqual({
+    expect(
+      widthOf(scopeOf("s1"), { kind: "failed", reason: "no daemon" }, 90),
+    ).toEqual({
       kind: "failed",
       reason: "no daemon",
     });
-    expect(widthOf(scopeOf("s3"), sightings, 90)).toMatchObject({ kind: "failed" });
+    expect(widthOf(scopeOf("s3"), sightings, 90)).toMatchObject({
+      kind: "failed",
+    });
   });
 });
 
@@ -196,7 +201,9 @@ describe("parseWidthSightings", () => {
     ({ version: "9.9.9", clients }) as unknown as StatsSnapshot;
 
   test("reads whose each render was and the width it measured", () => {
-    const value = [{ sessionId: "s1", ago: 1, role: "statusline", termCols: null }];
+    const value = [
+      { sessionId: "s1", ago: 1, role: "statusline", termCols: null },
+    ];
     expect(parseWidthSightings(stats(value))).toEqual({ kind: "ok", value });
   });
 

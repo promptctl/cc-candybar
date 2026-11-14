@@ -94,7 +94,7 @@ a new category here — that forces code review of the pattern.
 | Site | Category | Sync/Async | Detached? | Notes |
 |---|---|---|---|---|
 | `src/segments/git.ts` (`execGitAsync`) | `git` | async | no | Single helper used by every `git` segment query — branch, status, sha, tag, stash, upstream, repo-name, ahead/behind, fallback-branch, rev-list. Per-call timeout is 2000ms (but see **F4**). |
-| `src/segments/tmux.ts` (`askSessionName`) | `tmux` | async | no | `tmux -S <socket> display-message -p -t <pane> '#S'`, against the pane the session's client reported (`ClientHints.tmux`); skipped when it reported none. Once per pane, then every 30 s while a session's view holds the pane. 2000ms timeout. |
+| `src/daemon/cache/tmux.ts` (`askSessionName`) | `tmux` | async | no | `tmux -S <socket> display-message -p -t <pane> '#S'`, against the pane the session's client reported (`ClientHints.tmux`); skipped when it reported none. Once per pane, then every 30 s while a session's view holds the pane. 2000ms timeout. |
 | `src/var-system/sources.ts` (`execShell`) | `user-shell` | async | no | `/bin/sh -c <user-command>` for `declareShell` variables. **No timeout.** Currently unused at runtime (see **F6**). |
 | `src/daemon/server.ts` (`clickCopy`) | `click.pbcopy` | sync | no | Click verb `copy`: `/usr/bin/pbcopy <stdin>`. |
 | `src/daemon/server.ts` (`clickOpenVscode`) | `click.open` | sync | no | Click verb `open-vscode`: `/usr/bin/open -a "Visual Studio Code" <path>`. |
@@ -206,7 +206,7 @@ Total: 1 Rust + 1 Node daemon = 2 processes; subsequent ticks return to the happ
 ### F1 — **Critical / live.** Stale Rust client → version-mismatch spawn loop
 
 **Where:** `bin/cc-candybar` (built May 11, protocol `v=2`) vs.
-`src/daemon/protocol.ts` (current `PROTOCOL_VERSION = 3`, bumped in commit
+`src/daemon/foundations/protocol.ts` (current `PROTOCOL_VERSION = 3`, bumped in commit
 `3d04efc`).
 
 **Effect:** Every render sends `v=2`; daemon detects mismatch, schedules
@@ -280,7 +280,7 @@ ever bypassed, and an idle limit puts an upper bound on the orphan count.
 
 ### F4 — **Medium / structural.** Per-request budget < per-subprocess timeout
 
-**Where:** `src/daemon/request-deadline.ts` (`REQUEST_TIMEOUT_MS = 200ms`) vs.
+**Where:** `src/daemon/foundations/request-deadline.ts` (`REQUEST_TIMEOUT_MS = 200ms`) vs.
 `src/segments/git.ts` (per-`git`-call timeout `2000ms`).
 
 **Effect:** When the daemon hits a cold git-cache for a slow repo (large
@@ -408,8 +408,8 @@ cat ~/.local/state/cc-candybar/pid
 
 # Are stale Rust clients at an old protocol version?
 file bin/cc-candybar
-stat bin/cc-candybar          # compare mtime to git log of src/daemon/protocol.ts
-grep PROTOCOL_VERSION src/daemon/protocol.ts rust-client/src/main.rs
+stat bin/cc-candybar          # compare mtime to git log of src/daemon/foundations/protocol.ts
+grep PROTOCOL_VERSION src/daemon/foundations/protocol.ts rust-client/src/main.rs
 
 # Clear orphans and start fresh (after fixing F1):
 pkill -9 -f "dist/index\.mjs.*daemon"

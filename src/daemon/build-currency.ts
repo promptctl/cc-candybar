@@ -21,13 +21,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sourceDigest } from "../source-digest";
 import { PACKAGE_VERSION } from "../version";
-
-// What identifies a build to a person: the version it reports and the
-// digest of the source it was built from.
-export interface SourceStamp {
-  readonly version: string;
-  readonly digest: string;
-}
+import type { SourceStamp } from "../facts/world-state";
 
 // [LAW:types-are-the-program] Every way the question can come out, as data.
 // `stale` carries both stamps so the notice can name them; `current` carries

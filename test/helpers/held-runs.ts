@@ -10,12 +10,12 @@ import {
   SOURCES_NOTHING,
   type SessionView,
   type SourceOf,
-} from "../../src/daemon/cache/render";
-import type { SessionId } from "../../src/daemon/session-id";
+} from "../../src/renderer/render-cache";
+import type { SessionId } from "../../src/daemon/foundations/session-id";
 import { SourceRuns } from "../../src/daemon/source-runs";
 import type { ViewSource } from "../../src/dsl/view-source";
 import { UNREAD_RUN } from "../../src/facts/world-state";
-import type { Launcher } from "../../src/proc/launch";
+import type { Launcher } from "../../src/proc/launcher";
 import { systemTimekeeper } from "../../src/time";
 import { instantOf } from "../../src/utils/instant";
 
@@ -40,8 +40,7 @@ export function heldRuns(
   return {
     source: (view) => ({
       ...SOURCES_NOTHING(view),
-      run: (digest) =>
-        holders.get(view.sessionId)?.run(digest) ?? UNREAD_RUN,
+      run: (digest) => holders.get(view.sessionId)?.run(digest) ?? UNREAD_RUN,
     }),
     hold: (view) => {
       const held = new CheckRuns(

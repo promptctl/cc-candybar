@@ -21,7 +21,7 @@ import {
   knownOptionDomainNames,
   resolveOptionDomain,
 } from "../../src/config/option-domain";
-import { SessionState } from "../../src/daemon/session-state";
+import { SessionState } from "../../src/renderer/session-state";
 import {
   compileDslConfig,
   registerCompiled,
@@ -35,9 +35,9 @@ import {
 } from "../../src/dsl/render";
 import type { LinkSigner } from "../../src/click/link-signer";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
-import { sessionIdOf, type SessionId } from "../../src/daemon/session-id";
-import type { VerbContext } from "../../src/daemon/verbs";
-import type { SettingsHistory } from "../../src/daemon/settings-history";
+import { sessionIdOf, type SessionId } from "../../src/daemon/foundations/session-id";
+import type { VerbContext } from "../../src/renderer/verbs";
+import type { SettingsHistory } from "../../src/renderer/settings-history";
 import type { Host } from "../../src/host";
 import type { BuildLineOptions } from "../../src/render/strip";
 import { listResolvablePaletteNames } from "../../src/themes/policy";

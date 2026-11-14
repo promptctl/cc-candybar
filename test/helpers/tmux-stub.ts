@@ -5,7 +5,7 @@ import path from "node:path";
 import { until } from "./until";
 
 // Reads the tmux session name, which the payload awaits from a `tmux` spawn
-// (src/segments/tmux.ts): the stub below.
+// (src/daemon/cache/tmux.ts): the stub below.
 export const HELD_CONFIG = `{ segments: { mark: { template: '{{ .tmux.session }}' } }, root: { h: ['mark'] } }`;
 
 // [LAW:no-ambient-temporal-coupling] The `tmux` on the daemon's PATH: it

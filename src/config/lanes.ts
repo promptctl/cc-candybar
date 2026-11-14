@@ -32,7 +32,7 @@ export const IN_TMUX = 'ne .tmux.pane ""';
 
 // `handsOff` is whether a lane draws the bar somewhere other than the
 // statusline: while it is on, the statusline hands off to it
-// (src/daemon/lane-handoff.ts). Lane B draws the statusline itself, so it
+// (src/renderer/lane-handoff.ts). Lane B draws the statusline itself, so it
 // hands off nowhere. A switch that is `inTmux` is on only for a session its
 // client reports in a tmux pane: the tmux status line belongs to that pane, so
 // a session outside tmux ignores the setting, which other sessions share, and
@@ -146,4 +146,17 @@ export function parseLane(raw: unknown): Lane | null {
   return typeof raw === "string" && Object.hasOwn(LANES, raw)
     ? (raw as Lane)
     : null;
+}
+
+// The render event's `feeds=` field: each lane following the session as
+// `<lane>:<subscribers>sub/<fps>fps/shown|offscreen`, `-` when none does.
+export function feedsFact(feeds: LaneFeeds): string {
+  return (
+    LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0)
+      .map((lane) => {
+        const { subscribers, fps, shown } = feeds[lane];
+        return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
+      })
+      .join(",") || "-"
+  );
 }

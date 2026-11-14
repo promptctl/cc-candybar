@@ -10,7 +10,7 @@ and the binary is staged to `bin/cc-candybar` by `scripts/postinstall.mjs`.
 
 - **Render path** (default, when stdin has hook data): connects to the
   daemon's Unix socket at `~/.claude/powerline/socket`, sends a framed
-  `RenderRequest` (matching `src/daemon/protocol.ts`), prints the response
+  `RenderRequest` (matching `src/daemon/foundations/protocol.ts`), prints the response
   to stdout. Daemon-miss → spawn detached Node daemon, emit `\n`, exit 0.
 - **Subcommands** (`install`, `daemon`, `daemon-stats`, `url-handle`,
   `install-url-handler`, `--help`): `execvp`s `node <bin>/../dist/index.mjs`
@@ -18,7 +18,7 @@ and the binary is staged to `bin/cc-candybar` by `scripts/postinstall.mjs`.
 
 Wire format and timeouts mirror the existing TS client byte-for-byte.
 `scripts/check-protocol.mjs` (run in `prepublishOnly`) fails the publish if
-`PROTOCOL_VERSION` ever drifts between this crate and `src/daemon/protocol.ts`.
+`PROTOCOL_VERSION` ever drifts between this crate and `src/daemon/foundations/protocol.ts`.
 
 ## Build
 

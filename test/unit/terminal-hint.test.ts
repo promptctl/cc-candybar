@@ -4,7 +4,7 @@
 // pins, so the two runtimes report a session's terminal alike.
 
 import { detectTerminalEnv } from "../../src/terminal-hint";
-import { parseClientHints } from "../../src/daemon/protocol";
+import { parseClientHints } from "../../src/daemon/foundations/protocol";
 
 describe("detectTerminalEnv", () => {
   test("reports each set variable raw and leaves out the unset and the empty", () => {

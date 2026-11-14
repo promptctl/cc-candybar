@@ -4,9 +4,8 @@ import { Runs } from "./runs.js";
 import { locations, type DaemonPaths } from "./paths";
 import type { Host } from "../host";
 import type { DaemonLog } from "./log";
-import type { Inbound } from "./protocol";
+import type { Inbound } from "./foundations/protocol";
 import type { DaemonParts } from "./daemon-parts.js";
-import { lanesAt, laneClicked, renderFrame, viewLanes } from "./draw-bar.js";
 import {
   handleRequest,
   replyTo,
@@ -14,15 +13,11 @@ import {
   type Reply,
   type ReplyRequest,
 } from "./reply.js";
-import type { CheckedRenderRequest } from "../renderer/request-context.js";
-import type { SessionStorage } from "./session-state";
-import type { HistoryStorage } from "./settings-history";
-import type {
-  LaunchOwner,
-  Launcher,
-  Settled,
-  TestableLauncher,
-} from "../proc/launch";
+import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import type { SessionStorage } from "../renderer-interface/session-state";
+import type { HistoryStorage } from "../renderer-interface/history-storage";
+import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
+import type { Launcher } from "../proc/launcher";
 import type { DaemonLogger } from "../utils/logger";
 import { actsDir } from "./update-act";
 import type { Gates } from "./foundations/gates";
@@ -35,29 +30,18 @@ import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
 import { FileEventDelivery } from "./cache/file-events";
 import type { Timekeeper } from "../time";
-import { LEVEL, type Acceptance } from "./request-event.js";
+import { LEVEL, type Acceptance } from "./foundations/request-event.js";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import { SourceRuns } from "./source-runs";
-import {
-  configLoadedLine,
-  RenderCache,
-  renderCacheBudget,
-} from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, type LimitsDeps } from "./limits";
-import { SessionState } from "./session-state";
-import { SettingsHistory } from "./settings-history";
-import { NavigationHistory } from "./navigation-history";
-import type { DoctorEdge, DoctorStores } from "../doctor/edge";
+import type { DoctorEdge, DoctorStores } from "../doctor/ports";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
 import { Collector } from "./collector.js";
-import { WorldStates } from "../renderer/world-states.js";
-import { sessionSource, type SessionSource } from "./session-source.js";
-import { EffectSessions } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds } from "./frame-feed.js";
-import { type Drawing, type Lane, type LaneSwitches } from "../config/lanes.js";
+import { type Lane } from "../config/lanes.js";
 import {
   LIST_CLIENTS_FORMAT,
   LIST_PANES_FORMAT,
@@ -68,19 +52,24 @@ import type { TmuxAtExit } from "./tmux-status.js";
 import { TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
-import type { RenderedLine } from "../dsl/node-registry.js";
-import type { ClaudeInputEdge } from "../claude-input/edge.js";
+import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
 import type { LinkSigner } from "../click/link-signer.js";
-import { RenderWarningRecords } from "./render-warnings.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { JournalTurns } from "./journal-turns.js";
 import { rendererHost } from "./renderer-host.js";
-import { mainRenderer } from "../renderer/main.js";
-import { verbsOver } from "../renderer/verbs.js";
+import { loadMainRenderer } from "../renderer/main.js";
+import { refreshPayload } from "./readings.js";
+import {
+  applyFix,
+  gatherFacts,
+  installFacts,
+  oneAskPerClick,
+  readStores,
+} from "../doctor/edge.js";
 import { ClicksInFlight } from "./clicks-in-flight.js";
 import { closeByTurn, MenuIdle } from "./menu-idle.js";
-import type { SessionId } from "./session-id.js";
+import type { SessionId } from "./foundations/session-id.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -295,12 +284,19 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
   const storage = inputs.storage(log);
-  const sessionState = new SessionState(storage.session);
-  const settingsHistory = new SettingsHistory(
-    sessionState,
+  const startRenderer = loadMainRenderer({
+    clock,
     log,
-    storage.history,
-  );
+    now: instant,
+    storage,
+    stateDir: paths.state,
+    locations: locs,
+    env: host.env,
+    home: host.home,
+    gates,
+    bundle: bundle.path,
+    memoryLimitBytes,
+  });
   // Building starts nothing: only the daemon that won the socket arms them, so
   // the page answers the doctor's `serving` with no timer counting its memory.
   const limits = makeLimits({
@@ -369,10 +365,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     hostService,
     managedStorage,
   } = payloadProviders;
-  const navigationHistory = new NavigationHistory();
-  // Each session's effect memory — when its effect came into force — held in
-  // daemon memory only: a restarted daemon starts every session's effect again.
-  const effectSessions = new EffectSessions<RenderedLine>();
   // [LAW:single-enforcer] Each session's idle clock and the timer that closes
   // its menus (src/daemon/menu-idle.ts): a click restarts the clock, and the
   // close is a `menu-idle` turn of the renderer, the journaled write a ✕ makes,
@@ -398,7 +390,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     supersede: (storage, sessionId) =>
       managedStorage.supersede(storage, sessionId),
     launch: launcher.launch,
-    state: sessionState,
+    holdClickError: (sessionId, text, at) =>
+      parts.toRenderer.holdClickError(sessionId, text, at),
     log,
     now: instant,
     clock,
@@ -421,7 +414,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       socket: paths.socket,
       preload: stableAttachPreload(bundle.path, host),
     },
-    state: sessionState,
+    holdClickError: (sessionId, text, at) =>
+      parts.toRenderer.holdClickError(sessionId, text, at),
     log,
     now: instant,
     defer: (run) => void clock.defer(run),
@@ -454,22 +448,15 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
   // click — brings its next frame forward.
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
-    render: (sessionId, fps, at) => renderFrame(parts, sessionId, fps, at),
+    render: (sessionId, fps, at) =>
+      parts.toRenderer.renderFrame(sessionId, fps, at),
     // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
     // which fires in a later turn. A click that awaits gives up the loop, so a
     // frame may show its writes ahead of its commit; the step stays whole.
     watch: (sessionId, onChange) =>
-      reaction(() => sessionState.revision(sessionId), onChange),
-    lanes: (sessionId) => viewLanes(parts, sessionId),
-    // [LAW:single-enforcer] A feed's pin is its life: releasing it is the one
-    // moment the feed stops drawing, so its drawn copies retire with it.
-    pin: (sessionId) => {
-      const unpin = renderCache.pin(sessionId);
-      return () => {
-        renderCache.stopDrawing(sessionId, "feed");
-        unpin();
-      };
-    },
+      reaction(() => parts.toRenderer.revision(sessionId), onChange),
+    lanes: (sessionId) => parts.toRenderer.viewLanes(sessionId),
+    pin: (sessionId) => parts.toRenderer.pin(sessionId),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     refreshes: () => refreshLedger.totals(),
@@ -516,66 +503,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   }: CheckedRenderRequest): readonly string[] {
     return tmux === null || tmux === undefined ? [] : [tmux.socket];
   }
-  // [LAW:single-enforcer] What each session's renderers could not honour, as
-  // their frames recorded it (src/daemon/render-warnings.ts).
-  const renderWarnings = new RenderWarningRecords();
   // [LAW:one-source-of-truth] The daemon's one update fact: the update watch
   // writes it and every session's facts document reads it, so the box exists
   // before either.
   const updateFact = newUpdateFact();
-  // The world states the host hands the main renderer, which its views read.
-  const worldStates = new WorldStates();
-  const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
-    {
-      clock,
-      stateDir: paths.state,
-      locations: locs,
-      env: host.env,
-      sessionState,
-      watchers: watcherRegistry,
-      log,
-      storage: managedStorage,
-      signer: linkSigner,
-      gates,
-      // [LAW:single-enforcer] What every session's view draws from: its payload
-      // composed over its world state, its request, its picks and its
-      // histories' depths.
-      source: sessionSource({
-        sessionState,
-        worldStates,
-        home: host.home,
-        history: (sessionId) => settingsHistory.depth(sessionId),
-        // Measured against the gate of the config the view draws with.
-        navigation: (sessionId, config) =>
-          navigationHistory.depth(
-            sessionId,
-            sessionState,
-            gates.state.gateFor(config),
-          ),
-      }),
-    },
-    {
-      budgetBytes: () => renderCacheBudget(memoryLimitBytes),
-      observers: {
-        // [LAW:no-silent-failure] Every config (re)load's outcome lands in
-        // daemon.log with its cause — the operator's only record of why a load
-        // ran, and whether a save was picked up cleanly, kept rendering
-        // last-known-good behind an error, or resolved to a different file.
-        onReload: (entry, sessions, cause, settled) => {
-          log("info", configLoadedLine(entry, cause, settled));
-          // A reload changes the bar of every session drawn from the entry,
-          // even one that failed and kept the old config: its indicator says so.
-          for (const sessionId of sessions)
-            frameFeeds.wake(sessionId, "reload");
-        },
-        // [LAW:single-enforcer] What a session's view draws from moved: its
-        // feed's next frame is brought forward, whatever moved it: a request's
-        // facts, a refresh landing after its deadline, a source publishing, a
-        // pick. The dump link, which no view holds, wakes the same way.
-        onViewChanged: (sessionId) => frameFeeds.wake(sessionId, "data"),
-      },
-    },
-  );
   // [LAW:no-silent-failure] An edit made while file events went unheard is
   // re-read when they resume, in every entry, one entry per turn, each
   // waking its own sessions as its reload lands. Every feed redraws when
@@ -590,7 +521,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         watcherRegistry.judge();
         return;
       case "caught-up":
-        renderCache.reloadEvery({
+        parts.toRenderer.reloadEvery({
           kind: "events-resumed",
           since: notice.since,
         });
@@ -651,84 +582,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
     monotonic: () => clock.monotonic(),
   });
-  const verbCtx = {
-    gates,
-    sessionState,
-    stateDir: paths.state,
-    locations: locs,
-    journalTurns,
-    clickLanded: (sessionId: SessionId) =>
-      menuIdle.clicked(sessionId, instant()),
-    log,
-    launcher,
-    now: instant,
-    applyUpdate: () => updateWatch.act(),
-    // The load the session's bar is drawn from: its cache entry's load
-    // outcome, and what the config that entry renders left unused.
-    // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
-    // doctor click is a verdict on the files as they are now, not on
-    // whether the fs watcher has caught up with an edit made a moment ago.
-    doctor: inputs.doctorEdge(
-      launcher,
-      (origin) => {
-        const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
-        renderCache.reload(...at, { kind: "doctor" });
-        const entry = renderCache.getOrCreate(...at);
-        return {
-          layers: entry.configLayers,
-          error: entry.lastError,
-          warning: entry.lastWarning,
-          unused: entry.state.unused,
-          config: entry.state.config,
-        };
-      },
-      host,
-    ),
-    doctorStores,
-    probes: handlerProbes,
-    clients: renderSightings,
-    bundle: bundle.path,
-    serving: () => limits.serving(),
-    claudeInput: inputs.claudeInput(launcher),
-    history: settingsHistory,
-    navigation: navigationHistory,
-    // The config a session's last render resolved from — the same entry the
-    // render drew the bar with, so a save compares against the bar the user saw.
-    configFor: (origin: RenderOrigin) =>
-      renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
-        .state.config,
-    reloadConfig: (origin: RenderOrigin) =>
-      renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
-        kind: "write",
-      }),
-    // The storage keys of the same entry `configFor` reads the config of.
-    sourcesFor: (origin: RenderOrigin) =>
-      renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
-        .state.sources,
-    links: linkSigner,
-    runs,
-    lanes: {
-      of: (origin: RenderOrigin, sessionId: SessionId) =>
-        lanesAt(parts, origin, sessionId),
-      clicked: (
-        sessionId: SessionId,
-        before: LaneSwitches,
-        after: LaneSwitches,
-      ) => laneClicked(parts, sessionId, before, after),
-    },
-    views: {
-      follow: (sessionId: SessionId, origin: RenderOrigin) =>
-        renderCache.follow(
-          sessionId,
-          origin.projectDir,
-          origin.cwd,
-          origin.target.path,
-        ),
-    },
-    diagnosticCopy: (sessionId: SessionId, by: Drawing["by"], key: string) =>
-      renderCache.drawnCopy(sessionId, by, key),
-  };
-
   // [LAW:single-enforcer] The host's one reader of every session's world. What
   // it hands in alone goes through the host's one path to the renderer, which
   // the parts below hold; a delivery is first asked for by an owner landing
@@ -744,6 +597,44 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
 
   const clicks = new ClicksInFlight();
+  // [LAW:one-way-deps] The main renderer's start, handed the host's parts it
+  // reaches: the compiler checks each against its entry in `AdapterToHost`
+  // here, so no renderer file names a host type.
+  const toRenderer = startRenderer({
+    frameFeeds,
+    updateWatch,
+    fileEvents,
+    menuIdle,
+    launcher,
+    laneSetups,
+    tmuxStatusLines,
+    clicks,
+    refresh: (facts, at, refreshed) =>
+      refreshPayload({ ...facts, deps: payloadProviders }, at, refreshed),
+    cacheTallies: () => ({
+      git: gitService.getStats(),
+      usage: usageStore.getStats(),
+    }),
+    managedStorage,
+    watchers: watcherRegistry,
+    linkSigner,
+    journalTurns,
+    runs,
+    serving: () => limits.serving(),
+    renderSightings,
+    probes: handlerProbes,
+    doctor: {
+      gatherFacts,
+      applyFix,
+      installFacts,
+      readStores,
+      oneAskPerClick,
+      edge: (loadConfig) => inputs.doctorEdge(launcher, loadConfig, host),
+      stores: doctorStores,
+    },
+    claudeInput: inputs.claudeInput(launcher),
+    applyUpdate: () => updateWatch.act(),
+  });
   const parts: DaemonParts = {
     clicks,
     home: host.home,
@@ -761,8 +652,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     refreshLedger,
     fileEvents,
     payloadProviders,
-    sessionState,
-    effectSessions,
     menuIdle,
     journalTurns,
     linkSigner,
@@ -771,39 +660,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     laneSetups,
     tmuxStatusLines,
     frameFeeds,
-    renderWarnings,
-    renderCache,
     updateWatch,
     limits,
-    // [LAW:one-way-deps] exception: the main renderer, in process, over the
-    // host parts its side still reaches (RendererParts, src/daemon/draw-bar.ts).
     collector,
-    worldStates,
-    renderer: rendererHost(
-      "main",
-      clock,
-      mainRenderer({
-        clock,
-        log,
-        sessionState,
-        renderCache,
-        payloadProviders,
-        worldStates,
-        linkSigner,
-        renderWarnings,
-        effectSessions,
-        frameFeeds,
-        updateWatch,
-        fileEvents,
-        menuIdle,
-        launcher,
-        laneSetups,
-        tmuxStatusLines,
-        verbs: verbsOver(verbCtx, clicks),
-      }),
-      log,
-      collector,
-    ),
+    toRenderer,
+    renderer: rendererHost("main", clock, toRenderer, log, collector),
   };
 
   return {
@@ -831,7 +692,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
     reloadConfig: (origin) => {
       closing.signal.throwIfAborted();
-      verbCtx.reloadConfig(origin);
+      toRenderer.reloadConfig(origin);
     },
     arm() {
       closing.signal.throwIfAborted();
@@ -862,7 +723,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["limits disarm", () => limits.disarm()],
         // Before the sources and the storage its states hold.
         ["collector close", () => collector.close()],
-        ["renderCache close", () => renderCache.close()],
+        ["renderer views close", () => toRenderer.closeViews()],
         ["gitService close", () => gitService.close()],
         ["usageStore close", () => usageStore.close()],
         ["tmuxService close", () => tmuxService.close()],
@@ -874,7 +735,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        ["sessionState close", () => sessionState.close()],
+        ["sessionState close", () => toRenderer.closeSessionState()],
       ];
       for (const [step, run] of teardown) {
         try {

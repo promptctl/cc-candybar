@@ -3,10 +3,10 @@
 // under that key: the full prompt reaches the clipboard while the link stays
 // short, and a key that draw does not list is refused loudly.
 
-import { type LaunchOpts } from "../src/proc/launch";
+import { type LaunchOpts } from "../src/proc/launcher";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
 import { clickUrl, testVerbContext } from "./helpers/click";
 
@@ -58,9 +58,10 @@ test("the first line's click copies the full prompt, though its link carries onl
 test("a key the session's last draw no longer lists is refused, and nothing is copied", async () => {
   const { list } = drawn();
   const link = list[0]!.lines[0]![0].link!;
-  await expect(clickUrl(link, {
+  await expect(
+    clickUrl(link, {
       ...testVerbContext(new SessionState()),
-    launcher: recording,
+      launcher: recording,
       diagnosticCopy: () => undefined,
     }),
   ).rejects.toThrow(/no longer listed/);

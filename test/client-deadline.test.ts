@@ -17,7 +17,7 @@ import {
   encodeFrame,
   makeFrameReader,
   TOTAL_BUDGET_MS,
-} from "../src/daemon/protocol";
+} from "../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "../src/time";
 
 // A daemon that hands every request it reads to `seen`, and answers it with

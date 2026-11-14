@@ -29,7 +29,7 @@
 // `if-shell -F '#{@cc-candybar-status-prior}'`, which the restore removes, so
 // a draw landing after it does nothing.
 
-import type { SessionId } from "./session-id.js";
+import type { SessionId } from "./foundations/session-id.js";
 import { LANES } from "../config/lanes.js";
 import type { TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
@@ -45,6 +45,7 @@ import {
   tmuxStatusFrame,
   type TmuxStatusBar,
 } from "../tmux-status/frames.js";
+import type { TmuxStatusStats } from "./foundations/stats-snapshot";
 
 export const MAX_STATUS_ROWS = LANES.tmuxStatus.rows;
 export const PRIOR_OPTION = "@cc-candybar-status-prior";
@@ -495,13 +496,6 @@ interface Server {
   // The last failure said, so a failing write is logged when it starts
   // failing, not once a frame.
   lastFailure: string | null;
-}
-
-export interface TmuxStatusStats {
-  readonly sessions: number;
-  readonly layouts: number;
-  readonly writes: number;
-  readonly failedWrites: number;
 }
 
 // What a click on one of the daemon's status-line ranges stands for.

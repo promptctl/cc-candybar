@@ -10,8 +10,8 @@ import type {
 import type { GitInfo, GitRead, PullRequest } from "../segments/git";
 import type { Instant } from "../utils/instant";
 import { ABSENT, ok, type Reading } from "../utils/outcome";
-import type { SessionId } from "./session-id";
-import type { Readings } from "./render-payload";
+import type { SessionId } from "./foundations/session-id";
+import type { Readings } from "./readings";
 
 // The shape of a facts document on the wire; a document of another version is
 // not this one.
@@ -160,9 +160,4 @@ export function failedStamp(prior: WorldState, reason: string): WorldState {
       { kind: "stamp", reason },
     ],
   };
-}
-
-// Why the document is drawn from older facts, or null when its stamp held.
-export function stampFailureOf(document: WorldState): string | null {
-  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
 }

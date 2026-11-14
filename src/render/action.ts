@@ -21,7 +21,7 @@
 // FuncMap in as data). The generic engine never imports this module.
 
 import type { PlacedSegment } from "../dsl/node-registry.js";
-import type { SessionId } from "../daemon/session-id.js";
+import type { SessionId } from "../daemon/foundations/session-id.js";
 import { RichText, Style } from "@promptctl/rich-js";
 import type { Palette } from "@promptctl/rich-js";
 import type { FuncMap, Template } from "@promptctl/go-template-js";

@@ -3,7 +3,7 @@
 // calls for what, what is said, and the backoff are the shared cases
 // (test/frame-follow-cases.test.ts).
 
-import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
+import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
 import { WORLD } from "../helpers/host";
 import { runFrames } from "../../src/frames-cli";
 import { afterStreamEnd } from "../../src/daemon/frame-follow";

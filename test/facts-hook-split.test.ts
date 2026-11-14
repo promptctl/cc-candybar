@@ -11,20 +11,20 @@ import { join } from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import { assembleFacts } from "../src/daemon/facts-assembly";
+import { composePayload } from "../src/renderer/render-payload";
 import {
-  composePayload,
   readingsOf,
   refreshPayload,
   settledLanes,
   type PayloadInputs,
   type RenderPayloadDeps,
-} from "../src/daemon/render-payload";
-import { sessionIdOf } from "../src/daemon/session-id";
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+} from "../src/daemon/readings";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { ContextProvider } from "../src/segments/context";
 import { MetricsProvider } from "../src/segments/metrics";
 import { systemTimekeeper } from "../src/time";
-import type { CheckedHookData } from "../src/renderer/request-context";
+import type { CheckedHookData } from "../src/renderer-interface/request-context";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, pendingOf } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
@@ -143,7 +143,10 @@ test("two hooks that differ only in their instantaneous fields read one document
     return assembleFacts(
       undefined,
       SID,
-      readingsOf(inputs, settledLanes(ABSENT, { plugins: new Map(), runs: new Map() })),
+      readingsOf(
+        inputs,
+        settledLanes(ABSENT, { plugins: new Map(), runs: new Map() }),
+      ),
       pendingOf("unread"),
       AT,
     );

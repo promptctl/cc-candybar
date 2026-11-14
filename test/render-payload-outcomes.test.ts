@@ -7,15 +7,15 @@
 
 import { CacheExpiryProvider } from "../src/segments/cache";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { prFactOf } from "../src/daemon/render-payload";
+import { prFactOf } from "../src/renderer/render-payload";
 import { claudeConfigDir } from "../src/claude-settings";
-import type { ClientHints } from "../src/daemon/protocol";
-import type { RenderPayloadDeps } from "../src/daemon/render-payload";
+import type { ClientHints } from "../src/daemon/foundations/protocol";
+import type { RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import { VALUED_FIELDS } from "../src/config/globals-fields";

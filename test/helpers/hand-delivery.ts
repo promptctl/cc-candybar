@@ -1,8 +1,8 @@
 import type {
-  Delivery,
   DeliveryNotice,
   FileEvents,
 } from "../../src/daemon/cache/file-events";
+import type { Delivery } from "../../src/daemon/foundations/stats-snapshot";
 
 // The daemon's one owner of file-event delivery, driven by hand: what it
 // reads, and the notices it sends.

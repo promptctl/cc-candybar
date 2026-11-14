@@ -5,7 +5,7 @@
 // [LAW:single-enforcer] Every spawn goes through src/proc/launch (tmux through
 // src/proc/tmux), under its own launch category.
 
-import type { SessionId } from "./session-id.js";
+import type { SessionId } from "./foundations/session-id.js";
 import fs from "node:fs";
 import { sleep, type Timekeeper } from "../time";
 import {
@@ -13,7 +13,7 @@ import {
   saidBy,
   type LaunchResult,
   type Launcher,
-} from "../proc/launch.js";
+} from "../proc/launcher.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { Lane } from "../config/lanes.js";
@@ -24,7 +24,7 @@ import {
 import { lineage, processTable } from "../proc/process-table.js";
 import type { ProcessProbe } from "./process-fingerprint.js";
 import { presence } from "../utils/presence.js";
-import { sessionEnv } from "./session-env.js";
+import { sessionEnv } from "./foundations/session-env.js";
 import { canonical, executableOn, regularFileWith } from "../path-search.js";
 import { launcherNode } from "../attach-preload.js";
 import { type LaneEdge, type PaneClaude } from "./lane-setup.js";

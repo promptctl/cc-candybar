@@ -10,19 +10,16 @@ import {
   assembleFacts,
   failedStamp,
   FACTS_VERSION,
-  stampFailureOf,
 } from "../src/daemon/facts-assembly";
-import type { Update } from "../src/daemon/update-notice";
-import {
-  readingsOf,
-  type RenderPayloadDeps,
-} from "../src/daemon/render-payload";
-import { sessionIdOf } from "../src/daemon/session-id";
-import { oneDay } from "../src/daemon/cache/today-facts";
+import { stampFailureOf } from "../src/facts/world-state";
+import type { Update } from "../src/facts/world-state";
+import { readingsOf, type RenderPayloadDeps } from "../src/daemon/readings";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { oneDay } from "../src/daemon/foundations/today-facts";
 import { sumsOf } from "./helpers/today";
 import { claudeConfigDir, claudeSettingsPath } from "../src/claude-settings";
-import type { CheckedHookData } from "../src/renderer/request-context";
-import type { ClientHints } from "../src/daemon/protocol";
+import type { CheckedHookData } from "../src/renderer-interface/request-context";
+import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { instantOf, type Instant } from "../src/utils/instant";
 import {
   ABSENT,
@@ -162,7 +159,9 @@ describe("a session's facts document", () => {
     const { pullRequest, ...gitRead } = (
       lanes.git.current() as unknown as { value: Record<string, unknown> }
     ).value;
-    const settings = claudeSettingsPath(claudeConfigDir(undefined, r.deps.home));
+    const settings = claudeSettingsPath(
+      claudeConfigDir(undefined, r.deps.home),
+    );
     const expected: Record<keyof BuiltinFacts, Fact<unknown>> = {
       session: restamp(undefined, r.held.usageStore.usageOf(SID), T0),
       // The fixture's one day, and the session with no days of its own.

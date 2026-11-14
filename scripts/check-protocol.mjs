@@ -2,7 +2,7 @@
 // Guard: every wire-affecting constant the Rust client — or the vendored
 // statusline push lane B runs (vendor/cc-extra) — mirrors from the TS source
 // must agree. The wire contract is one source of truth
-// (src/daemon/protocol.ts, src/daemon/client.ts, src/render/error-glyph.ts,
+// (src/daemon/foundations/protocol.ts, src/daemon/client.ts, src/render/error-glyph.ts,
 // src/render/diagnostic-style.ts, src/render/diagnostic-text.ts);
 // the Rust binary embeds each value as a literal const because mirroring is
 // cheaper than codegen at this scale. This script diffs the entire mirrored
@@ -56,7 +56,7 @@ const markers = inFile(reads.markers);
 
 // --- the mirrored set -----------------------------------------------------
 
-const TS_PROTOCOL = "src/daemon/protocol.ts";
+const TS_PROTOCOL = "src/daemon/foundations/protocol.ts";
 const TS_CLIENT_HINTS = "src/client-hints.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_TMUX_HINT = "src/tmux-hint.ts";
@@ -80,7 +80,7 @@ const TS_FRAME_FOLLOW = "src/daemon/frame-follow.ts";
 // subscriber, the third runtime speaking the wire contract.
 const JS_PUSH = "vendor/cc-extra/src/statusline-push.js";
 const TS_ENTRY = "src/index.ts";
-const TS_DEBUG_TYPES = "src/daemon/debug-types.ts";
+const TS_DEBUG_TYPES = "src/daemon/foundations/debug-types.ts";
 const RS_FOLLOW = "rust-client/src/follow.rs";
 // The URL handler app, the fourth runtime speaking the wire: one frame (the
 // header and the `url` kind, versioned by itself) and the socket path.

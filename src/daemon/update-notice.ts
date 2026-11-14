@@ -1,24 +1,3 @@
-// The update notice: something newer exists than the code rendering the bar,
-// and here is what to do about it (brandon-build-notice-5d6). Two facts feed
-// it — a source checkout whose `src/` digest no longer matches the bundle
-// (src/daemon/build-currency.ts) and a published install behind the
-// registry's latest release (src/install/currency.ts) — and they are ONE
-// statement to the reader: what is newer, what is running, and three clicks:
-// act (rebuild / upgrade), dismiss (this session, this identity), disable
-// (the config file, durably).
-//
-// [LAW:one-type-per-behavior] Both facts render through one `Update` and one
-// sentence shape; what differs is a table of words and a command. The old
-// design gave the checkout its own vocabulary ("stale build: dist/index.mjs
-// <date> < src/x.ts <date>", a hint naming `just deploy`) that the user read
-// as a puzzle — the ticket's verbatim verdict.
-//
-// [LAW:effects-at-boundaries] `updateReading` / `updateNotice` are pure:
-// (currency samples) → the update's reading, and (update, act state, session
-// context) → the offer and the failure. The watch below is the edge: the
-// clocks, the registry fetch, the act's record, the validator registrations.
-
-import type { SessionId } from "./session-id.js";
 import {
   effectsUrl,
   VERB_APPLY_UPDATE,
@@ -31,24 +10,18 @@ import {
   formatVersion,
   PACKAGE_NAME,
   type Currency,
-  type Version,
 } from "../install/currency";
-import type { LaunchOpts, Launcher } from "../proc/launch";
+import type { LaunchOpts, Launcher } from "../proc/launcher";
 import {
   diagnosticSpan,
   UPDATE_SEVERITY,
   type DiagnosticLine,
-  type DiagnosticMessage,
   type SourcedText,
 } from "../render/diagnostics";
-import { shortDigest } from "../source-digest";
+import { shortDigest } from "../facts/world-state";
 import { PACKAGE_VERSION } from "../version";
-import {
-  assessBuild,
-  bundleStamp,
-  type BuildCurrency,
-  type SourceStamp,
-} from "./build-currency";
+import { assessBuild, bundleStamp, type BuildCurrency } from "./build-currency";
+import { type SourceStamp } from "../facts/world-state";
 import {
   claimAct,
   endOverdue,
@@ -73,31 +46,19 @@ import {
 } from "../utils/outcome";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue";
 import { changeLogger, type LogLevel } from "../utils/logger";
-import { BadVerbArgs, DaemonClosing } from "./verb-error";
+import { BadVerbArgs, DaemonClosing } from "./foundations/verb-error";
 import type { Gates } from "./foundations/gates";
 import {
   UPDATE_DISMISSED_KEY,
   UPDATE_NOTICE_FIELD,
   UPDATE_NOTICE_SESSION_KEY,
-} from "./update-keys";
+} from "./foundations/update-keys";
 import type { Timekeeper } from "../time.js";
-
-// [LAW:types-are-the-program] What is newer than the running code. `source`
-// is a checkout whose tree no longer matches the bundle; `release` is an
-// install behind the registry. Each carries both sides of the comparison
-// under one name pair, so the sentence reads the same fields off either.
-export type Update =
-  | {
-      readonly kind: "source";
-      readonly root: string;
-      readonly newer: SourceStamp;
-      readonly running: SourceStamp;
-    }
-  | {
-      readonly kind: "release";
-      readonly newer: Version;
-      readonly running: Version;
-    };
+import type { Update } from "../facts/world-state";
+import type {
+  NoticeContext,
+  UpdateNotice,
+} from "../renderer-interface/adapter";
 
 // What a dismissal names: the newer thing's identity, so a dismissal lapses
 // the moment something newer again appears — the digest for source (the
@@ -153,29 +114,6 @@ export function factsOf(update: Update): UpdateFacts {
       };
   }
 }
-
-// The per-session facts the notice reads: whose clicks these are, what this
-// session dismissed (the identity it wrote, or nothing), and whether the
-// session's config allows the notice at all (Globals.updateNotice).
-export interface NoticeContext {
-  readonly sessionId: SessionId;
-  readonly dismissed: string | null;
-  readonly enabled: boolean;
-}
-
-// What one update tells a session: the offer, an info message whose line is
-// the sentence and the three affordances, and the failure of the last act on
-// it, a plain warning of its own. They are two messages because they are two
-// levels: the offer is nothing going wrong, a failed click is
-// [LAW:no-silent-failure].
-// [LAW:types-are-the-program] At most one of each, and no failure without its
-// offer: a failure with nothing to retry is unrepresentable.
-export type UpdateNotice =
-  | { readonly offer: readonly []; readonly failure: readonly [] }
-  | {
-      readonly offer: readonly [DiagnosticMessage];
-      readonly failure: readonly [] | readonly [SourcedText];
-    };
 const NO_NOTICE: UpdateNotice = { offer: [], failure: [] };
 
 // [LAW:dataflow-not-control-flow] One update becomes zero or one offer and

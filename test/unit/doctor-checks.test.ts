@@ -17,7 +17,7 @@ import {
 import { detectTmuxHint } from "../../src/tmux-hint";
 import { frameFields, truecolorEnvFields } from "../../src/doctor/report";
 import type { SettingsSource } from "../../src/claude-settings";
-import type { FrameSighting } from "../../src/daemon/render-sightings";
+import type { FrameSighting } from "../../src/daemon/foundations/sightings";
 import type { SightingScope } from "../../src/doctor/sightings";
 import { HEALTHY_FACTS, drew, onOrigin } from "../helpers/doctor-facts";
 

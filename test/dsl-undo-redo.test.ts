@@ -29,17 +29,17 @@ import { chmodSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { SettingsHistory } from "../src/daemon/settings-history";
-import type { VerbContext } from "../src/daemon/verbs";
+import { SettingsHistory } from "../src/renderer/settings-history";
+import type { VerbContext } from "../src/renderer/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 
-import { sessionIdOf, type SessionId } from "../src/daemon/session-id";
+import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 const SID_A = sessionIdOf("a");

@@ -1,0 +1,112 @@
+// [LAW:types-are-the-program] Wire-level snapshot shapes for the `debug`
+// protocol message. The `what` discriminator carries the response shape
+// forward — a client requesting "vars" gets vars data, "segments" gets
+// segments data, "config" gets config data. There is no `data: unknown`
+// field that callers must shape-check.
+//
+// [LAW:one-source-of-truth] These types are the single contract between the
+// daemon's introspection layer (src/renderer/debug.ts) and any external
+// consumer (the future `cc-candybar vars` / `lint` CLIs, debug tooling).
+// The protocol wraps them; the introspector produces them.
+//
+// Lives in its own module to break a potential cycle: protocol.ts re-exports
+// these for the wire type, debug.ts produces them, and both could otherwise
+// pull each other in.
+
+import type { VarType, VarValue } from "../../var-system/types";
+import type { DslConfig, VariableDecl } from "../../config/dsl-types";
+
+// [LAW:one-source-of-truth] DEBUG_WHATS is the canonical list; DebugWhat is
+// *derived* from it via indexed access on the `as const` tuple type. Adding
+// a new entry to the array automatically expands DebugWhat — and the switch
+// in buildDebugSnapshot (src/renderer/debug.ts) becomes non-exhaustive,
+// failing the typecheck until a new arm is added. The dispatcher arm and
+// the canonical list are kept in lockstep by the type system, not by
+// human discipline.
+export const DEBUG_WHATS = ["vars", "segments", "config"] as const;
+export type DebugWhat = (typeof DEBUG_WHATS)[number];
+
+// Wire-side type guard for an untrusted JSON value. Used by the daemon at
+// the request boundary; symmetrically usable by future CLI shims that
+// validate user input before sending the frame.
+// [LAW:one-source-of-truth] Implemented in terms of DEBUG_WHATS so the
+// guard cannot drift from the canonical list — a new `what` added to
+// DEBUG_WHATS becomes accepted by isDebugWhat with no second-site edit.
+export function isDebugWhat(v: unknown): v is DebugWhat {
+  return (
+    typeof v === "string" && (DEBUG_WHATS as readonly string[]).includes(v)
+  );
+}
+
+// One row of the `vars` snapshot. Captures everything an operator needs to
+// answer "is this variable computing? did it fail? when did it last update?"
+// without re-reading config or grepping logs.
+export interface VarSnapshot {
+  readonly name: string;
+  // The DSL source kind that declared this variable (literal/env/input/...).
+  // null when a variable exists in the store but was not declared via DSL —
+  // present for completeness so a programmatic-only var still shows up in
+  // introspection rather than being silently invisible.
+  readonly source: VariableDecl["kind"] | null;
+  // A scalar's declared type, or "document" for a `parse: { json }` source
+  // (its `value` is then the document's JSON text, or the state a template
+  // read would surface: not yet scanned / the scan's failure reason).
+  readonly type: VarType | "document";
+  // Current store value. For Computed nodes this triggers re-evaluation if
+  // MobX has invalidated the cache; for Box nodes it is the last value set.
+  readonly value: VarValue;
+  readonly lastError: {
+    readonly timestampMs: number;
+    readonly message: string;
+  } | null;
+  // Wall-clock ms since the box's value last CHANGED (Box), or null for
+  // Computed nodes whose freshness is governed by MobX invalidation, not a
+  // single timestamp. Null is structurally distinct from 0 so consumers can
+  // distinguish "no age tracking applies" from "just updated."
+  //
+  // Changed, not written: a source that re-runs and parses identical content
+  // leaves this alone (brandon-var-system-1tl). It used to record the last
+  // write, which read as constant freshness for a variable nothing had moved in
+  // hours — misleading in exactly the situation this field is consulted in.
+  readonly ageMs: number | null;
+}
+
+// One row of the `segments` snapshot.
+export interface SegmentSnapshot {
+  readonly name: string;
+  // What the segment's own declaration says it shows (SegmentDecl.description),
+  // or null where it says nothing — `cc-candybar segments` is the surface an
+  // author asks "what can I put on my bar" through, and the bundled default
+  // merges into every config, so its descriptions answer here
+  // (brandon-config-schema-qqg). [LAW:types-are-the-program] A snapshot row is
+  // total: "has no description" is a fact about the segment, not a missing key.
+  readonly description: string | null;
+  // The template source string (verbatim, as authored in the config).
+  readonly template: string;
+  // Names of variables potentially referenced by the template, found via
+  // static analysis: dotted paths inside `{{ ... }}` actions, matched
+  // against the store's declared names. Exact runtime deps may be a subset
+  // (branches not taken), but every name returned IS in the store.
+  readonly referencedVars: readonly string[];
+  // Every placement of this segment the layout holds, in layout order — an
+  // unplaced segment has none — each with its last rendered output, or null
+  // where the daemon has captured none (hidden by its `when`, or not in the
+  // preset that rendered).
+  readonly placements: readonly PlacementSnapshot[];
+}
+
+export interface PlacementSnapshot {
+  readonly id: string;
+  readonly lastRender: string | null;
+}
+
+// [LAW:types-are-the-program] The discriminated union ensures every response
+// carries exactly the data shape its `what` promises. There is no path that
+// produces e.g. `{ what: "vars", segments: [...] }` — the type forbids it.
+export type DebugSnapshot =
+  | { readonly what: "vars"; readonly vars: readonly VarSnapshot[] }
+  | {
+      readonly what: "segments";
+      readonly segments: readonly SegmentSnapshot[];
+    }
+  | { readonly what: "config"; readonly config: DslConfig | null };

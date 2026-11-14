@@ -69,7 +69,7 @@ process.env.XDG_DATA_DIRS = noPlugins;
 process.env.XDG_CONFIG_HOME = jestTmpDir("config");
 
 // [LAW:single-enforcer] No test reads the host's answers for repository
-// configs, or its link key (src/daemon/repo-configs.ts, link-key.ts): both
+// configs, or its link key (src/renderer/repo-configs.ts, link-key.ts): both
 // live in the state directory, so a repository the host approved would load
 // in a test that means to see it wait. A test answering for a repository
 // writes into this one (test/helpers/repo-approval.ts).

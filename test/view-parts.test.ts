@@ -11,8 +11,8 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import { SessionState } from "../src/daemon/session-state";
-import { VERBS } from "../src/daemon/verbs";
+import { SessionState } from "../src/renderer/session-state";
+import { VERBS } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
 import { registerDslConfig, type DrawnFrame, type RenderWarning } from "../src/dsl/render";
@@ -24,7 +24,7 @@ import { recordRender, testVerbContext } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { textOf, type Frame } from "../src/render/frame";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const OPTS = {
   endcaps: "powerline" as const,

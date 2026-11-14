@@ -1,7 +1,7 @@
 // [LAW:single-enforcer] The `vars` / `segments` / `config` CLIs are ONE behavior
 // — fetch a debug snapshot from the running daemon and render it — parameterized
 // by `what`, not three commands. The daemon's `debug` protocol message is the
-// single introspection authority (src/daemon/debug.ts produces DebugSnapshot);
+// single introspection authority (src/renderer/debug.ts produces DebugSnapshot);
 // this is its client binding, the mirror of client-stats.ts. Like daemon-stats,
 // it does NOT spawn a daemon: introspecting a dead daemon is meaningless.
 
@@ -17,7 +17,7 @@ import type {
   DebugWhat,
   SegmentSnapshot,
   VarSnapshot,
-} from "./debug-types";
+} from "./foundations/debug-types";
 import type { DslConfig } from "../config/dsl-types";
 
 // Operator-driven introspection path: legitimately slower budgets than the

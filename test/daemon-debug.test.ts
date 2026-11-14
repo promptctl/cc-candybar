@@ -14,16 +14,16 @@
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { feedInputs } from "./helpers/inputs";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { ownDeclNames } from "./helpers/ambient-chrome";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
   makeFrameReader,
-} from "../src/daemon/protocol";
-import type { Request, Response } from "../src/daemon/protocol";
-import { DEBUG_WHATS, isDebugWhat } from "../src/daemon/debug-types";
-import type { DebugSnapshot } from "../src/daemon/debug-types";
+} from "../src/daemon/foundations/protocol";
+import type { Request, Response } from "../src/daemon/foundations/protocol";
+import { DEBUG_WHATS, isDebugWhat } from "../src/daemon/foundations/debug-types";
+import type { DebugSnapshot } from "../src/daemon/foundations/debug-types";
 import {
   buildDebugSnapshot,
   extractReferencedVars,
@@ -31,7 +31,7 @@ import {
   introspectSegments,
   introspectVars,
   type DaemonDslState,
-} from "../src/daemon/debug";
+} from "../src/renderer/debug";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { rootOf } from "../src/config/root";
 import { VariableStore } from "../src/var-system/store";

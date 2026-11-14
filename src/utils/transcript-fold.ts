@@ -33,7 +33,7 @@ import { ObservableLru } from "./observable-lru";
 import { valueOf } from "./logfmt";
 import type { Refreshes } from "./refresh-ledger";
 import { elapsedMs, type Timekeeper } from "../time";
-import type { SessionId } from "../daemon/session-id";
+import type { SessionId } from "../daemon/foundations/session-id";
 
 // [LAW:types-are-the-program] Never `absent`: a session with no transcript yet
 // is a real empty fold, so the caller has exactly two arms.

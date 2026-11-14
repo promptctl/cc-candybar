@@ -41,7 +41,7 @@ import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { VERB_SET_STATE } from "../src/click/wire";
 import type { DslConfig } from "../src/config/dsl-types";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s1");
 

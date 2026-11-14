@@ -1,0 +1,64 @@
+// Typing a slash line into a session's Claude Code, over an edge that reads
+// its pane and types into it. Shared, so the renderer's verbs type through the
+// edge the host hands in (the tmux one is src/claude-input/edge.ts).
+
+import type { ClientHints } from "../daemon/foundations/protocol.js";
+import type { TmuxHint } from "../tmux-hint.js";
+import { promptState, REFUSALS, type PaneSnapshot } from "./prompt-screen.js";
+import type { SlashLine } from "./slash-line.js";
+
+export interface ClaudeInputEdge {
+  // Both throw naming tmux's own failure. `type` answers with the refusal
+  // when a line was typed into the session too recently to type another.
+  readonly read: (hint: TmuxHint) => Promise<PaneSnapshot>;
+  readonly type: (hint: TmuxHint, line: SlashLine) => Promise<Typed>;
+}
+
+export type Typed =
+  | { readonly kind: "typed" }
+  | { readonly kind: "refused"; readonly reason: string };
+
+export type TypeResult =
+  | { readonly kind: "typed"; readonly pane: string }
+  | { readonly kind: "refused"; readonly reason: string };
+
+// [LAW:parse-dont-validate] The pane a session's client reported, or why the
+// bar has none to act in: the one reading of the tmux hint's three states for
+// everything the daemon does in a session's pane.
+export function tmuxPaneOf(
+  tmux: ClientHints["tmux"],
+):
+  | { readonly kind: "pane"; readonly hint: TmuxHint }
+  | { readonly kind: "refused"; readonly reason: string } {
+  if (tmux === undefined) {
+    return {
+      kind: "refused",
+      reason:
+        "this session's statusline client reports no tmux facts (it predates this daemon) — rebuild or reinstall cc-candybar",
+    };
+  }
+  if (tmux === null) {
+    return {
+      kind: "refused",
+      reason:
+        "this Claude Code is not running inside tmux — the bar can only act in a tmux pane",
+    };
+  }
+  return { kind: "pane", hint: tmux };
+}
+
+export async function typeSlash(
+  edge: ClaudeInputEdge,
+  hint: ClientHints["tmux"],
+  line: SlashLine,
+): Promise<TypeResult> {
+  const pane = tmuxPaneOf(hint);
+  if (pane.kind === "refused") return pane;
+  const tmux = pane.hint;
+  const state = promptState(await edge.read(tmux));
+  if (state.kind !== "ready") {
+    return { kind: "refused", reason: REFUSALS[state.kind] };
+  }
+  const typed = await edge.type(tmux, line);
+  return typed.kind === "typed" ? { kind: "typed", pane: tmux.pane } : typed;
+}

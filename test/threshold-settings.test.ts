@@ -16,11 +16,11 @@ import { picked, selectionFor } from "./helpers/selection";
 import { configurePlacement } from "./helpers/configure";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { SessionState } from "../src/daemon/session-state";
+import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { VERBS } from "../src/daemon/verbs";
+import { VERBS } from "../src/renderer/verbs";
 import {
   configureMember,
   EDIT_MODE_KEY,
@@ -28,8 +28,8 @@ import {
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { lastClickError } from "../src/daemon/click-error";
-import { sessionIdOf } from "../src/daemon/session-id";
+import { lastClickError } from "../src/daemon/foundations/click-error";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");

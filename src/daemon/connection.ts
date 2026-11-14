@@ -5,11 +5,11 @@
 // and being destroyed when its peer vanishes, because a flush that never settles
 // strands the exit.
 
-import type { SessionId } from "./session-id.js";
+import type { SessionId } from "./foundations/session-id.js";
 import type { Duplex } from "node:stream";
 import { inspect } from "node:util";
 import type { Daemon } from "./daemon.js";
-import { renderFailed } from "./draw-bar.js";
+import { renderFailed } from "./foundations/render-answers.js";
 import { NOTHING_TO_SETTLE } from "./statusline-answer.js";
 import { LANE_FRAMES } from "./lane-frames";
 import {
@@ -18,11 +18,11 @@ import {
   encodeFrame,
   encodeJsonFrame,
   makeFrameReader,
-} from "./protocol";
-import type { Response } from "./protocol";
+} from "./foundations/protocol";
+import type { Response } from "./foundations/protocol";
 import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
-import { REQUEST_TIMEOUT_MS } from "./request-deadline.js";
+import { REQUEST_TIMEOUT_MS } from "./foundations/request-deadline.js";
 
 // What a connection reads of its daemon.
 export type ConnectionDaemon = Pick<

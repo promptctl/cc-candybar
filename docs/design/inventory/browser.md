@@ -31,17 +31,17 @@ All paths are relative to `/Users/bmf/code/cc-candybar/.claude/worktrees/synthet
 **Is there one feed?** Yes. `FrameFeeds` in `src/daemon/frame-feed.ts` keeps `feeds = Map<sessionId, Feed>`. A feed has one timer (`Phase`), and `deps.render(sessionId, fps, at)` takes no width, rows or depth.
 
 **How each value is chosen:**
-- **Width:** `drawRender` in `src/daemon/server.ts` reads `view.facts().hints`, then calls `renderWidth(hints)`. That is `applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH)`, which is 120 less 2 (`src/daemon/render-payload.ts`, `src/render/strip.ts`, `src/utils/terminal-width.ts`). So the width comes from the request the view is declared with.
+- **Width:** `drawRender` in `src/daemon/server.ts` reads `view.facts().hints`, then calls `renderWidth(hints)`. That is `applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH)`, which is 120 less 2 (`src/renderer/render-payload.ts`, `src/render/strip.ts`, `src/utils/terminal-width.ts`). So the width comes from the request the view is declared with.
 - **Rows:** no row count is passed. The row count is whatever the draw produces at that width. The only cap is the diagnostics viewer: `viewerRowCap(hints.termRows, surfaceRows)`, capped at `MAX_VIEWER_ROWS` = 20. For a feed, it also applies each switched-on lane's `LANES[lane].rows`, and tmuxStatus has 5. `src/daemon/tmux-status.ts` then slices rows further.
-- **Depth:** `effective.colorCompatibility`, a config setting (`renderOptionsOf`). It is not a client hint. The comment in `src/daemon/protocol.ts` calls client-aware `auto` "documented-but-unbuilt". The view's parts read the depth from the payload (`src/dsl/parts.ts`).
+- **Depth:** `effective.colorCompatibility`, a config setting (`renderOptionsOf`). It is not a client hint. The comment in `src/daemon/foundations/protocol.ts` calls client-aware `auto` "documented-but-unbuilt". The view's parts read the depth from the payload (`src/dsl/parts.ts`).
 
 **The quoted phrase** is in `.claude/memory/rendering.md`, not `frames-and-lanes.md`. It sits in the viewer's bounds, and the matching code comment is in `src/daemon/server.ts`. It means one drawn frame, at one geometry, goes to every lane, so the viewer pages within the shortest surface that shows it. Each frame has two answers, `bar` and `statusline` (`FeedFrame`, `answerOf`).
 
 **State keyed by `drawing.by`:**
-- `renderWarnings` holds one record per session and renderer, because the two draw "at their own widths and roots" (`src/daemon/render-warnings.ts`).
-- `RenderCache.copies` is written by `delivered`, read by `drawnCopy`, and retired by `stopDrawing` when a feed closes (`src/daemon/cache/render.ts`).
-- `collectDiagnostics` and `viewerRows` take it. `copy-diagnostic` links carry it, and `requireDrawer` allows only `request` and `feed` (`src/daemon/verbs/index.ts`).
-- `clickErrorAt` decides whether a click error is still owed (`src/daemon/click-error.ts`).
+- `renderWarnings` holds one record per session and renderer, because the two draw "at their own widths and roots" (`src/renderer/render-warnings.ts`).
+- `RenderCache.copies` is written by `delivered`, read by `drawnCopy`, and retired by `stopDrawing` when a feed closes (`src/renderer/render-cache.ts`).
+- `collectDiagnostics` and `viewerRows` take it. `copy-diagnostic` links carry it, and `requireDrawer` allows only `request` and `feed` (`src/renderer/verbs/index.ts`).
+- `clickErrorAt` decides whether a click error is still owed (`src/daemon/foundations/click-error.ts`).
 - The rate cell in `src/config/settings-menu.ts` reads it.
 
 **What is not keyed by `by`, and blocks a second width:**
@@ -86,7 +86,7 @@ All paths are relative to `/Users/bmf/code/cc-candybar/.claude/worktrees/synthet
 - `LANE_NAMES: [&str; 4]` and the test strings in `rust-client/src/follow.rs`, policed by `scripts/check-protocol.mjs`
 - `schema/cc-candybar.schema.json` via `gen:schema`
 - The settable-keys list in `docs/interaction-authoring.md`
-- A new arm on the `Response` union in `src/daemon/protocol.ts`
+- A new arm on the `Response` union in `src/daemon/foundations/protocol.ts`
 - `SubscribeRequest`'s `lane` type follows `Lane` automatically
 - `scripts/vendor-cc-extra.mjs` also matched my lane search; I did not read why.
 

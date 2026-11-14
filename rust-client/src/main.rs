@@ -6,7 +6,7 @@
 // daemon-stats, url-handle, install-url-handler, --help) transparently execs
 // the Node fallback so this binary stays minimal.
 //
-// Wire format mirrors src/daemon/protocol.ts:
+// Wire format mirrors src/daemon/foundations/protocol.ts:
 //   - 4-byte big-endian length prefix
 //   - UTF-8 JSON body
 //   - 16 MiB cap
@@ -41,7 +41,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 // [LAW:one-source-of-truth] Every const below mirrors the TS wire contract
-// (src/daemon/protocol.ts, src/daemon/client.ts); scripts/check-protocol.mjs
+// (src/daemon/foundations/protocol.ts, src/daemon/client.ts); scripts/check-protocol.mjs
 // diffs each one, so a drift fails prepublishOnly instead of shipping.
 pub(crate) const PROTOCOL_VERSION: u32 = 3;
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(50);
@@ -287,7 +287,7 @@ enum BadInput {
 }
 
 // The client hints, set on the request (mirrors ClientHints in
-// src/daemon/protocol.ts). [LAW:single-enforcer] Client hints are captured
+// src/daemon/foundations/protocol.ts). [LAW:single-enforcer] Client hints are captured
 // here, in the client's live shell context, then trusted by the daemon. The
 // daemon's own env reflects whichever shell launched it — not the active
 // terminal, and not whether THIS session arrived over SSH.
@@ -336,7 +336,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let deadline = Instant::now() + TOTAL_BUDGET;
     // [LAW:one-source-of-truth] The same instant on the wall clock, stated on
     // the request so the daemon's wait ends early enough to answer before we
-    // hang up (src/daemon/request-deadline.ts). A clock set before 1970 states
+    // hang up (src/daemon/foundations/request-deadline.ts). A clock set before 1970 states
     // nothing, the old client's silence, rather than a deadline in the past.
     let deadline_epoch_ms = (std::time::SystemTime::now() + TOTAL_BUDGET)
         .duration_since(std::time::UNIX_EPOCH)
