@@ -37,7 +37,7 @@ import {
   prOfHead,
   trackingOf,
   type GitRead,
-  type PrState,
+  type PrFieldTypes,
   type PullRequest,
   type Tracking,
 } from "../segments/git.js";
@@ -349,13 +349,6 @@ interface GitFacts {
 // branch's PR (prNumber/prState/prUrl), lookup failed (prError), an earlier
 // PR of the branch's name (prEarlier — its state, no click target, since it is
 // not this work's), and no PR (all absent → segment when-gated off).
-interface PrFieldTypes {
-  prNumber: number;
-  prState: PrState;
-  prUrl: string;
-  prError: string;
-  prEarlier: PrState;
-}
 type PrArm<K extends keyof PrFieldTypes> = {
   readonly [F in K]: PrFieldTypes[F];
 } & { readonly [F in Exclude<keyof PrFieldTypes, K>]?: never };
@@ -367,18 +360,6 @@ export type PrPayload =
 // The branch's PR not answered yet (a key just moved): every field a template
 // reads of it is `P`, so the rest of git draws as it stands.
 type PrPendingOf<P> = { readonly [F in keyof PrFieldTypes]: P };
-
-// [LAW:one-source-of-truth] Every PR field a template can lay out: the mapped
-// type admits no PR field missing here, and the doctor reads this record to say
-// which segment needs the forge (src/doctor/data-needs.ts), so the two cannot
-// drift.
-export const PR_FIELDS: { readonly [F in keyof PrFieldTypes]: true } = {
-  prNumber: true,
-  prState: true,
-  prUrl: true,
-  prError: true,
-  prEarlier: true,
-};
 
 // The render event's `pr=`: the branch's PR state, `failed` when the forge
 // could not say, `earlier-<state>` when its PR was an older use of the

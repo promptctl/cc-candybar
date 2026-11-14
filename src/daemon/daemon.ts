@@ -283,7 +283,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
   const storage = inputs.storage(log);
-  const startRenderer = loadMainRenderer({
+  const loadedRenderer = loadMainRenderer({
     clock,
     log,
     now: instant,
@@ -389,8 +389,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     supersede: (storage, sessionId) =>
       managedStorage.supersede(storage, sessionId),
     launch: launcher.launch,
-    holdClickError: (sessionId, text, at) =>
-      parts.toRenderer.holdClickError(sessionId, text, at),
+    holdClickError: loadedRenderer.holdClickError,
     log,
     now: instant,
     clock,
@@ -413,8 +412,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       socket: paths.socket,
       preload: stableAttachPreload(bundle.path, host),
     },
-    holdClickError: (sessionId, text, at) =>
-      parts.toRenderer.holdClickError(sessionId, text, at),
+    holdClickError: loadedRenderer.holdClickError,
     log,
     now: instant,
     defer: (run) => void clock.defer(run),
@@ -599,7 +597,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:one-way-deps] The main renderer's start, handed the host's parts it
   // reaches: the compiler checks each against its entry in `AdapterToHost`
   // here, so no renderer file names a host type.
-  const toRenderer = startRenderer({
+  const toRenderer = loadedRenderer.start({
     frameFeeds,
     updateWatch,
     fileEvents,

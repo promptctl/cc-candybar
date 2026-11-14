@@ -17,7 +17,7 @@ import {
 import { presetRoot } from "../config/presets.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import { payloadPathOf, valueReadsOf } from "../config/loader/value-reads.js";
-import { PR_FIELDS } from "../renderer/render-payload.js";
+import { PR_FIELDS } from "../segments/git.js";
 
 export const DATA_SOURCES = ["pullRequests", "rateLimits"] as const;
 export type DataSource = (typeof DATA_SOURCES)[number];

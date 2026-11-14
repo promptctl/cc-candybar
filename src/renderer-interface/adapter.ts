@@ -378,6 +378,15 @@ export interface ExplicitLoad {
   readonly kind: "write" | "doctor";
 }
 
+// What the host reaches in the renderer once it is loaded, before its start:
+// what a host part built before the start writes through. Each member keeps
+// its in-process shape.
+export interface AdapterToLoadedRenderer {
+  // [LAW:effects-at-boundaries] exception: a host part's write of a click
+  // error into the session's state: a run's end, a lane setup's failure.
+  holdClickError(sessionId: SessionId, text: string, at: Instant): void;
+}
+
 // What the host reaches in the renderer, returned by its start beside
 // `answer`. Each member keeps its in-process shape.
 export interface AdapterToRenderer {
@@ -399,9 +408,6 @@ export interface AdapterToRenderer {
   // [LAW:effects-at-boundaries] exception: the debug reply's projection of
   // the most recently drawn view.
   debug(what: DebugWhat): DebugSnapshot;
-  // [LAW:effects-at-boundaries] exception: a host part's write of a click
-  // error into the session's state: a run's end, a lane setup's failure.
-  holdClickError(sessionId: SessionId, text: string, at: Instant): void;
   // [LAW:effects-at-boundaries] exception: every entry's reload, when file
   // events resume.
   reloadEvery(cause: EveryEntryLoad): void;

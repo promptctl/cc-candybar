@@ -5,9 +5,9 @@ import {
   PROTOCOL_VERSION,
   type RenderEncoding,
   type Response,
+  type Refusal,
 } from "./protocol";
 import { composeBar, type Frame } from "../../render/frame.js";
-import type { Refusal } from "./protocol.js";
 import { failureOf, type Failure } from "./verb-error.js";
 
 // [LAW:single-enforcer] The one reply to a request that failed — a render's own

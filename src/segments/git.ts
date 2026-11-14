@@ -35,6 +35,28 @@ export function trackingOf(
 // place that spelling becomes this.
 export type PrState = "open" | "merged" | "closed";
 
+// The PR fields a branch's payload carries, by type; the payload's arms over
+// them live with the payload (src/renderer/render-payload.ts).
+export interface PrFieldTypes {
+  prNumber: number;
+  prState: PrState;
+  prUrl: string;
+  prError: string;
+  prEarlier: PrState;
+}
+
+// [LAW:one-source-of-truth] Every PR field a template can lay out: the mapped
+// type admits no PR field missing here, and the doctor reads this record to say
+// which segment needs the forge (src/doctor/data-needs.ts), so the two cannot
+// drift.
+export const PR_FIELDS: { readonly [F in keyof PrFieldTypes]: true } = {
+  prNumber: true,
+  prState: true,
+  prUrl: true,
+  prError: true,
+  prEarlier: true,
+};
+
 // The branch's PR/MR in any state, as the forge CLI picks it for the branch —
 // gh takes an open one if there is one, else the newest; glab's rule is
 // unverified (see parseGitlabMr) — so a branch whose PR merged reads `merged`

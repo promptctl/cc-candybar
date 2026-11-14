@@ -37,6 +37,7 @@ import type { RenderOrigin } from "../config-hint.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type {
   AdapterToHost,
+  AdapterToLoadedRenderer,
   AdapterToRenderer,
 } from "../renderer-interface/adapter.js";
 import type {
@@ -195,12 +196,12 @@ export interface MainRendererInputs {
   readonly memoryLimitBytes: number;
 }
 
-// The main renderer's start, handed the host's parts it reaches: it builds the
-// rest of the renderer's own state over them and returns the renderer with
-// what the host reaches in it.
-export type MainRendererStart = (
-  host: AdapterToHost,
-) => Renderer & AdapterToRenderer;
+// The loaded main renderer, and its start, handed the host's parts it
+// reaches: the start builds the rest of the renderer's own state over them and
+// returns the renderer with what the host reaches in it.
+export interface LoadedMainRenderer extends AdapterToLoadedRenderer {
+  start(host: AdapterToHost): Renderer & AdapterToRenderer;
+}
 
 // [LAW:single-enforcer] The main renderer, in two steps of the daemon's
 // construction. [LAW:no-ambient-temporal-coupling] Loading reads the storage,
@@ -209,7 +210,7 @@ export type MainRendererStart = (
 // once the host's parts exist.
 export function loadMainRenderer(
   inputs: MainRendererInputs,
-): MainRendererStart {
+): LoadedMainRenderer {
   const { log } = inputs;
   const sessionState = new SessionState(inputs.storage.session);
   const settingsHistory = new SettingsHistory(
@@ -217,7 +218,11 @@ export function loadMainRenderer(
     log,
     inputs.storage.history,
   );
-  return (host) => startOver(inputs, sessionState, settingsHistory, host);
+  return {
+    holdClickError: (sessionId, text, at) =>
+      holdClickError(sessionState, sessionId, text, at),
+    start: (host) => startOver(inputs, sessionState, settingsHistory, host),
+  };
 }
 
 function startOver(
@@ -395,8 +400,6 @@ function startOver(
       },
     }),
     debug: (what) => debugOf(renderCache.latestView(), what),
-    holdClickError: (sessionId, text, at) =>
-      holdClickError(sessionState, sessionId, text, at),
     reloadEvery: (cause) => renderCache.reloadEvery(cause),
     reloadConfig,
     closeViews: () => renderCache.close(),
