@@ -502,7 +502,7 @@ describe("a click", () => {
     value: "",
     session: { ok: true, id: SESSION },
     arrival: { via: "link", delivery: { kind: "cli" } },
-    gone: () => false,
+    id: 1 as RequestId,
   });
 
   test("answers with what the open views read once its act has landed", async () => {

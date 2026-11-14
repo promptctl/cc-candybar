@@ -14,7 +14,7 @@ type ClickEvent = Extract<Event, { kind: "click" }>;
 // into the click's reply by its class.
 export async function clickTurn(
   { verbs, menuIdle }: Pick<MainRendererParts, "verbs" | "menuIdle">,
-  { verb, value, session, arrival, gone }: ClickEvent,
+  { verb, value, session, arrival, id }: ClickEvent,
   record: RequestFacts,
 ): Promise<void> {
   const handler = verbs.handler(verb);
@@ -30,7 +30,7 @@ export async function clickTurn(
       placeWaited: (ms) => noteFacts(record, { placeWait: `${ms}ms` }),
       gatherTook: (ms) => noteFacts(record, { gather: `${ms}ms` }),
       turnWaited: (ms) => noteFacts(record, { turnWait: `${ms}ms` }),
-      clientGone: gone,
+      click: id,
     });
   } finally {
     if (pending !== null) menuIdle.clickSettled(pending);

@@ -78,6 +78,7 @@ import { JournalTurns } from "./journal-turns.js";
 import { rendererHost } from "./renderer-host.js";
 import { mainRenderer } from "../renderer/main.js";
 import { verbsOver } from "../renderer/verbs.js";
+import { ClicksInFlight } from "./clicks-in-flight.js";
 import { closeByTurn, MenuIdle } from "./menu-idle.js";
 import type { SessionId } from "./session-id.js";
 
@@ -742,7 +743,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
   });
 
+  const clicks = new ClicksInFlight();
   const parts: DaemonParts = {
+    clicks,
     home: host.home,
     tmp: host.tmp,
     launcher,
@@ -796,7 +799,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         launcher,
         laneSetups,
         tmuxStatusLines,
-        verbs: verbsOver(verbCtx),
+        verbs: verbsOver(verbCtx, clicks),
       }),
       log,
       collector,

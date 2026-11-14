@@ -7,6 +7,8 @@
 import type { RendererParts } from "../daemon/draw-bar.js";
 import type { MenuIdle } from "../daemon/menu-idle.js";
 import type { SessionId } from "../daemon/session-id.js";
+import type { ClicksInFlight } from "../daemon/clicks-in-flight.js";
+import type { RequestId } from "./interface.js";
 import {
   closeIdleMenus,
   VERBS,
@@ -14,15 +16,21 @@ import {
   type VerbContext,
 } from "../daemon/verbs/index.js";
 
-// The facts one click brings to its verb: how it arrived, whether its client
-// is gone, and where its waits are noted.
-export type ClickFacts = Pick<
+// What the verb context holds of one click: how it arrived, where its waits
+// are noted, and whether its client is gone.
+type VerbClickFacts = Pick<
   VerbContext,
   "arrival" | "placeWaited" | "gatherTook" | "turnWaited" | "clientGone"
 >;
 
+// The facts the renderer brings of one click: the same, the click named by its
+// request for whether its client is gone, which the host answers.
+export type ClickFacts = Omit<VerbClickFacts, "clientGone"> & {
+  readonly click: RequestId;
+};
+
 // The daemon's verb context, less what each click brings.
-export type DaemonVerbContext = Omit<VerbContext, keyof ClickFacts>;
+export type DaemonVerbContext = Omit<VerbContext, keyof VerbClickFacts>;
 
 // [LAW:locality-or-seam] The renderer's port onto the verbs, so a renderer
 // test hands in the act it means to observe.
@@ -51,12 +59,24 @@ export type MainRendererParts = RendererParts & {
 // builds. [LAW:dataflow-not-control-flow] The dispatch is a table lookup: the
 // verb table (src/daemon/verbs/index.ts) is the one list of supported verbs,
 // and their handlers live there.
-export function verbsOver(ctx: DaemonVerbContext): RendererVerbs {
+// [LAW:effects-at-boundaries] exception: the verbs still act in place, so the
+// port is where a click's id meets the host's answer of whether its client
+// left.
+export function verbsOver(
+  ctx: DaemonVerbContext,
+  clicks: Pick<ClicksInFlight, "gone">,
+): RendererVerbs {
   return {
     handler: (verb) => {
       const handler = VERBS.get(verb);
       return (
-        handler && ((value, click) => handler(value, { ...ctx, ...click }))
+        handler &&
+        ((value, { click, ...facts }) =>
+          handler(value, {
+            ...ctx,
+            ...facts,
+            clientGone: () => clicks.gone(click),
+          }))
       );
     },
     closeIdle: (sessionId, idle) => closeIdleMenus(sessionId, idle, ctx),

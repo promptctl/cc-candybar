@@ -102,12 +102,11 @@ export type Event =
       // null when the click names none.
       readonly session: ParsedSessionId | null;
       readonly arrival: ClickArrival;
-      // [LAW:no-ambient-temporal-coupling] exception: whether the click's
-      // client left or its deadline passed, read while the turn waits inside
-      // itself for the click's place and its journal turn, as a request's
-      // turn waits on its world state. It goes once the mailbox refuses an
-      // abandoned click before delivering it.
-      readonly gone: () => boolean;
+      // The request the click arrived in. Whether its client left or its
+      // deadline passed is the host's to say, from the click's connection,
+      // asked by this id while the turn waits for the click's place and its
+      // journal turn.
+      readonly id: RequestId;
     }
   | {
       // The session's idle clock ran out: the turn closes its menus as the

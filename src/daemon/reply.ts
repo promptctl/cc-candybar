@@ -4,6 +4,7 @@ import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
 import { failedWith, renderFailed } from "./draw-bar.js";
+import type { ClickInFlight } from "./clicks-in-flight.js";
 import {
   answerStatusline,
   NOTHING_TO_SETTLE,
@@ -430,8 +431,8 @@ export async function replyTo(
 
   if (req.kind === "click") {
     return stay(
-      await clickEvent(parts, accepted, timedOut, clientLeft, (facts, gone) =>
-        clickOutcome(parts, req, facts, gone),
+      await clickEvent(parts, accepted, timedOut, clientLeft, (facts, click) =>
+        clickOutcome(parts, req, facts, click),
       ),
     );
   }
@@ -595,7 +596,7 @@ async function clickEvent(
   accepted: Acceptance,
   timedOut: () => boolean,
   clientLeft: () => boolean,
-  run: (facts: RequestFacts, gone: () => boolean) => Promise<RequestOutcome>,
+  run: (facts: RequestFacts, click: ClickInFlight) => Promise<RequestOutcome>,
 ): Promise<Response> {
   const { clock } = parts;
   const t0 = clock.monotonic();
@@ -606,8 +607,11 @@ async function clickEvent(
   // When a click still waiting for its turn is refused: the daemon's deadline,
   // or a client that waited for the answer leaving. The connection knows which
   // clients wait (the forwarder does not), so its `clientLeft` already says so.
-  const gone = () => timedOut() || clientLeft();
-  const outcome = await run(facts, gone);
+  const click: ClickInFlight = {
+    id: accepted.id,
+    gone: () => timedOut() || clientLeft(),
+  };
+  const outcome = await run(facts, click);
   // Whether the client was told TIMEOUT, and whether a client that waited
   // hung up, while the click ran: its effect lands though the client reported
   // a failure. One still waiting for its turn at either moment was refused
@@ -636,7 +640,7 @@ async function clickOutcome(
   parts: DaemonParts,
   req: ClickRequest,
   facts: RequestFacts,
-  gone: () => boolean,
+  click: ClickInFlight,
 ): Promise<RequestOutcome> {
   const arrival: ClickArrival = { via: "link", delivery: { kind: "cli" } };
   noteFacts(facts, { via: "cli" });
@@ -646,7 +650,7 @@ async function clickOutcome(
       `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`,
     );
   }
-  return clickRan(() => handleClick(parts, verb, value, arrival, facts, gone));
+  return clickRan(() => handleClick(parts, verb, value, arrival, facts, click));
 }
 
 // [LAW:parse-dont-validate][LAW:no-silent-failure] The URL handler's frame run
@@ -666,7 +670,7 @@ async function urlClick(
     accepted,
     timedOut,
     clientLeft,
-    async (facts, gone) => {
+    async (facts, click) => {
       const { urlV, url } = frame;
       noteFacts(facts, { via: "forwarder", urlV: String(urlV) });
       if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV)) {
@@ -684,7 +688,7 @@ async function urlClick(
         delivery: { kind: "forwarder", urlV },
       };
       return clickRan(() =>
-        handleClick(parts, link.verb, link.value, arrival, facts, gone),
+        handleClick(parts, link.verb, link.value, arrival, facts, click),
       );
     },
   );
@@ -724,11 +728,11 @@ async function handleClick(
   value: string,
   arrival: ClickArrival,
   facts: RequestFacts,
-  clientGone: () => boolean,
+  click: ClickInFlight,
 ): Promise<RequestOutcome> {
   if (verb === VERB_TMUX_STATUS_CLICK) {
     noteFacts(facts, { verb });
-    return statusLineClick(parts, value, facts, clientGone);
+    return statusLineClick(parts, value, facts, click);
   }
   // [LAW:nothing-unseen] What the host knows of the click is recorded before
   // anything about it can fail: the verb it runs, then its session as it
@@ -741,10 +745,14 @@ async function handleClick(
     noteFacts(facts, { sid: session.id });
     parts.collector.clicked(session.id);
   }
+  // [LAW:single-enforcer] Held through its turn, so its waits ask the host
+  // whether its client left, by its id.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
+  using _held = parts.clicks.hold(click);
   const delivered = await parts.renderer.answer({
     kind: "event",
     at: instantAt(parts.clock),
-    event: { kind: "click", verb, value, session, arrival, gone: clientGone },
+    event: { kind: "click", verb, value, session, arrival, id: click.id },
   });
   switch (delivered.kind) {
     case "answered":
@@ -783,16 +791,16 @@ async function statusLineClick(
   parts: DaemonParts,
   value: string,
   facts: RequestFacts,
-  clientGone: () => boolean,
+  click: ClickInFlight,
 ): Promise<RequestOutcome> {
   const { tmuxStatusLines } = parts;
-  const click = tmuxStatusLines.linkAt(value);
-  if (click.kind === "refused") return badRequest(click.reason);
-  noteFacts(facts, { link: click.url });
-  if (click.url.startsWith("cc-candybar://")) {
+  const link = tmuxStatusLines.linkAt(value);
+  if (link.kind === "refused") return badRequest(link.reason);
+  noteFacts(facts, { link: link.url });
+  if (link.url.startsWith("cc-candybar://")) {
     // A link a config wrote with a malformed escape is refused, as any
     // click's malformed wire encoding is.
-    const parsed = parseHandlerUrl(click.url);
+    const parsed = parseHandlerUrl(link.url);
     if (!parsed.ok) return badRequest(parsed.problem);
     // [LAW:no-silent-failure] A link the bar draws never names this verb; one
     // that did would be a click that only ever clicks another.
@@ -804,17 +812,17 @@ async function statusLineClick(
       parsed.value,
       { via: "tmux-status" },
       facts,
-      clientGone,
+      click,
     );
   }
   await clickHandoff(
     parts.launcher,
     {
       bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-      args: [click.url],
+      args: [link.url],
       category: "click.open",
     },
-    `opening ${click.url}`,
+    `opening ${link.url}`,
     parts.log,
     CLICK_PROGRAM_TIMEOUT_MS,
     parts.tmp,
