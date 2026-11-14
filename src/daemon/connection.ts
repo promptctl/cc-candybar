@@ -18,8 +18,8 @@ import {
   encodeFrame,
   encodeJsonFrame,
   makeFrameReader,
+  type Response,
 } from "./foundations/protocol";
-import type { Response } from "./foundations/protocol";
 import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
 import { REQUEST_TIMEOUT_MS } from "./foundations/request-deadline.js";

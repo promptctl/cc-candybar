@@ -51,8 +51,36 @@ import type { Every } from "../../utils/period";
 import { elapsedMs, type Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
 import { addDay, dayKey, EMPTY_DAY } from "../foundations/today-facts";
-import { type DayUsage } from "../../facts/world-state";
-import type { SpeedSample, SpeedObservation } from "../../facts/world-state";
+import type {
+  DayUsage,
+  SpeedObservation,
+  SpeedSample,
+} from "../../facts/world-state";
+
+// [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
+// Per-session records are canonical; the `session` projection (whole-session
+// totals) and the `today` projection (cross-session sum of today's per-day
+// buckets) are BOTH folds over this one store. There is no second usage cache
+// and no per-render whole-tree scan: a render observes the active session's
+// change through the single stat it already does, re-parses only that one
+// session, and folds in-memory records for everything else.
+//
+// [LAW:dataflow-not-control-flow] `today` stops being "recompute-if-stale"
+// (where the staleness probe — a whole-tree mtime sweep — cost as much as the
+// recompute it guarded). The aggregate is derived state maintained
+// incrementally: a Claude Code directory's transcript tree is scanned once
+// when a render first asks for its `today` (the seed), to make records for
+// sessions that did work before this daemon saw them; every render after that
+// is a single-file stat plus a lookup. A session that never renders (headless
+// `claude -p`, the Agent SDK) is kept current by RESCANNING the tree on the
+// directory's own period while a home holds it — the seed again, which over
+// warm records is a stat per transcript plus the bytes appended since the last
+// scan (measured: ~75 ms over 6k transcripts).
+//
+// [LAW:one-source-of-truth] `today` is derived, never summed by its reader:
+// records live in an observable map, and each directory's day sums are a kept
+// computed over it, so a frame's `today` is one lookup that changes in the
+// turn a record does (brandon-unfiled-3248.8ro6, step 3).
 
 // How many recent samples the burn-rate ring retains per session. A render-cadence
 // trend, not an archive: enough to fill a wide sparkline cell, capped so an

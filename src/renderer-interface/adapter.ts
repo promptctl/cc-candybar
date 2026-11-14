@@ -8,12 +8,11 @@
 
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { DiagnosticMessage, SourcedText } from "../render/diagnostics";
-import type { ClientHints } from "../daemon/foundations/protocol.js";
+import type { ClientHints, Response } from "../daemon/foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { Answered } from "../daemon/foundations/sighting-roles.js";
-import type { StorageKey } from "./interface.js";
+import type { StorageKey, RequestId } from "./interface.js";
 import type { Frame } from "../render/frame";
-import type { Response } from "../daemon/foundations/protocol";
 import type { Instant } from "../utils/instant.js";
 import type { Release } from "../utils/holds.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
@@ -21,7 +20,6 @@ import type { TmuxHint } from "../tmux-hint.js";
 import type { ClientHint } from "../client-hint.js";
 import type { Launcher } from "../proc/launcher.js";
 import type { LinkSigner } from "../click/link-signer.js";
-import type { RequestId } from "./interface.js";
 import type {
   CheckedRenderRequest,
   Refreshed,

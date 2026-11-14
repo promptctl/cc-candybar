@@ -1,3 +1,17 @@
+// Claude Code's auto-compact window: how full the context gets before Claude
+// Code summarizes it. Its only writer is Claude Code's `/autocompact` command,
+// which the bar types into the session (a `slash` action) — so the bar reads
+// the value back from where that command stores it.
+//
+// Measured on Claude Code 2.1.285 (brandon-context-ceiling-xta.e3p):
+//   - `/autocompact <tokens>` writes `autoCompactWindow` into the USER
+//     settings file and applies it to the running session at once;
+//     `/autocompact auto` deletes the key, handing the window back to Claude
+//     Code's per-model tuning.
+//   - It accepts 100,000 to 1,000,000 tokens and refuses the rest; a window
+//     above the model's context window is capped to it.
+//   - The statusline hook payload carries none of this.
+
 import fs from "node:fs";
 import { ObservableLru } from "../../utils/observable-lru.js";
 import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger.js";

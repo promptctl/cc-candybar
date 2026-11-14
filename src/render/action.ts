@@ -22,8 +22,7 @@
 
 import type { PlacedSegment } from "../dsl/node-registry.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import { RichText, Style } from "@promptctl/rich-js";
-import type { Palette } from "@promptctl/rich-js";
+import { RichText, Style, type Palette } from "@promptctl/rich-js";
 import type { FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";

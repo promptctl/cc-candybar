@@ -4,11 +4,12 @@ import { parseArgs } from "node:util";
 import { isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
 import { requestedConfigTarget } from "../config-hint";
-import { parseClientHints, RENDER_ENCODINGS } from "./foundations/protocol";
-import type {
-  ReaderRenderRequest,
-  RefusedArg,
-  RenderEncoding,
+import {
+  parseClientHints,
+  RENDER_ENCODINGS,
+  type ReaderRenderRequest,
+  type RefusedArg,
+  type RenderEncoding,
 } from "./foundations/protocol";
 import { parseSessionId } from "./foundations/session-id";
 import type { RuntimeStats } from "./stats";

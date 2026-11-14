@@ -22,14 +22,14 @@ import type { SessionId } from "./foundations/session-id.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { Instant } from "../utils/instant.js";
 import { answeredOf, roleOf } from "./foundations/sighting-roles.js";
-import type {
-  RateLimitsSeen,
-  TranscriptSaid,
-  RenderSaid,
-  RoledSaid,
-  RenderSighting,
+import {
+  type RateLimitsSeen,
+  type TranscriptSaid,
+  type RenderSaid,
+  type RoledSaid,
+  type RenderSighting,
+  SIGHTINGS_KEPT,
 } from "./foundations/sightings";
-import { SIGHTINGS_KEPT } from "./foundations/sightings";
 
 export function rateLimitsSeen(
   hookData: Pick<ClaudeHookData, "rate_limits" | "context_window">,

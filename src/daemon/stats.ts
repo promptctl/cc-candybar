@@ -1,13 +1,21 @@
-import type { RunStats } from "./foundations/stats-snapshot.js";
-import type { TmuxStatusStats } from "./foundations/stats-snapshot.js";
+// [LAW:single-enforcer] One mutator owns runtime counters. Server, caches, and
+// watchers each receive a tiny handle they're allowed to bump, but the
+// canonical object lives here. Stats are read-only after serialization.
+
+import type {
+  RunStats,
+  TmuxStatusStats,
+  FeedStats,
+  FileEventsStats,
+  SourceRunsStats,
+  ProbeArrival,
+  StoresRead,
+  SourceSnapshots,
+  StatsSnapshot,
+} from "./foundations/stats-snapshot.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
-import type { FeedStats } from "./foundations/stats-snapshot";
-import type { FileEventsStats } from "./foundations/stats-snapshot";
-import type { SourceRunsStats } from "./foundations/stats-snapshot";
-import type { ProbeArrival } from "./foundations/stats-snapshot";
 import type { RenderSighting } from "./foundations/sightings";
 import type { ServingDaemon } from "./foundations/memory-limit";
-import type { StoresRead } from "./foundations/stats-snapshot";
 import type { LaunchCategory } from "../proc/launcher";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
@@ -15,10 +23,6 @@ import { PACKAGE_VERSION } from "../version";
 import type { Monotonic, Timekeeper } from "../time";
 import type { RequestId } from "../renderer-interface/interface.js";
 import type { Acceptance } from "./foundations/request-event.js";
-import type {
-  SourceSnapshots,
-  StatsSnapshot,
-} from "./foundations/stats-snapshot";
 
 // A read kind no run of which has happened yet.
 const NO_RUNS: SourceRunsStats["shell"] = {

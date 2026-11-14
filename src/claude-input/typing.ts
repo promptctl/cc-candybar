@@ -1,6 +1,15 @@
 // Typing a slash line into a session's Claude Code, over an edge that reads
 // its pane and types into it. Shared, so the renderer's verbs type through the
 // edge the host hands in (the tmux one is src/claude-input/edge.ts).
+//
+// [LAW:effects-at-boundaries] The two tmux calls — read the pane, type into
+// it — live behind `ClaudeInputEdge`; whether to type is `typeSlash`'s fold
+// over pure facts (the session's recorded tmux hint, promptState).
+//
+// [LAW:single-enforcer] tmux is the only route: the client reports the
+// session's tmux socket and pane (src/tmux-hint.ts), so the keys reach THAT
+// pane and nothing else. Outside tmux there is no pane to address, and typing
+// into whatever window has focus is exactly what this must never do.
 
 import type { ClientHints } from "../daemon/foundations/protocol.js";
 import type { TmuxHint } from "../tmux-hint.js";

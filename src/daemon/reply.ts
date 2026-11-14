@@ -12,19 +12,24 @@ import {
 } from "./statusline-answer.js";
 import { checkRenderRequest } from "./render-checkpoint.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
-import { PROTOCOL_VERSION, URL_FRAME_VERSIONS } from "./foundations/protocol";
-import type {
-  ClickRequest,
-  Inbound,
-  Request,
-  Response,
-  SubscribeRequest,
+import {
+  PROTOCOL_VERSION,
+  URL_FRAME_VERSIONS,
+  type ClickRequest,
+  type Inbound,
+  type Request,
+  type Response,
+  type SubscribeRequest,
 } from "./foundations/protocol";
 import { parseSessionId, type SessionId } from "./foundations/session-id";
 import { type SourceSnapshots } from "./foundations/stats-snapshot";
 import { clickHandoff } from "./click-handoff";
 import { CLICK_PROGRAM_TIMEOUT_MS } from "./foundations/click-launch";
-import { clickSessionOf } from "../click/wire";
+import {
+  clickSessionOf,
+  parseHandlerUrl,
+  VERB_TMUX_STATUS_CLICK,
+} from "../click/wire";
 import { badRequest, failureOf } from "./foundations/verb-error";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
@@ -35,9 +40,9 @@ import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
 import { DEBUG_WHATS, isDebugWhat } from "./foundations/debug-types";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
-import { parseHandlerUrl, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
 import { instantAt, instantOf } from "../utils/instant.js";
 import { waitBudgetMs } from "./foundations/request-deadline.js";
+import type { RendererStats } from "../renderer-interface/adapter.js";
 import {
   noteFacts,
   requestEvent,
@@ -256,17 +261,18 @@ export async function replyTo(
   if (req.kind === "stats") {
     // [LAW:single-enforcer] Stats requests do NOT bump request counters —
     // observability shouldn't pollute the metric being observed.
+    const renderer = toRenderer.stats();
     return stay({
       ok: true,
       stats: stats.snapshot({
         gitCache: gitProvider.getStats(),
         usageCache: usageStore.getStats(),
-        sources: sourceSnapshots(parts),
+        sources: sourceSnapshots(parts, renderer.renderCache),
         fileEvents: fileEvents.stats(),
         sourceRuns: sourceRuns.stats(),
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
-        ...toRenderer.stats(),
+        ...renderer,
         collector: parts.collector.stats(),
         menuIdle: menuIdle.getStats(),
         journalTurns: journalTurns.getStats(),
@@ -446,7 +452,10 @@ export async function replyTo(
 
 // [LAW:nothing-unseen] Every source's refreshes from the one ledger, beside
 // how many homes of each scope the owners keep and how many a view holds.
-function sourceSnapshots(parts: DaemonParts): SourceSnapshots {
+function sourceSnapshots(
+  parts: DaemonParts,
+  cache: RendererStats["renderCache"],
+): SourceSnapshots {
   const {
     payloadProviders: {
       gitProvider,
@@ -455,14 +464,12 @@ function sourceSnapshots(parts: DaemonParts): SourceSnapshots {
       managedStorage,
       hostService,
     },
-    toRenderer,
     refreshLedger,
   } = parts;
   const git = gitProvider.getStats();
   const tmux = tmuxService.getStats();
   const today = usageStore.scanStats();
   const storage = managedStorage.stats();
-  const cache = toRenderer.stats().renderCache;
   return {
     records: refreshLedger.snapshot(),
     homes: {

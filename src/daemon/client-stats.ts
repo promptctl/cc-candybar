@@ -1,10 +1,11 @@
-import { describeFailure, requestOutcome } from "./client-transport";
-import type { CliPlan } from "../cli-plan";
-import type {
-  ClientWorld,
-  RoundTripBudgets,
-  RoundTripOutcome,
+import {
+  describeFailure,
+  requestOutcome,
+  type ClientWorld,
+  type RoundTripBudgets,
+  type RoundTripOutcome,
 } from "./client-transport";
+import type { CliPlan } from "../cli-plan";
 import { RuntimeStats } from "./stats";
 import { type StatsSnapshot } from "./foundations/stats-snapshot";
 import { fileEventsLine } from "./cache/file-events";

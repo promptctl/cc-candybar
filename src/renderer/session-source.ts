@@ -19,14 +19,19 @@
 // arrival, a world state's landing, a click — and never inside a draw.
 
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import type { EffectiveGlobals } from "../config/effective-globals.js";
-import { resolveEffectiveGlobals } from "../config/effective-globals.js";
+import {
+  type EffectiveGlobals,
+  resolveEffectiveGlobals,
+} from "../config/effective-globals.js";
 import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
-import type { WorldState } from "../facts/world-state.js";
+import {
+  type WorldState,
+  stampFailureOf,
+  UNREAD_RUN,
+} from "../facts/world-state.js";
 import type { WorldStates } from "./world-states.js";
 import type { SourceOf } from "./render-cache.js";
-import { stampFailureOf } from "../facts/world-state.js";
 import {
   composePayload,
   type ComposeInputs,
@@ -34,7 +39,6 @@ import {
   type ViewPayload,
 } from "./render-payload.js";
 import type { SessionStateReader } from "../renderer-interface/session-state.js";
-import { UNREAD_RUN } from "../facts/world-state.js";
 import type { HistoryDepth } from "./settings-history.js";
 import { settingCounts } from "./setting-drafts.js";
 

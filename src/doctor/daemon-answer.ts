@@ -6,7 +6,10 @@
 // (`daemon`, src/daemon/limits.ts `serving`).
 
 import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
-import type { StatsSnapshot } from "../daemon/foundations/stats-snapshot.js";
+import type {
+  StatsSnapshot,
+  StoresRead,
+} from "../daemon/foundations/stats-snapshot.js";
 import {
   describeFailure,
   type ClientWorld,
@@ -19,12 +22,11 @@ import {
 } from "../daemon/foundations/sightings.js";
 import { SIGHTING_ROLES } from "../daemon/foundations/sighting-roles.js";
 import type { Asked } from "./checks.js";
-import type { MemoryReading } from "../daemon/foundations/memory-limit.js";
 import type {
+  MemoryReading,
   PostMortem,
   ServingDaemon,
 } from "../daemon/foundations/memory-limit.js";
-import type { StoresRead } from "../daemon/foundations/stats-snapshot.js";
 import { parseMarkBook } from "./mark-book.js";
 import { parseClickedTerminals } from "./clicked-terminals.js";
 import { parsePostMortemsRead } from "./post-mortems-read.js";

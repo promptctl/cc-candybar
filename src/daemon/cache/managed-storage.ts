@@ -26,8 +26,10 @@ import { jsonParser } from "../../var-system/parse";
 import { sessionFileName } from "../../config/loader/plugins";
 import type { JsonValue } from "../../var-system/types";
 import type { StorageKey } from "../../renderer-interface/interface";
-import type { ManagedStorageStats } from "../foundations/stats-snapshot";
-import type { FaultCause } from "../foundations/stats-snapshot";
+import type {
+  ManagedStorageStats,
+  FaultCause,
+} from "../foundations/stats-snapshot";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // A file its program has not written for this long belongs to a session that

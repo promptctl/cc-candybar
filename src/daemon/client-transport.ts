@@ -22,10 +22,11 @@ import {
   ProtocolError,
   sendOne,
   type TimeoutPhase,
+  type Request,
+  type Response,
+  type PermanentOutcome,
 } from "./foundations/protocol";
-import type { Request, Response } from "./foundations/protocol";
 import type { Timekeeper } from "../time";
-import type { PermanentOutcome } from "./foundations/protocol";
 
 // Per-caller timeout policy, carried as data. The render hot path runs tight
 // budgets (a statusline refresh must not stall the host); operator-driven

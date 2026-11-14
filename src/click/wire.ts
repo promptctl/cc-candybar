@@ -515,28 +515,6 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_COPY_DIAGNOSTIC,
 ]);
 
-// [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
-// dispatcher folds the list, running EVERY effect through the leaf table, after
-// batchAdjacentWrites has joined each run of adjacent set-state (or
-// reset-config) effects into the one batch that lands whole. The
-// effect count is data — N=1 and N=100 walk the identical loop, no plain-vs-
-// compound branch. [LAW:no-silent-failure] Every effect runs even if an
-// earlier one failed; failures accumulate in `errors`. An unknown or
-// non-leaf (e.g. nested `dispatch`) verb is a miss in LEAF_VERBS — reported,
-// never executed.
-//
-// [LAW:types-are-the-program] The aggregate PRESERVES the dispatcher's
-// input-vs-operational error classification: a leaf throws BadVerbArgs for bad
-// input (→ BAD_REQUEST) and a plain Error for an operational failure (e.g. a
-// pbcopy/open launch failure → RENDER_FAILED). If ANY effect failed
-// operationally, the whole click failed operationally (plain Error); only when
-// every failure is an input error does the aggregate stay BadVerbArgs. An
-// unknown verb is bad input — it does not flip the classification.
-//
-// [LAW:one-source-of-truth] Per-effect errors are written to session state
-// so the bar shows WHICH effect(s) failed, for the hold src/daemon/foundations/click-error.ts
-// sets. Only possible when a session ID
-// is available from a set-state or toolbar-toggle effect in the same click.
 // [LAW:one-source-of-truth] The session a click is in: the first segment of
 // its first session-bearing effect — every SESSION_FIRST_VERBS member carries
 // it there — or none. Dispatch surfaces a failed step in that session's bar,

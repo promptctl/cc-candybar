@@ -12,8 +12,7 @@ import type { Release } from "../../utils/holds";
 import type { DaemonLogger } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
 import type { Timekeeper } from "../../time";
-import type { FileEventsStats } from "../foundations/stats-snapshot";
-import type { Delivery } from "../foundations/stats-snapshot";
+import type { FileEventsStats, Delivery } from "../foundations/stats-snapshot";
 import { iso, stopped } from "../foundations/file-events-warnings";
 
 // [LAW:no-ambient-temporal-coupling] How often the owner writes a probe: a

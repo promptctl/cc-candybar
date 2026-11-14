@@ -25,8 +25,12 @@
 
 import type { StoreNode, VariableStore } from "../var-system/store";
 import type { SourceRegistry } from "../var-system/sources";
-import type { DslConfig, VariableDecl } from "../config/dsl-types";
-import { placementId, walkNodes } from "../config/dsl-types";
+import {
+  type DslConfig,
+  type VariableDecl,
+  placementId,
+  walkNodes,
+} from "../config/dsl-types";
 import { presetNames, presetRoot } from "../config/presets";
 import { rootNode } from "../config/root";
 import { templateReads, variableRead } from "../config/loader/refs";

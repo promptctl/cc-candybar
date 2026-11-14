@@ -12,9 +12,13 @@ import type {
 import type {
   Subscription,
   Subscriptions,
+  StorageKey,
 } from "../renderer-interface/interface.js";
-import type { AdapterToHost } from "../renderer-interface/adapter.js";
-import type { StorageKey } from "../renderer-interface/interface.js";
+import type {
+  AdapterToHost,
+  EveryEntryLoad,
+  ExplicitLoad,
+} from "../renderer-interface/adapter.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { fileHeldSettings } from "./setting-drafts.js";
@@ -91,10 +95,6 @@ import { ownedBy, pluginNs } from "../config/loader/plugin-scope.js";
 import { projectionsOf } from "../config/loader/projections.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import type { RenderCacheStats } from "../daemon/foundations/stats-snapshot";
-import type {
-  EveryEntryLoad,
-  ExplicitLoad,
-} from "../renderer-interface/adapter";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
 // (projectDir, cwd) tuple: the parsed config, the variable store +

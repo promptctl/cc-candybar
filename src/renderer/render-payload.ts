@@ -53,9 +53,14 @@ import {
   type Reading,
 } from "../utils/outcome.js";
 import { isBundledPreset } from "./bundled-presets.js";
-import type { SpeedObservation } from "../facts/world-state.js";
+import {
+  type SpeedObservation,
+  type TodayFacts,
+  UNREAD_RUN,
+  type WorldState,
+  type SourceValue,
+} from "../facts/world-state.js";
 import { projectToday } from "../daemon/foundations/today-facts.js";
-import { type TodayFacts } from "../facts/world-state.js";
 import { contextOver } from "../segments/context.js";
 import { metricsOver } from "../segments/metrics.js";
 import { usageOver } from "../segments/session.js";
@@ -73,11 +78,6 @@ import {
 } from "../config/globals-fields.js";
 import { type Instant } from "../utils/instant.js";
 import type { Fact } from "../facts/fact.js";
-import {
-  UNREAD_RUN,
-  type WorldState,
-  type SourceValue,
-} from "../facts/world-state.js";
 import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SourceRun } from "../var-system/sources.js";

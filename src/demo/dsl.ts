@@ -48,7 +48,7 @@ import {
 } from "../renderer/render-cache.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import { NO_FILE_EVENTS } from "../daemon/cache/file-events.js";
-import type { DaemonLogger } from "../utils/logger.js";
+import { type DaemonLogger, debug, setDebug } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
 import { processWorld } from "../host.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
@@ -72,7 +72,6 @@ import { SessionEffects } from "../render/effect.js";
 import { ansiOf } from "../render/frame.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import type { CheckedHookData } from "../renderer-interface/request-context.js";
-import { debug, setDebug } from "../utils/logger.js";
 import { instantOf } from "../utils/instant.js";
 import { SourceRuns } from "../daemon/source-runs.js";
 import type { Subscriptions } from "../renderer-interface/interface.js";

@@ -110,8 +110,7 @@ const FAKE_IMPORTS = [
       "**/process-probe-fake",
       "**/process-probe-fake.js",
     ],
-    message:
-      "A fake is a test's: src never imports one. [LAW:single-enforcer]",
+    message: "A fake is a test's: src never imports one. [LAW:single-enforcer]",
   },
 ];
 
@@ -364,10 +363,16 @@ const ZONE_MESSAGE = {
 
 // A module's key is its repo-relative path without its extension, so
 // `../time.js`, `./time` and `src/time.ts` are one module, and a directory's
-// import (`../verbs`) is its index's.
-const moduleKey = (rel) => rel.replace(/\.(m?ts|m?js)$/, "");
+// import (`../verbs`) is its index's. Relative to this file, not ESLint's cwd,
+// so an editor or runner started in a subdirectory keys the same modules.
+const REPO_ROOT = import.meta.dirname;
+const withoutExtension = (p) => p.replace(/\.(m?ts|m?js)$/, "");
+const moduleKey = (abs) => withoutExtension(path.relative(REPO_ROOT, abs));
 const ZONE_KEYS = Object.entries(ZONE_ROWS)
-  .map(([row, zone]) => ({ row: row.endsWith("/") ? row : moduleKey(row), zone }))
+  .map(([row, zone]) => ({
+    row: row.endsWith("/") ? row : withoutExtension(row),
+    zone,
+  }))
   .sort((a, b) => b.row.length - a.row.length);
 const zoneOf = (key) =>
   ZONE_KEYS.find(({ row }) =>
@@ -377,7 +382,7 @@ const zoneOf = (key) =>
 const importDirection = {
   meta: { type: "problem", schema: [] },
   create(context) {
-    const from = moduleKey(path.relative(context.cwd, context.filename));
+    const from = moduleKey(context.filename);
     const fromZone = zoneOf(from);
     // Every spelling of an edge carries its source as a string literal:
     // `import`, `export … from`, `import()` and the type `import("…").T`.
@@ -386,10 +391,7 @@ const importDirection = {
         return;
       }
       const to = moduleKey(
-        path.relative(
-          context.cwd,
-          path.resolve(path.dirname(context.filename), source),
-        ),
+        path.resolve(path.dirname(context.filename), source),
       );
       const toZone = zoneOf(to);
       if (!ZONE_IMPORTS[fromZone].includes(toZone)) {
@@ -576,11 +578,7 @@ export default [
   {
     files: HOST_READERS,
     rules: {
-      "no-restricted-properties": [
-        "error",
-        ...CLOCK_PROPERTIES,
-        KILL_PROPERTY,
-      ],
+      "no-restricted-properties": ["error", ...CLOCK_PROPERTIES, KILL_PROPERTY],
     },
   },
   {
@@ -607,6 +605,7 @@ export default [
   {
     files: [
       "src/daemon/**/*.ts",
+      "src/renderer/**/*.ts",
       "src/claude-input/**/*.ts",
       "src/segments/**/*.ts",
       "src/var-system/**/*.ts",

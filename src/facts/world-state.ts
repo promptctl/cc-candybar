@@ -97,35 +97,10 @@ export interface WorldState {
   readonly diagnostics: readonly FactsDiagnostic[];
 }
 
-// [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
-// Per-session records are canonical; the `session` projection (whole-session
-// totals) and the `today` projection (cross-session sum of today's per-day
-// buckets) are BOTH folds over this one store. There is no second usage cache
-// and no per-render whole-tree scan: a render observes the active session's
-// change through the single stat it already does, re-parses only that one
-// session, and folds in-memory records for everything else.
-//
-// [LAW:dataflow-not-control-flow] `today` stops being "recompute-if-stale"
-// (where the staleness probe — a whole-tree mtime sweep — cost as much as the
-// recompute it guarded). The aggregate is derived state maintained
-// incrementally: a Claude Code directory's transcript tree is scanned once
-// when a render first asks for its `today` (the seed), to make records for
-// sessions that did work before this daemon saw them; every render after that
-// is a single-file stat plus a lookup. A session that never renders (headless
-// `claude -p`, the Agent SDK) is kept current by RESCANNING the tree on the
-// directory's own period while a home holds it — the seed again, which over
-// warm records is a stat per transcript plus the bytes appended since the last
-// scan (measured: ~75 ms over 6k transcripts).
-//
-// [LAW:one-source-of-truth] `today` is derived, never summed by its reader:
-// records live in an observable map, and each directory's day sums are a kept
-// computed over it, so a frame's `today` is one lookup that changes in the
-// turn a record does (brandon-unfiled-3248.8ro6, step 3).
-
 // [LAW:one-source-of-truth] One observation of the active session's cumulative
 // token counts at a single instant. tok/s is the delta between two of these —
-// the prior sample lives in this store (the single owner of per-session token
-// totals), never in a parallel counter. `input` folds the cache lanes into the
+// the prior sample lives in the session usage store (the single owner of
+// per-session token totals), never in a parallel counter. `input` folds the cache lanes into the
 // prompt-side total so `total === input + output`. `atMs` is the render's clock
 // instant (the daemon's single-enforcer clock), so a frozen test clock makes
 // the rate deterministic.
@@ -138,8 +113,8 @@ export interface SpeedSample {
 
 // The prior observation (absent on the very first render of a session), the one
 // just taken, and the recent ring (oldest→newest, INCLUDING `cur`). The pure
-// projections live at the render-payload boundary; this store only remembers and
-// reports. [LAW:one-source-of-truth] `prev === samples[samples.length - 2]` — the
+// projections live at the render-payload boundary; the session usage store only
+// remembers and reports. [LAW:one-source-of-truth] `prev === samples[samples.length - 2]` — the
 // tok/s baseline and the burn-rate history fold from the SAME owned ring, not two
 // parallel stores. tok/s reads the last pair; the sparkline reads every pair.
 export interface SpeedObservation {

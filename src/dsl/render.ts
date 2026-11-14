@@ -16,17 +16,15 @@ import type { ColorDepth, RichText, ThemeKey } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
 import type { ClockFactory } from "../template-engine/clock.js";
-import type {
-  ValidatedConfig,
-  VariableDecl,
-  CacheDecl,
-  LayoutNode,
-  ParseDecl,
-  SegmentNode,
-  SettingValue,
-  SourceDefault,
-} from "../config/dsl-types.js";
 import {
+  type ValidatedConfig,
+  type VariableDecl,
+  type CacheDecl,
+  type LayoutNode,
+  type ParseDecl,
+  type SegmentNode,
+  type SettingValue,
+  type SourceDefault,
   parseArm,
   placementSetting,
   settingsOf,
@@ -37,12 +35,15 @@ import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { configOptionDomains } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/reserved-names.js";
 import type { Derivation, VariableStore } from "../var-system/store.js";
-import type { SourceRegistry } from "../var-system/sources.js";
-import { parseDuration, type CachePolicy } from "../var-system/sources.js";
+import {
+  type SourceRegistry,
+  parseDuration,
+  type CachePolicy,
+} from "../var-system/sources.js";
 import type { SourceParse } from "../var-system/parse.js";
 import type { JsonValue } from "../var-system/types.js";
-import type { BuildLineOptions } from "../render/strip.js";
 import {
+  type BuildLineOptions,
   drawStripCells,
   stripChromeCols,
   stripSeamCols,

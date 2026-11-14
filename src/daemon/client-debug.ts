@@ -5,11 +5,12 @@
 // this is its client binding, the mirror of client-stats.ts. Like daemon-stats,
 // it does NOT spawn a daemon: introspecting a dead daemon is meaningless.
 
-import { describeFailure, requestOutcome } from "./client-transport";
-import type {
-  ClientWorld,
-  RoundTripBudgets,
-  RoundTripOutcome,
+import {
+  describeFailure,
+  requestOutcome,
+  type ClientWorld,
+  type RoundTripBudgets,
+  type RoundTripOutcome,
 } from "./client-transport";
 import type { CliPlan } from "../cli-plan";
 import type {

@@ -1,3 +1,19 @@
+// The update notice: something newer exists than the code rendering the bar,
+// and here is what to do about it. Two facts feed it — a source checkout whose
+// `src/` digest no longer matches the bundle (src/daemon/build-currency.ts) and
+// a published install behind the registry's latest release
+// (src/install/currency.ts) — and they are ONE statement to the reader: what is
+// newer, what is running, and three clicks: act (rebuild / upgrade), dismiss
+// (this session, this identity), disable (the config file, durably).
+//
+// [LAW:one-type-per-behavior] Both facts render through one `Update` and one
+// sentence shape; what differs is a table of words and a command.
+//
+// [LAW:effects-at-boundaries] `updateReading` / `updateNotice` are pure:
+// (currency samples) → the update's reading, and (update, act state, session
+// context) → the offer and the failure. The watch below is the edge: the
+// clocks, the registry fetch, the act's record, the validator registrations.
+
 import {
   effectsUrl,
   VERB_APPLY_UPDATE,
@@ -18,10 +34,13 @@ import {
   type DiagnosticLine,
   type SourcedText,
 } from "../render/diagnostics";
-import { shortDigest } from "../facts/world-state";
+import {
+  shortDigest,
+  type SourceStamp,
+  type Update,
+} from "../facts/world-state";
 import { PACKAGE_VERSION } from "../version";
 import { assessBuild, bundleStamp, type BuildCurrency } from "./build-currency";
-import { type SourceStamp } from "../facts/world-state";
 import {
   claimAct,
   endOverdue,
@@ -54,7 +73,6 @@ import {
   UPDATE_NOTICE_SESSION_KEY,
 } from "./foundations/update-keys";
 import type { Timekeeper } from "../time.js";
-import type { Update } from "../facts/world-state";
 import type {
   NoticeContext,
   UpdateNotice,

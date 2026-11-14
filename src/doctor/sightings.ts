@@ -11,10 +11,14 @@
 import type {
   FrameSighting,
   RenderSighting,
+  RoledSaid,
 } from "../daemon/foundations/sightings.js";
-import { RECENT_CLIENT_S } from "./checks.js";
-import type { RoledSaid } from "../daemon/foundations/sightings.js";
-import type { Asked, Width, UrlHandlerFacts } from "./checks.js";
+import {
+  RECENT_CLIENT_S,
+  type Asked,
+  type Width,
+  type UrlHandlerFacts,
+} from "./checks.js";
 
 // [LAW:types-are-the-program] Who delivered a link to the daemon: the URL
 // handler app, forwarding it raw in a frame of the version it spells, or

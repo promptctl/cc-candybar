@@ -16,8 +16,8 @@ import {
   VERB_DISPATCH,
   VERB_LOAD_CONFIG,
   VERB_OPEN_VSCODE,
+  SEGMENTED_VERBS,
 } from "./wire";
-import { SEGMENTED_VERBS } from "./wire";
 
 /** One link the bar drew: its visible text and its URL. */
 export interface DrawnLink {

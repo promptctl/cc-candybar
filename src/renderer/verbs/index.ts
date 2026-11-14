@@ -1,5 +1,29 @@
+// [LAW:single-enforcer] One registry that maps click verb names to their
+// handlers. Adding a new verb is one entry — no branching in the click turn
+// (src/renderer/click.ts), which does table lookup only; verb semantics live
+// in the per-verb handler functions.
+//
+// [LAW:dataflow-not-control-flow] The verb is data, the lookup is data;
+// the dispatcher runs the same operation every call (find handler, invoke
+// it). Variability lives entirely in the verb-name argument and in the
+// per-verb handler body — never in whether dispatch happens.
+//
+// [LAW:one-source-of-truth] The verb table is the single canonical list of
+// click verbs. Tests assert against this table directly so the live registry
+// and the test enumeration cannot drift.
+//
+// Multi-arg verbs (set-state) carry their args as a single slash-delimited
+// `value` string on the wire — keeping ClickRequest shape-stable at
+// protocol v3 ({verb, value}). The per-verb handler parses its own value
+// into the typed args it needs. URL format mirrors:
+//   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
+
 import { type LaunchOpts, type Launcher } from "../../proc/launcher";
-import type { Locations } from "../../config/loader/discovery";
+import {
+  type Locations,
+  durableConfig,
+  type ConfigHome,
+} from "../../config/loader/discovery";
 import type {
   SessionStateReader,
   SessionStateRW,
@@ -7,7 +31,7 @@ import type {
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
 import type { DaemonLogger } from "../../utils/logger";
-import { stateKeySeed } from "./key-seeds";
+import { stateKeySeed, configKeySeed } from "./key-seeds";
 import {
   disclosureNest,
   NO_NEST,
@@ -17,7 +41,6 @@ import {
 import { DISCLOSURE_CLOSED } from "../../config/disclosure";
 import type { Drawing, LaneSwitches } from "../../config/lanes";
 import { closingView } from "../closing-view";
-import { configKeySeed } from "./key-seeds";
 import type { Gates } from "../../daemon/foundations/gates";
 import type {
   Gate,
@@ -46,7 +69,6 @@ import {
 } from "../settings-history";
 import { type Step } from "../../renderer-interface/history-storage";
 import type { NavigationHistory } from "../navigation-history";
-import { durableConfig, type ConfigHome } from "../../config/loader/discovery";
 import {
   placementId,
   settingSpelling,
@@ -111,11 +133,18 @@ import {
   VERB_REPO_CONFIG,
   VERB_COPY_DIAGNOSTIC,
   type EvaluatedRun,
+  clickSessionOf,
+  sessionOfEffects,
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
 import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
 import type { RepoAnswer } from "../../config/loader/repo-gate";
-import type { RunRequest } from "../../renderer-interface/adapter";
+import type {
+  RunRequest,
+  AdapterToHost,
+  DoctorProbes,
+  JournalTurn,
+} from "../../renderer-interface/adapter";
 import type { DeclaredSources } from "../../renderer-interface/request-context";
 import { sessionEnv } from "../../daemon/foundations/session-env";
 import { runDeclaration, type SlashAction } from "../../config/action";
@@ -151,15 +180,29 @@ import type { ConfigTarget, RenderOrigin } from "../../config-hint";
 import { withMark } from "../../doctor/mark-book";
 import { withClicked } from "../../doctor/clicked-terminals";
 import { DoctorBusy } from "../../doctor/busy";
-import { barsOf, type ClickArrival } from "../../doctor/sightings";
-import { clickArrived, sessionWidth } from "../../doctor/sightings";
+import {
+  barsOf,
+  type ClickArrival,
+  clickArrived,
+  sessionWidth,
+  parseProbeNonce,
+} from "../../doctor/sightings";
 import { type DoctorEdge, type DoctorStores } from "../../doctor/ports";
-import type {
-  AdapterToHost,
-  DoctorProbes,
-} from "../../renderer-interface/adapter";
-import { parseProbeNonce } from "../../doctor/sightings";
 import { typeSlash, type ClaudeInputEdge } from "../../claude-input/typing";
+import {
+  BadVerbArgs,
+  DaemonClosing,
+  decodeWire,
+} from "../../daemon/foundations/verb-error";
+import {
+  parseSessionId,
+  type SessionId,
+} from "../../daemon/foundations/session-id";
+import type { IdleSpan } from "../../renderer-interface/interface";
+import {
+  CLICK_PROGRAM_TIMEOUT_MS,
+  clickFailed,
+} from "../../daemon/foundations/click-launch";
 
 // What the daemon hands everything that writes a session's state: a click's
 // verb, and the idle timer that closes its menus (`closeIdleMenus`).
@@ -181,11 +224,11 @@ export interface DaemonContext {
   // update-notice.ts), handed in by the daemon: the verb names the effect,
   // the watch that knows what is newer performs it.
   readonly applyUpdate: () => Promise<void>;
-  // [LAW:effects-at-boundaries] The doctor's edge (src/doctor/edge.ts): the
+  // [LAW:effects-at-boundaries] The doctor's edge (src/doctor/ports.ts): the
   // tmux query and the settings.json read/write, handed in so the handlers
   // below stay a fold over pure verdicts and a test drives them with fakes.
   readonly doctor: DoctorEdge;
-  // The doctor's stores, which this daemon files (src/doctor/edge.ts).
+  // The doctor's stores, which this daemon files (src/doctor/ports.ts).
   readonly doctorStores: DoctorStores;
   // Where a `doctor-probe` link records that it arrived.
   readonly probes: AdapterToHost["probes"];
@@ -199,7 +242,7 @@ export interface DaemonContext {
   // This daemon as the doctor's daemon row judges it (src/daemon/limits.ts).
   readonly serving: () => ServingDaemon;
   // [LAW:effects-at-boundaries] The tmux pane read and the typing
-  // (src/claude-input/edge.ts), handed in so a test drives them with fakes.
+  // (src/claude-input/typing.ts), handed in so a test drives them with fakes.
   readonly claudeInput: ClaudeInputEdge;
   // [LAW:one-source-of-truth] The one undo history over every settings change
   // (src/renderer/settings-history.ts). The verb table opens a journal on it
@@ -312,10 +355,10 @@ export type ClickContext = Journaled<VerbContext>;
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
 // raw wire-level `value` string and the daemon's verb context; it returns
 // nothing (clicks have no payload) once what it awaits has landed.
-// User-facing failures throw an Error;
-// the dispatcher in reply.ts converts that to a RENDER_FAILED response.
+// User-facing failures throw an Error, which the turn's classification
+// (src/daemon/foundations/verb-error.ts) answers as RENDER_FAILED.
 // Invalid-shape inputs (e.g. missing required slash-delimited subfield)
-// throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
+// throw a BadVerbArgs error, which it answers as BAD_REQUEST.
 export type VerbHandler = (value: string, ctx: ClickContext) => Promise<void>;
 
 // What a click's effect does in the turn, once anything it gathered is in hand.
@@ -336,23 +379,6 @@ const inTurn = (handler: VerbHandler): Verb => ({
   gathers: false,
   prepare: async (value) => (ctx) => handler(value, ctx),
 });
-
-import type { JournalTurn } from "../../renderer-interface/adapter";
-import {
-  BadVerbArgs,
-  DaemonClosing,
-  decodeWire,
-} from "../../daemon/foundations/verb-error";
-import {
-  parseSessionId,
-  type SessionId,
-} from "../../daemon/foundations/session-id";
-import type { IdleSpan } from "../../renderer-interface/interface";
-import { clickSessionOf, sessionOfEffects } from "../../click/wire";
-import {
-  CLICK_PROGRAM_TIMEOUT_MS,
-  clickFailed,
-} from "../../daemon/foundations/click-launch";
 export { BadVerbArgs };
 
 // ─── Argument decoders ───────────────────────────────────────────────────────
@@ -477,8 +503,8 @@ const toolbarToggle: VerbHandler = async (value, ctx) => {
 // `ValidateResult`. The body cannot fabricate a value (the `ok: true`
 // branch's `value` is the only thing it may write) and cannot proceed
 // on `ok: false` (it throws BadVerbArgs with the reason verbatim,
-// naming the failing pair so the operator can localize the typo). The
-// dispatcher in reply.ts maps BadVerbArgs to BAD_REQUEST.
+// naming the failing pair so the operator can localize the typo), which the
+// turn's classification answers as BAD_REQUEST.
 //
 // [LAW:no-silent-failure] Batch atomicity: every pair is validated
 // BEFORE any write happens. Any single failure rejects the whole
@@ -1884,6 +1910,28 @@ async function headGather(
   return leaf?.gathers ? hoisted(leaf, head!.value, ctx) : undefined;
 }
 
+// [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
+// dispatcher folds the list, running EVERY effect through the leaf table, after
+// batchAdjacentWrites has joined each run of adjacent set-state (or
+// reset-config) effects into the one batch that lands whole. The
+// effect count is data — N=1 and N=100 walk the identical loop, no plain-vs-
+// compound branch. [LAW:no-silent-failure] Every effect runs even if an
+// earlier one failed; failures accumulate in `errors`. An unknown or
+// non-leaf (e.g. nested `dispatch`) verb is a miss in LEAF_VERBS — reported,
+// never executed.
+//
+// [LAW:types-are-the-program] The aggregate PRESERVES the dispatcher's
+// input-vs-operational error classification: a leaf throws BadVerbArgs for bad
+// input (→ BAD_REQUEST) and a plain Error for an operational failure (e.g. a
+// pbcopy/open launch failure → RENDER_FAILED). If ANY effect failed
+// operationally, the whole click failed operationally (plain Error); only when
+// every failure is an input error does the aggregate stay BadVerbArgs. An
+// unknown verb is bad input — it does not flip the classification.
+//
+// [LAW:one-source-of-truth] Per-effect errors are written to session state
+// so the bar shows WHICH effect(s) failed, for the hold src/daemon/foundations/click-error.ts
+// sets. Only possible when a session ID
+// is available from a set-state or toolbar-toggle effect in the same click.
 async function foldEffects(
   rawValue: string,
   ctx: ClickContext,

@@ -17,7 +17,7 @@ import {
 import { inspect } from "node:util";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
-import { PROTOCOL_VERSION } from "./foundations/protocol";
+import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
 import {
   LANES,
   MOVING_FPS,
@@ -32,9 +32,12 @@ import { laneOffReason } from "../config/menu-places";
 import type { Timekeeper } from "../time";
 import type { SessionId } from "./foundations/session-id";
 import type { FeedStats } from "./foundations/stats-snapshot";
-import type { Refusal } from "./foundations/protocol";
-import type { FeedFrame, Level } from "../renderer-interface/adapter";
-import { WAKE_CAUSES, type WakeCause } from "../renderer-interface/adapter";
+import {
+  type FeedFrame,
+  type Level,
+  WAKE_CAUSES,
+  type WakeCause,
+} from "../renderer-interface/adapter";
 
 // Milliseconds from the start of one frame to the next: the closest a feed
 // draws a bar on a screen, and the furthest apart it draws any bar — what a

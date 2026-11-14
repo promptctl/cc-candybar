@@ -29,6 +29,7 @@ import {
   scopeOf,
   type SightedBar,
   type SightingScope,
+  sessionWidth,
 } from "./sightings.js";
 import { detectClientHints } from "../client-hints.js";
 import {
@@ -49,7 +50,6 @@ import {
   type WidthSightings,
 } from "./daemon-answer.js";
 import { gatherFacts, installFacts, productionEdge } from "./edge.js";
-import { sessionWidth } from "./sightings.js";
 import { type ConfigLoad, type InstallEdge, type DoctorEdge } from "./ports.js";
 import {
   probeUrlHandler,

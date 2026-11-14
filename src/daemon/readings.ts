@@ -19,8 +19,14 @@ import type {
   DaySums,
   SessionUsageStore,
 } from "./cache/session-usage-store.js";
-import type { SpeedObservation } from "../facts/world-state.js";
-import type { TodayFacts } from "../facts/world-state.js";
+import {
+  type SpeedObservation,
+  type TodayFacts,
+  REFRESH_LANES,
+  type RefreshLane,
+  type LaneDiagnostic,
+  shortDigest,
+} from "../facts/world-state.js";
 import type { ContextProvider } from "../segments/context.js";
 import type { MetricsFold, MetricsProvider } from "../segments/metrics.js";
 import type { TranscriptUsage } from "../segments/session.js";
@@ -34,8 +40,6 @@ import type { GitDataProvider } from "./cache/git.js";
 import type { Holds } from "../utils/holds.js";
 import { dateOf, type Instant } from "../utils/instant.js";
 import type { RefreshFaults } from "./refresh-faults.js";
-import { REFRESH_LANES, type RefreshLane } from "../facts/world-state.js";
-import type { LaneDiagnostic } from "../facts/world-state.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type { ManagedStorage } from "./cache/managed-storage.js";
 import {
@@ -45,7 +49,6 @@ import {
 } from "./source-runs.js";
 import type { JsonValue } from "../var-system/types.js";
 import { elapsedMs, type Timekeeper } from "../time";
-import { shortDigest } from "../facts/world-state.js";
 import type {
   ViewFacts,
   Refreshed,

@@ -8,24 +8,23 @@ import {
   platformProbes,
   type ChargeProbe,
 } from "./memory-report";
-import { type MemoryCharge } from "./foundations/memory-limit";
-import type { Launcher } from "../proc/launcher";
-import type { Timekeeper } from "../time";
-import type { PostMortem, ServingDaemon } from "./foundations/memory-limit";
 import {
+  type MemoryCharge,
+  type PostMortem,
+  type ServingDaemon,
   BYTES_PER_MB,
   mb,
   laterIdentity,
   approachingLimit,
   chargeWords,
   measureOf,
+  type BreachArtifact,
+  type MemoryReading,
+  type ReadCharge,
+  BREACH_ARTIFACTS,
 } from "./foundations/memory-limit";
-import type {
-  BreachArtifact,
-  MemoryReading,
-  ReadCharge,
-} from "./foundations/memory-limit";
-import { BREACH_ARTIFACTS } from "./foundations/memory-limit";
+import type { Launcher } from "../proc/launcher";
+import type { Timekeeper } from "../time";
 
 // [LAW:single-enforcer] One module owns "when does the daemon plan to die".
 // Only the memory trigger remains — idle and age limits were removed because they

@@ -8,8 +8,9 @@ import {
   PROTOCOL_VERSION,
   encodeFrame,
   makeFrameReader,
+  type Response,
+  type SubscribeRequest,
 } from "./foundations/protocol";
-import type { Response, SubscribeRequest } from "./foundations/protocol";
 import type { Lane } from "../config/lanes";
 
 // [LAW:types-are-the-program] Why a stream ended: the caller closed it, the

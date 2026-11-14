@@ -1,6 +1,6 @@
 // One render of a session, a request's or a frame's, and what it records.
 
-import { elapsedMs } from "../time.js";
+import { elapsedMs, type Timekeeper } from "../time.js";
 import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
 import {
@@ -8,7 +8,11 @@ import {
   type FileEventsWarning,
 } from "../daemon/foundations/file-events-warnings";
 import type { LauncherWarning, PipeEvent } from "../proc/launcher";
-import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import {
+  type CheckedRenderRequest,
+  type Refreshed,
+  type ViewFacts,
+} from "../renderer-interface/request-context.js";
 import { UPDATE_DISMISSED_KEY } from "../daemon/foundations/update-keys";
 import { type RenderOrigin } from "../config-hint";
 import {
@@ -43,10 +47,6 @@ import {
   refreshedFact,
   todayOf,
 } from "./render-payload.js";
-import {
-  type Refreshed,
-  type ViewFacts,
-} from "../renderer-interface/request-context.js";
 import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
 import type { WorldState } from "../facts/world-state.js";
@@ -57,13 +57,9 @@ import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
-import { type PassageFrame } from "../render/effect.js";
-import { feedsFact } from "../config/lanes.js";
+import { type PassageFrame, type EffectSessions } from "../render/effect.js";
 import {
-  type AdapterToHost,
-  type FeedFrame,
-} from "../renderer-interface/adapter.js";
-import {
+  feedsFact,
   LANE_NAMES,
   LANES,
   ANSWERING,
@@ -72,11 +68,15 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import {
+  type AdapterToHost,
+  type FeedFrame,
+  type LaneSession,
+} from "../renderer-interface/adapter.js";
+import {
   answeredClickError,
   clickErrorAt,
   type ClickErrorRecord,
 } from "../daemon/foundations/click-error.js";
-import { type LaneSession } from "../renderer-interface/adapter.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   collectDiagnostics,
@@ -101,9 +101,7 @@ import {
 
 import type { SessionState } from "./session-state";
 import type { RenderWarningRecords } from "./render-warnings.js";
-import type { EffectSessions } from "../render/effect.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
-import type { Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 import { failureOf } from "../daemon/foundations/verb-error.js";
 import {

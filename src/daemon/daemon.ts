@@ -48,8 +48,7 @@ import {
   PaneVisibility,
 } from "./pane-visibility.js";
 import { runTmuxAsync } from "../proc/tmux.js";
-import type { TmuxAtExit } from "./tmux-status.js";
-import { TmuxStatusLines } from "./tmux-status.js";
+import { type TmuxAtExit, TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
 import type { ClaudeInputEdge } from "../claude-input/typing.js";
