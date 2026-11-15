@@ -2,38 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-748",
-      "ref": "refs/pull/748/merge",
-      "sha": "f6d8aeeffa50362894d1c0c1f4e0f3706393ffc3",
-      "timestamp": "2026-11-15T00:11:48.858Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "66b6aaaf80c9bcced51090a86d2eba72303a3269",
+      "timestamp": "2026-11-15T00:17:23.076Z",
       "commits": [
         {
-          "sha": "f6d8aeeffa50362894d1c0c1f4e0f3706393ffc3",
+          "sha": "66b6aaaf80c9bcced51090a86d2eba72303a3269",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T00:10:56Z",
-          "message": "Merge c5481c21b60691954901c340bd2c720b306ed167 into 71fcc390ab9296c2d28351a24c8bc5fab3a2d6b3\n"
-        },
-        {
-          "sha": "c5481c21b60691954901c340bd2c720b306ed167",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T17:10:36-07:00",
-          "message": "test(protocol): the pin's name says it forces a deliberate edit, not that it tells a breaking bump from an additive one (candybar-step-back-8us0.p1p)\n"
-        },
-        {
-          "sha": "dafdaacfd417a85d60715f34ea441a297c03b310",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T17:08:38-07:00",
-          "message": "test(protocol): the pin's comment names every mirrored spelling and points to the constant for the cost of a bump (candybar-step-back-8us0.p1p)\n"
-        },
-        {
-          "sha": "7a9e396c24956f0965edc34222a43c73c49b794b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T17:05:31-07:00",
-          "message": "test(protocol): a test pins PROTOCOL_VERSION, so an added request kind cannot bump it (candybar-step-back-8us0.p1p)\n"
+          "timestamp": "2026-11-14T17:16:27-07:00",
+          "message": "test(protocol): a test pins PROTOCOL_VERSION, so an added request kind cannot bump it (candybar-step-back-8us0.p1p) (#748)\n\n* test(protocol): a test pins PROTOCOL_VERSION, so an added request kind cannot bump it (candybar-step-back-8us0.p1p)\n\n* test(protocol): the pin's comment names every mirrored spelling and points to the constant for the cost of a bump (candybar-step-back-8us0.p1p)\n\n* test(protocol): the pin's name says it forces a deliberate edit, not that it tells a breaking bump from an additive one (candybar-step-back-8us0.p1p)"
         }
       ]
     },
@@ -56,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-14T16:48:00-07:00",
           "message": "refactor(renderer): the host's pushes cross a process, each an adapter input answered by its reply alone (candybar-host-renderer-x96a.8rc)\n\nEvery reach of the host into the renderer is now an AdapterPush, plain\ndata checked at build time to cross a process (Crosses<T>), answered by\nan AdapterOutput: the reply of the push's own kind, or how it threw.\nrendererHost.ask is the one judge of a reply's kind; tell logs a\nfailure nothing awaits.\n\n- The feed asks for its frame and its lanes, so a frame lands later: a\n  wake while it is out is owed the next frame at the spacing, however\n  the frame ended, and a subscribe is admitted once its lanes answer,\n  opening nothing for one refused or gone meanwhile.\n- The pin owns the session's state wake, so the wake lives as long as\n  the feed.\n- Journal turns are the renderer's. The daemon's close awaits the\n  renderer's three teardown steps in today's order, and shutdown awaits\n  the close before it exits.\n- A render's wait ends when the render cache closes, said as\n  ended=closed, so a render the close interrupts holds no timer past it.\n- A heap-retainer test draws in a frame of its own, so the suspended\n  test frame's registers cannot hold the drawn store.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "71fcc390ab9296c2d28351a24c8bc5fab3a2d6b3",
-      "timestamp": "2026-11-14T22:38:03.854Z",
-      "commits": [
-        {
-          "sha": "71fcc390ab9296c2d28351a24c8bc5fab3a2d6b3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T15:37:09-07:00",
-          "message": "refactor(renderer): the renderer side is a directory, and a zones lint run both ways holds its seam (candybar-host-renderer-x96a.fro) (#746)\n\n* docs(spec): a file the renderer opens itself is not an adapter entry; the step that removes it adds its rule (candybar-host-renderer-x96a.fro)\n\n* refactor(renderer): the renderer side is a directory, and a zones lint run both ways holds its seam (candybar-host-renderer-x96a.fro)\n\nA table of zones in eslint.config.mjs (renderer, its start, shared, rest,\nroots; the longest prefix wins) and an inline rule fail any import into\nsrc/renderer/ but its start and any import out of it but shared code. It\ncertifies import direction only.\n\nThe contract moves to src/renderer-interface/ (interface, request context,\nsession-state and history ports, adapter). The renderer's modules move under\nsrc/renderer/: the verb table, the render cache and its budget, payload\nassembly, session state, the histories, render warnings, debug. Pure modules\nboth sides name move into src/daemon/foundations/ or join the shared row.\n\nAdapterToHost lists what the renderer reaches in the host and is handed in\nat the start; AdapterToRenderer lists what the host reaches in the renderer\nand is returned beside `answer`. Each entry carries its\n[LAW:effects-at-boundaries] exception. The main renderer loads its storage\nwhere the daemon did and starts once the host's parts exist, so construction\norder stays. The foundations rule and its test fold into the zones rule and\nits test.\n\n* fix(renderer): the zones rule keys modules from the repo root, the sync-launch ban covers the renderer, and moved law markers sit by their code (candybar-host-renderer-x96a.fro)\n\n- Zone keys resolve against the config's own directory, so ESLint started in\n  src/ (an editor) still holds the seam; the zone test lints from both cwds,\n  and covers the start zone's limits and a directory import through src.\n- The launchSync/runTmux ban reaches src/renderer/, where the daemon-served\n  verbs now live.\n- Headers the moves dropped are back beside their code: the verb table, the\n  click fold, typing over the tmux edge, the update notice, runtime stats,\n  the auto-compact window, and the session usage store.\n- Duplicate and mid-file imports the moves left are merged; stale pointers\n  to src/doctor/edge.ts, src/claude-input/edge.ts and reply.ts's dispatcher\n  name where the code is now.\n- The stats reply reads the renderer's stats once.\n\n* fix(renderer): only the entry reaches a root, the PR fields are shared, and a click error is held through the loaded renderer (candybar-host-renderer-x96a.fro)\n\n- The host reached src/renderer/ through a root (the doctor's data needs read\n  PR_FIELDS from the render payload). The PR field shape moves beside PrState\n  in segments/git, data-needs is shared, and rest may no longer import a root:\n  src/index.ts is the root that dispatches to them. The zone test refuses\n  every non-entry edge into a root.\n- Runs and LaneSetups held click errors through closures over parts declared\n  later in createDaemon. The hold needs only the session state the load reads,\n  so the loaded renderer offers it (AdapterToLoadedRenderer) and both owners\n  take it before the start.\n- Leftovers: two spellings of one import merged, a stale SEGMENTED_VERBS\n  pointer, and the bench suite back to main's formatting with its one moved\n  import.\n\n* fix(renderer): the zones rule fails closed and reads every import spelling, and shared shapes have one home (candybar-host-renderer-x96a.fro)\n\n- A file keyed outside the repo, or a computed import source, is refused\n  rather than called rest; modules key through realpath, so a symlinked\n  checkout keys as the modules it holds. The rule reads import = require,\n  require() and static template sources too. The zone test runs every case\n  from the root, from src/ and through a symlink.\n- Host's type moves to a shared module (src/host-facts.ts) so config-hint\n  picks from it instead of copying it; the world state names Update, not a\n  second UpdateNotice; ExplicitLoad lives with the render cache that reads it.\n- readingsHost is the one wiring of the host's refresh and cache tallies,\n  for the daemon and the test rig alike.\n- A stale DoctorStores pointer.\n\n* fix(lint): the zones rule keys a file in a directory not yet made through its nearest real ancestor (candybar-host-renderer-x96a.fro)"
         }
       ]
     }
