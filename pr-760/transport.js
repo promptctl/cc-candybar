@@ -29761,10 +29761,19 @@ var KeyedSource = class {
     }
   }
   // [LAW:single-enforcer] The one rule for a change under an entry, whether
-  // the owner's or the entry's own watch reports it: a held entry is read
-  // again; one nobody holds is not, since a hold's return re-reads it.
+  // the owner's or the entry's own watch reports it: the entry owes a re-read
+  // (`owed`). One nobody holds keeps the debt for its hold's return, so a
+  // session back from idle never draws a write it missed while away.
   heard(entry) {
-    if (entry.holders > 0) this.refresh(entry, "change");
+    entry.changed = true;
+    this.owed(entry);
+  }
+  // [LAW:no-ambient-temporal-coupling] The one place an owed change is read:
+  // whichever of a change, a landing or a hold's return finds the entry held
+  // and idle starts it, and starting any read pays the debt.
+  owed(entry) {
+    if (entry.changed && entry.holders > 0 && entry.flight === null)
+      this.refresh(entry, "change");
   }
   // Whether some home holds an entry `match` names now.
   isHeld(match) {
@@ -29831,6 +29840,7 @@ var KeyedSource = class {
       entry.changed ||= by === "change";
       return;
     }
+    entry.changed = false;
     const flight = new AbortController();
     entry.flight = flight;
     const startedAt = this.spec.clock.monotonic();
@@ -29859,15 +29869,13 @@ var KeyedSource = class {
       settle(entry, outcome);
     } finally {
       entry.revisit.landed(outcome);
-      if (entry.changed) {
-        entry.changed = false;
-        this.refresh(entry, "change");
-      }
+      this.owed(entry);
     }
   }
   hold(entry) {
     entry.holders++;
     entry.revisit.hold(true);
+    this.owed(entry);
     this.evict();
     return () => {
       entry.holders--;
@@ -54635,7 +54643,8 @@ function sourceSnapshots(parts, cache2) {
       tmuxService,
       usageStore,
       managedStorage,
-      hostService
+      hostService,
+      transcriptLanes
     },
     refreshLedger
   } = parts;
@@ -54659,7 +54668,8 @@ function sourceSnapshots(parts, cache2) {
       tmux: tmux3.held,
       host: hostService.held(),
       today: today.held,
-      pluginStorage: storage.held
+      pluginStorage: storage.held,
+      transcript: transcriptLanes.stats().held
     },
     pluginStorage: {
       folders: storage.folders,
@@ -65975,7 +65985,14 @@ var RuntimeStats = class _RuntimeStats {
           view: 0,
           pane: 0
         },
-        held: { git: 0, tmux: 0, host: 0, today: 0, pluginStorage: 0 },
+        held: {
+          git: 0,
+          tmux: 0,
+          host: 0,
+          today: 0,
+          pluginStorage: 0,
+          transcript: 0
+        },
         pluginStorage: {
           folders: 0,
           faults: { unusable: 0, refused: 0, error: 0 },

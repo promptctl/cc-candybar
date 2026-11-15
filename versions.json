@@ -4,15 +4,22 @@
     {
       "version": "pr-760",
       "ref": "refs/pull/760/merge",
-      "sha": "2e8c1c8b1c0683b7be1222b428d08de9b4a66b55",
-      "timestamp": "2026-11-15T23:02:59.114Z",
+      "sha": "bdac20eae2622077c446c13d6d127fb17c10879d",
+      "timestamp": "2026-11-15T23:16:21.493Z",
       "commits": [
         {
-          "sha": "2e8c1c8b1c0683b7be1222b428d08de9b4a66b55",
+          "sha": "bdac20eae2622077c446c13d6d127fb17c10879d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T16:02:00-07:00",
-          "message": "Merge aaec3101cbae740e97b1362515dd40ced8d74d38 into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+          "timestamp": "2026-11-15T23:15:21Z",
+          "message": "Merge 33296e98cffd3b144948c3bc4a24e887423fe9fd into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+        },
+        {
+          "sha": "33296e98cffd3b144948c3bc4a24e887423fe9fd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T16:15:10-07:00",
+          "message": "fix(collector): a change heard while nobody holds an entry is read when its hold returns, and transcript holds show in stats (candybar-skeleton-wj0c.zhh)\n\n- A keyed entry owes one re-read for a change heard since its stored read\n  began; it runs once the entry is held and no read is out, so a session back\n  from idle draws the write it missed instead of waiting out its period.\n- The stats snapshot lists the transcript lanes' held entries.\n- The demo closes the transcript lanes with the other providers.\n- SOURCES-AND-FRAMES no longer names a request as a refresh trigger.\n"
         },
         {
           "sha": "aaec3101cbae740e97b1362515dd40ced8d74d38",
