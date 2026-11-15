@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-755",
-      "ref": "refs/pull/755/merge",
-      "sha": "5fe0bf04e787322ac088b3da70c0770583c71c5d",
-      "timestamp": "2026-11-15T15:49:51.155Z",
-      "commits": [
-        {
-          "sha": "5fe0bf04e787322ac088b3da70c0770583c71c5d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T15:48:56Z",
-          "message": "Merge b7c46fbae5c970416e0b590dba500dce0579dd35 into 3aee42acb63d4aec4de6dd98eb4c2d6d28857df7\n"
-        },
-        {
-          "sha": "b7c46fbae5c970416e0b590dba500dce0579dd35",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T08:48:46-07:00",
-          "message": "fix(renderer): a storage folder another writer makes first is no fault, and the design inventory names holds, not keys (candybar-host-renderer-x96a.2r6)\n"
-        },
-        {
-          "sha": "8ecad5ce4dd9ffe1c14a83657dfb5a9d7b5c763b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T08:40:08-07:00",
-          "message": "fix(renderer): storage generations are numbered across folders, so a folder held again never reuses a closed watch's key (candybar-host-renderer-x96a.2r6)\n"
-        },
-        {
-          "sha": "fa4c524c48e134388137247cb244a1881e198481",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T08:35:42-07:00",
-          "message": "refactor(renderer): a folder's watch is the one record of its generation, and a file at its path is a fault (candybar-host-renderer-x96a.2r6)\n\nHigh review of #755. The Folder record repeated what the folder's current\nwatch holds (the identity it opened on, whether its generation ended), so it\ngoes: the next generation follows the watch it replaces, the second stat on\nopen goes with it, and nothing outlives a folder's last hold. The storage\nfolder is looked at before it is made, so a file at its path, or a read-only\nvolume refusing an existing folder, is judged truly. A served state enters the\nmap before its folders are held, so a throw cannot strand it; the host alone\nkeys each folder once.\n"
-        },
-        {
-          "sha": "c0caff0e59b7313283503492f9842e8a0965f840",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T08:20:42-07:00",
-          "message": "refactor(renderer): a build's storage folders cross as holds, and session reads are keyed by folder (candybar-host-renderer-x96a.2r6)\n\nThe last in-process reach, the storage owner, leaves the adapter, so every\nentry the renderer reaches in the host crosses a process and the crossing\ncheck covers all of it.\n\nA build names its storage folders; it keys and watches none. The render cache\ntells the host's storage owner which folders each served state's latest load\nnames (`storage.hold`), at every load, built, kept or failed, and releases\nthem when the state is reclaimed. So a folder's watch lives as long as a build\nnames it, never as long as a view or a session, and every config load is a\nlost or faulted folder's recovery, as before. A reload holds its successor\nbefore it releases its predecessor, so a folder both name stays open.\n\nThe generation is the owner's own fact: session reads are keyed by folder, a\nlane carries across a generation and is re-read when it moves, and the owner\nmakes only the storage folder, never its plugin's folder.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "3aee42acb63d4aec4de6dd98eb4c2d6d28857df7",
-      "timestamp": "2026-11-15T14:30:47.775Z",
+      "sha": "3d01afd006325c4b6298b3fd91cf2b77b5fae42b",
+      "timestamp": "2026-11-15T15:56:16.916Z",
       "commits": [
         {
-          "sha": "3aee42acb63d4aec4de6dd98eb4c2d6d28857df7",
+          "sha": "3d01afd006325c4b6298b3fd91cf2b77b5fae42b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T07:29:45-07:00",
-          "message": "refactor(renderer): the draw reads no host part: its host facts arrive as world state, push arguments and watch pushes (candybar-host-renderer-x96a.gbw) (#753)\n\n* refactor(renderer): the draw reads no host part: its host facts arrive as world state, push arguments and watch pushes (candybar-host-renderer-x96a.gbw)\n\nThe update notice is folded in the renderer from world state, which carries\nthe act state and the act files' read failure beside the update. File-event\ndelivery, the launch lifeline and the latest pipe event are daemon\ndiagnostics the collector stamps into every session's document; the pipe\nevent's hold is judged at the draw's instant. A request event carries the\nfeed facts it draws with, the cache tallies are the host's render event's,\nand the renderer's watches are notices answered by watch pushes, with the\nkeep-or-rebind rule shared by both sides. Only managed storage is left in\nprocess.\n\n* fix(renderer): the host's facts reach the draw current: deafness, a click's pane, the daemon's facts (candybar-host-renderer-x96a.gbw)\n\nHigh review of #753:\n- A watch deaf at its acquire, or deaf again for another reason, wakes its\n  holder: the registry tells a change of reason, and a renderer push whose\n  deafness moved is heard as an unknown window.\n- A click and an idle close carry the host's newest request of their session,\n  so a lane click after the session retired still follows its pane; the\n  renderer's own copy of the request is gone.\n- The daemon's facts are a typed field of the world state, read once for every\n  session apart from its owners: owners that fail leave them current, and a\n  move of them re-reads no owner. Its faults no longer pass through the\n  session's diagnostics to be sorted out again by every draw.\n- An update act's success publishes its sampled build and its end in one\n  action.\n- The one-type-per-behavior marker returns to the update offer.\n\n* fix(daemon): the daemon's facts are read whole, and the launcher's observer finds what it restates (candybar-host-renderer-x96a.gbw)\n\nMedium review of #753:\n- The daemon's facts are three boxes spread into one value: their read has\n  no failure arm to keep, so a stamp's only failure is its owners', and a\n  daemon fact can no longer freeze a session's readings.\n- The watcher registry, file-event delivery and the daemon's faults are\n  built before the launcher, whose observer restates the faults.\n- The update watch's act box is `actsRead`, no longer shadowed by each\n  read it publishes.\n- A storage window's paths are looked up in its list.\n\n* refactor(watch): a deafness moved is judged by structural equality, the one rule its other plain data already uses (candybar-host-renderer-x96a.gbw)"
+          "timestamp": "2026-11-15T08:55:20-07:00",
+          "message": "refactor(renderer): a build's storage folders cross as holds, and session reads are keyed by folder (candybar-host-renderer-x96a.2r6) (#755)\n\n* refactor(renderer): a build's storage folders cross as holds, and session reads are keyed by folder (candybar-host-renderer-x96a.2r6)\n\nThe last in-process reach, the storage owner, leaves the adapter, so every\nentry the renderer reaches in the host crosses a process and the crossing\ncheck covers all of it.\n\nA build names its storage folders; it keys and watches none. The render cache\ntells the host's storage owner which folders each served state's latest load\nnames (`storage.hold`), at every load, built, kept or failed, and releases\nthem when the state is reclaimed. So a folder's watch lives as long as a build\nnames it, never as long as a view or a session, and every config load is a\nlost or faulted folder's recovery, as before. A reload holds its successor\nbefore it releases its predecessor, so a folder both name stays open.\n\nThe generation is the owner's own fact: session reads are keyed by folder, a\nlane carries across a generation and is re-read when it moves, and the owner\nmakes only the storage folder, never its plugin's folder.\n\n* refactor(renderer): a folder's watch is the one record of its generation, and a file at its path is a fault (candybar-host-renderer-x96a.2r6)\n\nHigh review of #755. The Folder record repeated what the folder's current\nwatch holds (the identity it opened on, whether its generation ended), so it\ngoes: the next generation follows the watch it replaces, the second stat on\nopen goes with it, and nothing outlives a folder's last hold. The storage\nfolder is looked at before it is made, so a file at its path, or a read-only\nvolume refusing an existing folder, is judged truly. A served state enters the\nmap before its folders are held, so a throw cannot strand it; the host alone\nkeys each folder once.\n\n* fix(renderer): storage generations are numbered across folders, so a folder held again never reuses a closed watch's key (candybar-host-renderer-x96a.2r6)\n\n* fix(renderer): a storage folder another writer makes first is no fault, and the design inventory names holds, not keys (candybar-host-renderer-x96a.2r6)"
         }
       ]
     }
