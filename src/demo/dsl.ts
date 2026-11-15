@@ -304,6 +304,7 @@ try {
   // The providers own their timers and watchers; all of them are released so
   // the process ends when the frames do.
   providers.gitProvider.close();
+  providers.transcriptLanes.close();
   providers.usageStore.close();
   providers.tmuxService.close();
   providers.hostService.close();

@@ -50,7 +50,14 @@ const SOURCES: SourceSnapshots = {
     view: 2,
     pane: 2,
   },
-  held: { git: 1, tmux: 1, host: 2, today: 1, pluginStorage: 1 },
+  held: {
+    git: 1,
+    tmux: 1,
+    host: 2,
+    today: 1,
+    pluginStorage: 1,
+    transcript: 3,
+  },
   pluginStorage: {
     folders: 1,
     faults: { unusable: 0, refused: 1, error: 0 },
@@ -410,7 +417,7 @@ describe("formatStats", () => {
       "homes         daemon:1 configDir:1 repo:4 directory:3 session:10 view:2 pane:2",
     );
     expect(out).toContain(
-      "held          git:1 tmux:1 host:2 today:1 pluginStorage:1",
+      "held          git:1 tmux:1 host:2 today:1 pluginStorage:1 transcript:3",
     );
     expect(out).toContain(
       "plugin storage folders=1 lost=1 faults unusable:0 refused:1 error:0",

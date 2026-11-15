@@ -486,6 +486,7 @@ function sourceSnapshots(
       usageStore,
       managedStorage,
       hostService,
+      transcriptLanes,
     },
     refreshLedger,
   } = parts;
@@ -510,6 +511,7 @@ function sourceSnapshots(
       host: hostService.held(),
       today: today.held,
       pluginStorage: storage.held,
+      transcript: transcriptLanes.stats().held,
     },
     pluginStorage: {
       folders: storage.folders,
