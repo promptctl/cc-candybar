@@ -951,7 +951,7 @@ describe("the production edge's readers", () => {
     // is removed from what the child inherits.
     expect(sessionEnv({ ...facts, claudeConfigDir: undefined })).toHaveProperty(
       "CLAUDE_CONFIG_DIR",
-      undefined,
+      null,
     );
     expect(
       sessionEnv({ ...facts, claudeConfigDir: "/u/.claude.zai" })

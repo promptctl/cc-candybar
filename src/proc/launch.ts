@@ -140,10 +140,13 @@ function checkRateLimit(
 // directly, which is a second clock: under a realm boundary (Jest's sandbox
 // copies `process.env` per test file) the two diverge, and a PATH the test set
 // for a `shell` source never reached the shell it spawned
-// (brandon-custom-segments-g5z.3's doc stubs ran as 127). An overlay entry set
-// to `undefined` removes that variable: node's spawn skips undefined values.
+// (brandon-custom-segments-g5z.3's doc stubs ran as 127). An overlay entry of
+// null removes that variable: node's spawn skips undefined values.
 function childEnv(scope: LaunchScope, opts: LaunchOpts): NodeJS.ProcessEnv {
-  return { ...scope.inherited, ...opts.envOverlay };
+  const env: NodeJS.ProcessEnv = { ...scope.inherited };
+  for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
+    env[name] = value ?? undefined;
+  return env;
 }
 
 // [LAW:one-source-of-truth] Whoever aborted a signal said why when they did.

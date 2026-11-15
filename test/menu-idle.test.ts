@@ -494,7 +494,7 @@ const IDLE = {
   firedAt: instantOf(new Date(0)),
   idleS: 30,
   timeoutS: 30,
-  confirm: () => true,
+  confirm: async () => true,
 };
 
 describe("the close is the write the door's ✕ makes, on a click's own path", () => {

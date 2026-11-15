@@ -1574,6 +1574,7 @@ test("a frame whose render threw is the failure's Frame, a still bar in the erro
   const frame = renderFrame(parts, S, 30, instantOf(new Date(START_MS)), {
     following: new Set(["band"]),
     feeds: UNFOLLOWED_FEEDS,
+    idleSince: null,
   })!;
   expect(frame.bar).toEqual(renderFailedFrame("the view would not open"));
   expect(frame.bar.nextChange).toBe(Infinity);

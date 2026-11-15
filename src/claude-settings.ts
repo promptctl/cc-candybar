@@ -62,6 +62,15 @@ export function claudeManagedSettingsDir(platform: NodeJS.Platform): string {
   }
 }
 
+// [LAW:one-source-of-truth] The managed settings directory a daemon reads,
+// under the environment it was handed: test setup moves it so no test reads
+// the host's policy.
+export const claudeManagedSettingsDirIn = (
+  env: Readonly<Record<string, string | undefined>>,
+): string =>
+  env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ??
+  claudeManagedSettingsDir(process.platform);
+
 // The project-local settings file: the user's own, beside the project's
 // shared `.claude/settings.json` and over it.
 export const projectLocalSettingsFile = (projectDir: string): string =>

@@ -43,7 +43,7 @@ import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
 } from "../src/config/disclosure";
-import { clickUrl, effectsOf } from "./helpers/click";
+import { asyncSightings, clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import {
   VERB_DOCTOR_FIX,
@@ -153,7 +153,6 @@ function doctorBar(
   const settingsPath = path.join(dir, "settings.json");
   let probes = 0;
   const doctor: DoctorEdge = {
-    install: HEALTHY_INSTALL_EDGE,
     ...healthyDaemonEdge(),
     ...healthyDataEdge(),
     ...noManagedSettings(),
@@ -181,8 +180,8 @@ function doctorBar(
     ...rig.ctx,
     doctor,
     doctorStores: { ...emptyStores(), clicked },
-    clients,
-    serving: () => serving,
+    clients: asyncSightings(clients),
+    serving: async () => serving,
     log: (level, message) =>
       logs.push(level === "warn" ? `warn: ${message}` : message),
   };

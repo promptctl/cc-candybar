@@ -18,7 +18,7 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import { type LaunchOpts, type Launcher } from "../../proc/launcher";
+import type { ClickLaunch } from "../../renderer-interface/adapter";
 import {
   type Locations,
   durableConfig,
@@ -143,13 +143,11 @@ import type { RepoAnswer } from "../../config/loader/repo-gate";
 import type {
   RunRequest,
   AdapterToHost,
-  DoctorProbes,
 } from "../../renderer-interface/adapter";
 import type { DeclaredSources } from "../../renderer-interface/request-context";
 import { sessionEnv } from "../../daemon/foundations/session-env";
 import { runDeclaration, type SlashAction } from "../../config/action";
 import type { SlashLine } from "../../claude-input/slash-line";
-import type { ServingDaemon } from "../../daemon/foundations/memory-limit";
 import {
   parseClientHints,
   type ClientHints,
@@ -188,7 +186,13 @@ import {
   parseProbeNonce,
 } from "../../doctor/sightings";
 import { type DoctorEdge, type DoctorStores } from "../../doctor/ports";
-import { typeSlash, type ClaudeInputEdge } from "../../claude-input/typing";
+import { typeSlash } from "../../claude-input/typing";
+import {
+  applyFix,
+  gatherFacts,
+  oneAskPerClick,
+  readStores,
+} from "../../doctor/gather";
 import {
   BadVerbArgs,
   DaemonClosing,
@@ -199,10 +203,7 @@ import {
   type SessionId,
 } from "../../daemon/foundations/session-id";
 import type { IdleSpan } from "../../renderer-interface/interface";
-import {
-  CLICK_PROGRAM_TIMEOUT_MS,
-  clickFailed,
-} from "../../daemon/foundations/click-launch";
+import { clickFailed } from "../../daemon/foundations/click-launch";
 
 // What the daemon hands everything that writes a session's state: a click's
 // verb, and the idle timer that closes its menus (`closeIdleMenus`).
@@ -213,8 +214,8 @@ export interface DaemonContext {
   // [LAW:effects-at-boundaries] The daemon's clock.
   readonly now: () => Instant;
   readonly log: (level: "info" | "warn" | "error", msg: string) => void;
-  // Who a click's programs belong to.
-  readonly launcher: Launcher;
+  // A click's launch, which the host performs.
+  readonly launch: AdapterToHost["launch"];
   // The state directory whose answers book a click reads and records in.
   readonly stateDir: string;
   // Where the user's config and installed plugins live: a click's write
@@ -224,26 +225,25 @@ export interface DaemonContext {
   // update-notice.ts), handed in by the daemon: the verb names the effect,
   // the watch that knows what is newer performs it.
   readonly applyUpdate: () => Promise<void>;
-  // [LAW:effects-at-boundaries] The doctor's edge (src/doctor/ports.ts): the
-  // tmux query and the settings.json read/write, handed in so the handlers
-  // below stay a fold over pure verdicts and a test drives them with fakes.
+  // [LAW:effects-at-boundaries] The doctor's edge (src/doctor/ports.ts): its
+  // reads of the machine and the config load, handed in so the handlers below
+  // stay a fold over pure verdicts and a test drives them with fakes.
   readonly doctor: DoctorEdge;
+  // The install check's facts, which the host reads.
+  readonly installFacts: AdapterToHost["doctor"]["install"];
   // The doctor's stores, which this daemon files (src/doctor/ports.ts).
   readonly doctorStores: DoctorStores;
   // Where a `doctor-probe` link records that it arrived.
   readonly probes: AdapterToHost["probes"];
-  // [LAW:effects-at-boundaries] The doctor's world probes, each over the edge
-  // or the stores it is handed.
-  readonly doctorProbes: DoctorProbes;
   // Which client drew each session's bar, as this process saw it render, and
   // the bundle this daemon runs.
   readonly clients: AdapterToHost["renderSightings"];
   readonly bundle: string;
   // This daemon as the doctor's daemon row judges it (src/daemon/limits.ts).
-  readonly serving: () => ServingDaemon;
-  // [LAW:effects-at-boundaries] The tmux pane read and the typing
-  // (src/claude-input/typing.ts), handed in so a test drives them with fakes.
-  readonly claudeInput: ClaudeInputEdge;
+  readonly serving: AdapterToHost["serving"];
+  // [LAW:effects-at-boundaries] The typing of a slash line into a pane
+  // (src/claude-input/typing.ts), which the host performs.
+  readonly typeSlash: AdapterToHost["typeSlash"];
   // [LAW:one-source-of-truth] The one undo history over every settings change
   // (src/renderer/settings-history.ts). The verb table opens a journal on it
   // around each click, so a handler records by writing, never by remembering.
@@ -316,13 +316,21 @@ export interface VerbContext extends DaemonContext {
   readonly gatherTook: (ms: number) => void;
   readonly turnWaited: (ms: number) => void;
   // Whether the client that sent THIS click has left.
-  readonly clientGone: () => boolean;
+  readonly clientGone: () => Promise<boolean>;
 }
 
 // What only the turn may wait on: a handler reaches a launch through `launch`,
 // `typing`, `gather` or `applyUpdate`, each bound to the turn, so it cannot await one the
-// daemon's close would not stop it after.
-type TurnBound = "launcher" | "doctor" | "claudeInput" | "applyUpdate";
+// daemon's close would not stop it after. The doctor's reads of the host are
+// the gather's alone.
+type TurnBound =
+  | "launch"
+  | "doctor"
+  | "typeSlash"
+  | "applyUpdate"
+  | "serving"
+  | "clients"
+  | "installFacts";
 
 // What a helper reads, from either side of the turn.
 type Unbound = Omit<VerbContext, TurnBound>;
@@ -333,10 +341,7 @@ export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
   readonly navigating: SessionStateRW;
   // [LAW:single-enforcer] Every await of a handler is one of these four: the
   // click's turn answers whether it may go on (JournalTurn.landed).
-  readonly launch: (
-    opts: Omit<LaunchOpts, "timeoutMs">,
-    what: string,
-  ) => Promise<void>;
+  readonly launch: (opts: ClickLaunch, what: string) => Promise<void>;
   readonly typing: (
     hint: ClientHints["tmux"],
     line: SlashLine,
@@ -406,17 +411,13 @@ function oneArg(value: string): string {
 // [LAW:one-type-per-behavior] A click's launch of a program it waits out —
 // the clipboard, an editor — each of which hands off and exits.
 export async function clickLaunch(
-  launcher: Launcher,
-  opts: Omit<LaunchOpts, "timeoutMs">,
+  launch: AdapterToHost["launch"],
+  opts: ClickLaunch,
   what: string,
   log: DaemonLogger,
 ): Promise<void> {
-  // [LAW:no-ambient-temporal-coupling] A click holds the daemon-wide turn while
-  // it waits, so the bound is no option: it is what gives the turn back.
-  const result = await launcher.launch({
-    ...opts,
-    timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
-  });
+  // The host bounds it by the click's timeout (`clickLaunchVia`).
+  const result = await launch(opts);
   if (result.ok) return;
   clickFailed(result, what, log);
 }
@@ -1388,7 +1389,7 @@ function writeReport(ctx: Unbound, sid: SessionId, facts: DoctorFacts): void {
 // [LAW:no-ambient-temporal-coupling] One gather: a snapshot taken for one
 // config, since config chooses what is probed (the glyphs, the data needs).
 interface ClickGather {
-  readonly facts: Awaited<ReturnType<DoctorProbes["gatherFacts"]>>;
+  readonly facts: Awaited<ReturnType<typeof gatherFacts>>;
   readonly install: DoctorFacts["install"];
   // The gather that holds for the config as it stands: this one, or a new one
   // over it, so a report never judges one config on probes for another.
@@ -1412,21 +1413,22 @@ async function clickGather(
     sessionId: sid,
     via: ctx.arrival.via,
   } as const;
-  const said = ctx.clients.ofSession(sid, ctx.now());
+  const said = await ctx.clients.ofSession(sid, ctx.now());
+  const serving = await ctx.serving();
   let facts: ClickGather["facts"];
   try {
-    facts = await ctx.doctorProbes.gatherFacts(
+    facts = await gatherFacts(
       { ...doctor, loadConfig: () => load },
       sessionHints(ctx, sid),
       sessionOrigin(ctx, sid),
       (key) => ctx.sessionState.get(sid, key),
-      { kind: "ok", value: ctx.serving() },
+      { kind: "ok", value: serving },
       { kind: "ok", value: said.map((s) => s.rateLimits) },
       { kind: "ok", value: said.map((s) => s.transcript) },
       scope,
       { kind: "ok", value: barsOf(scope, said) },
       sessionWidth(sid, said),
-      ctx.doctorProbes.readStores(ctx.doctorStores),
+      readStores(ctx.doctorStores),
     );
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
@@ -1436,8 +1438,7 @@ async function clickGather(
     facts,
     // The client that drew the bar this click came from, and the daemon the
     // click reached — this process.
-    install: ctx.doctorProbes.installFacts(
-      doctor.install,
+    install: await ctx.installFacts(
       ctx.bundle,
       said.map((s) => s.client),
     ),
@@ -1459,7 +1460,7 @@ const gatherClick = (
   ctx: VerbContext,
   sid: SessionId,
 ): Promise<ClickGather> => {
-  const doctor = ctx.doctorProbes.oneAskPerClick(ctx.doctor);
+  const doctor = oneAskPerClick(ctx.doctor);
   return clickGather(
     ctx,
     sid,
@@ -1478,7 +1479,7 @@ async function clickFacts(
   gathered: ClickGather,
 ): Promise<DoctorFacts> {
   const { facts, install } = await ctx.gather(gathered.current);
-  const stores = ctx.doctorProbes.readStores(ctx.doctorStores);
+  const stores = readStores(ctx.doctorStores);
   const read = {
     ...facts,
     marks: stores.marks,
@@ -1580,7 +1581,7 @@ const doctorFix: Verb = {
           `doctor-fix: ${check.label} — ${verdict.ok ? "nothing to fix" : verdict.reason}`,
         );
       }
-      const after = c.doctorProbes.applyFix(c.doctorStores, verdict.fix, facts);
+      const after = applyFix(c.doctorStores, verdict.fix, facts);
       if (after.kind === "failed") {
         throw new BadVerbArgs(`doctor-fix: ${check.label} — ${after.reason}`);
       }
@@ -2049,8 +2050,8 @@ async function journaled<C extends DaemonContext>(
     "launch" | "typing" | "applyUpdate"
   > = {
     launch: (opts, what) =>
-      turn.landed(clickLaunch(ctx.launcher, opts, what, ctx.log)),
-    typing: (hint, line) => turn.landed(typeSlash(ctx.claudeInput, hint, line)),
+      turn.landed(clickLaunch(ctx.launch, opts, what, ctx.log)),
+    typing: (hint, line) => turn.landed(typeSlash(ctx.typeSlash, hint, line)),
     applyUpdate: () => turn.landed(ctx.applyUpdate()),
   };
   try {
@@ -2170,7 +2171,7 @@ export interface IdleClose extends IdleSpan {
   // Whether the close goes ahead, read in its turn: the session still known
   // idle since the timer fired, which a click, or its record's eviction, ends.
   // When it does, the clock's record follows it.
-  readonly confirm: () => boolean;
+  readonly confirm: () => Promise<boolean>;
 }
 
 // [LAW:single-enforcer] The idle timer's close (brandon-menus-sjhy.my3) takes
@@ -2189,11 +2190,11 @@ export function closeIdleMenus(
     {
       waited: (ms) =>
         ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
-      gone: () => false,
+      gone: async () => false,
     },
     (turn) =>
       journaled(sid, ctx, turn, async (c) => {
-        if (!idle.confirm()) {
+        if (!(await turn.landed(idle.confirm()))) {
           c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
           return;
         }

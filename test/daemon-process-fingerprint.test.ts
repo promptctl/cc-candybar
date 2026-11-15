@@ -68,7 +68,7 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
   // `ps` renders it deterministically — so the subprocess must pin BOTH the
   // locale (strftime format) and the timezone (localtime rendering).
   test("pins LC_ALL=C and TZ=UTC on the ps subprocess (locale- and tz-independent token)", async () => {
-    let seenEnv: NodeJS.ProcessEnv | undefined;
+    let seenEnv: Readonly<Record<string, string | null>> | undefined;
     const capture: Launcher["launch"] = async (opts) => {
       seenEnv = opts.envOverlay;
       return okStdout("Thu Jul  9 05:04:25 2026");

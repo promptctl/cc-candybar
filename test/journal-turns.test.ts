@@ -2,6 +2,7 @@
 // its `copy` launch; the click-path cases drive `replyTo`, the daemon's real
 // click arm.
 
+import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { fieldOf } from "../src/utils/logfmt";
 import { RuntimeStats } from "../src/daemon/stats";
 import { JournalTurns } from "../src/renderer/journal-turns";
@@ -49,7 +50,7 @@ const IDLE = {
   firedAt: instantOf(new Date(0)),
   idleS: 30,
   timeoutS: 30,
-  confirm: () => true,
+  confirm: async () => true,
 };
 
 function gate(): { wait: Promise<void>; open: () => void } {
@@ -76,13 +77,10 @@ function parkedClick(
     { verb: VERB_COPY, args: ["x"] },
     { verb: VERB_SET_STATE, args: [SID, "endcaps", style] },
   ]);
-  const launcher = {
-    ...ctx.launcher,
-    launch: () => parked.then(() => LAUNCHED),
-  } as Launcher;
+  const launch = () => parked.then(() => LAUNCHED);
   return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), {
     ...ctx,
-    launcher,
+    launch,
   });
 }
 
@@ -163,7 +161,7 @@ describe("the idle close decides in its turn", () => {
           sid,
           {
             ...closing,
-            confirm: () => idle.confirmClose(sid, closing.firedAt),
+            confirm: async () => idle.confirmClose(sid, closing.firedAt),
           },
           ctx,
         );
@@ -197,10 +195,7 @@ describe("the idle close decides in its turn", () => {
     // Another session holds the turn past this session's deadline.
     const other = VERBS.get(VERB_COPY)!("x", {
       ...ctx,
-      launcher: {
-        ...ctx.launcher,
-        launch: () => held.wait.then(() => LAUNCHED),
-      } as Launcher,
+      launch: () => held.wait.then(() => LAUNCHED),
     });
     await drain();
     m.advance(30);
@@ -226,10 +221,7 @@ describe("the idle close decides in its turn", () => {
     m.idle.observe(SID, m.at(), true, 30);
     const other = VERBS.get(VERB_COPY)!("x", {
       ...ctx,
-      launcher: {
-        ...ctx.launcher,
-        launch: () => held.wait.then(() => LAUNCHED),
-      } as Launcher,
+      launch: () => held.wait.then(() => LAUNCHED),
     });
     await drain();
     m.advance(30);
@@ -548,7 +540,7 @@ describe("a click's real launch", () => {
         }),
     } as Launcher;
     await expect(
-      VERBS.get(VERB_COPY)!("x", { ...ctx, launcher: hung }),
+      VERBS.get(VERB_COPY)!("x", { ...ctx, launch: clickLaunchVia(hung) }),
     ).rejects.toThrow(/pbcopy failed/);
     expect(turns.getStats().holder).toBeNull();
   });
@@ -574,7 +566,10 @@ describe("a click's real launch", () => {
     let ticks = 0;
     const ticking = setInterval(() => ticks++, 10);
     const started = performance.now();
-    await VERBS.get(VERB_COPY)!("x", { ...ctx, launcher: holder });
+    await VERBS.get(VERB_COPY)!("x", {
+      ...ctx,
+      launch: clickLaunchVia(holder),
+    });
     clearInterval(ticking);
     expect(performance.now() - started).toBeLessThan(2500);
     expect(ticks).toBeGreaterThan(0);

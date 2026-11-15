@@ -6,7 +6,6 @@ import type { CheckedRenderRequest } from "../renderer-interface/request-context
 import type { FrameFeeds } from "./frame-feed.js";
 import type { LaneSetups } from "./lane-setup.js";
 import type { LimitsHandle } from "./limits";
-import type { LinkSigner } from "../click/link-signer.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { RenderPayloadDeps } from "./readings";
 import type { RenderSightings } from "./render-sightings";
@@ -45,7 +44,6 @@ export interface DaemonParts {
   readonly fileEvents: FileEventDelivery;
   readonly payloadProviders: RenderPayloadDeps;
   readonly menuIdle: MenuIdle;
-  readonly linkSigner: LinkSigner;
   readonly runs: Runs;
   // [LAW:single-enforcer] The daemon's one owner of every declared source's
   // runs, which the stats reply reads.

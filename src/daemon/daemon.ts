@@ -36,7 +36,7 @@ import { SourceRuns } from "./source-runs";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, type LimitsDeps } from "./limits";
-import type { DoctorEdge, DoctorStores } from "../doctor/ports";
+import type { DoctorMachineEdge, DoctorStores } from "../doctor/ports";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
 import { Collector } from "./collector.js";
@@ -50,7 +50,8 @@ import {
 import { runTmuxAsync } from "../proc/tmux.js";
 import { type TmuxAtExit, TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
-import type { ClaudeInputEdge } from "../claude-input/typing.js";
+import { typeInPane, type ClaudeInputEdge } from "../claude-input/typing.js";
+import { clickLaunchVia } from "./foundations/click-launch.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import { instantAt, type Instant } from "../utils/instant.js";
@@ -58,13 +59,7 @@ import { parseFrame } from "../render/frame.js";
 import { rendererHost } from "./renderer-host.js";
 import { loadMainRenderer } from "../renderer/main.js";
 import { readingsHost } from "./readings.js";
-import {
-  applyFix,
-  gatherFacts,
-  installFacts,
-  oneAskPerClick,
-  readStores,
-} from "../doctor/edge.js";
+import { installFacts } from "../doctor/edge.js";
 import { ClicksInFlight } from "./clicks-in-flight.js";
 import { closeByTurn, MenuIdle } from "./menu-idle.js";
 import type { SessionId } from "./foundations/session-id.js";
@@ -111,12 +106,8 @@ export interface DaemonAdapters {
   readonly storage: (log: DaemonLogger) => DaemonStorage;
   // The doctor's stores, which this daemon files.
   readonly doctorStores: DoctorStores;
-  // The doctor's reads of the machine, over the config load it is handed.
-  readonly doctorEdge: (
-    launcher: Launcher,
-    loadConfig: DoctorEdge["loadConfig"],
-    host: Host,
-  ) => DoctorEdge;
+  // The doctor's reads of the machine.
+  readonly doctorEdge: (launcher: Launcher, host: Host) => DoctorMachineEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
   // What the daemon asks the machine about a pid: whether a process is there, and
   // when it started.
@@ -286,9 +277,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const storage = inputs.storage(log);
   const loadedRenderer = loadMainRenderer({
     clock,
-    log,
     now: instant,
-    storage,
+    storage: { ...storage, doctor: inputs.doctorStores },
+    linkSigner: inputs.linkSigner,
     stateDir: paths.state,
     locations: locs,
     env: host.env,
@@ -381,9 +372,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         `menu-idle: close failed (session=${sessionId}): ${failure.detail}`,
       ),
   });
-  // [LAW:single-enforcer] The one signer of every `run` link this daemon draws
-  // and the one that verifies them on the click, over the state directory's key.
-  const linkSigner = inputs.linkSigner;
   // [LAW:one-source-of-truth] The host parts' one write of a click error into
   // the session's state: a run's end, a lane setup's failure.
   const holdClickError = (sessionId: SessionId, text: string, at: Instant) =>
@@ -455,7 +443,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
     frame: async (sessionId, fps, at, following, feeds) => {
       const { frame } = await parts.renderer.ask(
-        { kind: "frame", session: sessionId, fps, following, feeds },
+        {
+          kind: "frame",
+          session: sessionId,
+          fps,
+          following,
+          feeds,
+          idleSince: menuIdle.since(sessionId, at) ?? null,
+        },
         at,
       );
       // [LAW:parse-dont-validate] The receiving edge of a feed frame.
@@ -611,37 +606,70 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
 
   const clicks = new ClicksInFlight();
+  const doctorEdge = inputs.doctorEdge(launcher, host);
+  const claudeInput = inputs.claudeInput(launcher);
+  const readings = readingsHost(payloadProviders);
   // [LAW:one-way-deps] The main renderer's start, handed the host's parts it
   // reaches: the compiler checks each against its entry in `AdapterToHost`
   // here, so no renderer file names a host type.
   const renderer = loadedRenderer.start({
+    // [LAW:effects-at-boundaries] exception: each reach below that crosses is
+    // the host's part in its crossing shape: a notice, or an awaited call.
+    wake: (sessionId, cause) => frameFeeds.wake(sessionId, cause),
+    log,
+    launch: clickLaunchVia(launcher),
+    typeSlash: typeInPane(claudeInput),
+    applyUpdate: () => updateWatch.act(),
+    runs: {
+      start: (run) => runs.start(run),
+      refused: (sessionId, action, reason) =>
+        runs.refused(sessionId, action, reason),
+    },
+    refresh: readings.refresh,
+    doctor: {
+      probeTmux: doctorEdge.probeTmux,
+      remoteLogin: doctorEdge.remoteLogin,
+      fontInUse: doctorEdge.fontInUse,
+      daemons: doctorEdge.daemons,
+      forge: doctorEdge.forge,
+      transcript: doctorEdge.transcript,
+      install: async (daemonBundle, clients) =>
+        installFacts(doctorEdge.install, daemonBundle, clients),
+    },
+    laneSetups: {
+      noted: (session, switches) => laneSetups.noted(session, switches),
+      clicked: (sessionId, session, before, after) =>
+        laneSetups.clicked(sessionId, session, before, after),
+    },
+    tmuxStatusLines: {
+      observe: ({ sessionId, tmux, on }) =>
+        tmuxStatusLines.observe(sessionId, tmux, on),
+    },
+    menuIdle: {
+      clicked: (sessionId, at) => menuIdle.clicked(sessionId, at),
+      clickArrived: (sessionId) => menuIdle.clickArrived(sessionId),
+      clickSettled: (sessionId) => menuIdle.clickSettled(sessionId),
+      observe: (sessionId, at, shown, timeoutS) =>
+        menuIdle.observe(sessionId, at, shown, timeoutS),
+      confirmClose: async (sessionId, firedAt) =>
+        menuIdle.confirmClose(sessionId, firedAt),
+    },
+    clicks: { gone: async (click) => clicks.gone(click) },
+    serving: async () => limits.serving(),
+    renderSightings: {
+      ofSession: async (sessionId, now) =>
+        renderSightings.ofSession(sessionId, now),
+    },
+    probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
+    // [LAW:effects-at-boundaries] exception: the parts the renderer still
+    // reaches in process.
     frameFeeds,
     updateWatch,
     fileEvents,
-    menuIdle,
     launcher,
-    laneSetups,
-    tmuxStatusLines,
-    clicks,
-    ...readingsHost(payloadProviders),
+    cacheTallies: readings.cacheTallies,
     managedStorage,
     watchers: watcherRegistry,
-    linkSigner,
-    runs,
-    serving: () => limits.serving(),
-    renderSightings,
-    probes: handlerProbes,
-    doctor: {
-      gatherFacts,
-      applyFix,
-      installFacts,
-      readStores,
-      oneAskPerClick,
-      edge: (loadConfig) => inputs.doctorEdge(launcher, loadConfig, host),
-      stores: doctorStores,
-    },
-    claudeInput: inputs.claudeInput(launcher),
-    applyUpdate: () => updateWatch.act(),
   });
   const parts: DaemonParts = {
     clicks,
@@ -661,7 +689,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     fileEvents,
     payloadProviders,
     menuIdle,
-    linkSigner,
     runs,
     sourceRuns,
     laneSetups,

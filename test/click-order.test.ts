@@ -3,6 +3,7 @@
 // clicks here are real verbs over a fake doctor edge whose process probe parks
 // on a gate; the click-path cases drive `replyTo`, the daemon's real click arm.
 
+import { typeInPane } from "../src/claude-input/typing";
 import { ProbeArrivals } from "../src/doctor/handler-probe";
 import { RuntimeStats } from "../src/daemon/stats";
 import { JournalTurns } from "../src/renderer/journal-turns";
@@ -100,7 +101,6 @@ async function drain(): Promise<void> {
 
 const edge = (over: Partial<DoctorEdge>): DoctorEdge =>
   ({
-    install: HEALTHY_INSTALL_EDGE,
     ...healthyDaemonEdge(),
     ...healthyDataEdge(),
     ...noManagedSettings(),
@@ -200,7 +200,7 @@ describe("a gather holds no turn", () => {
   test("a doctor click whose client left during the gather still files its report", async () => {
     const { held, doctor, ctx, reports } = setup();
     let gone = false;
-    const a = doctor(A, { ...ctx, clientGone: () => gone });
+    const a = doctor(A, { ...ctx, clientGone: async () => gone });
     await drain();
     gone = true;
     held.open();
@@ -211,7 +211,7 @@ describe("a gather holds no turn", () => {
   test("a `do` of doctor then a write whose client left during the gather lands both", async () => {
     const { held, doDoctorThen, ctx, toggled, reports } = setup();
     let gone = false;
-    const a = doDoctorThen({ ...ctx, clientGone: () => gone });
+    const a = doDoctorThen({ ...ctx, clientGone: async () => gone });
     await drain();
     gone = true;
     held.open();
@@ -238,16 +238,13 @@ describe("a gather holds no turn", () => {
   test("doctor-probe answers at once with the turn held", async () => {
     const { ctx, probes, turns } = setup();
     const parked = gate();
-    const launcher = {
-      ...ctx.launcher,
-      launch: () => parked.wait.then(() => LAUNCHED),
-    } as Launcher;
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
+    const launch = () => parked.wait.then(() => LAUNCHED);
+    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launch });
     await drain();
     expect(turns.getStats().holder).toBe(VERB_COPY);
     await VERBS.get(VERB_DOCTOR_PROBE)!(NONCE, {
       ...ctx,
-      clientGone: () => true,
+      clientGone: async () => true,
       arrival: { via: "link", delivery: { kind: "cli" } },
     });
     expect(probes.list().map((p) => p.nonce)).toEqual([NONCE]);
@@ -307,7 +304,7 @@ describe("one session's order", () => {
   test("a later click whose client left while queued behind the gather is refused, and writes nothing", async () => {
     const { held, doctor, toggle, ctx, toggled } = setup();
     const a = doctor(A);
-    const later = toggle(A, { ...ctx, clientGone: () => true });
+    const later = toggle(A, { ...ctx, clientGone: async () => true });
     const refused = expect(later).rejects.toBeInstanceOf(ClickAbandoned);
     held.open();
     await a;
@@ -319,13 +316,10 @@ describe("one session's order", () => {
     const { held, doDoctorThen, ctx, toggled, reports } = setup();
     const parked = gate();
     let gone = false;
-    const launcher = {
-      ...ctx.launcher,
-      launch: () => parked.wait.then(() => LAUNCHED),
-    } as Launcher;
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launcher });
+    const launch = () => parked.wait.then(() => LAUNCHED);
+    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launch });
     await drain();
-    const a = doDoctorThen({ ...ctx, clientGone: () => gone });
+    const a = doDoctorThen({ ...ctx, clientGone: async () => gone });
     held.open();
     await drain();
     gone = true;
@@ -422,7 +416,6 @@ describe("a gather is a snapshot of one config", () => {
       doctor: {
         ...real,
         ...healthyDataEdge(),
-        install: HEALTHY_INSTALL_EDGE,
         daemons: async () => {
           if (++daemons === 1) await parked.wait;
           return healthyDaemonEdge().daemons();
@@ -468,7 +461,7 @@ test("a slash click re-checks nothing outside the turn: read and typing share it
   await VERBS.get(VERB_SLASH)!(encodeSegments([A, "/compact"]), {
     ...ctx,
     configFor: () => config,
-    claudeInput: {
+    typeSlash: typeInPane({
       read: async () => {
         holders.push(turns.getStats().holder);
         return { inMode: false, screen: IDLE_SCREEN };
@@ -477,7 +470,7 @@ test("a slash click re-checks nothing outside the turn: read and typing share it
         holders.push(turns.getStats().holder);
         return { kind: "typed" };
       },
-    },
+    }),
   });
   expect(holders).toEqual([VERB_SLASH, VERB_SLASH]);
 });
@@ -491,15 +484,12 @@ test("a watcher reload during a parked pbcopy starts no `by=click` setup", async
   const moved = { band: true } as never as typeof quiet;
   let now = quiet;
   const moves: unknown[][] = [];
-  const launcher = {
-    ...ctx.launcher,
-    launch: () => parked.wait.then(() => LAUNCHED),
-  } as Launcher;
+  const launch = () => parked.wait.then(() => LAUNCHED);
   const copying = VERBS.get(VERB_COPY_DIAGNOSTIC)!(
     encodeSegments([A, "request", "k"]),
     {
       ...ctx,
-      launcher,
+      launch,
       diagnosticCopy: () => "text",
       lanes: { of: () => now, clicked: (...args) => moves.push(args) },
     },

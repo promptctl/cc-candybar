@@ -28,9 +28,14 @@ import {
   type MainRendererParts,
 } from "./verbs/port.js";
 import type { Timekeeper } from "../time.js";
-import type { DaemonLogger } from "../utils/logger.js";
 import type { SessionStorage } from "../renderer-interface/session-state.js";
-import type { HistoryStorage } from "../renderer-interface/history-storage.js";
+import type {
+  HistoryStorage,
+  LoadedHistory,
+} from "../renderer-interface/history-storage.js";
+import type { DoctorStores } from "../doctor/ports.js";
+import type { LinkSigner } from "../click/link-signer.js";
+import { claudeManagedSettingsDirIn } from "../claude-settings.js";
 import type { Locations } from "../config/loader/discovery.js";
 import type { Gates } from "../daemon/foundations/gates.js";
 import type { RenderOrigin } from "../config-hint.js";
@@ -106,6 +111,7 @@ export function mainRenderer(
           event.context,
           at,
           event.waitMs,
+          event.idleSince,
           record,
         );
         const id = ++minted as EffectId;
@@ -188,17 +194,21 @@ export function mainRenderer(
   });
 }
 
-// What the main renderer is built from besides the host's parts: its clock and
-// log, the storage its session state and history load from, and the facts of
-// the machine its loads resolve under.
+// What the main renderer is built from besides the host's parts: its clock,
+// the storage its session state, history and doctor load from, the signer its
+// links are drawn with, and the facts of the machine its loads resolve under.
 export interface MainRendererInputs {
   readonly clock: Timekeeper;
-  readonly log: DaemonLogger;
   readonly now: () => Instant;
   readonly storage: {
     readonly session: SessionStorage;
     readonly history: HistoryStorage;
+    // The doctor's stores: files under the state directory, which its clicks
+    // file into.
+    readonly doctor: DoctorStores;
   };
+  // [LAW:single-enforcer] The signer over the state directory's key.
+  readonly linkSigner: LinkSigner;
   // The state directory whose answers book a load reads and a click records in.
   readonly stateDir: string;
   // Where the user's config and installed plugins live.
@@ -229,25 +239,28 @@ export interface LoadedMainRenderer {
 export function loadMainRenderer(
   inputs: MainRendererInputs,
 ): LoadedMainRenderer {
-  const { log } = inputs;
   const sessionState = new SessionState(inputs.storage.session);
-  const settingsHistory = new SettingsHistory(
-    sessionState,
-    log,
-    inputs.storage.history,
-  );
+  const history = inputs.storage.history.load();
   return {
-    start: (host) => startOver(inputs, sessionState, settingsHistory, host),
+    start: (host) => startOver(inputs, sessionState, history, host),
   };
 }
 
 function startOver(
   inputs: MainRendererInputs,
   sessionState: SessionState,
-  settingsHistory: SettingsHistory,
+  history: LoadedHistory,
   host: AdapterToHost,
 ): Renderer {
-  const { clock, log, now, gates } = inputs;
+  const { clock, now, gates, linkSigner } = inputs;
+  // [LAW:single-enforcer] The renderer's lines go to the host's one log.
+  const { log } = host;
+  const settingsHistory = new SettingsHistory(
+    sessionState,
+    log,
+    inputs.storage.history,
+    history,
+  );
   // [LAW:single-enforcer] The one queue every journal waits its turn in, the
   // renderer's own: no host part takes a turn.
   const journalTurns = new JournalTurns({
@@ -273,7 +286,7 @@ function startOver(
       watchers: host.watchers,
       log,
       storage: host.managedStorage,
-      signer: host.linkSigner,
+      signer: linkSigner,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // composed over its world state, its request, its picks and its
@@ -303,21 +316,20 @@ function startOver(
           log("info", configLoadedLine(entry, cause, settled));
           // A reload changes the bar of every session drawn from the entry,
           // even one that failed and kept the old config: its indicator says so.
-          for (const sessionId of sessions)
-            host.frameFeeds.wake(sessionId, "reload");
+          for (const sessionId of sessions) host.wake(sessionId, "reload");
         },
         // [LAW:single-enforcer] What a session's view draws from moved: its
         // feed's next frame is brought forward, whatever moved it: a request's
         // facts, a refresh landing after its deadline, a source publishing, a
         // pick. The dump link, which no view holds, wakes the same way.
-        onViewChanged: (sessionId) => host.frameFeeds.wake(sessionId, "data"),
+        onViewChanged: (sessionId) => host.wake(sessionId, "data"),
       },
     },
   );
   const parts: RendererParts = {
     ...host,
     clock,
-    log,
+    linkSigner,
     sessionState,
     renderCache,
     worldStates,
@@ -336,33 +348,43 @@ function startOver(
     journalTurns,
     clickLanded: (sessionId) => host.menuIdle.clicked(sessionId, now()),
     log,
-    launcher: host.launcher,
+    launch: host.launch,
     now,
     applyUpdate: host.applyUpdate,
-    // The load the session's bar is drawn from: its cache entry's load
-    // outcome, and what the config that entry renders left unused.
-    // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
-    // doctor click is a verdict on the files as they are now, not on
-    // whether the fs watcher has caught up with an edit made a moment ago.
-    doctor: host.doctor.edge((origin) => {
-      const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
-      renderCache.reload(...at, { kind: "doctor" });
-      const entry = renderCache.getOrCreate(...at);
-      return {
-        layers: entry.configLayers,
-        error: entry.lastError,
-        warning: entry.lastWarning,
-        unused: entry.state.unused,
-        config: entry.state.config,
-      };
-    }),
-    doctorStores: host.doctor.stores,
-    doctorProbes: host.doctor,
+    doctor: {
+      probeTmux: host.doctor.probeTmux,
+      remoteLogin: host.doctor.remoteLogin,
+      fontInUse: host.doctor.fontInUse,
+      daemons: host.doctor.daemons,
+      forge: host.doctor.forge,
+      transcript: host.doctor.transcript,
+      // The load the session's bar is drawn from: its cache entry's load
+      // outcome, and what the config that entry renders left unused.
+      // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
+      // doctor click is a verdict on the files as they are now, not on
+      // whether the fs watcher has caught up with an edit made a moment ago.
+      loadConfig: (origin) => {
+        const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
+        renderCache.reload(...at, { kind: "doctor" });
+        const entry = renderCache.getOrCreate(...at);
+        return {
+          layers: entry.configLayers,
+          error: entry.lastError,
+          warning: entry.lastWarning,
+          unused: entry.state.unused,
+          config: entry.state.config,
+        };
+      },
+      home: inputs.home,
+      managedSettingsDir: claudeManagedSettingsDirIn(inputs.env),
+    },
+    installFacts: host.doctor.install,
+    doctorStores: inputs.storage.doctor,
     probes: host.probes,
     clients: host.renderSightings,
     bundle: inputs.bundle,
     serving: host.serving,
-    claudeInput: host.claudeInput,
+    typeSlash: host.typeSlash,
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -375,7 +397,7 @@ function startOver(
     sourcesFor: (origin) =>
       renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
         .state.sources,
-    links: host.linkSigner,
+    links: linkSigner,
     runs: host.runs,
     lanes: {
       of: (origin, sessionId) => lanesAt(parts, origin, sessionId),
@@ -407,7 +429,7 @@ function startOver(
     const unhold = renderCache.pin(sessionId);
     const unwatch = reaction(
       () => sessionState.revision(sessionId),
-      () => host.frameFeeds.wake(sessionId, "state"),
+      () => host.wake(sessionId, "state"),
     );
     pins.set(sessionId, () => {
       unwatch();
@@ -436,6 +458,7 @@ function startOver(
           frame: renderFrame(parts, push.session, push.fps, at, {
             following: new Set(push.following),
             feeds: push.feeds,
+            idleSince: push.idleSince,
           }),
         };
       case "lanes":

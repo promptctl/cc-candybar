@@ -5,7 +5,7 @@
 
 import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
-import { fileStores, productionEdge } from "../doctor/edge";
+import { fileStores, productionMachineEdge } from "../doctor/edge";
 import { systemLauncher } from "../proc/system-launcher";
 import { systemProbe } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
@@ -32,7 +32,7 @@ export function productionAdapters(
     launcher: (own) => systemLauncher(own, machine),
     storage: (log) => fileStorage(paths, log, machine),
     doctorStores: fileStores(paths.state),
-    doctorEdge: productionEdge,
+    doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
     laneEdge: (launcher, following, closing, probe) =>

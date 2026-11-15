@@ -49,8 +49,14 @@ import {
   type TranscriptSightings,
   type WidthSightings,
 } from "./daemon-answer.js";
-import { gatherFacts, installFacts, productionEdge } from "./edge.js";
-import { type ConfigLoad, type InstallEdge, type DoctorEdge } from "./ports.js";
+import { installFacts, productionEdge } from "./edge.js";
+import { gatherFacts } from "./gather.js";
+import {
+  type ConfigLoad,
+  type DoctorEdge,
+  type DoctorMachineEdge,
+  type InstallEdge,
+} from "./ports.js";
 import {
   probeUrlHandler,
   productionHandlerProbeEdge,
@@ -216,7 +222,8 @@ export function widthOf(
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
 // exit code) out. `doctorCommandPlan` hands it to the one delivery; a test reads it.
 export async function doctorPlan(
-  edge: DoctorEdge,
+  // The machine as the gather reads it, and as the install check does.
+  edge: DoctorEdge & DoctorMachineEdge,
   handler: HandlerProbeEdge,
   daemon: () => Promise<DaemonAnswer>,
   env: Readonly<Record<string, string | undefined>>,

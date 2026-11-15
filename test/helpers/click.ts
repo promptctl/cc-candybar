@@ -3,13 +3,8 @@
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 
-import {
-  applyFix,
-  gatherFacts,
-  installFacts,
-  oneAskPerClick,
-  readStores,
-} from "../../src/doctor/edge";
+import { installFacts } from "../../src/doctor/edge";
+import { clickLaunchVia } from "../../src/daemon/foundations/click-launch";
 import { bareGates } from "./gates";
 import { HOST } from "./host";
 import { unscriptedLauncher } from "./fake-launcher";
@@ -65,14 +60,12 @@ export function recordRender(
   );
 }
 
-// The doctor's world probes as the daemon hands them in.
-export const DOCTOR_PROBES = {
-  gatherFacts,
-  applyFix,
-  installFacts,
-  readStores,
-  oneAskPerClick,
-};
+// A host's sightings as the renderer reaches them: each read answered.
+export const asyncSightings = (
+  sightings: Pick<RenderSightings, "ofSession">,
+): VerbContext["clients"] => ({
+  ofSession: async (sessionId, now) => sightings.ofSession(sessionId, now),
+});
 
 // [LAW:one-source-of-truth] THE VerbContext a test hands the click path: a
 // silent log and an update act that refuses loudly — no test here has an
@@ -94,7 +87,7 @@ export function testVerbContext(
     sessionState,
     history,
     navigation: new NavigationHistory(),
-    clientGone: () => false,
+    clientGone: async () => false,
     journalTurns: new JournalTurns({
       log: () => {},
       monotonic: () => systemTimekeeper.monotonic(),
@@ -104,7 +97,7 @@ export function testVerbContext(
     gatherTook: () => {},
     turnWaited: () => {},
     log: () => {},
-    launcher: unscriptedLauncher,
+    launch: clickLaunchVia(unscriptedLauncher),
     now: () => instantOf(new Date()),
     applyUpdate: async () => {
       throw new Error("apply-update: no update watch in this test");
@@ -112,7 +105,6 @@ export function testVerbContext(
     // Same posture for the doctor's edge: a test that drives a doctor click
     // hands in its own fake edge; reaching this one is a test bug.
     doctor: {
-      install: HEALTHY_INSTALL_EDGE,
       ...noManagedSettings(),
       probeTmux: async () => {
         throw new Error("doctor: no tmux edge in this test");
@@ -132,10 +124,12 @@ export function testVerbContext(
       forge: async () => {
         throw new Error("doctor: no forge edge in this test");
       },
-      transcript: () => {
+      transcript: async () => {
         throw new Error("doctor: no transcript edge in this test");
       },
     },
+    installFacts: async (bundle, clients) =>
+      installFacts(HEALTHY_INSTALL_EDGE, bundle, clients),
     doctorStores: {
       marks: {
         read: () => {
@@ -166,19 +160,13 @@ export function testVerbContext(
     // daemon's for a probe to land: a test that reads arrivals hands in its own.
     arrival: { via: "link", delivery: { kind: "forwarder", urlV: 1 } },
     probes: new ProbeArrivals(),
-    doctorProbes: DOCTOR_PROBES,
-    clients: new RenderSightings(),
+    clients: asyncSightings(new RenderSightings()),
     bundle: HEALTHY_BUNDLE,
-    serving: () => HEALTHY_SERVING,
+    serving: async () => HEALTHY_SERVING,
     // And for the Claude Code pane: a test that drives a slash click hands in
-    // its own edge.
-    claudeInput: {
-      read: async () => {
-        throw new Error("slash: no claude-input edge in this test");
-      },
-      type: async () => {
-        throw new Error("slash: no claude-input edge in this test");
-      },
+    // its own typing.
+    typeSlash: async () => {
+      throw new Error("slash: no claude-input edge in this test");
     },
     // The config the session renders with: a test whose click reads it (a
     // save, a step from an unset key, any session write once the session has

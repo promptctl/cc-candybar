@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
-import type { Refreshed } from "../src/renderer-interface/request-context";
+import type { RefreshTimes } from "../src/renderer-interface/request-context";
 import { REFRESH_LANES } from "../src/facts/world-state";
 import { sessionRig, settledRequest } from "./helpers/session-rig";
 import { until } from "./helpers/until";
@@ -58,9 +58,11 @@ async function bare() {
   usageStore.declareToday = naming(declared, "today", usageStore.declareToday);
   const configFile = path.join(dir, "config.json5");
   fs.writeFileSync(configFile, "{ root: { h: [] } }");
-  const refreshed: Refreshed = new Map();
-  const view = await settledRequest(rig, dir, configFile, cleanups, refreshed);
-  return { view, declared, refreshed };
+  let refreshed: RefreshTimes | null = null;
+  const view = await settledRequest(rig, dir, configFile, cleanups, (took) => {
+    refreshed = took;
+  });
+  return { view, declared, refreshed: refreshed as RefreshTimes | null };
 }
 
 describe("totality: a layout placing no segment still gathers every built-in", () => {
@@ -87,7 +89,9 @@ describe("totality: a layout placing no segment still gathers every built-in", (
 
   test("a request refreshes every stamp-gated lane", async () => {
     const { refreshed } = await bare();
-    expect([...refreshed.keys()].sort()).toEqual([...REFRESH_LANES].sort());
+    expect(Object.keys(refreshed ?? {}).sort()).toEqual(
+      [...REFRESH_LANES].sort(),
+    );
   });
 
   test("its world state has every built-in answered once the owners answer", async () => {

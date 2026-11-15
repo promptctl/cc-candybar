@@ -12,7 +12,7 @@ import type {
 } from "../../src/daemon/foundations/sightings";
 import type { SettingsSource } from "../../src/claude-settings";
 import type { SightedBar } from "../../src/doctor/sightings";
-import { readStores } from "../../src/doctor/edge";
+import { readStores } from "../../src/doctor/gather";
 import {
   type DoctorEdge,
   type DoctorStores,
@@ -167,7 +167,7 @@ export const healthyDataEdge = (): Pick<
   DoctorEdge,
   "forge" | "transcript"
 > => ({
-  transcript: () => ({
+  transcript: async () => ({
     kind: "ok",
     value: { lines: 3, unparsed: 0, whole: true },
   }),

@@ -54,6 +54,7 @@ import {
 } from "../utils/outcome.js";
 import { isBundledPreset } from "./bundled-presets.js";
 import {
+  REFRESH_LANES,
   type SpeedObservation,
   type TodayFacts,
   UNREAD_RUN,
@@ -82,7 +83,7 @@ import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SourceRun } from "../var-system/sources.js";
 import type {
-  Refreshed,
+  RefreshTimes,
   ViewFacts,
 } from "../renderer-interface/request-context";
 
@@ -689,14 +690,12 @@ export function renderWidth(hints: ClientHints): number {
 }
 
 // [LAW:nothing-unseen] The render event's `refreshed=`: each lane the
-// request's arrival refreshed, with how long it took, `…` for one still out
-// when the answer was drawn; `-` for none.
-export function refreshedFact(refreshed: Refreshed): string {
-  return (
-    [...refreshed]
-      .map(([lane, ms]) => `${lane}:${ms === null ? "…" : `${ms}ms`}`)
-      .join(",") || "-"
-  );
+// request's arrival refreshed, with how long it took, or `…` while the refresh
+// was still out when the answer was drawn.
+export function refreshedFact(refreshed: RefreshTimes | null): string {
+  return refreshed === null
+    ? "…"
+    : REFRESH_LANES.map((lane) => `${lane}:${refreshed[lane]}ms`).join(",");
 }
 
 // Whether a request still waits on its world state before it draws: some
@@ -742,7 +741,7 @@ export const awaitedReading = (fact: Reading<unknown>): boolean =>
 // resolves; the answer is then drawn from the same world state a frame drawn
 // after it reads.
 export async function settleWorld(
-  refresh: () => Promise<void>,
+  refresh: () => Promise<unknown>,
   worldState: () => WorldState,
   named: () => Iterable<Run>,
   signal: AbortSignal,

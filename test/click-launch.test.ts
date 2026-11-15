@@ -2,6 +2,7 @@
 // says what the launch itself said of why, so the click's reply and its event
 // carry the cause, not only the class of failure.
 
+import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { HOST } from "./helpers/host";
 import { tmpdir } from "node:os";
@@ -125,7 +126,9 @@ describe("clickLaunch", () => {
   test("a program that cannot start is a throw naming the spawn's own error", async () => {
     await expect(
       clickLaunch(
-        systemLauncher({ inherited: process.env }, systemTimekeeper),
+        clickLaunchVia(
+          systemLauncher({ inherited: process.env }, systemTimekeeper),
+        ),
         {
           bin: "/nonexistent/cc-candybar-no-such-opener",
           args: ["https://example.com"],

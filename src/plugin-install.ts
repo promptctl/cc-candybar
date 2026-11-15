@@ -98,7 +98,7 @@ function cloneRepo(
   into: string,
 ): void {
   const git = (
-    envOverlay: Record<string, string | undefined>,
+    envOverlay: Record<string, string | null>,
     ...args: string[]
   ): string => {
     const run = launcher.launchSync({
@@ -115,9 +115,9 @@ function cloneRepo(
   };
   // Overlay: terminal prompts off, and the variables that locate a repository
   // (named by the tool itself) unset.
-  const env: Record<string, string | undefined> = { GIT_TERMINAL_PROMPT: "0" };
+  const env: Record<string, string | null> = { GIT_TERMINAL_PROMPT: "0" };
   for (const name of git(env, "rev-parse", "--local-env-vars").split("\n"))
-    env[name] = undefined;
+    env[name] = null;
   git(
     env,
     "clone",

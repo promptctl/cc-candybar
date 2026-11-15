@@ -165,6 +165,7 @@ const request = async (t: { r: Renderer; rig: SessionRig }) => {
       id: REQUEST,
       context,
       waitMs: 5000,
+      idleSince: null,
     },
   });
 };
@@ -246,6 +247,7 @@ describe("a statusline request", () => {
           id: REQUEST,
           context,
           waitMs: 5000,
+          idleSince: null,
         },
       }),
     );
@@ -285,6 +287,7 @@ describe("a feed's frame", () => {
     const frame = renderFrame(parts, SESSION, MOVING_FPS, AT, {
       following: new Set(),
       feeds: UNFOLLOWED_FEEDS,
+      idleSince: null,
     });
     expect(frame?.failure).toBeNull();
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
@@ -300,6 +303,7 @@ describe("a feed's frame", () => {
       renderFrame(parts, SESSION, MOVING_FPS, at, {
         following: new Set(),
         feeds: UNFOLLOWED_FEEDS,
+        idleSince: null,
       });
     const changedBefore = changed.length;
     const revision = rig.sessionState.latestRevision();
@@ -427,6 +431,7 @@ describe("the session's config, ahead of its request", () => {
     const answered = await answerStatusline(
       host,
       t.rig.served.collector,
+      { since: () => undefined },
       systemTimekeeper,
       checked(),
       REQUEST,
@@ -457,6 +462,7 @@ describe("the session's config, ahead of its request", () => {
         id: REQUEST,
         context: checked(),
         waitMs: 5000,
+        idleSince: null,
       },
     });
     expect(threw(answering).failure.message).toMatch(
@@ -505,6 +511,7 @@ describe("two requests of one session at different keys", () => {
       answerStatusline(
         host,
         t.rig.served.collector,
+        { since: () => undefined },
         systemTimekeeper,
         checked(pane),
         id as RequestId,

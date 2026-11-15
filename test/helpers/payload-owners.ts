@@ -59,7 +59,6 @@ import {
 } from "../../src/daemon/readings";
 import type { EffectiveGlobals } from "../../src/config/effective-globals";
 import type { ClientHints } from "../../src/daemon/foundations/protocol";
-import type { Refreshed } from "../../src/renderer-interface/request-context";
 import { EMPTY_HISTORY_DEPTH } from "../../src/renderer/settings-history";
 import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { Holds as HoldsClass } from "../../src/utils/holds";
@@ -166,10 +165,9 @@ export function todayReadingOf(inputs: LanedInputs) {
 export async function settleLanes(
   inputs: LanedInputs,
   at: Instant,
-  refreshed: Refreshed = new Map(),
 ): Promise<void> {
   await settleWorld(
-    () => refreshPayload(inputs, at, refreshed),
+    () => refreshPayload(inputs, at),
     () => documentOf(inputs),
     () => [],
     new AbortController().signal,

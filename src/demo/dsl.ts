@@ -248,12 +248,7 @@ async function renderFrames(): Promise<void> {
         // instant, sampled here as the daemon samples it per request.
         const at = instantOf(new Date(world.clock.now()));
         await settleWorld(
-          () =>
-            refreshPayload(
-              { hookData, deps: providers, cwd, hints },
-              at,
-              new Map(),
-            ),
+          () => refreshPayload({ hookData, deps: providers, cwd, hints }, at),
           () => worldStates.of(sessionId),
           () => view.registry.namedRuns().values(),
           // The demo's frames have no client to hang up.

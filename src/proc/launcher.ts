@@ -114,8 +114,8 @@ export interface LaunchOpts {
   bin: string;
   args?: string[];
   cwd?: string;
-  // Set over the launcher's inherited environment; `undefined` unsets.
-  envOverlay?: Readonly<Record<string, string | undefined>>;
+  // Set over the launcher's inherited environment; null unsets.
+  envOverlay?: Readonly<Record<string, string | null>>;
   timeoutMs?: number;
   stdinInput?: string | Buffer;
   category: LaunchCategory;

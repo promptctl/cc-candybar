@@ -67,7 +67,6 @@ export interface DoctorEdge {
   readonly managedSettingsDir: string;
   // The user's home: where Claude Code's default directory is.
   readonly home: string;
-  readonly install: InstallEdge;
   // Every cc-candybar daemon process this user runs (`daemonProcesses`).
   readonly daemons: () => Promise<Asked<readonly DaemonProcess[]>>;
   // Whether the forge CLI the checkout's remote names is installed and logged
@@ -75,8 +74,15 @@ export interface DoctorEdge {
   readonly forge: (cwd: string) => Promise<Asked<ForgeLogin | null>>;
   // The tail of a session's transcript, read as the bar reads it — absent
   // when no file is at the path (`readTranscriptWindow`).
-  readonly transcript: (path: string) => Outcome<TranscriptWindow>;
+  readonly transcript: (path: string) => Promise<Outcome<TranscriptWindow>>;
 }
+
+// [LAW:effects-at-boundaries] The doctor's reads of the machine: what the
+// gather asks through its edge, and the install check's reads.
+export type DoctorMachineEdge = Pick<
+  DoctorEdge,
+  "probeTmux" | "remoteLogin" | "fontInUse" | "daemons" | "forge" | "transcript"
+> & { readonly install: InstallEdge };
 
 // One load's outcome, as both a cache entry and a fresh load carry it: the
 // file it resolved, the error that stopped it, the advisories it earned (one
