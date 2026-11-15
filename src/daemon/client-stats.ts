@@ -285,6 +285,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(
     `  dirs          ${s.watchers.dirs.active} open (${s.watchers.dirs.opened} opened, ${s.watchers.dirs.closed} closed)`,
   );
+  lines.push(`  polled        ${s.watchers.polled} paths`);
   lines.push(``);
   lines.push(`subprocesses`);
   lines.push(`  total         ${s.subprocesses.total}`);

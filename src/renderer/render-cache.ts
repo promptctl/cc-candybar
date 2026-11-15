@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { inspect } from "node:util";
-import { nearestWatchTarget } from "../utils/watch-target.js";
 import { chainName } from "../config-hint.js";
 import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
@@ -1402,11 +1401,10 @@ export class RenderCache<
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
-    fs.mkdirSync(repoConfigsDir(deps.stateDir), { recursive: true });
-    const { dir, name } = nearestWatchTarget(repoConfigsPath(deps.stateDir));
+    const answers = repoConfigsPath(deps.stateDir);
     this.answersWatch = deps.watchers.acquire(
-      `repo-configs:${dir}/${name}`,
-      { dirs: [{ path: dir, filenames: [name] }] },
+      `repo-configs:${answers}`,
+      { dirs: [], polled: [answers] },
       (heard) => this.reloadEvery({ kind: "answers-watch", heard }),
     );
   }
@@ -2116,7 +2114,7 @@ export class RenderCache<
     // entry now hears: a change that fires nothing is read against this line.
     this.log(
       "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch.handle.deaf.length}`,
+      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} polled=${targets.polled.length} deaf=${watch.handle.deaf.length}`,
     );
     for (const { path: at, reason } of unresolved)
       this.log(

@@ -4,15 +4,16 @@ import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
 import { bindsFolder, boundKey, boundOf } from "../../utils/folder-identity";
 import type { Timekeeper } from "../../time";
-import type {
-  Invalidation,
-  WatchTargets,
-  HeldWatch,
-  WatchSpec,
-  WatchMove,
-  WatcherHandle,
-  DirTarget,
-  Deafness,
+import {
+  ridesStream,
+  type Invalidation,
+  type WatchTargets,
+  type HeldWatch,
+  type WatchSpec,
+  type WatchMove,
+  type WatcherHandle,
+  type DirTarget,
+  type Deafness,
 } from "../foundations/watch-targets";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
@@ -43,12 +44,20 @@ const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 // rebuilds its one FSEvents stream and leaks a CFString per watched directory
 // each time (fixed upstream in libuv 9ac5b3cee0). Hold a watch for as long as
 // its target matters, not for as long as one value derived from it.
+//
+// Nor is holding one free, so a polled path opens none: one sweep lstats every
+// polled path each period, and its cost is the paths, whatever happens in the
+// tree around them.
 
 // [LAW:one-source-of-truth] Exported: the invalidation-debounce floor is the
 // single source consumers derive from (e.g. the load harness's git-churn
 // interval must sit above it). Restating "50" anywhere else would let the two
 // drift silently.
 export const DEBOUNCE_MS = 50;
+
+// How often every polled path is read: the longest a change to one waits
+// before its debounce window opens.
+export const POLL_MS = 1000;
 
 // A debounce window's invalidation while it gathers: its paths are the
 // registry's own until the window closes and hands them to the holders.
@@ -68,9 +77,8 @@ type DirState =
     }
   | { readonly kind: "deaf"; readonly deafness: Deafness };
 
-// [LAW:single-enforcer] One OS watch per directory, shared by every slot
-// that targets it: a slot's key spells its name filters, so a link re-pointed
-// to a new name is a new slot on the same directory, and the handle stays.
+// [LAW:single-enforcer] One OS watch per directory and shape (every child, or
+// the tree), shared by every slot that targets it.
 interface DirWatch {
   readonly id: string;
   readonly path: string;
@@ -79,12 +87,18 @@ interface DirWatch {
   readonly listeners: Set<Listener>;
 }
 
-// A slot's target on a directory watch: which names there it hears (`null`:
-// every child).
+// A slot's target on a directory watch. It hears everything the watch reports.
 interface Listener {
   readonly slot: WatcherSlot;
   readonly dir: DirWatch;
-  readonly filter: ReadonlySet<string> | null;
+}
+
+// [LAW:single-enforcer] One record per polled path, shared by every slot that
+// names it: what the last read of the path found, and who hears it change.
+interface PolledPath {
+  readonly path: string;
+  entry: string;
+  readonly slots: Set<WatcherSlot>;
 }
 
 interface Holder {
@@ -94,6 +108,8 @@ interface Holder {
 interface WatcherSlot {
   readonly key: string;
   readonly listeners: Listener[];
+  readonly polled: PolledPath[];
+  readonly ridesStream: boolean;
   // [LAW:single-enforcer] Each acquire is a holder with its own callback, and
   // every window reaches every holder: `watch_file` sources in a directory
   // home and in each session's view share one key.
@@ -103,12 +119,13 @@ interface WatcherSlot {
 }
 
 // [LAW:nothing-unseen] Two kinds of fact. A slot is a consumer's watch:
-// `watchersOpened` counts slots whose every directory listened at acquire,
-// `watchRefusals` slots with one deaf then, and `watchersClosed` every slot
-// released, so the slots held now are opened plus refusals less closed. A
-// directory watch is an OS handle, which is what the cost scales with on
-// macOS: `dirWatchesOpened` counts each open, `dirWatchesClosed` each close (a
-// reopen's included), and `watchErrors` each error a handle reported.
+// `watchersOpened` counts slots whose every OS directory watch listened at
+// acquire, `watchRefusals` slots with one deaf then, and `watchersClosed`
+// every slot released, so the slots held now are opened plus refusals less
+// closed. A directory watch is an OS handle, which is what the cost scales
+// with on macOS: `dirWatchesOpened` counts each open, `dirWatchesClosed` each
+// close (a reopen's included), and `watchErrors` each error a handle reported.
+// A polled path holds no handle and counts in none of them.
 export interface WatcherCounters {
   watchersOpened: number;
   watchersClosed: number;
@@ -151,16 +168,41 @@ const heldBy = (
 const dirId = (target: DirTarget): string =>
   `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 
+// [LAW:one-source-of-truth] What a read of a polled path compares: what is at
+// the path now, or the error reading it gave. Any difference is a change, as
+// a directory watch reports a child made, removed, replaced, written or
+// chmod'ed (the ctime moves on each). A directory's size and times are its
+// children's, which a polled path never stood for, so a directory is its
+// identity and mode alone.
+// [LAW:no-silent-failure] A read the disk refuses is not deafness: the path
+// fires as it starts failing and as it stops, and the holder's own read of it
+// fails loudly in between. A missing parent and a folder replaced on the way
+// arrive the same way, so a polled path is never deaf and never judged.
+function entryAt(at: string): string {
+  try {
+    const s = fs.lstatSync(at, { bigint: true });
+    return s.isDirectory()
+      ? `${s.mode}:${s.dev}:${s.ino}`
+      : `${s.mode}:${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
+  } catch (e) {
+    return `error:${(e as NodeJS.ErrnoException).code}`;
+  }
+}
+
 export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
   private readonly dirs = new Map<string, DirWatch>();
+  private readonly polled = new Map<string, PolledPath>();
+  // The next sweep's cancel, armed exactly while a path is polled.
+  private sweep: (() => void) | null = null;
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
   private readonly clock: Pick<Timekeeper, "after">;
   private closed = false;
 
   constructor(opts: {
-    // [LAW:effects-at-boundaries] The clock the debounce window runs on.
+    // [LAW:effects-at-boundaries] The clock the debounce window and the
+    // sweep run on.
     clock: Pick<Timekeeper, "after">;
     counters?: WatcherCounters;
     // [LAW:single-enforcer] One injection point per consumer. The daemon
@@ -195,6 +237,7 @@ export class WatcherRegistry {
           path: d.path,
           reason: "the watcher registry is closed",
         })),
+        ridesStream: ridesStream(targets),
       };
     }
     const shared = this.slots.get(key);
@@ -244,19 +287,23 @@ export class WatcherRegistry {
     const slot: WatcherSlot = {
       key,
       listeners: [],
+      polled: [],
+      ridesStream: ridesStream(targets),
       holders: new Set(),
       debounce: null,
     };
     for (const target of targets.dirs) {
       const dir = this.dirFor(target);
-      const listener: Listener = {
-        slot,
-        dir,
-        filter: target.filenames ? new Set(target.filenames) : null,
-      };
+      const listener: Listener = { slot, dir };
       dir.listeners.add(listener);
       slot.listeners.push(listener);
     }
+    for (const at of targets.polled) {
+      const record = this.polledAt(at);
+      record.slots.add(slot);
+      slot.polled.push(record);
+    }
+    this.armSweep();
     this.slots.set(key, slot);
     if (this.counters) {
       if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
@@ -395,16 +442,12 @@ export class WatcherRegistry {
     }
   }
 
-  // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
-  // it lists, an unnamed event (the OS may be reporting the filtered child),
-  // or the directory's own name while the folder at the path is no longer the
-  // one this handle bound (its removal or replacement, which macOS reports as
-  // a change and Linux as a rename) reaches the slot. The same name with the
-  // folder unchanged is macOS reporting a child that came or went, or a chmod,
-  // and is not. Judged once per event, for every listener. A move is then
-  // judged, so a handle never stays bound to a folder no longer at its path
-  // and every later event naming the directory is judged against the folder
-  // there.
+  // [LAW:dataflow-not-control-flow] Every event reaches every slot on the
+  // watch. One naming the directory itself, while the folder at the path is
+  // no longer the one this handle bound (its removal or replacement, which
+  // macOS reports as a change and Linux as a rename), is then judged, so a
+  // handle never stays bound to a folder no longer at its path and every later
+  // event naming the directory is judged against the folder there.
   private heard(
     dir: DirWatch,
     handle: fs.FSWatcher,
@@ -412,14 +455,12 @@ export class WatcherRegistry {
   ): void {
     const { state } = dir;
     if (!heldBy(state, handle)) return;
-    const moved =
+    this.tell(dir, namedOf(dir.path, changed));
+    if (
       changed === path.basename(dir.path) &&
-      boundKey(boundOf(dir.path)) !== state.bound;
-    for (const { slot, filter } of dir.listeners) {
-      if (filter === null || changed === null || filter.has(changed) || moved)
-        this.fire(slot, namedOf(dir.path, changed));
-    }
-    if (moved) this.judged(dir, "moved");
+      boundKey(boundOf(dir.path)) !== state.bound
+    )
+      this.judged(dir, "moved");
   }
 
   private tell(dir: DirWatch, invalidation: Gathering): void {
@@ -461,6 +502,7 @@ export class WatcherRegistry {
           dir.state.kind === "deaf" ? [dir.state.deafness] : [],
         );
       },
+      ridesStream: slot.ridesStream,
       release: () => {
         if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
         if (this.slots.get(slot.key) !== slot) return;
@@ -481,7 +523,9 @@ export class WatcherRegistry {
     );
   }
 
-  // A directory watch closes with the last slot on it.
+  // A directory watch closes, and a polled path is forgotten, with the last
+  // slot on it: a slot that names the path again starts from what is there at
+  // its own acquire.
   private closeSlot(slot: WatcherSlot, cause: string): void {
     if (slot.debounce !== null) {
       slot.debounce.cancel();
@@ -495,12 +539,73 @@ export class WatcherRegistry {
         this.closeHandle(dir.path, dir.state.handle, cause);
       this.dirs.delete(dir.id);
     }
+    for (const record of slot.polled) {
+      record.slots.delete(slot);
+      if (record.slots.size === 0) this.polled.delete(record.path);
+    }
+    if (this.polled.size === 0) this.disarmSweep();
     if (this.counters) this.counters.watchersClosed++;
+  }
+
+  // The record for a polled path: the one already held, or a new one read
+  // now, so only a change after the acquire is a change.
+  private polledAt(at: string): PolledPath {
+    const held = this.polled.get(at);
+    if (held !== undefined) return held;
+    const record: PolledPath = {
+      path: at,
+      entry: entryAt(at),
+      slots: new Set(),
+    };
+    this.polled.set(at, record);
+    return record;
+  }
+
+  // [LAW:no-ambient-temporal-coupling] The sweep is armed while a path is
+  // polled and the registry is open, and the next one only once this one has
+  // read every path. The reads are synchronous, so no two sweeps overlap and
+  // no older read lands over a newer one. The daemon already lstats these
+  // paths on this thread when it derives a spec, so a hung mount under a
+  // polled path blocks it there whatever the sweep does.
+  private armSweep(): void {
+    if (this.sweep !== null || this.closed || this.polled.size === 0) return;
+    this.sweep = this.clock.after(
+      POLL_MS,
+      () => {
+        this.sweep = null;
+        this.readPolled();
+        this.armSweep();
+      },
+      { unref: true },
+    );
+  }
+
+  private disarmSweep(): void {
+    this.sweep?.();
+    this.sweep = null;
+  }
+
+  // [LAW:dataflow-not-control-flow] The same read for every polled path each
+  // sweep. A path whose entry differs fires every slot that names it, by its
+  // path, through the slot's debounce, as a directory watch reports a child.
+  private readPolled(): void {
+    for (const record of this.polled.values()) {
+      const now = entryAt(record.path);
+      if (now === record.entry) continue;
+      record.entry = now;
+      for (const slot of record.slots)
+        this.fire(slot, { kind: "changed", paths: new Set([record.path]) });
+    }
   }
 
   // The slots held now.
   size(): number {
     return this.slots.size;
+  }
+
+  // The paths polled now: no OS watch each.
+  polledPaths(): number {
+    return this.polled.size;
   }
 
   // The OS directory watches open now.
@@ -516,6 +621,7 @@ export class WatcherRegistry {
 
   closeAll(): void {
     this.closed = true;
+    this.disarmSweep();
     for (const slot of this.slots.values()) this.closeSlot(slot, "close");
     this.slots.clear();
   }

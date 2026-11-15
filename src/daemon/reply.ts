@@ -280,6 +280,7 @@ export async function replyTo(
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
+        polledPaths: watcherRegistry.polledPaths(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
         clients: renderSightings.list(instantOf(new Date(clock.now()))),

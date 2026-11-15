@@ -30,7 +30,6 @@ import {
   watchFault,
   watchTargetsOf,
   type BoundWatch,
-  type Invalidation,
   type PathsWatch,
 } from "./foundations/watch-targets.js";
 import {
@@ -180,19 +179,13 @@ interface WatchEntry {
 }
 
 // [LAW:single-enforcer] One watch per path regardless of subscriber count:
-// several entries can share it. The directory watches are the watcher
-// registry's, which opens, shares, counts and logs every one in the daemon;
-// this follows each path's spec and fans its windows out.
+// several entries can share it. The watches are the watcher registry's, which
+// opens, shares, counts and logs every one in the daemon; this follows each
+// path's spec and fans its windows out.
 //
 // A path is watched wherever it can change (`watchTargetsOf`, the rule the
-// config watcher shares): each directory through which its link chain passes,
-// filtered to the names there, and the path itself when it is a directory. A
-// directory, never a file, because a watch on a file binds its inode: it
-// never sees a file created after it (an app that has not written yet) and
-// goes deaf after the first atomic rename (write-then-rename, the safe way to
-// rewrite a file). A directory that does not exist yet is watched through its
-// nearest existing ancestor, and each one that appears moves the watch one
-// level deeper.
+// config watcher shares), and a link re-pointed or a directory appearing on
+// the way is a new spec the next window follows.
 class PathWatches {
   private readonly entries = new Map<string, WatchEntry>();
   private readonly releaseDelivery: () => void;
@@ -222,8 +215,8 @@ class PathWatches {
     const entry: WatchEntry = {
       bound: {
         derived: watch,
-        held: this.watchers.follow(null, watch, (heard) =>
-          this.heard(filePath, entry, heard),
+        held: this.watchers.follow(null, watch, () =>
+          this.heard(filePath, entry),
         ).watch,
       },
       subscribers: new Map(),
@@ -236,26 +229,17 @@ class PathWatches {
   // A new key acquires its watch, keeping every directory both keys name.
   private rederive(filePath: string, entry: WatchEntry): void {
     const paths = derived(filePath);
-    const { watch } = this.watchers.follow(entry.bound.held, paths, (heard) =>
-      this.heard(filePath, entry, heard),
+    const { watch } = this.watchers.follow(entry.bound.held, paths, () =>
+      this.heard(filePath, entry),
     );
     entry.bound = { derived: paths, held: watch };
     this.report(filePath, entry);
   }
 
-  // A window re-derives and re-reads.
-  private heard(
-    filePath: string,
-    entry: WatchEntry,
-    heard: Invalidation,
-  ): void {
-    const wasLeaf = entry.bound.derived.reached;
+  // A window re-derives and re-reads: every path it watches is one the
+  // content can change at.
+  private heard(filePath: string, entry: WatchEntry): void {
     this.rederive(filePath, entry);
-    // Ancestor churn on the way DOWN is not a change to the path; a move
-    // up from the leaf is its removal, which the subscribers must read. A
-    // failed directory may have missed a change, so its window always reads.
-    if (heard.kind !== "failed" && !wasLeaf && !entry.bound.derived.reached)
-      return;
     for (const cb of entry.subscribers.keys()) cb();
   }
 
@@ -265,13 +249,15 @@ class PathWatches {
   }
 
   // The watch's fault, derived from what it holds now and whether the OS is
-  // delivering what it would hear. A stall is every watch's: it rides the
-  // delivery owner's one stream.
+  // delivering what it would hear. A stall is the fault only of a watch that
+  // rides the delivery owner's stream: a file is polled and keeps refreshing
+  // through one, and a directory watched whole does not.
   private faultOf(filePath: string, entry: WatchEntry): string | null {
+    const { handle } = entry.bound.held;
     return watchFault(
       `watch_file ${filePath}`,
       entry.bound,
-      stallReason(this.fileEvents.delivery()),
+      handle.ridesStream ? stallReason(this.fileEvents.delivery()) : null,
     );
   }
 
@@ -319,8 +305,8 @@ class PathWatches {
   }
 }
 
-// Where the path can change: every hop of its link chain by name, and the
-// path itself when it is a directory.
+// Where the path can change: every hop of its link chain, polled, and the
+// path itself watched whole when it is a directory.
 const derived = (filePath: string): PathsWatch =>
   watchTargetsOf({ named: [filePath], whole: [filePath] });
 
