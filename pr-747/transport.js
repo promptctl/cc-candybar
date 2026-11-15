@@ -36700,6 +36700,7 @@ var failedWith = (message) => ({
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION
 });
+var renderFailed = (err) => failedWith(failureOf(err).message);
 var renderFailure = (failure) => ({
   ...failure,
   kind: "threw"
@@ -67656,21 +67657,21 @@ var FrameFeeds = class {
   // leaving whichever state it is in.
   subscribe(sessionId2, sub2) {
     let left = false;
-    void this.deps.lanes(sessionId2).then(
-      (lanes) => {
-        if (!left) this.admit(sessionId2, sub2, lanes);
-      },
-      // [LAW:no-silent-failure] A view the renderer could not read lanes from
-      // draws its failure: the subscriber is admitted as for a session with
-      // no view, and its first frame decides.
-      (thrown2) => {
-        this.deps.log(
-          "error",
-          `feed sid=${JSON.stringify(sessionId2)} lanes threw: ${inspect(thrown2)}`
-        );
-        if (!left) this.admit(sessionId2, sub2, null);
-      }
-    );
+    void this.deps.lanes(sessionId2).catch((thrown2) => {
+      this.deps.log(
+        "error",
+        `feed sid=${JSON.stringify(sessionId2)} lanes threw: ${inspect(thrown2)}`
+      );
+      return null;
+    }).then((lanes) => {
+      if (!left) this.admit(sessionId2, sub2, lanes);
+    }).catch((thrown2) => {
+      this.deps.log(
+        "error",
+        `feed sid=${JSON.stringify(sessionId2)} admission threw: ${inspect(thrown2)}`
+      );
+      sub2.refused(renderFailed(thrown2));
+    });
     return () => {
       left = true;
       const feed2 = this.feeds.get(sessionId2);
@@ -85627,13 +85628,14 @@ function createDaemon(inputs) {
     )
   });
   const linkSigner2 = inputs.linkSigner;
+  const holdClickError2 = (sessionId2, text4, at) => parts.renderer.tell(
+    { kind: "hold-click-error", session: sessionId2, text: text4 },
+    at
+  );
   const runs = new Runs({
     supersede: (storage2, sessionId2) => managedStorage.supersede(storage2, sessionId2),
     launch: launcher.launch,
-    holdClickError: (sessionId2, text4, at) => parts.renderer.tell(
-      { kind: "hold-click-error", session: sessionId2, text: text4 },
-      at
-    ),
+    holdClickError: holdClickError2,
     log,
     now: instant,
     clock
@@ -85653,10 +85655,7 @@ function createDaemon(inputs) {
       socket: paths2.socket,
       preload: stableAttachPreload(bundle.path, host)
     },
-    holdClickError: (sessionId2, text4, at) => parts.renderer.tell(
-      { kind: "hold-click-error", session: sessionId2, text: text4 },
-      at
-    ),
+    holdClickError: holdClickError2,
     log,
     now: instant,
     defer: (run3) => void clock.defer(run3)
