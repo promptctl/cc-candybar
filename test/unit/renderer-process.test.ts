@@ -370,15 +370,17 @@ describe("ids a renderer mints", () => {
       ["unwatch", 1],
     ]);
     expect(held.at(-1)).toEqual(["release", 2]);
-    // A push for the first renderer's watch fails as down; the second's goes
-    // to it by its own id.
+    // A push for the first renderer's watch fails, said as its own failure;
+    // the second's goes to it by its own id.
     await expect(
       link.renderer.answer({
         kind: "adapter",
         push: { kind: "watch", id: 1 as WatchId, heard: null, deaf: [] },
         at: 0 as Instant,
       }),
-    ).rejects.toThrow(RendererDown);
+    ).rejects.toThrow(
+      "renderer main: watch 1 was held by a renderer that has ended",
+    );
     void link.renderer.answer({
       kind: "adapter",
       push: { kind: "watch", id: 3 as WatchId, heard: null, deaf: [] },
@@ -416,6 +418,29 @@ describe("ids a renderer mints", () => {
     clock.advance(2 * BACKOFF_FIRST_MS);
     children[2]!.say({ kind: "started", pid: 9003 });
     starts[2]!();
+    await settled();
+    expect(held).toEqual([
+      ["hold", 1],
+      ["release", 1],
+    ]);
+  });
+
+  test("a start with nothing to await releases no holds before its renderer has booted", async () => {
+    const { link, children, clock, held } = rig();
+    link.arm();
+    children[0]!.say({ kind: "started", pid: 9001 });
+    children[0]!.say({
+      kind: "notice",
+      reach: "storage.hold",
+      args: [1, ["/f"]],
+    });
+    await settled();
+    children[0]!.exit(CRASHED);
+    await settled();
+    clock.advance(BACKOFF_FIRST_MS);
+    await settled();
+    expect(held).toEqual([["hold", 1]]);
+    children[1]!.say({ kind: "started", pid: 9002 });
     await settled();
     expect(held).toEqual([
       ["hold", 1],

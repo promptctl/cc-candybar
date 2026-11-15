@@ -86,7 +86,7 @@ export const inProcessPort: RendererPort = ({ load }) => {
 // The renderer in a process of its own, which loads there, so the host never
 // opens the files the renderer is the one writer of.
 export function processPort(
-  run: Pick<ProcessOwner, "entry" | "cwd" | "heapCapMb">,
+  run: Pick<ProcessOwner, "launcher" | "entry" | "cwd" | "heapCapMb">,
 ): RendererPort {
   return ({ boot, node }) => ({
     start: (own) => processRenderer({ ...own, ...run, node, boot }),
@@ -120,14 +120,14 @@ export interface LinkOwner {
   readonly clock: Timekeeper;
   readonly start: () => Promise<void>;
   readonly ended: (event: HeldEvent) => void;
-  // The daemon's launcher for the renderer's process, which its close ends
-  // only after the renderer's own close steps.
-  readonly launcher: Pick<Launcher, "launchChannel">;
 }
 
-// What a process link is built from besides: how to run it, and the boot it
-// sends.
+// What a process link is built from besides: the launcher whose lifetime is
+// the process's, so the daemon's close aborting its own launches does not end
+// the renderer before the renderer's own close steps; how to run it; and the
+// boot it sends.
 export interface ProcessOwner extends LinkOwner {
+  readonly launcher: Pick<Launcher, "launchChannel">;
   // The node that runs the host, with its flags.
   readonly node: readonly string[];
   // The entry the host's own process runs, which the node flags load: the
@@ -344,24 +344,13 @@ export function processRenderer(own: ProcessOwner): RendererLink {
           log("error", `renderer main[${generationOf}]: ${message}`),
       }),
     };
-    heardBy = (text) => heard(link, text);
     phase = { kind: "starting", link, queued: [] };
     write(channel, { kind: "boot", boot: own.boot });
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: the host's
     // one path reaches it in the order it is called, so every input after
-    // this is queued behind the state it changes. What an ended renderer held
-    // goes once this one has taken its start, and stays if it ends first.
-    void own
-      .start()
-      .catch((thrown: unknown) =>
-        log(
-          "error",
-          `renderer main[${generationOf}] start failed: ${String(thrown)}`,
-        ),
-      )
-      .finally(() => {
-        if (current() === link) releaseGone();
-      });
+    // this is queued behind the state it changes.
+    const start = own.start();
+    heardBy = (text) => heard(link, start, text);
     void channel.ended.then((result) => {
       stdout.end();
       stderr.end();
@@ -378,7 +367,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     });
   };
 
-  const heard = (link: Link, text: string): void => {
+  const heard = (link: Link, start: Promise<void>, text: string): void => {
     let line: RendererLine;
     try {
       line = JSON.parse(text) as RendererLine;
@@ -389,7 +378,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
     switch (line.kind) {
       case "started":
-        started(link);
+        started(link, start);
         return;
       // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log;
       // the stack is the log's alone.
@@ -405,7 +394,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
   };
 
-  const started = (link: Link): void => {
+  const started = (link: Link, start: Promise<void>): void => {
     if (phase.kind !== "starting" || phase.link !== link) return;
     const { queued } = phase;
     phase = { kind: "live", link };
@@ -416,6 +405,11 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     );
     refused = 0;
     for (const send of queued) send();
+    // [LAW:no-ambient-temporal-coupling] What an ended renderer held goes once
+    // this one has started and taken its start, and stays if it ends first.
+    void start.then(() => {
+      if (current() === link) releaseGone();
+    });
     // Its memory is read at once, not a period after its boot.
     ping(link);
   };
@@ -515,10 +509,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         // [LAW:no-silent-failure] The renderer that owed this one is gone, so
         // there is no one to tell.
         if (effect === undefined || effect.by !== link.held)
-          throw refusal(
-            new RendererDown(
-              `renderer main: effect ${e.of} was returned by a renderer that has ended`,
-            ),
+          throw new Error(
+            `renderer main: effect ${e.of} was returned by a renderer that has ended`,
           );
         effects.delete(e.of);
         toSend = { ...input, event: { ...e, of: effect.id } };
@@ -540,10 +532,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       if (push.kind !== "watch") return link.lines.renderer.answer(input);
       const watch = watches.get(push.id);
       if (watch === undefined || watch.by !== link.held)
-        throw refusal(
-          new RendererDown(
-            `renderer main: watch ${push.id} was held by a renderer that has ended`,
-          ),
+        throw new Error(
+          `renderer main: watch ${push.id} was held by a renderer that has ended`,
         );
       return link.lines.renderer.answer({
         ...input,

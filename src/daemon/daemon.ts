@@ -291,7 +291,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: [...launcher.standing(), ...rendererLauncher.standing()],
+        launcher: launcher.standing(),
         rendererEnded,
       }),
     );
@@ -302,10 +302,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // one-shot launcher, after the last stats anyone reads.
   // Its work holds this one, so a closed daemon's launches are refused here,
   // whichever daemon is live by then.
-  const launchOwner = (signal: AbortSignal): LaunchOwner => ({
+  const launcher = inputs.launcher({
     inherited: host.env,
     stats: stats.launchStats,
-    signal,
+    signal: closing.signal,
     // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
     // hold them against.
     now: instant,
@@ -324,12 +324,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       restateFaults();
     },
   });
-  const launcher = inputs.launcher(launchOwner(closing.signal));
-  // [LAW:single-enforcer] The renderer's process is the daemon's launch too,
-  // metered and warned as every other, under a close of its own: the
-  // daemon's abort comes before the renderer's last close steps.
-  const rendererClosing = new AbortController();
-  const rendererLauncher = inputs.launcher(launchOwner(rendererClosing.signal));
   // [LAW:one-source-of-truth] The update watch and the lane edge read a pid
   // through this one probe, so a probe handed in reaches both. The process entry
   // (server.ts) asks its own before this daemon exists.
@@ -729,7 +723,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
-      rendererLauncher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
         rendererEnded = { ...rendererEnded, answered: true };
       restateFaults();
@@ -767,7 +760,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     reaches,
     log,
     clock,
-    launcher: rendererLauncher,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
     // request would: every live session whose newest request the host holds
     // gets its `config` with its latest stamp, and every open feed its `pin`,
@@ -914,10 +906,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // After every step the renderer takes: its process, when it has one,
         // ends with nothing left to flush.
         ["renderer process close", () => link.close()],
-        [
-          "renderer launches abort",
-          () => rendererClosing.abort(new Error("the daemon closed")),
-        ],
       ];
       for (const [step, run] of teardown) {
         try {
@@ -927,14 +915,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         }
       }
       closed = true;
-      return {
-        settled: Promise.all([
-          launcher.settled(),
-          rendererLauncher.settled(),
-        ]).then(([own, renderer]) => ({
-          unreaped: [...own.unreaped, ...renderer.unreaped],
-        })),
-      };
+      return { settled: launcher.settled() };
     },
   };
 }

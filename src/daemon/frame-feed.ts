@@ -569,8 +569,9 @@ export class FrameFeeds<Req> {
     const moment = started + (at - wall) * 1000;
     try {
       await this.step(feed, started, moment, at);
-      // A step is whole only once nothing of it threw, its push included.
-      if (feed.fault !== null) {
+      // A step is whole only once nothing of it threw, its push included; a
+      // feed closed while it drew recovers nothing.
+      if (feed.fault !== null && this.feeds.get(feed.sessionId) === feed) {
         this.deps.log(
           "info",
           `feed sid=${JSON.stringify(feed.sessionId)} recovered after ${feed.fault}`,

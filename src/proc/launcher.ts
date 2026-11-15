@@ -195,9 +195,10 @@ export interface Channel {
   write(text: string): void;
   // Closes its stdin.
   end(): void;
-  // How it ended, once its child is gone and its stdout and stderr have
-  // ended, so the last thing it said is heard before this resolves. Its
-  // streams are empty: everything it said was heard.
+  // How it ended, once its child is gone. Its pipes may close after that,
+  // never holding this back (a descendant can keep them open), so what it
+  // said last can be heard after this resolves. Its streams are empty:
+  // everything it said is heard.
   readonly ended: Promise<LaunchResult>;
 }
 
