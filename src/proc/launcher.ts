@@ -4,7 +4,11 @@
 
 import type { Timekeeper } from "../time";
 import type { Drawing } from "../config/lanes";
-import { eventHoldAt, type HeldEvent } from "../utils/event-hold";
+import {
+  DAEMON_EVENT_HOLD_S,
+  eventHoldAt,
+  type HeldEvent,
+} from "../utils/event-hold";
 import type { Instant } from "../utils/instant";
 
 // Closed list of subprocess categories. Adding a new spawn site requires
@@ -96,6 +100,10 @@ export const LAUNCH_CATEGORIES = [
   "lane.tmux",
   "lane.claude",
   "lane.process",
+  // A renderer's own process (src/daemon/renderer-process.ts): one channel at
+  // a time, started as its daemon arms and again after one ends, paced by the
+  // supervisor's backoff, so no rate limit.
+  "renderer",
   // The launcher's lifeline (below): one per launcher that launches, and one
   // more each time a lost one is replaced. Metered for its spawn alone, so
   // every replacement counts in daemon-stats.
@@ -169,6 +177,30 @@ export type LaunchResult =
     };
 
 export type Failed = Extract<LaunchResult, { ok: false }>;
+
+// [LAW:types-are-the-program] A launch the caller talks to for as long as it
+// lives: what it writes on stdout and stderr is heard as it comes, never
+// captured, so it has no output bound; its stdin stays open for the caller.
+export interface ChannelOpts extends Omit<AsyncLaunchOpts, "stdinInput"> {
+  readonly heard: {
+    readonly stdout: (text: string) => void;
+    readonly stderr: (text: string) => void;
+  };
+}
+
+export interface Channel {
+  // The child's pid, null when its spawn failed.
+  readonly pid: number | null;
+  // Writes to its stdin; nothing once its stdin has closed.
+  write(text: string): void;
+  // Closes its stdin.
+  end(): void;
+  // How it ended, once its child is gone. Its pipes may close after that,
+  // never holding this back (a descendant can keep them open), so what it
+  // said last can be heard after this resolves. Its streams are empty:
+  // everything it said is heard.
+  readonly ended: Promise<LaunchResult>;
+}
 
 // [LAW:single-enforcer] Why a launch failed, said one way for every caller.
 export function whyFailed(r: Failed): string {
@@ -248,10 +280,6 @@ export interface LaunchPipesFact {
 // while it stands, and the latest pipe event.
 export type LauncherFact = LifelineWarning | LaunchPipesFact;
 
-// Seconds every render shows a pipe event: long enough to read on a bar that
-// redraws only on events. That it is seen at all is the owed half of the hold.
-export const PIPE_EVENT_HOLD_S = 60;
-
 export interface LaunchPipesWarning {
   readonly kind: "launch-pipes";
   readonly message: string;
@@ -273,7 +301,7 @@ export function launcherWarningsAt(
 ): LauncherWarning[] {
   return facts.flatMap((fact): LauncherWarning[] => {
     if (fact.kind === "lifeline") return [fact];
-    const hold = eventHoldAt(fact.event, PIPE_EVENT_HOLD_S, at, render);
+    const hold = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render);
     return hold === "over" ? [] : [{ ...fact, message: fact.event.text, hold }];
   });
 }
@@ -348,6 +376,7 @@ export interface Launcher {
   // launched child's own progress waits by this one, never by a held daemon's.
   readonly clock: Timekeeper;
   launch(opts: AsyncLaunchOpts): Promise<LaunchResult>;
+  launchChannel(opts: ChannelOpts): Channel;
   launchDetachedSync(opts: LaunchOpts): LaunchResult;
   launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch;
   // Whether anything of the job's process group the launcher can still signal is

@@ -226,8 +226,9 @@ export interface AdapterToHost {
   };
   // Where a `doctor-probe` link records that it arrived.
   readonly probes: { readonly arrive: (arrival: ProbeArrival) => void };
-  // An answer carrying the launcher's pipe event reached its client.
-  readonly pipeEventAnswered: (event: HeldEvent) => void;
+  // An answer carrying a daemon-wide held event (the launcher's pipe event,
+  // the last renderer's end) reached its client.
+  readonly eventAnswered: (event: HeldEvent) => void;
   // The renderer's watches, each held by the host's one registry under the
   // id the renderer minted, from its `watch` to its `unwatch`: every window
   // it hears comes back as a `watch` push.

@@ -4,7 +4,14 @@
 
 Claude Code spawns the client on every statusline tick. The client connects to the daemon's unix socket, sends the hook JSON and prints the answer. The daemon is the only renderer. The client has no render path of its own, on purpose: a second renderer is a second source of truth, and it drifts. [LAW:one-source-of-truth]
 
-Inside the daemon the renderer side is a directory, and a lint rule over a table of zones fails any import into it but its start and any import out of it but shared code. The contract between the two (the renderer interface and the adapter) is shared, because the host and the wire both name it, and every reach across the seam is an adapter entry, so the adapter is the list of work left before the renderer runs in a process of its own. A zone is only what the rule checks, which is import direction: node's builtins and globals reach the world without a relative import, so a shared module may still open a file or write stderr, and the rule for each such effect lands with the change that removes the effect. [LAW:one-way-deps]
+Inside the daemon the renderer side is a directory, and a lint rule over a table of zones fails any import into it but its start and any import out of it but shared code. The contract between the two (the renderer interface and the adapter) is shared, because the host and the wire both name it, and every reach across the seam is an adapter entry. A zone is only what the rule checks, which is import direction: node's builtins and globals reach the world without a relative import, so a shared module may still open a file or write stderr, and the rule for each such effect lands with the change that removes the effect. [LAW:one-way-deps]
+
+The daemon's process runs its renderer in a process of its own, speaking that contract as JSON lines over the child's stdio; tests, the page and `check` run it in process, through the same contract. Four things the code relies on that it cannot show:
+
+- The renderer is spawned from the process's own entry, never the bundle path the daemon reports: under a test's loader the module's file is no entry, and a renderer spawned from it runs nothing.
+- It is launched through the process's launcher, not the daemon's, because the daemon's close aborts its own launches before the renderer's last close step, which flushes the session state.
+- It ends on its stdin's EOF, so it dies with a host killed with no cleanup; the launcher's lifeline is no part of that.
+- While no renderer is live an input fails at once rather than starting one, because a request per tick that spawns would be a fork storm under a crash loop.
 
 A request is answered by the frame its renderer presents, and the renderer keeps what that frame showed (its copies, the click error it carried) until the host says whether the client took it. So the connection settles every reply on every exit, including a reply superseded by the backstop's and a write that threw: an exit that forgets leaks one record per request, and nothing shows it.
 

@@ -18,20 +18,24 @@ import {
 import { eventLine } from "../utils/logfmt.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
-import type { Timekeeper } from "../time.js";
+import { elapsedMs, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
-import { failureOf } from "./foundations/verb-error.js";
+import { CrossedFailure, failureOf } from "./foundations/verb-error.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";
+
+// A turn as the host took it: how it ended, and what the hop to its renderer
+// cost, null for a turn no renderer answered.
+export type HostTurn = TurnOutcome & { readonly hopMs: number | null };
 
 export interface RendererHost {
   readonly name: RendererName;
   // One turn, recorded by the caller: a request's answer writes both its
   // turns on the request's render event.
-  answer(input: EventInput): Promise<TurnOutcome>;
+  answer(input: EventInput): Promise<HostTurn>;
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
   deliver(input: EventInput, about: TurnRecord): Promise<TurnOutcome>;
@@ -45,8 +49,9 @@ export interface RendererHost {
 
 export function rendererHost(
   name: RendererName,
-  // The clock a refusal's `effect-done` is stamped by, when it is made.
-  clock: Pick<Timekeeper, "now">,
+  // The clock a refusal's `effect-done` is stamped by, when it is made, and a
+  // hop is timed on.
+  clock: Pick<Timekeeper, "now" | "monotonic">,
   renderer: Renderer,
   log: DaemonLogger,
   collector: {
@@ -59,11 +64,16 @@ export function rendererHost(
     readonly holding: (session: SessionId) => () => void;
   },
 ): RendererHost {
-  const held = async (input: EventInput): Promise<TurnOutcome> => {
+  const held = async (input: EventInput): Promise<HostTurn> => {
     const session = sessionOf(input.event);
     const release = session === null ? () => {} : collector.holding(session);
     try {
-      const { subscriptions, ...output } = await renderer.answer(input);
+      const sentAt = clock.monotonic();
+      const { subscriptions, turnMs, ...answered } =
+        await renderer.answer(input);
+      // [LAW:nothing-unseen] The hop: the round trip less the renderer's own
+      // turn, so what the process boundary costs is read from the event.
+      const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
       collector.subscribed(subscriptions);
       // [LAW:single-enforcer] A present answers the request whose turn
       // returned it, so every effect another turn returns is refused here,
@@ -80,12 +90,13 @@ export function rendererHost(
   // hears how the whole turn ended as a value: a hold that failed, a renderer
   // that rejected, or an output the host could not take, is the turn's
   // failure. Nothing of it was taken, so the subscriptions last taken stand.
-  const turn = (input: EventInput): Promise<TurnOutcome> =>
+  const turn = (input: EventInput): Promise<HostTurn> =>
     held(input).catch(
-      (thrown: unknown): TurnOutcome => ({
+      (thrown: unknown): HostTurn => ({
         kind: "threw",
         failure: failureOf(thrown),
         record: [],
+        hopMs: null,
       }),
     );
   const refuse = (effect: Effect, reason: string): void =>
@@ -121,6 +132,9 @@ export function rendererHost(
           log("info", eventLine("turn", [...head, ...delivered.record]));
         return;
       case "threw":
+        // [LAW:single-enforcer] No renderer was live to take it: the
+        // supervisor says that once, with the count it refused.
+        if (delivered.failure.kind === "down") return;
         // [LAW:no-silent-failure] No turn's failure is left unhandled.
         log(
           LEVEL[delivered.failure.kind],
@@ -156,10 +170,13 @@ export function rendererHost(
         (thrown: unknown) =>
           ({ kind: "threw", failure: failureOf(thrown) }) as const,
       );
+    // The failure keeps its kind, so a push no renderer took reads as one.
     if (output.kind === "threw")
-      throw new Error(
-        `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`,
-      );
+      throw new CrossedFailure({
+        ...output.failure,
+        message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
+        detail: `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`,
+      });
     if (output.reply.kind !== push.kind)
       throw new Error(
         `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`,
@@ -169,11 +186,12 @@ export function rendererHost(
     return output.reply as ReplyTo<P["kind"]>;
   };
   const tell = (push: AdapterPush, at: Instant): void =>
-    // [LAW:types-are-the-program] exception: `ask` rejects only with the
-    // Errors it makes, which no promise type carries.
-    void ask(push, at).catch((thrown: unknown) =>
-      log("error", (thrown as Error).message),
-    );
+    void ask(push, at).catch((thrown: unknown) => {
+      const failure = failureOf(thrown);
+      // [LAW:single-enforcer] A push no renderer was live to take is the
+      // supervisor's to say.
+      if (failure.kind !== "down") log("error", failure.detail);
+    });
   return { name, answer: turn, deliver, ask, tell };
 }
 

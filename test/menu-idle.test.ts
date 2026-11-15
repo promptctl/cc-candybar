@@ -41,10 +41,8 @@ import {
   litAt,
 } from "../src/config/menu-timeout";
 import { closeByTurn, MenuIdle } from "../src/daemon/menu-idle";
-import type {
-  RendererInput,
-  RendererOutput,
-} from "../src/renderer-interface/interface";
+import type { RendererInput } from "../src/renderer-interface/interface";
+import type { HostTurn } from "../src/daemon/renderer-host";
 import { selectionFor } from "./helpers/selection";
 import { textOf, type Frame, type Row } from "../src/render/frame";
 import { systemTimekeeper } from "../src/time";
@@ -245,7 +243,7 @@ describe("the close as a renderer turn", () => {
     jest.advanceTimersByTime(s * 1000);
   };
   // A host whose every turn answers `delivered`, and the inputs it was handed.
-  const hostAnswering = (delivered: RendererOutput) => {
+  const hostAnswering = (delivered: HostTurn) => {
     const inputs: RendererInput[] = [];
     return {
       inputs,
@@ -262,8 +260,8 @@ describe("the close as a renderer turn", () => {
     const { host, inputs } = hostAnswering({
       kind: "answered",
       effects: [],
-      subscriptions: { sources: {} },
       record: [],
+      hopMs: 0,
     });
     const idle = { firedAt: at(now), idleS: 30, timeoutS: 30 };
     await closeByTurn(host, () => at(now), S, idle, null);
@@ -281,7 +279,7 @@ describe("the close as a renderer turn", () => {
       kind: "threw",
       failure: failureOf(new Error("the close threw")),
       record: [],
-      subscriptions: { sources: {} },
+      hopMs: 0,
     });
     const failures: string[] = [];
     const idle = new MenuIdle({

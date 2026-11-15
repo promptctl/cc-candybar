@@ -69,6 +69,8 @@ import type {
   JobLaunch,
   JobEnding,
   Launcher,
+  Channel,
+  ChannelOpts,
 } from "./launcher";
 
 // [LAW:no-silent-failure] A spawn whose `cwd` is gone fails with the SAME
@@ -615,9 +617,106 @@ function feed(input: Writable, text: string | Buffer | undefined): void {
   input.end(text);
 }
 
-async function launchWaited(
+// [LAW:one-type-per-behavior] What a waited launch does with its child's
+// pipes, the one thing its two forms differ in: a launch captures its output
+// and writes its stdin once; a channel relays its output as it comes and
+// hands its stdin to the caller.
+interface Pipes {
+  readonly read: (
+    state: LaunchState,
+    category: LaunchCategory,
+    stream: Readable | null,
+    ends: CaptureEnds,
+    which: "stdout" | "stderr",
+  ) => Captured;
+  readonly opened: (input: Writable | null, pid: number | null) => void;
+}
+
+const captured = (stdinInput: string | Buffer | undefined): Pipes => ({
+  read: (state, category, stream, ends) =>
+    capture(state, category, stream, ends),
+  opened: (input) => {
+    if (input !== null) feed(input, stdinInput);
+  },
+});
+
+// [LAW:single-enforcer] A channel's stream, decoded as it comes and heard
+// whole: nothing is kept, so nothing is bounded. A read error ends the launch
+// as a captured stream's does.
+function relay(
+  state: LaunchState,
+  category: LaunchCategory,
+  stream: Readable | null,
+  ends: CaptureEnds,
+  heard: (text: string) => void,
+): Captured {
+  const decoder = new StringDecoder("utf8");
+  stream?.on("error", (err) => {
+    state.scope.stats?.onPipeError(category);
+    ends.failed(err);
+  });
+  stream?.on("data", (chunk: Buffer) => {
+    const text = decoder.write(chunk);
+    if (text !== "") heard(text);
+  });
+  return {
+    take: () => {
+      const tail = decoder.end();
+      if (tail !== "") heard(tail);
+      return "";
+    },
+    drain: () => {
+      if (stream === null || stream.destroyed || stream.readableEnded) return;
+      hold(state, category, stream, () => "closed");
+    },
+  };
+}
+
+// A channel: a waited launch whose output is heard and whose stdin is the
+// caller's to write and close.
+function launchChannel(state: LaunchState, opts: ChannelOpts): Channel {
+  let input: Writable | null = null;
+  let pid: number | null = null;
+  const ended = track(
+    state,
+    launchPiped(state, opts, {
+      read: (s, category, stream, ends, which) =>
+        relay(s, category, stream, ends, opts.heard[which]),
+      opened: (opened, spawned) => {
+        input = opened;
+        pid = spawned;
+        // [LAW:no-silent-failure] exception: a write to a child that has gone
+        // fails here, and the child's end is the verdict `ended` reports.
+        opened?.on("error", () => {});
+      },
+    }),
+  );
+  return {
+    get pid() {
+      return pid;
+    },
+    write: (text) => {
+      if (input !== null && !input.writableEnded && !input.destroyed)
+        input.write(text);
+    },
+    end: () => {
+      input?.end();
+    },
+    ended,
+  };
+}
+
+function launchWaited(
   state: LaunchState,
   opts: AsyncLaunchOpts,
+): Promise<LaunchResult> {
+  return launchPiped(state, opts, captured(opts.stdinInput));
+}
+
+async function launchPiped(
+  state: LaunchState,
+  opts: Omit<AsyncLaunchOpts, "stdinInput">,
+  pipes: Pipes,
 ): Promise<LaunchResult> {
   const { stats, clock } = state.scope;
   const refused = admit(state, opts.category, opts.signal);
@@ -668,8 +767,20 @@ async function launchWaited(
         terminate("pipe-error");
       },
     };
-    const stdout = capture(state, opts.category, child.stdout, ends);
-    const stderr = capture(state, opts.category, child.stderr, ends);
+    const stdout = pipes.read(
+      state,
+      opts.category,
+      child.stdout,
+      ends,
+      "stdout",
+    );
+    const stderr = pipes.read(
+      state,
+      opts.category,
+      child.stderr,
+      ends,
+      "stderr",
+    );
     const output = () => ({ stdout: stdout.take(), stderr: stderr.take() });
     let settled = false;
     // What clears each timer the launch has armed.
@@ -850,7 +961,7 @@ async function launchWaited(
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
 
-    if (input !== null) feed(input, opts.stdinInput);
+    pipes.opened(input, group ?? null);
   });
 }
 
@@ -1206,6 +1317,7 @@ function launcherWithState(
   const launcher: TestableLauncher = {
     clock,
     launch: (opts) => track(state, launchWaited(state, opts)),
+    launchChannel: (opts) => launchChannel(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     jobGroupAlive: (pid) => spawner.signalJob(pid, 0),

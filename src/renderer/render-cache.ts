@@ -128,15 +128,17 @@ export const VIEW_BYTES = 2.5 * 1024 * 1024;
 // the line the doctor calls near the limit once the rest of the daemon is
 // reserved — so a share full at its charges, which a test holds real heap
 // under and so are the most the cache can cost, never puts the daemon past
-// that line, whatever the limit. The reserve is the ~60 MB a daemon serving
-// one session is charged; the charges' own headroom over what entries hold is
-// the heap's growth room, so reserving more would starve the cache at a
-// lowered limit for nothing. At the default limit the share is 704 MB: ~126
-// sessions on one compile, each an entry and a view, against a working set of
-// ~20 directories in the production daemon.
+// that line, whatever the limit. The limit is over the host and its renderer
+// process together, so the reserve is the ~60 MB one process serving one
+// session was charged, and a second runtime with its own copy of the loaded
+// bundle (a bare node is charged ~12 MB). The charges' own headroom over what
+// entries hold is the heap's growth room, so reserving more would starve the
+// cache at a lowered limit for nothing. At the default limit the share is
+// 672 MB: ~120 sessions on one compile, each an entry and a view, against a
+// working set of ~20 directories in the production daemon.
 // Measured, a full share costs less than its charges: serving 100 sessions,
 // the daemon is charged ~430 MB in all with 560 MB of the share accounted.
-const RENDER_CACHE_RESERVE_BYTES = 64 * 1024 * 1024;
+const RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
 // Never less than a quarter of the limit, which a small limit has always had:
 // there the reserve would leave the cache too little to hold two sessions.
 export function renderCacheBudget(memoryLimitBytes: number): number {

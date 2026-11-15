@@ -65,7 +65,7 @@ function failed(
 // [LAW:effects-at-boundaries] The request's context as both its turns take
 // it: the checkout its directory is in, read from the disk by the host, so
 // the renderer reads no file for it and the two turns read one location.
-function located(req: CheckedRenderRequest): CheckedRenderRequest {
+export function located(req: CheckedRenderRequest): CheckedRenderRequest {
   const dir = req.hookData.workspace?.current_dir ?? req.cwd;
   return {
     ...req,
@@ -123,8 +123,9 @@ export async function answerStatusline(
   // that moved is declared and its stamp handed in before the request is
   // delivered, so the request's wait covers every source the view reads.
   // In process the config turn answers at once, so nothing that opens or
-  // closes a view runs between it and the request; out of process, the
-  // router's mailbox is what keeps the two adjacent.
+  // closes a view runs between it and the request. Out of process another
+  // input can land between the two, as the host sends a renderer each input
+  // as it comes.
   const configured = await host.answer({
     kind: "event",
     at,
@@ -158,6 +159,14 @@ export async function answerStatusline(
     },
   });
   recorded(facts, delivered);
+  // [LAW:nothing-unseen] Both turns' hops, beside `took`: what reaching the
+  // renderer cost this request.
+  noteFacts(facts, {
+    hop:
+      configured.hopMs === null || delivered.hopMs === null
+        ? "-"
+        : `${configured.hopMs + delivered.hopMs}ms`,
+  });
   if (delivered.kind === "threw") {
     noteFacts(facts, { renderer: host.name });
     return failed(host, delivered.failure);

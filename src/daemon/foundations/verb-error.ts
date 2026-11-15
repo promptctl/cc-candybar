@@ -31,14 +31,23 @@ export class ClickAbandoned extends Error {
   }
 }
 
+// No renderer is live to take the input: the last one ended, and its
+// supervisor says how, once, rather than each input that found none.
+export class RendererDown extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RendererDown";
+  }
+}
+
 // [LAW:types-are-the-program] How a request or a turn failed, as data: its
 // kind, which a request's outcome is named by and its reader routes by
-// (`bad-request` the client's fault, `threw` the daemon's, and the two that
-// are neither), the message a reply carries, and the detail a log keeps (an
+// (`bad-request` the client's fault, `threw` the daemon's, and the others
+// neither: a close, a client that left, no renderer live), the message a reply carries, and the detail a log keeps (an
 // Error's stack). A class crosses no process, so a failure is classified
 // where it was thrown and travels as this.
 export interface Failure {
-  readonly kind: "bad-request" | "threw" | "closing" | "abandoned";
+  readonly kind: "bad-request" | "threw" | "closing" | "abandoned" | "down";
   readonly message: string;
   readonly detail: string;
 }
@@ -51,11 +60,24 @@ const KINDS: ReadonlyArray<
   [BadVerbArgs, "bad-request"],
   [DaemonClosing, "closing"],
   [ClickAbandoned, "abandoned"],
+  [RendererDown, "down"],
 ];
 
+// A failure classified in another process, thrown here as it was classified
+// there: a class crosses no process, so the failure travels as data and is
+// thrown again as this.
+export class CrossedFailure extends Error {
+  constructor(readonly failure: Failure) {
+    super(failure.message);
+    this.name = "CrossedFailure";
+  }
+}
+
 // [LAW:single-enforcer] The one classification of a thrown value. `inspect` is
-// total over anything a handler can throw and carries an Error's stack.
+// total over anything a handler can throw and carries an Error's stack. A
+// crossed failure was classified where it was thrown, so it keeps its kind.
 export function failureOf(thrown: unknown): Failure {
+  if (thrown instanceof CrossedFailure) return thrown.failure;
   return {
     kind: KINDS.find(([as]) => thrown instanceof as)?.[1] ?? "threw",
     message: thrown instanceof Error ? thrown.message : inspect(thrown),

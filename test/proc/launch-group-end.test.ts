@@ -9,7 +9,6 @@ import {
 } from "../../src/proc/launch";
 import {
   launcherWarningsAt,
-  PIPE_EVENT_HOLD_S,
   type LaunchCategory,
   type WarningChange,
 } from "../../src/proc/launcher";
@@ -17,6 +16,7 @@ import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";
 import { instantOf, type Instant } from "../../src/utils/instant";
+import { DAEMON_EVENT_HOLD_S } from "../../src/utils/event-hold";
 
 // What these cases launch leaves its process group with setsid, which only
 // python reaches portably: macOS has no setsid command.
@@ -307,12 +307,12 @@ describe("the pipes a descendant holds past its launch", () => {
       ).filter((w) => w.kind === "launch-pipes");
     expect(event.text).toContain("user-shell output cut at the");
     expect(event.text).toContain("now fails its writes");
-    expect(shown(PIPE_EVENT_HOLD_S - 1, "feed")).toHaveLength(1);
-    expect(shown(PIPE_EVENT_HOLD_S + 1, "feed")).toEqual([]);
-    expect(shown(PIPE_EVENT_HOLD_S + 600, "request")).toHaveLength(1);
+    expect(shown(DAEMON_EVENT_HOLD_S - 1, "feed")).toHaveLength(1);
+    expect(shown(DAEMON_EVENT_HOLD_S + 1, "feed")).toEqual([]);
+    expect(shown(DAEMON_EVENT_HOLD_S + 600, "request")).toHaveLength(1);
     launcher.answeredPipeEvent(event);
-    expect(shown(PIPE_EVENT_HOLD_S - 1, "feed")).toHaveLength(1);
-    expect(shown(PIPE_EVENT_HOLD_S + 1, "request")).toEqual([]);
+    expect(shown(DAEMON_EVENT_HOLD_S - 1, "feed")).toHaveLength(1);
+    expect(shown(DAEMON_EVENT_HOLD_S + 1, "request")).toEqual([]);
   });
 
   it("count only what the holder writes after the launch, against a bound of their own", async () => {

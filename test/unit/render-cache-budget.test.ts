@@ -22,9 +22,10 @@ describe("the render cache's share of the memory limit", () => {
     },
   );
 
-  // A lowered limit still holds more than the session being served.
+  // A lowered limit still holds more than the session being served, after
+  // both processes' reserve: its quarter, five sessions.
   test("at 160 MB it holds several sessions", () => {
-    expect(renderCacheBudget(160 * MB)).toBeGreaterThanOrEqual(sessions(8));
+    expect(renderCacheBudget(160 * MB)).toBeGreaterThanOrEqual(sessions(5));
   });
 
   test("at the default limit it holds the load gate's hundred sessions", () => {

@@ -14,6 +14,7 @@ import {
   stableAttachPreload,
 } from "./install";
 import { runDaemon } from "./daemon/server";
+import { runRenderer } from "./renderer-process.js";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { daemonStatsPlan } from "./daemon/client-stats";
 import { debugCommandPlan } from "./daemon/client-debug";
@@ -95,6 +96,11 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   // The daemon owns its own lifecycle.
   daemon: async () => {
     runDaemon(world);
+  },
+  // A renderer's own process, which its daemon starts and talks to over its
+  // stdio; it ends when its stdin does.
+  renderer: async () => {
+    runRenderer(world);
   },
   "daemon-stats": async (args) => {
     await exitWith(await daemonStatsPlan(world, args));

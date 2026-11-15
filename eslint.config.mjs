@@ -193,7 +193,7 @@ const OWNED_IMPORTS = {
   // handed down. The daemon process reads it once, in server.ts.
   daemonPaths: {
     group: PATHS,
-    owners: ["src/daemon/server.ts"],
+    owners: ["src/daemon/server.ts", "src/renderer-process.ts"],
     message: "A daemon is handed its paths: take the value you are given.",
   },
   stateDir: {
@@ -347,6 +347,8 @@ const ZONE_ROWS = {
   "src/doctor/gather.ts": "shared",
   "src/claude-settings-read.ts": "shared",
   "src/index.ts": "root",
+  // The renderer process's composition root, the counterpart of the daemon's.
+  "src/renderer-process.ts": "root",
   "src/check.ts": "root",
   "src/check-runs.ts": "root",
   "src/demo/": "root",

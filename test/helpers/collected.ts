@@ -36,7 +36,7 @@ export function collected(
     Partial<Pick<CollectorDeps, "clock" | "watched" | "daemon">>,
   cleanups: Array<() => void>,
 ): Collected {
-  const worldStates = new WorldStates();
+  const worldStates = new WorldStates(() => {});
   let served: Served | null = null;
   const cache = (): Served => {
     if (served === null)

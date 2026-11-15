@@ -174,7 +174,17 @@ export function daemonFields({
             ? `(${signedMb(-memory.charge.gap)})`
             : ""
         }:${mb(memory.charge.bytes)}`;
-  return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;
+  // Each process's RSS, the host's first: `-` for a share no read has sized.
+  const shares =
+    memory.kind === "unmeasured"
+      ? "-"
+      : memory.processes
+          .map(
+            (p) =>
+              `${p.role}:${p.pid}:${p.sizes === null ? "-" : mb(p.sizes.rss)}`,
+          )
+          .join(",");
+  return `${running} memory=${held}/${mb(limit)} processes=${shares} postMortems=${told}`;
 }
 
 // [LAW:nothing-unseen] What the segment-data check reasoned over, as one

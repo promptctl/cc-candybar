@@ -6,6 +6,7 @@ import { rendererHost } from "../../src/daemon/renderer-host";
 import { failureOf } from "../../src/daemon/foundations/verb-error";
 import type { AdapterOutput } from "../../src/renderer-interface/interface";
 import { instantOf } from "../../src/utils/instant";
+import type { Monotonic } from "../../src/time";
 import { pushRenderer } from "../helpers/renderers";
 
 const AT = instantOf(new Date(0));
@@ -17,7 +18,7 @@ function hostOver(output: AdapterOutput) {
   const said = new Promise<string>((resolve) => (say = resolve));
   const host = rendererHost(
     "main",
-    { now: () => 0 },
+    { now: () => 0, monotonic: () => 0 as Monotonic },
     pushRenderer(async () => output),
     (level, line) => say(`${level} ${line}`),
     {

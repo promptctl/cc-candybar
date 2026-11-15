@@ -44,6 +44,9 @@ export const LEVEL: Record<RequestOutcome["kind"], LogLevel> = {
   threw: "error",
   closing: "info",
   abandoned: "info",
+  // The supervisor says the renderer's end once, as a warning; a request
+  // that found none says it on its own event.
+  down: "warn",
 };
 
 // The outcome's own detail: a failure's detail carries an Error's stack.
@@ -59,6 +62,8 @@ function detailOf(outcome: RequestOutcome): RequestFacts {
       return [["closing", outcome.message]];
     case "abandoned":
       return [["abandoned", "1"]];
+    case "down":
+      return [["down", outcome.message]];
   }
 }
 

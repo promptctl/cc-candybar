@@ -316,6 +316,17 @@ export class Collector {
     };
   }
 
+  // Each session the collector reads now, with its latest stamp: what a
+  // renderer's complete start configures again. Unlike a request, it marks no
+  // session active, so a restart keeps none past a sweep that would retire it.
+  liveDocuments(): ReadonlyMap<SessionId, WorldState> {
+    return new Map(
+      [...this.records.values()].flatMap((r) =>
+        r.phase.kind === "live" ? [[r.session, r.stamped.document]] : [],
+      ),
+    );
+  }
+
   // One sweep. Public so a test can run it at an instant it chose.
   sweep(): void {
     for (const record of this.records.values()) {

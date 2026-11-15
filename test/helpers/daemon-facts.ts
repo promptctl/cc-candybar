@@ -19,6 +19,7 @@ export const daemonFactsOf = (
   update: { newer, act: IDLE, actsError: null },
   fileEvents: [],
   launcher: [],
+  rendererEnded: null,
 });
 
 // The host's feeds of a daemon where nothing follows any session.

@@ -11,6 +11,11 @@
 import type { Instant } from "./instant.js";
 import type { Drawing } from "../config/lanes.js";
 
+// Seconds every render shows an event of the daemon's own (a pipe event, a
+// renderer's end): long enough to read on a bar that redraws only on events.
+// That it is seen at all is the owed half of the hold.
+export const DAEMON_EVENT_HOLD_S = 60;
+
 export interface HeldEvent {
   // What it says: with `at`, which event it is.
   readonly text: string;

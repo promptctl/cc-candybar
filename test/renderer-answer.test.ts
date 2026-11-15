@@ -94,7 +94,7 @@ function renderer(
       providers: rig.providers,
       verbs,
     }),
-    pipeEventAnswered: (event) => pipesAnswered.push(event),
+    eventAnswered: (event) => pipesAnswered.push(event),
   };
   // The cache's record of a delivered frame, heard on its way in.
   const recorded: string[][] = [];

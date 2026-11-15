@@ -241,8 +241,11 @@ export type TurnOutcome = { readonly record: TurnRecord } & (
 // output names the open views' subscriptions as they stand after it, however
 // it ended: an act can land before its turn throws (a click that committed
 // and followed its view), and its view is read all the same.
+// `turnMs` is how long the turn took on the renderer's own clock, so the host
+// tells what the hop to the renderer cost from what the turn did.
 export type RendererOutput = TurnOutcome & {
   readonly subscriptions: Subscriptions;
+  readonly turnMs: number;
 };
 
 // A firing of a session's idle timer: when it fired, how long the session was

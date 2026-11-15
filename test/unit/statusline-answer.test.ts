@@ -71,6 +71,7 @@ const output = (
   effects,
   subscriptions: NO_SUBSCRIPTIONS,
   record,
+  turnMs: 0,
 });
 
 // A turn that threw `message`, having reached `record`.
@@ -83,6 +84,7 @@ const threwWith = (
   failure: failureOf(new Error(message)),
   subscriptions,
   record,
+  turnMs: 0,
 });
 
 // A renderer whose request turn answers `request`, whose config
@@ -273,6 +275,7 @@ test("a render turn that throws a bad argument is still the daemon's failure, as
     kind: "threw",
     failure: failureOf(new BadVerbArgs("no such row")),
     subscriptions: NO_SUBSCRIPTIONS,
+    turnMs: 0,
     record: [],
   });
   const { answered } = await answer(renderer);

@@ -16,7 +16,7 @@ import {
   chargeProbe,
   footprintCharge,
   memoryReport,
-  physFootprintOf,
+  physFootprintsOf,
   platformProbes,
   type MemoryProbe,
 } from "../src/daemon/memory-report";
@@ -86,10 +86,10 @@ describe("platformProbes", () => {
     ).toEqual(["/usr/bin/footprint -p 4242", "/usr/bin/vmmap --summary 4242"]);
   });
 
-  test("linux reads the rollup first, then status — no subprocess either way", async () => {
+  test("linux reads the pid's rollup first, then its status — no subprocess either way", async () => {
     expect(
       platformProbes(processLauncher, "linux", 4242).map((p) => p.name),
-    ).toEqual(["/proc/self/smaps_rollup", "/proc/self/status"]);
+    ).toEqual(["/proc/4242/smaps_rollup", "/proc/4242/status"]);
   });
 
   test("an unknown platform contributes no probes rather than a wrong one", async () => {
@@ -137,19 +137,19 @@ describe("the memory charge", () => {
     exitCode: 0,
   });
 
-  test("footprint's byte output is read off its phys_footprint line, never the peak", async () => {
-    expect(physFootprintOf(FOOTPRINT)).toBe(224953704);
-    expect(physFootprintOf("phys_footprint_peak: 9 B")).toBeNull();
-    expect(physFootprintOf("phys_footprint: 216 MB")).toBeNull();
+  test("footprint's byte output is read off its phys_footprint lines, never the peak", async () => {
+    expect(physFootprintsOf(FOOTPRINT)).toEqual([224953704]);
+    expect(physFootprintsOf("phys_footprint_peak: 9 B")).toEqual([]);
+    expect(physFootprintsOf("phys_footprint: 216 MB")).toEqual([]);
   });
 
   test("footprint answering is the charge; asked for exact bytes", async () => {
     const asked: string[][] = [];
-    const probe = footprintCharge(77, async (args) => {
+    const probe = footprintCharge(async (args) => {
       asked.push(args);
       return ran(FOOTPRINT);
     });
-    expect(await probe(1)).toEqual({
+    expect(await probe([77], 1)).toEqual({
       kind: "charged",
       measure: "phys_footprint",
       bytes: 224953704,
@@ -157,8 +157,33 @@ describe("the memory charge", () => {
     expect(asked).toEqual([["-p", "77", "--noCategories", "-f", "bytes"]]);
   });
 
+  test("the host and its renderer are charged together, from one call", async () => {
+    const asked: string[][] = [];
+    const probe = footprintCharge(async (args) => {
+      asked.push(args);
+      return ran(`${FOOTPRINT}\n${FOOTPRINT.replace("224953704", "1000")}`);
+    });
+    expect(await probe([77, 78], 1)).toEqual({
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes: 224953704 + 1000,
+    });
+    expect(asked).toEqual([
+      ["-p", "77", "-p", "78", "--noCategories", "-f", "bytes"],
+    ]);
+  });
+
+  test("a footprint missing a process charges none of them", async () => {
+    const probe = footprintCharge(async () => ran(FOOTPRINT));
+    expect(await probe([77, 78], 5)).toEqual({
+      kind: "stand-in",
+      bytes: 5,
+      unread: "footprint printed 1 phys_footprint lines for 2 processes",
+    });
+  });
+
   test("footprint failing or unreadable leaves RSS standing in, saying why", async () => {
-    const failed = footprintCharge(77, async () => ({
+    const failed = footprintCharge(async () => ({
       ok: false,
       reason: "timeout",
       stdout: "",
@@ -166,21 +191,21 @@ describe("the memory charge", () => {
       exitCode: null,
       signal: "SIGTERM",
     }));
-    expect(await failed(5)).toEqual({
+    expect(await failed([77], 5)).toEqual({
       kind: "stand-in",
       bytes: 5,
       unread: "footprint timeout: footprint: hung",
     });
-    const garbled = footprintCharge(77, async () => ran("nothing here"));
-    expect(await garbled(5)).toEqual({
+    const garbled = footprintCharge(async () => ran("nothing here"));
+    expect(await garbled([77], 5)).toEqual({
       kind: "stand-in",
       bytes: 5,
-      unread: "footprint printed no phys_footprint line",
+      unread: "footprint printed 0 phys_footprint lines for 1 processes",
     });
   });
 
   test("off macOS, RSS is the charge", async () => {
-    expect(await chargeProbe(processLauncher, "linux", 1)(42)).toEqual({
+    expect(await chargeProbe(processLauncher, "linux")([1], 42)).toEqual({
       kind: "charged",
       measure: "rss",
       bytes: 42,
@@ -190,11 +215,10 @@ describe("the memory charge", () => {
   (os.platform() === "darwin" ? test : test.skip)(
     "on this Mac, footprint answers for this process",
     async () => {
-      const charge = await chargeProbe(
-        processLauncher,
-        "darwin",
-        process.pid,
-      )(process.memoryUsage().rss);
+      const charge = await chargeProbe(processLauncher, "darwin")(
+        [process.pid],
+        process.memoryUsage().rss,
+      );
       expect(charge).toMatchObject({
         kind: "charged",
         measure: "phys_footprint",

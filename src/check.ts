@@ -352,6 +352,7 @@ export function checkPayload(
       update: { newer: { ...ABSENT, at }, act: IDLE, actsError: null },
       fileEvents: [],
       launcher: [],
+      rendererEnded: null,
     },
     at,
   );
