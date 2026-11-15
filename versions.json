@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-758",
+      "ref": "refs/pull/758/merge",
+      "sha": "064377363b61fb7833ded7a69459b7f56c645916",
+      "timestamp": "2026-11-15T20:09:19.056Z",
+      "commits": [
+        {
+          "sha": "064377363b61fb7833ded7a69459b7f56c645916",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T13:08:19-07:00",
+          "message": "Merge ed73dc236e7783371d11432dc464690a3bdbf291 into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+        },
+        {
+          "sha": "ed73dc236e7783371d11432dc464690a3bdbf291",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T13:08:02-07:00",
+          "message": "feat(click): every link a renderer draws is signed, and the host verifies each click before any renderer sees it (candybar-host-renderer-x96a.35o)\n\nAny web page can open a cc-candybar:// link, so the host now honours only\none the bar drew. Every bar link carries a mac over the whole link, spelled\nafter its last '#', made where a run is drawn; measuring a strip signs\nnothing. The host verifies each click at the one place every delivery\npasses through, so a forged, edited or unsigned link reaches no renderer.\n\n- The host owns the link key and hands it to its renderer in the boot.\n- A click request carries the raw url; the host parses it after verifying.\n- A tmux range carries no mac; the link its frame drew there is verified.\n- The URL handler's frame version 2 waits for one answer and notifies on a\n  refusal, or when no renderer took the click. Version 1 is still accepted.\n- The doctor's probe link is signed by the CLI with the key file.\n- The repository answer's own mac is gone: the whole-link mac covers it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "2079879f1a0e087b16769463d6326609fb6ed589",
