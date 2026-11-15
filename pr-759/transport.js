@@ -24121,16 +24121,26 @@ function linkSigner(key) {
   if (key.length !== LINK_KEY_BYTES) {
     throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
   }
+  const signed = /* @__PURE__ */ new Map();
   return {
     sign: (fields2) => digest(key, fields2).toString("hex"),
     verify: (fields2, mac) => {
       if (!MAC_SPELLING.test(mac)) return false;
       return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
     },
-    signLink: (link) => signLinkWith(key, link),
-    openLink: (signed) => openLinkWith(key, signed)
+    signLink: (link) => {
+      let done2 = signed.get(link);
+      if (done2 === void 0) {
+        if (signed.size >= SIGNED_LINKS_HELD) signed.clear();
+        done2 = signLinkWith(key, link);
+        signed.set(link, done2);
+      }
+      return done2;
+    },
+    openLink: (link) => openLinkWith(key, link)
   };
 }
+var SIGNED_LINKS_HELD = 1024;
 function linkSignerOver(key) {
   let signer;
   const loaded = () => {
@@ -24153,15 +24163,7 @@ function linkSignerOver(key) {
   };
 }
 function signingFrames(signer) {
-  const signed = /* @__PURE__ */ new Map();
-  const sign = (link) => {
-    let done2 = signed.get(link);
-    if (done2 === void 0) {
-      done2 = isBarLink(link) ? signer.signLink(link) : link;
-      signed.set(link, done2);
-    }
-    return done2;
-  };
+  const sign = (link) => isBarLink(link) ? signer.signLink(link) : link;
   return (frame2) => ({
     ...frame2,
     rows: frame2.rows.map((row2) => ({
@@ -45934,6 +45936,11 @@ function parseClick(url, delivery, links2) {
       problem: "a status-line click comes only from tmux's own binding"
     };
   }
+  if (!isBarLink(url))
+    return {
+      kind: "refused",
+      problem: `expected a ${URL_SCHEME}:// link, got: ${url}`
+    };
   const opened = openClick(url, links2);
   return opened.kind === "link" ? { ...opened, delivery } : opened;
 }
@@ -54781,6 +54788,7 @@ async function ranClick(parts, read2, facts, click3) {
       noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
       return statusLineClick(parts, read2.value, facts, click3);
     case "link":
+      noteFacts(facts, { link: read2.link });
       return handleClick(
         parts,
         read2.verb,

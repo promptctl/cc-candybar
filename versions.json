@@ -4,15 +4,22 @@
     {
       "version": "pr-759",
       "ref": "refs/pull/759/merge",
-      "sha": "9f6e1046773a9dfc8fd0e6a44c0dc25c99371d83",
-      "timestamp": "2026-11-15T22:05:24.103Z",
+      "sha": "94c4e1fb3d507e18584c799c11dd11ee38b3797c",
+      "timestamp": "2026-11-15T22:18:00.483Z",
       "commits": [
         {
-          "sha": "9f6e1046773a9dfc8fd0e6a44c0dc25c99371d83",
+          "sha": "94c4e1fb3d507e18584c799c11dd11ee38b3797c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T22:04:32Z",
-          "message": "Merge 4f5ff1644092f80c344e5ea1dcd10c8c0ea14fbf into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+          "timestamp": "2026-11-15T22:17:07Z",
+          "message": "Merge 999a9e2f4c36f4683188a893d340c21562d83d67 into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+        },
+        {
+          "sha": "999a9e2f4c36f4683188a893d340c21562d83d67",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T15:16:55-07:00",
+          "message": "fix(click): a link is signed once and kept, and the app tells a refusal from a lost click (candybar-host-renderer-x96a.35o)\n\n- The signer keeps each link's signature, bounded, so a bar redrawn at its\n  lanes' fps signs only the links it has not drawn before.\n- The app shows \"Click refused\" only for a bad request; the daemon's own\n  failure is told as not delivered.\n- A forwarded link's click event records the link it opened.\n- A link of another scheme is refused as one, not as unsigned.\n"
         },
         {
           "sha": "4f5ff1644092f80c344e5ea1dcd10c8c0ea14fbf",
