@@ -64,19 +64,22 @@ const keyString = (key: StorageKey): string =>
 
 // Makes the storage folder if nothing is at its path, never its plugin's
 // folder: a load can name the folder of a plugin since removed, and making the
-// parent would bring the plugin back as an empty folder. Looked at before it
-// is made: mkdir answers EEXIST for a file at the path as for a folder, and a
-// read-only volume can refuse an existing folder before saying it exists.
+// parent would bring the plugin back as an empty folder. A mkdir that fails is
+// judged by what is at the path: it answers EEXIST for a file as for a folder,
+// a read-only volume can refuse an existing folder before saying it exists,
+// and a program can make the folder first. Nothing there is mkdir's own fault.
 function madeOnce(folder: string): void {
-  let st: fs.Stats;
   try {
-    st = fs.statSync(folder);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     fs.mkdirSync(folder);
-    return;
+  } catch (e) {
+    let st: fs.Stats;
+    try {
+      st = fs.statSync(folder);
+    } catch {
+      throw e;
+    }
+    if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
   }
-  if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
 }
 
 // [LAW:types-are-the-program] What a hold found at a folder's path: the
@@ -90,7 +93,8 @@ type Found =
 // which its sources' reads derive their failure from first. `watching`: its
 // folder is the one its watch opened on. `lost`: its folder is gone or
 // replaced. `faulted`: its folder could not be made or its watch failed.
-// `closed`: its last holder released it. `lost`, `faulted` and `closed` end
+// `closed`: its folder's last hold released it, or its next generation
+// opened. `lost`, `faulted` and `closed` end
 // the generation: nothing moves it on, so each is counted once.
 type Health =
   | { readonly kind: "watching" }
@@ -392,7 +396,7 @@ export class ManagedStorage {
 
   // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
   // folder still there, is a standing fault: every source read from the
-  // generation reads it, and the folder is marked lost, so the next load's
+  // generation reads it, and the generation ends, so the next load's
   // hold opens a fresh generation. No retry here: the OS refusing a watch
   // (limits, permissions) refuses an immediate retry the same way.
   private faulted(watched: Watched, cause: FaultCause, reason: string): void {
