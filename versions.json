@@ -4,15 +4,22 @@
     {
       "version": "pr-758",
       "ref": "refs/pull/758/merge",
-      "sha": "d27c4eb4bb5cdcdd476535fa34d282f7f2cc7bfc",
-      "timestamp": "2026-11-15T20:34:21.510Z",
+      "sha": "e6efec28d69096fe2d41273853202b7f5e53d541",
+      "timestamp": "2026-11-15T20:48:43.980Z",
       "commits": [
         {
-          "sha": "d27c4eb4bb5cdcdd476535fa34d282f7f2cc7bfc",
+          "sha": "e6efec28d69096fe2d41273853202b7f5e53d541",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T20:33:34Z",
-          "message": "Merge 5548e394f9d405c1536e9deb99943b119ac8ca5e into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+          "timestamp": "2026-11-15T20:47:34Z",
+          "message": "Merge e61398e19ac9700d001e0abefa78e7557b743207 into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+        },
+        {
+          "sha": "e61398e19ac9700d001e0abefa78e7557b743207",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T13:47:24-07:00",
+          "message": "fix(click): a broken link key is told on the bar, and the URL handler is answered at its click's outcome (candybar-host-renderer-x96a.35o)\n\nMedium review of #758. The host boots with its key or the reason it has none: every click is refused with it, and the renderer refuses its boot with it on the bar's ⚠. A version-2 url frame is answered when its click has run, never by the request deadline, so a slow click that lands is not told as failed. A lone surrogate in a link is drawn as U+FFFD instead of throwing. The status-line click's log line drops the mac, and the page's key is a Buffer.\n"
         },
         {
           "sha": "5548e394f9d405c1536e9deb99943b119ac8ca5e",

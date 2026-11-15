@@ -24089,10 +24089,22 @@ var linkMac = (key, link) => import_buffer.Buffer.from(
   digest(key, link).subarray(0, LINK_MAC_BYTES).toString("base64").replace(/=+$/, "").replaceAll("+", "-").replaceAll("/", "_")
 );
 var OUTSIDE_TRANSIT = /[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu;
-var transitForm = (link) => link.replace(OUTSIDE_TRANSIT, (c) => encodeURIComponent(c));
+var transitForm = (link) => link.toWellFormed().replace(OUTSIDE_TRANSIT, (c) => encodeURIComponent(c));
 function unprovenLink(signed) {
   const mark = signed.lastIndexOf(LINK_MAC_MARK);
   return mark !== -1 && LINK_MAC_SPELLING.test(signed.slice(mark + 1)) ? signed.slice(0, mark) : signed;
+}
+function keylessSigner(reason) {
+  const problem = `no link is honoured, since the link key could not be had: ${reason}`;
+  const refuse4 = () => {
+    throw new Error(problem);
+  };
+  return {
+    sign: refuse4,
+    verify: () => false,
+    signLink: refuse4,
+    verifyLink: () => ({ ok: false, problem })
+  };
 }
 function linkSigner(key) {
   if (key.length !== LINK_KEY_BYTES) {
@@ -53986,7 +53998,7 @@ async function statusLineClick(parts, value, facts, click3) {
   const { tmuxStatusLines } = parts;
   const link = tmuxStatusLines.linkAt(value);
   if (link.kind === "refused") return badRequest(link.reason);
-  noteFacts(facts, { link: link.url });
+  noteFacts(facts, { link: unprovenLink(link.url) });
   if (isBarLink(link.url)) {
     const parsed2 = parseClick(link.url, parts.links);
     switch (parsed2.kind) {
@@ -86184,7 +86196,8 @@ function createDaemon(inputs) {
     }
   });
   const probe2 = inputs.probe(launcher);
-  const links2 = linkSigner(inputs.linkKey);
+  const { linkKey } = inputs;
+  const links2 = linkKey.kind === "ok" ? linkSigner(linkKey.value) : keylessSigner(linkKey.reason);
   const preparedRenderer = inputs.renderer({
     load: () => loadMainRenderer({
       clock,
@@ -86204,7 +86217,7 @@ function createDaemon(inputs) {
       host: { ...host, env: bootEnv(host.env) },
       bundle: bundle.path,
       memoryLimitBytes: memoryLimitBytes2,
-      linkKey: inputs.linkKey.toString("base64")
+      linkKey: linkKey.kind === "ok" ? { kind: "ok", value: linkKey.value.toString("base64") } : linkKey
     },
     node: bundle.node
   });
@@ -88035,8 +88048,9 @@ var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
 var pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
-  // Its links are clicked on the page alone, so its key is the page's own.
-  linkKey: randomBytes(LINK_KEY_BYTES),
+  // Its links are clicked on the page alone, so its key is the page's own. The
+  // page's crypto hands back bytes that are no Buffer, so they are made one.
+  linkKey: { kind: "ok", value: import_buffer.Buffer.from(randomBytes(LINK_KEY_BYTES)) },
   gates: daemonGates(),
   paths,
   host: HOST,
