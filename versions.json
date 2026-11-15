@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-749",
+      "ref": "refs/pull/749/merge",
+      "sha": "c0d4825c21fb8e127fe6f6ee97614f7a019ebb83",
+      "timestamp": "2026-11-15T00:38:51.737Z",
+      "commits": [
+        {
+          "sha": "c0d4825c21fb8e127fe6f6ee97614f7a019ebb83",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T00:38:03Z",
+          "message": "Merge d85db0f7cbcd6320d94703d4545e9bc9136434a7 into 66b6aaaf80c9bcced51090a86d2eba72303a3269\n"
+        },
+        {
+          "sha": "d85db0f7cbcd6320d94703d4545e9bc9136434a7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:37:52-07:00",
+          "message": "chore(testing): the judge's leftovers go: an unused import, the ledger kind, the one-caller preload merge (candybar-testing-do00.cfu)\n\nThe spawn helper's header stops claiming that no test can pass the daemon\nceiling, which nothing enforces; a daemon started through it counts against\nthe ceiling. withPreload folds into withStamp, its one caller.\n"
+        },
+        {
+          "sha": "fb77ae49126413bc3b3d8cebc69731c47afcb5d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:27:18-07:00",
+          "message": "chore(testing): the daemon-boot judge, ratchet and ceiling are deleted (candybar-testing-do00.cfu)\n\nlaws:testing counts a test that drives the daemon in process over fakes as a\nunit test, so nothing judges where a daemon boots. The ratchet file and both\nof its CI checks go, with the ledger preload, the global setup that installed\nit, the harness's boot records and the teardown verdict. The tier configs that\npick files by directory stay.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-747",
       "ref": "refs/pull/747/merge",
       "sha": "815ce994258620c56254da5800de09d1194765d9",
@@ -34,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-14T16:48:00-07:00",
           "message": "refactor(renderer): the host's pushes cross a process, each an adapter input answered by its reply alone (candybar-host-renderer-x96a.8rc)\n\nEvery reach of the host into the renderer is now an AdapterPush, plain\ndata checked at build time to cross a process (Crosses<T>), answered by\nan AdapterOutput: the reply of the push's own kind, or how it threw.\nrendererHost.ask is the one judge of a reply's kind; tell logs a\nfailure nothing awaits.\n\n- The feed asks for its frame and its lanes, so a frame lands later: a\n  wake while it is out is owed the next frame at the spacing, however\n  the frame ended, and a subscribe is admitted once its lanes answer,\n  opening nothing for one refused or gone meanwhile.\n- The pin owns the session's state wake, so the wake lives as long as\n  the feed.\n- Journal turns are the renderer's. The daemon's close awaits the\n  renderer's three teardown steps in today's order, and shutdown awaits\n  the close before it exits.\n- A render's wait ends when the render cache closes, said as\n  ended=closed, so a render the close interrupts holds no timer past it.\n- A heap-retainer test draws in a frame of its own, so the suspended\n  test frame's registers cannot hold the drawn store.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-749",
-      "ref": "refs/pull/749/merge",
-      "sha": "dd6017c26916b8f4eb2528c2f984fcae294600f2",
-      "timestamp": "2026-11-15T00:28:30.991Z",
-      "commits": [
-        {
-          "sha": "dd6017c26916b8f4eb2528c2f984fcae294600f2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T17:27:36-07:00",
-          "message": "Merge fb77ae49126413bc3b3d8cebc69731c47afcb5d1 into 66b6aaaf80c9bcced51090a86d2eba72303a3269\n"
-        },
-        {
-          "sha": "fb77ae49126413bc3b3d8cebc69731c47afcb5d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T17:27:18-07:00",
-          "message": "chore(testing): the daemon-boot judge, ratchet and ceiling are deleted (candybar-testing-do00.cfu)\n\nlaws:testing counts a test that drives the daemon in process over fakes as a\nunit test, so nothing judges where a daemon boots. The ratchet file and both\nof its CI checks go, with the ledger preload, the global setup that installed\nit, the harness's boot records and the teardown verdict. The tier configs that\npick files by directory stay.\n"
         }
       ]
     },
