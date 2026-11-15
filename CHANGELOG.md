@@ -1,3 +1,13 @@
+## [1.221.0](https://github.com/promptctl/cc-candybar/compare/v1.220.0...v1.221.0) (2026-11-15)
+
+### Features
+
+* **renderer:** the renderer runs in a process of its own, which the host's supervisor starts and restarts (candybar-host-renderer-x96a.v58) ([#757](https://github.com/promptctl/cc-candybar/issues/757)) ([2079879](https://github.com/promptctl/cc-candybar/commit/2079879f1a0e087b16769463d6326609fb6ed589))
+
+### Bug Fixes
+
+* **click:** the host opens every link's signature before a renderer sees it, and tells the app its verdict at once (candybar-host-renderer-x96a.35o) ([#759](https://github.com/promptctl/cc-candybar/issues/759)) ([a7e8d92](https://github.com/promptctl/cc-candybar/commit/a7e8d92192edfafdbf0875132bfa65803bef6458)), closes [#fragment](https://github.com/promptctl/cc-candybar/issues/fragment)
+
 ## [1.220.0](https://github.com/promptctl/cc-candybar/compare/v1.219.2...v1.220.0) (2026-11-12)
 
 ### Features
