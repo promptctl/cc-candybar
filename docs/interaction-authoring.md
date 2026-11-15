@@ -1048,9 +1048,10 @@ Your own config may declare one too. It names a source by its full name:
   arguments and `env` are evaluated as the bar draws the button, as a
   `copy`'s text is, and the link carries the result, signed with a key only
   the daemon holds. A click runs exactly what the button showed, evaluating
-  nothing of its own. A link the daemon did not draw — edited, forged, or
-  naming a run the session's config does not declare — runs nothing, and the
-  refusal shows in the bar. So does a link drawn before you edited its
+  nothing of its own. A link the bar did not draw — edited or forged — runs
+  nothing, and whoever sent it is told why (on macOS, a notification). A
+  link naming a run the session's config does not declare runs nothing, and
+  the refusal shows in the bar. So does a link drawn before you edited its
   action: it ran what the old declaration promised.
 - **The program gets the session's environment.** It is the daemon's own
   environment with every variable that states a session fact replaced:

@@ -70,7 +70,8 @@ export interface RendererProcess {
 // begins, and its `start` the host's reaches once the host's parts exist.
 export type RendererPort = (prepared: {
   readonly load: () => LoadedMainRenderer;
-  readonly boot: RendererBoot;
+  // Read for each spawn: a boot carries the link key as it reads then.
+  readonly boot: () => RendererBoot;
   // The node that runs the host, with its flags.
   readonly node: readonly string[];
 }) => { start(own: LinkOwner): RendererLink };
@@ -136,7 +137,7 @@ export interface ProcessOwner extends LinkOwner {
   // daemon's inherited cwd.
   readonly cwd: string;
   readonly heapCapMb: number;
-  readonly boot: RendererBoot;
+  readonly boot: () => RendererBoot;
 }
 
 // How often the supervisor pings a live renderer, and how long one may go
@@ -352,7 +353,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       }),
     };
     phase = { kind: "starting", link, queued: [] };
-    write(channel, { kind: "boot", boot: own.boot });
+    write(channel, { kind: "boot", boot: own.boot() });
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: the host's
     // one path reaches it in the order it is called, so every input after
     // this is queued behind the state it changes.

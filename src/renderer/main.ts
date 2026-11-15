@@ -394,7 +394,6 @@ function startOver(
     },
     installFacts,
     doctorStores: inputs.storage.doctor,
-    probes: host.probes,
     clients: host.renderSightings,
     bundle: inputs.bundle,
     serving: host.serving,

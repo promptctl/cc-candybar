@@ -14,7 +14,7 @@
 // is one function either way.
 
 import type { World } from "../host.js";
-import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
+import { previewSigner } from "../click/link-signer.js";
 import { daemonGates } from "../daemon/foundations/update-keys.js";
 import { locations, stateDir } from "../daemon/paths.js";
 import { openSync } from "node:fs";
@@ -106,7 +106,7 @@ export function loadConfigOnce(
     locations: locations(host),
     env: host.env,
     sessionState: new SessionState(),
-    signer: linkSignerFromKeyFile(linkKeyFile(stateDir(host))),
+    signer: previewSigner(),
     gates: daemonGates(),
     stateDir: stateDir(host),
   };

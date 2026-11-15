@@ -15,7 +15,7 @@ import { tryClickViaDaemon } from "../daemon/client";
 import type { FailureOutcome } from "../daemon/client-transport";
 import type { PermanentOutcome } from "../daemon/foundations/protocol";
 import { obtainDaemonKick } from "../daemon/acquire";
-import { APP_NAME, parseHandlerUrl, URL_SCHEME } from "../click/wire";
+import { APP_NAME, URL_SCHEME } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
 import { shellWord, singleQuoted } from "../shell-word";
@@ -479,13 +479,9 @@ export async function runUrlHandle(
     process.exit(1);
   }
 
-  const parsed = parseHandlerUrl(rawUrl);
-  if (!parsed.ok) {
-    process.stderr.write(`url-handle: ${parsed.problem}\n`);
-    process.exit(1);
-  }
-
-  const outcome = await tryClickViaDaemon(world, parsed.verb, parsed.value);
+  // [LAW:single-enforcer] Sent as it was clicked: the host reads every link,
+  // and refuses one it cannot open with the reason this prints.
+  const outcome = await tryClickViaDaemon(world, rawUrl);
   if (outcome.kind === "ok") {
     process.exit(0);
   }

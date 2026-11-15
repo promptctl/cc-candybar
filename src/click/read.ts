@@ -7,8 +7,8 @@ import type { Frame } from "../render/frame";
 import {
   decodeSegments,
   parseEffects,
+  isBarLink,
   parseHandlerUrl,
-  URL_SCHEME,
   VERB_APPLY_UPDATE,
   VERB_RUN,
   VERB_COPY,
@@ -18,6 +18,9 @@ import {
   VERB_OPEN_VSCODE,
   SEGMENTED_VERBS,
 } from "./wire";
+import { unprovenLink } from "./link-signer";
+
+export { isBarLink };
 
 /** One link the bar drew: its visible text and its URL. */
 export interface DrawnLink {
@@ -47,11 +50,6 @@ export function linksOf({ rows }: Pick<Frame, "rows">): DrawnLink[] {
   });
 }
 
-// A link outside the cc-candybar scheme (a repo page, a PR) is the
-// terminal's to open; the daemon never sees a click on it.
-export const isBarLink = (url: string): boolean =>
-  url.startsWith(`${URL_SCHEME}://`);
-
 export interface DecodedEffect {
   readonly verb: string;
   readonly args: string[];
@@ -75,11 +73,12 @@ function decodeArgs(verb: string, value: string): string[] {
   return [decodeURIComponent(value)];
 }
 
-// [LAW:no-silent-failure] A link a bar DREW, as the daemon splits it. A reader
-// of drawn links holds links the renderer wrote, so one the daemon would refuse
-// is a bug in the draw, thrown here rather than carried as a refusal.
+// [LAW:no-silent-failure] A link a bar DREW, as the daemon splits it once it
+// has opened its signature. A reader of drawn links holds links the renderer
+// wrote, so one the daemon would refuse is a bug in the draw, thrown here
+// rather than carried as a refusal.
 export function clickOf(url: string): { verb: string; value: string } {
-  const link = parseHandlerUrl(url);
+  const link = parseHandlerUrl(unprovenLink(url));
   if (!link.ok) throw new Error(link.problem);
   return { verb: link.verb, value: link.value };
 }

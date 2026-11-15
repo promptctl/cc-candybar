@@ -12,7 +12,7 @@ import type { Timekeeper } from "../time";
 import type { DaemonAdapters } from "./daemon.js";
 import { fileStorage } from "./file-storage";
 import { productionLaneEdge } from "./lane-edge.js";
-import { linkKeyFile, linkSignerFromKeyFile } from "./link-key.js";
+import { linkKeyFile, linkSignerFromKeyFile, readLinkKey } from "./link-key.js";
 import { realLimitsDeps } from "./limits";
 import { inProcessPort } from "./renderer-process.js";
 import type { DaemonLog } from "./log";
@@ -24,11 +24,10 @@ import type { DaemonPaths } from "./paths";
 export function rendererAdapters(
   paths: DaemonPaths,
   machine: Timekeeper,
-): Pick<DaemonAdapters, "storage" | "doctorStores" | "linkSigner"> {
+): Pick<DaemonAdapters, "storage" | "doctorStores"> {
   return {
     storage: (log) => fileStorage(paths, log, machine),
     doctorStores: fileStores(paths.state),
-    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
   };
 }
 
@@ -46,6 +45,10 @@ export function productionAdapters(
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),
     ...rendererAdapters(paths, machine),
+    // [LAW:one-source-of-truth] One key file, which the host opens every
+    // click with and reads afresh for each renderer it starts.
+    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
+    linkKey: () => readLinkKey(linkKeyFile(paths.state)),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,

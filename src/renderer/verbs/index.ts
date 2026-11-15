@@ -127,7 +127,6 @@ import {
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
-  VERB_DOCTOR_PROBE,
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
@@ -139,7 +138,7 @@ import {
 import type { LinkSigner } from "../../click/link-signer";
 import type { JournalTurn, JournalTurns } from "../journal-turns";
 import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
-import type { RepoAnswer } from "../../config/loader/repo-gate";
+import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
   RunRequest,
   AdapterToHost,
@@ -187,7 +186,6 @@ import {
   type ClickArrival,
   clickArrived,
   sessionWidth,
-  parseProbeNonce,
 } from "../../doctor/sightings";
 import { type DoctorEdge, type DoctorStores } from "../../doctor/ports";
 import { typeSlash } from "../../claude-input/typing";
@@ -237,8 +235,6 @@ export interface DaemonContext {
   readonly installFacts: AdapterToHost["doctor"]["install"];
   // The doctor's stores, which this daemon files (src/doctor/ports.ts).
   readonly doctorStores: DoctorStores;
-  // Where a `doctor-probe` link records that it arrived.
-  readonly probes: AdapterToHost["probes"];
   // Which client drew each session's bar, as this process saw it render, and
   // the bundle this daemon runs.
   readonly clients: AdapterToHost["renderSightings"];
@@ -1560,30 +1556,6 @@ const doctorRun: Verb = {
   },
 };
 
-// A probe link `cc-candybar doctor` opened, delivered by the URL handler: its
-// arrival is the whole effect, read back by the CLI from the daemon's stats.
-// [LAW:single-enforcer] It writes no journal, so it takes no turn: nothing
-// queued can make it wait, and no client's leaving can refuse a link that came.
-const doctorProbe = async (
-  value: string,
-  ctx: Pick<VerbContext, "arrival" | "probes" | "log">,
-): Promise<void> => {
-  const nonce = parseProbeNonce(oneArg(value));
-  if (nonce === null) {
-    throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
-  }
-  // [LAW:no-silent-failure] A probe link is opened by the CLI, never drawn in
-  // a frame, so one cannot come from the tmux status line.
-  if (ctx.arrival.via !== "link")
-    throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
-  const { delivery } = ctx.arrival;
-  ctx.probes.arrive({ nonce, delivery });
-  ctx.log(
-    "info",
-    `doctor-probe: arrived nonce=${nonce} delivery=${delivery.kind}`,
-  );
-};
-
 // Re-probe THIS check at click time and perform the fix its fresh verdict
 // carries — never a fix cached from the render that drew the `[fix]`, because
 // the world may have moved (the var got set, the tmux server went away). Then
@@ -1794,18 +1766,22 @@ const run: VerbHandler = async (value, ctx) => {
 // ─── Repository configs (brandon-unfiled-3248.kezw) ─────────────────────────
 
 // [LAW:parse-dont-validate] An answer is recorded only when its mac verifies:
-// the bar drew it, for this session, for this directory and this answer. The
-// book lives beside the link key, and the render cache watches it, so every
-// bar reloads; the clicking session's reloads before the click answers, as
-// save's does.
+// the question drew it, for this session, for this directory and this answer.
+// The link's own signature proves only that the bar drew the link, and a
+// config can draw any link, so the answer keeps a mac of its own. The book
+// lives beside the link key, and the render cache watches it, so every bar
+// reloads; the clicking session's reloads before the click answers, as save's
+// does.
 const repoConfig: VerbHandler = async (value, ctx) => {
   const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
     decodeSegments(value),
   );
   const sid = requireSessionId(sessionId);
-  // Signed, so it is an answer the bar offered.
-  const answered = answer as RepoAnswer;
-  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
+  const answered = REPO_ANSWERS.find((known) => known === answer);
+  if (
+    answered === undefined ||
+    !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)
+  ) {
     throw new BadVerbArgs(
       "the answer's signature does not match what it carries: it was not drawn by this daemon",
     );
@@ -1890,7 +1866,6 @@ const LEAF_VERBS = new Map<string, Verb>([
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_DOCTOR_PROBE, inTurn(doctorProbe)],
   [VERB_SLASH, inTurn(slash)],
   [VERB_RUN, inTurn(run)],
   [VERB_REPO_CONFIG, inTurn(repoConfig)],
@@ -2185,9 +2160,6 @@ export const VERBS: ReadonlyMap<
       ] as const,
   ),
   [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)] as const,
-  // After the leaves, so it replaces the click they built: a probe writes no
-  // journal, so nothing may refuse it for a turn.
-  [VERB_DOCTOR_PROBE, doctorProbe] as const,
 ]);
 
 export const VERB_NAMES: readonly string[] = Object.freeze([

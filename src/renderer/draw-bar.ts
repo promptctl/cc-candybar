@@ -108,7 +108,7 @@ import {
 import type { SessionState } from "./session-state";
 import type { RenderWarningRecords } from "./render-warnings.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
-import type { LinkSigner } from "../click/link-signer.js";
+import { signingFrames, type LinkSigner } from "../click/link-signer.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
 import {
   failedWith,
@@ -175,7 +175,11 @@ export function renderFrame(
       feed.feeds,
       feed.idleSince,
     );
-    const answer = RENDER_ANSWERS.ansi(drawn.body);
+    // [LAW:single-enforcer] Signed as they leave the renderer, the bar and
+    // what the statusline shows alike, each link once.
+    const signed = signingFrames(parts.linkSigner);
+    const bar = signed(drawn.body);
+    const answer = RENDER_ANSWERS.ansi(bar);
     const statusline = statuslineOf(
       sessionId,
       drawn,
@@ -187,11 +191,13 @@ export function renderFrame(
     // unpin retires what the feed drew.
     delivered();
     return {
-      bar: drawn.body,
+      bar,
       resp: answer,
       // Mostly the bar itself, and one frame encodes once.
       statusline:
-        statusline === drawn.body ? answer : RENDER_ANSWERS.ansi(statusline),
+        statusline === drawn.body
+          ? answer
+          : RENDER_ANSWERS.ansi(signed(statusline)),
       evaluated,
       cellBreaks,
       lanes,
@@ -1171,9 +1177,10 @@ export async function answerRequest(
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
-  const frame = toStatusline
-    ? statuslineOf(sessionId, drawn, elsewhere)
-    : drawn.body;
+  // [LAW:single-enforcer] Signed as it leaves the renderer, each link once.
+  const frame = signingFrames(parts.linkSigner)(
+    toStatusline ? statuslineOf(sessionId, drawn, elsewhere) : drawn.body,
+  );
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
   // how long the turn after the wait took to make the frame: with the host's
   // `encoded=` for its bytes, what the draw's reserve is held to

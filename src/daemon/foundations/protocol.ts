@@ -353,13 +353,13 @@ export interface ShutdownRequest {
   kind: "shutdown";
 }
 
-// A click as `cc-candybar url-handle` sends it: the verb and value already
-// split. The tmux status line's click binding runs that command.
+// A click as `cc-candybar url-handle` sends it: the link as it was clicked,
+// so the host opens the same bytes the bar signed. The tmux status line's
+// click binding runs that command.
 export interface ClickRequest {
   v: number;
   kind: "click";
-  verb: string;
-  value: string;
+  url: string;
 }
 
 // [LAW:types-are-the-program] A link as the URL handler app forwards it: the
@@ -371,14 +371,20 @@ export interface ClickRequest {
 // url-handler/main.swift, the one frame that app spells, and pinned by
 // scripts/check-protocol.mjs.
 export const URL_FRAME_KIND = "url";
-export const URL_FRAME_VERSION = 1;
+export const URL_FRAME_VERSION = 2;
 // Every version a shipped forwarder has written: the ones before the current,
 // then the current itself, so a bump cannot refuse the frame it ships.
-const EARLIER_URL_FRAME_VERSIONS: readonly number[] = [];
+const EARLIER_URL_FRAME_VERSIONS: readonly number[] = [1];
 export const URL_FRAME_VERSIONS: ReadonlySet<number> = new Set([
   ...EARLIER_URL_FRAME_VERSIONS,
   URL_FRAME_VERSION,
 ]);
+// [LAW:dataflow-not-control-flow] Whether the frame's writer reads the host's
+// verdict on its link before it hangs up: every version from 2 does, and one
+// this daemon does not speak is a newer app's, told why it is refused. A
+// version 1 writer hangs up at once, so its verdict goes to no one.
+export const awaitsVerdict = (urlV: unknown): boolean =>
+  typeof urlV === "number" && urlV >= 2;
 
 export interface UrlFrame {
   kind: typeof URL_FRAME_KIND;

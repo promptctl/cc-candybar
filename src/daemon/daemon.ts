@@ -54,6 +54,7 @@ import { typeInPane, type ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
 import type { LinkSigner } from "../click/link-signer.js";
+import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { parseFrame } from "../render/frame.js";
 import { rendererHost } from "./renderer-host.js";
@@ -133,8 +134,12 @@ export interface DaemonAdapters {
     closing: AbortSignal,
     probe: ProcessProbe,
   ) => LaneEdge;
-  // The one signer of every `run` link this daemon draws.
+  // The signer every click is opened with, and which a renderer in this
+  // process draws with.
   readonly linkSigner: LinkSigner;
+  // The key a renderer in a process of its own is started with, read for
+  // each start.
+  readonly linkKey: () => Asked<string>;
   // What the memory backstop reads and writes on the machine.
   readonly limits: (own: {
     readonly startedAtMs: number;
@@ -347,12 +352,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         bundle: bundle.path,
         memoryLimitBytes,
       }),
-    boot: {
+    boot: () => ({
       digest: bundle.digest,
       host: { ...host, env: bootEnv(host.env) },
       bundle: bundle.path,
       memoryLimitBytes,
-    },
+      linkKey: inputs.linkKey(),
+    }),
     node: bundle.node,
   });
   // Building starts nothing: only the daemon that won the socket arms them, so
@@ -722,7 +728,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       ofSession: async (sessionId, now) =>
         renderSightings.ofSession(sessionId, now),
     },
-    probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
@@ -809,6 +814,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     doctorStores,
     stats,
     handlerProbes,
+    linkSigner: inputs.linkSigner,
     renderSightings,
     watcherRegistry,
     refreshLedger,

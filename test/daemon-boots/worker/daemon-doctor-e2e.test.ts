@@ -28,6 +28,7 @@ import {
   renderBody,
   renderRequest,
   urlWriting,
+  drawnLink,
 } from "../../helpers/daemon-e2e";
 import { bundleAt, startDaemon, statsOf } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
@@ -190,7 +191,7 @@ test("the doctor's config row says what named the session's file", async () => {
 
     await click(
       daemon,
-      `cc-candybar://${VERB_LOAD_CONFIG}/source-pick/${encodeURIComponent(picked)}`,
+      drawnLink(daemon, `cc-candybar://${VERB_LOAD_CONFIG}/source-pick/${encodeURIComponent(picked)}`),
     );
     expect(await row("source-pick", { configEnv: named }, flag)).toContain(
       squeezed(`✓ config — ${picked} (load-config pick)`),
@@ -245,7 +246,10 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     });
     expect((await statsOf(daemon.daemon)).handlerProbes).toMatchObject([
       { nonce, delivery: { kind: "cli" } },
-      { nonce: forwardedNonce, delivery: { kind: "forwarder", urlV: 1 } },
+      {
+        nonce: forwardedNonce,
+        delivery: { kind: "forwarder", urlV: URL_FRAME_VERSION },
+      },
     ]);
 
     // A frame the daemon cannot read is refused on its click event, with the
@@ -261,13 +265,13 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     );
     expect(events[0]).toMatch(/ via=cli verb=doctor-probe .* outcome=ok/);
     expect(events[1]).toMatch(
-      / via=forwarder urlV=1 verb=doctor-probe .* outcome=ok/,
+      new RegExp(` via=forwarder urlV=${URL_FRAME_VERSION} verb=doctor-probe .* outcome=ok`),
     );
     expect(events[2]).toMatch(
-      / via=forwarder urlV=99 .* outcome=bad-request problems="the URL handler's frame version 99 is not one this daemon speaks \(1\)"/,
+      / via=forwarder urlV=99 .* outcome=bad-request problems="the URL handler's frame version 99 is not one this daemon speaks \(1, 2\)"/,
     );
     expect(events[3]).toMatch(
-      / via=forwarder urlV=1 .* outcome=bad-request problems="expected a cc-candybar:\/\/ link, got: https:\/\/example.com\/"/,
+      / via=forwarder urlV=1 .* outcome=bad-request problems="the link carries no signature: /,
     );
     expect(events[4]).toMatch(
       / via=forwarder urlV=1 .* outcome=bad-request problems="the URL handler's frame carries no url string"/,
@@ -275,7 +279,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
 
     const SID = "doctor-e2e-2";
     await render(daemon, SID, projectDir);
-    await click(daemon, `cc-candybar://${VERB_DOCTOR_RUN}/${SID}`);
+    await click(daemon, drawnLink(daemon, `cc-candybar://${VERB_DOCTOR_RUN}/${SID}`));
     await click(
       daemon,
       urlWriting(

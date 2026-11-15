@@ -30,5 +30,6 @@ export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   return a.every((byte, i) => byte === b[i]);
 }
 export const randomUUID = (): string => globalThis.crypto.randomUUID();
-export const randomBytes = (n: number) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+// A Buffer, as node:crypto returns.
+export const randomBytes = (n: number) => Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
 export default { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };

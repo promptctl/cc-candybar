@@ -3,6 +3,7 @@
 // what waits for a start, how an end is said and backed off from, when a
 // silent renderer is ended, and whose ids cross.
 
+import type { Asked } from "../../src/utils/outcome";
 import {
   BACKOFF_FIRST_MS,
   HUNG_AFTER_MS,
@@ -68,6 +69,8 @@ function rig(start: () => Promise<void> = async () => {}) {
   const ends: HeldEvent[] = [];
   const watched: Array<["watch" | "unwatch", WatchId]> = [];
   const held: Array<["hold" | "release", StorageHoldId]> = [];
+  // The key as the host reads it now: what each boot carries.
+  const key = { read: { kind: "ok", value: "a2V5" } as Asked<string> };
   const launcher = {
     launchChannel: (opts: ChannelOpts): Channel => {
       let finish: (result: LaunchResult) => void = () => {};
@@ -123,17 +126,18 @@ function rig(start: () => Promise<void> = async () => {}) {
     entry: "/app/index.mjs",
     cwd: "/state",
     heapCapMb: 512,
-    boot: {
+    boot: () => ({
       digest: "d1",
       host: { env: {}, home: "/home", tmp: "/tmp" },
       bundle: "/app/index.mjs",
       memoryLimitBytes: 1,
-    },
+      linkKey: key.read,
+    }),
   });
   // The inputs the host sent the child, in order.
   const inputs = (child: Child) =>
     child.written.flatMap((l) => (l.kind === "input" ? [l] : []));
-  return { clock, children, logs, ends, watched, held, link, inputs };
+  return { clock, children, logs, ends, watched, held, link, inputs, key };
 }
 
 // Every promise chain the supervisor started settles: it awaits nothing but
@@ -173,6 +177,7 @@ describe("a renderer process's start", () => {
           host: { env: {}, home: "/home", tmp: "/tmp" },
           bundle: "/app/index.mjs",
           memoryLimitBytes: 1,
+          linkKey: { kind: "ok", value: "a2V5" },
         },
       },
     ]);
@@ -298,6 +303,27 @@ describe("a renderer process's end", () => {
   test("renderers that end young wait twice as long each time, to a minute, and one that lived restarts at once", () => {
     expect([0, 1, 2, 3, 7, 30].map(backoffMs)).toEqual([
       0, 1_000, 2_000, 4_000, 60_000, 60_000,
+    ]);
+  });
+
+  // Removing a broken key file, its error's own remedy, recovers at the next
+  // start with no restart of the host.
+  test("each start boots with the key as the host reads it then", async () => {
+    const { link, children, clock, key } = rig();
+    key.read = { kind: "failed", reason: "link key holds 3 bytes" };
+    link.arm();
+    children[0]!.exit(CRASHED);
+    await settled();
+    key.read = { kind: "ok", value: "bmV3" };
+    clock.advance(backoffMs(1));
+    const boots = children.map(
+      (child) => child.written.find((l) => l.kind === "boot")!,
+    );
+    expect(
+      boots.map((l) => (l.kind === "boot" ? l.boot.linkKey : null)),
+    ).toEqual([
+      { kind: "failed", reason: "link key holds 3 bytes" },
+      { kind: "ok", value: "bmV3" },
     ]);
   });
 

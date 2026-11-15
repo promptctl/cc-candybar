@@ -1,5 +1,5 @@
-// [LAW:effects-at-boundaries] The link key on disk: what the daemon, `check`
-// and the demo build their one LinkSigner from. The key is stable across
+// [LAW:effects-at-boundaries] The link key on disk: what the host opens every
+// click with and hands each renderer it starts. The key is stable across
 // restarts, so a link still in a terminal's scrollback verifies after the
 // daemon that drew it is gone.
 
@@ -11,20 +11,46 @@ import {
   linkSigner,
   type LinkSigner,
 } from "../click/link-signer.js";
+import type { Asked } from "../utils/outcome.js";
 
 export function linkKeyFile(dir: string): string {
   return path.join(dir, "link.key");
 }
 
-// The signer over the key file, read on first use: importing the daemon, or
-// running a CLI that never draws a `run` link, touches no disk for it.
+// The signer over the key file, read on first use and kept once a read
+// succeeds: importing the daemon touches no disk for it, and a key that could
+// not be read is read again at the next use, so removing a broken file (its
+// error's own remedy) recovers with no restart.
+// [LAW:no-silent-failure] A key it cannot have refuses the click that needed
+// it, with the reason; it never throws past the click.
 export function linkSignerFromKeyFile(file: string): LinkSigner {
   let signer: LinkSigner | undefined;
-  const loaded = (): LinkSigner => (signer ??= readOrCreate(file));
+  const loaded = (): LinkSigner => (signer ??= linkSigner(readOrCreate(file)));
   return {
     sign: (fields) => loaded().sign(fields),
     verify: (fields, mac) => loaded().verify(fields, mac),
+    signLink: (link) => loaded().signLink(link),
+    openLink: (signed) => {
+      let opener: LinkSigner;
+      try {
+        opener = loaded();
+      } catch (e) {
+        return { kind: "failed", reason: (e as Error).message };
+      }
+      return opener.openLink(signed);
+    },
   };
+}
+
+// The key a renderer's start hands it, read afresh for each start, in base64
+// so it crosses as a line: a start whose key cannot be read refuses its boot
+// with the reason, and the next start reads again.
+export function readLinkKey(file: string): Asked<string> {
+  try {
+    return { kind: "ok", value: readOrCreate(file).toString("base64") };
+  } catch (e) {
+    return { kind: "failed", reason: (e as Error).message };
+  }
 }
 
 // The key on disk, made first when there is none: a state directory that
@@ -32,7 +58,7 @@ export function linkSignerFromKeyFile(file: string): LinkSigner {
 // [LAW:no-silent-failure] A key file of the wrong length is refused loudly,
 // naming the file, never replaced: a replaced key silently voids every link
 // already drawn.
-function readOrCreate(file: string): LinkSigner {
+function readOrCreate(file: string): Buffer {
   let key: Buffer;
   try {
     key = fs.readFileSync(file);
@@ -46,7 +72,7 @@ function readOrCreate(file: string): LinkSigner {
       `link key ${file} holds ${key.length} bytes, not ${LINK_KEY_BYTES}: remove it and a new one is made (links drawn before then stop working)`,
     );
   }
-  return linkSigner(key);
+  return key;
 }
 
 // [LAW:no-ambient-temporal-coupling] The key is written whole to a file of the

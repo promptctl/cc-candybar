@@ -4,13 +4,13 @@
 // on a gate; the click-path cases drive `replyTo`, the daemon's real click arm.
 
 import { typeInPane } from "../src/claude-input/typing";
-import { ProbeArrivals } from "../src/doctor/handler-probe";
 import { RuntimeStats } from "../src/daemon/stats";
 import { JournalTurns } from "../src/renderer/journal-turns";
 import { HOST, locs } from "./helpers/host";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { clickParts } from "./helpers/click-parts";
+import { signedClick } from "./helpers/link-signer";
 import { replyTo } from "../src/daemon/reply";
 import { SessionState } from "../src/renderer/session-state";
 import {
@@ -24,7 +24,6 @@ import {
   VERB_COPY_DIAGNOSTIC,
   VERB_DISPATCH,
   VERB_DOCTOR_MARK,
-  VERB_DOCTOR_PROBE,
   VERB_DOCTOR_RUN,
   VERB_SET_CONFIG,
   VERB_SLASH,
@@ -68,7 +67,6 @@ const IDLE_SCREEN = [
   RULE,
   "  ⏸ manual mode on",
 ];
-const NONCE = "01234567-89ab-cdef-0123-456789abcdef";
 const A = sessionIdOf("session-a");
 const B = sessionIdOf("session-b");
 const S = sessionIdOf("s");
@@ -123,10 +121,8 @@ function setup(over: Partial<DoctorEdge> = {}) {
   const held = gate();
   const healthy = healthyDaemonEdge().daemons;
   const gathers: string[] = [];
-  const probes = new ProbeArrivals();
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
-    probes,
     journalTurns: turns,
     log: (_level, line) => logged.push(line),
     doctorStores: emptyStores(),
@@ -159,7 +155,6 @@ function setup(over: Partial<DoctorEdge> = {}) {
     held,
     gathers,
     ctx,
-    probes,
     toggled,
     doctor,
     toggle,
@@ -233,24 +228,6 @@ describe("a gather holds no turn", () => {
     held.open();
     await twice;
     expect(gathers).toEqual(["holder=null", `holder=${VERB_DISPATCH}`]);
-  });
-
-  test("doctor-probe answers at once with the turn held", async () => {
-    const { ctx, probes, turns } = setup();
-    const parked = gate();
-    const launch = () => parked.wait.then(() => LAUNCHED);
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launch });
-    await drain();
-    expect(turns.getStats().holder).toBe(VERB_COPY);
-    await VERBS.get(VERB_DOCTOR_PROBE)!(NONCE, {
-      ...ctx,
-      clientGone: async () => true,
-      arrival: { via: "link", delivery: { kind: "cli" } },
-    });
-    expect(probes.list().map((p) => p.nonce)).toEqual([NONCE]);
-    expect(turns.getStats().holder).toBe(VERB_COPY);
-    parked.open();
-    await holding;
   });
 });
 
@@ -604,11 +581,9 @@ test("the click path counts a click pending from arrival, through a refusal, and
   const send = (gone: () => boolean) =>
     replyTo(
       parts,
-      {
-        kind: "click",
-        verb: VERB_DOCTOR_RUN,
-        value: encodeURIComponent(A),
-      } as Parameters<typeof replyTo>[1],
+      signedClick(VERB_DOCTOR_RUN, encodeURIComponent(A)) as Parameters<
+        typeof replyTo
+      >[1],
       () => false,
       new RuntimeStats(systemTimekeeper).accept(),
       gone,
@@ -662,11 +637,9 @@ test("a click's turn holds its session in the collector while it runs, with noth
   const send = (gone: () => boolean) =>
     replyTo(
       parts,
-      {
-        kind: "click",
-        verb: VERB_DOCTOR_RUN,
-        value: encodeURIComponent(A),
-      } as Parameters<typeof replyTo>[1],
+      signedClick(VERB_DOCTOR_RUN, encodeURIComponent(A)) as Parameters<
+        typeof replyTo
+      >[1],
       () => false,
       new RuntimeStats(systemTimekeeper).accept(),
       gone,
@@ -703,9 +676,9 @@ test("a click whose session will not decode is a bad request whose event still n
   } as unknown as DaemonParts;
   const { resp } = await replyTo(
     parts,
-    { kind: "click", verb: VERB_DOCTOR_RUN, value: "%ZZ" } as Parameters<
-      typeof replyTo
-    >[1],
+    // An escape that is no UTF-8: the one malformed segment a signed link,
+    // whose bare `%` is escaped, can still carry.
+    signedClick(VERB_DOCTOR_RUN, "%C0") as Parameters<typeof replyTo>[1],
     () => false,
     new RuntimeStats(systemTimekeeper).accept(),
     () => false,

@@ -34,6 +34,7 @@ import {
   renderRequest,
   renderUntil,
   refusedClick,
+  drawnLink,
 } from "../../helpers/daemon-e2e";
 import { renderLines } from "../../helpers/daemon-log";
 import { linkUrls } from "../../helpers/frame";
@@ -112,7 +113,7 @@ describe("a daemon in this worker", () => {
     await render(daemon, sid, projectDir);
     await refusedClick(
       daemon,
-      effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "no-such-key", "x"] }]),
+      drawnLink(daemon, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "no-such-key", "x"] }])),
       "bad-request",
     );
     await render(daemon, sid, projectDir);

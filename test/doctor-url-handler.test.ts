@@ -25,7 +25,9 @@ import {
 import { clickArrived } from "../src/doctor/sightings";
 import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
-import { BadVerbArgs, VERBS, type VerbContext } from "../src/renderer/verbs";
+import { VERBS, type VerbContext } from "../src/renderer/verbs";
+import { parseClick } from "../src/daemon/click-reading";
+import { linkSignerFromKeyFile } from "../src/daemon/link-key";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import { SessionState } from "../src/renderer/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
@@ -51,7 +53,7 @@ const verdict = (urlHandler: UrlHandlerFacts) =>
   probe({ ...HEALTHY_FACTS, urlHandler });
 
 const APP = "/Users/u/Applications/CCCandybarURLHandler.app";
-const FORWARDED = { kind: "forwarder", urlV: 1 } as const;
+const FORWARDED = { kind: "forwarder", urlV: 2 } as const;
 const CLI = { kind: "cli" } as const;
 const REINSTALL = "re-run `cc-candybar install`";
 
@@ -351,7 +353,6 @@ describe("the daemon's side of the round trip", () => {
 
   function daemon(arrival: ClickArrival) {
     const sessionState = new SessionState();
-    const probes = new ProbeArrivals();
     // The client the session's last render carried, as the daemon saw it.
     const clients = new RenderSightings();
     // From the session's own location — the origin test/helpers/click.ts
@@ -370,7 +371,6 @@ describe("the daemon's side of the round trip", () => {
     const ctx: VerbContext = {
       ...testVerbContext(sessionState, undefined, DEFAULT_DSL_CONFIG),
       arrival,
-      probes,
       clients: asyncSightings(clients),
       log: (_level, message) => logs.push(message),
       doctorStores: emptyStores(),
@@ -405,33 +405,34 @@ describe("the daemon's side of the round trip", () => {
     };
     const click = async (verb: string, value: string): Promise<void> =>
       await VERBS.get(verb)!(value, ctx);
-    return { sessionState, probes, logs, click };
+    return { sessionState, logs, click };
   }
 
-  test("a probe link records its nonce and who delivered it", async () => {
-    const d = daemon(link(FORWARDED));
-    await d.click(VERB_DOCTOR_PROBE, NONCE);
-    expect(d.probes.list()).toEqual([{ nonce: NONCE, delivery: FORWARDED }]);
-    expect(d.logs).toEqual([
-      `doctor-probe: arrived nonce=${NONCE} delivery=forwarder`,
-    ]);
+  // [LAW:single-enforcer] A probe is the host's to read: it carries no
+  // signature, so it arrives whatever state the link key is in.
+  const PROBE = `cc-candybar://${VERB_DOCTOR_PROBE}/${NONCE}`;
+  const KEYLESS = linkSignerFromKeyFile("/dev/null/link.key");
+
+  test("a probe link is read with who delivered it, whatever the key", () => {
+    expect(parseClick(PROBE, FORWARDED, KEYLESS)).toEqual({
+      kind: "probe",
+      nonce: NONCE,
+      delivery: FORWARDED,
+    });
+    expect(parseClick(PROBE, CLI, KEYLESS)).toEqual({
+      kind: "probe",
+      nonce: NONCE,
+      delivery: CLI,
+    });
   });
 
-  test("a probe the CLI delivered is recorded as such", async () => {
-    const d = daemon(link(CLI));
-    await d.click(VERB_DOCTOR_PROBE, NONCE);
-    expect(d.probes.list()).toEqual([{ nonce: NONCE, delivery: CLI }]);
-    expect(d.logs).toEqual([
-      `doctor-probe: arrived nonce=${NONCE} delivery=cli`,
-    ]);
-  });
-
-  test("a value that is not a probe nonce is refused and records nothing", async () => {
-    const d = daemon(link(FORWARDED));
-    await expect(d.click(VERB_DOCTOR_PROBE, "../../etc")).rejects.toThrow(
-      BadVerbArgs,
-    );
-    expect(d.probes.list()).toEqual([]);
+  test("a probe link that carries no probe nonce is refused", () => {
+    expect(
+      parseClick(`cc-candybar://${VERB_DOCTOR_PROBE}/../../etc`, CLI, KEYLESS),
+    ).toEqual({
+      kind: "refused",
+      problem: "the probe link carries no probe nonce",
+    });
   });
 
   test("only the newest arrivals are kept", async () => {
@@ -496,14 +497,6 @@ describe("the daemon's side of the round trip", () => {
     expect(row.reason).toContain("asked from the tmux status line");
     expect(row.logs).toHaveLength(1);
     expect(row.logs[0]).toContain(" clicked=no ");
-  });
-
-  test("a probe cannot arrive from the tmux status line", async () => {
-    const d = daemon({ via: "tmux-status" });
-    await expect(d.click(VERB_DOCTOR_PROBE, NONCE)).rejects.toThrow(
-      BadVerbArgs,
-    );
-    expect(d.probes.list()).toEqual([]);
   });
 
   test("a click's arrival is the fact its doctor row reads", async () => {

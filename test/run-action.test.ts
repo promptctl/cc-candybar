@@ -44,7 +44,7 @@ import { type RunRequest } from "../src/renderer-interface/adapter";
 import { sessionEnv } from "../src/daemon/foundations/session-env";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { linkSigner } from "../src/click/link-signer";
-import { linkSignerFromKeyFile } from "../src/daemon/link-key";
+import { linkSignerFromKeyFile, readLinkKey } from "../src/daemon/link-key";
 import { runDeclaration, type RunAction } from "../src/config/action";
 import { effectsUrl, VERB_RUN, type EvaluatedRun } from "../src/click/wire";
 import { BadVerbArgs, type VerbContext } from "../src/renderer/verbs";
@@ -1134,5 +1134,31 @@ describe("the link key", () => {
         evaluated: "{}",
       }),
     ).toThrow(`link key ${file} holds 5 bytes, not 32`);
+  });
+
+  // The error's own remedy, removing the file, works with no restart: the
+  // host's signer reads again at the next click, and each renderer start
+  // reads the key afresh.
+  test("a broken key refuses a click and a renderer's start with the reason, and removing it recovers both", () => {
+    const file = write("state/link.key", "short");
+    const host = linkSignerFromKeyFile(file);
+    const why = `link key ${file} holds 5 bytes, not 32`;
+    expect(host.openLink("cc-candybar://copy/x#AAAAAAAAAAAAAAAAAAAAAA")).toEqual(
+      { kind: "failed", reason: expect.stringContaining(why) },
+    );
+    expect(readLinkKey(file)).toEqual({
+      kind: "failed",
+      reason: expect.stringContaining(why),
+    });
+    fs.rmSync(file);
+    const started = readLinkKey(file);
+    if (started.kind !== "ok") throw new Error(started.reason);
+    const drawn = linkSigner(Buffer.from(started.value, "base64")).signLink(
+      "cc-candybar://copy/x",
+    );
+    expect(host.openLink(drawn)).toEqual({
+      kind: "ok",
+      value: "cc-candybar://copy/x",
+    });
   });
 });

@@ -14,7 +14,7 @@
 import { randomUUID } from "node:crypto";
 import { sleep, type Monotonic } from "../time.js";
 import fs from "node:fs";
-import { URL_SCHEME, VERB_DOCTOR_PROBE } from "../click/wire.js";
+import { DOCTOR_PROBE_PREFIX, URL_SCHEME } from "../click/wire.js";
 import {
   describeFailure,
   type ClientWorld,
@@ -127,7 +127,7 @@ export async function probeUrlHandler(
     };
   }
   const nonce = edge.nonce();
-  const unopened = edge.open(`${URL_SCHEME}://${VERB_DOCTOR_PROBE}/${nonce}`);
+  const unopened = edge.open(`${DOCTOR_PROBE_PREFIX}${nonce}`);
   const arrived = unopened === null ? await awaitArrival(edge, nonce) : null;
   return arrived ?? { kind: "lost", unopened, opener: handlerApp(edge) };
 }

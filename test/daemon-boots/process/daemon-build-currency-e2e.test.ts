@@ -12,7 +12,7 @@ import { sessionStatePath } from "../../../src/daemon/paths";
 import type { SessionSnapshot } from "../../../src/renderer-interface/session-state";
 import { sourceDigest } from "../../../src/source-digest";
 import { effectsUrl, VERB_APPLY_UPDATE } from "../../../src/click/wire";
-import { click, killAndWait } from "../../helpers/daemon-e2e";
+import { click, killAndWait, drawnLink } from "../../helpers/daemon-e2e";
 import { until } from "../../helpers/until";
 import {
   prepareIsolatedDaemonEnv,
@@ -219,7 +219,7 @@ describe("a daemon spawned from the built bundle", () => {
         await expect(
           click(
             sockPath,
-            effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
+            drawnLink(sockPath, effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }])),
           ),
         ).rejects.toThrow(/already rebuilding/);
         fs.writeFileSync(stub.gate, "");

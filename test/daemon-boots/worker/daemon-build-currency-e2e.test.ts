@@ -19,6 +19,7 @@ import {
 } from "../../../src/click/wire";
 import {
   click,
+  drawnLink,
 } from "../../helpers/daemon-e2e";
 import { keptRenders, loggedLines } from "../../helpers/daemon-log";
 import {
@@ -149,12 +150,12 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
       )!;
       await click(
         sock,
-        effectsUrl([
+        drawnLink(sock, effectsUrl([
           {
             verb: VERB_SET_STATE,
             args: ["bc-disable-pick", UPDATE_NOTICE_SESSION_KEY, "true"],
           },
-        ]),
+        ])),
       );
       await click(
         sock,

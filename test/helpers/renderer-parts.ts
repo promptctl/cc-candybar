@@ -67,7 +67,6 @@ export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
     clicks: { gone: async () => false },
     serving: unhosted("serving"),
     renderSightings: { ofSession: async () => [] },
-    probes: { arrive: unhosted("probes") },
     eventAnswered: () => {},
     watches: { watch: unhosted("watches"), unwatch: unhosted("watches") },
     storage: { hold: unhosted("storage"), release: unhosted("storage") },

@@ -6,8 +6,8 @@
 // [LAW:one-way-deps] exception: the renderer process's composition root, the
 // counterpart of the daemon's (src/daemon/server.ts): it reads its paths from
 // the host's `Host` and builds the files the renderer still opens itself
-// (session state, the settings history, the doctor's stores, the link key),
-// which adf and uh4 hand in instead.
+// (session state, the settings history, the doctor's stores), which adf and
+// uh4 hand in instead.
 
 import v8 from "node:v8";
 import process from "node:process";
@@ -15,6 +15,7 @@ import { inspect } from "node:util";
 import type { World } from "./host.js";
 import { daemonPaths, locations } from "./daemon/paths.js";
 import { rendererAdapters } from "./daemon/production-adapters.js";
+import { linkSigner } from "./click/link-signer.js";
 import { daemonGates } from "./daemon/foundations/update-keys.js";
 import { failureOf } from "./daemon/foundations/verb-error.js";
 import { instantAt } from "./utils/instant.js";
@@ -126,6 +127,10 @@ function booted(
     throw new Error(
       `the host was built from source ${boot.digest ?? "of no digest"}; this renderer from ${own ?? "source of no digest"}, which the next daemon runs`,
     );
+  // [LAW:no-silent-failure] A key the host could not read refuses this boot
+  // with its reason, on the bar's ⚠; the host's next start reads it again.
+  if (boot.linkKey.kind === "failed")
+    throw new Error(`the link key could not be read: ${boot.linkKey.reason}`);
   const { host } = boot;
   const paths = daemonPaths(host);
   const { clock } = world;
@@ -137,7 +142,7 @@ function booted(
       ...adapters.storage(reaches.log),
       doctor: adapters.doctorStores,
     },
-    linkSigner: adapters.linkSigner,
+    linkSigner: linkSigner(Buffer.from(boot.linkKey.value, "base64")),
     stateDir: paths.state,
     locations: locations(host),
     env: host.env,

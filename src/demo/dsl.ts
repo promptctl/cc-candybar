@@ -22,7 +22,7 @@
 // is not branching — it lets the config's own timed sources (shell, time)
 // populate, exactly as the daemon re-renders on each status-line tick.
 
-import { linkKeyFile, linkSignerFromKeyFile } from "../daemon/link-key.js";
+import { previewSigner } from "../click/link-signer.js";
 import { daemonGates } from "../daemon/foundations/update-keys.js";
 import { locations, stateDir } from "../daemon/paths.js";
 import { repoGateAt } from "../renderer/repo-configs.js";
@@ -161,7 +161,7 @@ function loadState(): DslRenderState {
       locations: locs,
       env: host.env,
       sessionState,
-      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(host))),
+      signer: previewSigner(),
       gates: daemonGates(),
       stateDir: stateDir(host),
     },

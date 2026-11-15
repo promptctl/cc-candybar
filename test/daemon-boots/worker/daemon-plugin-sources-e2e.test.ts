@@ -18,6 +18,7 @@ import {
   frameRequest,
   hookData,
   refusedClick,
+  drawnLink,
 } from "../../helpers/daemon-e2e";
 import { barOf } from "../../helpers/drawn-frame";
 import { linkUrls } from "../../helpers/frame";
@@ -212,7 +213,9 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     );
   });
 
-  test("a forged link is refused, runs nothing, and its refusal is drawn", async () => {
+  // [LAW:single-enforcer] The host refuses a link the bar did not draw before
+  // any renderer sees it: no run is refused, because none was asked for.
+  test("a link changed since the bar drew it reaches no renderer and runs nothing", async () => {
     const link = runLink(await renderRaw());
     const run = effectsOf(link).find((e) => e.verb === VERB_RUN)!;
     const [sid, action, evaluated] = run.args as [
@@ -221,17 +224,58 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       string,
       string,
     ];
-    const forged = effectsUrl([
-      {
-        verb: VERB_RUN,
-        args: [
-          sid,
-          action,
-          evaluated.replace("/h/ran", "/h/forged"),
-          run.args[3]!,
-        ],
-      },
-    ]);
+    const forged = drawnLink(
+      daemon,
+      effectsUrl([
+        {
+          verb: VERB_RUN,
+          args: [
+            sid,
+            action,
+            evaluated.replace("/h/ran", "/h/forged"),
+            run.args[3]!,
+          ],
+        },
+      ]),
+    );
+    // The run link as the bar drew it, with its arguments changed.
+    const changed = link.replace("%252Fh%252Fran", "%252Fh%252Fforged");
+    expect(changed).not.toBe(link);
+    const before = await statsOf(daemon.daemon);
+
+    await refusedClick(daemon, changed, "bad-request");
+    expect((await statsOf(daemon.daemon)).runs).toMatchObject({
+      started: before.runs.started,
+      refused: before.runs.refused,
+    });
+    expect(await render()).not.toContain("⚠");
+  });
+
+  // A config can draw any link, and the bar signs every one, so the run's own
+  // mac proves what the link alone cannot: that the draw evaluated this run.
+  test("a run the draw did not evaluate is refused by its own mac, runs nothing, and its refusal is drawn", async () => {
+    const link = runLink(await renderRaw());
+    const run = effectsOf(link).find((e) => e.verb === VERB_RUN)!;
+    const [sid, action, evaluated] = run.args as [
+      string,
+      string,
+      string,
+      string,
+    ];
+    const forged = drawnLink(
+      daemon,
+      effectsUrl([
+        {
+          verb: VERB_RUN,
+          args: [
+            sid,
+            action,
+            evaluated.replace("/h/ran", "/h/forged"),
+            run.args[3]!,
+          ],
+        },
+      ]),
+    );
     const before = await statsOf(daemon.daemon);
 
     await refusedClick(daemon, forged, "bad-request");

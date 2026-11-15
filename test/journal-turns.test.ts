@@ -2,6 +2,7 @@
 // its `copy` launch; the click-path cases drive `replyTo`, the daemon's real
 // click arm.
 
+import { signedClick } from "./helpers/link-signer";
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { fieldOf } from "../src/utils/logfmt";
 import { RuntimeStats } from "../src/daemon/stats";
@@ -358,7 +359,7 @@ describe("the click path", () => {
     const send = (verb: string, value: string, gone = () => false) =>
       replyTo(
         given,
-        { kind: "click", verb, value } as Parameters<typeof replyTo>[1],
+        signedClick(verb, value) as Parameters<typeof replyTo>[1],
         () => false,
         stats.accept(),
         gone,

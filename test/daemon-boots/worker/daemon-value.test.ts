@@ -3,6 +3,7 @@
 // the socket uses, closed with nothing left running, and built again over the
 // same storage to see a restart.
 
+import { linkKeyFile, linkSignerFromKeyFile } from "../../../src/daemon/link-key";
 import { NO_TMUX_AT_EXIT } from "../../helpers/in-worker-daemon";
 import { hostOf } from "../../helpers/host";
 import type { Host } from "../../../src/host";
@@ -97,6 +98,12 @@ describe("the daemon is a value", () => {
   // stands (a case may have put a stub on PATH), with its state under `root`.
   const hostNow = (): Host =>
     hostOf({ ...process.env, XDG_STATE_HOME: path.join(root, "state") });
+  // A link as this test's daemon draws it: signed with the key in its state
+  // directory.
+  const drawnHere = (link: string): string =>
+    linkSignerFromKeyFile(linkKeyFile(daemonPaths(hostNow()).state)).signLink(
+      link,
+    );
 
   const construct = (
     inputs: {
@@ -232,9 +239,9 @@ describe("the daemon is a value", () => {
     await expect(
       clickLink(
         daemon,
-        effectsUrl([
+        drawnHere(effectsUrl([
           { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
-        ]),
+        ])),
       ),
     ).rejects.toThrow(closed);
     expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
@@ -365,12 +372,12 @@ describe("the daemon is a value", () => {
     const { setting, on } = LANES.band.switch;
     await clickLink(
       daemon,
-      effectsUrl([
+      drawnHere(effectsUrl([
         {
           verb: VERB_SET_STATE,
           args: ["value-close", setting, String(on)],
         },
-      ]),
+      ])),
     );
     // A feed on the lane the click turned on: a refused subscription is no
     // feed, and would leave nothing here for the close to end.

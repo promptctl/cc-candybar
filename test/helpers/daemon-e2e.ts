@@ -22,7 +22,8 @@ import {
 } from "../../src/daemon/foundations/protocol";
 import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
-import { linkClick } from "./click";
+import { linkKeyFile, linkSignerFromKeyFile } from "../../src/daemon/link-key";
+import { unprovenLink } from "../../src/click/link-signer";
 import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
@@ -243,16 +244,23 @@ export function render(
   return frameRequest(target, renderBody(sessionId, cwd, hints, args));
 }
 
-// A click, decoded the same way `cc-candybar url-handle` decodes it, as the
-// wire request the URL handler app sends.
+// A click as `cc-candybar url-handle` sends it: the link as it was clicked.
 export function clickBody(url: string) {
-  const { verb, value } = linkClick(url);
   return {
     v: PROTOCOL_VERSION,
     kind: "click",
-    verb,
-    value,
+    url,
   } as const satisfies ClickRequest;
+}
+
+// [LAW:single-enforcer] A link as `target`'s bar would draw it: signed with
+// that daemon's key, which lives in the state directory beside its log. For a
+// test that builds the link a draw makes, or edits one a draw made, rather
+// than clicking one read off a frame as it was drawn.
+export function drawnLink(target: DaemonTarget, link: string): string {
+  return linkSignerFromKeyFile(
+    linkKeyFile(path.dirname(endpointOf(target).log)),
+  ).signLink(unprovenLink(link));
 }
 
 // A click sent as the URL handler app sends it. The daemon's answer is
