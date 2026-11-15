@@ -4,15 +4,22 @@
     {
       "version": "pr-760",
       "ref": "refs/pull/760/merge",
-      "sha": "4c9abdacfa38f8ca0e4295653a1cb8f3173078b4",
-      "timestamp": "2026-11-15T23:26:49.275Z",
+      "sha": "a9084d6549ccf6ddd799e5731c7aafe5f7f3137f",
+      "timestamp": "2026-11-15T23:43:28.291Z",
       "commits": [
         {
-          "sha": "4c9abdacfa38f8ca0e4295653a1cb8f3173078b4",
+          "sha": "a9084d6549ccf6ddd799e5731c7aafe5f7f3137f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T23:25:57Z",
-          "message": "Merge d32e933382fde4cec10926f7fa86569cdb2a749f into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+          "timestamp": "2026-11-15T23:42:33Z",
+          "message": "Merge db8356683bd500aabe334ca5a208d6b818c24dff into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+        },
+        {
+          "sha": "db8356683bd500aabe334ca5a208d6b818c24dff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T16:42:21-07:00",
+          "message": "fix(ledger): a session lane's refresh is a step of its transcript entry's, which is the one line (candybar-skeleton-wj0c.zhh)\n\n- A source declares whether its refresh is a unit of work (its own line) or a\n  step of another's (a line only when it fails, still counted). The session\n  lanes are steps of their transcript entry's refresh, so a write costs one\n  line, and a session with no transcript yet one per period, not six.\n- Every draw, the demo's and check's included, projects today and speed\n  through one function, so the demo draws tok/s again.\n- The watch key is the entry's key; the awaited built-ins are listed once.\n"
         },
         {
           "sha": "d32e933382fde4cec10926f7fa86569cdb2a749f",

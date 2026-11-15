@@ -29701,7 +29701,8 @@ var KeyedSource = class {
     this.refreshes = spec.ledger.declare({
       name: spec.name,
       scope: spec.scope,
-      refresh: ["first", "period", "change", "supersede"]
+      refresh: ["first", "period", "change", "supersede"],
+      event: "own"
     });
   }
   spec;
@@ -29974,7 +29975,7 @@ var RefreshLedger = class {
     };
     for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
     this.tallies.set(key, tally);
-    return new Refreshes(tally, this.logger);
+    return new Refreshes(tally, declaration.event, this.logger);
   }
   // Every source declared, by scope then name.
   snapshot() {
@@ -29995,11 +29996,13 @@ var RefreshLedger = class {
   }
 };
 var Refreshes = class {
-  constructor(tally, logger) {
+  constructor(tally, event, logger) {
     this.tally = tally;
+    this.event = event;
     this.logger = logger;
   }
   tally;
+  event;
   logger;
   // This source's record as the ledger holds it: what its owner's own stats
   // report, a view of the one tally rather than a count of its own.
@@ -30012,6 +30015,7 @@ var Refreshes = class {
     this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;
     const failure = outcome.kind === "failed";
+    if (!failure && this.event === "step") return;
     const why2 = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
       failure ? "warn" : "info",
@@ -59265,12 +59269,14 @@ var GitDataProvider = class {
     this.gitRefreshes = ledger.declare({
       name: "git",
       scope: "repo",
-      refresh: ["first", "period", "change"]
+      refresh: ["first", "period", "change"],
+      event: "own"
     });
     this.prRefreshes = ledger.declare({
       name: "pr",
       scope: "repo",
-      refresh: ["first", "period"]
+      refresh: ["first", "period"],
+      event: "own"
     });
     if (opts.watchers) {
       this.watchers = opts.watchers;
@@ -61145,7 +61151,8 @@ var SessionUsageStore = class {
     this.usage = this.ledger.declare({
       name: "usage",
       scope: "session",
-      refresh: ["first", "period", "change"]
+      refresh: ["first", "period", "change"],
+      event: "step"
     });
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
     this.scans = new KeyedSource({
@@ -62249,7 +62256,8 @@ var ContextProvider = class {
       (opts.ledger ?? new RefreshLedger(logger)).declare({
         name: "context",
         scope: "session",
-        refresh: ["first", "period", "change"]
+        refresh: ["first", "period", "change"],
+        event: "step"
       }),
       opts.clock,
       logger
@@ -62360,7 +62368,8 @@ var MetricsProvider = class {
       (opts.ledger ?? new RefreshLedger(logger)).declare({
         name: "metrics",
         scope: "session",
-        refresh: ["first", "period", "change"]
+        refresh: ["first", "period", "change"],
+        event: "step"
       }),
       opts.clock,
       logger
@@ -62482,7 +62491,8 @@ var ActivityProvider = class {
       (opts.ledger ?? new RefreshLedger(logger)).declare({
         name: "activity",
         scope: "session",
-        refresh: ["first", "period", "change"]
+        refresh: ["first", "period", "change"],
+        event: "step"
       }),
       opts.clock,
       logger
@@ -62665,7 +62675,8 @@ var AutoCompactProvider = class {
     this.refreshes = ledger.declare({
       name: "autocompact",
       scope: "configDir",
-      refresh: ["first", "period", "change"]
+      refresh: ["first", "period", "change"],
+      event: "step"
     });
   }
   clock;
@@ -62746,7 +62757,8 @@ var CacheExpiryProvider = class {
     this.refreshes = ledger.declare({
       name: "cache",
       scope: "session",
-      refresh: ["first", "period", "change"]
+      refresh: ["first", "period", "change"],
+      event: "step"
     });
   }
   clock;
@@ -65659,13 +65671,14 @@ init_globals();
 var import_node_path31 = __toESM(require_path_browserify(), 1);
 var TRANSCRIPT_PERIOD = { okMs: 1e4, failedMs: 1e4 };
 var MAX_UNHELD = 16;
+var keyOfFollowed = ({ session, transcript: transcript2, settings }) => [session, transcript2, settings].join("\0");
 var TranscriptLanes = class {
   constructor(deps) {
     this.deps = deps;
     this.source = new KeyedSource({
       name: "transcript",
       scope: "session",
-      keyOf: ({ session, transcript: transcript2, settings }) => [session, transcript2, settings].join("\0"),
+      keyOf: keyOfFollowed,
       fields: ({ session }) => `sid=${valueOf(session)}`,
       read: (followed, _signal, by) => this.read(followed, by),
       every: () => deps.every ?? TRANSCRIPT_PERIOD,
@@ -65694,7 +65707,7 @@ var TranscriptLanes = class {
   watch(followed, changed) {
     const { transcript: transcript2, settings } = followed;
     const handle = this.deps.watchers.acquire(
-      `transcript-lanes:${[followed.session, transcript2, settings].join("\0")}`,
+      `transcript-lanes:${keyOfFollowed(followed)}`,
       {
         dirs: [
           { path: (0, import_node_path31.dirname)(transcript2), filenames: [(0, import_node_path31.basename)(transcript2)] },
@@ -81413,7 +81426,7 @@ function renderWidth(hints) {
 }
 function awaitsReading({ builtins, sources, runs }, named3) {
   return [
-    ...BUILTINS.filter((name) => AWAITED[name]).map((name) => builtins[name]),
+    ...AWAITED_BUILTINS.map((name) => builtins[name]),
     ...Object.values(sources),
     ...[...named3].map((run3) => (runs[run3.digest] ?? UNREAD_RUN).reading)
   ].some(awaitedReading);
@@ -81433,7 +81446,7 @@ var AWAITED = {
   hostName: true,
   hostUser: true
 };
-var BUILTINS = Object.keys(AWAITED);
+var AWAITED_BUILTINS = Object.keys(AWAITED).filter((name) => AWAITED[name]);
 var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
 async function settleWorld(worldState, named3, signal) {
   try {
@@ -81649,6 +81662,12 @@ function speedOf(fact, at) {
   const rates = current2 ? projectSpeed(obs) : void 0;
   const history = projectSpeedHistory(obs);
   return rates !== void 0 || history !== void 0 ? { ...rates, ...history !== void 0 && { history } } : void 0;
+}
+function instantFacts(builtins, at) {
+  return {
+    today: todayOf(builtins.today, at),
+    speed: speedOf(builtins.speed, at)
+  };
 }
 function todayOf(fact, at) {
   if (fact.kind === "pending") return pendingOf(fact.why);
@@ -82097,8 +82116,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing: drawing2,
     feeds,
-    today: todayOf(document.builtins.today, at),
-    speed: speedOf(document.builtins.speed, at)
+    ...instantFacts(document.builtins, at)
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
   noteFacts(
