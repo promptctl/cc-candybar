@@ -4,15 +4,22 @@
     {
       "version": "pr-755",
       "ref": "refs/pull/755/merge",
-      "sha": "aedab2e1aa6eab8ce5259ff3fc4081baabdf6732",
-      "timestamp": "2026-11-15T15:37:05.221Z",
+      "sha": "ffaee214005a35e42d03fb6a397d094f7855f03f",
+      "timestamp": "2026-11-15T15:41:04.002Z",
       "commits": [
         {
-          "sha": "aedab2e1aa6eab8ce5259ff3fc4081baabdf6732",
+          "sha": "ffaee214005a35e42d03fb6a397d094f7855f03f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T15:35:59Z",
-          "message": "Merge fa4c524c48e134388137247cb244a1881e198481 into 3aee42acb63d4aec4de6dd98eb4c2d6d28857df7\n"
+          "timestamp": "2026-11-15T15:40:18Z",
+          "message": "Merge 8ecad5ce4dd9ffe1c14a83657dfb5a9d7b5c763b into 3aee42acb63d4aec4de6dd98eb4c2d6d28857df7\n"
+        },
+        {
+          "sha": "8ecad5ce4dd9ffe1c14a83657dfb5a9d7b5c763b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T08:40:08-07:00",
+          "message": "fix(renderer): storage generations are numbered across folders, so a folder held again never reuses a closed watch's key (candybar-host-renderer-x96a.2r6)\n"
         },
         {
           "sha": "fa4c524c48e134388137247cb244a1881e198481",

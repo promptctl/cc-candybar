@@ -64987,6 +64987,9 @@ var ManagedStorage = class {
     error: 0
   };
   lost = 0;
+  // [LAW:single-enforcer] Generations are numbered across every folder, so no
+  // two watches, a folder's closed one and its next included, share a key.
+  generations = 0;
   watchers;
   logger;
   identityOf;
@@ -65031,7 +65034,7 @@ var ManagedStorage = class {
       const was = this.watched.get(folder);
       const found2 = this.found(folder);
       if (was !== void 0 && current(was, found2)) continue;
-      const generation = was === void 0 ? 0 : was.key.generation + 1;
+      const generation = this.generations++;
       if (was !== void 0)
         this.logger(
           "info",
