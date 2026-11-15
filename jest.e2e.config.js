@@ -13,7 +13,7 @@ export function e2eConfig({ run, roots = base.roots, testMatch }) {
     roots,
     testMatch,
     reporters: [...reportersFor(run), CAP_REPORTER],
-    setupFilesAfterEnv: [...base.setupFilesAfterEnv, ASSERTION_LIMIT_SETUP],
+    setupFilesAfterEnv: [ASSERTION_LIMIT_SETUP],
   };
 }
 

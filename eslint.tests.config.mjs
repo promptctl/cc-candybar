@@ -81,8 +81,6 @@ export default [
     files: ["test/**/*.{ts,mts}"],
     ignores: [
       "test/setup.ts",
-      "test/global-setup.ts",
-      "test/setup-after-env.ts",
       "test/unit-global-setup.ts",
       "test/helpers/in-worker-daemon.ts",
     ],

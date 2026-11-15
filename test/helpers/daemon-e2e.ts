@@ -31,7 +31,6 @@ import {
   type DaemonTarget,
 } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
-import { ROUTE_ENV } from "./process-tier.cjs";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { logLines } from "../../src/daemon/log";
 import {
@@ -387,7 +386,6 @@ export function runRealClient(
       [path.join(process.cwd(), "dist", "index.mjs"), ...args],
       {
         ...options,
-        env: { ...options.env, [ROUTE_ENV]: "client" },
         encoding: "utf8",
         timeout: 10_000,
       },

@@ -8,7 +8,6 @@ import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 
 import { daemonPool, type DaemonPool } from "./daemon-pool";
-import { ROUTE_ENV } from "./process-tier.cjs";
 
 const REPO_ROOT = process.cwd();
 
@@ -70,7 +69,7 @@ export async function spawnTestDaemon(
   try {
     child = spawn(entry.bin, [...entry.args, "daemon"], {
       cwd: REPO_ROOT,
-      env: { ...env, [ROUTE_ENV]: "helper" },
+      env,
       stdio: ["ignore", "pipe", "pipe"],
       // New session + process group (pgid = child.pid), inherited by the
       // worker `tsx` forks — the ONLY thing that makes a group-wide signal

@@ -7,7 +7,6 @@ import path from "node:path";
 
 import { RSS_LIMIT_ENV } from "../../../src/daemon/limits";
 import { waitForExit } from "../../helpers/daemon-wire";
-import { LEDGER_ENV, parseLedger } from "../../helpers/process-tier.cjs";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -55,21 +54,6 @@ test("the refusal report names the phase and quotes the daemon's reason", async 
   }
 });
 
-// [LAW:no-silent-failure] A dead meter would read as a run that started nothing,
-// so the ledger is held to hearing a real one, by the helper's route.
-test("a daemon's start is in the run's ledger, under its test file", async () => {
-  const iso = prepareIsolatedDaemonEnv("ccb-rdy");
-  const env = { ...iso.env, [RSS_LIMIT_ENV]: "512MB" };
-  try {
-    await expect(spawnDaemonWithEnv(env)).rejects.toThrow();
-    expect(parseLedger(fs.readFileSync(process.env[LEDGER_ENV]!, "utf8"))).toContainEqual({
-      file: "test/daemon-boots/process/spawn-isolated-daemon.test.ts",
-      route: "helper",
-    });
-  } finally {
-    iso.removeTmpDirs();
-  }
-});
 
 // A PINNED LIMIT, not a wish: readiness is "a daemon answers on this socket",
 // never "the daemon this call spawned answers". Spawned against a socket a LIVE
