@@ -59,6 +59,7 @@ import { textOf, ansiOf, parseFrame } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
+import { fakeWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/foundations/update-keys";
@@ -153,6 +154,9 @@ interface Rig {
   readonly updateFact: UpdateFact;
   readonly reloads: ReloadSignal;
   readonly lines: string[];
+  // The cache's storage notices, in the order sent: `hold <id>` or
+  // `release <id>`.
+  readonly storageCalls: string[];
   readonly collector: Collector;
   readonly worldStates: WorldStates;
   // A request's turn as the main renderer takes one: the world state the
@@ -209,6 +213,7 @@ function rig(): Rig {
   const sessionState = new SessionState();
   const updateFact = newUpdateFact();
   const reloads = new ReloadSignal();
+  const storageCalls: string[] = [];
   const served = collected(
     {
       owners: providers,
@@ -225,7 +230,16 @@ function rig(): Rig {
       env: host.env,
       sessionState,
       watchers,
-      storage: providers.managedStorage,
+      storage: {
+        hold: (id, folders) => {
+          storageCalls.push(`hold ${id}`);
+          providers.managedStorage.hold(id, folders);
+        },
+        release: (id) => {
+          storageCalls.push(`release ${id}`);
+          providers.managedStorage.release(id);
+        },
+      },
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
@@ -256,6 +270,7 @@ function rig(): Rig {
     updateFact,
     reloads,
     lines,
+    storageCalls,
     collector: served.collector,
     worldStates: served.worldStates,
     hold: (configFile, sid = "s1") => {
@@ -371,7 +386,6 @@ describe("a source's declaration", () => {
       locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
-      storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
     });
@@ -382,9 +396,12 @@ describe("a source's declaration", () => {
         storage: path.join(dir, "p", "session"),
       });
       expect([...loaded.state!.sources]).toEqual([
-        [STATUS, { folder: path.join(dir, "p", "session"), generation: 0 }],
+        [STATUS, path.join(dir, "p", "session")],
       ]);
-      // The build created the folder, so the program has somewhere to write.
+      // A build holds no folder; the cache's hold on the state it serves
+      // makes it, so the program has somewhere to write.
+      expect(fs.existsSync(path.join(dir, "p", "session"))).toBe(false);
+      r.cache.getOrCreate(dir, dir, p);
       expect(fs.statSync(path.join(dir, "p", "session")).isDirectory()).toBe(
         true,
       );
@@ -466,7 +483,6 @@ describe("a source's declaration", () => {
       locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
-      storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
     });
@@ -501,7 +517,6 @@ describe("a source's declaration", () => {
       locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
-      storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
     });
@@ -628,7 +643,6 @@ describe("a source's declaration", () => {
       locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
-      storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
     });
@@ -1152,6 +1166,62 @@ describe("a storage folder's watch", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
 
+  test("every session retiring, then a new one's request, opens and closes no watch: the build holds it", async () => {
+    const r = rig();
+    const file = config(["plugins.p.gated"]);
+    const first = r.hold(file, "s0");
+    await answered(first.view);
+    first[Symbol.dispose]();
+    const opened = r.counters.watchersOpened;
+    const closed = r.counters.watchersClosed;
+    r.collector.sweep();
+    r.collector.sweep();
+    const next = r.hold(file, "s1");
+    await answered(next.view);
+    next[Symbol.dispose]();
+    expect(r.counters.watchersOpened).toBe(opened);
+    expect(r.counters.watchersClosed).toBe(closed);
+    expect(r.providers.managedStorage.stats().folders).toBe(1);
+  });
+
+  test("a built reload holds its successor's folders before it releases its predecessor's; a kept one holds again under the same id", async () => {
+    const r = rig();
+    const file = config(["plugins.p.gated"]);
+    // No render holds the state through the reload: a held one's release
+    // waits for that render's return.
+    const held = r.hold(file);
+    await answered(held.view);
+    held[Symbol.dispose]();
+    const entry = r.cache.getOrCreate(dir, dir, file);
+    expect(r.storageCalls).toEqual(["hold 1"]);
+    r.cache.reload(dir, dir, file, { kind: "doctor" });
+    expect(r.storageCalls).toEqual(["hold 1", "hold 1"]);
+    const edited = fs
+      .readFileSync(file, "utf8")
+      .replace(`template: "mine"`, `template: "mine, edited"`);
+    await r.reloads.after(entry, () => fs.writeFileSync(file, edited));
+    expect(r.storageCalls.slice(2, 4)).toEqual(["hold 2", "release 1"]);
+  });
+
+  test("a refused watch's fault clears at the config's reload", async () => {
+    const file = config(["plugins.p.gated"]);
+    const storage = storageOf();
+    fs.mkdirSync(storage, { recursive: true });
+    fakeWatches(new Set([storage]));
+    cleanups.push(() => jest.restoreAllMocks());
+    const r = rig();
+    const view = viewOf(r, file);
+    await answered(view);
+    expect(r.providers.managedStorage.stats().faults.refused).toBe(1);
+    jest.restoreAllMocks();
+    r.cache.reload(dir, dir, file, { kind: "doctor" });
+    await writeUntilShown(
+      () => programWrites(storage, "s1", { home: "/recovered" }),
+      () => draw(view).text.includes("home=/recovered"),
+      "the write after the reload",
+    );
+  });
+
   test("a reload keeps it open", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
@@ -1182,12 +1252,10 @@ describe("a storage folder's watch", () => {
     held[Symbol.dispose]();
     const entry = r.cache.getOrCreate(dir, dir, file);
     const storage = storageOf();
-    const before = entry.state.sources.get(STATUS)!;
+    const lost = r.providers.managedStorage.stats().lost;
     await r.reloads.afterRemoving(entry, storage, () => fs.mkdirSync(storage));
     expect(fs.statSync(storage).isDirectory()).toBe(true);
-    expect(entry.state.sources.get(STATUS)!.generation).toBeGreaterThan(
-      before.generation,
-    );
+    expect(r.providers.managedStorage.stats().lost).toBe(lost + 1);
     const view = viewOf(r, file);
     await answered(view);
     await writeUntilShown(
@@ -1306,7 +1374,7 @@ describe("an installed plugin's storage", () => {
       { path: path.join(root(), "p", "plugin.json5"), placed: "replaced" },
     ]);
     await until(
-      () => entry.state.sources.get(STATUS)?.folder === installed,
+      () => entry.state.sources.get(STATUS) === installed,
       "the reload onto the installed folder",
       10_000,
     );

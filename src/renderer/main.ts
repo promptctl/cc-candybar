@@ -294,7 +294,7 @@ function startOver(
       sessionState,
       watchers: watches,
       log,
-      storage: host.managedStorage,
+      storage: host.storage,
       signer: linkSigner,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
@@ -399,7 +399,7 @@ function startOver(
       renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
         .state.config,
     reloadConfig,
-    // The storage keys of the same entry `configFor` reads the config of.
+    // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) =>
       renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
         .state.sources,

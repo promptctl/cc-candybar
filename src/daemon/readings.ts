@@ -346,15 +346,15 @@ export function declareLanes(
     today: declare("today", () =>
       owners.usageStore.declareToday(holds, facts.hints.claudeConfigDir),
     ),
-    // [LAW:one-source-of-truth] Each source's hold at (its folder's storage
-    // key, the session the checkpoint parsed).
+    // [LAW:one-source-of-truth] Each source's hold at (its storage folder,
+    // the session the checkpoint parsed).
     sources: new Map(
-      [...sources.plugins].map(([name, storage]) => [
+      [...sources.plugins].map(([name, folder]) => [
         name,
         declare(name, () =>
           owners.managedStorage.declare(
             holds,
-            storage,
+            folder,
             facts.hookData.session_id,
           ),
         ),

@@ -15,7 +15,6 @@ import type { RateLimitsSeen } from "../daemon/foundations/sightings";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { ClaudeHookData } from "../utils/claude";
 import type { RefreshLane } from "../facts/world-state.js";
-import type { StorageKey } from "./interface.js";
 import type { Judged } from "../daemon/foundations/judge-run.js";
 
 // A render request that crossed the checkpoint: its hookData carries every
@@ -61,9 +60,9 @@ export interface ViewFacts {
   readonly hints: ClientHints;
 }
 
-// The plugin sources a config declares, by variable name, at the storage key
-// its render state's build took for each one's folder.
-export type DeclaredSources = ReadonlyMap<string, StorageKey>;
+// The plugin sources a config declares, by variable name, at the storage
+// folder the loader resolved for each: the real path.
+export type DeclaredSources = ReadonlyMap<string, string>;
 
 // What a session's renderer subscribes to: its config's plugin sources, and
 // the runs its `shell` and `file` sources name, by digest, as the host judged

@@ -199,8 +199,17 @@ test("the config load line names the load's projections", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-projections-"));
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
-    fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
-    const loaded = loadFromDisk(dir, dir, file, { clock: systemTimekeeper, stateDir: stateDir(HOST), locations: locs(), env: HOST.env, storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, gates: bareGates(),
+    fs.writeFileSync(
+      file,
+      `{ variables: ${variables}, segments: ${segments} }`,
+    );
+    const loaded = loadFromDisk(dir, dir, file, {
+      clock: systemTimekeeper,
+      stateDir: stateDir(HOST),
+      locations: locs(),
+      env: HOST.env,
+      signer: TEST_SIGNER,
+      gates: bareGates(),
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();

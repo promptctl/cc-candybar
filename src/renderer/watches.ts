@@ -8,7 +8,7 @@
 // as an `unknown` window, so the holder re-derives what it says of it.
 
 import { compareStructural } from "mobx";
-import type { HostCalls, WatchId } from "../renderer-interface/adapter.js";
+import type { AdapterToHost, WatchId } from "../renderer-interface/adapter.js";
 import {
   followWatch,
   type Deafness,
@@ -29,7 +29,7 @@ export class Watches {
   private minted = 0;
   private readonly held = new Map<WatchId, Held>();
 
-  constructor(private readonly host: HostCalls["watches"]) {}
+  constructor(private readonly host: AdapterToHost["watches"]) {}
 
   // A watch of `targets` under `key`, whose every window `heard` hears.
   acquire(

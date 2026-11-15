@@ -9,6 +9,7 @@ import {
   STORAGE_SWEEP_EVERY_MS,
 } from "../src/daemon/cache/managed-storage";
 import type { Delivery } from "../src/daemon/foundations/stats-snapshot";
+import type { StorageHoldId } from "../src/renderer-interface/adapter";
 import {
   statIdentity,
   type FolderIdentity,
@@ -42,6 +43,11 @@ interface Rig {
   readonly counters: WatcherCounters;
   readonly lines: string[];
   write(sessionId: string, text: string): void;
+  // A render state's load naming the rig's folder, under `id`; the returned
+  // release is its reclaim.
+  hold(id?: number): () => void;
+  // The folder's generation, as the owner's last event about it said.
+  generation(): number;
 }
 
 const rigs: Rig[] = [];
@@ -51,6 +57,8 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
     fs.mkdtempSync(path.join(os.tmpdir(), "managed-storage-")),
   );
   const folder = path.join(root, "plug", "session");
+  // The plugin's folder: the owner makes only the storage folder in it.
+  fs.mkdirSync(path.dirname(folder));
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
@@ -87,6 +95,18 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
       fs.writeFileSync(tmp, text);
       fs.renameSync(tmp, path.join(folder, `${sessionId}.json`));
     },
+    hold(id = 1) {
+      storage.hold(id as StorageHoldId, [folder]);
+      return () => storage.release(id as StorageHoldId);
+    },
+    generation() {
+      const moved = lines.filter((l) =>
+        l.startsWith(`info plugin storage generation folder=${folder} `),
+      );
+      return moved.length === 0
+        ? 0
+        : Number(/generation=(\d+)$/.exec(moved.at(-1)!)![1]);
+    },
   };
   rigs.push(made);
   return made;
@@ -114,21 +134,22 @@ const refreshes = (r: Rig, by: string): string[] =>
 describe("ManagedStorage reads", () => {
   test("a session's file: ok, absent with no file or blank text, failed naming the path", async () => {
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    const release = r.storage.watch(key);
+    const release = r.hold();
     const holds = new Holds();
     const C = sessionIdOf("session-c");
     r.write(A, '{"ceiling": 350000}');
     r.write(C, "  \n");
     r.write(B, "{not json");
-    expect(await answered(r.storage.declare(holds, key, A))).toEqual(
+    expect(await answered(r.storage.declare(holds, r.folder, A))).toEqual(
       ok({ ceiling: 350000 }),
     );
     expect(
-      await answered(r.storage.declare(holds, key, sessionIdOf("nobody"))),
+      await answered(r.storage.declare(holds, r.folder, sessionIdOf("nobody"))),
     ).toEqual(ABSENT);
-    expect(await answered(r.storage.declare(holds, key, C))).toEqual(ABSENT);
-    const bad = await answered(r.storage.declare(holds, key, B));
+    expect(await answered(r.storage.declare(holds, r.folder, C))).toEqual(
+      ABSENT,
+    );
+    const bad = await answered(r.storage.declare(holds, r.folder, B));
     expect(bad).toMatchObject({ kind: "failed" });
     expect(bad.kind === "failed" && bad.reason).toMatch(
       new RegExp(
@@ -139,26 +160,56 @@ describe("ManagedStorage reads", () => {
     expect(refreshes(r, "first")).toContainEqual(
       expect.stringMatching(
         new RegExp(
-          `^info plugin storage refresh file=${path.join(r.folder, "session-a.json")} generation=0 by=first outcome=ok took=\\d+ms$`,
+          `^info plugin storage refresh file=${path.join(r.folder, "session-a.json")} by=first outcome=ok took=\\d+ms$`,
         ),
       ),
     );
     release();
   });
 
-  test("the folder is created by the key request, before any session reads it", () => {
+  test("the folder is created by a load's hold, before any session reads it", () => {
     const r = rig();
     expect(fs.existsSync(r.folder)).toBe(false);
-    r.storage.keyFor(r.folder);
+    r.hold();
     expect(fs.statSync(r.folder).isDirectory()).toBe(true);
+  });
+
+  test("a plugin folder that is gone is not made again: its storage folder faults", async () => {
+    const r = rig();
+    fs.rmdirSync(path.dirname(r.folder));
+    r.hold();
+    expect(fs.existsSync(path.dirname(r.folder))).toBe(false);
+    expect(
+      await answered(r.storage.declare(new Holds(), r.folder, A)),
+    ).toMatchObject({
+      kind: "failed",
+      reason: expect.stringContaining("could not be created or read: ENOENT"),
+    });
+  });
+
+  test("a session declared before any hold reads the path, and the hold re-reads what landed unwatched", async () => {
+    const watches = fakeWatches();
+    const r = rig();
+    fs.mkdirSync(r.folder);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    expect(await answered(lane)).toEqual(ok("a"));
+    expect(watches).toHaveLength(0);
+    r.write(A, '"before the hold"');
+    r.hold();
+    await until(
+      () =>
+        JSON.stringify(lane.current()) ===
+        JSON.stringify(ok("before the hold")),
+      "the hold's re-read",
+    );
   });
 
   test("a program's write reaches its session's lane through the folder's watch", async () => {
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"a1"');
-    const a = r.storage.declare(new Holds(), key, A);
+    const a = r.storage.declare(new Holds(), r.folder, A);
     await answered(a);
     // FSEvents drops what lands before its stream is armed.
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -172,13 +223,12 @@ describe("ManagedStorage reads", () => {
   test("a write to session A's file re-reads A only", async () => {
     const watches = fakeWatches();
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"a1"');
     r.write(B, '"b1"');
     const holds = new Holds();
-    const a = r.storage.declare(holds, key, A);
-    const b = r.storage.declare(holds, key, B);
+    const a = r.storage.declare(holds, r.folder, A);
+    const b = r.storage.declare(holds, r.folder, B);
     await answered(a);
     await answered(b);
     r.write(A, '"a2"');
@@ -199,15 +249,14 @@ describe("ManagedStorage reads", () => {
   test("an unnamed event re-reads every held key in the folder, and only those", async () => {
     const watches = fakeWatches();
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"a1"');
     r.write(B, '"b1"');
     const holds = new Holds();
     const loose = new Holds();
-    const a = r.storage.declare(holds, key, A);
-    const b = r.storage.declare(holds, key, B);
-    const c = r.storage.declare(loose, key, sessionIdOf("session-c"));
+    const a = r.storage.declare(holds, r.folder, A);
+    const b = r.storage.declare(holds, r.folder, B);
+    const c = r.storage.declare(loose, r.folder, sessionIdOf("session-c"));
     await answered(a);
     await answered(b);
     await answered(c);
@@ -230,18 +279,17 @@ describe("ManagedStorage reads", () => {
   test("hold, release, write, hold again: the kept value draws until the re-read lands the write", async () => {
     const watches = fakeWatches();
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"before"');
     const holds = new Holds();
-    await answered(r.storage.declare(holds, key, A));
+    await answered(r.storage.declare(holds, r.folder, A));
     holds.declare(() => {});
     r.write(A, '"while away"');
     // The event finds the key unheld: nothing reads.
     watches[0]!.listener("rename", "session-a.json");
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(refreshes(r, "change")).toHaveLength(0);
-    const lane = r.storage.declare(holds, key, A);
+    const lane = r.storage.declare(holds, r.folder, A);
     expect(lane.current()).toEqual(ok("before"));
     await until(() => {
       const now = lane.current();
@@ -253,14 +301,13 @@ describe("ManagedStorage reads", () => {
   test("a supersede holds back watch triggers until it resumes; two need both resumes", async () => {
     const watches = fakeWatches();
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"before"');
     const holds = new Holds();
-    const lane = r.storage.declare(holds, key, A);
+    const lane = r.storage.declare(holds, r.folder, A);
     await answered(lane);
-    const one = r.storage.supersede(key, A);
-    const two = r.storage.supersede(key, A);
+    const one = r.storage.supersede(r.folder, A);
+    const two = r.storage.supersede(r.folder, A);
     expect(lane.current()).toMatchObject({
       kind: "pending",
       why: "superseded",
@@ -283,29 +330,38 @@ describe("ManagedStorage reads", () => {
 });
 
 describe("ManagedStorage watches", () => {
-  test("N holders of one folder, and views coming and going, open exactly one watch", async () => {
+  test("N states holding one folder, loads again, and views coming and going, open exactly one watch", async () => {
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    const releases = Array.from({ length: 5 }, () => r.storage.watch(key));
+    const releases = Array.from({ length: 5 }, (_, i) => r.hold(i + 1));
     for (let i = 0; i < 5; i++) {
       const view = new Holds();
-      await answered(r.storage.declare(view, key, sessionIdOf(`s${i}`)));
+      await answered(r.storage.declare(view, r.folder, sessionIdOf(`s${i}`)));
       view.close();
+      r.hold(i + 1);
     }
-    expect(r.storage.keyFor(r.folder)).toEqual(key);
+    expect(r.generation()).toBe(0);
     expect(r.counters.watchersOpened).toBe(1);
     expect(r.storage.stats().folders).toBe(1);
-    for (const release of releases) release();
+    for (const release of releases.slice(1)) release();
+    expect(r.counters.watchersClosed).toBe(0);
+    releases[0]!();
+    expect(r.counters.watchersClosed).toBe(1);
+    expect(r.storage.stats().folders).toBe(0);
+  });
+
+  test("a load that no longer names a folder closes its watch", () => {
+    const r = rig();
+    r.hold();
+    r.storage.hold(1 as StorageHoldId, []);
     expect(r.counters.watchersClosed).toBe(1);
     expect(r.storage.stats().folders).toBe(0);
   });
 
   test("chmod, utimes and xattr on the folder leave its sources reading and open no watch", async () => {
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"a"');
-    const lane = r.storage.declare(new Holds(), key, A);
+    const lane = r.storage.declare(new Holds(), r.folder, A);
     await answered(lane);
     await new Promise((resolve) => setTimeout(resolve, 100));
     fs.chmodSync(r.folder, 0o700);
@@ -315,7 +371,8 @@ describe("ManagedStorage watches", () => {
     }
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(lane.current()).toEqual(ok("a"));
-    expect(r.storage.keyFor(r.folder)).toEqual(key);
+    r.hold();
+    expect(r.generation()).toBe(0);
     expect(r.storage.stats()).toMatchObject({
       lost: 0,
       faults: { unusable: 0, refused: 0, error: 0 },
@@ -323,29 +380,27 @@ describe("ManagedStorage watches", () => {
     expect(r.counters.watchersOpened).toBe(1);
   });
 
-  test("a folder removed under its watch is lost, and the next key request is a new generation", async () => {
+  test("a folder removed under its watch is lost, and the next load's hold is a new generation", async () => {
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     await new Promise((resolve) => setTimeout(resolve, 100));
     fs.rmSync(r.folder, { recursive: true });
-    const next = r.storage.keyFor(r.folder);
-    expect(next).toEqual({ folder: r.folder, generation: 1 });
-    r.storage.watch(next);
+    r.hold();
+    expect(r.generation()).toBe(1);
     r.write(A, '"fresh"');
-    expect(await answered(r.storage.declare(new Holds(), next, A))).toEqual(
+    expect(await answered(r.storage.declare(new Holds(), r.folder, A))).toEqual(
       ok("fresh"),
     );
     expect(r.counters.watchersOpened).toBe(2);
+    expect(r.counters.watchersClosed).toBe(1);
   });
 
   test("a held file whose folder is removed reads what the path holds now, not its last value", async () => {
     const watches = fakeWatches();
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"a"');
-    const lane = r.storage.declare(new Holds(), key, A);
+    const lane = r.storage.declare(new Holds(), r.folder, A);
     expect(await answered(lane)).toEqual(ok("a"));
     fs.rmSync(r.folder, { recursive: true });
     watches[0]!.listener("rename", path.basename(r.folder));
@@ -354,13 +409,13 @@ describe("ManagedStorage watches", () => {
     expect(await answered(lane)).toEqual(ABSENT);
   });
 
-  test("a folder that cannot be created is a standing fault of its sources, not a throw; the next key request tries again", async () => {
+  test("a folder that cannot be created is a standing fault of its sources, not a throw; the next load's hold tries again", async () => {
     const r = rig();
     // A file where the folder's parent should be: mkdir fails ENOTDIR.
+    fs.rmdirSync(path.dirname(r.folder));
     fs.writeFileSync(path.dirname(r.folder), "");
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
-    const lane = r.storage.declare(new Holds(), key, A);
+    r.hold();
+    const lane = r.storage.declare(new Holds(), r.folder, A);
     expect(await answered(lane)).toEqual({
       kind: "failed",
       failedAt: "read",
@@ -377,13 +432,13 @@ describe("ManagedStorage watches", () => {
       ),
     );
     fs.rmSync(path.dirname(r.folder));
-    const next = r.storage.keyFor(r.folder);
-    expect(next.generation).toBe(1);
-    r.storage.watch(next);
+    fs.mkdirSync(path.dirname(r.folder));
+    r.hold();
+    expect(r.generation()).toBe(1);
     r.write(A, '"a"');
-    expect(await answered(r.storage.declare(new Holds(), next, A))).toEqual(
-      ok("a"),
-    );
+    // The lane carries across the generation, re-read once it opens.
+    await until(() => lane.current().kind === "ok", "the re-read");
+    expect(lane.current()).toEqual(ok("a"));
   });
 
   // ext4 reuses a freed inode number: a folder deleted and created again can
@@ -399,46 +454,44 @@ describe("ManagedStorage watches", () => {
         return same;
       };
       const r = rig({ identityOf });
-      const key = r.storage.keyFor(r.folder);
-      r.storage.watch(key);
+      r.hold();
       const recreate = () => {
         fs.rmSync(r.folder, { recursive: true });
         fs.mkdirSync(r.folder);
         birth = 2n;
       };
-      return { r, key, watches, recreate };
+      return { r, watches, recreate };
     }
 
     test("its own event first, then the config load: a new generation", async () => {
-      const { r, key, watches, recreate } = await recreated();
+      const { r, watches, recreate } = await recreated();
       recreate();
       watches[0]!.listener("rename", path.basename(r.folder));
       // The fake watch's window closes on the registry's debounce.
-      return until(() => r.storage.stats().lost === 1, "the loss").then(() => {
-        expect(r.storage.keyFor(r.folder)).toEqual({ ...key, generation: 1 });
-      });
+      await until(() => r.storage.stats().lost === 1, "the loss");
+      r.hold();
+      expect(r.generation()).toBe(1);
     });
 
     test("the config load first, then its own event: a new generation, and the stale event marks nothing", async () => {
-      const { r, key, watches, recreate } = await recreated();
+      const { r, watches, recreate } = await recreated();
       recreate();
-      const next = r.storage.keyFor(r.folder);
-      expect(next).toEqual({ ...key, generation: 1 });
-      r.storage.watch(next);
+      r.hold();
+      expect(r.generation()).toBe(1);
       watches[0]!.listener("rename", path.basename(r.folder));
       await new Promise((resolve) => setTimeout(resolve, 150));
-      expect(r.storage.keyFor(r.folder)).toEqual(next);
+      r.hold();
+      expect(r.generation()).toBe(1);
       expect(r.storage.stats().lost).toBe(0);
     });
   });
 
-  test("a refused watch is a standing fault on every source in the folder; the next key request is a new generation", async () => {
+  test("a refused watch is a standing fault on every source in the folder; the next load's hold is a new generation", async () => {
     const r0 = rig();
     fakeWatches(new Set([r0.folder]));
-    const key = r0.storage.keyFor(r0.folder);
-    r0.storage.watch(key);
+    r0.hold();
     r0.write(A, '"a"');
-    const lane = r0.storage.declare(new Holds(), key, A);
+    const lane = r0.storage.declare(new Holds(), r0.folder, A);
     expect(await answered(lane)).toEqual({
       kind: "failed",
       failedAt: "read",
@@ -451,21 +504,19 @@ describe("ManagedStorage watches", () => {
       error: 0,
     });
     jest.restoreAllMocks();
-    const next = r0.storage.keyFor(r0.folder);
-    expect(next.generation).toBe(1);
-    r0.storage.watch(next);
-    expect(await answered(r0.storage.declare(new Holds(), next, A))).toEqual(
-      ok("a"),
-    );
+    r0.hold();
+    expect(r0.generation()).toBe(1);
+    // The lane carries across the generation, re-read once it opens.
+    await until(() => lane.current().kind === "ok", "the re-read");
+    expect(lane.current()).toEqual(ok("a"));
   });
 
   test("an error after open on a folder still there is the fault, and the held keys read it", async () => {
     const watches = fakeWatches();
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"a"');
-    const lane = r.storage.declare(new Holds(), key, A);
+    const lane = r.storage.declare(new Holds(), r.folder, A);
     await answered(lane);
     watches[0]!.emitter.emit("error", new Error("EIO: i/o error"));
     await until(() => lane.current().kind === "failed", "the fault");
@@ -485,7 +536,8 @@ describe("ManagedStorage watches", () => {
         /^warn plugin storage fault folder=\S+ generation=0 cause=error reason=/,
       ),
     );
-    expect(r.storage.keyFor(r.folder).generation).toBe(1);
+    r.hold();
+    expect(r.generation()).toBe(1);
   });
 });
 
@@ -513,19 +565,18 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
   async function stalledRig() {
     const watches = fakeWatches();
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"a"');
-    const lane = r.storage.declare(new Holds(), key, A);
+    const lane = r.storage.declare(new Holds(), r.folder, A);
     expect(await answered(lane)).toEqual(ok("a"));
     r.fileEvents.set(stalled, { kind: "moved" });
     await until(() => lane.current().kind === "failed", "the stall");
-    return { r, key, lane, watch: watches[0]! };
+    return { r, lane, watch: watches[0]! };
   }
 
   test("while delivery is stalled every held lane reads the stall, naming its folder and the span's start", async () => {
-    const { r, key, lane } = await stalledRig();
-    const other = r.storage.declare(new Holds(), key, B);
+    const { r, lane } = await stalledRig();
+    const other = r.storage.declare(new Holds(), r.folder, B);
     expect(lane.current()).toEqual({
       kind: "failed",
       failedAt: "read",
@@ -537,7 +588,8 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
       reason: stallReason(r.folder),
     });
     // A stall is not a loss: the generation is still the right one.
-    expect(r.storage.keyFor(r.folder)).toEqual(key);
+    r.hold();
+    expect(r.generation()).toBe(0);
     expect(r.storage.stats()).toMatchObject({ lost: 0 });
   });
 
@@ -602,13 +654,12 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
 
   // The event naming the folder and the follower's event that reloads its
   // config ride one stream, which can drop both at once without a stall.
-  test("a folder replaced while its own event was dropped is lost on the next period, and the next key request is a new generation", async () => {
+  test("a folder replaced while its own event was dropped is lost on the next period, and the next load's hold is a new generation", async () => {
     fakeWatches();
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"a"');
-    const lane = r.storage.declare(new Holds(), key, A);
+    const lane = r.storage.declare(new Holds(), r.folder, A);
     expect(await answered(lane)).toEqual(ok("a"));
     fs.rmSync(r.folder, { recursive: true });
     fs.mkdirSync(r.folder);
@@ -624,13 +675,14 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
           JSON.stringify(ok("in the new folder")),
       "the re-read from the path",
     );
-    expect(r.storage.keyFor(r.folder)).toEqual({ ...key, generation: 1 });
+    r.hold();
+    expect(r.generation()).toBe(1);
   });
 
   test("a folder removed under its watch is lost once, however many periods pass", async () => {
     fakeWatches();
     const r = rig();
-    r.storage.watch(r.storage.keyFor(r.folder));
+    r.hold();
     fs.rmSync(r.folder, { recursive: true });
     for (let i = 0; i < 4; i++) r.fileEvents.notify({ kind: "period" });
     await quiet();
@@ -675,10 +727,9 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
   test("a period with delivery unchanged re-reads nothing", async () => {
     fakeWatches();
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     r.write(A, '"a"');
-    const lane = r.storage.declare(new Holds(), key, A);
+    const lane = r.storage.declare(new Holds(), r.folder, A);
     expect(await answered(lane)).toEqual(ok("a"));
     const before = reads(r).length;
     for (let i = 0; i < 3; i++) r.fileEvents.notify({ kind: "period" });
@@ -697,15 +748,15 @@ describe("ManagedStorage cleanup", () => {
 
   test("a watch's opening removes only unheld files older than 30 days, and writes its event", async () => {
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
+    fs.mkdirSync(r.folder);
     for (const sid of ["old", "held-old", "young"]) r.write(sid, "{}");
     fs.writeFileSync(path.join(r.folder, "old-notes.txt"), "");
     age(path.join(r.folder, "old.json"), 31);
     age(path.join(r.folder, "held-old.json"), 31);
     age(path.join(r.folder, "old-notes.txt"), 31);
     const holds = new Holds();
-    await answered(r.storage.declare(holds, key, sessionIdOf("held-old")));
-    r.storage.watch(key);
+    await answered(r.storage.declare(holds, r.folder, sessionIdOf("held-old")));
+    r.hold();
     await until(
       () => r.lines.some((l) => l.includes("plugin storage sweep")),
       "the sweep's event",
@@ -726,7 +777,7 @@ describe("ManagedStorage cleanup", () => {
 
   test("a file gone between the listing and its removal leaves the rest of the sweep to run", async () => {
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
+    fs.mkdirSync(r.folder);
     for (const sid of ["a", "b"]) {
       r.write(sid, "{}");
       age(path.join(r.folder, `${sid}.json`), 31);
@@ -737,7 +788,7 @@ describe("ManagedStorage cleanup", () => {
       fs.unlinkSync(file);
       return stat(file);
     });
-    r.storage.watch(key);
+    r.hold();
     await until(
       () => r.lines.some((l) => l.includes("plugin storage sweep")),
       "the sweep's event",
@@ -761,8 +812,7 @@ describe("ManagedStorage cleanup", () => {
       ],
     });
     const r = rig();
-    const key = r.storage.keyFor(r.folder);
-    r.storage.watch(key);
+    r.hold();
     await until(
       () => r.lines.filter((l) => l.includes("sweep")).length === 1,
       "the opening sweep",

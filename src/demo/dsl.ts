@@ -43,7 +43,6 @@ import {
   loadChain,
   openView,
   subscriptionsOf,
-  UNOWNED_STORAGE,
   type DslRenderState,
 } from "../renderer/render-cache.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
@@ -162,7 +161,6 @@ function loadState(): DslRenderState {
       locations: locs,
       env: host.env,
       sessionState,
-      storage: UNOWNED_STORAGE,
       signer: linkSignerFromKeyFile(linkKeyFile(stateDir(host))),
       gates: daemonGates(),
       stateDir: stateDir(host),

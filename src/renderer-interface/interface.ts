@@ -210,13 +210,13 @@ export type Effect = Present;
 export type TurnRecord = readonly Field[];
 
 // [LAW:types-are-the-program] A source the renderer's state needs read for
-// one session: a plugin source, at its folder's storage key, named by the
-// variable that reads it; or a `shell` or `file` run, named by its digest.
+// one session: a plugin source, at its storage folder, named by the variable
+// that reads it; or a `shell` or `file` run, named by its digest.
 export type Subscription =
   | {
       readonly kind: "plugin";
       readonly source: SourceId;
-      readonly storage: StorageKey;
+      readonly folder: string;
     }
   | { readonly kind: "run"; readonly run: Run };
 
@@ -244,15 +244,6 @@ export type TurnOutcome = { readonly record: TurnRecord } & (
 export type RendererOutput = TurnOutcome & {
   readonly subscriptions: Subscriptions;
 };
-
-// [LAW:types-are-the-program] A storage folder as the owner keys it: the real
-// path the loader resolved, and the generation the owner has reached for it.
-// Only a loss moves the generation, so a folder replaced at the same path is a
-// new key, read fresh, with a watch of its own.
-export interface StorageKey {
-  readonly folder: string;
-  readonly generation: number;
-}
 
 // A firing of a session's idle timer: when it fired, how long the session was
 // idle by then, and the timeout it ran.

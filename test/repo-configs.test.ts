@@ -22,7 +22,6 @@ import type { RepoAnswers } from "../src/config/loader/repo-gate";
 import {
   configLoadedLine,
   loadFromDisk,
-  UNOWNED_STORAGE,
   type LoadCause,
   type ReloadedEntry,
 } from "../src/renderer/render-cache";
@@ -171,7 +170,6 @@ describe("the gate over a project's plugins", () => {
     const deps = {
       clock: systemTimekeeper,
       sessionState: new SessionState(),
-      storage: UNOWNED_STORAGE,
       signer: linkSigner(Buffer.alloc(32)),
       gates: bareGates(),
       stateDir: stateDir(host),

@@ -6,7 +6,7 @@
 import type { Crosses, Reaches } from "../../src/renderer-interface/crosses";
 import type {
   AdapterPush,
-  HostCalls,
+  AdapterToHost,
 } from "../../src/renderer-interface/adapter";
 
 // @ts-expect-error a closure does not cross
@@ -47,7 +47,8 @@ const hole: Reaches<{ readonly see: (tmux: string | undefined) => void }> =
 const held: Reaches<{ readonly ask: () => Promise<Map<string, number>> }> =
   true;
 // @ts-expect-error a reach group that grew one in-place reach is found
-const grown: Reaches<HostCalls & { readonly x: { y: () => number } }> = true;
+const grown: Reaches<AdapterToHost & { readonly x: { y: () => number } }> =
+  true;
 // @ts-expect-error an answer of `any` holds whatever it was handed
 const untyped: Reaches<{ readonly read: () => any }> = true;
 // @ts-expect-error an awaited `any` holds whatever it was handed
