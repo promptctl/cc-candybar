@@ -123,8 +123,9 @@ export async function answerStatusline(
   // that moved is declared and its stamp handed in before the request is
   // delivered, so the request's wait covers every source the view reads.
   // In process the config turn answers at once, so nothing that opens or
-  // closes a view runs between it and the request; out of process, the
-  // router's mailbox is what keeps the two adjacent.
+  // closes a view runs between it and the request. Out of process another
+  // input can land between the two, as the host sends a renderer each input
+  // as it comes.
   const configured = await host.answer({
     kind: "event",
     at,

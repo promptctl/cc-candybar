@@ -118,6 +118,22 @@ describe("the renderer over lines", () => {
     expect(saw).toEqual(["gone?", "log after"]);
   });
 
+  test("a line heard after the renderer's end reaches nothing, and is said", () => {
+    const { host, saw } = recordingHost();
+    const faults: string[] = [];
+    const lines = rendererOverLines({
+      send: () => {},
+      host,
+      fault: (message) => faults.push(message),
+    });
+    lines.ended(new Error("renderer main exited"));
+    lines.heard({ kind: "notice", reach: "log", args: ["info", "late"] });
+    expect(saw).toEqual([]);
+    expect(faults).toEqual([
+      "renderer said notice after its end (renderer main exited)",
+    ]);
+  });
+
   test("a push that threw fails as it does in this process, its failure kept", async () => {
     const here = talkingRenderer(recordingHost().host).answer(push("lanes"));
     const there = overLines(recordingHost().host).answer(push("lanes"));

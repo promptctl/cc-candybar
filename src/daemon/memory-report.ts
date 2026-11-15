@@ -66,13 +66,12 @@ export async function memoryReport(
 }
 
 // Each process's report, in the order its probes are given: the host's, then
-// its renderer's.
+// its renderer's. [LAW:no-ambient-temporal-coupling] Taken together, so both
+// describe one moment of a breach that is still growing.
 export async function memoryReports(
   each: ReadonlyArray<readonly MemoryProbe[]>,
 ): Promise<string> {
-  const reports: string[] = [];
-  for (const probes of each) reports.push(await memoryReport(probes));
-  return reports.join("\n\n");
+  return (await Promise.all(each.map(memoryReport))).join("\n\n");
 }
 
 // [LAW:dataflow-not-control-flow] The platform difference is a LIST in

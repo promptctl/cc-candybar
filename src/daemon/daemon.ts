@@ -328,8 +328,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // through this one probe, so a probe handed in reaches both. The process entry
   // (server.ts) asks its own before this daemon exists.
   const probe = inputs.probe(launcher);
-  // Before every owner that arms a timer: storage that cannot be read refuses
-  // the build with nothing running.
+  // Before every owner that arms a timer: a renderer in process loads here, so
+  // storage it cannot read refuses the build with nothing running. One in a
+  // process of its own loads there, and refuses its boot with the reason on
+  // the bar's ⚠.
   const preparedRenderer = inputs.renderer({
     load: () =>
       loadMainRenderer({

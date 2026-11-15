@@ -39,7 +39,7 @@ import {
   type RendererOverLines,
 } from "../renderer-interface/wire.js";
 import type { LoadedMainRenderer } from "../renderer/main.js";
-import { RendererDown } from "./foundations/verb-error.js";
+import { RendererDown, failureOf } from "./foundations/verb-error.js";
 
 // What the host holds of its renderer, whichever link it runs over.
 export interface RendererLink {
@@ -76,8 +76,7 @@ export type RendererPort = (prepared: {
 }) => { start(own: LinkOwner): RendererLink };
 
 // [LAW:one-type-per-behavior] The renderer in this process: what a test's
-// daemon and the page run. It loads as the daemon's build begins, so storage
-// that cannot be read refuses the build before any owner arms a timer.
+// daemon and the page run. It loads as the daemon's build begins.
 export const inProcessPort: RendererPort = ({ load }) => {
   const loaded = load();
   return { start: (own) => inProcessRenderer(loaded, own.reaches) };
@@ -191,6 +190,9 @@ interface Link {
   hung: boolean;
   // Why it refused its boot, which its end says.
   refusal: string | null;
+  // That it started and answered its start: from then the next renderer is
+  // handed what it holds.
+  tookOver: boolean;
   readonly held: Held;
   usage: MemorySizes | null;
   // When the ping owed an answer went out.
@@ -206,7 +208,11 @@ type Phase =
       readonly queued: Array<() => void>;
     }
   | { readonly kind: "live"; readonly link: Link }
-  | { readonly kind: "down"; readonly why: string; readonly retry: () => void }
+  | {
+      readonly kind: "down";
+      readonly why: string;
+      readonly cancelRetry: () => void;
+    }
   | { readonly kind: "closed" };
 
 // [LAW:one-source-of-truth] What one renderer holds in the host, each of its
@@ -285,21 +291,21 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     },
   });
 
-  // [LAW:no-ambient-temporal-coupling] What an ended renderer held stays held
-  // until the next one has answered its start, so a folder both watch is
-  // never closed and reopened: a directory watch leaks on macOS when it is.
-  // At close, everything goes.
-  const releaseGone = (): void => {
-    for (const { held } of gone.splice(0)) {
-      for (const host of held.watches.values()) {
-        watches.delete(host);
-        own.reaches.watches.unwatch(host);
-      }
-      for (const host of held.holds.values()) own.reaches.storage.release(host);
-      for (const [host, effect] of effects)
-        if (effect.by === held) effects.delete(host);
+  const release = ({ held }: Link): void => {
+    for (const host of held.watches.values()) {
+      watches.delete(host);
+      own.reaches.watches.unwatch(host);
     }
+    for (const host of held.holds.values()) own.reaches.storage.release(host);
+    for (const [host, effect] of effects)
+      if (effect.by === held) effects.delete(host);
   };
+  // [LAW:no-ambient-temporal-coupling] What an ended renderer that took over
+  // held stays held until the next one takes over, so a folder both watch is
+  // never closed and reopened: a directory watch leaks on macOS when it is. A
+  // renderer that never took over hands nothing on, so at most one waits. At
+  // close, everything goes.
+  const releaseGone = (): void => gone.splice(0).forEach(release);
 
   const write = (channel: Channel, line: HostLine): void =>
     channel.write(`${JSON.stringify(line)}\n`);
@@ -334,6 +340,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       spawnedAt: clock.monotonic(),
       hung: false,
       refusal: null,
+      tookOver: false,
       held,
       usage: null,
       pingSentAt: null,
@@ -349,7 +356,16 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: the host's
     // one path reaches it in the order it is called, so every input after
     // this is queued behind the state it changes.
-    const start = own.start();
+    // [LAW:no-silent-failure] A start that throws is said, and the renderer
+    // serves what the inputs after it bring.
+    const start = own
+      .start()
+      .catch((thrown: unknown) =>
+        log(
+          "error",
+          `renderer main[${generationOf}] start failed: ${failureOf(thrown).detail}`,
+        ),
+      );
     heardBy = (text) => heard(link, start, text);
     void channel.ended.then((result) => {
       stdout.end();
@@ -408,7 +424,9 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:no-ambient-temporal-coupling] What an ended renderer held goes once
     // this one has started and taken its start, and stays if it ends first.
     void start.then(() => {
-      if (current() === link) releaseGone();
+      if (current() !== link) return;
+      link.tookOver = true;
+      releaseGone();
     });
     // Its memory is read at once, not a period after its boot.
     ping(link);
@@ -416,17 +434,20 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   const ended = (link: Link, how: string): void => {
     link.lines.ended(new RendererDown(`renderer main ${how}`));
-    gone.push(link);
+    if (link.tookOver) gone.push(link);
+    else release(link);
     if (phase.kind === "closed") return;
+    const booted = phase.kind === "live";
     const queued = phase.kind === "starting" ? phase.queued : [];
     const lived = clock.monotonic() - link.spawnedAt;
-    young = lived < YOUNG_MS ? young + 1 : 0;
+    // A boot that never answered ended young, however long it was judged.
+    young = booted && lived >= YOUNG_MS ? 0 : young + 1;
     const delay = backoffMs(young);
     const why = `renderer main[${link.generation}] ${how}`;
     phase = {
       kind: "down",
       why: how,
-      retry: clock.after(delay, () => {
+      cancelRetry: clock.after(delay, () => {
         if (phase.kind === "down") spawn();
       }),
     };
@@ -509,7 +530,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         // [LAW:no-silent-failure] The renderer that owed this one is gone, so
         // there is no one to tell.
         if (effect === undefined || effect.by !== link.held)
-          throw new Error(
+          throw new RendererDown(
             `renderer main: effect ${e.of} was returned by a renderer that has ended`,
           );
         effects.delete(e.of);
@@ -532,7 +553,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       if (push.kind !== "watch") return link.lines.renderer.answer(input);
       const watch = watches.get(push.id);
       if (watch === undefined || watch.by !== link.held)
-        throw new Error(
+        throw new RendererDown(
           `renderer main: watch ${push.id} was held by a renderer that has ended`,
         );
       return link.lines.renderer.answer({
@@ -551,7 +572,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     close: async () => {
       const link = current();
       const queued = phase.kind === "starting" ? phase.queued : [];
-      if (phase.kind === "down") phase.retry();
+      if (phase.kind === "down") phase.cancelRetry();
       phase = { kind: "closed" };
       // What waited for this boot fails as a closed renderer's.
       for (const send of queued) send();

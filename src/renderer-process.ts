@@ -129,11 +129,14 @@ function booted(
   const { host } = boot;
   const paths = daemonPaths(host);
   const { clock } = world;
-  const adapters = rendererAdapters(paths, reaches.log, clock);
+  const adapters = rendererAdapters(paths, clock);
   return loadMainRenderer({
     clock,
     now: () => instantAt(clock),
-    storage: { ...adapters.storage, doctor: adapters.doctorStores },
+    storage: {
+      ...adapters.storage(reaches.log),
+      doctor: adapters.doctorStores,
+    },
     linkSigner: adapters.linkSigner,
     stateDir: paths.state,
     locations: locations(host),

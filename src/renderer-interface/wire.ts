@@ -322,6 +322,13 @@ export function rendererOverLines(deps: {
     }
   };
   const heard = (line: RendererLine): void => {
+    // [LAW:no-silent-failure] A line a renderer said as it ended (its pipes
+    // can close after its end) reaches nothing: what it would hold has no
+    // owner left to release it, and what it answers was failed already.
+    if (gone !== null) {
+      deps.fault(`renderer said ${line.kind} after its end (${gone.message})`);
+      return;
+    }
     switch (line.kind) {
       case "notice":
         try {

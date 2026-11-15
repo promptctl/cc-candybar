@@ -109,8 +109,9 @@ export type BreachArtifact = keyof typeof BREACH_ARTIFACTS;
 // [LAW:one-source-of-truth] The limit is the daemon's whole: the charge,
 // `rss` and `heapTotal` are over every process it runs as, and `processes`
 // says each one's share, the host's first. A renderer in a process of its
-// own is read as its latest ping answered, and counts in the charge from its
-// start, before any has.
+// own is read as its latest ping answered, which goes out as it starts. Its
+// pid is in the platform's charge from its spawn; where the charge is RSS
+// (Linux, or a stand-in), it counts from its first ping's answer.
 export type MemoryReading =
   | { readonly kind: "unmeasured" }
   | {
