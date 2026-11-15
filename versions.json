@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-753",
-      "ref": "refs/pull/753/merge",
-      "sha": "84164c77a35ecb3758b823192037a0bf3601c8dc",
-      "timestamp": "2026-11-15T14:25:19.166Z",
-      "commits": [
-        {
-          "sha": "84164c77a35ecb3758b823192037a0bf3601c8dc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T14:24:22Z",
-          "message": "Merge 4be20d22be0cd4b4e40ad3aecb676c2fb8754a37 into f6153274737f840e353302f669b6543916691714\n"
-        },
-        {
-          "sha": "4be20d22be0cd4b4e40ad3aecb676c2fb8754a37",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T07:24:11-07:00",
-          "message": "refactor(watch): a deafness moved is judged by structural equality, the one rule its other plain data already uses (candybar-host-renderer-x96a.gbw)\n"
-        },
-        {
-          "sha": "97401fab65aa811c03fa49afea4cbd1ab63750fa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T07:13:53-07:00",
-          "message": "fix(daemon): the daemon's facts are read whole, and the launcher's observer finds what it restates (candybar-host-renderer-x96a.gbw)\n\nMedium review of #753:\n- The daemon's facts are three boxes spread into one value: their read has\n  no failure arm to keep, so a stamp's only failure is its owners', and a\n  daemon fact can no longer freeze a session's readings.\n- The watcher registry, file-event delivery and the daemon's faults are\n  built before the launcher, whose observer restates the faults.\n- The update watch's act box is `actsRead`, no longer shadowed by each\n  read it publishes.\n- A storage window's paths are looked up in its list.\n"
-        },
-        {
-          "sha": "23df569fa817e56c5ea112470466af5ba684db58",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T07:00:46-07:00",
-          "message": "fix(renderer): the host's facts reach the draw current: deafness, a click's pane, the daemon's facts (candybar-host-renderer-x96a.gbw)\n\nHigh review of #753:\n- A watch deaf at its acquire, or deaf again for another reason, wakes its\n  holder: the registry tells a change of reason, and a renderer push whose\n  deafness moved is heard as an unknown window.\n- A click and an idle close carry the host's newest request of their session,\n  so a lane click after the session retired still follows its pane; the\n  renderer's own copy of the request is gone.\n- The daemon's facts are a typed field of the world state, read once for every\n  session apart from its owners: owners that fail leave them current, and a\n  move of them re-reads no owner. Its faults no longer pass through the\n  session's diagnostics to be sorted out again by every draw.\n- An update act's success publishes its sampled build and its end in one\n  action.\n- The one-type-per-behavior marker returns to the update offer.\n"
-        },
-        {
-          "sha": "ac81d1d16ac7ba66d7621e212978605aa0673598",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T06:34:52-07:00",
-          "message": "refactor(renderer): the draw reads no host part: its host facts arrive as world state, push arguments and watch pushes (candybar-host-renderer-x96a.gbw)\n\nThe update notice is folded in the renderer from world state, which carries\nthe act state and the act files' read failure beside the update. File-event\ndelivery, the launch lifeline and the latest pipe event are daemon\ndiagnostics the collector stamps into every session's document; the pipe\nevent's hold is judged at the draw's instant. A request event carries the\nfeed facts it draws with, the cache tallies are the host's render event's,\nand the renderer's watches are notices answered by watch pushes, with the\nkeep-or-rebind rule shared by both sides. Only managed storage is left in\nprocess.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f6153274737f840e353302f669b6543916691714",
-      "timestamp": "2026-11-15T13:10:32.221Z",
+      "sha": "3aee42acb63d4aec4de6dd98eb4c2d6d28857df7",
+      "timestamp": "2026-11-15T14:30:47.775Z",
       "commits": [
         {
-          "sha": "f6153274737f840e353302f669b6543916691714",
+          "sha": "3aee42acb63d4aec4de6dd98eb4c2d6d28857df7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T06:09:33-07:00",
-          "message": "refactor(renderer): the renderer's acts and reads cross as notices and awaited calls (candybar-host-renderer-x96a.5ym) (#752)\n\n* refactor(renderer): the renderer's acts and reads cross as notices and awaited calls (candybar-host-renderer-x96a.5ym)\n\nEvery reach the renderer makes into the host is now a notice (answers\nvoid) or an awaited call (answers a promise of plain data), and a\ncompile-time check, Reaches, holds the whole host-call surface to that.\n\n- The launch, the slash typing, the doctor's reads and install facts,\n  the serving daemon, the client sightings and the idle confirm are\n  awaited; the click's launch bound lives with the host.\n- The idle clock's reading rides the request and the frame push, so the\n  draw reads no host clock in place.\n- A refresh answers each lane's time instead of filling a map it was\n  handed.\n- A record's undefined value no longer crosses, so a launch's env\n  overlay unsets with null, which JSON keeps.\n- The doctor's gather moves to a shared module the renderer side imports.\n\n* fix(renderer): a busy probe crosses as data, a late refresh logs its lanes, and the crossing check names any (candybar-host-renderer-x96a.5ym)\n\n- The doctor's rate-limited probes answer busy as data; the gather turns it\n  into the click's refusal, so it survives a process boundary.\n- A request refresh that lands after its answer writes a refreshed line\n  naming the request, with every lane's time.\n- Reaches refuses an answer of any; Crosses refuses undefined under every\n  index signature, numbered and templated ones included.\n- A journal turn is held from the head of its queue, so a slow gone() shows.\n- The click gather's independent host reads run together; the doctor's\n  reads are spread rather than copied member by member."
-        },
-        {
-          "sha": "3bb8666947fbd73f1923b0ac3d53781eed9732f2",
-          "author_name": "GitHub Action",
-          "author_email": "action@github.com",
-          "timestamp": "2026-11-15T08:52:23Z",
-          "message": "chore: update pricing data 2026-11-15 [skip ci]\n"
+          "timestamp": "2026-11-15T07:29:45-07:00",
+          "message": "refactor(renderer): the draw reads no host part: its host facts arrive as world state, push arguments and watch pushes (candybar-host-renderer-x96a.gbw) (#753)\n\n* refactor(renderer): the draw reads no host part: its host facts arrive as world state, push arguments and watch pushes (candybar-host-renderer-x96a.gbw)\n\nThe update notice is folded in the renderer from world state, which carries\nthe act state and the act files' read failure beside the update. File-event\ndelivery, the launch lifeline and the latest pipe event are daemon\ndiagnostics the collector stamps into every session's document; the pipe\nevent's hold is judged at the draw's instant. A request event carries the\nfeed facts it draws with, the cache tallies are the host's render event's,\nand the renderer's watches are notices answered by watch pushes, with the\nkeep-or-rebind rule shared by both sides. Only managed storage is left in\nprocess.\n\n* fix(renderer): the host's facts reach the draw current: deafness, a click's pane, the daemon's facts (candybar-host-renderer-x96a.gbw)\n\nHigh review of #753:\n- A watch deaf at its acquire, or deaf again for another reason, wakes its\n  holder: the registry tells a change of reason, and a renderer push whose\n  deafness moved is heard as an unknown window.\n- A click and an idle close carry the host's newest request of their session,\n  so a lane click after the session retired still follows its pane; the\n  renderer's own copy of the request is gone.\n- The daemon's facts are a typed field of the world state, read once for every\n  session apart from its owners: owners that fail leave them current, and a\n  move of them re-reads no owner. Its faults no longer pass through the\n  session's diagnostics to be sorted out again by every draw.\n- An update act's success publishes its sampled build and its end in one\n  action.\n- The one-type-per-behavior marker returns to the update offer.\n\n* fix(daemon): the daemon's facts are read whole, and the launcher's observer finds what it restates (candybar-host-renderer-x96a.gbw)\n\nMedium review of #753:\n- The daemon's facts are three boxes spread into one value: their read has\n  no failure arm to keep, so a stamp's only failure is its owners', and a\n  daemon fact can no longer freeze a session's readings.\n- The watcher registry, file-event delivery and the daemon's faults are\n  built before the launcher, whose observer restates the faults.\n- The update watch's act box is `actsRead`, no longer shadowed by each\n  read it publishes.\n- A storage window's paths are looked up in its list.\n\n* refactor(watch): a deafness moved is judged by structural equality, the one rule its other plain data already uses (candybar-host-renderer-x96a.gbw)"
         }
       ]
     }
