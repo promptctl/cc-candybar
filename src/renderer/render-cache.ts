@@ -224,8 +224,9 @@ export interface StateDeps {
   // The gates a config's sessions click through, which a load builds once so a
   // config that cannot gate fails there.
   readonly gates: Gates;
-  // The daemon's one watcher registry, which the cache's own watches (the
-  // answers book's) ride. A build outside the daemon leaves it out.
+  // The renderer's watches, each held by the host's one registry, which the
+  // cache's own watches (the answers book's) ride; a watch's deafness is the
+  // host's latest push of it. A build outside the daemon leaves it out.
   readonly watchers?: Pick<Watches, "acquire" | "follow">;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load

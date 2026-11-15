@@ -247,22 +247,27 @@ describe("a stamp that throws", () => {
   test("hands in the last document with the failure and the next seq; the same failure hands in nothing, and the next good stamp clears it", () => {
     const broken = observable.box(false);
     const tick = observable.box(0);
-    const { owners } = handLanded();
-    const { collector, handedIn, logged } = collectorOver(owners, {
-      update: () => {
+    const { owners: base } = handLanded();
+    const failing = (): Lane<string> => ({
+      current: () => {
         tick.get();
-        if (broken.get()) throw new Error("update watch exploded");
-        return pendingOf("unread");
+        if (broken.get()) throw new Error("host read exploded");
+        return ABSENT as Current<string>;
       },
     });
+    const owners = {
+      ...base,
+      hostService: { declareName: failing, declareUser: failing },
+    } as unknown as RenderPayloadDeps;
+    const { collector, handedIn, logged } = collectorOver(owners);
     const first = collector.requested(requestAt("/a"));
     runInAction(() => broken.set(true));
     expect(handedIn).toHaveLength(1);
     const failedDoc = (handedIn[0] as { worldState: WorldState }).worldState;
     expect(failedDoc.seq).toBe(first.seq + 1);
     expect(failedDoc.builtins).toBe(first.builtins);
-    expect(stampFailureOf(failedDoc)).toContain("update watch exploded");
-    expect(logged.join("\n")).toContain("update watch exploded");
+    expect(stampFailureOf(failedDoc)).toContain("host read exploded");
+    expect(logged.join("\n")).toContain("host read exploded");
 
     runInAction(() => tick.set(1));
     expect(handedIn).toHaveLength(1);

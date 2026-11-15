@@ -144,23 +144,14 @@ interface SessionRecord {
   phase: Phase;
 }
 
-// What a stamp reads: the session's owners, and the daemon's own facts, read
-// apart from them, so owners that fail to read leave the daemon's facts
-// current, and a move of the daemon's facts re-reads no owner. Each is what
-// it read or what stopped it reading: a derivation that throws is a stamp
-// that did not complete, not a reaction that never ran.
+// What a stamp reads: what the session's owners read, or what stopped them
+// reading (a derivation that throws is a stamp that did not complete, not a
+// reaction that never ran), and the daemon's own facts, read apart from them,
+// so owners that fail to read leave the daemon's facts current, and a move of
+// the daemon's facts re-reads no owner.
 interface StampInputs {
   readonly owners: Ok<Readings> | Failed;
-  readonly daemon: Ok<DaemonFacts> | Failed;
-}
-
-// [LAW:single-enforcer] The one catch every read a stamp takes passes.
-function readOf<T>(what: string, read: () => T): Ok<T> | Failed {
-  try {
-    return ok(read());
-  } catch (e) {
-    return failed(`${what}: ${String(e)}`, "read");
-  }
+  readonly daemon: DaemonFacts;
 }
 
 // What a session's declaration keys on, of the request that named it.
@@ -221,10 +212,9 @@ export class Collector {
 
   // [LAW:one-source-of-truth] The daemon's facts, derived once for every
   // session, and moved only when what they say moved.
-  private readonly daemon = computed(
-    () => readOf("reading the daemon", () => this.deps.daemon()),
-    { equals: compareStructural },
-  );
+  private readonly daemon = computed(() => this.deps.daemon(), {
+    equals: compareStructural,
+  });
 
   // [LAW:single-enforcer] A request names the session's keys: they are
   // declared again and stamped in one action, and that stamp is returned to
@@ -366,12 +356,11 @@ export class Collector {
     let document: WorldState;
     try {
       if (first.owners.kind === "failed") throw new Error(first.owners.reason);
-      if (first.daemon.kind === "failed") throw new Error(first.daemon.reason);
       document = assembleFacts(
         undefined,
         session,
         first.owners.value,
-        first.daemon.value,
+        first.daemon,
         instantAt(this.deps.clock),
       );
     } catch (e) {
@@ -494,9 +483,11 @@ export class Collector {
   }
 
   private read({ locator, lanes }: Declared): Ok<Readings> | Failed {
-    return readOf("reading the owners", () =>
-      readingsOf(this.inputsOf(locator), lanes),
-    );
+    try {
+      return ok(readingsOf(this.inputsOf(locator), lanes));
+    } catch (e) {
+      return failed(`reading the owners: ${String(e)}`, "read");
+    }
   }
 
   // [LAW:single-enforcer] The one stamp of a session's document, against the
@@ -509,20 +500,15 @@ export class Collector {
   ): boolean {
     const prior = stamped.document;
     const { owners, daemon } = moved;
-    // [LAW:no-silent-failure] Daemon facts that failed to read keep the
-    // prior's, and say why.
-    const facts = daemon.kind === "ok" ? daemon.value : prior.daemon;
     const next =
       owners.kind === "failed"
-        ? failedStamp(prior, owners.reason, facts)
-        : daemon.kind === "failed"
-          ? failedStamp(prior, daemon.reason, facts)
-          : this.assembled(
-              prior,
-              owners.value,
-              facts,
-              instantAt(this.deps.clock),
-            );
+        ? failedStamp(prior, owners.reason, daemon)
+        : this.assembled(
+            prior,
+            owners.value,
+            daemon,
+            instantAt(this.deps.clock),
+          );
     const failure = next === prior ? null : stampFailureOf(next);
     // [LAW:no-silent-failure] Told to the log as well as to the bar.
     if (failure !== null)

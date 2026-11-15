@@ -265,12 +265,14 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // [LAW:one-source-of-truth] What the notice is folded from, beside the
   // update: written with `seen` and `unreadable`, so a move of either is a
   // move of every session's world state.
-  const read = observable.box<ActsRead>(
+  const actsRead = observable.box<ActsRead>(
     { act: IDLE, actsError: null },
     { deep: false, equals: compareStructural },
   );
   const publishActs = (): void =>
-    runInAction(() => read.set({ act: seen ?? IDLE, actsError: unreadable }));
+    runInAction(() =>
+      actsRead.set({ act: seen ?? IDLE, actsError: unreadable }),
+    );
   let gate: { readonly identity: string; readonly dispose: () => void } | null =
     null;
   const logBuild = changeLogger(log);
@@ -443,7 +445,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       publish();
       armed.forEach((release) => release());
     },
-    acts: () => read.get(),
+    acts: () => actsRead.get(),
     running: () =>
       actTurn(async () => {
         const read = await touchActs(() => acts.read());

@@ -248,6 +248,42 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats(clock);
+  // [LAW:single-enforcer] The daemon injects its log into both registries so
+  // cache + watcher lifecycle events land in daemon.log at the right level.
+  // Non-daemon consumers (var-system tests, future library use) take the
+  // default debug-routed loggers and never write to daemon log files.
+  const watcherRegistry = new WatcherRegistry({
+    clock,
+    counters: stats,
+    logger: log,
+  });
+  // [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
+  // events: one owner, started once the bind is won (`arm`).
+  const fileEvents = new FileEventDelivery({
+    watchers: watcherRegistry,
+    logger: log,
+    clock,
+  });
+  // [LAW:one-source-of-truth] The daemon's own faults, as every session's
+  // world state carries them: whether file events are heard, and what the
+  // launcher stands behind. Restated whenever either may have moved, and
+  // compared whole, so a restatement that moved nothing moves no document.
+  // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
+  // observer restates them.
+  const daemonFaults = observable.box<
+    Pick<DaemonFacts, "fileEvents" | "launcher">
+  >(
+    { fileEvents: [], launcher: [] },
+    { deep: false, equals: compareStructural },
+  );
+  function restateFaults(): void {
+    runInAction(() =>
+      daemonFaults.set({
+        fileEvents: fileEventsWarnings(fileEvents.delivery()),
+        launcher: launcher.standing(),
+      }),
+    );
+  }
   // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
   // this daemon's launcher meters them into daemon-stats and ends them with it.
   // The tmux restore at exit is the exception: it runs through the process's
@@ -313,15 +349,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // directory: its click files them, and daemon-stats answers what they hold
   // to `cc-candybar doctor`.
   const doctorStores = inputs.doctorStores;
-  // [LAW:single-enforcer] The daemon injects its log into both registries so
-  // cache + watcher lifecycle events land in daemon.log at the right level.
-  // Non-daemon consumers (var-system tests, future library use) take the
-  // default debug-routed loggers and never write to daemon log files.
-  const watcherRegistry = new WatcherRegistry({
-    clock,
-    counters: stats,
-    logger: log,
-  });
   // [LAW:one-source-of-truth] One provider per data shape, shared across every
   // render in this daemon, built by the one constructor every renderer uses
   // (payload-providers.ts). The render cache owns DSL-state-per-config; these
@@ -329,31 +356,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:single-enforcer] The daemon's one record of every source's refreshes:
   // the providers', and each config's user sources (the render cache's).
   const refreshLedger = new RefreshLedger(log);
-  // [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
-  // events: one owner, started once the bind is won (`arm`).
-  const fileEvents = new FileEventDelivery({
-    watchers: watcherRegistry,
-    logger: log,
-    clock,
-  });
-  // [LAW:one-source-of-truth] The daemon's own faults, as every session's
-  // world state carries them: whether file events are heard, and what the
-  // launcher stands behind. Restated whenever either may have moved, and
-  // compared whole, so a restatement that moved nothing moves no document.
-  const daemonFaults = observable.box<
-    Pick<DaemonFacts, "fileEvents" | "launcher">
-  >(
-    { fileEvents: [], launcher: [] },
-    { deep: false, equals: compareStructural },
-  );
-  function restateFaults(): void {
-    runInAction(() =>
-      daemonFaults.set({
-        fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: launcher.standing(),
-      }),
-    );
-  }
   restateFaults();
   // [LAW:single-enforcer] The daemon's one owner of every declared source's
   // runs: the collector holds each run a session's renderer subscribes to, so
