@@ -167,10 +167,13 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         .then((r) => {
           if (r.kind === "url") {
             // A plain write rather than `respond`, which would clear the
-            // deadline the click still runs under. A version 1 writer has
-            // closed, and a write to its socket is only an error event.
+            // deadline the click still runs under, yet the socket's one
+            // answer all the same. A version 1 writer has closed, and a write
+            // to its socket is only an error event.
+            responded = true;
             if (r.awaitsVerdict) sock.end(encodeFrame(r.verdict));
-            void r.landed
+            void r
+              .land()
               .catch((err: unknown) =>
                 daemon.log("error", `url click threw: ${inspect(err)}`),
               )

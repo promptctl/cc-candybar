@@ -356,6 +356,11 @@ export interface ShutdownRequest {
 // A click as `cc-candybar url-handle` sends it: the link as it was clicked,
 // so the host opens the same bytes the bar signed. The tmux status line's
 // click binding runs that command.
+// [LAW:carrying-cost] exception: its required shape changed without a bump.
+// Only that binding sends it, and a daemon binds it from its own bundle and
+// restarts when the bundle changes, so a mismatched CLI and daemon meet only
+// until that restart, and the one click between is refused saying why. A
+// bump would blank every running statusbar to cover that one click.
 export interface ClickRequest {
   v: number;
   kind: "click";

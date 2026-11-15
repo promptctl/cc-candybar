@@ -63,7 +63,7 @@ const urlAnswer = (
   kind: "url",
   awaitsVerdict,
   verdict: { ok: false, error: "forged", code: "BAD_REQUEST", daemonV: 3 },
-  landed,
+  land: () => landed,
 });
 
 // A memory stream runs on process ticks and microtasks, which all drain before

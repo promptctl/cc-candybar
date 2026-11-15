@@ -85,8 +85,10 @@ export type HandledRequest =
       // Whether the frame's writer reads `verdict`.
       awaitsVerdict: boolean;
       verdict: Response;
-      // Settles once the click's event is written.
-      landed: Promise<void>;
+      // [LAW:no-ambient-temporal-coupling] The click, started by whoever
+      // wrote the verdict once it is written, so no work of the click's
+      // stands before it. Settles once the click's event is written.
+      land: () => Promise<void>;
     };
 
 const stay = (resp: Response): Reply => ({
@@ -629,16 +631,17 @@ function urlClick(
       read.kind === "refused"
         ? clickReply(badRequest(read.problem))
         : { ok: true, output: "" },
-    landed: clickEvent(
-      parts,
-      accepted,
-      timedOut,
-      clientLeft,
-      async (facts, click) => {
-        noteFacts(facts, { via: "forwarder", urlV: String(frame.urlV) });
-        return ranClick(parts, read, facts, click);
-      },
-    ).then(() => {}),
+    land: () =>
+      clickEvent(
+        parts,
+        accepted,
+        timedOut,
+        clientLeft,
+        async (facts, click) => {
+          noteFacts(facts, { via: "forwarder", urlV: String(frame.urlV) });
+          return ranClick(parts, read, facts, click);
+        },
+      ).then(() => {}),
   };
 }
 
@@ -655,7 +658,9 @@ async function ranClick(
     case "refused":
       return badRequest(read.problem);
     case "probe":
-      noteFacts(facts, { verb: VERB_DOCTOR_PROBE });
+      // [LAW:nothing-unseen] The nonce matches the arrival to the doctor run
+      // that opened it.
+      noteFacts(facts, { verb: VERB_DOCTOR_PROBE, nonce: read.nonce });
       parts.handlerProbes.arrive({
         nonce: read.nonce,
         delivery: read.delivery,
@@ -776,6 +781,10 @@ async function statusLineClick(
     // [LAW:single-enforcer] Opened as a clicked link is, by the same reading:
     // a link a config wrote with a malformed escape is refused, as any
     // click's malformed wire encoding is.
+    // [LAW:no-silent-failure] It is opened as a verb, never read as a click,
+    // so a drawn link naming a status-line click or a probe reaches the
+    // renderer as a verb it does not know, and is refused there with it named:
+    // a range never runs another range.
     const opened = openClick(link.url, parts.linkSigner);
     if (opened.kind === "refused") return badRequest(opened.problem);
     return handleClick(
