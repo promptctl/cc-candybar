@@ -4,15 +4,22 @@
     {
       "version": "pr-747",
       "ref": "refs/pull/747/merge",
-      "sha": "26787b4f0ca2e50417143837b0565573f5dc1119",
-      "timestamp": "2026-11-15T00:53:15.502Z",
+      "sha": "ae9dbd97bfdae1c12c77117f8a07f8db1a09135d",
+      "timestamp": "2026-11-15T00:59:01.904Z",
       "commits": [
         {
-          "sha": "26787b4f0ca2e50417143837b0565573f5dc1119",
+          "sha": "ae9dbd97bfdae1c12c77117f8a07f8db1a09135d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T00:52:29Z",
-          "message": "Merge 97aca0ad2c8559210edc276735dcd112537f5a73 into 47e5c8cdc0cb272e742459205ca0547f581d5424\n"
+          "timestamp": "2026-11-15T00:58:02Z",
+          "message": "Merge 702a881302c6a11851f0118bf85f73f0b079b1e2 into 47e5c8cdc0cb272e742459205ca0547f581d5424\n"
+        },
+        {
+          "sha": "702a881302c6a11851f0118bf85f73f0b079b1e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:57:47-07:00",
+          "message": "fix(daemon): every shutdown step runs whatever one before it threw, and a subscriber that left hears no refusal (candybar-host-renderer-x96a.8rc)\n\nLow review of #747. The close, the lease removal and the registry release are\nsteps each said by name on a throw, so a close that failed still gives up the\nlease. A subscriber that left before its admission failed is not refused.\n"
         },
         {
           "sha": "97aca0ad2c8559210edc276735dcd112537f5a73",

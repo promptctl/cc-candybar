@@ -67665,6 +67665,7 @@ var FrameFeeds = class {
         "error",
         `feed sid=${JSON.stringify(sessionId2)} admission threw: ${inspect(thrown2)}`
       );
+      if (left) return;
       const feed2 = this.feeds.get(sessionId2);
       if (feed2 !== void 0) this.unsubscribe(feed2, sub2);
       sub2.refused(renderFailed(thrown2));
