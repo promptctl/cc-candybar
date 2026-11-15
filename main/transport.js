@@ -22678,12 +22678,28 @@ var ClickAbandoned = class extends Error {
     this.name = "ClickAbandoned";
   }
 };
+var RendererDown = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "RendererDown";
+  }
+};
 var KINDS = [
   [BadVerbArgs, "bad-request"],
   [DaemonClosing, "closing"],
-  [ClickAbandoned, "abandoned"]
+  [ClickAbandoned, "abandoned"],
+  [RendererDown, "down"]
 ];
+var CrossedFailure = class extends Error {
+  constructor(failure) {
+    super(failure.message);
+    this.failure = failure;
+    this.name = "CrossedFailure";
+  }
+  failure;
+};
 function failureOf(thrown2) {
+  if (thrown2 instanceof CrossedFailure) return thrown2.failure;
   return {
     kind: KINDS.find(([as]) => thrown2 instanceof as)?.[1] ?? "threw",
     message: thrown2 instanceof Error ? thrown2.message : inspect(thrown2),
@@ -23055,6 +23071,7 @@ function timeoutSignal(clock, ms) {
 
 // src/utils/event-hold.ts
 init_globals();
+var DAEMON_EVENT_HOLD_S = 60;
 function eventHoldAt(event, holdS, at, render3) {
   if (at < event.at + holdS) return "held";
   return render3 === "request" && !event.answered ? "owed" : "over";
@@ -23331,7 +23348,67 @@ function feed(input, text4) {
   });
   input.end(text4);
 }
-async function launchWaited(state, opts) {
+var captured = (stdinInput) => ({
+  read: (state, category, stream, ends) => capture(state, category, stream, ends),
+  opened: (input) => {
+    if (input !== null) feed(input, stdinInput);
+  }
+});
+function relay(state, category, stream, ends, heard) {
+  const decoder = new import_node_string_decoder.StringDecoder("utf8");
+  stream?.on("error", (err) => {
+    state.scope.stats?.onPipeError(category);
+    ends.failed(err);
+  });
+  stream?.on("data", (chunk3) => {
+    const text4 = decoder.write(chunk3);
+    if (text4 !== "") heard(text4);
+  });
+  return {
+    take: () => {
+      const tail = decoder.end();
+      if (tail !== "") heard(tail);
+      return "";
+    },
+    drain: () => {
+      if (stream === null || stream.destroyed || stream.readableEnded) return;
+      hold(state, category, stream, () => "closed");
+    }
+  };
+}
+function launchChannel(state, opts) {
+  let input = null;
+  let pid2 = null;
+  const ended = track(
+    state,
+    launchPiped(state, opts, {
+      read: (s, category, stream, ends, which) => relay(s, category, stream, ends, opts.heard[which]),
+      opened: (opened, spawned) => {
+        input = opened;
+        pid2 = spawned;
+        opened?.on("error", () => {
+        });
+      }
+    })
+  );
+  return {
+    get pid() {
+      return pid2;
+    },
+    write: (text4) => {
+      if (input !== null && !input.writableEnded && !input.destroyed)
+        input.write(text4);
+    },
+    end: () => {
+      input?.end();
+    },
+    ended
+  };
+}
+function launchWaited(state, opts) {
+  return launchPiped(state, opts, captured(opts.stdinInput));
+}
+async function launchPiped(state, opts, pipes) {
   const { stats, clock } = state.scope;
   const refused = admit(state, opts.category, opts.signal);
   if (refused !== null) return refused;
@@ -23373,8 +23450,20 @@ async function launchWaited(state, opts) {
         terminate("pipe-error");
       }
     };
-    const stdout2 = capture(state, opts.category, child.stdout, ends);
-    const stderr2 = capture(state, opts.category, child.stderr, ends);
+    const stdout2 = pipes.read(
+      state,
+      opts.category,
+      child.stdout,
+      ends,
+      "stdout"
+    );
+    const stderr2 = pipes.read(
+      state,
+      opts.category,
+      child.stderr,
+      ends,
+      "stderr"
+    );
     const output = () => ({ stdout: stdout2.take(), stderr: stderr2.take() });
     let settled3 = false;
     let timer = null;
@@ -23501,7 +23590,7 @@ async function launchWaited(state, opts) {
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
-    if (input !== null) feed(input, opts.stdinInput);
+    pipes.opened(input, group ?? null);
   });
 }
 function launchBlocking(state, opts) {
@@ -23724,6 +23813,7 @@ function launcherWithState(owner, clock, spawner) {
   const launcher = {
     clock,
     launch: (opts) => track(state, launchWaited(state, opts)),
+    launchChannel: (opts) => launchChannel(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     jobGroupAlive: (pid2) => spawner.signalJob(pid2, 0),
@@ -24022,11 +24112,10 @@ function failureText(r, where = "") {
   const said = saidBy(r, r.stderr);
   return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
 }
-var PIPE_EVENT_HOLD_S = 60;
 function launcherWarningsAt(facts, at, render3) {
   return facts.flatMap((fact) => {
     if (fact.kind === "lifeline") return [fact];
-    const hold2 = eventHoldAt(fact.event, PIPE_EVENT_HOLD_S, at, render3);
+    const hold2 = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render3);
     return hold2 === "over" ? [] : [{ ...fact, message: fact.event.text, hold: hold2 }];
   });
 }
@@ -29727,15 +29816,15 @@ var RefreshLedger = class {
   // Every source's refreshes summed by trigger: what the feed summary
   // compares across its window.
   totals() {
-    const sum = Object.fromEntries(
+    const sum2 = Object.fromEntries(
       REFRESH_TRIGGERS.map((t2) => [t2, 0])
     );
     for (const tally of this.tallies.values()) {
       for (const trigger of REFRESH_TRIGGERS) {
-        sum[trigger] += tally.refreshes[trigger] ?? 0;
+        sum2[trigger] += tally.refreshes[trigger] ?? 0;
       }
     }
-    return sum;
+    return sum2;
   }
 };
 var OWN_EVENT = {
@@ -37493,8 +37582,8 @@ function nextUp(x) {
   return x > 0 ? x + ulp : x + (a === 2 ** e && a > MIN_NORMAL ? ulp / 2 : ulp);
 }
 var ULPS_OF_ROUNDING = 8;
-function walkUp(sum, reached, finer) {
-  let x = sum;
+function walkUp(sum2, reached, finer) {
+  let x = sum2;
   for (let walked = 0; !reached(x); walked++) {
     if (walked === ULPS_OF_ROUNDING)
       throw new RangeError(finer());
@@ -37533,7 +37622,7 @@ function beat(holds2) {
   if (holds2.length === 0)
     throw new RangeError("a beat needs at least one hold");
   holds2.forEach((hold2, i) => positiveSeconds(`beat hold ${i}`, hold2));
-  const period = holds2.reduce((sum, hold2) => sum + hold2, 0);
+  const period = holds2.reduce((sum2, hold2) => sum2 + hold2, 0);
   const starts = [];
   let elapsed = 0;
   for (const hold2 of holds2) {
@@ -39362,8 +39451,8 @@ function played(animation, { origin, time, rate }) {
   const behind = forward ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
   const past = forward ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
   const hostOf = (edge) => {
-    const sum = origin + (edge - time) / rate;
-    return Number.isFinite(sum) ? firstReaching(sum, (host) => past(mapped(host), edge)) : sum;
+    const sum2 = origin + (edge - time) / rate;
+    return Number.isFinite(sum2) ? firstReaching(sum2, (host) => past(mapped(host), edge)) : sum2;
   };
   return Animation.of({
     at: (host) => animation.at(mapped(hostTime(host))),
@@ -41519,16 +41608,16 @@ function noise(x, y, z) {
   return lerp2(lerp2(lerp2(grad(P[AA], x, y, z), grad(P[BA], x - 1, y, z), u), lerp2(grad(P[AB], x, y - 1, z), grad(P[BB], x - 1, y - 1, z), u), v), lerp2(lerp2(grad(P[AA + 1], x, y, z - 1), grad(P[BA + 1], x - 1, y, z - 1), u), lerp2(grad(P[AB + 1], x, y - 1, z - 1), grad(P[BB + 1], x - 1, y - 1, z - 1), u), v), w);
 }
 function fbm(x, y, z, octaves) {
-  let sum = 0;
+  let sum2 = 0;
   let amplitude = 1;
   let total = 0;
   for (let i = 0; i < octaves; i++) {
     const f = 2 ** i;
-    sum += amplitude * noise(x * f, y * f, z * f);
+    sum2 += amplitude * noise(x * f, y * f, z * f);
     total += amplitude;
     amplitude /= 2;
   }
-  return sum / total;
+  return sum2 / total;
 }
 function hash(n, z) {
   const x = Math.sin(n * 12.9898 + z * 78.233) * 43758.5453;
@@ -41678,10 +41767,10 @@ function swell(shape, s, k) {
 function given(shape, s, k) {
   const whole = lasts(shape, k);
   const area = (to) => {
-    let sum = 0;
+    let sum2 = 0;
     for (let i = 0; i < 24; i++)
-      sum += swell(shape, (i + 0.5) / 24 * to, k);
-    return sum * to;
+      sum2 += swell(shape, (i + 0.5) / 24 * to, k);
+    return sum2 * to;
   };
   return area(Math.min(Math.max(s, 0), whole)) / area(whole);
 }
@@ -42838,7 +42927,10 @@ var LEVEL = {
   "bad-request": "warn",
   threw: "error",
   closing: "info",
-  abandoned: "info"
+  abandoned: "info",
+  // The supervisor says the renderer's end once, as a warning; a request
+  // that found none says it on its own event.
+  down: "warn"
 };
 function detailOf(outcome) {
   switch (outcome.kind) {
@@ -42852,6 +42944,8 @@ function detailOf(outcome) {
       return [["closing", outcome.message]];
     case "abandoned":
       return [["abandoned", "1"]];
+    case "down":
+      return [["down", outcome.message]];
   }
 }
 function requestEvent(kind, facts, outcome, tookMs) {
@@ -42937,6 +43031,9 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
     }
   });
   recorded(facts, delivered);
+  noteFacts(facts, {
+    hop: configured.hopMs === null || delivered.hopMs === null ? "-" : `${configured.hopMs + delivered.hopMs}ms`
+  });
   if (delivered.kind === "threw") {
     noteFacts(facts, { renderer: host.name });
     return failed2(host, delivered.failure);
@@ -51435,7 +51532,7 @@ var CLOSING_FLASH = [
   ...flashes(3, 0.25)
 ];
 var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
-  (sum, { seconds }) => sum + seconds,
+  (sum2, { seconds }) => sum2 + seconds,
   0
 );
 var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
@@ -52978,6 +53075,7 @@ function measureOf(charge) {
 }
 var BREACH_ARTIFACTS = {
   memoryReport: { prefix: "memory-", suffix: ".txt" },
+  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" },
   heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
 };
 
@@ -53717,6 +53815,7 @@ function clickReply(outcome) {
     case "threw":
     case "closing":
     case "abandoned":
+    case "down":
       return failedWith(outcome.message);
   }
 }
@@ -54118,6 +54217,9 @@ function bundleStamp(digest2) {
   }
   return { version: PACKAGE_VERSION, digest: digest2 };
 }
+function bakedDigest() {
+  return true ? null : void 0;
+}
 function checkoutVersion(root) {
   const raw = JSON.parse(
     fs_default.readFileSync(import_node_path17.default.join(root, "package.json"), "utf8")
@@ -54270,6 +54372,234 @@ var KeyedSerialQueue = class {
     });
   }
 };
+
+// src/daemon/foundations/update-offer.ts
+init_globals();
+
+// src/render/diagnostics.ts
+init_globals();
+var DIAGNOSTIC_LEVELS = {
+  error: { rank: 0, glyph: "\u26A0", colors: DIAGNOSTIC_ERROR_COLORS },
+  warning: { rank: 1, glyph: "\u26A0", colors: DIAGNOSTIC_WARNING_COLORS },
+  info: { rank: 2, glyph: "\u2139", colors: DIAGNOSTIC_INFO_COLORS }
+};
+var ERROR_SEVERITY = {
+  level: "error",
+  glyph: DIAGNOSTIC_LEVELS.error.glyph
+};
+var WARNING_SEVERITY = {
+  level: "warning",
+  glyph: DIAGNOSTIC_LEVELS.warning.glyph
+};
+var UPDATE_SEVERITY = {
+  level: "info",
+  glyph: "\u2B06"
+};
+var APPROVAL_SEVERITY = {
+  level: "info",
+  glyph: "\u{1F512}"
+};
+var HANDOFF_SEVERITY = {
+  level: "info",
+  glyph: "\u{1F9EA}"
+};
+var colorsOf = (severity) => DIAGNOSTIC_LEVELS[severity.level].colors;
+function diagnosticSpan(text4, link) {
+  return { text: sanitizeText(text4), link };
+}
+function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
+  const plain = /* @__PURE__ */ new Set();
+  const plainOf3 = (text4, severity) => {
+    const made = plainMessage(text4, severity);
+    for (const m of made) plain.add(m);
+    return made;
+  };
+  const list2 = [
+    ...errors2.flatMap((e) => plainOf3(e, ERROR_SEVERITY)),
+    ...notices,
+    ...warnings.flatMap((w) => plainOf3(w, WARNING_SEVERITY))
+  ].sort((a, b) => rankOf(a) - rankOf(b));
+  const keys2 = copyKeys(list2);
+  const minted = list2.map(
+    (m, i) => plain.has(m) ? {
+      ...m,
+      lines: [
+        [
+          diagnosticSpan(
+            m.lines[0][0].text,
+            copyLink(sessionId2, by, keys2[i], i + 1)
+          )
+        ],
+        ...m.lines.slice(1)
+      ]
+    } : m
+  );
+  return minted;
+}
+function plainMessage({ about, text: message, copy: copy3 }, severity) {
+  const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
+  return first2 === void 0 ? [] : [{ severity, about, message, copy: copy3, lines: [first2, ...rest2] }];
+}
+function copyKeys(list2) {
+  return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
+}
+function copyLink(sessionId2, by, key, position) {
+  return effectsUrl(
+    [{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId2, by, key] }],
+    `copy diagnostic ${position}`
+  );
+}
+var rankOf = (message) => DIAGNOSTIC_LEVELS[message.severity.level].rank;
+function worstLevel(list2) {
+  return list2[0]?.severity.level ?? null;
+}
+var IDENTITY_BITS = 32;
+var OCCURRENCES = 256;
+var PAGES = 4096;
+function identityOf(message) {
+  const digest2 = createHash("sha256").update(
+    `${message.severity.level}\0${message.severity.glyph}\0${message.about}`
+  ).digest("hex");
+  return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
+}
+function stopsOf(list2) {
+  const seen2 = /* @__PURE__ */ new Map();
+  return list2.map((m) => {
+    const id2 = identityOf(m);
+    const n = seen2.get(id2) ?? 0;
+    seen2.set(id2, n + 1);
+    return id2 * OCCURRENCES + Math.min(n, OCCURRENCES - 1);
+  });
+}
+function viewerKey(list2, at, page2) {
+  return String(stopsOf(list2)[at] * PAGES + page2 + 1);
+}
+var INDICATOR_CAP = 9;
+function diagnosticsProjection(list2) {
+  const level = worstLevel(list2);
+  const n = list2.length;
+  const { glyph, colors } = DIAGNOSTIC_LEVELS[level ?? "info"];
+  return {
+    label: level === null ? "" : `${glyph} ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
+    fg: colors.fg,
+    bg: colors.bg,
+    open: list2.length === 0 ? DIAGNOSTICS_CLOSED : viewerKey(list2, 0, 0)
+  };
+}
+function viewedIndex(raw, list2) {
+  const key = Number(raw) - 1;
+  const at = stopsOf(list2).indexOf(Math.floor(key / PAGES));
+  return raw === null || at === -1 ? null : { index: at + 1, page: key % PAGES };
+}
+var MAX_VIEWER_ROWS = 20;
+function viewerRowCap(termRows, surfaceRows) {
+  return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS, ...surfaceRows);
+}
+function viewerRows(list2, at, sessionId2, by, geometry) {
+  const { index } = at;
+  const shown = list2[index - 1];
+  const opts = viewerOptions(geometry);
+  const body = channelRows(shown, opts, []);
+  const colors = colorsOf(shown.severity);
+  const style = new Style({ bgcolor: colors.bg, color: colors.fg });
+  const button = (text4, link) => cell(text4, link === null ? style : style.withLink(link));
+  const step4 = (glyph, to) => to === null ? button(" ", null) : button(
+    glyph,
+    viewerLink(
+      sessionId2,
+      viewerKey(list2, to.index - 1, to.page),
+      `show diagnostic ${to.index} of ${list2.length} page ${to.page + 1}`
+    )
+  );
+  const headerOf = (pages, page2) => {
+    const back2 = page2 > 0 ? { index, page: page2 - 1 } : index > 1 ? { index: index - 1, page: 0 } : null;
+    const on2 = page2 < pages - 1 ? { index, page: page2 + 1 } : index < list2.length ? { index: index + 1, page: 0 } : null;
+    const steps2 = list2.length > 1 || pages > 1;
+    const position = pages > 1 ? `[${index}/${list2.length} ${page2 + 1}/${pages}]` : `[${index}/${list2.length}]`;
+    return drawnRows(
+      [
+        button("\u2715", viewerLink(sessionId2, DIAGNOSTICS_CLOSED)),
+        ...steps2 ? [step4("\u2039", back2)] : [],
+        button(position, null),
+        ...steps2 ? [step4("\u203A", on2)] : [],
+        button(
+          "\u29C9 copy",
+          copyLink(sessionId2, by, viewerKey(list2, index - 1, 0), index)
+        )
+      ],
+      opts
+    );
+  };
+  let headerRows = 1;
+  for (; ; ) {
+    const perPage = Math.max(1, geometry.rows - headerRows);
+    const pages = Math.min(PAGES, Math.ceil(body.length / perPage));
+    const page2 = Math.min(at.page, pages - 1);
+    const header = headerOf(pages, page2);
+    if (header.length > headerRows) {
+      headerRows = header.length;
+      continue;
+    }
+    const rows = body.slice(page2 * perPage, (page2 + 1) * perPage);
+    const left = body.length - (page2 + 1) * perPage;
+    const shownRows = page2 === pages - 1 && left > 0 ? [
+      ...rows.slice(0, -1),
+      ...drawnRows(
+        [button(`\u2026 ${left + 1} more rows: \u29C9 copy has them all`, null)],
+        { ...opts, wrap: false }
+      )
+    ] : rows;
+    return [...header, ...shownRows];
+  }
+}
+function handoffRows(handoff, list2, sessionId2, geometry) {
+  const { label: label2, fg, bg, open: open2 } = diagnosticsProjection(list2);
+  const indicator = label2 === "" ? [] : [
+    cell(
+      label2,
+      new Style({ bgcolor: bg, color: fg }).withLink(
+        viewerLink(sessionId2, open2)
+      )
+    )
+  ];
+  return channelRows(handoff, viewerOptions(geometry), indicator);
+}
+function viewerLink(sessionId2, key, says) {
+  return effectsUrl(
+    [{ verb: VERB_SET_STATE, args: [sessionId2, DIAGNOSTICS_VIEWING, key] }],
+    says
+  );
+}
+function viewerOptions(geometry) {
+  return {
+    endcaps: "plain",
+    separator: "",
+    width: geometry.width,
+    wrap: true,
+    padding: 0,
+    colorCompatibility: geometry.colorCompatibility
+  };
+}
+var cell = (word, style) => new RichText(`${word} `, { style, end: "", overflow: "ignore" });
+var drawnRows = (cells, opts) => drawStripCells(cells, opts).lines.map((runs) => ({
+  kind: "diagnostic",
+  runs
+}));
+var ISSUE_INDENT = " ";
+function channelRows(message, opts, trailing) {
+  const colors = colorsOf(message.severity);
+  const base = new Style({ bgcolor: colors.bg, color: colors.fg });
+  const styled = (link) => link === null ? base : base.withLink(link);
+  const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
+  return message.lines.flatMap((line, i) => {
+    const prefix = cell(i === 0 ? message.severity.glyph : ISSUE_INDENT, base);
+    const cells = line.flatMap(
+      (span) => span.text.split(" ").flatMap((w) => chopCells(w, fold)).map((w) => cell(w, styled(span.link)))
+    );
+    const after = i === 0 ? trailing : [];
+    return drawnRows([prefix, ...cells, ...after], opts);
+  });
+}
 
 // src/daemon/foundations/update-keys.ts
 init_globals();
@@ -55925,7 +56255,10 @@ function daemonFields({
   const { memory, limit, postMortems } = serving.value;
   const told = postMortems.kind === "failed" || read2.kind === "failed" ? "unread" : `${unreadPostMortems(serving.value, read2).length}/${postMortems.value.length}`;
   const held = memory.kind === "unmeasured" ? "unmeasured" : `${measureOf(memory.charge)}${memory.charge.kind === "stand-in" ? `(${signedMb(-memory.charge.gap)})` : ""}:${mb(memory.charge.bytes)}`;
-  return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;
+  const shares2 = memory.kind === "unmeasured" ? "-" : memory.processes.map(
+    (p2) => `${p2.role}:${p2.pid}:${p2.sizes === null ? "-" : mb(p2.sizes.rss)}`
+  ).join(",");
+  return `${running} memory=${held}/${mb(limit)} processes=${shares2} postMortems=${told}`;
 }
 function dataFields(data) {
   const pr = () => {
@@ -57665,234 +57998,6 @@ function daemonGates() {
 }
 
 // src/daemon/foundations/update-offer.ts
-init_globals();
-
-// src/render/diagnostics.ts
-init_globals();
-var DIAGNOSTIC_LEVELS = {
-  error: { rank: 0, glyph: "\u26A0", colors: DIAGNOSTIC_ERROR_COLORS },
-  warning: { rank: 1, glyph: "\u26A0", colors: DIAGNOSTIC_WARNING_COLORS },
-  info: { rank: 2, glyph: "\u2139", colors: DIAGNOSTIC_INFO_COLORS }
-};
-var ERROR_SEVERITY = {
-  level: "error",
-  glyph: DIAGNOSTIC_LEVELS.error.glyph
-};
-var WARNING_SEVERITY = {
-  level: "warning",
-  glyph: DIAGNOSTIC_LEVELS.warning.glyph
-};
-var UPDATE_SEVERITY = {
-  level: "info",
-  glyph: "\u2B06"
-};
-var APPROVAL_SEVERITY = {
-  level: "info",
-  glyph: "\u{1F512}"
-};
-var HANDOFF_SEVERITY = {
-  level: "info",
-  glyph: "\u{1F9EA}"
-};
-var colorsOf = (severity) => DIAGNOSTIC_LEVELS[severity.level].colors;
-function diagnosticSpan(text4, link) {
-  return { text: sanitizeText(text4), link };
-}
-function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
-  const plain = /* @__PURE__ */ new Set();
-  const plainOf3 = (text4, severity) => {
-    const made = plainMessage(text4, severity);
-    for (const m of made) plain.add(m);
-    return made;
-  };
-  const list2 = [
-    ...errors2.flatMap((e) => plainOf3(e, ERROR_SEVERITY)),
-    ...notices,
-    ...warnings.flatMap((w) => plainOf3(w, WARNING_SEVERITY))
-  ].sort((a, b) => rankOf(a) - rankOf(b));
-  const keys2 = copyKeys(list2);
-  const minted = list2.map(
-    (m, i) => plain.has(m) ? {
-      ...m,
-      lines: [
-        [
-          diagnosticSpan(
-            m.lines[0][0].text,
-            copyLink(sessionId2, by, keys2[i], i + 1)
-          )
-        ],
-        ...m.lines.slice(1)
-      ]
-    } : m
-  );
-  return minted;
-}
-function plainMessage({ about, text: message, copy: copy3 }, severity) {
-  const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
-  return first2 === void 0 ? [] : [{ severity, about, message, copy: copy3, lines: [first2, ...rest2] }];
-}
-function copyKeys(list2) {
-  return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
-}
-function copyLink(sessionId2, by, key, position) {
-  return effectsUrl(
-    [{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId2, by, key] }],
-    `copy diagnostic ${position}`
-  );
-}
-var rankOf = (message) => DIAGNOSTIC_LEVELS[message.severity.level].rank;
-function worstLevel(list2) {
-  return list2[0]?.severity.level ?? null;
-}
-var IDENTITY_BITS = 32;
-var OCCURRENCES = 256;
-var PAGES = 4096;
-function identityOf(message) {
-  const digest2 = createHash("sha256").update(
-    `${message.severity.level}\0${message.severity.glyph}\0${message.about}`
-  ).digest("hex");
-  return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
-}
-function stopsOf(list2) {
-  const seen2 = /* @__PURE__ */ new Map();
-  return list2.map((m) => {
-    const id2 = identityOf(m);
-    const n = seen2.get(id2) ?? 0;
-    seen2.set(id2, n + 1);
-    return id2 * OCCURRENCES + Math.min(n, OCCURRENCES - 1);
-  });
-}
-function viewerKey(list2, at, page2) {
-  return String(stopsOf(list2)[at] * PAGES + page2 + 1);
-}
-var INDICATOR_CAP = 9;
-function diagnosticsProjection(list2) {
-  const level = worstLevel(list2);
-  const n = list2.length;
-  const { glyph, colors } = DIAGNOSTIC_LEVELS[level ?? "info"];
-  return {
-    label: level === null ? "" : `${glyph} ${n > INDICATOR_CAP ? `${INDICATOR_CAP}+` : n}`,
-    fg: colors.fg,
-    bg: colors.bg,
-    open: list2.length === 0 ? DIAGNOSTICS_CLOSED : viewerKey(list2, 0, 0)
-  };
-}
-function viewedIndex(raw, list2) {
-  const key = Number(raw) - 1;
-  const at = stopsOf(list2).indexOf(Math.floor(key / PAGES));
-  return raw === null || at === -1 ? null : { index: at + 1, page: key % PAGES };
-}
-var MAX_VIEWER_ROWS = 20;
-function viewerRowCap(termRows, surfaceRows) {
-  return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS, ...surfaceRows);
-}
-function viewerRows(list2, at, sessionId2, by, geometry) {
-  const { index } = at;
-  const shown = list2[index - 1];
-  const opts = viewerOptions(geometry);
-  const body = channelRows(shown, opts, []);
-  const colors = colorsOf(shown.severity);
-  const style = new Style({ bgcolor: colors.bg, color: colors.fg });
-  const button = (text4, link) => cell(text4, link === null ? style : style.withLink(link));
-  const step4 = (glyph, to) => to === null ? button(" ", null) : button(
-    glyph,
-    viewerLink(
-      sessionId2,
-      viewerKey(list2, to.index - 1, to.page),
-      `show diagnostic ${to.index} of ${list2.length} page ${to.page + 1}`
-    )
-  );
-  const headerOf = (pages, page2) => {
-    const back2 = page2 > 0 ? { index, page: page2 - 1 } : index > 1 ? { index: index - 1, page: 0 } : null;
-    const on2 = page2 < pages - 1 ? { index, page: page2 + 1 } : index < list2.length ? { index: index + 1, page: 0 } : null;
-    const steps2 = list2.length > 1 || pages > 1;
-    const position = pages > 1 ? `[${index}/${list2.length} ${page2 + 1}/${pages}]` : `[${index}/${list2.length}]`;
-    return drawnRows(
-      [
-        button("\u2715", viewerLink(sessionId2, DIAGNOSTICS_CLOSED)),
-        ...steps2 ? [step4("\u2039", back2)] : [],
-        button(position, null),
-        ...steps2 ? [step4("\u203A", on2)] : [],
-        button(
-          "\u29C9 copy",
-          copyLink(sessionId2, by, viewerKey(list2, index - 1, 0), index)
-        )
-      ],
-      opts
-    );
-  };
-  let headerRows = 1;
-  for (; ; ) {
-    const perPage = Math.max(1, geometry.rows - headerRows);
-    const pages = Math.min(PAGES, Math.ceil(body.length / perPage));
-    const page2 = Math.min(at.page, pages - 1);
-    const header = headerOf(pages, page2);
-    if (header.length > headerRows) {
-      headerRows = header.length;
-      continue;
-    }
-    const rows = body.slice(page2 * perPage, (page2 + 1) * perPage);
-    const left = body.length - (page2 + 1) * perPage;
-    const shownRows = page2 === pages - 1 && left > 0 ? [
-      ...rows.slice(0, -1),
-      ...drawnRows(
-        [button(`\u2026 ${left + 1} more rows: \u29C9 copy has them all`, null)],
-        { ...opts, wrap: false }
-      )
-    ] : rows;
-    return [...header, ...shownRows];
-  }
-}
-function handoffRows(handoff, list2, sessionId2, geometry) {
-  const { label: label2, fg, bg, open: open2 } = diagnosticsProjection(list2);
-  const indicator = label2 === "" ? [] : [
-    cell(
-      label2,
-      new Style({ bgcolor: bg, color: fg }).withLink(
-        viewerLink(sessionId2, open2)
-      )
-    )
-  ];
-  return channelRows(handoff, viewerOptions(geometry), indicator);
-}
-function viewerLink(sessionId2, key, says) {
-  return effectsUrl(
-    [{ verb: VERB_SET_STATE, args: [sessionId2, DIAGNOSTICS_VIEWING, key] }],
-    says
-  );
-}
-function viewerOptions(geometry) {
-  return {
-    endcaps: "plain",
-    separator: "",
-    width: geometry.width,
-    wrap: true,
-    padding: 0,
-    colorCompatibility: geometry.colorCompatibility
-  };
-}
-var cell = (word, style) => new RichText(`${word} `, { style, end: "", overflow: "ignore" });
-var drawnRows = (cells, opts) => drawStripCells(cells, opts).lines.map((runs) => ({
-  kind: "diagnostic",
-  runs
-}));
-var ISSUE_INDENT = " ";
-function channelRows(message, opts, trailing) {
-  const colors = colorsOf(message.severity);
-  const base = new Style({ bgcolor: colors.bg, color: colors.fg });
-  const styled = (link) => link === null ? base : base.withLink(link);
-  const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
-  return message.lines.flatMap((line, i) => {
-    const prefix = cell(i === 0 ? message.severity.glyph : ISSUE_INDENT, base);
-    const cells = line.flatMap(
-      (span) => span.text.split(" ").flatMap((w) => chopCells(w, fold)).map((w) => cell(w, styled(span.link)))
-    );
-    const after = i === 0 ? trailing : [];
-    return drawnRows([prefix, ...cells, ...after], opts);
-  });
-}
-
-// src/daemon/foundations/update-offer.ts
 function updateIdentity(update) {
   return update.kind === "source" ? update.newer.digest : formatVersion(update.newer);
 }
@@ -58070,7 +58175,6 @@ function makeUpdateWatch(opts) {
     releaseIntervalMs,
     registryUrl,
     fetchImpl,
-    gates,
     onApplied,
     log
   } = opts;
@@ -58091,7 +58195,6 @@ function makeUpdateWatch(opts) {
   const publishActs = () => runInAction(
     () => actsRead.set({ act: seen2 ?? IDLE, actsError: unreadable })
   );
-  let gate2 = null;
   const logBuild = changeLogger(log);
   const logRelease = changeLogger(log);
   const actQueue = new KeyedSerialQueue();
@@ -58105,21 +58208,10 @@ function makeUpdateWatch(opts) {
     const held = fact.get();
     return held.kind === "ok" ? held.value : null;
   };
-  function syncGate() {
-    const update = current2();
-    const identity2 = update === null ? null : updateIdentity(update);
-    if ((gate2 === null ? null : gate2.identity) === identity2) return;
-    gate2?.dispose();
-    gate2 = identity2 === null ? null : {
-      identity: identity2,
-      dispose: gates.state.register(UPDATE_DISMISSED_KEY, [identity2])
-    };
-  }
   function publish() {
     const reading = closed ? ABSENT : updateReading(build, release4);
     const next = restamp(fact.get(), reading, instantAt(clock));
     runInAction(() => fact.set(next));
-    syncGate();
   }
   function sampleBuild() {
     const sampled = assessBuild(entryUrl, () => bundleStamp(digest2));
@@ -58443,6 +58535,9 @@ ${outcome.text}`;
     ...refusals.length > 0 ? refusals : ["# no probe is known for this platform"]
   ].join("\n");
 }
+async function memoryReports(each) {
+  return (await Promise.all(each.map(memoryReport))).join("\n\n");
+}
 var FOOTPRINT = "/usr/bin/footprint";
 var VMMAP = "/usr/bin/vmmap";
 function platformProbes(launcher, platform3, pid2) {
@@ -58458,31 +58553,30 @@ function platformProbes(launcher, platform3, pid2) {
   if (platform3 === "linux") {
     return [
       // One line per accounting class for the whole address space — Linux's
-      // answer to `footprint`, and free (no subprocess).
-      fileProbe("/proc/self/smaps_rollup"),
+      // answer to `footprint`, and free (no subprocess). A process may read
+      // its own child's.
+      fileProbe(`/proc/${pid2}/smaps_rollup`),
       // Always present, coarser: VmRSS and friends, so Linux never falls all
       // the way through to "no probe answered".
-      fileProbe("/proc/self/status")
+      fileProbe(`/proc/${pid2}/status`)
     ];
   }
   return [];
 }
-function chargeProbe(launcher, platform3, pid2) {
+function chargeProbe(launcher, platform3) {
   return platform3 === "darwin" ? footprintCharge(
-    pid2,
     (args) => launcher.launch({
       bin: FOOTPRINT,
       args,
       timeoutMs: PROBE_TIMEOUT_MS,
       category: "limits.charge"
     })
-  ) : async (rss) => ({ kind: "charged", measure: "rss", bytes: rss });
+  ) : async (_pids, rss) => ({ kind: "charged", measure: "rss", bytes: rss });
 }
-function footprintCharge(pid2, run3) {
-  return async (rss) => {
+function footprintCharge(run3) {
+  return async (pids, rss) => {
     const result = await run3([
-      "-p",
-      String(pid2),
+      ...pids.flatMap((pid2) => ["-p", String(pid2)]),
       "--noCategories",
       "-f",
       "bytes"
@@ -58494,17 +58588,22 @@ function footprintCharge(pid2, run3) {
         unread: `footprint ${failureText(result)}`
       };
     }
-    const bytes = physFootprintOf(result.stdout);
-    return bytes === null ? {
+    const each = physFootprintsOf(result.stdout);
+    return each.length !== pids.length ? {
       kind: "stand-in",
       bytes: rss,
-      unread: "footprint printed no phys_footprint line"
-    } : { kind: "charged", measure: "phys_footprint", bytes };
+      unread: `footprint printed ${each.length} phys_footprint lines for ${pids.length} processes`
+    } : {
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes: each.reduce((total, bytes) => total + bytes, 0)
+    };
   };
 }
-function physFootprintOf(text4) {
-  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
-  return m === null ? null : Number(m[1]);
+function physFootprintsOf(text4) {
+  return [...text4.matchAll(/^\s*phys_footprint:\s+(\d+) B\s*$/gm)].map(
+    (m) => Number(m[1])
+  );
 }
 function commandProbe(launcher, bin, args) {
   return {
@@ -58591,9 +58690,29 @@ function makeLimits(deps) {
   }
   async function measure3() {
     if (triggered) return true;
-    const { rss, heapTotal } = deps.memoryBytes();
-    const charge = readCharge(await deps.memoryCharge(rss), latest);
-    const reading = { kind: "measured", charge, rss, heapTotal };
+    const own2 = deps.memoryBytes();
+    const renderer = deps.renderer();
+    const processes = [
+      { role: "host", pid: deps.pid, sizes: own2 },
+      ...renderer === null ? [] : [
+        {
+          role: "renderer",
+          pid: renderer.pid,
+          sizes: renderer.usage
+        }
+      ]
+    ];
+    const pids = processes.map((p2) => p2.pid);
+    const rss = sum(processes, (s) => s.rss);
+    const heapTotal = sum(processes, (s) => s.heapTotal);
+    const charge = readCharge(await deps.memoryCharge(pids, rss), latest);
+    const reading = {
+      kind: "measured",
+      charge,
+      rss,
+      heapTotal,
+      processes
+    };
     latest = reading;
     deps.log("info", `memory ${readingFields(reading, limit)}`);
     if (disarmed || charge.bytes <= limit) return false;
@@ -58606,15 +58725,31 @@ function makeLimits(deps) {
     const identity2 = `${stamp2}-${deps.pid}`;
     await attempt2(deps.log, "memory report", async () => {
       const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
-      const report2 = await deps.captureMemoryReport();
+      const report2 = await deps.captureMemoryReport(pids);
       if (disarmed) return;
       deps.writeMemoryReport(file, report2);
       deps.log("info", `memory report written: ${file}`);
     });
-    if (disarmed) {
-      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
-      return false;
-    }
+    const closedDuring = () => {
+      if (disarmed)
+        deps.log(
+          "info",
+          "daemon closed during the breach: no snapshot, no exit"
+        );
+      return disarmed;
+    };
+    if (closedDuring()) return false;
+    if (renderer !== null)
+      await attempt2(deps.log, "renderer heap snapshot", async () => {
+        const file = artifactFile(
+          deps.snapshotDir,
+          "rendererHeapSnapshot",
+          identity2
+        );
+        await renderer.heapSnapshot(file);
+        deps.log("info", `renderer heap snapshot written: ${file}`);
+      });
+    if (closedDuring()) return false;
     await attempt2(deps.log, "heap snapshot", () => {
       deps.writeLogNow();
       const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
@@ -58671,9 +58806,23 @@ function makeLimits(deps) {
   }
   return { check, describeNextRestart, serving, arm: arm2, disarm };
 }
-function readingFields({ charge, rss, heapTotal }, limit) {
+function sum(processes, size) {
+  return processes.reduce(
+    (total, p2) => total + (p2.sizes === null ? 0 : size(p2.sizes)),
+    0
+  );
+}
+function readingFields({
+  charge,
+  rss,
+  heapTotal,
+  processes
+}, limit) {
   const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
-  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}`;
+  const each = processes.map(
+    (p2) => ` ${p2.role}=${p2.pid}:${p2.sizes === null ? "unread" : `rss${mb(p2.sizes.rss)}MB/heap${mb(p2.sizes.heapTotal)}MB`}`
+  ).join("");
+  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}${each}`;
 }
 async function attempt2(log, what, body) {
   try {
@@ -58711,9 +58860,11 @@ function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
       const mem = process_default.memoryUsage();
       return { rss: mem.rss, heapTotal: mem.heapTotal };
     },
-    memoryCharge: chargeProbe(owner.launcher, process_default.platform, process_default.pid),
-    captureMemoryReport: () => memoryReport(
-      platformProbes(owner.launcher, process_default.platform, process_default.pid)
+    memoryCharge: chargeProbe(owner.launcher, process_default.platform),
+    captureMemoryReport: (pids) => memoryReports(
+      pids.map(
+        (pid2) => platformProbes(owner.launcher, process_default.platform, pid2)
+      )
     ),
     // 0600 like the heap snapshot v8 writes beside it: the pair shares an
     // identity, so it shares a permission — a post-mortem pair where one half is
@@ -60730,9 +60881,9 @@ function daySumsOver(slots, roots) {
   for (const { record: record2 } of slots) {
     if (record2 === void 0 || !under2(record2.transcriptPath, roots)) continue;
     for (const [day, d] of record2.days) {
-      const sum = sums.get(day) ?? { ...EMPTY_DAY };
-      addDay(sum, d);
-      sums.set(day, sum);
+      const sum2 = sums.get(day) ?? { ...EMPTY_DAY };
+      addDay(sum2, d);
+      sums.set(day, sum2);
     }
   }
   return Object.fromEntries(sums);
@@ -65690,7 +65841,12 @@ init_globals();
 
 // src/daemon/client-stats.ts
 init_globals();
+var myLabel = buildLabel(PACKAGE_VERSION, bakedDigest());
+var anotherBuild = `it is another build than this client (${myLabel}), and restarts only when its own bundle changes`;
 var STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot());
+function buildLabel(version, digest2) {
+  return `${version} [${digest2 === null ? "no digest" : shortDigest(digest2)}]`;
+}
 
 // src/doctor/handler-probe.ts
 var ARRIVALS_KEPT = 16;
@@ -66022,6 +66178,16 @@ var Collector = class {
       record2.turns--;
     };
   }
+  // Each session the collector reads now, with its latest stamp: what a
+  // renderer's complete start configures again. Unlike a request, it marks no
+  // session active, so a restart keeps none past a sweep that would retire it.
+  liveDocuments() {
+    return new Map(
+      [...this.records.values()].flatMap(
+        (r) => r.phase.kind === "live" ? [[r.session, r.stamped.document]] : []
+      )
+    );
+  }
   // One sweep. Public so a test can run it at an instant it chose.
   sweep() {
     for (const record2 of this.records.values()) {
@@ -66352,6 +66518,10 @@ var FrameFeeds = class {
       `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${feed2.followers.size} view=${lanes === null ? "N" : "Y"}`
     );
   }
+  // Every session an open feed draws: what a renderer's complete start pins.
+  openFeeds() {
+    return [...this.feeds.keys()];
+  }
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
   // fact its pin counts, from the feed's open to its close.
   feedOpen(sessionId2) {
@@ -66454,6 +66624,8 @@ var FrameFeeds = class {
       moving: 0,
       unseen: 0,
       failed: 0,
+      fault: null,
+      faulted: 0,
       pushed: 0,
       drawMs: 0,
       evaluated: 0,
@@ -66513,13 +66685,24 @@ var FrameFeeds = class {
     const moment2 = started2 + (at - wall) * 1e3;
     try {
       await this.step(feed2, started2, moment2, at);
+      if (feed2.fault !== null && this.feeds.get(feed2.sessionId) === feed2) {
+        this.deps.log(
+          "info",
+          `feed sid=${JSON.stringify(feed2.sessionId)} recovered after ${feed2.fault}`
+        );
+        feed2.fault = null;
+      }
     } catch (error) {
       const woken = wokenWhileOut(feed2);
       feed2.lastStart = moment2;
-      this.deps.log(
-        "error",
-        `feed sid=${JSON.stringify(feed2.sessionId)} threw: ${inspect(error)}`
-      );
+      feed2.faulted++;
+      const said = failureOf(error).message;
+      if (feed2.fault !== said)
+        this.deps.log(
+          "error",
+          `feed sid=${JSON.stringify(feed2.sessionId)} threw: ${inspect(error)}`
+        );
+      feed2.fault = said;
       if (this.feeds.get(feed2.sessionId) !== feed2) return;
       this.schedule(feed2, null, at);
       if (woken) this.hasten(feed2);
@@ -66714,7 +66897,7 @@ var FrameFeeds = class {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
+      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} faulted=${feed2.faulted} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
     );
     feed2.summarizedAt = now2;
   }
@@ -68269,7 +68452,9 @@ function rendererHost(name, clock, renderer, log, collector) {
     const release4 = session === null ? () => {
     } : collector.holding(session);
     try {
-      const { subscriptions, ...output } = await renderer.answer(input);
+      const sentAt = clock.monotonic();
+      const { subscriptions, turnMs, ...answered } = await renderer.answer(input);
+      const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
       collector.subscribed(subscriptions);
       if (output.kind === "answered" && input.event.kind !== "request")
         for (const effect of output.effects)
@@ -68283,7 +68468,8 @@ function rendererHost(name, clock, renderer, log, collector) {
     (thrown2) => ({
       kind: "threw",
       failure: failureOf(thrown2),
-      record: []
+      record: [],
+      hopMs: null
     })
   );
   const refuse4 = (effect, reason) => void deliver(
@@ -68313,6 +68499,7 @@ function rendererHost(name, clock, renderer, log, collector) {
           log("info", eventLine("turn", [...head, ...delivered.record]));
         return;
       case "threw":
+        if (delivered.failure.kind === "down") return;
         log(
           LEVEL[delivered.failure.kind],
           eventLine("turn", [
@@ -68333,22 +68520,21 @@ function rendererHost(name, clock, renderer, log, collector) {
       (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
     );
     if (output.kind === "threw")
-      throw new Error(
-        `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`
-      );
+      throw new CrossedFailure({
+        ...output.failure,
+        message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
+        detail: `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`
+      });
     if (output.reply.kind !== push.kind)
       throw new Error(
         `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`
       );
     return output.reply;
   };
-  const tell = (push, at) => (
-    // [LAW:types-are-the-program] exception: `ask` rejects only with the
-    // Errors it makes, which no promise type carries.
-    void ask(push, at).catch(
-      (thrown2) => log("error", thrown2.message)
-    )
-  );
+  const tell = (push, at) => void ask(push, at).catch((thrown2) => {
+    const failure = failureOf(thrown2);
+    if (failure.kind !== "down") log("error", failure.detail);
+  });
   return { name, answer: turn, deliver, ask, tell };
 }
 function sessionOf(event) {
@@ -78809,7 +78995,7 @@ function labelBudget(rows, available) {
     (row2) => row2.map(({ name }) => cellWidth2(blockLabel(name)))
   );
   const fits2 = (most2) => widths.every(
-    (row2) => row2.reduce((sum, w) => sum + Math.min(w, most2) + 2, 0) <= available
+    (row2) => row2.reduce((sum2, w) => sum2 + Math.min(w, most2) + 2, 0) <= available
   );
   let most = Math.max(1, ...widths.flat());
   while (most > 1 && !fits2(most)) most -= 1;
@@ -79265,7 +79451,7 @@ function laidOut(node) {
     return { start: at, span, ownLine: ownLine(i) };
   });
 }
-var widthOf2 = (laid) => laid.reduce((sum, { span, ownLine }) => sum + (ownLine ? 0 : span.width), 0);
+var widthOf2 = (laid) => laid.reduce((sum2, { span, ownLine }) => sum2 + (ownLine ? 0 : span.width), 0);
 var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
 function placeChildren(node, at) {
   const laid = laidOut(node);
@@ -80856,7 +81042,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         pending: [...waited].sort()
       },
       evaluated: parts.evaluated - evaluatedBefore,
-      cellBreaks: rendered.reduce((sum, row2) => sum + row2.cellBreaks, 0),
+      cellBreaks: rendered.reduce((sum2, row2) => sum2 + row2.cellBreaks, 0),
       rules
     };
   } catch (_) {
@@ -81635,10 +81821,14 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
   const { daemon: daemon3 } = document;
   const launched = launcherWarningsAt(daemon3.launcher, at, drawing2.by);
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
-  const pipeShown = pipeWarning?.event ?? null;
+  const ended = rendererEndedAt(daemon3.rendererEnded, at, drawing2.by);
+  const eventsShown = [pipeWarning?.event, ended?.event].flatMap(
+    (e) => e === void 0 ? [] : [e]
+  );
   const standing2 = [
     ...daemon3.fileEvents,
     ...launched,
+    ...ended === void 0 ? [] : [ended],
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }],
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
@@ -81779,6 +81969,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
       case "config-watch":
       case "lifeline":
       case "launch-pipes":
+      case "renderer-ended":
       case "when":
         return w.kind;
     }
@@ -81835,10 +82026,13 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     evaluated: evaluated2,
     cellBreaks,
     clickShown,
-    pipeShown,
+    eventsShown,
     delivered,
     lanes
   };
+}
+function rendererEndedAt(event, at, render3) {
+  return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind: "renderer-ended", message: event.text, event };
 }
 function recordRequest(parts, req) {
   const { sessionState } = parts;
@@ -81942,7 +82136,7 @@ async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
       refreshed: refreshedFact(refreshed)
     });
     const sessionId2 = req.hookData.session_id;
-    const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
+    const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(
       parts,
       setup,
       ANSWERING,
@@ -81963,7 +82157,7 @@ async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
         sessionId2,
         delivered,
         clickShown,
-        pipeShown
+        eventsShown
       )
     };
   } catch (_) {
@@ -81972,12 +82166,12 @@ async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function answerDelivered(parts, sessionId2, copied, clickShown, pipeShown) {
+function answerDelivered(parts, sessionId2, copied, clickShown, eventsShown) {
   return () => {
     copied();
     if (clickShown !== null)
       answeredClickError(parts.sessionState, sessionId2, clickShown);
-    if (pipeShown !== null) parts.pipeEventAnswered(pipeShown);
+    for (const event of eventsShown) parts.eventAnswered(event);
   };
 }
 function statuslineOf(sessionId2, drawn, elsewhere) {
@@ -82204,6 +82398,12 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 // src/renderer/world-states.ts
 init_globals();
 var WorldStates = class {
+  // [LAW:single-enforcer] Told every document taken: each one carries the
+  // daemon-wide facts, which the update gate follows.
+  constructor(took) {
+    this.took = took;
+  }
+  took;
   // [LAW:one-source-of-truth] One document per session, the newest handed in.
   documents = observable.map(
     void 0,
@@ -82225,6 +82425,7 @@ var WorldStates = class {
       );
     }
     runInAction(() => this.documents.set(document.session, document));
+    this.took(document);
   }
   // [LAW:no-defensive-null-guards] The host delivers a session's `config`,
   // which carries its document, ahead of each of its requests, and a `retire`
@@ -82240,6 +82441,31 @@ var WorldStates = class {
   }
   drop(session) {
     runInAction(() => this.documents.delete(session));
+  }
+};
+
+// src/renderer/update-gate.ts
+init_globals();
+var UpdateGate = class {
+  constructor(gates) {
+    this.gates = gates;
+  }
+  gates;
+  newest = null;
+  gate = null;
+  took(fact) {
+    if (fact.kind === "pending") return;
+    if (this.newest !== null && fact.at < this.newest) return;
+    this.newest = fact.at;
+    const identity2 = fact.kind === "ok" ? updateIdentity(fact.value) : null;
+    if ((this.gate?.identity ?? null) === identity2) return;
+    this.gate?.dispose();
+    this.gate = identity2 === null ? null : {
+      identity: identity2,
+      dispose: this.gates.state.register(UPDATE_DISMISSED_KEY, [
+        identity2
+      ])
+    };
   }
 };
 
@@ -82453,7 +82679,7 @@ function unusedDeclarations(raw, config2, inserted) {
 var ENTRY_BYTES = 3 * 1024 * 1024;
 var COMPILE_BYTES = 10 * 1024 * 1024;
 var VIEW_BYTES = 2.5 * 1024 * 1024;
-var RENDER_CACHE_RESERVE_BYTES = 64 * 1024 * 1024;
+var RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
 function renderCacheBudget(memoryLimitBytes2) {
   return Math.floor(
     Math.max(
@@ -83896,6 +84122,7 @@ function mainRenderer(parts, pushed) {
     },
     event: async (input) => {
       const record2 = [];
+      const from = parts.clock.monotonic();
       const ended = await turn(input.event, input.at, record2).then(
         (effects) => ({ kind: "answered", effects }),
         // [LAW:single-enforcer] Classified here, where it was thrown: a
@@ -83905,7 +84132,8 @@ function mainRenderer(parts, pushed) {
       return {
         ...ended,
         record: record2,
-        subscriptions: parts.renderCache.subscriptions()
+        subscriptions: parts.renderCache.subscriptions(),
+        turnMs: elapsedMs(parts.clock, from)
       };
     }
   });
@@ -83933,7 +84161,10 @@ function startOver(inputs, sessionState, history, host) {
   const navigationHistory = new NavigationHistory();
   const effectSessions = new EffectSessions();
   const renderWarnings = new RenderWarningRecords();
-  const worldStates = new WorldStates();
+  const updateGate = new UpdateGate(gates);
+  const worldStates = new WorldStates(
+    (document) => updateGate.took(document.daemon.update.newer)
+  );
   const watches = new Watches(host.watches);
   const renderCache = new RenderCache(
     {
@@ -84167,6 +84398,56 @@ function debugOf(view, what) {
     }
   );
 }
+
+// src/renderer-interface/wire.ts
+init_globals();
+function bootEnv(env2) {
+  return Object.fromEntries(
+    Object.entries(env2).flatMap(
+      ([name, value]) => value === void 0 ? [] : [[name, value]]
+    )
+  );
+}
+var REACH_KINDS = {
+  wake: "notice",
+  log: "notice",
+  launch: "call",
+  typeSlash: "call",
+  applyUpdate: "call",
+  runs: { start: "notice", refused: "notice" },
+  refresh: "call",
+  doctor: {
+    probeTmux: "call",
+    remoteLogin: "call",
+    fontInUse: "call",
+    daemons: "call",
+    forge: "call",
+    transcript: "call",
+    install: "call"
+  },
+  laneSetups: { noted: "notice", clicked: "notice" },
+  tmuxStatusLines: { observe: "notice" },
+  menuIdle: {
+    clicked: "notice",
+    clickArrived: "notice",
+    clickSettled: "notice",
+    observe: "notice",
+    confirmClose: "call"
+  },
+  clicks: { gone: "call" },
+  serving: "call",
+  renderSightings: { ofSession: "call" },
+  probes: { arrive: "notice" },
+  eventAnswered: "notice",
+  watches: { watch: "notice", unwatch: "notice" },
+  storage: { hold: "notice", release: "notice" }
+};
+function reachesOf(table, prefix = "") {
+  return Object.entries(table).flatMap(
+    ([key, value]) => typeof value === "string" ? [[`${prefix}${key}`, value]] : reachesOf(value, `${prefix}${key}.`)
+  );
+}
+var REACHES = reachesOf(REACH_KINDS);
 
 // src/doctor/edge.ts
 init_globals();
@@ -85714,14 +85995,16 @@ function createDaemon(inputs) {
     clock
   });
   const daemonFaults = observable.box(
-    { fileEvents: [], launcher: [] },
+    { fileEvents: [], launcher: [], rendererEnded: null },
     { deep: false, equals: compareStructural }
   );
+  let rendererEnded = null;
   function restateFaults() {
     runInAction(
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: launcher.standing()
+        launcher: launcher.standing(),
+        rendererEnded
       })
     );
   }
@@ -85746,19 +86029,27 @@ function createDaemon(inputs) {
     }
   });
   const probe2 = inputs.probe(launcher);
-  const storage = inputs.storage(log);
-  const loadedRenderer = loadMainRenderer({
-    clock,
-    now: instant,
-    storage: { ...storage, doctor: inputs.doctorStores },
-    linkSigner: inputs.linkSigner,
-    stateDir: paths2.state,
-    locations: locs,
-    env: host.env,
-    home: host.home,
-    gates,
-    bundle: bundle.path,
-    memoryLimitBytes: memoryLimitBytes2
+  const preparedRenderer = inputs.renderer({
+    load: () => loadMainRenderer({
+      clock,
+      now: instant,
+      storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
+      linkSigner: inputs.linkSigner,
+      stateDir: paths2.state,
+      locations: locs,
+      env: host.env,
+      home: host.home,
+      gates,
+      bundle: bundle.path,
+      memoryLimitBytes: memoryLimitBytes2
+    }),
+    boot: {
+      digest: bundle.digest,
+      host: { ...host, env: bootEnv(host.env) },
+      bundle: bundle.path,
+      memoryLimitBytes: memoryLimitBytes2
+    },
+    node: bundle.node
   });
   const limits = makeLimits({
     ...inputs.limits({
@@ -85767,7 +86058,11 @@ function createDaemon(inputs) {
       launcher,
       log
     }),
-    limitBytes: memoryLimitBytes2
+    limitBytes: memoryLimitBytes2,
+    // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
+    // renderer's process counts in it while one runs. Read only once armed,
+    // by when the link below exists.
+    renderer: () => link.process()
   });
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
@@ -85970,7 +86265,6 @@ function createDaemon(inputs) {
     releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
     registryUrl,
     fetchImpl: inputs.fetch,
-    gates,
     onApplied: () => binaryWatch.checkNow(),
     log
   });
@@ -85990,7 +86284,7 @@ function createDaemon(inputs) {
   const doctorEdge = inputs.doctorEdge(launcher, host);
   const claudeInput = inputs.claudeInput(launcher);
   const readings = readingsHost(payloadProviders);
-  const renderer = loadedRenderer.start({
+  const reaches = {
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
     // the host's part in its crossing shape: a notice, or an awaited call.
     wake: (sessionId2, cause) => frameFeeds.wake(sessionId2, cause),
@@ -86027,8 +86321,10 @@ function createDaemon(inputs) {
       ofSession: async (sessionId2, now2) => renderSightings.ofSession(sessionId2, now2)
     },
     probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
-    pipeEventAnswered: (event) => {
+    eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
+      if (rendererEnded !== null && answeredBy(rendererEnded, event))
+        rendererEnded = { ...rendererEnded, answered: true };
       restateFaults();
     },
     watches: {
@@ -86051,6 +86347,43 @@ function createDaemon(inputs) {
     storage: {
       hold: (id2, folders) => managedStorage.hold(id2, folders),
       release: (id2) => managedStorage.release(id2)
+    }
+  };
+  const link = preparedRenderer.start({
+    reaches,
+    log,
+    clock,
+    // [LAW:single-enforcer] A renderer that starts again is configured as a
+    // request would: every live session whose newest request the host holds
+    // gets its `config` with its latest stamp, and every open feed its `pin`,
+    // through the host's one path to the renderer, each turn recorded there.
+    start: async () => {
+      const at = instant();
+      for (const sessionId2 of frameFeeds.openFeeds())
+        parts.renderer.tell({ kind: "pin", session: sessionId2 }, at);
+      await Promise.all(
+        [...collector.liveDocuments()].flatMap(([sessionId2, worldState]) => {
+          const req = frameFeeds.latest(sessionId2);
+          return req === null ? [] : [
+            parts.renderer.deliver(
+              {
+                kind: "event",
+                at,
+                event: {
+                  kind: "config",
+                  context: located(req),
+                  worldState
+                }
+              },
+              [["why", "renderer-start"]]
+            )
+          ];
+        })
+      );
+    },
+    ended: (event) => {
+      rendererEnded = event;
+      restateFaults();
     }
   });
   const parts = {
@@ -86079,7 +86412,7 @@ function createDaemon(inputs) {
     updateWatch,
     limits,
     collector,
-    renderer: rendererHost("main", clock, renderer, log, collector)
+    renderer: rendererHost("main", clock, link.renderer, log, collector)
   };
   return {
     stats,
@@ -86114,6 +86447,7 @@ function createDaemon(inputs) {
       binaryWatch.arm();
       updateWatch.arm();
       limits.arm();
+      link.arm();
     },
     async close(atExit) {
       const rendererStep = (kind) => () => parts.renderer.ask({ kind }, instant());
@@ -86148,7 +86482,10 @@ function createDaemon(inputs) {
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last: a run that ends in the teardown holds its click error first.
-        ["sessionState close", rendererStep("close-session-state")]
+        ["sessionState close", rendererStep("close-session-state")],
+        // After every step the renderer takes: its process, when it has one,
+        // ends with nothing left to flush.
+        ["renderer process close", () => link.close()]
       ];
       for (const [step4, run3] of teardown) {
         try {
@@ -87243,18 +87580,41 @@ function create(file) {
   }
 }
 
+// src/daemon/renderer-process.ts
+init_globals();
+var inProcessPort = ({ load }) => {
+  const loaded = load();
+  return { start: (own2) => inProcessRenderer(loaded, own2.reaches) };
+};
+function inProcessRenderer(loaded, reaches) {
+  const renderer = loaded.start(reaches);
+  return {
+    renderer,
+    arm: () => {
+    },
+    close: async () => {
+    },
+    process: () => null
+  };
+}
+
 // src/daemon/production-adapters.ts
+function rendererAdapters(paths2, machine) {
+  return {
+    storage: (log) => fileStorage(paths2, log, machine),
+    doctorStores: fileStores(paths2.state),
+    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state))
+  };
+}
 function productionAdapters(paths2, daemonLog, machine) {
   return {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
-    storage: (log) => fileStorage(paths2, log, machine),
-    doctorStores: fileStores(paths2.state),
+    ...rendererAdapters(paths2, machine),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
     laneEdge: (launcher, following, closing, probe2) => productionLaneEdge(launcher, following, closing, machine, probe2),
-    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
       log,
@@ -87262,6 +87622,9 @@ function productionAdapters(paths2, daemonLog, machine) {
       snapshotDir: paths2.state,
       writeLogNow: () => daemonLog.writeNow()
     }),
+    // [LAW:one-type-per-behavior] In this process: the daemon process's entry
+    // (server.ts) runs it in a process of its own.
+    renderer: inProcessPort,
     fetch,
     stat: fs_default.statSync
   };
