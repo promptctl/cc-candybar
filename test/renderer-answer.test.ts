@@ -328,7 +328,7 @@ describe("a statusline request", () => {
     };
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
-      diagnostics: [
+      launcher: [
         {
           kind: "lifeline",
           message: "programs launched now would outlive their launcher",
@@ -644,13 +644,17 @@ describe("two requests of one session at different keys", () => {
 
 describe("a click", () => {
   // A click on the rig's session's link, delivered by the CLI.
-  const click = (verb: string): Event => ({
+  const click = (
+    verb: string,
+    latest: CheckedRenderRequest | null = null,
+  ): Event => ({
     kind: "click",
     verb,
     value: "",
     session: { ok: true, id: SESSION },
     arrival: { via: "link", delivery: { kind: "cli" } },
     id: 1 as RequestId,
+    latest,
   });
 
   test("answers with what the open views read once its act has landed", async () => {
@@ -693,6 +697,24 @@ describe("a click", () => {
     expect(thrown.subscriptions.sources).toEqual({});
   });
 
+  test("hands its act the host's newest request of its session, though the session has retired", async () => {
+    let seen: CheckedRenderRequest | null | undefined;
+    const t = renderer({
+      handler: (verb) =>
+        verb === "act"
+          ? async (_value, facts) => {
+              seen = facts.latest;
+            }
+          : undefined,
+      closeIdle: () => Promise.reject(new Error("no idle close here")),
+    });
+    await request(t);
+    await handIn(t.r, { kind: "retire", session: SESSION });
+    const latest = checked("%3");
+    answered(await handIn(t.r, click("act", latest)));
+    expect(seen).toBe(latest);
+  });
+
   test("of a verb the renderer does not have is its bad request", async () => {
     const t = renderer();
     const { failure } = threw(await handIn(t.r, click("nope")));
@@ -722,6 +744,7 @@ describe("the idle close", () => {
         kind: "menu-idle",
         session: SESSION,
         idle,
+        latest: null,
       }),
     );
     expect(effects).toEqual([]);

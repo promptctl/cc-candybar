@@ -138,7 +138,9 @@ describe("journals take turns", () => {
     const slow = click("nord", "plain", held.wait);
     await drain();
     let closed = false;
-    const closing = closeIdleMenus(SID, IDLE, ctx).then(() => (closed = true));
+    const closing = closeIdleMenus(SID, null, IDLE, ctx).then(
+      () => (closed = true),
+    );
     await drain();
     expect(closed).toBe(false);
     held.open();
@@ -159,6 +161,7 @@ describe("the idle close decides in its turn", () => {
       close: async (sid, closing) => {
         const running = closeIdleMenus(
           sid,
+          null,
           {
             ...closing,
             confirm: async () => idle.confirmClose(sid, closing.firedAt),
@@ -331,13 +334,20 @@ describe("close", () => {
 
 describe("the click path", () => {
   function parts(ctx: VerbContext, linkUrl = "") {
-    const { arrival: _a, turnWaited: _t, clientGone: _g, ...verbCtx } = ctx;
+    const {
+      arrival: _a,
+      turnWaited: _t,
+      clientGone: _g,
+      latest: _l,
+      ...verbCtx
+    } = ctx;
     const events: string[] = [];
     const menuIdle = { clickArrived: () => {}, clickSettled: () => {} };
     const given = {
       clock: { monotonic: () => performance.now(), now: () => Date.now() },
       menuIdle,
       payloadProviders: {},
+      frameFeeds: { latest: () => null },
       log: (_level: string, line: string) => events.push(line),
       tmuxStatusLines: {
         linkAt: () => ({ kind: "link", url: linkUrl }),
@@ -456,7 +466,7 @@ test("stats name the holder and what waits", async () => {
   const held = gate();
   const slow = click("nord", "plain", held.wait);
   await drain();
-  const queued = closeIdleMenus(SID, IDLE, ctx);
+  const queued = closeIdleMenus(SID, null, IDLE, ctx);
   await drain();
   expect(turns.getStats()).toMatchObject({ holder: "dispatch", queued: 1 });
   held.open();

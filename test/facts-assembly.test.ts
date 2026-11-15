@@ -344,7 +344,7 @@ describe("a session's facts document", () => {
         daemonFactsOf(none),
         T0,
       );
-      expect(first.update.newer).toBe(none);
+      expect(first.daemon.update.newer).toBe(none);
       expect(
         assembleFacts(first, SID, readings, daemonFactsOf(none), at(5)),
       ).toBe(first);
@@ -360,7 +360,7 @@ describe("a session's facts document", () => {
         daemonFactsOf(newer),
         at(10),
       );
-      expect(second.update.newer).toBe(newer);
+      expect(second.daemon.update.newer).toBe(newer);
       expect(second.seq).toBe(2);
       for (const key of BUILTIN_KEYS) {
         expect(second.builtins[key]).toBe(first.builtins[key]);
@@ -378,14 +378,31 @@ describe("a session's facts document", () => {
         daemonFactsOf(),
         T0,
       );
-      const failedOnce = failedStamp(first, "the read broke");
+      const failedOnce = failedStamp(first, "the read broke", daemonFactsOf());
       expect(failedOnce.seq).toBe(first.seq + 1);
       expect(failedOnce.builtins).toBe(first.builtins);
       expect(stampFailureOf(failedOnce)).toBe("the read broke");
-      expect(failedStamp(failedOnce, "the read broke")).toBe(failedOnce);
-      expect(stampFailureOf(failedStamp(failedOnce, "another"))).toBe(
-        "another",
+      expect(failedStamp(failedOnce, "the read broke", daemonFactsOf())).toBe(
+        failedOnce,
       );
+      expect(
+        stampFailureOf(failedStamp(failedOnce, "another", daemonFactsOf())),
+      ).toBe("another");
+      // The daemon's facts are read apart from the owners that threw, so a
+      // failure that persists still carries them as they stand.
+      const newer = restamp(
+        first.daemon.update.newer,
+        ok<Update>({ kind: "release", newer: [2, 0, 0], running: [1, 0, 0] }),
+        at(10),
+      );
+      const moved = failedStamp(
+        failedOnce,
+        "the read broke",
+        daemonFactsOf(newer),
+      );
+      expect(moved.seq).toBe(failedOnce.seq + 1);
+      expect(moved.daemon.update.newer).toBe(newer);
+      expect(moved.builtins).toBe(first.builtins);
       expect(stampFailureOf(first)).toBeNull();
       // The next clean stamp is a document without it.
       const clean = assembleFacts(

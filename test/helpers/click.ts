@@ -88,6 +88,7 @@ export function testVerbContext(
     history,
     navigation: new NavigationHistory(),
     clientGone: async () => false,
+    latest: null,
     journalTurns: new JournalTurns({
       log: () => {},
       monotonic: () => systemTimekeeper.monotonic(),

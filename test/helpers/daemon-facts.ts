@@ -17,7 +17,8 @@ export const daemonFactsOf = (
   newer: Fact<Update> = pendingOf("unread"),
 ): DaemonFacts => ({
   update: { newer, act: IDLE, actsError: null },
-  diagnostics: [],
+  fileEvents: [],
+  launcher: [],
 });
 
 // The host's feeds of a daemon where nothing follows any session.

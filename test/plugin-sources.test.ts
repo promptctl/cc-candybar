@@ -1082,7 +1082,7 @@ describe("a session's world state", () => {
     const a = viewOf(r, file, "s-a");
     const b = viewOf(r, file, "s-b");
     const before = [a.source.facts(), b.source.facts()];
-    expect(before.map((d) => d.update.newer)).toEqual([
+    expect(before.map((d) => d.daemon.update.newer)).toEqual([
       pendingOf("unread"),
       pendingOf("unread"),
     ]);
@@ -1091,7 +1091,7 @@ describe("a session's world state", () => {
 
     const after = [a.source.facts(), b.source.facts()];
     for (const [i, doc] of after.entries()) {
-      expect(doc.update.newer).toBe(NEWER);
+      expect(doc.daemon.update.newer).toBe(NEWER);
       expect(doc.seq).toBe(before[i]!.seq + 1);
       for (const key of BUILTINS) {
         expect(doc.builtins[key as keyof typeof doc.builtins]).toBe(
@@ -1121,7 +1121,7 @@ describe("a session's world state", () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
     runInAction(() => r.updateFact.set(NEWER));
-    expect(view.source.facts().update.newer).toBe(NEWER);
+    expect(view.source.facts().daemon.update.newer).toBe(NEWER);
     const held = view.source.facts();
 
     r.collector.close();

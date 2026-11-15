@@ -3,6 +3,9 @@
 // failure. Shared, because the host's watch owns the update and its act, and
 // the renderer folds the notice from what its world state carries.
 //
+// [LAW:one-type-per-behavior] Both facts render through one `Update` and one
+// sentence shape; what differs is a table of words and a command.
+//
 // [LAW:effects-at-boundaries] Pure: every value arrives as an argument.
 
 import {

@@ -298,6 +298,38 @@ describe("WatcherRegistry", () => {
     },
   );
 
+  // Root ignores directory permissions, so the second refusal cannot be built.
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "a deaf directory refused again for another reason tells its slot the new fault",
+    async () => {
+      const parent = fs.mkdtempSync(path.join(os.tmpdir(), "watch-redeaf-"));
+      const dir = path.join(parent, "later");
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
+      const heard: Invalidation[] = [];
+      try {
+        const handle = reg.acquire("k", { dirs: [{ path: dir }] }, (h) =>
+          heard.push(h),
+        );
+        expect(handle.deaf[0]?.reason).toContain("ENOENT");
+        fs.mkdirSync(dir);
+        fs.chmodSync(dir, 0o000);
+        reg.judge();
+        await until(() => heard.length === 1, "the new refusal's window");
+        expect(handle.deaf[0]?.reason).toContain("EACCES");
+        expect(heard).toEqual([
+          { kind: "failed", reason: expect.stringContaining("EACCES") },
+        ]);
+      } finally {
+        reg.closeAll();
+        fs.chmodSync(dir, 0o700);
+        rmrf(parent);
+      }
+    },
+  );
+
   test("an error after open reaches the consumer and the stats", async () => {
     const fake = standIn();
     try {

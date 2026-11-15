@@ -188,7 +188,8 @@ async function renderFrames(): Promise<void> {
   // carries an update nothing has sampled, and no fault of a daemon's own.
   const daemonFacts: DaemonFacts = {
     update: { newer: pendingOf("unread"), act: IDLE, actsError: null },
-    diagnostics: [],
+    fileEvents: [],
+    launcher: [],
   };
   // [LAW:single-enforcer] The session's world state, read by the host's own
   // collector over the demo's providers and handed straight to the store its

@@ -2,13 +2,15 @@
 // id this renderer minted, from its `watch` notice to its `unwatch`. What the
 // registry hears comes back as a `watch` push, which carries the targets the
 // OS is not listening to as of that push, so a held watch's deafness is the
-// latest push's. Every change in deafness is told as a window (going deaf
-// tells `failed`, listening again tells `unknown`), so the latest push is the
-// deafness as it stands.
+// latest push's. The registry tells every change in deafness as a window, but
+// the acquire's own deafness arrives after the acquire, in the push that
+// answers it: a push whose deafness moved from what the watch held is heard
+// as an `unknown` window, so the holder re-derives what it says of it.
 
 import type { HostCalls, WatchId } from "../renderer-interface/adapter.js";
 import {
   followWatch,
+  sameDeafnesses,
   type Deafness,
   type HeldWatch,
   type Invalidation,
@@ -71,7 +73,9 @@ export class Watches {
   ): void {
     const watch = this.held.get(id);
     if (watch === undefined) return;
+    const moved = !sameDeafnesses(watch.deaf, deaf);
     watch.deaf = deaf;
-    if (heard !== null) watch.heard(heard);
+    const window = heard ?? (moved ? { kind: "unknown" } : null);
+    if (window !== null) watch.heard(window);
   }
 }

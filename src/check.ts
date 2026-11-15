@@ -350,7 +350,8 @@ export function checkPayload(
     checkReadings(config, at),
     {
       update: { newer: { ...ABSENT, at }, act: IDLE, actsError: null },
-      diagnostics: [],
+      fileEvents: [],
+      launcher: [],
     },
     at,
   );

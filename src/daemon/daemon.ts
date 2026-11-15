@@ -62,7 +62,7 @@ import { readingsHost } from "./readings.js";
 import { installFacts } from "../doctor/edge.js";
 import { ClicksInFlight } from "./clicks-in-flight.js";
 import { compareStructural, observable, runInAction } from "mobx";
-import type { DaemonDiagnostic } from "../facts/world-state.js";
+import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import type { WatchId } from "../renderer-interface/adapter.js";
 import type {
@@ -340,16 +340,18 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // world state carries them: whether file events are heard, and what the
   // launcher stands behind. Restated whenever either may have moved, and
   // compared whole, so a restatement that moved nothing moves no document.
-  const daemonFaults = observable.box<readonly DaemonDiagnostic[]>([], {
-    deep: false,
-    equals: compareStructural,
-  });
+  const daemonFaults = observable.box<
+    Pick<DaemonFacts, "fileEvents" | "launcher">
+  >(
+    { fileEvents: [], launcher: [] },
+    { deep: false, equals: compareStructural },
+  );
   function restateFaults(): void {
     runInAction(() =>
-      daemonFaults.set([
-        ...fileEventsWarnings(fileEvents.delivery()),
-        ...launcher.standing(),
-      ]),
+      daemonFaults.set({
+        fileEvents: fileEventsWarnings(fileEvents.delivery()),
+        launcher: launcher.standing(),
+      }),
     );
   }
   restateFaults();
@@ -390,7 +392,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     now: instant,
     close: (sessionId, idle) =>
-      closeByTurn(parts.renderer, instant, sessionId, idle),
+      closeByTurn(
+        parts.renderer,
+        instant,
+        sessionId,
+        idle,
+        frameFeeds.latest(sessionId),
+      ),
     failed: (sessionId, failure) =>
       log(
         LEVEL[failure.kind],
@@ -624,7 +632,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     owners: payloadProviders,
     daemon: () => ({
       update: { newer: updateFact.get(), ...updateWatch.acts() },
-      diagnostics: daemonFaults.get(),
+      ...daemonFaults.get(),
     }),
     clock,
     watched: (sessionId) => frameFeeds.feedOpen(sessionId),

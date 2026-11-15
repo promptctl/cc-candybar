@@ -54,11 +54,7 @@ export function collected(
     // subscribed yet.
     deliver: async (event) => {
       if (event.kind === "world-state") worldStates.take(event.worldState);
-      else
-        retireSession(
-          { renderCache: cache(), worldStates, contexts: new Map() },
-          event.session,
-        );
+      else retireSession({ renderCache: cache(), worldStates }, event.session);
       await Promise.resolve();
       collector.subscribed(cache().subscriptions());
       return { kind: "answered" };

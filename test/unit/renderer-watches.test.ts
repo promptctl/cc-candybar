@@ -40,14 +40,33 @@ test("a push is what its watch hears, and its deafness stands until the next pus
   const heard: Invalidation[] = [];
   const handle = watches.acquire("k", TARGETS, (h) => heard.push(h));
   expect(handle.deaf).toEqual([]);
-  // The acquire's own push says how deaf the watch is, and hears nothing.
+  // The acquire's own push of a watch that listens hears nothing.
+  watches.pushed(1 as WatchId, null, []);
+  expect(heard).toEqual([]);
+  // A window is heard as the registry told it.
+  watches.pushed(1 as WatchId, { kind: "changed", paths: ["/w/a"] }, []);
+  expect(heard).toEqual([{ kind: "changed", paths: ["/w/a"] }]);
+});
+
+test("a push that moves the watch's deafness wakes its holder, so what it says of it is re-derived", () => {
+  const { watches } = hostOf();
+  const heard: Invalidation[] = [];
+  const handle = watches.acquire("k", TARGETS, (h) => heard.push(h));
+  // A watch deaf at its acquire: the acquire's own push says so, and the
+  // holder hears it.
   watches.pushed(1 as WatchId, null, DEAF);
   expect(handle.deaf).toEqual(DEAF);
-  expect(heard).toEqual([]);
-  // Listening again is told as a window that names nothing.
-  watches.pushed(1 as WatchId, { kind: "unknown" }, []);
-  expect(handle.deaf).toEqual([]);
   expect(heard).toEqual([{ kind: "unknown" }]);
+  // The same deafness again moves nothing.
+  watches.pushed(1 as WatchId, null, [{ ...DEAF[0]! }]);
+  expect(heard).toHaveLength(1);
+  // Deaf for another reason is a move.
+  const other: readonly Deafness[] = [
+    { kind: "refused", path: "/w", reason: "ENOENT" },
+  ];
+  watches.pushed(1 as WatchId, null, other);
+  expect(handle.deaf).toEqual(other);
+  expect(heard).toHaveLength(2);
 });
 
 test("a push for a watch released since it was sent reaches nothing", () => {

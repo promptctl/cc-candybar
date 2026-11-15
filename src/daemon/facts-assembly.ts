@@ -112,22 +112,22 @@ export function assembleFacts(
     }),
   );
 
-  const { update } = daemon;
-  const diagnostics = [...readings.faults, ...daemon.diagnostics];
-  const parts = { builtins, sources, runs, update, diagnostics };
+  const diagnostics = readings.faults;
+  const parts = { builtins, sources, runs, daemon, diagnostics };
   // [LAW:single-enforcer] `restamp` is the one judge of whether a fact moved,
   // and it returns the prior fact itself when not, so the document is
   // unmoved when every fact is the prior's own. The builtins, sources and runs are
   // compared by that identity, never walked again (a source's value can be
-  // large JSON); the update and diagnostics are small and not restamped here.
+  // large JSON); the daemon's facts and the diagnostics are small and not
+  // restamped here.
   if (
     prior !== undefined &&
     sameFacts(builtins, prior.builtins) &&
     sameFacts(sources, prior.sources) &&
     sameFacts(runs, prior.runs) &&
     compareStructural(
-      { update, diagnostics },
-      { update: prior.update, diagnostics: prior.diagnostics },
+      { daemon, diagnostics },
+      { daemon: prior.daemon, diagnostics: prior.diagnostics },
     )
   ) {
     return prior;
@@ -142,14 +142,22 @@ export function assembleFacts(
 
 // [LAW:single-enforcer] The other way a document is minted: a stamp that threw
 // keeps the readings of `prior` and says why, with the next `seq`, so the bar's
-// ⚠ says it is drawn from older facts. A failure for the reason already held
+// ⚠ says it is drawn from older facts. The daemon's facts are read apart from
+// the session's owners, so they are `daemon` as it stands whatever threw. A
+// failure for the reason already held, over the daemon's facts already held,
 // is that document, so a fault that persists mints nothing per landing; the
 // next stamp that succeeds carries no stamp diagnostic, and so moves too.
-export function failedStamp(prior: WorldState, reason: string): WorldState {
+export function failedStamp(
+  prior: WorldState,
+  reason: string,
+  daemon: DaemonFacts,
+): WorldState {
   const held = prior.diagnostics.find((d) => d.kind === "stamp");
-  if (held?.reason === reason) return prior;
+  if (held?.reason === reason && compareStructural(daemon, prior.daemon))
+    return prior;
   return {
     ...prior,
+    daemon,
     seq: prior.seq + 1,
     diagnostics: [
       ...prior.diagnostics.filter((d) => d.kind !== "stamp"),

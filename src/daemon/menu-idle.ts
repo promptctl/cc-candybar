@@ -16,6 +16,7 @@
 import { closesAt } from "../config/menu-timeout.js";
 import type { Instant } from "../utils/instant.js";
 import type { IdleSpan } from "../renderer-interface/interface.js";
+import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type { RendererHost } from "./renderer-host.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type { Failure } from "./foundations/verb-error.js";
@@ -31,11 +32,12 @@ export async function closeByTurn(
   at: () => Instant,
   sessionId: SessionId,
   idle: IdleSpan,
+  latest: CheckedRenderRequest | null,
 ): Promise<Failure | null> {
   const delivered = await host.answer({
     kind: "event",
     at: at(),
-    event: { kind: "menu-idle", session: sessionId, idle },
+    event: { kind: "menu-idle", session: sessionId, idle, latest },
   });
   return delivered.kind === "threw" ? delivered.failure : null;
 }

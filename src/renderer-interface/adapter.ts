@@ -15,10 +15,6 @@ import type { Frame, WireFrame } from "../render/frame";
 import type { Instant } from "../utils/instant.js";
 import type { Release } from "../utils/holds.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
-
-// A watch the renderer holds, named by the id it minted.
-declare const WATCH_ID: unique symbol;
-export type WatchId = number & { readonly [WATCH_ID]: true };
 import type { Crosses, Reaches } from "./crosses.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { ClientHint } from "../client-hint.js";
@@ -45,6 +41,10 @@ import type {
 import type { HeldEvent } from "../utils/event-hold.js";
 import type { InstallFacts } from "../doctor/checks.js";
 import type { DoctorMachineEdge } from "../doctor/ports.js";
+
+// A watch the renderer holds, named by the id it minted.
+declare const WATCH_ID: unique symbol;
+export type WatchId = number & { readonly [WATCH_ID]: true };
 
 export interface LaneSession {
   readonly sessionId: SessionId;

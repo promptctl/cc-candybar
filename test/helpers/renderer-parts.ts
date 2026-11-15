@@ -96,7 +96,6 @@ export function rendererParts({
     sessionState,
     renderCache: cache as never,
     worldStates,
-    contexts: new Map(),
     renderWarnings: new RenderWarningRecords(),
     effectSessions: new EffectSessions(),
     verbs,

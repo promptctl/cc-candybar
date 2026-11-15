@@ -2124,9 +2124,11 @@ export class RenderCache<
     // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
     // candidate appeared, a link was re-pointed), and which directories the
     // entry now hears: a change that fires nothing is read against this line.
+    // Which of them the OS refused is the host registry's line (`watch
+    // failed`), as the deafness reaches this renderer only after the acquire.
     this.log(
       "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch.handle.deaf.length}`,
+      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")}`,
     );
     for (const { path: at, reason } of unresolved)
       this.log(

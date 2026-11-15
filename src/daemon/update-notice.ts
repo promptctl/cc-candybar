@@ -395,21 +395,25 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     });
     if (closed || !read.ok) return;
     const next = judgeAct(read.value);
-    if (seen === null && next.kind === "running") {
+    const was = seen;
+    seen = next;
+    if (was === null && next.kind === "running") {
       log("info", `apply-update: act ${next.act} is running; watching it`);
     }
-    if (seen?.kind === "running" && next.kind !== "running") {
-      if (next.kind === "succeeded") {
-        log("info", `apply-update: act ${next.act} succeeded`);
-        sampleBuild();
-        onApplied();
-      }
-      if (next.kind === "failed") {
-        log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
-      }
+    const ended = was?.kind === "running" && next.kind !== "running";
+    const succeeded = ended && next.kind === "succeeded";
+    if (succeeded) log("info", `apply-update: act ${next.act} succeeded`);
+    if (ended && next.kind === "failed") {
+      log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
     }
-    seen = next;
-    publishActs();
+    // [LAW:one-source-of-truth] One action: a success's sampled build and the
+    // act it ends land together, so no stamp pairs the new update with the act
+    // still running.
+    runInAction(() => {
+      if (succeeded) sampleBuild();
+      publishActs();
+    });
+    if (succeeded) onApplied();
   }
 
   // [LAW:no-ambient-temporal-coupling] Each tick scheduled only once the last

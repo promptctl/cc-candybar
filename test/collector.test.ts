@@ -275,6 +275,35 @@ describe("a stamp that throws", () => {
   });
 });
 
+describe("owners that keep failing to read", () => {
+  test("leave the daemon's facts current: a move of them hands in a document carrying it, still saying what failed", () => {
+    const broken = observable.box(false);
+    const newer = observable.box<Fact<Update>>(pendingOf("unread"));
+    const { owners: base } = handLanded();
+    const failing = (): Lane<string> => ({
+      current: () => {
+        if (broken.get()) throw new Error("host read exploded");
+        return ABSENT as Current<string>;
+      },
+    });
+    const owners = {
+      ...base,
+      hostService: { declareName: failing, declareUser: failing },
+    } as unknown as RenderPayloadDeps;
+    const { collector, handedIn } = collectorOver(owners, {
+      update: () => newer.get(),
+    });
+    collector.requested(requestAt("/a"));
+    runInAction(() => broken.set(true));
+    expect(handedIn).toHaveLength(1);
+    runInAction(() => newer.set(pendingOf("superseded")));
+    expect(handedIn).toHaveLength(2);
+    const doc = (handedIn[1] as { worldState: WorldState }).worldState;
+    expect(doc.daemon.update.newer).toEqual(pendingOf("superseded"));
+    expect(stampFailureOf(doc)).toContain("host read exploded");
+  });
+});
+
 describe("the renderer's subscriptions", () => {
   test("a plugin source added is declared and read into the world state; one dropped is released after that output", () => {
     const { owners, held, land } = handLanded();

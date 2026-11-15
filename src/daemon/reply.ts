@@ -674,7 +674,15 @@ async function handleClick(
   const delivered = await parts.renderer.answer({
     kind: "event",
     at: instantAt(parts.clock),
-    event: { kind: "click", verb, value, session, arrival, id: click.id },
+    event: {
+      kind: "click",
+      verb,
+      value,
+      session,
+      arrival,
+      id: click.id,
+      latest: session?.ok ? parts.frameFeeds.latest(session.id) : null,
+    },
   });
   switch (delivered.kind) {
     case "answered":

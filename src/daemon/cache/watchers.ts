@@ -14,7 +14,7 @@ import type {
   DirTarget,
   Deafness,
 } from "../foundations/watch-targets";
-import { followWatch } from "../foundations/watch-targets";
+import { followWatch, sameDeafness } from "../foundations/watch-targets";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
 // injects its log (writes to daemon.log at the requested level); other
@@ -305,17 +305,22 @@ export class WatcherRegistry {
   }
 
   // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, it hears the fault. Listening again, it hears an
-  // `unknown` window: whatever changed while the directory was deaf or bound
-  // to another folder went unheard, and a holder that re-derives on it reports
-  // its fault cleared. Deaf staying deaf is no change and tells nothing.
+  // state. Going deaf, or deaf for another reason, it hears the fault.
+  // Listening again, it hears an `unknown` window: whatever changed while the
+  // directory was deaf or bound to another folder went unheard, and a holder
+  // that re-derives on it reports its fault cleared. Deaf for the same reason
+  // is no change and tells nothing.
   private reopen(dir: DirWatch, cause: string): void {
     const was = dir.state;
     if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    dir.state = this.open(dir, () => dir, cause, was);
-    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening")
-      this.tell(dir, failedOf(dir.state.deafness));
+    const now = this.open(dir, () => dir, cause, was);
+    dir.state = now;
+    if (now.kind === "listening") this.tell(dir, { kind: "unknown" });
+    else if (
+      was.kind === "listening" ||
+      !sameDeafness(was.deafness, now.deafness)
+    )
+      this.tell(dir, failedOf(now.deafness));
   }
 
   // `dirOf` names the watch the handle belongs to; its callbacks run only
@@ -369,15 +374,10 @@ export class WatcherRegistry {
       // [LAW:nothing-unseen] A refusal is logged when it starts or its reason
       // changes; every period retries a deaf directory, and the same refusal
       // repeated would bury the events around it.
-      const same =
-        was?.kind === "deaf" &&
-        was.deafness.kind === "refused" &&
-        was.deafness.reason === reason;
-      if (!same) this.logger("warn", `watch failed ${at}: ${reason}`);
-      return {
-        kind: "deaf",
-        deafness: { kind: "refused", path: at, reason },
-      };
+      const deafness: Deafness = { kind: "refused", path: at, reason };
+      if (was?.kind !== "deaf" || !sameDeafness(was.deafness, deafness))
+        this.logger("warn", `watch failed ${at}: ${reason}`);
+      return { kind: "deaf", deafness };
     }
   }
 

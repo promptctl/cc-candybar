@@ -160,7 +160,7 @@ export function mainRenderer(
         // click since the firing keeps what it opened.
         // [LAW:effects-at-boundaries] exception: the idle clock stays with
         // the host, so the turn asks it in place.
-        await parts.verbs.closeIdle(event.session, {
+        await parts.verbs.closeIdle(event.session, event.latest, {
           ...event.idle,
           confirm: () =>
             parts.menuIdle.confirmClose(event.session, event.idle.firedAt),
@@ -342,7 +342,6 @@ function startOver(
     sessionState,
     renderCache,
     worldStates,
-    contexts: new Map(),
     renderWarnings,
     effectSessions,
   };
@@ -407,9 +406,10 @@ function startOver(
     links: linkSigner,
     runs: host.runs,
     lanes: {
-      of: (origin, sessionId) => lanesAt(parts, origin, sessionId),
-      clicked: (sessionId, before, after) =>
-        laneClicked(parts, sessionId, before, after),
+      of: (origin, sessionId, latest) =>
+        lanesAt(parts, origin, sessionId, latest),
+      clicked: (sessionId, latest, before, after) =>
+        laneClicked(parts, sessionId, latest, before, after),
     },
     views: {
       follow: (sessionId, origin) =>

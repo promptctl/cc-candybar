@@ -8,6 +8,7 @@ import type { RendererParts } from "../draw-bar.js";
 import type { SessionId } from "../../daemon/foundations/session-id.js";
 import type { AdapterToHost } from "../../renderer-interface/adapter.js";
 import type { RequestId } from "../../renderer-interface/interface.js";
+import type { CheckedRenderRequest } from "../../renderer-interface/request-context.js";
 import {
   closeIdleMenus,
   VERBS,
@@ -19,7 +20,12 @@ import {
 // are noted, and whether its client is gone.
 type VerbClickFacts = Pick<
   VerbContext,
-  "arrival" | "placeWaited" | "gatherTook" | "turnWaited" | "clientGone"
+  | "arrival"
+  | "placeWaited"
+  | "gatherTook"
+  | "turnWaited"
+  | "clientGone"
+  | "latest"
 >;
 
 // The facts the renderer brings of one click: the same, the click named by its
@@ -40,7 +46,11 @@ export interface RendererVerbs {
   ): ((value: string, click: ClickFacts) => Promise<void>) | undefined;
   // The idle clock's close of the session's menus: the journaled write a ✕
   // makes.
-  closeIdle(sessionId: SessionId, idle: IdleClose): Promise<void>;
+  closeIdle(
+    sessionId: SessionId,
+    latest: CheckedRenderRequest | null,
+    idle: IdleClose,
+  ): Promise<void>;
 }
 
 // The main renderer's parts: the draw's, which the host's own frames share,
@@ -73,6 +83,7 @@ export function verbsOver(
           }))
       );
     },
-    closeIdle: (sessionId, idle) => closeIdleMenus(sessionId, idle, ctx),
+    closeIdle: (sessionId, latest, idle) =>
+      closeIdleMenus(sessionId, latest, idle, ctx),
   };
 }

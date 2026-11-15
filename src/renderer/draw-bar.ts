@@ -4,11 +4,7 @@ import { elapsedMs, type Timekeeper } from "../time.js";
 import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
-import {
-  launcherWarningsAt,
-  type LauncherFact,
-  type LauncherWarning,
-} from "../proc/launcher";
+import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
 import type { HeldEvent } from "../utils/event-hold.js";
 import { updateNotice } from "../daemon/foundations/update-offer.js";
 import {
@@ -52,7 +48,7 @@ import {
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
-import type { FactsDiagnostic, WorldState } from "../facts/world-state.js";
+import type { WorldState } from "../facts/world-state.js";
 import type { WorldStates } from "./world-states.js";
 import { isPending } from "../utils/outcome.js";
 import {
@@ -122,10 +118,6 @@ import {
 // views read.
 export interface RendererState {
   readonly clock: Pick<Timekeeper, "monotonic" | "after">;
-  // [LAW:one-source-of-truth] Each session's newest context, as its `config`
-  // carried it, until its retire: the pane a click's lane setups and status
-  // line follow.
-  readonly contexts: Map<SessionId, CheckedRenderRequest>;
   readonly sessionState: SessionState;
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
   readonly worldStates: WorldStates;
@@ -269,14 +261,14 @@ export function lanesAt(
   parts: RendererParts,
   origin: RenderOrigin,
   sessionId: SessionId,
+  latest: CheckedRenderRequest | null,
 ): LaneSwitches {
-  const { renderCache, contexts } = parts;
+  const { renderCache } = parts;
   using hold = renderCache.hold(
     origin.projectDir,
     origin.cwd,
     origin.target.path,
   );
-  const latest = contexts.get(sessionId) ?? null;
   // [LAW:dataflow-not-control-flow] exception: a click with no request on
   // record (none since a restart, or its last one evicted) has no hint, and is measured as if in
   // tmux so a tmux session's click owes its setup; the owed setup is settled
@@ -369,7 +361,6 @@ export function configureSession(
   noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
     recordRequest(parts, req);
-    parts.contexts.set(req.hookData.session_id, req);
     parts.worldStates.take(worldState);
     holdSessionAt(parts, req)[Symbol.dispose]();
   });
@@ -381,13 +372,12 @@ export function configureSession(
 // ends; one action holds both, so the view's change reaction, stopped by the
 // closing, never runs over the document gone.
 export function retireSession(
-  parts: Pick<RendererParts, "worldStates" | "contexts"> & {
+  parts: Pick<RendererParts, "worldStates"> & {
     readonly renderCache: Pick<RendererParts["renderCache"], "retireSession">;
   },
   session: SessionId,
 ): void {
   runInAction(() => {
-    parts.contexts.delete(session);
     parts.worldStates.drop(session);
     parts.renderCache.retireSession(session);
   });
@@ -589,7 +579,7 @@ export function drawRender(
   // state carries it, read for THIS session: what it dismissed and whether
   // its config allows the notice — both values, folded by the notice into
   // zero or one offer and zero or one failure.
-  const { update } = document;
+  const { update } = document.daemon;
   const updates = updateNotice(
     update.newer.kind === "ok" ? update.newer.value : null,
     update.act,
@@ -638,7 +628,7 @@ export function drawRender(
     entry.watch === null ? null : watchFault("config watch", entry.watch, null);
   // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
-  const daemon = daemonFaultsOf(document.diagnostics);
+  const { daemon } = document;
   const launched = launcherWarningsAt(daemon.launcher, at, drawing.by);
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
   const pipeShown = pipeWarning?.event ?? null;
@@ -908,33 +898,6 @@ export function drawRender(
   };
 }
 
-// [LAW:types-are-the-program] The daemon's own faults the world state
-// carries, by whose they are: file events', and the launcher's. Exhaustive
-// over the diagnostics, so a new kind is a compile error here until the draw
-// says whose it is.
-function daemonFaultsOf(diagnostics: readonly FactsDiagnostic[]): {
-  readonly fileEvents: readonly FileEventsWarning[];
-  readonly launcher: readonly LauncherFact[];
-} {
-  const fileEvents: FileEventsWarning[] = [];
-  const launcher: LauncherFact[] = [];
-  for (const d of diagnostics) {
-    switch (d.kind) {
-      case "file-events":
-        fileEvents.push(d);
-        break;
-      case "lifeline":
-      case "launch-pipes":
-        launcher.push(d);
-        break;
-      case "lane":
-      case "stamp":
-        break;
-    }
-  }
-  return { fileEvents, launcher };
-}
-
 // The warning a load carried, beside what a draw could not honour.
 interface LoadWarning {
   readonly kind: "load";
@@ -1063,11 +1026,11 @@ export function laneSessionOf(
 export function laneClicked(
   parts: RendererParts,
   sessionId: SessionId,
+  latest: CheckedRenderRequest | null,
   before: LaneSwitches,
   after: LaneSwitches,
 ): void {
-  const { contexts, laneSetups, tmuxStatusLines } = parts;
-  const latest = contexts.get(sessionId) ?? null;
+  const { laneSetups, tmuxStatusLines } = parts;
   laneSetups.clicked(
     sessionId,
     latest === null ? null : laneSessionOf(parts, latest),

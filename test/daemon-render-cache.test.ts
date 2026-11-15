@@ -499,10 +499,7 @@ describe("RenderCache", () => {
         l.startsWith(`config watch bound projectDir=${dir} cwd=${dir} dirs=`),
       );
     const hears = (line: string, dir: string): boolean =>
-      / dirs=(.*) deaf=\d+$/
-        .exec(line)![1]!
-        .split(",")
-        .includes(realpathSync(dir));
+      / dirs=(.*)$/.exec(line)![1]!.split(",").includes(realpathSync(dir));
 
     test("a write-then-rename of the link's target reloads, every time", async () => {
       const { dir, cleanup } = mkConfigDir();
