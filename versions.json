@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-748",
+      "ref": "refs/pull/748/merge",
+      "sha": "198a1a07cdcef0d60e055ef15ee7c5e15af00379",
+      "timestamp": "2026-11-15T00:06:52.152Z",
+      "commits": [
+        {
+          "sha": "198a1a07cdcef0d60e055ef15ee7c5e15af00379",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:05:55-07:00",
+          "message": "Merge 7a9e396c24956f0965edc34222a43c73c49b794b into 71fcc390ab9296c2d28351a24c8bc5fab3a2d6b3\n"
+        },
+        {
+          "sha": "7a9e396c24956f0965edc34222a43c73c49b794b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:05:31-07:00",
+          "message": "test(protocol): a test pins PROTOCOL_VERSION, so an added request kind cannot bump it (candybar-step-back-8us0.p1p)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-747",
       "ref": "refs/pull/747/merge",
       "sha": "64c26712029a3e1c16b2f9b5e26b0e212a6dbe28",
