@@ -331,6 +331,8 @@ export class FrameFeeds<Req> {
           "error",
           `feed sid=${JSON.stringify(sessionId)} admission threw: ${inspect(thrown)}`,
         );
+        // One that left already heard its own leaving.
+        if (left) return;
         const feed = this.feeds.get(sessionId);
         if (feed !== undefined) this.unsubscribe(feed, sub);
         sub.refused(renderFailed(thrown));
