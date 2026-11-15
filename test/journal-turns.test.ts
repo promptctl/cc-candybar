@@ -334,7 +334,11 @@ describe("close", () => {
 });
 
 describe("the click path", () => {
-  function parts(ctx: VerbContext, linkUrl = "") {
+  function parts(
+    ctx: VerbContext,
+    linkUrl = "",
+    linkAt: () => unknown = () => ({ kind: "link", url: linkUrl }),
+  ) {
     const {
       arrival: _a,
       turnWaited: _t,
@@ -350,9 +354,7 @@ describe("the click path", () => {
       payloadProviders: {},
       frameFeeds: { latest: () => null },
       log: (_level: string, line: string) => events.push(line),
-      tmuxStatusLines: {
-        linkAt: () => ({ kind: "link", url: linkUrl }),
-      },
+      tmuxStatusLines: { linkAt },
       ...clickParts(verbCtx, menuIdle),
     } as unknown as DaemonParts;
     const stats = new RuntimeStats(systemTimekeeper);
@@ -393,6 +395,20 @@ describe("the click path", () => {
     const { send } = parts(ctx, url);
     const { resp } = await send(VERB_TMUX_STATUS_CLICK, "ignored");
     expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+  });
+
+  test("a status-line click that throws is its outcome, and writes its event", async () => {
+    const { ctx } = setup();
+    const { send, events } = parts(ctx, "", () => {
+      throw new Error("the opener failed");
+    });
+    const { resp } = await send(VERB_TMUX_STATUS_CLICK, "ignored");
+    expect(resp).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("the opener failed"),
+    });
+    expect(events).toHaveLength(1);
+    expect(fieldOf(events[0]!, "verb")).toBe(VERB_TMUX_STATUS_CLICK);
   });
 
   test("a click after close is answered as a failed click", async () => {

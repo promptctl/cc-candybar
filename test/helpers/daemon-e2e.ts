@@ -22,8 +22,8 @@ import {
 } from "../../src/daemon/foundations/protocol";
 import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
-import { linkKeyFile, linkSignerFromKeyFile } from "../../src/daemon/link-key";
-import { unprovenLink } from "../../src/click/link-signer";
+import { linkKeyFile, linkKeyFromFile } from "../../src/daemon/link-key";
+import { linkSignerOver, unprovenLink } from "../../src/click/link-signer";
 import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
@@ -258,8 +258,8 @@ export function clickBody(url: string) {
 // test that builds the link a draw makes, or edits one a draw made, rather
 // than clicking one read off a frame as it was drawn.
 export function drawnLink(target: DaemonTarget, link: string): string {
-  return linkSignerFromKeyFile(
-    linkKeyFile(path.dirname(endpointOf(target).log)),
+  return linkSignerOver(
+    linkKeyFromFile(linkKeyFile(path.dirname(endpointOf(target).log))),
   ).signLink(unprovenLink(link));
 }
 

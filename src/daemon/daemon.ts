@@ -53,7 +53,7 @@ import { shellWord } from "../shell-word.js";
 import { typeInPane, type ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
-import type { LinkSigner } from "../click/link-signer.js";
+import { linkSignerOver } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { parseFrame } from "../render/frame.js";
@@ -134,12 +134,9 @@ export interface DaemonAdapters {
     closing: AbortSignal,
     probe: ProcessProbe,
   ) => LaneEdge;
-  // The signer every click is opened with, and which a renderer in this
-  // process draws with.
-  readonly linkSigner: LinkSigner;
-  // The key a renderer in a process of its own is started with, read for
-  // each start.
-  readonly linkKey: () => Asked<string>;
+  // [LAW:one-source-of-truth] The link key, asked for at each use: every
+  // click is opened with it and every renderer draws with it.
+  readonly linkKey: () => Asked<Buffer>;
   // What the memory backstop reads and writes on the machine.
   readonly limits: (own: {
     readonly startedAtMs: number;
@@ -333,6 +330,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // through this one probe, so a probe handed in reaches both. The process entry
   // (server.ts) asks its own before this daemon exists.
   const probe = inputs.probe(launcher);
+  const linkSigner = linkSignerOver(inputs.linkKey);
   // Before every owner that arms a timer: a renderer in process loads here, so
   // storage it cannot read refuses the build with nothing running. One in a
   // process of its own loads there, and refuses its boot with the reason on
@@ -343,7 +341,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         clock,
         now: instant,
         storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
-        linkSigner: inputs.linkSigner,
+        linkSigner,
         stateDir: paths.state,
         locations: locs,
         env: host.env,
@@ -352,13 +350,20 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         bundle: bundle.path,
         memoryLimitBytes,
       }),
-    boot: () => ({
-      digest: bundle.digest,
-      host: { ...host, env: bootEnv(host.env) },
-      bundle: bundle.path,
-      memoryLimitBytes,
-      linkKey: inputs.linkKey(),
-    }),
+    // The key crosses in base64, so the boot crosses as a line.
+    boot: () => {
+      const key = inputs.linkKey();
+      return {
+        digest: bundle.digest,
+        host: { ...host, env: bootEnv(host.env) },
+        bundle: bundle.path,
+        memoryLimitBytes,
+        linkKey:
+          key.kind === "ok"
+            ? { kind: "ok", value: key.value.toString("base64") }
+            : key,
+      };
+    },
     node: bundle.node,
   });
   // Building starts nothing: only the daemon that won the socket arms them, so
@@ -814,7 +819,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     doctorStores,
     stats,
     handlerProbes,
-    linkSigner: inputs.linkSigner,
+    linkSigner,
     renderSightings,
     watcherRegistry,
     refreshLedger,

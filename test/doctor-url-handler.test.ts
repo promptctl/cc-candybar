@@ -27,7 +27,7 @@ import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { parseClick } from "../src/daemon/click-reading";
-import { linkSignerFromKeyFile } from "../src/daemon/link-key";
+import { linkSignerOver } from "../src/click/link-signer";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import { SessionState } from "../src/renderer/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
@@ -411,7 +411,10 @@ describe("the daemon's side of the round trip", () => {
   // [LAW:single-enforcer] A probe is the host's to read: it carries no
   // signature, so it arrives whatever state the link key is in.
   const PROBE = `cc-candybar://${VERB_DOCTOR_PROBE}/${NONCE}`;
-  const KEYLESS = linkSignerFromKeyFile("/dev/null/link.key");
+  const KEYLESS = linkSignerOver(() => ({
+    kind: "failed",
+    reason: "no key can be had",
+  }));
 
   test("a probe link is read with who delivered it, whatever the key", () => {
     expect(parseClick(PROBE, FORWARDED, KEYLESS)).toEqual({

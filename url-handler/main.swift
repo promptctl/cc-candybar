@@ -22,9 +22,10 @@
 // the verdict (VERDICT_WAIT_MS), which the daemon writes as soon as it has
 // read the frame, before the click runs.
 //
-// [LAW:no-silent-failure] The app sees two failures: a frame that could not be
-// written or got no verdict, and a link the daemon refused (one the bar never
-// drew, or one changed since). Each is written to the unified log under the
+// [LAW:no-silent-failure] The app sees three failures: a frame that could not
+// be written, a frame written that got no verdict it could read (the click may
+// still land, so it is told as unconfirmed, never as lost), and a link the
+// daemon refused (one the bar never drew, or one changed since). Each is written to the unified log under the
 // app's subsystem (`log stream --predicate 'subsystem ==
 // "com.cccandybar.url-handler"'`) and told to the user as a macOS user
 // notification carrying what was observed or the daemon's reason, never a
@@ -72,6 +73,8 @@ enum Forward {
   case delivered
   // The daemon refused the link, for the reason it gave.
   case refused(String)
+  // The frame was written, and no verdict on it could be read.
+  case unconfirmed(String)
   case failed(String)
 }
 
@@ -186,20 +189,20 @@ func verdict(_ fd: Int32) -> Forward {
   let header: Data
   switch readExactly(fd, FRAME_HEADER_BYTES, by: deadline) {
   case .success(let d): header = d
-  case .failure(let e): return .failed(e.why)
+  case .failure(let e): return .unconfirmed(e.why)
   }
   let length = header.reduce(0) { ($0 << 8) | Int($1) }
   if length > VERDICT_MAX_BYTES {
-    return .failed("the daemon's verdict is \(length) bytes, past \(VERDICT_MAX_BYTES)")
+    return .unconfirmed("the daemon's verdict is \(length) bytes, past \(VERDICT_MAX_BYTES)")
   }
   let body: Data
   switch readExactly(fd, length, by: deadline) {
   case .success(let d): body = d
-  case .failure(let e): return .failed(e.why)
+  case .failure(let e): return .unconfirmed(e.why)
   }
   guard let said = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
     let ok = said["ok"] as? Bool
-  else { return .failed("the daemon's verdict is not one this app reads") }
+  else { return .unconfirmed("the daemon's verdict is not one this app reads") }
   if ok { return .delivered }
   return .refused(said["error"] as? String ?? "the daemon gave no reason")
 }
@@ -263,6 +266,9 @@ final class Handler: NSObject, NSApplicationDelegate {
       case .refused(let why):
         log.error("refused \(link, privacy: .private): \(why, privacy: .public)")
         notify("Click refused", why, refusedClickNotice)
+      case .unconfirmed(let why):
+        log.error("unconfirmed \(link, privacy: .private): \(why, privacy: .public)")
+        notify("Click unconfirmed", why, lostClickNotice)
       case .failed(let why):
         log.error("lost \(link, privacy: .private): \(why, privacy: .public)")
         notify("Click not delivered", why, lostClickNotice)

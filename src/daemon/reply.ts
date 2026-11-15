@@ -543,7 +543,9 @@ async function clickEvent(
     id: accepted.id,
     gone: () => timedOut() || clientLeft(),
   };
-  const outcome = await run(facts, click);
+  // [LAW:single-enforcer] Whatever a click throws is its outcome, whichever
+  // arm it took, so every click writes its event.
+  const outcome = await run(facts, click).catch(failureOf);
   // Whether the client was told TIMEOUT, and whether a client that waited
   // hung up, while the click ran: its effect lands though the client reported
   // a failure. One still waiting for its turn at either moment was refused
@@ -663,28 +665,14 @@ async function ranClick(
       noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
       return statusLineClick(parts, read.value, facts, click);
     case "link":
-      return clickRan(() =>
-        handleClick(
-          parts,
-          read.verb,
-          read.value,
-          { via: "link", delivery: read.delivery },
-          facts,
-          click,
-        ),
+      return handleClick(
+        parts,
+        read.verb,
+        read.value,
+        { via: "link", delivery: read.delivery },
+        facts,
+        click,
       );
-  }
-}
-
-// What a click that reached its verb became: whatever it throws is its
-// outcome, so every click writes its event.
-async function clickRan(
-  click: () => Promise<RequestOutcome>,
-): Promise<RequestOutcome> {
-  try {
-    return await click();
-  } catch (error) {
-    return failureOf(error);
   }
 }
 
@@ -790,15 +778,13 @@ async function statusLineClick(
     // click's malformed wire encoding is.
     const opened = openClick(link.url, parts.linkSigner);
     if (opened.kind === "refused") return badRequest(opened.problem);
-    return clickRan(() =>
-      handleClick(
-        parts,
-        opened.verb,
-        opened.value,
-        { via: "tmux-status" },
-        facts,
-        click,
-      ),
+    return handleClick(
+      parts,
+      opened.verb,
+      opened.value,
+      { via: "tmux-status" },
+      facts,
+      click,
     );
   }
   await clickHandoff(

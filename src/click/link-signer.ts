@@ -71,8 +71,9 @@ export function transitForm(link: string): string {
 
 // A signed link with its mac taken off, for a reading of what was clicked: a
 // log line, a debug dump. A mac in a log is a link anyone reading it can send.
+// A link of another scheme carries no mac, so its own `#fragment` stays.
 export function unprovenLink(signed: string): string {
-  const mark = signed.lastIndexOf(LINK_MAC_MARK);
+  const mark = isBarLink(signed) ? signed.lastIndexOf(LINK_MAC_MARK) : -1;
   return mark === -1 ? signed : signed.slice(0, mark);
 }
 
@@ -148,6 +149,34 @@ export function linkSigner(key: Buffer): LinkSigner {
     },
     signLink: (link) => signLinkWith(key, link),
     openLink: (signed) => openLinkWith(key, signed),
+  };
+}
+
+// The signer over a key that may not be had yet, asked for at each use.
+// [LAW:no-silent-failure] A key it cannot have refuses the click that needed
+// it, with the reason, and never throws past the click; a draw that signs
+// with it throws the reason.
+export function linkSignerOver(key: () => Asked<Buffer>): LinkSigner {
+  let signer: LinkSigner | undefined;
+  const loaded = (): Asked<LinkSigner> => {
+    const asked = key();
+    return asked.kind === "ok"
+      ? { kind: "ok", value: (signer ??= linkSigner(asked.value)) }
+      : asked;
+  };
+  const held = (): LinkSigner => {
+    const asked = loaded();
+    if (asked.kind === "failed") throw new Error(asked.reason);
+    return asked.value;
+  };
+  return {
+    sign: (fields) => held().sign(fields),
+    verify: (fields, mac) => held().verify(fields, mac),
+    signLink: (link) => held().signLink(link),
+    openLink: (signed) => {
+      const asked = loaded();
+      return asked.kind === "ok" ? asked.value.openLink(signed) : asked;
+    },
   };
 }
 

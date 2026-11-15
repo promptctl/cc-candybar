@@ -77,12 +77,7 @@ describe("a daemon aimed by its paths value", () => {
       storage.session.flush();
       storage.history.save({});
       adapters.doctorStores.clicked.update((seen) => [...seen, "kitty"]);
-      adapters.linkSigner.sign({
-        sessionId: "s1",
-        action: "a",
-        declaration: "[]",
-        evaluated: "{}",
-      });
+      adapters.linkKey();
       const limits = adapters.limits({
         startedAtMs: 0,
         exit: () => {},

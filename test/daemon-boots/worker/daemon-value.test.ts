@@ -3,7 +3,8 @@
 // the socket uses, closed with nothing left running, and built again over the
 // same storage to see a restart.
 
-import { linkKeyFile, linkSignerFromKeyFile } from "../../../src/daemon/link-key";
+import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
+import { linkSignerOver } from "../../../src/click/link-signer";
 import { NO_TMUX_AT_EXIT } from "../../helpers/in-worker-daemon";
 import { hostOf } from "../../helpers/host";
 import type { Host } from "../../../src/host";
@@ -101,9 +102,9 @@ describe("the daemon is a value", () => {
   // A link as this test's daemon draws it: signed with the key in its state
   // directory.
   const drawnHere = (link: string): string =>
-    linkSignerFromKeyFile(linkKeyFile(daemonPaths(hostNow()).state)).signLink(
-      link,
-    );
+    linkSignerOver(
+      linkKeyFromFile(linkKeyFile(daemonPaths(hostNow()).state)),
+    ).signLink(link);
 
   const construct = (
     inputs: {

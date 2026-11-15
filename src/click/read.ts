@@ -20,8 +20,6 @@ import {
 } from "./wire";
 import { unprovenLink } from "./link-signer";
 
-export { isBarLink };
-
 /** One link the bar drew: its visible text and its URL. */
 export interface DrawnLink {
   readonly text: string;

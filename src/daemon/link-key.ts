@@ -6,51 +6,29 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import {
-  LINK_KEY_BYTES,
-  linkSigner,
-  type LinkSigner,
-} from "../click/link-signer.js";
+import { LINK_KEY_BYTES } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
 
 export function linkKeyFile(dir: string): string {
   return path.join(dir, "link.key");
 }
 
-// The signer over the key file, read on first use and kept once a read
-// succeeds: importing the daemon touches no disk for it, and a key that could
-// not be read is read again at the next use, so removing a broken file (its
-// error's own remedy) recovers with no restart.
-// [LAW:no-silent-failure] A key it cannot have refuses the click that needed
-// it, with the reason; it never throws past the click.
-export function linkSignerFromKeyFile(file: string): LinkSigner {
-  let signer: LinkSigner | undefined;
-  const loaded = (): LinkSigner => (signer ??= linkSigner(readOrCreate(file)));
-  return {
-    sign: (fields) => loaded().sign(fields),
-    verify: (fields, mac) => loaded().verify(fields, mac),
-    signLink: (link) => loaded().signLink(link),
-    openLink: (signed) => {
-      let opener: LinkSigner;
-      try {
-        opener = loaded();
-      } catch (e) {
-        return { kind: "failed", reason: (e as Error).message };
-      }
-      return opener.openLink(signed);
-    },
+// [LAW:one-source-of-truth] The key in the file, read on first use and kept
+// once a read succeeds: the host opens every click with what this returns and
+// starts every renderer with it, so the two never hold different keys.
+// Importing the daemon touches no disk for it, and a key that could not be
+// read is read again at the next ask, so removing a broken file (its error's
+// own remedy) recovers with no restart.
+export function linkKeyFromFile(file: string): () => Asked<Buffer> {
+  let key: Buffer | undefined;
+  return () => {
+    try {
+      key ??= readOrCreate(file);
+      return { kind: "ok", value: key };
+    } catch (e) {
+      return { kind: "failed", reason: (e as Error).message };
+    }
   };
-}
-
-// The key a renderer's start hands it, read afresh for each start, in base64
-// so it crosses as a line: a start whose key cannot be read refuses its boot
-// with the reason, and the next start reads again.
-export function readLinkKey(file: string): Asked<string> {
-  try {
-    return { kind: "ok", value: readOrCreate(file).toString("base64") };
-  } catch (e) {
-    return { kind: "failed", reason: (e as Error).message };
-  }
 }
 
 // The key on disk, made first when there is none: a state directory that

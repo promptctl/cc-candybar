@@ -179,10 +179,13 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
             respond(r.resp, r.exitAfterFlush, r.settled);
           else stream(r.sessionId, r.lane);
         })
+        // [LAW:no-silent-failure] Answered with the failure whoever sent the
+        // frame: a request's client, or a URL handler that reads its verdict.
+        // A version 1 writer has closed, and the write is only an error event.
         .catch((err: unknown) => {
           daemon.log("error", `handler threw: ${inspect(err)}`);
-          if (waits) respond(renderFailed(err), null, NOTHING_TO_SETTLE);
-          else landed();
+          respond(renderFailed(err), null, NOTHING_TO_SETTLE);
+          if (!waits) landed();
         });
     },
     (err) => {
