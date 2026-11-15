@@ -4,15 +4,22 @@
     {
       "version": "pr-759",
       "ref": "refs/pull/759/merge",
-      "sha": "efb5c11dea09c07463626a67a0d77ab63f3f9d86",
-      "timestamp": "2026-11-15T21:54:56.595Z",
+      "sha": "9f6e1046773a9dfc8fd0e6a44c0dc25c99371d83",
+      "timestamp": "2026-11-15T22:05:24.103Z",
       "commits": [
         {
-          "sha": "efb5c11dea09c07463626a67a0d77ab63f3f9d86",
+          "sha": "9f6e1046773a9dfc8fd0e6a44c0dc25c99371d83",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T21:54:00Z",
-          "message": "Merge e03f85d9cc765d0d573392bd68f48cc66b9cd717 into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+          "timestamp": "2026-11-15T22:04:32Z",
+          "message": "Merge 4f5ff1644092f80c344e5ea1dcd10c8c0ea14fbf into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+        },
+        {
+          "sha": "4f5ff1644092f80c344e5ea1dcd10c8c0ea14fbf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T15:04:19-07:00",
+          "message": "fix(click): a URL frame's click starts only once its verdict is written (candybar-host-renderer-x96a.35o)\n\n- The connection writes the verdict, then starts the click, so no\n  synchronous work of the click stands between the app and its answer.\n- The verdict is the socket's one answer, so a failure after it is never\n  written over an ended socket.\n- A probe's click event records its nonce.\n- The status-line link opened as a verb cites the refusal it gets from the\n  renderer, and the click request's shape change states why it bumps no\n  protocol version.\n"
         },
         {
           "sha": "e03f85d9cc765d0d573392bd68f48cc66b9cd717",

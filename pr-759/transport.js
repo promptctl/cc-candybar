@@ -54753,7 +54753,7 @@ function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
     kind: "url",
     awaitsVerdict: awaitsVerdict(frame2.urlV),
     verdict: read2.kind === "refused" ? clickReply(badRequest(read2.problem)) : { ok: true, output: "" },
-    landed: clickEvent(
+    land: () => clickEvent(
       parts,
       accepted,
       timedOut,
@@ -54771,7 +54771,7 @@ async function ranClick(parts, read2, facts, click3) {
     case "refused":
       return badRequest(read2.problem);
     case "probe":
-      noteFacts(facts, { verb: VERB_DOCTOR_PROBE });
+      noteFacts(facts, { verb: VERB_DOCTOR_PROBE, nonce: read2.nonce });
       parts.handlerProbes.arrive({
         nonce: read2.nonce,
         delivery: read2.delivery
