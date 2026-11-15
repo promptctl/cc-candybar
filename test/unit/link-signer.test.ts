@@ -61,6 +61,17 @@ describe("a link carrying text a URL parser escapes", () => {
   });
 });
 
+test("a link carrying half a character signs, with the half drawn as U+FFFD", () => {
+  const verified = TEST_SIGNER.verifyLink(
+    TEST_SIGNER.signLink("cc-candybar://copy/cut\uD83D"),
+  );
+  expect(verified.ok).toBe(true);
+  if (verified.ok)
+    expect(decodeURIComponent(verified.link)).toBe(
+      "cc-candybar://copy/cut�",
+    );
+});
+
 describe("a link with no mac", () => {
   test("is refused, saying it carries none", () => {
     expect(TEST_SIGNER.verifyLink(LINK)).toEqual({

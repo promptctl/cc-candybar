@@ -127,6 +127,10 @@ function booted(
     throw new Error(
       `the host was built from source ${boot.digest ?? "of no digest"}; this renderer from ${own ?? "source of no digest"}, which the next daemon runs`,
     );
+  if (boot.linkKey.kind === "failed")
+    throw new Error(
+      `the host has no link key, so no link this renderer draws could be honoured: ${boot.linkKey.reason}`,
+    );
   const { host } = boot;
   const paths = daemonPaths(host);
   const { clock } = world;
@@ -138,7 +142,7 @@ function booted(
       ...adapters.storage(reaches.log),
       doctor: adapters.doctorStores,
     },
-    linkSigner: linkSigner(Buffer.from(boot.linkKey, "base64")),
+    linkSigner: linkSigner(Buffer.from(boot.linkKey.value, "base64")),
     stateDir: paths.state,
     locations: locations(host),
     env: host.env,

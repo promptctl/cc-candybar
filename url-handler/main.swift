@@ -1,9 +1,9 @@
 // The cc-candybar URL handler: a resident macOS background-only app that
 // forwards every `cc-candybar://` link Launch Services hands it to the daemon,
-// as one frame, and tells the user when the daemon refuses it. The daemon
-// parses and verifies the link; this app never reads it. Background-only (the Info.plist install writes) is what
-// keeps a click from taking the terminal's keyboard focus: Launch Services
-// never activates such an app.
+// as one frame, and tells the user when the click fails. The daemon parses and
+// verifies the link; this app never reads it. Background-only (the Info.plist
+// install writes) is what keeps a click from taking the terminal's keyboard
+// focus: Launch Services never activates such an app.
 //
 // [LAW:one-source-of-truth] The app knows three wire facts, mirrored from
 // src/daemon/foundations/protocol.ts and src/daemon/paths.ts and pinned by
@@ -30,8 +30,9 @@
 // app's subsystem
 // (`log stream --predicate 'subsystem == "com.cccandybar.url-handler"'`) and
 // told to the user as a macOS user notification carrying what was observed or
-// the daemon's reason, never a diagnosis. The click is lost by design: the app never starts a
-// daemon, because that would need the paths that age, and a launcher the
+// the daemon's reason, never a diagnosis. The click is lost by design: the app
+// never starts a daemon, because that would need the paths that age, and a
+// launcher the
 // daemon left beside its socket would make this app a second enforcer
 // [LAW:single-enforcer] of that directory's trust check and of the daemon's
 // spawn-storm protections.
@@ -55,9 +56,9 @@ let URL_FRAME_VERSION = 2
 // long is only ever reached by one that is wedged.
 let WRITE_WAIT_MS: Int32 = 1000
 
-// How long the app waits for the daemon's answer. The daemon answers when the
-// click's turn has run, or at its own request deadline, which is well inside
-// this bound; one that has not answered by then is wedged.
+// How long the app waits for the daemon's answer, which comes when the
+// click's turn has run: a click that has not landed by then did not land, or
+// lands later than its user can tell, and is told as lost.
 let ANSWER_WAIT_MS: Int32 = 1000
 
 // Mirrored: src/daemon/paths.ts defaultSocketPath.
@@ -187,9 +188,10 @@ func answer(_ fd: Int32) -> Forward {
 
 // Tells the user a click was lost or refused, in a form that needs no bar. The
 // body is the observed failure as the forward reported it, or the daemon's
-// reason; the user reads it as the fact it is. Authorization is asked for on every lost click: the request
-// completes without a prompt once the user has answered, so the app keeps no
-// state about it, and a user who never loses a click never sees the prompt.
+// reason; the user reads it as the fact it is. Authorization is asked for on
+// every lost click: the request completes without a prompt once the user has
+// answered, so the app keeps no state about it, and a user who never loses a
+// click never sees the prompt.
 // The banner shows only because this app is never frontmost: macOS hides a
 // frontmost app's notifications unless its delegate asks for them, and a
 // background-only app is never activated, so no delegate is needed. An app

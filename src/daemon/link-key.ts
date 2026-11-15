@@ -11,6 +11,7 @@ import {
   linkSigner,
   type LinkSigner,
 } from "../click/link-signer.js";
+import type { Asked } from "../utils/outcome.js";
 
 export function linkKeyFile(dir: string): string {
   return path.join(dir, "link.key");
@@ -27,6 +28,18 @@ export function linkSignerFromKeyFile(file: string): LinkSigner {
     signLink: (link) => loaded().signLink(link),
     verifyLink: (signed) => loaded().verifyLink(signed),
   };
+}
+
+// [LAW:no-silent-failure] The key as the host boots with it, or why it could
+// not be had: a host whose key file is broken still boots, refuses every
+// click with the reason, and its renderer refuses its boot with it on the
+// bar's ⚠, so the remedy is seen where the bar is.
+export function askLinkKey(file: string): Asked<Buffer> {
+  try {
+    return { kind: "ok", value: linkKey(file) };
+  } catch (e) {
+    return { kind: "failed", reason: (e as Error).message };
+  }
 }
 
 // The key on disk, made first when there is none: a state directory that

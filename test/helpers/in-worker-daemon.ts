@@ -38,7 +38,7 @@ import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
 import { memoryConnection } from "./memory-connection";
 import { seedTestLinkKey } from "./link-signer";
-import { linkKey, linkKeyFile } from "../../src/daemon/link-key";
+import { askLinkKey, linkKeyFile } from "../../src/daemon/link-key";
 
 export type DaemonOverrides = Partial<
   Omit<DaemonInputs, "storage" | "paths">
@@ -89,7 +89,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   try {
     const daemon = createDaemon({
       ...productionAdapters(paths, daemonLog, systemTimekeeper),
-      linkKey: linkKey(linkKeyFile(paths.state)),
+      linkKey: askLinkKey(linkKeyFile(paths.state)),
       bundle: bundleAt(path.join(paths.state, "checkout")),
       host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),

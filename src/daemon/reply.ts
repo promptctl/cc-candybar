@@ -33,6 +33,7 @@ import {
   VERB_TMUX_STATUS_CLICK,
 } from "../click/wire";
 import { badRequest, failureOf } from "./foundations/verb-error";
+import { unprovenLink } from "../click/link-signer";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/gather";
@@ -757,7 +758,9 @@ async function statusLineClick(
   const { tmuxStatusLines } = parts;
   const link = tmuxStatusLines.linkAt(value);
   if (link.kind === "refused") return badRequest(link.reason);
-  noteFacts(facts, { link: link.url });
+  // Logged without its mac: a log is pasted and shared, and a signed link in
+  // it is one any page could replay.
+  noteFacts(facts, { link: unprovenLink(link.url) });
   if (isBarLink(link.url)) {
     const parsed = parseClick(link.url, parts.links);
     switch (parsed.kind) {

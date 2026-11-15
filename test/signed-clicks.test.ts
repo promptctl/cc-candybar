@@ -17,6 +17,7 @@ import {
 } from "../src/daemon/foundations/protocol";
 import { effectsUrl, STATUS_CLICK_URL, VERB_COPY } from "../src/click/wire";
 import { badRequest } from "../src/daemon/foundations/verb-error";
+import { keylessSigner, type LinkSigner } from "../src/click/link-signer";
 import { TEST_SIGNER } from "./helpers/link-signer";
 
 const DRAWN = TEST_SIGNER.signLink(
@@ -26,7 +27,10 @@ const lastFlipped = (link: string): string =>
   `${link.slice(0, -1)}${link.endsWith("A") ? "B" : "A"}`;
 
 // The renderer's answer to every click it is handed: by default, it took it.
-function host(answer: unknown = { kind: "answered", record: [] }) {
+function host(
+  answer: unknown = { kind: "answered", record: [] },
+  links: LinkSigner = TEST_SIGNER,
+) {
   const handed: unknown[] = [];
   const parts = {
     clock: systemTimekeeper,
@@ -36,7 +40,7 @@ function host(answer: unknown = { kind: "answered", record: [] }) {
     payloadProviders: {},
     collector: { holding: () => () => {}, clicked: () => {} },
     clicks: new ClicksInFlight(),
-    links: TEST_SIGNER,
+    links,
     renderer: {
       answer: async (input: unknown) => {
         handed.push(input);
@@ -117,6 +121,17 @@ describe.each([
   });
 });
 
+// A host whose key file is broken still boots, and says why on every click.
+test("a host with no link key refuses each click, saying why", async () => {
+  const rig = host(undefined, keylessSigner("link key /s/link.key holds 3 bytes"));
+  expect(await rig.viaForwarder(DRAWN)).toMatchObject({
+    ok: false,
+    code: "BAD_REQUEST",
+    error: expect.stringMatching(/link key \/s\/link.key holds 3 bytes/),
+  });
+  expect(rig.handed).toEqual([]);
+});
+
 // A range is tmux's to send: it expands one from its binding at the click, so
 // one carries no mac, and one through the URL handler came from a page.
 test("a status-line range delivered by the URL handler reaches no renderer, and is refused", async () => {
@@ -141,12 +156,12 @@ describe("the URL handler's frame", () => {
         urlV: URL_FRAME_VERSION,
         url: DRAWN,
       }),
-    ).toMatchObject({ kind: "url", waits: true });
+    ).toMatchObject({ kind: "url", answered: "outcome" });
   });
 
   test("of the version before is one its writer hangs up on", () => {
     expect(
       classifyInbound({ kind: URL_FRAME_KIND, urlV: 1, url: DRAWN }),
-    ).toMatchObject({ kind: "url", waits: false });
+    ).toMatchObject({ kind: "url", answered: "never" });
   });
 });

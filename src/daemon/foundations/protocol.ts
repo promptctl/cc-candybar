@@ -402,16 +402,26 @@ export interface UrlFrame {
 // click. A url frame's fields stay untrusted JSON here (not a Partial that
 // claims their types): the click path reads them, and refuses what it cannot
 // read with the click event that says so.
-// `waits` is whether its writer reads the answer: every request's does, and
-// a url frame's from version 2 (one whose version is unreadable is answered,
-// so a writer that waits hears the refusal).
+// [LAW:types-are-the-program] When its writer is answered: a request at its
+// outcome or the deadline, whichever comes first, since a statusline client
+// must hear soon; a url frame from version 2 at its click's outcome alone,
+// since the app bounds its own wait and a TIMEOUT would tell it a click that
+// lands failed; a version-1 url frame never, since its writer hung up. One
+// whose version is unreadable is answered, so a writer that waits hears the
+// refusal.
+export type Answered = "outcome-or-deadline" | "outcome" | "never";
+
 export type Inbound =
   | {
       readonly kind: "url";
       readonly frame: Record<string, unknown>;
-      readonly waits: boolean;
+      readonly answered: Exclude<Answered, "outcome-or-deadline">;
     }
-  | { readonly kind: "request"; readonly req: Request; readonly waits: true };
+  | {
+      readonly kind: "request";
+      readonly req: Request;
+      readonly answered: "outcome-or-deadline";
+    };
 
 export function classifyInbound(raw: unknown): Inbound {
   if (
@@ -419,12 +429,18 @@ export function classifyInbound(raw: unknown): Inbound {
     raw === null ||
     (raw as { kind?: unknown }).kind !== URL_FRAME_KIND
   )
-    return { kind: "request", req: raw as Request, waits: true };
+    return {
+      kind: "request",
+      req: raw as Request,
+      answered: "outcome-or-deadline",
+    };
   const frame = raw as Record<string, unknown>;
   return {
     kind: "url",
     frame,
-    waits: !UNANSWERED_URL_FRAME_VERSIONS.has(frame.urlV),
+    answered: UNANSWERED_URL_FRAME_VERSIONS.has(frame.urlV)
+      ? "never"
+      : "outcome",
   };
 }
 

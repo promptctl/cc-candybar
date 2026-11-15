@@ -17,6 +17,8 @@ import type { Subscriber } from "../src/daemon/frame-feed";
 import {
   FRAME_HEADER_BYTES,
   PROTOCOL_VERSION,
+  URL_FRAME_KIND,
+  URL_FRAME_VERSION,
   encodeFrame,
   sendOne,
   type Request,
@@ -182,6 +184,30 @@ describe("a connection over a stream", () => {
     await settled();
     expect(received).toHaveLength(1);
     expect(settle.mock.calls).toEqual([[false]]);
+  });
+
+  // The app bounds its own wait, and a TIMEOUT would tell it that a click
+  // still running, which lands, failed.
+  test("a URL handler click that outlives the backstop is answered its outcome, never TIMEOUT", async () => {
+    const request = held();
+    const daemon = standIn({ handle: request.handle });
+    const { send, received, ended } = open(daemon);
+    send({
+      kind: URL_FRAME_KIND,
+      urlV: URL_FRAME_VERSION,
+      url: "cc-candybar://copy/x",
+    } as unknown as Request);
+    await settled();
+
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    await settled();
+    expect(received).toEqual([]);
+    expect(request.timedOut()).toBe(true);
+
+    request.answer(replyWith());
+    await settled();
+    expect(received).toEqual([ANSWER]);
+    expect(ended()).toBe(true);
   });
 
   test("each TIMEOUT names the request its handler was handed, however many are in flight", async () => {

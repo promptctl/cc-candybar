@@ -47,6 +47,7 @@ import { writeAtomic } from "../../../src/utils/atomic-write";
 import { valueOf } from "../../../src/utils/logfmt";
 import { until } from "../../helpers/until";
 import { TEST_SIGNER } from "../../helpers/link-signer";
+import { unprovenLink } from "../../../src/click/link-signer";
 
 jest.setTimeout(30_000);
 
@@ -204,7 +205,8 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     await until(() => ran().length > 0, "the status-line click's event");
     const [event, ...more] = ran();
     expect(more).toEqual([]);
-    expect(event).toContain(` link=${JSON.stringify(link)} `);
+    // Logged without its mac, which a shared log must not carry.
+    expect(event).toContain(` link=${JSON.stringify(unprovenLink(link))} `);
     expect(event).toContain(` linkVerb=dispatch sid=${sid} `);
     expect(event).toContain(" outcome=ok");
   });

@@ -50,7 +50,7 @@ import { processPort } from "./renderer-process.js";
 import { mb } from "./foundations/memory-limit";
 import { armParentWatchdog, anchorFromEnv } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
-import { linkKey, linkKeyFile } from "./link-key.js";
+import { askLinkKey, linkKeyFile } from "./link-key.js";
 
 // Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
 // single-instance enforcer (two daemons cannot both bind the same path; the
@@ -210,7 +210,7 @@ async function boot(): Promise<void> {
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
     ...productionAdapters(paths, daemonLog, world.clock),
-    linkKey: linkKey(linkKeyFile(paths.state)),
+    linkKey: askLinkKey(linkKeyFile(paths.state)),
     // [LAW:one-type-per-behavior] The renderer runs in a process of its own,
     // launched through the process's launcher: the daemon's close aborts its
     // own launches before the renderer's last steps of it.

@@ -53,7 +53,8 @@ import { shellWord } from "../shell-word.js";
 import { typeInPane, type ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
-import { linkSigner } from "../click/link-signer.js";
+import { keylessSigner, linkSigner } from "../click/link-signer.js";
+import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { parseFrame } from "../render/frame.js";
 import { rendererHost } from "./renderer-host.js";
@@ -135,7 +136,9 @@ export interface DaemonAdapters {
   ) => LaneEdge;
   // The link key (src/daemon/link-key.ts): the host verifies every click
   // with it, and hands it to its renderer, which signs every link it draws.
-  readonly linkKey: Buffer;
+  // Or why it could not be had, which every click and the renderer's boot
+  // then say.
+  readonly linkKey: Asked<Buffer>;
   // What the memory backstop reads and writes on the machine.
   readonly limits: (own: {
     readonly startedAtMs: number;
@@ -329,13 +332,17 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // through this one probe, so a probe handed in reaches both. The process entry
   // (server.ts) asks its own before this daemon exists.
   const probe = inputs.probe(launcher);
+  // [LAW:single-enforcer] The host's one signer: it verifies every click, and
+  // a renderer in process draws with it.
+  const { linkKey } = inputs;
+  const links =
+    linkKey.kind === "ok"
+      ? linkSigner(linkKey.value)
+      : keylessSigner(linkKey.reason);
   // Before every owner that arms a timer: a renderer in process loads here, so
   // storage it cannot read refuses the build with nothing running. One in a
   // process of its own loads there, and refuses its boot with the reason on
   // the bar's ⚠.
-  // [LAW:single-enforcer] The host's one signer: it verifies every click, and
-  // a renderer in process draws with it.
-  const links = linkSigner(inputs.linkKey);
   const preparedRenderer = inputs.renderer({
     load: () =>
       loadMainRenderer({
@@ -356,7 +363,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       host: { ...host, env: bootEnv(host.env) },
       bundle: bundle.path,
       memoryLimitBytes,
-      linkKey: inputs.linkKey.toString("base64"),
+      linkKey:
+        linkKey.kind === "ok"
+          ? { kind: "ok", value: linkKey.value.toString("base64") }
+          : linkKey,
     },
     node: bundle.node,
   });

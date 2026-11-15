@@ -11,6 +11,7 @@ import type { Failure } from "../daemon/foundations/verb-error.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
 import type { Host } from "../host-facts.js";
+import type { Asked } from "../utils/outcome.js";
 import type { AdapterToHost } from "./adapter.js";
 import type { Crosses } from "./crosses.js";
 import {
@@ -42,8 +43,9 @@ export interface RendererBoot {
   readonly bundle: string;
   readonly memoryLimitBytes: number;
   // The host's link key in base64: the renderer signs every link it draws
-  // with it, and opens no key file.
-  readonly linkKey: string;
+  // with it, and opens no key file. Or why the host could not have it, which
+  // the renderer refuses its boot with.
+  readonly linkKey: Asked<string>;
 }
 
 // The host's environment as a boot carries it: its set variables.

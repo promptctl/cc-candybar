@@ -15,6 +15,7 @@ import { LANE_FRAMES } from "./lane-frames";
 import {
   PROTOCOL_VERSION,
   classifyInbound,
+  type Answered,
   encodeFrame,
   encodeJsonFrame,
   makeFrameReader,
@@ -119,13 +120,14 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // more than one scan per key to orphan. Cancellation would be both messier
   // and wasteful here (the in-flight scan is exactly what the next tick needs).
   let timedOut = false;
-  // Whether a client waits for the answer, decided when its frame is read
-  // (below); declared here because the backstop reads it.
-  let waits = true;
+  // When the client is answered, decided when its frame is read (below);
+  // declared here because the backstop reads it.
+  let answered: Answered = "outcome-or-deadline";
+  const waits = (): boolean => answered !== "never";
   const clearBackstop = daemon.clock.after(REQUEST_TIMEOUT_MS, () => {
     timedOut = true;
     daemon.stats.requestsTimedOut++;
-    if (!waits) return;
+    if (answered !== "outcome-or-deadline") return;
     respond(
       {
         ok: false,
@@ -139,30 +141,30 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     );
   });
 
-  // [LAW:dataflow-not-control-flow] Whether a client waits for the answer is a
-  // fact of what it sent (classifyInbound). A version-1 URL handler app writes
-  // its frame and hangs up by design, so for its frame the socket's close is
-  // not a peer leaving: the
-  // frame stays in flight, under the same deadline every request has, until
-  // its click is handled (a click past the deadline is refused, so a repeat
-  // click cannot revert it, src/renderer/journal-turns.ts), and no one is said
-  // to have left. Every other client holds the socket until answered.
+  // [LAW:dataflow-not-control-flow] When a client is answered is a fact of
+  // what it sent (classifyInbound). A version-1 URL handler app writes its
+  // frame and hangs up by design, so for its frame the socket's close is not a
+  // peer leaving: the frame stays in flight, under the same deadline every
+  // request has, until its click is handled (a click past the deadline is
+  // refused, so a repeat click cannot revert it, src/renderer/journal-turns.ts),
+  // and no one is said to have left. Every other client holds the socket until
+  // answered.
   const reader = makeFrameReader(
     (frame) => {
       const inbound = classifyInbound(frame);
-      waits = inbound.waits;
+      answered = inbound.answered;
       void daemon
         .handle(
           inbound,
           () => timedOut,
           accepted,
-          () => waits && sock.destroyed,
+          () => waits() && sock.destroyed,
         )
         .then((r) => {
           // A version-1 url frame's answer goes to no one: its writer closed,
           // and a write to that socket is only an error event. The click's
           // event (src/daemon/reply.ts) is where its outcome is seen.
-          if (!waits) {
+          if (!waits()) {
             if (r.kind === "reply") r.settled(false);
             return;
           }
@@ -171,10 +173,10 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         })
         .catch((err: unknown) => {
           daemon.log("error", `handler threw: ${inspect(err)}`);
-          if (waits) respond(renderFailed(err), null, NOTHING_TO_SETTLE);
+          if (waits()) respond(renderFailed(err), null, NOTHING_TO_SETTLE);
         })
         .finally(() => {
-          if (waits) return;
+          if (waits()) return;
           clearBackstop();
           leaveInFlight();
         });
@@ -234,7 +236,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     daemon.log("warn", `socket error: ${err.message}`);
   });
   sock.on("close", () => {
-    if (!waits) return;
+    if (!waits()) return;
     clearBackstop();
     leaveInFlight();
   });

@@ -75,8 +75,9 @@ const HOST = WORLD.host;
 const paths = daemonPaths(HOST);
 const pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
-  // Its links are clicked on the page alone, so its key is the page's own.
-  linkKey: randomBytes(LINK_KEY_BYTES),
+  // Its links are clicked on the page alone, so its key is the page's own. The
+  // page's crypto hands back bytes that are no Buffer, so they are made one.
+  linkKey: { kind: "ok", value: Buffer.from(randomBytes(LINK_KEY_BYTES)) },
   gates: daemonGates(),
   paths,
   host: HOST,

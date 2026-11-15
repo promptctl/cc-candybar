@@ -659,8 +659,8 @@ export async function prepareConfig(
     sourceRuns.close();
   };
   try {
-    // [LAW:single-enforcer] check draws `run` links as the daemon does,
-    // signed with the one key.
+    // [LAW:single-enforcer] check draws every link as the daemon does,
+    // signed with the key in this shell's state directory.
     const compiled = registerDslConfig(config, registry, {
       cwd,
       signer: linkSignerFromKeyFile(linkKeyFile(stateDir(world.host))),

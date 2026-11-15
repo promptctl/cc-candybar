@@ -90,9 +90,12 @@ const linkMac = (key: Buffer, link: string): Buffer =>
 // later, escapes any other (a second `#`, a space, non-ASCII text) before the
 // handler reads the link, and the mac covers the bytes, so the signer escapes
 // them first. A verb decodes its arguments, so the escaped link means the same.
+// A lone surrogate (text a template cut mid-character) has no UTF-8 to escape,
+// so it is written as U+FFFD, as a terminal would draw it: nothing a config
+// writes into a link makes its draw throw.
 const OUTSIDE_TRANSIT = /[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu;
 const transitForm = (link: string): string =>
-  link.replace(OUTSIDE_TRANSIT, (c) => encodeURIComponent(c));
+  link.toWellFormed().replace(OUTSIDE_TRANSIT, (c) => encodeURIComponent(c));
 
 // A drawn link with its mac removed, unproven: what a reader of a frame (the
 // harness, the page, the bench) reads a link's effects off. Only the host's
@@ -102,6 +105,21 @@ export function unprovenLink(signed: string): string {
   return mark !== -1 && LINK_MAC_SPELLING.test(signed.slice(mark + 1))
     ? signed.slice(0, mark)
     : signed;
+}
+
+// [LAW:no-silent-failure] The signer of a host whose key could not be had: it
+// signs nothing, and refuses every link with why.
+export function keylessSigner(reason: string): LinkSigner {
+  const problem = `no link is honoured, since the link key could not be had: ${reason}`;
+  const refuse = (): never => {
+    throw new Error(problem);
+  };
+  return {
+    sign: refuse,
+    verify: () => false,
+    signLink: refuse,
+    verifyLink: () => ({ ok: false, problem }),
+  };
 }
 
 export function linkSigner(key: Buffer): LinkSigner {
