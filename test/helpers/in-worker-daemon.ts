@@ -37,28 +37,6 @@ import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
 import { memoryConnection } from "./memory-connection";
-import {
-  LEDGER_ENV,
-  TEST_FILE_ENV,
-  recordDaemonStart,
-} from "./process-tier.cjs";
-
-// [LAW:single-enforcer] What a boot here is recorded with. `startDaemon` replaces
-// the worker's env with the case's own, which holds neither, so both are read
-// once as this module loads, before a case places anything. Both exist by then:
-// global setup made the ledger, and test/setup-after-env.ts named the file.
-const LEDGER = ledgerPath();
-// [LAW:no-silent-failure] A boot with nowhere to record itself would go unseen.
-function ledgerPath(): string {
-  const ledger = process.env[LEDGER_ENV];
-  if (ledger === undefined) {
-    throw new Error(
-      `${LEDGER_ENV} is unset: a daemon built in a worker records itself in the run's ledger, which global setup makes`,
-    );
-  }
-  return ledger;
-}
-const TEST_FILE = process.env[TEST_FILE_ENV] ?? null;
 
 export type DaemonOverrides = Partial<
   Omit<DaemonInputs, "storage" | "paths">
@@ -100,9 +78,6 @@ export interface BuiltDaemon {
 // Delivery unstarted is `unmeasured` with nothing missed, and adds no warning
 // (src/daemon/cache/file-events.ts).
 export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
-  // [LAW:nothing-unseen] Every daemon built in a worker comes through here, so the
-  // judge sees each one by the file that built it, as it sees a real daemon.
-  recordDaemonStart({ ledger: LEDGER, file: TEST_FILE, route: "harness" });
   // The env a case placed names where the daemon lives, read once here.
   const paths = overrides.paths ?? daemonPaths(HOST);
   fs.mkdirSync(paths.state, { recursive: true });

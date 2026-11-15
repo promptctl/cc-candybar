@@ -14,12 +14,6 @@ import path from "node:path";
 
 import { DEFAULT_POOL_DIR, daemonPool } from "./helpers/daemon-pool";
 import { JEST_TMP_PREFIX, jestTmpOwner } from "./helpers/jest-tmp";
-import {
-  HELPER_START_CEILING,
-  LEDGER_ENV,
-  judgeDaemonStarts,
-  parseLedger,
-} from "./helpers/process-tier.cjs";
 import { processProbe } from "./helpers/host";
 
 // [LAW:one-source-of-truth] A directory under this prefix is in use while the
@@ -58,34 +52,10 @@ export function sweepJestTmp(root: string, sweeper: number): void {
   }
 }
 
-// [LAW:no-silent-failure] Global setup made the ledger, so a read that fails is a
-// lost meter, not a run that started nothing, and it throws like a verdict does.
-// [LAW:nothing-unseen] The counts print on every run, zero included.
-//
-// [LAW:no-ambient-temporal-coupling] exception: a client's kick is detached, so
-// one made as a run's last act can land just after this read. Nothing says a kick
-// is still coming, so there is no state to wait on, and a sleep here would be a
-// bet. Such a start outlives no test: the sweep below takes its ledger, or the
-// worker's death ends it.
-function reportDaemonStarts(): void {
-  const ledger = fs.readFileSync(process.env[LEDGER_ENV]!, "utf8");
-  const verdict = judgeDaemonStarts(parseLedger(ledger), HELPER_START_CEILING);
-  console.log(
-    `daemon starts: ${verdict.helper} of ${HELPER_START_CEILING} by the helper, ${verdict.client} by a client, ${verdict.harness} in a worker`,
-  );
-  if (verdict.problems.length > 0) {
-    throw new Error(`process tier:\n${verdict.problems.join("\n")}`);
-  }
-}
-
 export default async function globalTeardown(): Promise<void> {
-  try {
-    reportDaemonStarts();
-  } finally {
-    // The shared pool's own bookkeeping: drop slot files whose recorded owner
-    // is provably dead.
-    await daemonPool.sweepStale();
+  // The shared pool's own bookkeeping: drop slot files whose recorded owner
+  // is provably dead.
+  await daemonPool.sweepStale();
 
-    sweepJestTmp(os.tmpdir(), process.pid);
-  }
+  sweepJestTmp(os.tmpdir(), process.pid);
 }

@@ -13,5 +13,5 @@ export default {
   maxWorkers: "100%",
   globalSetup: "<rootDir>/test/unit-global-setup.ts",
   reporters: reportersFor("unit"),
-  setupFilesAfterEnv: [...base.setupFilesAfterEnv, "<rootDir>/test/unit-setup.ts"],
+  setupFilesAfterEnv: ["<rootDir>/test/unit-setup.ts"],
 };

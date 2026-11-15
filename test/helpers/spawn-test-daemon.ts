@@ -1,14 +1,12 @@
-// [LAW:single-enforcer] The ONE place in the test suite that spawns a real
-// `cc-candybar daemon` subprocess. Every call gates on `daemonPool` first, so
-// no test file can push the live-daemon count past the shared machine-global
-// ceiling — see daemon-pool.ts for why that ceiling has to be machine-global,
-// not per-worker or per-worktree.
+// [LAW:single-enforcer] The test suite's spawner of a real `cc-candybar daemon`
+// subprocess. Every call gates on `daemonPool` first, so a daemon started here
+// counts against the shared machine-global ceiling — see daemon-pool.ts for why
+// that ceiling has to be machine-global, not per-worker or per-worktree.
 
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 
 import { daemonPool, type DaemonPool } from "./daemon-pool";
-import { ROUTE_ENV } from "./process-tier.cjs";
 
 const REPO_ROOT = process.cwd();
 
@@ -70,7 +68,7 @@ export async function spawnTestDaemon(
   try {
     child = spawn(entry.bin, [...entry.args, "daemon"], {
       cwd: REPO_ROOT,
-      env: { ...env, [ROUTE_ENV]: "helper" },
+      env,
       stdio: ["ignore", "pipe", "pipe"],
       // New session + process group (pgid = child.pid), inherited by the
       // worker `tsx` forks — the ONLY thing that makes a group-wide signal

@@ -12,8 +12,7 @@ type JestTmpKind =
   | "managed"
   | "data"
   | "config"
-  | "state"
-  | "ledger";
+  | "state";
 
 // [LAW:one-source-of-truth] A jest worker's own directory, unique per test file
 // and named for the worker that made it: the name is how another run's global
