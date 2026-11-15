@@ -4,15 +4,22 @@
     {
       "version": "pr-755",
       "ref": "refs/pull/755/merge",
-      "sha": "94963abf52bfa011e21773f325c4ba8bef5fe135",
-      "timestamp": "2026-11-15T15:22:23.679Z",
+      "sha": "aedab2e1aa6eab8ce5259ff3fc4081baabdf6732",
+      "timestamp": "2026-11-15T15:37:05.221Z",
       "commits": [
         {
-          "sha": "94963abf52bfa011e21773f325c4ba8bef5fe135",
+          "sha": "aedab2e1aa6eab8ce5259ff3fc4081baabdf6732",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T08:21:19-07:00",
-          "message": "Merge c0caff0e59b7313283503492f9842e8a0965f840 into 3aee42acb63d4aec4de6dd98eb4c2d6d28857df7\n"
+          "timestamp": "2026-11-15T15:35:59Z",
+          "message": "Merge fa4c524c48e134388137247cb244a1881e198481 into 3aee42acb63d4aec4de6dd98eb4c2d6d28857df7\n"
+        },
+        {
+          "sha": "fa4c524c48e134388137247cb244a1881e198481",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T08:35:42-07:00",
+          "message": "refactor(renderer): a folder's watch is the one record of its generation, and a file at its path is a fault (candybar-host-renderer-x96a.2r6)\n\nHigh review of #755. The Folder record repeated what the folder's current\nwatch holds (the identity it opened on, whether its generation ended), so it\ngoes: the next generation follows the watch it replaces, the second stat on\nopen goes with it, and nothing outlives a folder's last hold. The storage\nfolder is looked at before it is made, so a file at its path, or a read-only\nvolume refusing an existing folder, is judged truly. A served state enters the\nmap before its folders are held, so a throw cannot strand it; the host alone\nkeys each folder once.\n"
         },
         {
           "sha": "c0caff0e59b7313283503492f9842e8a0965f840",

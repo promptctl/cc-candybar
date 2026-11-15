@@ -8879,11 +8879,11 @@ var require_glob = __commonJS({
           for (const index of pattern2.indexes) {
             if (cache2.seen(entryPath, pattern2, index) || cache2.seen(entryPath, pattern2, index + 1))
               return;
-            const current = pattern2.at(index);
+            const current2 = pattern2.at(index);
             const nextIndex = index + 1;
             const next = pattern2.at(nextIndex);
             const fromSymlink = !this.followSymlinks && pattern2.symlinks.has(index);
-            if (current === GLOBSTAR) {
+            if (current2 === GLOBSTAR) {
               const isDot = name.charCodeAt(0) === 46;
               const nextMatches = pattern2.test(nextIndex, name);
               let nextNonGlobIndex = nextIndex;
@@ -8926,10 +8926,10 @@ var require_glob = __commonJS({
                 }
               }
             }
-            if (typeof current === "string") {
+            if (typeof current2 === "string") {
               if (pattern2.test(index, name) && index !== last2)
                 subPatterns.add(nextIndex);
-              else if (current === "." && pattern2.test(nextIndex, name)) {
+              else if (current2 === "." && pattern2.test(nextIndex, name)) {
                 if (nextIndex === last2) {
                   if (this.accept(entryPath))
                     yield this.result(entryPath);
@@ -8937,7 +8937,7 @@ var require_glob = __commonJS({
                   subPatterns.add(nextIndex + 1);
               }
             }
-            if (typeof current === "object" && pattern2.test(index, name)) {
+            if (typeof current2 === "object" && pattern2.test(index, name)) {
               if (index === last2) {
                 if (this.accept(entryPath))
                   yield this.result(entryPath);
@@ -22249,10 +22249,10 @@ var require_dist = __commonJS({
             parseState = "beforePropertyName";
           }
         } else {
-          var current = stack[stack.length - 1];
-          if (current == null) {
+          var current2 = stack[stack.length - 1];
+          if (current2 == null) {
             parseState = "end";
-          } else if (Array.isArray(current)) {
+          } else if (Array.isArray(current2)) {
             parseState = "afterArrayValue";
           } else {
             parseState = "afterPropertyValue";
@@ -22261,10 +22261,10 @@ var require_dist = __commonJS({
       }
       function pop() {
         stack.pop();
-        var current = stack[stack.length - 1];
-        if (current == null) {
+        var current2 = stack[stack.length - 1];
+        if (current2 == null) {
           parseState = "end";
-        } else if (Array.isArray(current)) {
+        } else if (Array.isArray(current2)) {
           parseState = "afterArrayValue";
         } else {
           parseState = "afterPropertyValue";
@@ -37998,12 +37998,12 @@ function editDistance(a, b) {
   let before = [];
   let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i = 1; i <= a.length; i++) {
-    const current = [i];
+    const current2 = [i];
     for (let j = 1; j <= b.length; j++) {
       const swap = i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1];
-      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + Number(a[i - 1] !== b[j - 1]), swap ? before[j - 2] + 1 : Infinity);
+      current2[j] = Math.min(previous[j] + 1, current2[j - 1] + 1, previous[j - 1] + Number(a[i - 1] !== b[j - 1]), swap ? before[j - 2] + 1 : Infinity);
     }
-    [before, previous] = [previous, current];
+    [before, previous] = [previous, current2];
   }
   return previous[b.length];
 }
@@ -41740,8 +41740,8 @@ function shimmer(curve, width, glow, z) {
       for (const { strength, centre } of passes)
         lit = Math.max(lit, strength * bump((cell3.col - left - centre) / width));
       const row2 = cell3.row + z;
-      const current = 0.8 * noise(cell3.col * 0.05, row2 * 0.3 + 1.3, t2 * 0.02);
-      const caustic = (ripple(cell3.col * 0.21 + current, row2 * 0.9, t2 * 0.022) * ripple(cell3.col * 0.33 + 9.1 - current, row2 * 0.7, t2 * 0.018 + 4.2)) ** 2;
+      const current2 = 0.8 * noise(cell3.col * 0.05, row2 * 0.3 + 1.3, t2 * 0.02);
+      const caustic = (ripple(cell3.col * 0.21 + current2, row2 * 0.9, t2 * 0.022) * ripple(cell3.col * 0.33 + 9.1 - current2, row2 * 0.7, t2 * 0.018 + 4.2)) ** 2;
       return curve.swing * curve.ease(lit * (0.1 + 0.6 * caustic));
     };
   };
@@ -52707,8 +52707,8 @@ var SessionEffects = class {
     const effectOf = (rowKey, part) => {
       const row3 = made.get(rowKey) ?? /* @__PURE__ */ new Map();
       made.set(rowKey, row3);
-      const current = row3.get(part.scope);
-      if (current !== void 0) return current.effect;
+      const current2 = row3.get(part.scope);
+      if (current2 !== void 0) return current2.effect;
       const last3 = known.get(rowKey)?.get(part.scope);
       const reuse = last3?.name === part.name;
       const z = noiseOffset(
@@ -53248,7 +53248,7 @@ function applyFix(stores, fix, facts) {
     }
     case "post-mortems-read": {
       const read2 = stores.postMortemsRead.update(
-        (current) => current.through === null || laterIdentity(fix.through, current.through) ? { through: fix.through } : current
+        (current2) => current2.through === null || laterIdentity(fix.through, current2.through) ? { through: fix.through } : current2
       );
       return read2.kind === "failed" ? read2 : {
         kind: "ok",
@@ -58101,12 +58101,12 @@ function makeUpdateWatch(opts) {
   const every = (run3, ms) => {
     armed.push(clock.every(ms, run3, { unref: true }));
   };
-  const current = () => {
+  const current2 = () => {
     const held = fact.get();
     return held.kind === "ok" ? held.value : null;
   };
   function syncGate() {
-    const update = current();
+    const update = current2();
     const identity2 = update === null ? null : updateIdentity(update);
     if ((gate2 === null ? null : gate2.identity) === identity2) return;
     gate2?.dispose();
@@ -58221,7 +58221,7 @@ function makeUpdateWatch(opts) {
       const read2 = await touchActs(() => acts.read());
       if (closed) throw new DaemonClosing("apply-update");
       if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
-      const update = current();
+      const update = current2();
       if (update === null) {
         throw new BadVerbArgs(
           "apply-update: nothing newer is known to apply"
@@ -64963,16 +64963,21 @@ var fileName = (sessionId2) => sessionFileName(sessionId2);
 var fileOf = (f) => import_node_path30.default.join(f.folder, fileName(f.sessionId));
 var keyString = (key) => JSON.stringify([key.folder, key.generation]);
 function madeOnce(folder) {
+  let st;
   try {
-    fs_default.mkdirSync(folder);
+    st = fs_default.statSync(folder);
   } catch (e) {
-    if (e.code !== "EEXIST") throw e;
+    if (e.code !== "ENOENT") throw e;
+    fs_default.mkdirSync(folder);
+    return;
   }
+  if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
 }
+var current = (was, found2) => was.health.kind === "watching" && found2.kind === "found" && found2.identity !== "gone" && was.identity !== "gone" && sameIdentity(found2.identity, was.identity);
 var ManagedStorage = class {
   sessions;
-  folders = /* @__PURE__ */ new Map();
-  // By folder: each folder's current generation's watch.
+  // [LAW:one-source-of-truth] By folder: each folder's current generation's
+  // watch, the one record of what the owner knows of the folder.
   watched = /* @__PURE__ */ new Map();
   // The folders each render state's latest load named.
   holds = /* @__PURE__ */ new Map();
@@ -65023,10 +65028,16 @@ var ManagedStorage = class {
   hold(id2, folders) {
     this.holds.set(id2, folders);
     for (const folder of new Set(folders)) {
-      const key = this.keyFor(folder);
       const was = this.watched.get(folder);
-      if (was?.key.generation === key.generation) continue;
-      this.opened(key);
+      const found2 = this.found(folder);
+      if (was !== void 0 && current(was, found2)) continue;
+      const generation = was === void 0 ? 0 : was.key.generation + 1;
+      if (was !== void 0)
+        this.logger(
+          "info",
+          `plugin storage generation folder=${valueOf(folder)} generation=${generation}`
+        );
+      this.opened({ folder, generation }, found2);
       if (was !== void 0) this.closed(was);
       this.sessions.changed((f) => f.folder === folder);
     }
@@ -65062,35 +65073,21 @@ var ManagedStorage = class {
     this.holds.clear();
     this.closeUnheld();
   }
-  // The key of a folder a hold names. Creates the storage folder, so its
-  // program has somewhere to write before any session reads it, and stats
-  // it. The generation moves when the folder was marked lost or is no longer
-  // the folder its watch opened on; so whichever of a removal's events comes
-  // first, a recreated folder is a new key.
+  // What a hold finds at a folder's path. Creates the storage folder, so its
+  // program has somewhere to write before any session reads it.
   // [LAW:no-silent-failure] A folder that cannot be created or read is its
   // generation's standing fault, read by every source in it, never a throw:
   // one plugin's folder fails only that plugin's sources, not the build.
-  keyFor(folder) {
-    const known = this.folders.get(folder) ?? this.recorded(folder);
-    let now2 = "gone";
-    known.unusable = null;
+  found(folder) {
     try {
       madeOnce(folder);
-      now2 = this.identityOf(folder);
+      return { kind: "found", identity: this.identityOf(folder) };
     } catch (e) {
-      known.unusable = `could not be created or read: ${e.message}`;
+      return {
+        kind: "unusable",
+        reason: `could not be created or read: ${e.message}`
+      };
     }
-    const moved = known.lost || known.identity !== null && (now2 === "gone" || !sameIdentity(now2, known.identity));
-    if (moved) {
-      known.generation++;
-      known.lost = false;
-      known.identity = now2 === "gone" ? null : now2;
-      this.logger(
-        "info",
-        `plugin storage generation folder=${valueOf(folder)} generation=${known.generation}`
-      );
-    }
-    return { folder, generation: known.generation };
   }
   // Closes every folder no hold names.
   closeUnheld() {
@@ -65098,28 +65095,12 @@ var ManagedStorage = class {
     for (const [folder, watched] of [...this.watched])
       if (!named3.has(folder)) this.closed(watched);
   }
-  recorded(folder) {
-    const known = {
-      generation: 0,
-      identity: null,
-      lost: false,
-      unusable: null
-    };
-    this.folders.set(folder, known);
-    return known;
-  }
-  // Opens a folder's generation just keyed, as the folder's current watch.
-  opened(key) {
-    const folder = this.folders.get(key.folder);
-    if (folder === void 0) {
-      throw new Error(`plugin storage: no key was asked for ${key.folder}`);
-    }
-    const { unusable } = folder;
-    const identity2 = unusable === null ? this.identityOf(key.folder) : "gone";
-    folder.identity = identity2 === "gone" ? null : identity2;
+  // Opens a folder's next generation, on what its hold found, as the folder's
+  // current watch.
+  opened(key, found2) {
+    const identity2 = found2.kind === "found" ? found2.identity : "gone";
     const watched = {
       key,
-      folder,
       identity: identity2,
       // [LAW:single-enforcer] The only acquirer of this registry key, so the
       // slot's one callback is this generation's own.
@@ -65136,7 +65117,8 @@ var ManagedStorage = class {
       health: { kind: "watching" }
     };
     this.watched.set(key.folder, watched);
-    if (unusable !== null) this.faulted(watched, "unusable", unusable);
+    if (found2.kind === "unusable")
+      this.faulted(watched, "unusable", found2.reason);
     for (const refusal of watched.handle.deaf) {
       this.faulted(watched, "refused", refusal.reason);
     }
@@ -65197,7 +65179,7 @@ var ManagedStorage = class {
   judged(watched, present) {
     const { health } = watched;
     if (health.kind !== "watching") return;
-    const { key, folder } = watched;
+    const { key } = watched;
     let now2;
     try {
       now2 = this.identityOf(key.folder);
@@ -65211,7 +65193,6 @@ var ManagedStorage = class {
       return;
     }
     watched.health = { kind: "lost" };
-    folder.lost = true;
     this.lost++;
     this.logger(
       "info",
@@ -65225,11 +65206,10 @@ var ManagedStorage = class {
   // hold opens a fresh generation. No retry here: the OS refusing a watch
   // (limits, permissions) refuses an immediate retry the same way.
   faulted(watched, cause, reason) {
-    const { key, folder } = watched;
+    const { key } = watched;
     if (watched.health.kind !== "watching") return;
     watched.health = { kind: "faulted", reason };
     this.faultCounts[cause]++;
-    folder.lost = true;
     this.logger(
       "warn",
       `plugin storage fault folder=${valueOf(key.folder)} generation=${key.generation} cause=${cause} reason=${JSON.stringify(reason)}`
@@ -66750,9 +66730,9 @@ function controlledSessions(listClients) {
 function shownPanes(listPanes, controlled) {
   const shown = /* @__PURE__ */ new Set();
   for (const line of listPanes.split("\n")) {
-    const [pane, session, attached, current, zoomed, active2] = line.trim().split(" ");
+    const [pane, session, attached, current2, zoomed, active2] = line.trim().split(" ");
     if (pane === void 0 || pane === "" || session === void 0) continue;
-    if (Number(attached) > 0 && (current === "1" || controlled.has(session)) && (zoomed !== "1" || active2 === "1"))
+    if (Number(attached) > 0 && (current2 === "1" || controlled.has(session)) && (zoomed !== "1" || active2 === "1"))
       shown.add(pane);
   }
   return shown;
@@ -68727,10 +68707,10 @@ function stateFile(dir, name, empty2, parse3) {
   return {
     read: read2,
     update: (next) => {
-      const current = read2();
-      if (current.kind === "failed") return current;
-      const value = next(current.value);
-      if (value !== current.value) {
+      const current2 = read2();
+      if (current2.kind === "failed") return current2;
+      const value = next(current2.value);
+      if (value !== current2.value) {
         writeAtomic(file, `${JSON.stringify(value, null, 2)}
 `);
       }
@@ -74794,11 +74774,11 @@ var SettingsHistory = class {
           const step4 = [...committing.get(sessionId2)?.values() ?? []].filter(
             (c) => c.before !== c.after
           );
-          const current = this.history(sessionId2);
-          const appended = step4.length === 0 ? current : afterAppend(current, step4);
+          const current2 = this.history(sessionId2);
+          const appended = step4.length === 0 ? current2 : afterAppend(current2, step4);
           const toggle = toggled.get(sessionId2);
           const next = toggle === void 0 ? appended : withToggle(appended, toggle);
-          if (next !== current) this.put(sessionId2, next);
+          if (next !== current2) this.put(sessionId2, next);
         }
       }
     };
@@ -75260,10 +75240,10 @@ var setState = async (rawValue, ctx) => {
   ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
 var STEP_INT_RE = /^-?\d+$/;
-function stepWithin(current, by, min2, max2) {
-  const n = current + by;
-  if (n > max2) return current === max2 ? min2 : max2;
-  if (n < min2) return current === min2 ? max2 : min2;
+function stepWithin(current2, by, min2, max2) {
+  const n = current2 + by;
+  if (n > max2) return current2 === max2 ? min2 : max2;
+  if (n < min2) return current2 === min2 ? max2 : min2;
   return n;
 }
 var stepState = async (rawValue, ctx) => {
@@ -75472,20 +75452,20 @@ var stepConfig = async (rawValue, ctx) => {
     key
   );
   const stored = readValue(home.path, landing.key);
-  const current = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
+  const current2 = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
     "step-config",
     key,
     params,
     configKeySeed(landing.globals, key)
   );
-  const next = stepWithin(current, by, params.min, params.max);
+  const next = stepWithin(current2, by, params.min, params.max);
   const result = gate2.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
   ctx.log(
     "info",
-    `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
+    `step-config: ${landing.key} ${current2}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
   );
 };
 var save = async (value, ctx) => {
@@ -77676,8 +77656,8 @@ function linkFragment(text4, url, active2, base) {
   rt.end = "";
   return rt;
 }
-function linkOver(cell3, url, current = false) {
-  const link = new Style({ link: url, bold: current ? true : void 0 });
+function linkOver(cell3, url, current2 = false) {
+  const link = new Style({ link: url, bold: current2 ? true : void 0 });
   const linked = new RichText(cell3.plain, {
     style: Style.combine([resolvedStyle(cell3.style), link])
   });
@@ -77698,26 +77678,26 @@ function cycleIndex(c, store) {
 function realize(c, display, boundValue, store, sessionId2, signer) {
   switch (c.kind) {
     case "set-literal": {
-      const current = readVar(store, c.stateVar);
+      const current2 = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
-        active: current === c.value
+        active: current2 === c.value
       };
     }
     case "set-option": {
       const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
+      const current2 = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current === value
+        active: current2 === value
       };
     }
     case "set-int": {
       const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
+      const current2 = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current === value
+        active: current2 === value
       };
     }
     case "set-cycle": {
@@ -77764,18 +77744,18 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
     // the write durable, not the click itself.
     case "persist-literal": {
-      const current = readVar(store, c.stateVar);
+      const current2 = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, c.value] }],
-        active: current === c.value
+        active: current2 === c.value
       };
     }
     case "persist-option": {
       const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
+      const current2 = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_CONFIG, args: [sessionId2, c.key, value] }],
-        active: current === value
+        active: current2 === value
       };
     }
     case "persist-cycle": {
@@ -78109,21 +78089,21 @@ var cell2 = (text4, style) => {
   drawn.end = "";
   return drawn;
 };
-var currentMark = (current) => new Style({ bold: current });
+var currentMark = (current2) => new Style({ bold: current2 });
 function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground) {
   if (paletteOf === void 0) {
-    return (position, _option, label2, current) => cell2(
+    return (position, _option, label2, current2) => cell2(
       label2,
       Style.combine([
         bandItemStyle(active2, { ...position, distribution }, drawnAt),
-        currentMark(current)
+        currentMark(current2)
       ])
     );
   }
   const text4 = stateCell(active2.palette, ground, drawnAt);
-  return (_position, option, label2, current) => named2(
+  return (_position, option, label2, current2) => named2(
     label2,
-    Style.combine([text4, currentMark(current)]),
+    Style.combine([text4, currentMark(current2)]),
     paletteOf(option, render3)
   );
 }
@@ -78139,11 +78119,11 @@ function labelPaint(render3, paletteOf, option, label2) {
 }
 function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
   const text4 = stateCell(active2.palette, ground, drawnAt);
-  return (_position, option, _label, current) => cell2(
+  return (_position, option, _label, current2) => cell2(
     RichText.fromFragments([
-      cell2(current ? "[" : " ", text4),
+      cell2(current2 ? "[" : " ", text4),
       swatch(paletteOf(option, render3)),
-      cell2(current ? "]" : " ", text4)
+      cell2(current2 ? "]" : " ", text4)
     ])
   );
 }
@@ -78324,14 +78304,14 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
   const declared = runtime.compiled.get(applyName);
   const store = renderBinding(runtime, "picker").store;
   const sessionId2 = clickSession(runtime, "picker");
-  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
+  const current2 = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
   const optionFace = (i, label2) => {
     const option = apply.options[i];
     return itemPaint(
       { index: i, count: apply.options.length },
       option,
       label2,
-      option === current
+      option === current2
     );
   };
   const available = !paged ? Infinity : close.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
@@ -78355,7 +78335,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     )
   );
   const holding2 = pageHolding(
-    current === void 0 ? -1 : apply.options.indexOf(current)
+    current2 === void 0 ? -1 : apply.options.indexOf(current2)
   );
   const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
@@ -78509,9 +78489,9 @@ function pickerFuncs(runtime, activeSegment) {
 init_globals();
 var CAROUSEL_PREV = "\u25C0";
 var CAROUSEL_NEXT = "\u25B6";
-function ringAround(options, current) {
+function ringAround(options, current2) {
   const count = options.length;
-  const centre = Math.max(options.indexOf(current), 0);
+  const centre = Math.max(options.indexOf(current2), 0);
   return (offset) => ((centre + offset) % count + count) % count;
 }
 function renderCarousel(applyName, apply, openName, label2, runtime) {
@@ -79167,20 +79147,20 @@ init_globals();
 init_globals();
 function splitCellsIntoLines(cells) {
   const lines2 = [];
-  let current = [];
+  let current2 = [];
   for (const cell3 of cells) {
     if (!cell3.contains("\n")) {
-      current.push(cell3);
+      current2.push(cell3);
       continue;
     }
     const pieces = cell3.split("\n");
-    current.push(pieces[0]);
+    current2.push(pieces[0]);
     for (let i = 1; i < pieces.length; i++) {
-      lines2.push(current);
-      current = [pieces[i]];
+      lines2.push(current2);
+      current2 = [pieces[i]];
     }
   }
-  lines2.push(current);
+  lines2.push(current2);
   return lines2;
 }
 
@@ -82991,8 +82971,8 @@ var RenderCache = class {
       watch: null
     };
     this.serve(entry.state);
-    this.holdFolders(entry.state);
     this.entries.set(key, entry);
+    this.holdFolders(entry.state);
     this.fit(entry);
     this.log(
       "info",
@@ -83101,11 +83081,11 @@ var RenderCache = class {
   follow(sessionId2, projectDir, cwd2, configFile) {
     var _stack = [];
     try {
-      const current = this.views.get(sessionId2);
-      const facts = current?.facts() ?? this.openFailures.get(sessionId2)?.facts;
+      const current2 = this.views.get(sessionId2);
+      const facts = current2?.facts() ?? this.openFailures.get(sessionId2)?.facts;
       if (facts === void 0) return;
       const origin = this.entries.get(cacheKey(projectDir, cwd2, configFile));
-      if (current !== void 0 && origin?.state === current.state) return;
+      if (current2 !== void 0 && origin?.state === current2.state) return;
       const held = __using(_stack, this.hold(projectDir, cwd2, configFile));
       this.viewOf(held.entry, held.state, facts, "click");
     } catch (_) {
@@ -83132,19 +83112,19 @@ var RenderCache = class {
   // The session's view of `state`: the one it has, or a new one replacing it.
   viewOf(entry, state, facts, by) {
     const sessionId2 = facts.hookData.session_id;
-    const current = this.views.get(sessionId2);
-    if (current?.state === state) {
+    const current2 = this.views.get(sessionId2);
+    if (current2?.state === state) {
       this.views.delete(sessionId2);
-      this.views.set(sessionId2, current);
-      current.requested(facts);
-      return current;
+      this.views.set(sessionId2, current2);
+      current2.requested(facts);
+      return current2;
     }
     this.views.delete(sessionId2);
     let view;
     try {
       view = this.opened(entry, state, facts, by);
     } finally {
-      if (current !== void 0) this.retireView(current, "moved");
+      if (current2 !== void 0) this.retireView(current2, "moved");
     }
     this.fit(entry);
     return view;
@@ -83325,9 +83305,7 @@ var RenderCache = class {
   }
   // The host holds the storage folders a served state's latest load named.
   holdFolders(state) {
-    this.deps.storage.hold(this.holdOf(state).id, [
-      ...new Set(state.sources.values())
-    ]);
+    this.deps.storage.hold(this.holdOf(state).id, [...state.sources.values()]);
   }
   holdOf(state) {
     const hold2 = this.holds.get(state);
