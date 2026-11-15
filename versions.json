@@ -4,15 +4,22 @@
     {
       "version": "pr-760",
       "ref": "refs/pull/760/merge",
-      "sha": "717b83415c6f7f20d1c83ddb7644fe9277e9db90",
-      "timestamp": "2026-11-15T23:44:22.534Z",
+      "sha": "9bd74a9dda41f8954c61cc905833be39b32d6ac8",
+      "timestamp": "2026-11-15T23:54:50.792Z",
       "commits": [
         {
-          "sha": "717b83415c6f7f20d1c83ddb7644fe9277e9db90",
+          "sha": "9bd74a9dda41f8954c61cc905833be39b32d6ac8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T16:43:26-07:00",
-          "message": "Merge 8be6620609a668bf12b286fb11191af7fd514b57 into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+          "timestamp": "2026-11-15T23:53:50Z",
+          "message": "Merge 73856eae6eb8d3c042c659c241c771ab50e5bdab into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+        },
+        {
+          "sha": "73856eae6eb8d3c042c659c241c771ab50e5bdab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T16:53:39-07:00",
+          "message": "test(e2e): a render that timed out on every attempt names what the daemon logged meanwhile (candybar-skeleton-wj0c.zhh)\n"
         },
         {
           "sha": "8be6620609a668bf12b286fb11191af7fd514b57",
