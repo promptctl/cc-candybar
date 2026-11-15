@@ -59387,8 +59387,9 @@ function waitWithin(work, ms, late, after, closing) {
     void work(wait.signal).then(
       () => resolve("answered"),
       // [LAW:no-silent-failure] Every rejection is reported: the wait's own
-      // while it listens, its owner's after.
-      (e) => wait.signal.aborted ? late(e) : reject2(e)
+      // while it listens, its owner's after. Work that answered never
+      // rejects, so a wait aborted before it ended at its deadline or close.
+      (e) => wait.signal.aborted ? late(e, wait.signal.reason) : reject2(e)
     );
   });
   return ended.finally(() => {
@@ -67657,19 +67658,15 @@ var FrameFeeds = class {
   // leaving whichever state it is in.
   subscribe(sessionId2, sub2) {
     let left = false;
-    void this.deps.lanes(sessionId2).catch((thrown2) => {
-      this.deps.log(
-        "error",
-        `feed sid=${JSON.stringify(sessionId2)} lanes threw: ${inspect(thrown2)}`
-      );
-      return null;
-    }).then((lanes) => {
+    void this.deps.lanes(sessionId2).then((lanes) => {
       if (!left) this.admit(sessionId2, sub2, lanes);
     }).catch((thrown2) => {
       this.deps.log(
         "error",
         `feed sid=${JSON.stringify(sessionId2)} admission threw: ${inspect(thrown2)}`
       );
+      const feed2 = this.feeds.get(sessionId2);
+      if (feed2 !== void 0) this.unsubscribe(feed2, sub2);
       sub2.refused(renderFailed(thrown2));
     });
     return () => {
@@ -67882,11 +67879,11 @@ var FrameFeeds = class {
       [...this.following(feed2.sessionId)],
       this.feedsOf(feed2.sessionId, at)
     );
-    const woken = wokenWhileOut(feed2);
     if (frame2 === null) {
+      const woken2 = wokenWhileOut(feed2);
       feed2.noView++;
       feed2.phase = { kind: "waiting" };
-      if (woken && this.feeds.get(feed2.sessionId) === feed2) this.hasten(feed2);
+      if (woken2 && this.feeds.get(feed2.sessionId) === feed2) this.hasten(feed2);
       return;
     }
     feed2.lastStart = moment2;
@@ -67902,6 +67899,7 @@ var FrameFeeds = class {
     if (this.feeds.get(feed2.sessionId) !== feed2) return;
     if (finished - feed2.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed2, "running");
+    const woken = wokenWhileOut(feed2);
     this.schedule(feed2, frame2, at);
     if (woken) this.hasten(feed2);
   }
@@ -83177,9 +83175,9 @@ async function answerRequest(parts, req, at, waitMs, facts) {
       budget,
       // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
       // it is a bug, said against the session, never one that ends the daemon.
-      (e) => log(
+      (e, ended2) => log(
         "error",
-        `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`
+        `render wait failed after it ended ended=${ended2} sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`
       ),
       clock.after,
       parts.renderCache.closing
@@ -84895,6 +84893,15 @@ function serializeSegmentCells(cells, colorCompatibility) {
   return out;
 }
 
+// src/renderer-interface/interface.ts
+init_globals();
+function rendererOf(arms) {
+  function answer2(input) {
+    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
+  }
+  return { answer: answer2 };
+}
+
 // src/renderer/journal-turns.ts
 init_globals();
 var DAEMON_WIDE = "journals";
@@ -85087,12 +85094,6 @@ function mainRenderer(parts, pushed) {
       };
     }
   });
-}
-function rendererOf(arms) {
-  function answer2(input) {
-    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
-  }
-  return { answer: answer2 };
 }
 function loadMainRenderer(inputs) {
   const { log } = inputs;

@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-747",
+      "ref": "refs/pull/747/merge",
+      "sha": "26787b4f0ca2e50417143837b0565573f5dc1119",
+      "timestamp": "2026-11-15T00:53:15.502Z",
+      "commits": [
+        {
+          "sha": "26787b4f0ca2e50417143837b0565573f5dc1119",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T00:52:29Z",
+          "message": "Merge 97aca0ad2c8559210edc276735dcd112537f5a73 into 47e5c8cdc0cb272e742459205ca0547f581d5424\n"
+        },
+        {
+          "sha": "97aca0ad2c8559210edc276735dcd112537f5a73",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:52:17-07:00",
+          "message": "fix(renderer): a subscribe whose lanes cannot be read is refused, and a draw is held to waking nothing (candybar-host-renderer-x96a.8rc)\n\nSecond high review of #747. A lanes read or an admission that throws refuses\nthe subscriber RENDER_FAILED and drops it wherever it got to: admitting it as\na session with no view left it open forever when the same fault broke every\nframe. The owed wake is read as the phase is replaced, so a wake the push\nraised is kept. A bounded wait tells its late failure how it ended. A test\nholds that a feed's draw moves neither the view's data nor the session's\nstate, and the frame-feed fake carries lanes on failed frames as the renderer\ndoes. rendererOf lives beside the interface it builds.\n"
+        },
+        {
+          "sha": "e2d05f9bdaa223c88094ce22a3784ed4fac2bef1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:35:46-07:00",
+          "message": "fix(renderer): an admission that throws is refused, the shutdown exit always runs, and Crosses names any (candybar-host-renderer-x96a.8rc)\n\nMedium review of #747. A subscribe's admission runs after its lanes arrive, so\na throw in it is logged and answered RENDER_FAILED rather than an unhandled\nrejection. The shutdown's cleanup after the close logs a throw and still exits\nwith its code. Crosses refuses an any, which passed every test unread. The two\nclick-error writers share one push, and two comments and a test name follow\nthe async close and the owed wake.\n"
+        },
+        {
+          "sha": "6bc1558c994e38243d6c296adbf3f87a0752e83b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:21:26-07:00",
+          "message": "fix(renderer): a frame's Infinity crosses as its wire form, and a failed frame still gates its lanes (candybar-host-renderer-x96a.8rc)\n\nHigh review of #747. A feed frame's and a present's bar cross as WireFrame and\nthe host parses them where they land, since JSON carries Infinity as null and\nno type tells it from a finite number. A failed feed frame reads its lanes from\nthe view, so a lane switched off while the render throws still ends. One\nrendererOf dispatches each input to its typed arm, the reading reply kinds are\nderived from their arms, a push that rejects is said with its renderer and\nkind, and a subscribe that lands after the close is logged.\n"
+        },
+        {
+          "sha": "4efd086f911b21846a92a87fde5110d26bb472bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T16:48:00-07:00",
+          "message": "refactor(renderer): the host's pushes cross a process, each an adapter input answered by its reply alone (candybar-host-renderer-x96a.8rc)\n\nEvery reach of the host into the renderer is now an AdapterPush, plain\ndata checked at build time to cross a process (Crosses<T>), answered by\nan AdapterOutput: the reply of the push's own kind, or how it threw.\nrendererHost.ask is the one judge of a reply's kind; tell logs a\nfailure nothing awaits.\n\n- The feed asks for its frame and its lanes, so a frame lands later: a\n  wake while it is out is owed the next frame at the spacing, however\n  the frame ended, and a subscribe is admitted once its lanes answer,\n  opening nothing for one refused or gone meanwhile.\n- The pin owns the session's state wake, so the wake lives as long as\n  the feed.\n- Journal turns are the renderer's. The daemon's close awaits the\n  renderer's three teardown steps in today's order, and shutdown awaits\n  the close before it exits.\n- A render's wait ends when the render cache closes, said as\n  ended=closed, so a render the close interrupts holds no timer past it.\n- A heap-retainer test draws in a frame of its own, so the suspended\n  test frame's registers cannot hold the drawn store.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-750",
       "ref": "refs/pull/750/merge",
       "sha": "2cfeb072060597ea3025608c467f1a18bbd68884",
@@ -35,42 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-14T17:47:07-07:00",
           "message": "chore(testing): the daemon-boot judge, ratchet and ceiling are deleted (candybar-testing-do00.cfu) (#749)\n\n* chore(testing): the daemon-boot judge, ratchet and ceiling are deleted (candybar-testing-do00.cfu)\n\nlaws:testing counts a test that drives the daemon in process over fakes as a\nunit test, so nothing judges where a daemon boots. The ratchet file and both\nof its CI checks go, with the ledger preload, the global setup that installed\nit, the harness's boot records and the teardown verdict. The tier configs that\npick files by directory stay.\n\n* chore(testing): the judge's leftovers go: an unused import, the ledger kind, the one-caller preload merge (candybar-testing-do00.cfu)\n\nThe spawn helper's header stops claiming that no test can pass the daemon\nceiling, which nothing enforces; a daemon started through it counts against\nthe ceiling. withPreload folds into withStamp, its one caller.\n\n* test(testing): the stamp test pins its preload to the stamp file, and the pool test's stand-in stops citing the ledger (candybar-testing-do00.cfu)"
-        }
-      ]
-    },
-    {
-      "version": "pr-747",
-      "ref": "refs/pull/747/merge",
-      "sha": "815ce994258620c56254da5800de09d1194765d9",
-      "timestamp": "2026-11-15T00:37:02.712Z",
-      "commits": [
-        {
-          "sha": "815ce994258620c56254da5800de09d1194765d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T00:35:59Z",
-          "message": "Merge e2d05f9bdaa223c88094ce22a3784ed4fac2bef1 into 66b6aaaf80c9bcced51090a86d2eba72303a3269\n"
-        },
-        {
-          "sha": "e2d05f9bdaa223c88094ce22a3784ed4fac2bef1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T17:35:46-07:00",
-          "message": "fix(renderer): an admission that throws is refused, the shutdown exit always runs, and Crosses names any (candybar-host-renderer-x96a.8rc)\n\nMedium review of #747. A subscribe's admission runs after its lanes arrive, so\na throw in it is logged and answered RENDER_FAILED rather than an unhandled\nrejection. The shutdown's cleanup after the close logs a throw and still exits\nwith its code. Crosses refuses an any, which passed every test unread. The two\nclick-error writers share one push, and two comments and a test name follow\nthe async close and the owed wake.\n"
-        },
-        {
-          "sha": "6bc1558c994e38243d6c296adbf3f87a0752e83b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T17:21:26-07:00",
-          "message": "fix(renderer): a frame's Infinity crosses as its wire form, and a failed frame still gates its lanes (candybar-host-renderer-x96a.8rc)\n\nHigh review of #747. A feed frame's and a present's bar cross as WireFrame and\nthe host parses them where they land, since JSON carries Infinity as null and\nno type tells it from a finite number. A failed feed frame reads its lanes from\nthe view, so a lane switched off while the render throws still ends. One\nrendererOf dispatches each input to its typed arm, the reading reply kinds are\nderived from their arms, a push that rejects is said with its renderer and\nkind, and a subscribe that lands after the close is logged.\n"
-        },
-        {
-          "sha": "4efd086f911b21846a92a87fde5110d26bb472bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-14T16:48:00-07:00",
-          "message": "refactor(renderer): the host's pushes cross a process, each an adapter input answered by its reply alone (candybar-host-renderer-x96a.8rc)\n\nEvery reach of the host into the renderer is now an AdapterPush, plain\ndata checked at build time to cross a process (Crosses<T>), answered by\nan AdapterOutput: the reply of the push's own kind, or how it threw.\nrendererHost.ask is the one judge of a reply's kind; tell logs a\nfailure nothing awaits.\n\n- The feed asks for its frame and its lanes, so a frame lands later: a\n  wake while it is out is owed the next frame at the spacing, however\n  the frame ended, and a subscribe is admitted once its lanes answer,\n  opening nothing for one refused or gone meanwhile.\n- The pin owns the session's state wake, so the wake lives as long as\n  the feed.\n- Journal turns are the renderer's. The daemon's close awaits the\n  renderer's three teardown steps in today's order, and shutdown awaits\n  the close before it exits.\n- A render's wait ends when the render cache closes, said as\n  ended=closed, so a render the close interrupts holds no timer past it.\n- A heap-retainer test draws in a frame of its own, so the suspended\n  test frame's registers cannot hold the drawn store.\n"
         }
       ]
     }
