@@ -18,6 +18,7 @@ import { inspect } from "node:util";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
 import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
+import { renderFailed } from "./foundations/render-answers";
 import {
   LANES,
   MOVING_FPS,
@@ -316,21 +317,31 @@ export class FrameFeeds<Req> {
   // leaving whichever state it is in.
   subscribe(sessionId: SessionId, sub: Subscriber): () => void {
     let left = false;
-    void this.deps.lanes(sessionId).then(
-      (lanes) => {
-        if (!left) this.admit(sessionId, sub, lanes);
-      },
-      // [LAW:no-silent-failure] A view the renderer could not read lanes from
-      // draws its failure: the subscriber is admitted as for a session with
-      // no view, and its first frame decides.
-      (thrown: unknown) => {
+    void this.deps
+      .lanes(sessionId)
+      .catch((thrown: unknown) => {
+        // [LAW:no-silent-failure] A view the renderer could not read lanes
+        // from draws its failure: the subscriber is admitted as for a session
+        // with no view, and its first frame decides.
         this.deps.log(
           "error",
           `feed sid=${JSON.stringify(sessionId)} lanes threw: ${inspect(thrown)}`,
         );
-        if (!left) this.admit(sessionId, sub, null);
-      },
-    );
+        return null;
+      })
+      .then((lanes) => {
+        if (!left) this.admit(sessionId, sub, lanes);
+      })
+      // [LAW:no-silent-failure] An admission that threw is the subscribe's
+      // failure, as a subscribe's own throw is its connection's: said, and
+      // answered RENDER_FAILED, never an open socket nothing feeds.
+      .catch((thrown: unknown) => {
+        this.deps.log(
+          "error",
+          `feed sid=${JSON.stringify(sessionId)} admission threw: ${inspect(thrown)}`,
+        );
+        sub.refused(renderFailed(thrown));
+      });
     return () => {
       left = true;
       const feed = this.feeds.get(sessionId);

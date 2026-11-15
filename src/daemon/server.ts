@@ -441,9 +441,10 @@ function writeLeaseFile(sockPath: string): void {
 // --- shutdown ---
 
 // [LAW:single-enforcer] exception: the one launch a daemon holds its loop for,
-// outside `launch`'s settle-at-exit path. Serving has stopped and shutdown is
-// synchronous, so no loop is held from anything. A holder of tmux's stdout can
-// hold this restore, bounded by shutdown's SIGKILL backstop only once it returns.
+// outside `launch`'s settle-at-exit path. Serving has stopped and the restore is
+// one synchronous step of the close, so it holds the loop only while it runs. A
+// holder of tmux's stdout can hold this restore, bounded by shutdown's SIGKILL
+// backstop only once it returns.
 const tmuxAtExit =
   (launcher: OneShotLauncher): TmuxAtExit =>
   (socket, args, stdin) =>
@@ -499,25 +500,33 @@ function shutdown(code: number): void {
 // the session state flushes last, whichever process the renderer runs in; the
 // exit follows the close, still inside the backstop armed above.
 async function closeThenExit(code: number): Promise<void> {
-  // Each teardown step logs its own failure and the rest still run, so the
-  // close always resolves.
-  await serving?.close(tmuxAtExit(daemonProcess().world.launcher));
-  // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
-  // displaced daemon (socket stolen, thief wrote its own lease) must not delete
-  // the live owner's lease on its way out, or the next EADDRINUSE would read
-  // `absent` and reclaim the thief's live socket — cascading the theft.
-  removeLeaseIfOwned(daemonProcess().paths.lease, process.pid);
-  // [LAW:one-source-of-truth] Same "only if it still names us" guard as the
-  // lease above, reused via releaseRegistration — a slot this daemon never
-  // claimed (exempt production, or refused before claiming one) is null and
-  // skipped.
-  if (breakerRegistryPath !== null) {
-    releaseRegistration(
-      breakerRegistryPath,
-      process.pid,
-      readRegistryEntry,
-      (p) => fs.unlinkSync(p),
-    );
+  try {
+    // Each teardown step logs its own failure and the rest still run, so the
+    // close always resolves.
+    await serving?.close(tmuxAtExit(daemonProcess().world.launcher));
+    // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
+    // displaced daemon (socket stolen, thief wrote its own lease) must not
+    // delete the live owner's lease on its way out, or the next EADDRINUSE
+    // would read `absent` and reclaim the thief's live socket — cascading the
+    // theft.
+    removeLeaseIfOwned(daemonProcess().paths.lease, process.pid);
+    // [LAW:one-source-of-truth] Same "only if it still names us" guard as the
+    // lease above, reused via releaseRegistration — a slot this daemon never
+    // claimed (exempt production, or refused before claiming one) is null and
+    // skipped.
+    if (breakerRegistryPath !== null) {
+      releaseRegistration(
+        breakerRegistryPath,
+        process.pid,
+        readRegistryEntry,
+        (p) => fs.unlinkSync(p),
+      );
+    }
+  } catch (e) {
+    // [LAW:no-silent-failure] Said, and the exit below still runs with its
+    // code: an unhandled rejection here would only reach a shutdown already
+    // under way, and the backstop's SIGKILL would end the process instead.
+    serverLog("error", `shutdown cleanup failed: ${inspect(e)}`);
   }
   // The log writes every line still waiting as the process exits (log.ts), so
   // the death line lands without a flush here.

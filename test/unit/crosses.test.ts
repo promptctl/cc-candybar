@@ -14,6 +14,8 @@ const map: Crosses<{ readonly seen: ReadonlyMap<string, number> }> = true;
 const holes: Crosses<readonly (string | undefined)[]> = true;
 // @ts-expect-error a function deep in a value is found
 const deep: Crosses<{ a: { b: { c: { d: () => void } } } }> = true;
+// @ts-expect-error an `any` holds whatever it was handed, read or not
+const anything: Crosses<{ readonly parsed: any }> = true;
 // @ts-expect-error a push that held a closure would not cross
 const push: Crosses<AdapterPush | { kind: "x"; run: () => void }> = true;
 // A field left out arrives left out, so an optional one crosses.
@@ -25,6 +27,6 @@ const plain: Crosses<{
 
 describe("Crosses", () => {
   it("is a check the typecheck runs", () => {
-    expect([closure, map, holes, deep, push, plain]).toHaveLength(6);
+    expect([closure, map, holes, deep, anything, push, plain]).toHaveLength(7);
   });
 });

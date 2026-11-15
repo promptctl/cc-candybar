@@ -384,17 +384,20 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:single-enforcer] The one signer of every `run` link this daemon draws
   // and the one that verifies them on the click, over the state directory's key.
   const linkSigner = inputs.linkSigner;
+  // [LAW:one-source-of-truth] The host parts' one write of a click error into
+  // the session's state: a run's end, a lane setup's failure.
+  const holdClickError = (sessionId: SessionId, text: string, at: Instant) =>
+    parts.renderer.tell(
+      { kind: "hold-click-error", session: sessionId, text },
+      at,
+    );
   // [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
   // flight (src/daemon/runs.ts), closed with the daemon.
   const runs = new Runs({
     supersede: (storage, sessionId) =>
       managedStorage.supersede(storage, sessionId),
     launch: launcher.launch,
-    holdClickError: (sessionId, text, at) =>
-      parts.renderer.tell(
-        { kind: "hold-click-error", session: sessionId, text },
-        at,
-      ),
+    holdClickError,
     log,
     now: instant,
     clock,
@@ -417,11 +420,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       socket: paths.socket,
       preload: stableAttachPreload(bundle.path, host),
     },
-    holdClickError: (sessionId, text, at) =>
-      parts.renderer.tell(
-        { kind: "hold-click-error", session: sessionId, text },
-        at,
-      ),
+    holdClickError,
     log,
     now: instant,
     defer: (run) => void clock.defer(run),

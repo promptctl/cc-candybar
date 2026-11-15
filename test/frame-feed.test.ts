@@ -413,7 +413,7 @@ test("a new request is drawn at once, and two subscribers share every frame", as
   closeB();
 });
 
-test("a render slower than the period is followed by the next at once, and a wake during it is coalesced into it", async () => {
+test("a render slower than the period is followed by the next at once, and the wakes during it are owed one frame between them", async () => {
   const { feeds, note, state, changes, clock } = harness({
     motion: "moving",
     renderMs: 60,
@@ -433,8 +433,10 @@ test("a render slower than the period is followed by the next at once, and a wak
   // Back to back, 60 ms apart: the first render at 0 holds the loop to 60,
   // which the 10 ms advance ends inside, so the 300 ms window runs from 60
   // to 360 and holds renders at 60, 120, 180, 240, 300 and 360 beside the
-  // first. The wakes were folded into the one being drawn rather than piling
-  // up: each would have added a render.
+  // first. The two wakes in each render are owed one frame, the next, which
+  // the spacing already draws at once: one each would have added renders. A
+  // render quicker than the period shows the owed frame itself (the test of
+  // a wake while a frame is out).
   expect(state.renders).toBe(7);
 });
 

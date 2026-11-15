@@ -33,19 +33,23 @@ type Deeper<D extends readonly unknown[]> = D extends readonly [
   ? Rest
   : [];
 
+// `any` would pass every test below unread, so it is named as not crossing:
+// only `0 extends 1 & T` tells it from the types it stands in for.
 type Part<T, D extends readonly unknown[]> = D extends []
   ? true
-  : [T] extends [Primitive]
-    ? true
-    : [T] extends [(...args: never[]) => unknown]
-      ? CannotCross<T>
-      : [T] extends [ReadonlyMap<unknown, unknown> | ReadonlySet<unknown>]
+  : 0 extends 1 & T
+    ? CannotCross<T>
+    : [T] extends [Primitive]
+      ? true
+      : [T] extends [(...args: never[]) => unknown]
         ? CannotCross<T>
-        : [T] extends [ReadonlyArray<infer E>]
-          ? Each<E, Deeper<D>>
-          : [T] extends [object]
-            ? Fields<T, Deeper<D>>
-            : CannotCross<T>;
+        : [T] extends [ReadonlyMap<unknown, unknown> | ReadonlySet<unknown>]
+          ? CannotCross<T>
+          : [T] extends [ReadonlyArray<infer E>]
+            ? Each<E, Deeper<D>>
+            : [T] extends [object]
+              ? Fields<T, Deeper<D>>
+              : CannotCross<T>;
 
 // Each member of a union on its own, so one that cannot cross is named.
 type Each<T, D extends readonly unknown[]> = T extends unknown
