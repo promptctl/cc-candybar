@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-749",
+      "ref": "refs/pull/749/merge",
+      "sha": "dd6017c26916b8f4eb2528c2f984fcae294600f2",
+      "timestamp": "2026-11-15T00:28:30.991Z",
+      "commits": [
+        {
+          "sha": "dd6017c26916b8f4eb2528c2f984fcae294600f2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:27:36-07:00",
+          "message": "Merge fb77ae49126413bc3b3d8cebc69731c47afcb5d1 into 66b6aaaf80c9bcced51090a86d2eba72303a3269\n"
+        },
+        {
+          "sha": "fb77ae49126413bc3b3d8cebc69731c47afcb5d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:27:18-07:00",
+          "message": "chore(testing): the daemon-boot judge, ratchet and ceiling are deleted (candybar-testing-do00.cfu)\n\nlaws:testing counts a test that drives the daemon in process over fakes as a\nunit test, so nothing judges where a daemon boots. The ratchet file and both\nof its CI checks go, with the ledger preload, the global setup that installed\nit, the harness's boot records and the teardown verdict. The tier configs that\npick files by directory stay.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-747",
       "ref": "refs/pull/747/merge",
       "sha": "ff57100db875db101a5e502229f3bece7ee8a16a",
