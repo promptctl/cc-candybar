@@ -212,13 +212,12 @@ export async function replyTo(
     stats,
     clock,
     frameFeeds,
-    toRenderer,
+    renderer,
     payloadProviders: { gitProvider, usageStore },
     fileEvents,
     runs,
     sourceRuns,
     menuIdle,
-    journalTurns,
     tmuxStatusLines,
     watcherRegistry,
     limits,
@@ -261,28 +260,30 @@ export async function replyTo(
   if (req.kind === "stats") {
     // [LAW:single-enforcer] Stats requests do NOT bump request counters —
     // observability shouldn't pollute the metric being observed.
-    const renderer = toRenderer.stats();
+    const { stats: drawn } = await renderer.ask(
+      { kind: "stats" },
+      instantAt(clock),
+    );
     return stay({
       ok: true,
       stats: stats.snapshot({
         gitCache: gitProvider.getStats(),
         usageCache: usageStore.getStats(),
-        sources: sourceSnapshots(parts, renderer.renderCache),
+        sources: sourceSnapshots(parts, drawn.renderCache),
         fileEvents: fileEvents.stats(),
         sourceRuns: sourceRuns.stats(),
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
-        ...renderer,
+        ...drawn,
         collector: parts.collector.stats(),
         menuIdle: menuIdle.getStats(),
-        journalTurns: journalTurns.getStats(),
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
-        clients: renderSightings.list(instantOf(new Date(clock.now()))),
+        clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest,
         daemon: limits.serving(),
@@ -443,7 +444,11 @@ export async function replyTo(
         daemonV: PROTOCOL_VERSION,
       });
     }
-    return stay({ ok: true, debug: toRenderer.debug(req.what) });
+    const { snapshot } = await renderer.ask(
+      { kind: "debug", what: req.what },
+      instantAt(clock),
+    );
+    return stay({ ok: true, debug: snapshot });
   }
 
   const unanswered: never = req;

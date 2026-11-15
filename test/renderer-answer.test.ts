@@ -22,6 +22,8 @@ import type {
   RequestId,
 } from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
+import { renderFrame, type RendererParts } from "../src/renderer/draw-bar";
+import { MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { rendererParts } from "./helpers/renderer-parts";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
@@ -40,6 +42,7 @@ import { rendererHost } from "../src/daemon/renderer-host";
 import type { RendererVerbs } from "../src/renderer/verbs/port";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { WorldState } from "../src/facts/world-state";
+import { hearingEvents, NO_PUSHES } from "./helpers/renderers";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
 let dir: string;
@@ -59,13 +62,18 @@ const NO_STATS = { size: 0, hits: 0, misses: 0 };
 // and every line the daemon's log was handed.
 function renderer(verbs?: RendererVerbs): {
   readonly r: Renderer;
+  readonly parts: RendererParts;
   readonly recorded: string[][];
+  // Each session whose view told the cache its data moved, in order.
+  readonly changed: string[];
   readonly logged: string[];
   readonly rig: SessionRig;
 } {
   const logged: string[] = [];
+  const changed: string[] = [];
   const rig = sessionRig(dir, cleanups, {
     log: (level, message) => logged.push(`${level} ${message}`),
+    observers: { onViewChanged: (sessionId) => changed.push(sessionId) },
   });
   const { providers } = rig;
   const parts = rendererParts({
@@ -86,7 +94,14 @@ function renderer(verbs?: RendererVerbs): {
     recorded.push([...copies.values()]);
     record(sessionId, by, copies);
   };
-  return { r: mainRenderer(parts), recorded, logged, rig };
+  return {
+    r: mainRenderer(parts, NO_PUSHES),
+    parts,
+    recorded,
+    changed,
+    logged,
+    rig,
+  };
 }
 
 // A statusline request for the rig's session, through the host's checkpoint.
@@ -222,16 +237,18 @@ describe("a statusline request", () => {
     // An eviction between the two turns.
     t.rig.cache.retireSession(SESSION);
     expect(viewOf(t.rig)).toBeNull();
-    const { effects } = answered(await t.r.answer({
-      kind: "event",
-      at: AT,
-      event: {
-        kind: "request",
-        id: REQUEST,
-        context,
-        waitMs: 5000,
-      },
-    }));
+    const { effects } = answered(
+      await t.r.answer({
+        kind: "event",
+        at: AT,
+        event: {
+          kind: "request",
+          id: REQUEST,
+          context,
+          waitMs: 5000,
+        },
+      }),
+    );
     expect(presentOf(effects)).toMatchObject({ request: REQUEST });
     expect(viewOf(t.rig)?.facts()).toBe(context);
   });
@@ -255,6 +272,44 @@ describe("a statusline request", () => {
   });
 });
 
+describe("a feed's frame", () => {
+  test("records what it showed as it is drawn, under the feed, apart from the request's", async () => {
+    const { r, parts, recorded, rig } = renderer();
+    answered(await request({ r, rig }));
+    const by: string[] = [];
+    const record = rig.cache.delivered.bind(rig.cache);
+    rig.cache.delivered = (sessionId, drawer, copies) => {
+      by.push(drawer);
+      record(sessionId, drawer, copies);
+    };
+    const frame = renderFrame(parts, SESSION, MOVING_FPS, AT, {
+      following: new Set(),
+      feeds: UNFOLLOWED_FEEDS,
+    });
+    expect(frame?.failure).toBeNull();
+    expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
+    expect(by).toEqual(["feed"]);
+  });
+
+  // A wake while a frame is out is owed a frame after it, so a draw that woke
+  // its own feed would keep a still bar drawing at the moving rate.
+  test("moves nothing its feed wakes for: neither the view's data nor the session's state", async () => {
+    const { r, parts, changed, rig } = renderer();
+    answered(await request({ r, rig }));
+    const draw = (at: Instant) =>
+      renderFrame(parts, SESSION, MOVING_FPS, at, {
+        following: new Set(),
+        feeds: UNFOLLOWED_FEEDS,
+      });
+    const changedBefore = changed.length;
+    const revision = rig.sessionState.latestRevision();
+    expect(draw(AT)?.failure).toBeNull();
+    expect(draw((AT + 1) as Instant)?.failure).toBeNull();
+    expect(changed.slice(changedBefore)).toEqual([]);
+    expect(rig.sessionState.latestRevision()).toBe(revision);
+  });
+});
+
 describe("the world state the host hands in", () => {
   test("is what the session's view draws from, and an older seq is refused", async () => {
     const t = renderer();
@@ -265,10 +320,12 @@ describe("the world state the host hands in", () => {
       seq: held.seq + 1,
       builtins: { ...held.builtins, hostName: { ...ok("elsewhere"), at: AT } },
     };
-    const { effects } = answered(await handIn(t.r, {
-      kind: "world-state",
-      worldState: next,
-    }));
+    const { effects } = answered(
+      await handIn(t.r, {
+        kind: "world-state",
+        worldState: next,
+      }),
+    );
     expect(effects).toEqual([]);
     expect(viewOf(t.rig)?.source.facts()).toBe(next);
     expect(
@@ -340,15 +397,13 @@ describe("the session's config, ahead of its request", () => {
     const { effects, subscriptions } = answered(await configure(t, checked()));
     expect(effects).toEqual([]);
     const view = viewOf(t.rig)!;
-    expect(subscriptions.sources).toEqual(
-      {
-        [SESSION]: [...view.state.sources].map(([source, storage]) => ({
-          kind: "plugin",
-          source,
-          storage,
-        })),
-      },
-    );
+    expect(subscriptions.sources).toEqual({
+      [SESSION]: [...view.state.sources].map(([source, storage]) => ({
+        kind: "plugin",
+        source,
+        storage,
+      })),
+    });
     expect(presentOf(answered(await request(t)).effects)).toMatchObject({
       kind: "present",
       request: REQUEST,
@@ -364,12 +419,7 @@ describe("the session's config, ahead of its request", () => {
     const host = rendererHost(
       "main",
       systemTimekeeper,
-      {
-        answer: (input) => {
-          kinds.push(input.event.kind);
-          return t.r.answer(input);
-        },
-      },
+      hearingEvents(t.r, (input) => kinds.push(input.event.kind)),
       () => {},
       t.rig.served.collector,
     );
@@ -444,13 +494,10 @@ describe("two requests of one session at different keys", () => {
     const host = rendererHost(
       "main",
       systemTimekeeper,
-      {
-        answer: (input) => {
-          if (input.event.kind === "config")
-            requests.push(input.event.worldState);
-          return t.r.answer(input);
-        },
-      },
+      hearingEvents(t.r, (input) => {
+        if (input.event.kind === "config")
+          requests.push(input.event.worldState);
+      }),
       () => {},
       t.rig.served.collector,
     );
@@ -519,7 +566,9 @@ describe("a click", () => {
     };
     const before = await request(t);
     expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
-    const { effects, subscriptions, record } = answered(await handIn(t.r, click("act")));
+    const { effects, subscriptions, record } = answered(
+      await handIn(t.r, click("act")),
+    );
     expect(effects).toEqual([]);
     expect(subscriptions.sources).toEqual({});
     // The host records what it knows of the click; this act waited on nothing.
@@ -562,12 +611,18 @@ describe("the idle close", () => {
         closed.push(sessionId);
       },
     });
-    const idle = { firedAt: instantAt(systemTimekeeper), idleS: 30, timeoutS: 30 };
-    const { effects } = answered(await handIn(t.r, {
-      kind: "menu-idle",
-      session: SESSION,
-      idle,
-    }));
+    const idle = {
+      firedAt: instantAt(systemTimekeeper),
+      idleS: 30,
+      timeoutS: 30,
+    };
+    const { effects } = answered(
+      await handIn(t.r, {
+        kind: "menu-idle",
+        session: SESSION,
+        idle,
+      }),
+    );
     expect(effects).toEqual([]);
     expect(closed).toEqual([SESSION]);
   });

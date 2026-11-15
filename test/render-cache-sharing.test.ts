@@ -413,7 +413,12 @@ test("a compile keeps nothing of a render once it returns", async () => {
   // path is a holder the draw left behind, printed from the heap's roots.
   heldStores.push(new ProbeStore(systemTimekeeper));
   try {
-    drawAlone(config, compiled);
+    // Drawn in a frame of its own that returns before the await: a suspended
+    // async frame keeps its registers, and one may still hold what a call in
+    // it returned, as the snapshot's path through the test's own frame.
+    (() => {
+      drawAlone(config, compiled);
+    })();
     expect(await retainerPathsTo("ProbeStore")).toHaveLength(1);
   } finally {
     heldStores.length = 0;

@@ -20,6 +20,7 @@ import {
 } from "./foundations/render-answers.js";
 import { failureOf, type Failure } from "./foundations/verb-error.js";
 import type { Response } from "./foundations/protocol";
+import { parseFrame } from "../render/frame.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
 import type { RendererHost } from "./renderer-host.js";
@@ -184,7 +185,7 @@ export async function answerStatusline(
   const encodeFrom = clock.monotonic();
   let resp: Response;
   try {
-    resp = RENDER_ANSWERS[req.encoding](presented.frame);
+    resp = RENDER_ANSWERS[req.encoding](parseFrame(presented.frame));
   } catch (e) {
     const failure = failureOf(e);
     done(presented, `encoding its frame threw: ${failure.message}`);

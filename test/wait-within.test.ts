@@ -4,6 +4,9 @@ import { systemTimekeeper } from "../src/time";
 const after = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+// The owner of a wait that never closes.
+const OPEN = new AbortController().signal;
+
 const unexpected = (e: unknown): void => {
   throw new Error(`no late failure was expected: ${String(e)}`);
 };
@@ -18,6 +21,7 @@ test("work that ends inside the time answers, and its signal is aborted once the
     1000,
     unexpected,
     systemTimekeeper.after,
+    OPEN,
   );
   expect(end).toBe("answered");
   expect(seen?.aborted).toBe(true);
@@ -33,6 +37,7 @@ test("work still out at the deadline ends the wait there, and its signal aborts"
     20,
     unexpected,
     systemTimekeeper.after,
+    OPEN,
   );
   expect(end).toBe("deadline");
   expect(seen?.aborted).toBe(true);
@@ -47,6 +52,7 @@ test("a wait ends when its time does, and not before", async () => {
       110,
       unexpected,
       systemTimekeeper.after,
+      OPEN,
     ).then((e) => {
       end = e;
     });
@@ -66,6 +72,7 @@ test("a rejection inside the time is the wait's", async () => {
       1000,
       unexpected,
       systemTimekeeper.after,
+      OPEN,
     ),
   ).rejects.toThrow("bug");
 });
@@ -78,10 +85,51 @@ test("a rejection after the deadline goes to its owner's report, never dropped",
       throw new Error("late bug");
     },
     5,
-    (e) => late.push(e),
+    (e, ended) => late.push([e, ended]),
     systemTimekeeper.after,
+    OPEN,
   );
   expect(end).toBe("deadline");
   await after(60);
-  expect(late).toEqual([new Error("late bug")]);
+  expect(late).toEqual([[new Error("late bug"), "deadline"]]);
+});
+
+test("its owner closing ends the wait there, with its timer cleared and its work's signal aborted", async () => {
+  const owner = new AbortController();
+  let seen: AbortSignal | undefined;
+  const cleared: string[] = [];
+  const waiting = waitWithin(
+    (signal) => {
+      seen = signal;
+      return new Promise(() => {});
+    },
+    60_000,
+    unexpected,
+    (ms, fire) => {
+      const clear = systemTimekeeper.after(ms, fire);
+      return () => {
+        cleared.push("timer");
+        clear();
+      };
+    },
+    owner.signal,
+  );
+  owner.abort();
+  expect(await waiting).toBe("closed");
+  expect(seen?.aborted).toBe(true);
+  expect(cleared).toEqual(["timer"]);
+});
+
+test("a wait begun after its owner closed ends at once", async () => {
+  const owner = new AbortController();
+  owner.abort();
+  expect(
+    await waitWithin(
+      () => new Promise(() => {}),
+      60_000,
+      unexpected,
+      systemTimekeeper.after,
+      owner.signal,
+    ),
+  ).toBe("closed");
 });

@@ -10,13 +10,14 @@ import {
   type Effect,
   type Event,
   type Renderer,
-  type RendererInput,
+  type EventInput,
   type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
 } from "../renderer-interface/interface.js";
 import { eventLine } from "../utils/logfmt.js";
-import { instantAt } from "../utils/instant.js";
+import { instantAt, type Instant } from "../utils/instant.js";
+import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import type { Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 import type { SessionId } from "./foundations/session-id.js";
@@ -30,10 +31,16 @@ export interface RendererHost {
   readonly name: RendererName;
   // One turn, recorded by the caller: a request's answer writes both its
   // turns on the request's render event.
-  answer(input: RendererInput): Promise<TurnOutcome>;
+  answer(input: EventInput): Promise<TurnOutcome>;
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
-  deliver(input: RendererInput, about: TurnRecord): Promise<TurnOutcome>;
+  deliver(input: EventInput, about: TurnRecord): Promise<TurnOutcome>;
+  // One push, at `at`, answered by its reply. A push that threw or rejected,
+  // or one answered by another push's reply, rejects with an Error naming the
+  // renderer and the push: the caller that awaits it owns the failure.
+  ask<P extends AdapterPush>(push: P, at: Instant): Promise<ReplyTo<P["kind"]>>;
+  // One push nobody awaits: its failure is logged here.
+  tell(push: AdapterPush, at: Instant): void;
 }
 
 export function rendererHost(
@@ -52,7 +59,7 @@ export function rendererHost(
     readonly holding: (session: SessionId) => () => void;
   },
 ): RendererHost {
-  const held = async (input: RendererInput): Promise<TurnOutcome> => {
+  const held = async (input: EventInput): Promise<TurnOutcome> => {
     const session = sessionOf(input.event);
     const release = session === null ? () => {} : collector.holding(session);
     try {
@@ -73,7 +80,7 @@ export function rendererHost(
   // hears how the whole turn ended as a value: a hold that failed, a renderer
   // that rejected, or an output the host could not take, is the turn's
   // failure. Nothing of it was taken, so the subscriptions last taken stand.
-  const turn = (input: RendererInput): Promise<TurnOutcome> =>
+  const turn = (input: EventInput): Promise<TurnOutcome> =>
     held(input).catch(
       (thrown: unknown): TurnOutcome => ({
         kind: "threw",
@@ -97,7 +104,7 @@ export function rendererHost(
     );
   // A turn's line, when it learned something or failed.
   const record = (
-    input: RendererInput,
+    input: EventInput,
     about: TurnRecord,
     delivered: TurnOutcome,
   ): void => {
@@ -128,14 +135,46 @@ export function rendererHost(
   // [LAW:nothing-unseen] An input no event of its own records is recorded
   // here.
   const deliver = async (
-    input: RendererInput,
+    input: EventInput,
     about: TurnRecord,
   ): Promise<TurnOutcome> => {
     const delivered = await turn(input);
     record(input, about, delivered);
     return delivered;
   };
-  return { name, answer: turn, deliver };
+  // [LAW:single-enforcer] The one place a push's output is judged: a push is
+  // answered by the reply of its own kind, or it failed.
+  const ask = async <P extends AdapterPush>(
+    push: P,
+    at: Instant,
+  ): Promise<ReplyTo<P["kind"]>> => {
+    // A renderer that rejected fails the push as one whose turn threw, so
+    // every failure is said with the renderer and the push it failed.
+    const output = await renderer
+      .answer({ kind: "adapter", push, at })
+      .catch(
+        (thrown: unknown) =>
+          ({ kind: "threw", failure: failureOf(thrown) }) as const,
+      );
+    if (output.kind === "threw")
+      throw new Error(
+        `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`,
+      );
+    if (output.reply.kind !== push.kind)
+      throw new Error(
+        `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`,
+      );
+    // [LAW:types-are-the-program] exception: the kinds were just compared,
+    // which the compiler cannot carry from the reply's kind to its type.
+    return output.reply as ReplyTo<P["kind"]>;
+  };
+  const tell = (push: AdapterPush, at: Instant): void =>
+    // [LAW:types-are-the-program] exception: `ask` rejects only with the
+    // Errors it makes, which no promise type carries.
+    void ask(push, at).catch((thrown: unknown) =>
+      log("error", (thrown as Error).message),
+    );
+  return { name, answer: turn, deliver, ask, tell };
 }
 
 // [LAW:one-source-of-truth] The session an event names: what a turn holds,

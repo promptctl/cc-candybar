@@ -18,6 +18,7 @@ import { inspect } from "node:util";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
 import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
+import { renderFailed } from "./foundations/render-answers";
 import {
   LANES,
   MOVING_FPS,
@@ -102,30 +103,39 @@ export interface FeedDeps<Req> {
   // showing either changes whenever it does — an extra draw for a click, the
   // frame's own push, a bar's own beat — and is pushed for it, so a still bar
   // would never be still.
-  // [LAW:effects-at-boundaries] Synchronous by type: a frame only reads what
-  // its sources stored, so drawing one can await nothing and refresh nothing.
+  // `following` and `feeds` are the feed's own (`following`, `feedsOf`), read
+  // as it asks, so the draw reads no feed.
+  // [LAW:effects-at-boundaries] A frame only reads what its sources stored, so
+  // it refreshes nothing; it is drawn in the renderer's turn and arrives
+  // later, and the feed's phase says what happens meanwhile.
   // [LAW:types-are-the-program] Null when the session has no view to draw
   // yet: a frame opens none (src/renderer/render-cache.ts `holdView`), so the
   // feed waits for the event that opens one.
-  render(sessionId: SessionId, fps: number, at: Instant): FeedFrame | null;
+  frame(
+    sessionId: SessionId,
+    fps: number,
+    at: Instant,
+    following: readonly Lane[],
+    feeds: LaneFeeds,
+  ): Promise<FeedFrame | null>;
   // Which animation lanes the session's settings switch on now, as its view
   // draws them — never a copy taken when a frame was drawn, so a toggle turned
   // on is honoured at the next subscribe. Null while it has no view.
-  lanes(sessionId: SessionId): LaneSwitches | null;
+  lanes(sessionId: SessionId): Promise<LaneSwitches | null>;
   // Whether the bar of the session `req` is from is on a screen now: a bar
   // nobody can see is drawn at the still rate however it moves.
   shown(req: Req): boolean;
   // The first feed opened: whatever runs only while some feed exists starts,
   // and the returned stop is called when the last feed closes.
   watching(): () => void;
-  // Calls `onChange` whenever the session's own state changes (a click opening
-  // a menu), so its next frame is brought forward (`wake`). Returns the
-  // disposer.
-  watch(sessionId: SessionId, onChange: () => void): () => void;
   // [LAW:no-ambient-temporal-coupling] Holds the session's view open, and the
-  // entry it is of, from the feed's open to its close: the feed being open is
-  // what keeps it, not its frames reading it. Returns the release.
-  pin(sessionId: SessionId): () => void;
+  // entry it is of, from the feed's open (`pin`) to its close (`unpin`): the
+  // feed being open is what keeps it, not its frames reading it. The pin also
+  // wakes the feed whenever the session's own state changes (a click opening
+  // a menu), as `wake` "state". Neither is awaited: the renderer takes them
+  // in the order they were sent, before and after the feed's frames.
+  pin(sessionId: SessionId): void;
+  unpin(sessionId: SessionId): void;
   // Every source's refreshes so far, by trigger (the daemon's one ledger):
   // the feed's summary says how many ran while it was open, beside the frames
   // it drew, so a feed that drew without refreshing anything is seen to.
@@ -139,7 +149,9 @@ export interface FeedDeps<Req> {
 
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
 // state: no view to draw yet; the next frame due `at` a timer, on the
-// monotonic clock; or a frame being drawn.
+// monotonic clock; or a frame out to the renderer, and whether a wake came
+// while it was (`woken`): the frame may have been drawn before what woke it
+// moved, so the wake is owed the next frame, at the feed's spacing.
 type Phase =
   | { readonly kind: "waiting" }
   | {
@@ -147,7 +159,7 @@ type Phase =
       readonly at: number;
       readonly clear: () => void;
     }
-  | { readonly kind: "drawing" };
+  | { readonly kind: "drawing"; readonly woken: boolean };
 
 interface Feed {
   readonly sessionId: SessionId;
@@ -159,8 +171,6 @@ interface Feed {
   // joining to its last leaving, and not counting the frame a subscriber is
   // handed as it joins, which is the bar as it stood, not one more frame.
   readonly rates: Map<Lane, Instant[]>;
-  readonly unwatch: () => void;
-  readonly unpin: () => void;
   phase: Phase;
   // The moment the last frame was drawn for, on the monotonic clock: what a
   // wake's next frame is spaced from.
@@ -246,12 +256,20 @@ interface Noted<Req> {
  * the session has a subscriber; its frames are drawn one at a time, so two
  * subscribers to one session share every render.
  */
+// [LAW:no-ambient-temporal-coupling] What woke the feed while its frame was
+// out is owed a frame after it, however that frame ended.
+function wokenWhileOut(feed: Feed): boolean {
+  return feed.phase.kind === "drawing" && feed.phase.woken;
+}
+
 export class FrameFeeds<Req> {
   private readonly requests = new Map<SessionId, Noted<Req>>();
   private readonly feeds = new Map<SessionId, Feed>();
   // [LAW:no-ambient-temporal-coupling] The stop of what runs while any feed
   // exists: held exactly from the first feed opening to the last closing.
   private stopWatching: (() => void) | null = null;
+  // The daemon's close: no feed opens after it.
+  private closed = false;
   private drawn = 0;
   private pushed = 0;
   private refused = 0;
@@ -292,11 +310,58 @@ export class FrameFeeds<Req> {
   // lane the session's settings switch off is refused here before any feed
   // opens, and one whose lane is switched off while it streams is ended in
   // `push`. A session with no view yet waits, and its first frame decides.
+  // [LAW:no-ambient-temporal-coupling] The lanes arrive from the renderer
+  // later, so a subscriber is admitting until they do: nothing opens, and
+  // nothing is sent it, before its lane is known to be on. One that leaves
+  // while admitting is never admitted, and the returned unsubscribe is its
+  // leaving whichever state it is in.
   subscribe(sessionId: SessionId, sub: Subscriber): () => void {
-    const lanes = this.deps.lanes(sessionId);
+    let left = false;
+    void this.deps
+      .lanes(sessionId)
+      .then((lanes) => {
+        if (!left) this.admit(sessionId, sub, lanes);
+      })
+      // [LAW:no-silent-failure] A lanes read or an admission that threw is the
+      // subscribe's failure, as a subscribe's own throw is its connection's:
+      // said, the subscriber dropped wherever it got to, and answered
+      // RENDER_FAILED, never an open socket nothing feeds.
+      .catch((thrown: unknown) => {
+        this.deps.log(
+          "error",
+          `feed sid=${JSON.stringify(sessionId)} admission threw: ${inspect(thrown)}`,
+        );
+        // One that left already heard its own leaving.
+        if (left) return;
+        const feed = this.feeds.get(sessionId);
+        if (feed !== undefined) this.unsubscribe(feed, sub);
+        sub.refused(renderFailed(thrown));
+      });
+    return () => {
+      left = true;
+      const feed = this.feeds.get(sessionId);
+      if (feed !== undefined) this.unsubscribe(feed, sub);
+    };
+  }
+
+  private admit(
+    sessionId: SessionId,
+    sub: Subscriber,
+    lanes: LaneSwitches | null,
+  ): void {
+    // A daemon that closed while the lanes were out opens no feed: the
+    // subscriber is dropped as the close dropped those it followed.
+    // [LAW:nothing-unseen] Said, so a subscribe never vanishes from the log.
+    if (this.closed) {
+      this.deps.log(
+        "info",
+        `feed sid=${JSON.stringify(sessionId)} dropped lane=${sub.lane} daemon-closed`,
+      );
+      return;
+    }
     if (lanes !== null && !lanes[sub.lane]) {
       this.refuse(sessionId, sub);
-      return () => {};
+      return;
     }
     const held = this.feeds.get(sessionId);
     const feed = held ?? this.open(sessionId);
@@ -304,16 +369,15 @@ export class FrameFeeds<Req> {
     if (!feed.rates.has(sub.lane)) feed.rates.set(sub.lane, []);
     // [LAW:no-ambient-temporal-coupling] A feed's clock starts when it opens:
     // its first frame falls due as a wake's would, in a later turn than the
-    // subscribe, so a subscribe draws nothing in its caller's turn. A later
-    // subscriber is handed the frame as it stands, and the next is brought
-    // forward: who follows the session is drawn into it (`following`).
+    // admission, so admitting draws nothing in its turn. A later subscriber is
+    // handed the frame as it stands, and the next is brought forward: who
+    // follows the session is drawn into it (`following`).
     if (held !== undefined) this.send(feed, sub);
     this.hasten(feed);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${feed.followers.size} view=${lanes === null ? "N" : "Y"}`,
     );
-    return () => this.unsubscribe(feed, sub);
   }
 
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
@@ -418,8 +482,6 @@ export class FrameFeeds<Req> {
       sessionId,
       followers: new Map(),
       rates: new Map(),
-      unwatch: this.deps.watch(sessionId, () => this.wake(sessionId, "state")),
-      unpin: this.deps.pin(sessionId),
       phase: { kind: "waiting" },
       // Never drawn: its first frame may be drawn now.
       lastStart: -Infinity,
@@ -441,6 +503,7 @@ export class FrameFeeds<Req> {
       refreshesAtOpen: this.deps.refreshes(),
     };
     this.feeds.set(sessionId, feed);
+    this.deps.pin(sessionId);
     this.stopWatching ??= this.deps.watching();
     return feed;
   }
@@ -448,6 +511,7 @@ export class FrameFeeds<Req> {
   // The daemon's close: every feed ends as its last subscriber's leaving ends
   // it, and the pane follow with the last of them.
   close(): void {
+    this.closed = true;
     for (const feed of [...this.feeds.values()])
       for (const sub of [...feed.followers.keys()]) this.unsubscribe(feed, sub);
   }
@@ -462,8 +526,7 @@ export class FrameFeeds<Req> {
       return;
     }
     if (feed.phase.kind === "due") feed.phase.clear();
-    feed.unwatch();
-    feed.unpin();
+    this.deps.unpin(feed.sessionId);
     this.feeds.delete(feed.sessionId);
     if (this.feeds.size === 0) {
       this.stopWatching?.();
@@ -482,8 +545,8 @@ export class FrameFeeds<Req> {
   // frame set for a change shows it however early its timer fires, and none is
   // ever drawn further ahead of the wall than that, so nothing carries from
   // one frame to the next. Its moment on the monotonic clock is that instant's.
-  private draw(feed: Feed, due: Instant): void {
-    feed.phase = { kind: "drawing" };
+  private async draw(feed: Feed, due: Instant): Promise<void> {
+    feed.phase = { kind: "drawing", woken: false };
     const started = this.deps.clock.monotonic();
     const wall = this.deps.instant();
     const at = Math.min(
@@ -492,10 +555,11 @@ export class FrameFeeds<Req> {
     ) as Instant;
     const moment = started + (at - wall) * 1000;
     try {
-      this.step(feed, started, moment, at);
+      await this.step(feed, started, moment, at);
     } catch (error) {
       // A frame that faulted spaces the next as a drawn one does, so a feed
       // woken while its adapter throws still draws at its spacing.
+      const woken = wokenWhileOut(feed);
       feed.lastStart = moment;
       this.deps.log(
         "error",
@@ -503,24 +567,34 @@ export class FrameFeeds<Req> {
       );
       if (this.feeds.get(feed.sessionId) !== feed) return;
       this.schedule(feed, null, at);
+      if (woken) this.hasten(feed);
     }
   }
 
-  private step(feed: Feed, started: number, moment: number, at: Instant): void {
-    // The render adapter answers a failed render with its error frame; a throw
-    // out of it is a fault in the adapter, `draw`'s to report.
-    const frame = this.deps.render(
+  private async step(
+    feed: Feed,
+    started: number,
+    moment: number,
+    at: Instant,
+  ): Promise<void> {
+    // The renderer answers a failed render with its error frame; a rejection
+    // is a fault in the adapter, `draw`'s to report.
+    const frame = await this.deps.frame(
       feed.sessionId,
       paceOf(this.spacingOf(feed)),
       at,
+      [...this.following(feed.sessionId)],
+      this.feedsOf(feed.sessionId, at),
     );
     // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits,
     // with no timer, until the event that opens one wakes it.
     // A draw that found no view drew nothing, so it spaces nothing: the
     // frame the view's opening wakes is drawn at once.
     if (frame === null) {
+      const woken = wokenWhileOut(feed);
       feed.noView++;
       feed.phase = { kind: "waiting" };
+      if (woken && this.feeds.get(feed.sessionId) === feed) this.hasten(feed);
       return;
     }
     feed.lastStart = moment;
@@ -538,7 +612,11 @@ export class FrameFeeds<Req> {
     if (this.feeds.get(feed.sessionId) !== feed) return;
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
+    // Read as the phase is replaced, so a wake the push raised (a lane it
+    // ended, which redraws who follows) is owed as one while out is.
+    const woken = wokenWhileOut(feed);
     this.schedule(feed, frame, at);
+    if (woken) this.hasten(feed);
   }
 
   // [LAW:no-ambient-temporal-coupling] The next frame is due when the bar
@@ -576,12 +654,18 @@ export class FrameFeeds<Req> {
   // never later than it already falls due. Answers whether it moved anything:
   // a wake that did not was coalesced into a frame already due. Spaced on the
   // monotonic clock, so a wall clock stepped back cannot stall a wake.
-  // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
-  // turn and opens nothing, so a wake while it draws is the draw's own, and
-  // the frame reads what that moved: it is coalesced into that frame.
+  // [LAW:no-ambient-temporal-coupling] A frame is drawn in the renderer's
+  // turn and arrives later, so a wake while it is out may be of something it
+  // did not read: the wake is held in the phase and brings the next frame
+  // forward once this one lands. A draw writes nothing its view reacts to, so
+  // none of these wakes is the draw's own.
   private hasten(feed: Feed): boolean {
     const { phase } = feed;
-    if (phase.kind === "drawing") return false;
+    if (phase.kind === "drawing") {
+      if (phase.woken) return false;
+      feed.phase = { kind: "drawing", woken: true };
+      return true;
+    }
     const now = this.deps.clock.monotonic();
     const at = Math.max(now, feed.lastStart + this.spacingOf(feed));
     if (phase.kind === "due" && phase.at <= at) return false;
@@ -630,7 +714,7 @@ export class FrameFeeds<Req> {
   private fire(feed: Feed, due: Instant, dueMoment: number): void {
     const remaining = dueMoment - this.deps.clock.monotonic();
     if (remaining > 0) this.setTimer(feed, due, dueMoment, remaining);
-    else this.draw(feed, due);
+    else void this.draw(feed, due);
   }
 
   private shown(feed: Feed): boolean {
@@ -643,8 +727,8 @@ export class FrameFeeds<Req> {
   }
 
   private push(feed: Feed, frame: FeedFrame, at: Instant): void {
-    // The lanes the session's settings switch on as this frame goes out.
-    const lanes = this.deps.lanes(feed.sessionId);
+    // The lanes the session's settings switched on as this frame drew.
+    const { lanes } = frame;
     if (lanes !== null) {
       for (const sub of [...feed.followers.keys()]) {
         if (lanes[sub.lane]) continue;
@@ -653,9 +737,6 @@ export class FrameFeeds<Req> {
       }
     }
     if (feed.followers.size === 0) return;
-    // [LAW:one-source-of-truth] A frame whose bytes match the last one shows
-    // the same links, so what they copy is this frame's, pushed or not.
-    frame.delivered();
     const answers = {
       resp: JSON.stringify(frame.resp),
       statusline: JSON.stringify(frame.statusline),

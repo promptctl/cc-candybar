@@ -262,15 +262,16 @@ export function startDaemon(
     // exit ends it, so here the shell's end does: a subscriber hears the daemon
     // go, and a request's backstop goes with its stream. What is logged by now
     // is awaited and the log ended before the case's next daemon opens the same
-    // file. A closed daemon's work needs no wait here, so close's value goes
-    // unread: its launches are refused, by its own launcher, and a line of its
-    // says it came after the close.
+    // file. The teardown is awaited, so its session state is on disk before the
+    // next daemon reads it; a closed daemon's work needs no wait here, so what
+    // close settles goes unread: its launches are refused, by its own launcher,
+    // and a line of its says it came after the close.
     stop: async () => {
       // A second stop of one daemon (inline, then the case's afterEach) is no
       // second daemon ending: only a first one counts down what is held.
       if (stopped) return;
       stopped = true;
-      void daemon.close(NO_TMUX_AT_EXIT);
+      await daemon.close(NO_TMUX_AT_EXIT);
       for (const end of open) end.destroy();
       await Promise.all(
         servers.map((server) => new Promise((closed) => server.close(closed))),

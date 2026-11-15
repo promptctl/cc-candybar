@@ -5,7 +5,7 @@
 
 import { ProbeArrivals } from "../src/doctor/handler-probe";
 import { RuntimeStats } from "../src/daemon/stats";
-import { JournalTurns } from "../src/daemon/journal-turns";
+import { JournalTurns } from "../src/renderer/journal-turns";
 import { HOST, locs } from "./helpers/host";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";

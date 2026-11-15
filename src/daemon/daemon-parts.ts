@@ -1,5 +1,4 @@
 import type { Collector } from "./collector.js";
-import type { AdapterToRenderer } from "../renderer-interface/adapter.js";
 import type { Timekeeper } from "../time.js";
 import type { FileEventDelivery } from "./cache/file-events";
 import type { WatcherRegistry } from "./cache/watchers";
@@ -17,7 +16,6 @@ import type { RuntimeStats } from "./stats";
 import type { TmuxStatusLines } from "./tmux-status.js";
 import type { UpdateWatch } from "./update-notice";
 import type { DoctorStores } from "../doctor/ports";
-import type { JournalTurns } from "./journal-turns";
 import type { RendererHost } from "./renderer-host.js";
 import type { ClicksInFlight } from "./clicks-in-flight.js";
 import type { ProbeArrivals } from "../doctor/handler-probe";
@@ -57,7 +55,6 @@ export interface DaemonParts {
   readonly frameFeeds: FrameFeeds<CheckedRenderRequest>;
   readonly updateWatch: UpdateWatch;
   readonly limits: LimitsHandle;
-  readonly journalTurns: Pick<JournalTurns, "getStats">;
   // The host's one path to the main renderer (src/daemon/renderer-host.ts).
   readonly renderer: RendererHost;
   // The clicks whose turns run, and whether each one's client has left.
@@ -65,7 +62,4 @@ export interface DaemonParts {
   // [LAW:single-enforcer] The host's one reader of every session's world
   // (src/daemon/collector.ts).
   readonly collector: Collector;
-  // What the host reaches in the main renderer, returned by its start
-  // (src/renderer/main.ts) beside the renderer it wraps.
-  readonly toRenderer: AdapterToRenderer;
 }

@@ -108,7 +108,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // Per-request timeout protects the daemon from a single slow request
   // (e.g. a hung git call) blocking subsequent connections. It abandons the
   // RESPONSE, not the work in hand — the handler promise keeps running — though
-  // a click still waiting for its turn is refused then (src/daemon/journal-turns.ts).
+  // a click still waiting for its turn is refused then (src/renderer/journal-turns.ts).
   //
   // [LAW:one-source-of-truth] That is safe for the transcript-fs path because
   // the work is bounded + shared, not orphaned: the today aggregate and
@@ -144,7 +144,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // design, so for a url frame the socket's close is not a peer leaving: the
   // frame stays in flight, under the same deadline every request has, until
   // its click is handled (a click past the deadline is refused, so a repeat
-  // click cannot revert it, src/daemon/journal-turns.ts), and no one is said
+  // click cannot revert it, src/renderer/journal-turns.ts), and no one is said
   // to have left. Every other client holds the socket until answered.
   const reader = makeFrameReader(
     (frame) => {
@@ -221,8 +221,9 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       drawing: () => true,
     });
     // Answered only once the subscription stands: a subscribe that threw is
-    // the connection's `handler threw`, answered RENDER_FAILED and ended,
-    // never an open socket nothing feeds.
+    // the connection's `handler threw`, and an admission that threw later is
+    // refused by the feed, each answered RENDER_FAILED and ended, never an
+    // open socket nothing feeds.
     responded = true;
     sock.on("close", unsubscribe);
   };

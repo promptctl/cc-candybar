@@ -9,6 +9,7 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
+import { eventRenderer, hearingEvents } from "../helpers/renderers";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
@@ -97,21 +98,19 @@ function scripted(
     heard,
     configs,
     requests,
-    renderer: {
-      answer: async ({ event }) => {
-        switch (event.kind) {
-          case "config":
-            configs.push(event);
-            return configured;
-          case "request":
-            requests.push(event);
-            return request;
-          default:
-            heard.push(event);
-            return output([]);
-        }
-      },
-    },
+    renderer: eventRenderer(async ({ event }) => {
+      switch (event.kind) {
+        case "config":
+          configs.push(event);
+          return configured;
+        case "request":
+          requests.push(event);
+          return request;
+        default:
+          heard.push(event);
+          return output([]);
+      }
+    }),
   };
 }
 
@@ -273,13 +272,11 @@ test("a render turn that throws a bad argument is still the daemon's failure, as
 test("a renderer that rejects is the turn's failure, said on its line, and the subscriptions last taken stand", async () => {
   const logged: string[] = [];
   const subscribed: Subscriptions[] = [];
-  const renderer: Renderer = {
-    answer: async ({ event }) => {
-      if (event.kind === "config") return output([]);
-      if (event.kind === "request") return output([present(1)]);
-      throw new Error("the renderer went away");
-    },
-  };
+  const renderer = eventRenderer(async ({ event }) => {
+    if (event.kind === "config") return output([]);
+    if (event.kind === "request") return output([present(1)]);
+    throw new Error("the renderer went away");
+  });
   const { answered } = await answer(renderer, logged, subscribed);
   answered.settled(true);
   await drained();
@@ -305,13 +302,11 @@ test("a turn that throws still hands the host what its open views read", async (
 
 test("a failed effect-done turn is said on a turn line naming the renderer and the session", async () => {
   const logged: string[] = [];
-  const renderer: Renderer = {
-    answer: async ({ event }) => {
-      if (event.kind === "config") return output([]);
-      if (event.kind === "request") return output([present(1)]);
-      return threwWith([], "no such present");
-    },
-  };
+  const renderer = eventRenderer(async ({ event }) => {
+    if (event.kind === "config") return output([]);
+    if (event.kind === "request") return output([present(1)]);
+    return threwWith([], "no such present");
+  });
   const { answered } = await answer(renderer, logged);
   answered.settled(true);
   await drained();
@@ -333,14 +328,10 @@ test("the session's config reaches the renderer first, with the world state read
     { ...output([]), subscriptions: opened },
   );
   await answer(
-    {
-      answer: (input) => {
-        // What the host had subscribed when this input reached the renderer.
-        if (input.event.kind === "request")
-          expect(subscribed).toEqual([opened]);
-        return renderer.answer(input);
-      },
-    },
+    hearingEvents(renderer, (input) => {
+      // What the host had subscribed when this input reached the renderer.
+      if (input.event.kind === "request") expect(subscribed).toEqual([opened]);
+    }),
     [],
     subscribed,
   );
@@ -362,13 +353,11 @@ test("the host holds the session through each of its turns, with nothing held by
   ] as const) {
     const holds = { count: 0, sessions: [] as string[] };
     const heldDuring: string[] = [];
-    const renderer: Renderer = {
-      answer: async ({ event }) => {
-        const turn = event.kind === "config" ? config : request;
-        heldDuring.push(`${event.kind}:${holds.count}`);
-        return turn;
-      },
-    };
+    const renderer = eventRenderer(async ({ event }) => {
+      const turn = event.kind === "config" ? config : request;
+      heldDuring.push(`${event.kind}:${holds.count}`);
+      return turn;
+    });
     await answer(renderer, [], [], holds);
     expect(heldDuring).toEqual(
       config.kind === "threw" ? ["config:1"] : ["config:1", "request:1"],

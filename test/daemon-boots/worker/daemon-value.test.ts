@@ -123,7 +123,9 @@ describe("the daemon is a value", () => {
   };
 
   const close = async (daemon: Daemon): Promise<void> => {
-    await daemon.close(NO_TMUX_AT_EXIT);
+    await (
+      await daemon.close(NO_TMUX_AT_EXIT)
+    ).settled;
     open = null;
   };
 
@@ -394,7 +396,7 @@ describe("the daemon is a value", () => {
     );
 
     const sessionFile = sessionStatePath(hostNow());
-    const closing = await daemon.close(NO_TMUX_AT_EXIT);
+    const { settled: closing } = await daemon.close(NO_TMUX_AT_EXIT);
     open = null;
     afterClose = { armed: [], fired: [] };
     const closedWith = readFileSync(sessionFile, "utf8");
