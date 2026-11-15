@@ -1455,17 +1455,16 @@ export class RenderCache<
       watch: null,
     };
     this.serve(entry.state);
-    // Before the bound: an eviction there releases another state's folders,
-    // which this one may name too.
-    this.holdFolders(entry.state);
-    // [LAW:single-enforcer] Insert, bound, watch, then notify — in that
-    // order. From the moment the entry is in the map it is reachable for
+    // [LAW:single-enforcer] Insert, hold, bound, watch, then notify — in that
+    // order. The hold precedes the bound: an eviction there releases another
+    // state's folders, which this one may name too. From the moment the entry is in the map it is reachable for
     // eviction and dispose, so a throwing observer cannot strand a registry
     // outside it, and a reentrant getOrCreate for this key finds the entry
     // rather than building a duplicate. The bound runs first because it is a
     // fact about the MAP, complete at insertion: nothing later (including an
     // observer throwing) can skip it. [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
+    this.holdFolders(entry.state);
     this.fit(entry);
     this.log(
       "info",
@@ -1881,9 +1880,9 @@ export class RenderCache<
 
   // The host holds the storage folders a served state's latest load named.
   private holdFolders(state: DslRenderState): void {
-    this.deps.storage.hold(this.holdOf(state).id, [
-      ...new Set(state.sources.values()),
-    ]);
+    // [LAW:single-enforcer] The host keys each folder once, however many
+    // sources name it.
+    this.deps.storage.hold(this.holdOf(state).id, [...state.sources.values()]);
   }
 
   private holdOf(state: DslRenderState): StateHold {

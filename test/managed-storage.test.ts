@@ -441,6 +441,19 @@ describe("ManagedStorage watches", () => {
     expect(lane.current()).toEqual(ok("a"));
   });
 
+  test("a file where the folder should be is a standing fault of its sources, never a folder", async () => {
+    const r = rig();
+    fs.writeFileSync(r.folder, "");
+    r.hold();
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    expect(await answered(lane)).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason: `cannot refresh: ${r.folder} could not be created or read: ${r.folder} is not a folder; reload the config or restart the daemon`,
+    });
+    expect(r.storage.stats().faults).toMatchObject({ unusable: 1 });
+  });
+
   // ext4 reuses a freed inode number: a folder deleted and created again can
   // carry the old device and inode. Only its birth time tells them apart.
   describe("a folder recreated with the same device and inode", () => {

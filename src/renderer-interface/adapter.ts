@@ -156,7 +156,7 @@ export type DoctorReads = Omit<DoctorMachineEdge, "install"> & {
 
 // [LAW:effects-at-boundaries] exception: what the renderer reaches in the
 // host that crosses a process: each a notice, which answers nothing, or an
-// awaited call answering plain data. Each is a reach a later step removes.
+// awaited call answering plain data.
 export interface AdapterToHost {
   // A feed's next frame brought forward.
   readonly wake: (sessionId: SessionId, cause: WakeCause) => void;

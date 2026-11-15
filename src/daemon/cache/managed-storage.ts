@@ -62,29 +62,29 @@ const fileOf = (f: SessionFile): string =>
 const keyString = (key: StorageKey): string =>
   JSON.stringify([key.folder, key.generation]);
 
-// Makes the storage folder if it is not there, never its plugin's folder: a
-// load can name the folder of a plugin since removed, and making the parent
-// would bring the plugin back as an empty folder.
+// Makes the storage folder if nothing is at its path, never its plugin's
+// folder: a load can name the folder of a plugin since removed, and making the
+// parent would bring the plugin back as an empty folder. Looked at before it
+// is made: mkdir answers EEXIST for a file at the path as for a folder, and a
+// read-only volume can refuse an existing folder before saying it exists.
 function madeOnce(folder: string): void {
+  let st: fs.Stats;
   try {
-    fs.mkdirSync(folder);
+    st = fs.statSync(folder);
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    fs.mkdirSync(folder);
+    return;
   }
+  if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
 }
 
-// What the owner knows of one folder path across its generations.
-interface Folder {
-  generation: number;
-  // Recorded when the current generation's watch opened (or when a hold
-  // moved the generation); null while nothing is recorded.
-  identity: FolderIdentity | null;
-  // Gone, replaced, or its watch faulted: the next hold moves the generation.
-  lost: boolean;
-  // Why the last hold could not create or read the folder, or null: its
-  // generation's standing fault, set when the watch opens.
-  unusable: string | null;
-}
+// [LAW:types-are-the-program] What a hold found at a folder's path: the
+// folder there or nothing (removed as it was made), or why it could not be
+// made or read.
+type Found =
+  | { readonly kind: "found"; readonly identity: FolderIdentity | "gone" }
+  | { readonly kind: "unusable"; readonly reason: string };
 
 // [LAW:types-are-the-program] What has become of one generation's folder,
 // which its sources' reads derive their failure from first. `watching`: its
@@ -101,13 +101,23 @@ type Health =
 // A folder's current generation's watch, open while some hold names it.
 interface Watched {
   readonly key: StorageKey;
-  readonly folder: Folder;
   // The folder the watch opened on.
   readonly identity: FolderIdentity | "gone";
   readonly handle: WatcherHandle;
   readonly stopSweep: () => void;
   health: Health;
 }
+
+// Whether a folder's watch still serves what its hold found: its generation
+// has not ended and the folder at the path is the one it opened on. So
+// whichever of a removal's events comes first, a recreated folder is a new
+// generation.
+const current = (was: Watched, found: Found): boolean =>
+  was.health.kind === "watching" &&
+  found.kind === "found" &&
+  found.identity !== "gone" &&
+  was.identity !== "gone" &&
+  sameIdentity(found.identity, was.identity);
 
 // [LAW:single-enforcer] The one owner of every plugin's managed storage, for
 // the whole daemon (design-docs/PLUGIN-API.md, "Managed storage"). A plugin's
@@ -118,16 +128,16 @@ interface Watched {
 // [LAW:no-ambient-temporal-coupling] A folder's watch lives as long as a
 // render state declaring it holds it (`hold` to `release`), never as long as a
 // view: opening or closing a directory watch leaks on macOS. The owner never
-// re-arms a watch: a folder gone or replaced, or its watch faulted, is marked
-// lost, and the next hold (every config load sends one) moves its generation.
+// re-arms a watch: a folder gone or replaced, or its watch faulted, ends its
+// generation, and the next hold (every config load sends one) opens the next.
 //
 // [LAW:one-source-of-truth] Whether the OS is delivering file events is the
 // daemon's one fact, not a folder's (file-events.ts): a stall is every
 // folder's, read from that owner.
 export class ManagedStorage {
   private readonly sessions: KeyedSource<SessionFile, JsonValue>;
-  private readonly folders = new Map<string, Folder>();
-  // By folder: each folder's current generation's watch.
+  // [LAW:one-source-of-truth] By folder: each folder's current generation's
+  // watch, the one record of what the owner knows of the folder.
   private readonly watched = new Map<string, Watched>();
   // The folders each render state's latest load named.
   private readonly holds = new Map<StorageHoldId, readonly string[]>();
@@ -192,10 +202,16 @@ export class ManagedStorage {
   hold(id: StorageHoldId, folders: readonly string[]): void {
     this.holds.set(id, folders);
     for (const folder of new Set(folders)) {
-      const key = this.keyFor(folder);
       const was = this.watched.get(folder);
-      if (was?.key.generation === key.generation) continue;
-      this.opened(key);
+      const found = this.found(folder);
+      if (was !== undefined && current(was, found)) continue;
+      const generation = was === undefined ? 0 : was.key.generation + 1;
+      if (was !== undefined)
+        this.logger(
+          "info",
+          `plugin storage generation folder=${valueOf(folder)} generation=${generation}`,
+        );
+      this.opened({ folder, generation }, found);
       if (was !== undefined) this.closed(was);
       this.sessions.changed((f) => f.folder === folder);
     }
@@ -237,38 +253,21 @@ export class ManagedStorage {
     this.closeUnheld();
   }
 
-  // The key of a folder a hold names. Creates the storage folder, so its
-  // program has somewhere to write before any session reads it, and stats
-  // it. The generation moves when the folder was marked lost or is no longer
-  // the folder its watch opened on; so whichever of a removal's events comes
-  // first, a recreated folder is a new key.
+  // What a hold finds at a folder's path. Creates the storage folder, so its
+  // program has somewhere to write before any session reads it.
   // [LAW:no-silent-failure] A folder that cannot be created or read is its
   // generation's standing fault, read by every source in it, never a throw:
   // one plugin's folder fails only that plugin's sources, not the build.
-  private keyFor(folder: string): StorageKey {
-    const known = this.folders.get(folder) ?? this.recorded(folder);
-    let now: FolderIdentity | "gone" = "gone";
-    known.unusable = null;
+  private found(folder: string): Found {
     try {
       madeOnce(folder);
-      now = this.identityOf(folder);
+      return { kind: "found", identity: this.identityOf(folder) };
     } catch (e) {
-      known.unusable = `could not be created or read: ${(e as Error).message}`;
+      return {
+        kind: "unusable",
+        reason: `could not be created or read: ${(e as Error).message}`,
+      };
     }
-    const moved =
-      known.lost ||
-      (known.identity !== null &&
-        (now === "gone" || !sameIdentity(now, known.identity)));
-    if (moved) {
-      known.generation++;
-      known.lost = false;
-      known.identity = now === "gone" ? null : now;
-      this.logger(
-        "info",
-        `plugin storage generation folder=${valueOf(folder)} generation=${known.generation}`,
-      );
-    }
-    return { folder, generation: known.generation };
   }
 
   // Closes every folder no hold names.
@@ -278,31 +277,12 @@ export class ManagedStorage {
       if (!named.has(folder)) this.closed(watched);
   }
 
-  private recorded(folder: string): Folder {
-    const known: Folder = {
-      generation: 0,
-      identity: null,
-      lost: false,
-      unusable: null,
-    };
-    this.folders.set(folder, known);
-    return known;
-  }
-
-  // Opens a folder's generation just keyed, as the folder's current watch.
-  private opened(key: StorageKey): Watched {
-    const folder = this.folders.get(key.folder);
-    // [LAW:no-silent-failure] A watch is only ever opened on a key this owner
-    // just handed out.
-    if (folder === undefined) {
-      throw new Error(`plugin storage: no key was asked for ${key.folder}`);
-    }
-    const { unusable } = folder;
-    const identity = unusable === null ? this.identityOf(key.folder) : "gone";
-    folder.identity = identity === "gone" ? null : identity;
+  // Opens a folder's next generation, on what its hold found, as the folder's
+  // current watch.
+  private opened(key: StorageKey, found: Found): Watched {
+    const identity = found.kind === "found" ? found.identity : "gone";
     const watched: Watched = {
       key,
-      folder,
       identity,
       // [LAW:single-enforcer] The only acquirer of this registry key, so the
       // slot's one callback is this generation's own.
@@ -321,7 +301,8 @@ export class ManagedStorage {
     this.watched.set(key.folder, watched);
     // First, so its reason is the one the sources read: a folder that could
     // not be made refuses its watch too.
-    if (unusable !== null) this.faulted(watched, "unusable", unusable);
+    if (found.kind === "unusable")
+      this.faulted(watched, "unusable", found.reason);
     for (const refusal of watched.handle.deaf) {
       this.faulted(watched, "refused", refusal.reason);
     }
@@ -384,7 +365,7 @@ export class ManagedStorage {
   private judged(watched: Watched, present: () => void): void {
     const { health } = watched;
     if (health.kind !== "watching") return;
-    const { key, folder } = watched;
+    const { key } = watched;
     let now: FolderIdentity | "gone";
     try {
       now = this.identityOf(key.folder);
@@ -398,7 +379,6 @@ export class ManagedStorage {
       return;
     }
     watched.health = { kind: "lost" };
-    folder.lost = true;
     this.lost++;
     this.logger(
       "info",
@@ -413,11 +393,10 @@ export class ManagedStorage {
   // hold opens a fresh generation. No retry here: the OS refusing a watch
   // (limits, permissions) refuses an immediate retry the same way.
   private faulted(watched: Watched, cause: FaultCause, reason: string): void {
-    const { key, folder } = watched;
+    const { key } = watched;
     if (watched.health.kind !== "watching") return;
     watched.health = { kind: "faulted", reason };
     this.faultCounts[cause]++;
-    folder.lost = true;
     this.logger(
       "warn",
       `plugin storage fault folder=${valueOf(key.folder)} generation=${key.generation} cause=${cause} reason=${JSON.stringify(reason)}`,
