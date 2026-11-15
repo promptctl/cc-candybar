@@ -186,6 +186,10 @@ interface Feed {
   noted: number;
   // Frames due that found no view to draw, and waited.
   noView: number;
+  // [LAW:nothing-unseen] The fault its frame steps are throwing, and how many
+  // in a row have: said once as it starts and once as it clears, so one that
+  // lasts (a renderer starting again) is one line, not one a frame.
+  fault: { readonly text: string; count: number } | null;
   // Next frames set sooner than the still period, because the bar changes
   // sooner on a screen, and those held to it only because the bar was on no
   // screen: counts of the decision, since only the decision asks whether a bar
@@ -490,6 +494,7 @@ export class FrameFeeds<Req> {
       drawn: 0,
       noted: 0,
       noView: 0,
+      fault: null,
       moving: 0,
       unseen: 0,
       failed: 0,
@@ -556,15 +561,28 @@ export class FrameFeeds<Req> {
     const moment = started + (at - wall) * 1000;
     try {
       await this.step(feed, started, moment, at);
+      if (feed.fault !== null)
+        this.deps.log(
+          "info",
+          `feed sid=${JSON.stringify(feed.sessionId)} recovered faults=${feed.fault.count}`,
+        );
+      feed.fault = null;
     } catch (error) {
       // A frame that faulted spaces the next as a drawn one does, so a feed
       // woken while its adapter throws still draws at its spacing.
       const woken = wokenWhileOut(feed);
       feed.lastStart = moment;
-      this.deps.log(
-        "error",
-        `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
-      );
+      // A fault is the same one while its message is, whatever stack it
+      // was thrown from this time.
+      const text = error instanceof Error ? error.message : inspect(error);
+      if (feed.fault?.text === text) feed.fault.count++;
+      else {
+        feed.fault = { text, count: 1 };
+        this.deps.log(
+          "error",
+          `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
+        );
+      }
       if (this.feeds.get(feed.sessionId) !== feed) return;
       this.schedule(feed, null, at);
       if (woken) this.hasten(feed);

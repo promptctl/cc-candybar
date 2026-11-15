@@ -101,21 +101,22 @@ export function memoryLimitMb(env: NodeJS.ProcessEnv): number {
   return mb;
 }
 
+// [LAW:one-source-of-truth] The `--max-old-space-size` value a process is
+// started with over its limit, by the client for the host and by the host
+// for its renderer: V8's own cap stays above the limit, so the backstop, not
+// a V8 abort, is what ends a process that grows.
+export const heapCapOf = (limitBytes: number): number =>
+  Math.ceil(limitBytes / BYTES_PER_MB) * HEAP_CAP_OVER_RSS;
+
 // The `--max-old-space-size` value a spawner hands node for the daemon.
 export function heapCapMb(env: NodeJS.ProcessEnv): number {
-  return memoryLimitMb(env) * HEAP_CAP_OVER_RSS;
+  return heapCapOf(memoryLimitBytes(env));
 }
 
 // The budget in bytes, the unit every MemoryCharge is read in.
 export function memoryLimitBytes(env: NodeJS.ProcessEnv): number {
   return memoryLimitMb(env) * BYTES_PER_MB;
 }
-
-// The heap cap the host starts its renderer's process with, as the client
-// starts the host: V8's own cap stays above the limit, so the backstop, not a
-// V8 abort, is what ends a process that grows.
-export const heapCapOf = (limitBytes: number): number =>
-  Math.ceil(limitBytes / BYTES_PER_MB) * HEAP_CAP_OVER_RSS;
 
 const DEFAULT_CHECK_INTERVAL = 60 * 1000;
 const HEAP_SNAPSHOT_KEEP = 3;

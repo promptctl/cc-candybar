@@ -52,6 +52,12 @@ const endedOf = (result: LaunchResult): string =>
 // own kill backstop (src/daemon/server.ts).
 const END_GRACE_MS = 100;
 
+// The host's node flags a renderer runs under (a loader, under tsx), less
+// the two that are the host's alone: its heap cap, which the renderer is
+// given over its own limit, and an inspector, whose port the host holds.
+const ownFlag = (flag: string): boolean =>
+  !flag.startsWith("--max-old-space-size") && !flag.startsWith("--inspect");
+
 // [LAW:single-enforcer] A renderer in its own process: the bundle the daemon
 // runs, started again as its `renderer` subcommand, talking over its stdio.
 export function processRenderers(
@@ -74,7 +80,7 @@ export function processRenderers(
       {
         bin: bin!,
         args: [
-          ...flags,
+          ...flags.filter(ownFlag),
           `--max-old-space-size=${heapCapOf(own.memoryLimitBytes)}`,
           own.bundle.entry,
           "renderer",
@@ -118,6 +124,7 @@ export function processRenderers(
     return {
       answer: wire.answer,
       ended,
+      alive: wire.ping,
       end: async () => {
         channel.close();
         // [LAW:no-ambient-temporal-coupling] One that does not end on its
@@ -186,6 +193,8 @@ export function inProcessRenderers(parts: InProcessParts): Renderers {
         },
         ended,
         end: async () => end("ended with its daemon"),
+        // Its loop is the host's, which is turning if this runs.
+        alive: async () => {},
       };
     };
   };

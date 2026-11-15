@@ -639,6 +639,13 @@ function lines(
     partial += text.slice(from);
     if (partial.length > MAX_CAPTURED_BYTES) ends.full();
   });
+  // [LAW:no-silent-failure] A last line with no newline (a crash's own
+  // message, cut off) is heard as the stream ends.
+  stream?.on("end", () => {
+    const rest = partial + decoder.end();
+    partial = "";
+    if (open && rest !== "") heard(rest);
+  });
   return {
     take: () => {
       open = false;

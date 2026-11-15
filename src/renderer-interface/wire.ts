@@ -32,14 +32,16 @@ export type Reached =
   | { readonly ok: true; readonly value: unknown }
   | { readonly ok: false; readonly failure: Failure };
 
-// What the host sends a renderer.
+// What the host sends a renderer: an input, the answer to one of its calls,
+// and a ping, which its event loop answers at once whatever its turns await.
 export type ToRenderer =
   | { readonly k: "input"; readonly id: number; readonly input: RendererInput }
-  | { readonly k: "reached"; readonly id: number; readonly outcome: Reached };
+  | { readonly k: "reached"; readonly id: number; readonly outcome: Reached }
+  | { readonly k: "ping"; readonly id: number };
 
 // What a renderer sends its host: an input's output with the renderer's own
-// span of its turn, and a reach, whose id is null when it is a notice nobody
-// answers.
+// span of its turn, a reach, whose id is null when it is a notice nobody
+// answers, and the answer to a ping.
 export type ToHost =
   | {
       readonly k: "output";
@@ -52,7 +54,8 @@ export type ToHost =
       readonly id: number | null;
       readonly path: string;
       readonly args: readonly unknown[];
-    };
+    }
+  | { readonly k: "pong"; readonly id: number };
 
 // [LAW:types-are-the-program] Each reach of the adapter, spelled by how it
 // crosses: a notice nobody answers, or a call whose promise the host's answer
@@ -123,6 +126,7 @@ export function parseToRenderer(line: string): ToRenderer {
         id: v.id,
         outcome: v.outcome as unknown as Reached,
       };
+    if (v.k === "ping") return { k: "ping", id: v.id };
   }
   throw new Error(`not a line a host sends a renderer: ${line.slice(0, 200)}`);
 }
@@ -149,6 +153,8 @@ export function parseToHost(line: string): ToHost {
       Array.isArray(v.args)
     )
       return { k: "reach", id: v.id, path: v.path, args: v.args };
+    if (v.k === "pong" && typeof v.id === "number")
+      return { k: "pong", id: v.id };
   }
   throw new Error(
     `not a line a renderer sends its host: ${line.slice(0, 200)}`,
@@ -260,7 +266,10 @@ export function serveRenderer(
         calls.delete(heard.id);
         if (heard.outcome.ok) call.resolve(heard.outcome.value);
         else call.reject(new CrossedFailure(heard.outcome.failure));
+        return;
       }
+      case "ping":
+        send({ k: "pong", id: heard.id });
     }
   });
 }
@@ -273,8 +282,10 @@ export interface WireRenderer {
   answer(
     input: RendererInput,
   ): Promise<{ output: RendererOutput | AdapterOutput; tookMs: number }>;
-  // [LAW:no-silent-failure] Every input still out fails with `reason`: the
-  // renderer's end is gone, and nothing will answer it.
+  // Settles once the renderer's event loop answers, however long its turns.
+  ping(): Promise<void>;
+  // [LAW:no-silent-failure] Every input and ping still out fails with
+  // `reason`: the renderer's end is gone, and nothing will answer it.
   fail(reason: Error): void;
 }
 
@@ -292,6 +303,10 @@ export function wireRenderer(
       reject: (e: unknown) => void;
     }
   >();
+  const pings = new Map<
+    number,
+    { resolve: () => void; reject: (e: unknown) => void }
+  >();
   let lastInput = 0;
   let failed: Error | null = null;
   const send = (message: ToRenderer): void => channel.send(lineOf(message));
@@ -307,6 +322,14 @@ export function wireRenderer(
           throw new Error(`an output for input ${heard.id}, which is not out`);
         pending.delete(heard.id);
         input.resolve({ output: heard.output, tookMs: heard.tookMs });
+        return;
+      }
+      case "pong": {
+        const ping = pings.get(heard.id);
+        if (ping === undefined)
+          throw new Error(`a pong for ping ${heard.id}, which is not out`);
+        pings.delete(heard.id);
+        ping.resolve();
         return;
       }
       case "reach": {
@@ -344,10 +367,20 @@ export function wireRenderer(
         send({ k: "input", id, input });
       });
     },
+    ping: () => {
+      if (failed !== null) return Promise.reject(failed);
+      const id = ++lastInput;
+      return new Promise((resolve, reject) => {
+        pings.set(id, { resolve, reject });
+        send({ k: "ping", id });
+      });
+    },
     fail: (reason) => {
       failed ??= reason;
-      for (const { reject } of pending.values()) reject(reason);
+      for (const { reject } of [...pending.values(), ...pings.values()])
+        reject(reason);
       pending.clear();
+      pings.clear();
     },
   };
 }

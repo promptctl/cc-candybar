@@ -13,8 +13,10 @@ import type {
   Generation,
   RendererInput,
   StartInput,
+  Subscriptions,
 } from "../../src/renderer-interface/interface";
 import {
+  LIVENESS_MS,
   RESTART,
   restartDelayMs,
   superviseRenderer,
@@ -47,6 +49,10 @@ function rig() {
   const deferred: Array<() => void> = [];
   let now = 0;
   let timers: Array<{ at: number; run: () => void }> = [];
+  const subscribed: Subscriptions[] = [];
+  // What the next renderers do: answer their start with a throw, or leave a
+  // liveness ask unanswered.
+  const plays = { startThrows: false, hung: false };
   const start: SupervisorDeps["start"] = (host, generation) => {
     let end!: (words: string) => void;
     const ended = new Promise<string>((resolve) => (end = resolve));
@@ -55,16 +61,28 @@ function rig() {
     const link: RendererLink = {
       answer: async (input) => {
         heard.push(input);
+        const sources = { [`g${generation}`]: [] } as never;
         return {
           output:
             input.kind === "adapter"
               ? { kind: "replied", reply: { kind: input.push.kind } as never }
-              : {
-                  kind: "answered",
-                  effects: [],
-                  record: [],
-                  subscriptions: { sources: {} },
-                },
+              : input.kind === "start" && plays.startThrows
+                ? {
+                    kind: "threw",
+                    failure: {
+                      kind: "threw",
+                      message: "boom",
+                      detail: "boom",
+                    },
+                    record: [],
+                    subscriptions: { sources },
+                  }
+                : {
+                    kind: "answered",
+                    effects: [],
+                    record: [],
+                    subscriptions: { sources },
+                  },
           tookMs: 0,
         };
       },
@@ -73,6 +91,7 @@ function rig() {
         end("ended with its host");
         await ended;
       },
+      alive: () => (plays.hung ? new Promise(() => {}) : Promise.resolve()),
     };
     return link;
   };
@@ -95,6 +114,7 @@ function rig() {
         worldState: { session: S } as never,
       },
     ],
+    subscribed: (s) => void subscribed.push(s),
     monotonic: () => now,
     now: () => AT,
     defer: (run) => void deferred.push(run),
@@ -140,6 +160,8 @@ function rig() {
     push,
     advance,
     startOf,
+    subscribed,
+    plays,
   };
 }
 
@@ -296,5 +318,57 @@ test("a close while it waits to restart cancels the restart", async () => {
   await flush();
   await r.supervisor.close();
   await r.advance(RESTART.maxBackoffMs);
+  expect(r.played).toHaveLength(1);
+});
+
+test("a start's subscriptions reach the collector, as a turn's do", async () => {
+  const r = rig();
+  r.supervisor.arm();
+  await flush();
+  expect(r.subscribed).toEqual([{ sources: { g1: [] } }]);
+});
+
+test("a start that failed releases nothing its predecessor held", async () => {
+  const r = rig();
+  r.supervisor.arm();
+  await flush();
+  r.played[0]!.host.watches.watch("1.1" as WatchId, "k", {} as never);
+  r.plays.startThrows = true;
+  r.played[0]!.end("exited with code 1");
+  await flush();
+  await r.advance(restartDelayMs(1));
+  expect(r.played).toHaveLength(2);
+  expect(r.said).not.toContain("release k");
+  r.plays.startThrows = false;
+  r.played[1]!.end("exited with code 1");
+  await flush();
+  await r.advance(restartDelayMs(2));
+  expect(r.said).toContain("release k");
+});
+
+test("a renderer whose loop stops answering is said, ended, and started again", async () => {
+  const r = rig();
+  r.supervisor.arm();
+  await flush();
+  r.plays.hung = true;
+  await r.advance(LIVENESS_MS);
+  expect(r.played).toHaveLength(1);
+  await r.advance(LIVENESS_MS);
+  expect(r.said).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("renderer hung generation=1"),
+    ]),
+  );
+  r.plays.hung = false;
+  await r.advance(restartDelayMs(1));
+  expect(r.played).toHaveLength(2);
+});
+
+test("a renderer that keeps answering is never taken for hung", async () => {
+  const r = rig();
+  r.supervisor.arm();
+  await flush();
+  for (let i = 0; i < 5; i++) await r.advance(LIVENESS_MS);
+  expect(r.said.some((l) => l.includes("renderer hung"))).toBe(false);
   expect(r.played).toHaveLength(1);
 });

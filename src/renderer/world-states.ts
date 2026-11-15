@@ -9,6 +9,17 @@ import type { SessionId } from "../daemon/foundations/session-id";
 import type { Fact } from "../facts/fact";
 import type { Update, WorldState } from "../facts/world-state";
 
+// [LAW:one-source-of-truth] The update is one fact the host restamps for
+// every session and hands in session by session, so the one held is the
+// latest change any document carried: a document handed in late, carrying
+// the fact as it stood before, moves nothing.
+const later = (held: Fact<Update> | null, next: Fact<Update>): Fact<Update> =>
+  next.kind === "pending"
+    ? (held ?? next)
+    : held === null || held.kind === "pending" || next.at >= held.at
+      ? next
+      : held;
+
 export class WorldStates {
   // [LAW:one-source-of-truth] One document per session, the newest handed in.
   private readonly documents = observable.map<SessionId, WorldState>(
@@ -39,7 +50,7 @@ export class WorldStates {
     }
     runInAction(() => {
       this.documents.set(document.session, document);
-      this.update.set(document.daemon.update.newer);
+      this.update.set(later(this.update.get(), document.daemon.update.newer));
     });
   }
 

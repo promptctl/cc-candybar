@@ -209,27 +209,40 @@ export function mainRenderer(
       const { cause, sessions } = input.start;
       return ended(
         (async () => {
-          // [LAW:no-silent-failure] Each session opens on its own: one that
-          // throws is said in the start's failure, and the rest still open.
+          // [LAW:no-silent-failure] Each step of each session runs on its
+          // own: one that throws is said in the start's failure, and the rest
+          // still run.
           const failed: string[] = [];
-          for (const session of sessions)
+          const step = (
+            session: SessionSnapshot,
+            what: string,
+            run: () => void,
+          ): void => {
             try {
+              run();
+            } catch (thrown) {
+              failed.push(
+                `${session.worldState.session} ${what}: ${failureOf(thrown).detail}`,
+              );
+            }
+          };
+          for (const session of sessions) {
+            step(session, "open", () =>
               configureSession(
                 parts,
                 session.context,
                 session.worldState,
                 input.at,
                 record,
-              );
-              started(session, cause, input.at);
-            } catch (thrown) {
-              failed.push(
-                `${session.worldState.session}: ${failureOf(thrown).detail}`,
-              );
-            }
+              ),
+            );
+            // Whether its view opened or not: the host's feed is pinned, and
+            // the restart is its to hear, either way.
+            step(session, "start", () => started(session, cause, input.at));
+          }
           if (failed.length > 0)
             throw new Error(
-              `the start opened ${sessions.length - failed.length} of ${sessions.length} sessions; ${failed.join("; ")}`,
+              `the start of ${sessions.length} sessions failed ${failed.length} steps; ${failed.join("; ")}`,
             );
           return [];
         })(),
@@ -582,11 +595,11 @@ function startOver(
   // session it carries, for the usual hold: the state that renderer's process
   // kept unsaved went with it.
   const started = (
-    { context, pinned }: SessionSnapshot,
+    { worldState, pinned }: SessionSnapshot,
     cause: StartCause,
     at: Instant,
   ): void => {
-    const sessionId = context.hookData.session_id;
+    const sessionId = worldState.session;
     if (pinned) pin(sessionId);
     if (cause.kind === "crashed")
       holdClickError(

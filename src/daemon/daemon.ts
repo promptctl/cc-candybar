@@ -296,13 +296,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     now: instant,
     observeWarnings: observeWarnings(""),
   });
-  // [LAW:one-source-of-truth] The update watch and the lane edge read a pid
-  // through this one probe, so a probe handed in reaches both. The process entry
-  // (server.ts) asks its own before this daemon exists.
-  const probe = inputs.probe(launcher);
-  // [LAW:no-ambient-temporal-coupling] The renderer's own launcher, aborted as
-  // the teardown's last step: the renderer's steps of the close come after
-  // the daemon's launches are aborted, and its process must outlive them.
+  // [LAW:no-ambient-temporal-coupling] The renderer's own launcher, built
+  // beside the daemon's before anything launches, as the faults read both.
+  // It is aborted as the teardown's last step: the renderer's steps of the
+  // close come after the daemon's launches are aborted, and its process must
+  // outlive them.
   const rendererClosing = new AbortController();
   const rendererLauncher = inputs.launcher({
     inherited: host.env,
@@ -311,6 +309,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     now: instant,
     observeWarnings: observeWarnings("renderer "),
   });
+  // [LAW:one-source-of-truth] The update watch and the lane edge read a pid
+  // through this one probe, so a probe handed in reaches both. The process entry
+  // (server.ts) asks its own before this daemon exists.
+  const probe = inputs.probe(launcher);
   // Building starts nothing: only the daemon that won the socket arms them, so
   // the page answers the doctor's `serving` with no timer counting its memory.
   const limits = makeLimits({
@@ -707,6 +709,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           ? []
           : [{ context: located(latest), worldState }];
       }),
+    subscribed: (subscriptions) => collector.subscribed(subscriptions),
     monotonic: () => clock.monotonic(),
     now: instant,
     defer: (run) => void clock.defer(run),

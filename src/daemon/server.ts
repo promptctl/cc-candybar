@@ -205,8 +205,8 @@ async function boot(): Promise<void> {
   ensureSocketParentSafe(paths.socket);
 
   // The daemon is built now that we know we are the daemon process: its
-  // renderer, started on the first request, loads prior session state and is
-  // the sole writer of the state file.
+  // renderer, started as the daemon arms after the bind, loads prior session
+  // state and is the sole writer of the state file.
   const daemon = createDaemon({
     ...productionAdapters(paths, daemonLog, world.clock),
     bundle: runningBundle(),

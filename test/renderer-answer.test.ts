@@ -758,7 +758,7 @@ describe("the idle close", () => {
   });
 });
 
-test("a start opens every session it carries on its own: one that throws is said, and the rest still open", async () => {
+test("a start opens every session it carries on its own: one that throws is said, still starts (its pin holds), and the rest still open", async () => {
   const t = renderer();
   const context = checked();
   const worldState = t.rig.served.collector.requested(context);
@@ -785,10 +785,10 @@ test("a start opens every session it carries on its own: one that throws is said
     kind: "threw",
     failure: {
       message: expect.stringContaining(
-        "the start opened 1 of 2 sessions; broken:",
+        "the start of 2 sessions failed 1 steps; broken open:",
       ),
     },
   });
-  expect(started).toEqual([SESSION]);
+  expect(started).toEqual(["broken", SESSION]);
   expect(t.parts.worldStates.of(SESSION).session).toBe(SESSION);
 });

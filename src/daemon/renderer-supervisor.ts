@@ -22,6 +22,7 @@ import {
   type RendererOutput,
   type SessionSnapshot,
   type StartCause,
+  type Subscriptions,
 } from "../renderer-interface/interface.js";
 import type { Instant } from "../utils/instant.js";
 import type { DaemonLogger } from "../utils/logger";
@@ -48,6 +49,8 @@ export interface RendererLink {
   readonly ended: Promise<string>;
   // Asks it to finish, and resolves once it has ended.
   end(): Promise<void>;
+  // Settles once it answers on its own loop, whatever its turns await.
+  alive(): Promise<void>;
 }
 
 // How a renderer starts, handed the host it reaches and the generation it
@@ -80,6 +83,12 @@ export const RESTART = {
   maxBackoffMs: 60_000,
 } as const;
 
+// [LAW:no-silent-failure] How often a running renderer is asked whether its
+// loop still turns: one that has not answered by the next ask is hung, said,
+// and ended, so its supervisor starts another. A turn that awaits the host
+// still answers; only a loop that stopped turning does not.
+export const LIVENESS_MS = 10_000;
+
 export const restartDelayMs = (endedYoung: number): number =>
   endedYoung === 0
     ? 0
@@ -104,6 +113,9 @@ export interface SupervisorDeps {
   // [LAW:one-source-of-truth] Every session the host holds live, as a start
   // carries it: its latest context with the document last stamped for it.
   readonly sessions: () => ReadonlyArray<Omit<SessionSnapshot, "pinned">>;
+  // [LAW:single-enforcer] Where a start's subscriptions go, as every turn's
+  // do: the collector's set, whole.
+  readonly subscribed: (subscriptions: Subscriptions) => void;
   readonly monotonic: () => number;
   readonly now: () => Instant;
   // A turn later, as a push from another process arrives after the notice
@@ -169,6 +181,8 @@ export function superviseRenderer(deps: SupervisorDeps): Supervisor {
   let generations = 0;
   // How many renderers in a row ended young: what the next restart waits by.
   let endedYoung = 0;
+  // Cancels the live renderer's next liveness ask.
+  let stopHeartbeat = (): void => {};
   // [LAW:one-source-of-truth] The sessions whose feed is pinned, as the pins
   // and unpins passed on say, recorded as each arrives, so a start pins what
   // the renderer before it held.
@@ -258,8 +272,14 @@ export function superviseRenderer(deps: SupervisorDeps): Supervisor {
     const ready = link
       .answer({ kind: "start", start: { cause, sessions }, at: deps.now() })
       .then(
-        ({ output }) =>
-          "kind" in output && output.kind === "threw" ? output.failure : null,
+        ({ output }) => {
+          // [LAW:types-are-the-program] exception: a start is answered as
+          // an event is; the link's one answer cannot name it.
+          const started = output as RendererOutput;
+          // The start names every source its sessions read, as a turn does.
+          deps.subscribed(started.subscriptions);
+          return started.kind === "threw" ? started.failure : null;
+        },
         (thrown: unknown) => failureOf(thrown),
       )
       .then((failed) => {
@@ -273,10 +293,13 @@ export function superviseRenderer(deps: SupervisorDeps): Supervisor {
             ...(failed === null ? [] : ([["error", failed.detail]] as const)),
           ]),
         );
-        // What the renderers before this one held goes now that this one
-        // holds what it needs.
+        if (failed !== null) return;
+        // What the renderers before this one held goes once this one holds
+        // what it needs: never on a start that did not, so a folder both
+        // name is never closed between them.
         for (const gone of ended) gone.release();
         ended = [];
+        heartbeat(live);
       });
     void link.ended.then((words) => {
       scope.dead = true;
@@ -292,6 +315,7 @@ export function superviseRenderer(deps: SupervisorDeps): Supervisor {
         );
         return;
       }
+      stopHeartbeat();
       endedYoung =
         deps.monotonic() - startedAt < RESTART.youngMs ? endedYoung + 1 : 0;
       const delay = restartDelayMs(endedYoung);
@@ -309,10 +333,35 @@ export function superviseRenderer(deps: SupervisorDeps): Supervisor {
         state = startOne({ kind: "crashed", ended: words });
       });
     });
-    return {
-      kind: "live",
-      live: { generation, link, scope, startedAt, ready },
+    const live: Live = { generation, link, scope, startedAt, ready };
+    return { kind: "live", live };
+  };
+
+  // [LAW:no-silent-failure] Asks the live renderer every LIVENESS_MS whether
+  // its loop turns; one that left the last ask unanswered is ended.
+  const heartbeat = (live: Live): void => {
+    let answered = true;
+    const beat = (): void => {
+      if (state.kind !== "live" || state.live !== live) return;
+      if (!answered) {
+        log(
+          "error",
+          eventLine("renderer hung", [
+            ["generation", String(live.generation)],
+            ["unanswered", `${LIVENESS_MS}ms`],
+          ]),
+        );
+        void live.link.end();
+        return;
+      }
+      answered = false;
+      void live.link.alive().then(
+        () => (answered = true),
+        () => {},
+      );
+      stopHeartbeat = deps.after(LIVENESS_MS, beat);
     };
+    beat();
   };
 
   // [LAW:single-enforcer] The one place an input reaches a renderer.
@@ -362,6 +411,7 @@ export function superviseRenderer(deps: SupervisorDeps): Supervisor {
     close: async () => {
       const was = state;
       state = { kind: "closed" };
+      stopHeartbeat();
       if (was.kind === "down") was.cancel();
       if (was.kind === "live") await was.live.link.end();
       // What every renderer held goes with the host: none follows them.
