@@ -4,15 +4,22 @@
     {
       "version": "pr-757",
       "ref": "refs/pull/757/merge",
-      "sha": "f0084bb0e31cb932e3a29080881aa05886f822b8",
-      "timestamp": "2026-11-15T18:30:22.694Z",
+      "sha": "3ca7a9f5d79b802f77e5893f8a0bd594557b3e26",
+      "timestamp": "2026-11-15T18:56:16.832Z",
       "commits": [
         {
-          "sha": "f0084bb0e31cb932e3a29080881aa05886f822b8",
+          "sha": "3ca7a9f5d79b802f77e5893f8a0bd594557b3e26",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T11:29:22-07:00",
-          "message": "Merge 286a3e28dccd4dd6016be253d2391dea1c930cec into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+          "timestamp": "2026-11-15T18:55:12Z",
+          "message": "Merge 3a16c8f205e1c7123fdd110571103747aef8faa2 into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+        },
+        {
+          "sha": "3a16c8f205e1c7123fdd110571103747aef8faa2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T11:55:00-07:00",
+          "message": "fix(renderer): a restart's start heads the boot's queue, a refused boot says why, and the renderer launches through the daemon's own launcher (candybar-host-renderer-x96a.v58)\n\nThe restart's config and pin are queued at spawn, ahead of every input that\narrives during the boot, so none repeats or contradicts them; its turns are\nrecorded through deliver. A close during a boot fails what waited for it. A\ngone renderer's holds stay until a start answers. A refused boot's reason\nreaches the bar's warning. A booting renderer counts in the memory charge,\nand the breach's renderer snapshot targets the measured process only and\nrechecks the close after it. The boot carries the host's source digest in\nplace of a hand-bumped protocol number. A call line reaches the host as it\narrives. A channel ends only once its pipes have closed. The daemon event\nhold is one constant. The update gate follows an equal-stamp fact. A feed\nrecovers only after a whole step. The doctor names build skew under a\nreading it cannot parse.\n"
         },
         {
           "sha": "286a3e28dccd4dd6016be253d2391dea1c930cec",

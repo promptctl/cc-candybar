@@ -23071,6 +23071,7 @@ function timeoutSignal(clock, ms) {
 
 // src/utils/event-hold.ts
 init_globals();
+var DAEMON_EVENT_HOLD_S = 60;
 function eventHoldAt(event, holdS, at, render3) {
   if (at < event.at + holdS) return "held";
   return render3 === "request" && !event.answered ? "owed" : "over";
@@ -23378,16 +23379,24 @@ function relay(state, category, stream, ends, heard) {
 function launchChannel(state, opts) {
   let input = null;
   let pid2 = null;
+  const streams = [];
   const ended = track(
     state,
     launchPiped(state, opts, {
-      read: (s, category, stream, ends, which) => relay(s, category, stream, ends, opts.heard[which]),
+      read: (s, category, stream, ends, which) => {
+        if (stream !== null)
+          streams.push(new Promise((closed) => stream.once("close", closed)));
+        return relay(s, category, stream, ends, opts.heard[which]);
+      },
       opened: (opened, spawned) => {
         input = opened;
         pid2 = spawned;
         opened?.on("error", () => {
         });
       }
+    }).then(async (result) => {
+      await Promise.all(streams);
+      return result;
     })
   );
   return {
@@ -24111,11 +24120,10 @@ function failureText(r, where = "") {
   const said = saidBy(r, r.stderr);
   return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
 }
-var PIPE_EVENT_HOLD_S = 60;
 function launcherWarningsAt(facts, at, render3) {
   return facts.flatMap((fact) => {
     if (fact.kind === "lifeline") return [fact];
-    const hold2 = eventHoldAt(fact.event, PIPE_EVENT_HOLD_S, at, render3);
+    const hold2 = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render3);
     return hold2 === "over" ? [] : [{ ...fact, message: fact.event.text, hold: hold2 }];
   });
 }
@@ -54217,6 +54225,9 @@ function bundleStamp(digest2) {
   }
   return { version: PACKAGE_VERSION, digest: digest2 };
 }
+function bakedDigest() {
+  return true ? null : void 0;
+}
 function checkoutVersion(root) {
   const raw = JSON.parse(
     fs_default.readFileSync(import_node_path17.default.join(root, "package.json"), "utf8")
@@ -58729,10 +58740,15 @@ function makeLimits(deps) {
       deps.writeMemoryReport(file, report2);
       deps.log("info", `memory report written: ${file}`);
     });
-    if (disarmed) {
-      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
-      return false;
-    }
+    const closedDuring = () => {
+      if (disarmed)
+        deps.log(
+          "info",
+          "daemon closed during the breach: no snapshot, no exit"
+        );
+      return disarmed;
+    };
+    if (closedDuring()) return false;
     if (renderer !== null)
       await attempt2(deps.log, "renderer heap snapshot", async () => {
         const file = artifactFile(
@@ -58740,9 +58756,10 @@ function makeLimits(deps) {
           "rendererHeapSnapshot",
           identity2
         );
-        await deps.writeRendererHeapSnapshot(file);
+        await renderer.heapSnapshot(file);
         deps.log("info", `renderer heap snapshot written: ${file}`);
       });
+    if (closedDuring()) return false;
     await attempt2(deps.log, "heap snapshot", () => {
       deps.writeLogNow();
       const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
@@ -65834,7 +65851,12 @@ init_globals();
 
 // src/daemon/client-stats.ts
 init_globals();
+var myLabel = buildLabel(PACKAGE_VERSION, bakedDigest());
+var anotherBuild = `it is another build than this client (${myLabel}), and restarts only when its own bundle changes`;
 var STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot());
+function buildLabel(version, digest2) {
+  return `${version} [${digest2 === null ? "no digest" : shortDigest(digest2)}]`;
+}
 
 // src/doctor/handler-probe.ts
 var ARRIVALS_KEPT = 16;
@@ -66673,6 +66695,13 @@ var FrameFeeds = class {
     const moment2 = started2 + (at - wall) * 1e3;
     try {
       await this.step(feed2, started2, moment2, at);
+      if (feed2.fault !== null) {
+        this.deps.log(
+          "info",
+          `feed sid=${JSON.stringify(feed2.sessionId)} recovered after ${feed2.fault}`
+        );
+        feed2.fault = null;
+      }
     } catch (error) {
       const woken = wokenWhileOut(feed2);
       feed2.lastStart = moment2;
@@ -66697,13 +66726,6 @@ var FrameFeeds = class {
       [...this.following(feed2.sessionId)],
       this.feedsOf(feed2.sessionId, at)
     );
-    if (feed2.fault !== null) {
-      this.deps.log(
-        "info",
-        `feed sid=${JSON.stringify(feed2.sessionId)} recovered after ${feed2.fault}`
-      );
-      feed2.fault = null;
-    }
     if (frame2 === null) {
       const woken2 = wokenWhileOut(feed2);
       feed2.noView++;
@@ -82019,9 +82041,8 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     lanes
   };
 }
-var RENDERER_ENDED_HOLD_S = 60;
 function rendererEndedAt(event, at, render3) {
-  return event === null || eventHoldAt(event, RENDERER_ENDED_HOLD_S, at, render3) === "over" ? void 0 : { kind: "renderer-ended", message: event.text, event };
+  return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind: "renderer-ended", message: event.text, event };
 }
 function recordRequest(parts, req) {
   const { sessionState } = parts;
@@ -82444,7 +82465,7 @@ var UpdateGate = class {
   gate = null;
   took(fact) {
     if (fact.kind === "pending") return;
-    if (this.newest !== null && fact.at <= this.newest) return;
+    if (this.newest !== null && fact.at < this.newest) return;
     this.newest = fact.at;
     const identity2 = fact.kind === "ok" ? updateIdentity(fact.value) : null;
     if ((this.gate?.identity ?? null) === identity2) return;
@@ -85992,15 +86013,15 @@ function createDaemon(inputs) {
     runInAction(
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: launcher.standing(),
+        launcher: [...launcher.standing(), ...rendererLauncher.standing()],
         rendererEnded
       })
     );
   }
-  const launcher = inputs.launcher({
+  const launchOwner = (signal) => ({
     inherited: host.env,
     stats: stats.launchStats,
-    signal: closing.signal,
+    signal,
     // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
     // hold them against.
     now: instant,
@@ -86017,6 +86038,9 @@ function createDaemon(inputs) {
       restateFaults();
     }
   });
+  const launcher = inputs.launcher(launchOwner(closing.signal));
+  const rendererClosing = new AbortController();
+  const rendererLauncher = inputs.launcher(launchOwner(rendererClosing.signal));
   const probe2 = inputs.probe(launcher);
   const preparedRenderer = inputs.renderer({
     load: () => loadMainRenderer({
@@ -86033,6 +86057,7 @@ function createDaemon(inputs) {
       memoryLimitBytes: memoryLimitBytes2
     }),
     boot: {
+      digest: bundle.digest,
       host: { ...host, env: bootEnv(host.env) },
       bundle: bundle.path,
       memoryLimitBytes: memoryLimitBytes2
@@ -86050,8 +86075,7 @@ function createDaemon(inputs) {
     // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
     // renderer's process counts in it while one runs. Read only once armed,
     // by when the link below exists.
-    renderer: () => link.process(),
-    writeRendererHeapSnapshot: (file) => link.heapSnapshot(file)
+    renderer: () => link.process()
   });
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
@@ -86312,6 +86336,7 @@ function createDaemon(inputs) {
     probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
+      rendererLauncher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
         rendererEnded = { ...rendererEnded, answered: true };
       restateFaults();
@@ -86342,10 +86367,11 @@ function createDaemon(inputs) {
     reaches,
     log,
     clock,
+    launcher: rendererLauncher,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
     // request would: every live session whose newest request the host holds
     // gets its `config` with its latest stamp, and every open feed its `pin`,
-    // through the host's one path to the renderer.
+    // through the host's one path to the renderer, each turn recorded there.
     start: async () => {
       const at = instant();
       for (const sessionId2 of frameFeeds.openFeeds())
@@ -86354,11 +86380,18 @@ function createDaemon(inputs) {
         [...collector.liveDocuments()].flatMap(([sessionId2, worldState]) => {
           const req = frameFeeds.latest(sessionId2);
           return req === null ? [] : [
-            parts.renderer.answer({
-              kind: "event",
-              at,
-              event: { kind: "config", context: located(req), worldState }
-            })
+            parts.renderer.deliver(
+              {
+                kind: "event",
+                at,
+                event: {
+                  kind: "config",
+                  context: located(req),
+                  worldState
+                }
+              },
+              [["why", "renderer-start"]]
+            )
           ];
         })
       );
@@ -86467,7 +86500,11 @@ function createDaemon(inputs) {
         ["sessionState close", rendererStep("close-session-state")],
         // After every step the renderer takes: its process, when it has one,
         // ends with nothing left to flush.
-        ["renderer process close", () => link.close()]
+        ["renderer process close", () => link.close()],
+        [
+          "renderer launches abort",
+          () => rendererClosing.abort(new Error("the daemon closed"))
+        ]
       ];
       for (const [step4, run3] of teardown) {
         try {
@@ -86477,7 +86514,14 @@ function createDaemon(inputs) {
         }
       }
       closed = true;
-      return { settled: launcher.settled() };
+      return {
+        settled: Promise.all([
+          launcher.settled(),
+          rendererLauncher.settled()
+        ]).then(([own2, renderer]) => ({
+          unreaped: [...own2.unreaped, ...renderer.unreaped]
+        }))
+      };
     }
   };
 }
@@ -87576,9 +87620,7 @@ function inProcessRenderer(loaded, reaches) {
     },
     close: async () => {
     },
-    process: () => null,
-    heapSnapshot: async () => {
-    }
+    process: () => null
   };
 }
 
