@@ -9,13 +9,18 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
+import { UNFOLLOWED } from "../helpers/daemon-facts";
+import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { eventRenderer, hearingEvents } from "../helpers/renderers";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { answerStatusline } from "../../src/daemon/statusline-answer";
 import type { RequestFacts } from "../../src/daemon/foundations/request-event";
-import { BadVerbArgs, failureOf } from "../../src/daemon/foundations/verb-error";
+import {
+  BadVerbArgs,
+  failureOf,
+} from "../../src/daemon/foundations/verb-error";
 import {
   type Effect,
   type EffectId,
@@ -123,22 +128,16 @@ async function answer(
   const facts: RequestFacts = [];
   const named = new Set<string>();
   const answered = await answerStatusline(
-    rendererHost(
-      "main",
-      CLOCK,
-      renderer,
-      (_level, line) => logged.push(line),
-      {
-        subscribed: (subscriptions) => void subscribed.push(subscriptions),
-        // Mirrors the collector: only a session a request has named is held.
-        holding: (session) => {
-          if (!named.has(session)) return () => {};
-          holds.count++;
-          holds.sessions.push(session);
-          return () => void holds.count--;
-        },
+    rendererHost("main", CLOCK, renderer, (_level, line) => logged.push(line), {
+      subscribed: (subscriptions) => void subscribed.push(subscriptions),
+      // Mirrors the collector: only a session a request has named is held.
+      holding: (session) => {
+        if (!named.has(session)) return () => {};
+        holds.count++;
+        holds.sessions.push(session);
+        return () => void holds.count--;
       },
-    ),
+    }),
     {
       requested: (req) => {
         named.add(req.hookData.session_id);
@@ -146,6 +145,7 @@ async function answer(
       },
     },
     { since: () => undefined },
+    UNFOLLOWED,
     CLOCK,
     REQ,
     REQUEST,
@@ -192,7 +192,12 @@ test("a present its client never took settles failed", async () => {
   answered.settled(false);
   await drained();
   expect(heard).toMatchObject([
-    { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "failed" } },
+    {
+      kind: "effect-done",
+      session: SESSION,
+      of: 1,
+      outcome: { kind: "failed" },
+    },
   ]);
 });
 
@@ -209,7 +214,12 @@ test("a turn that presents no frame for the request is a failure naming the rend
   await drained();
   // The stray present is refused, not dropped.
   expect(heard).toMatchObject([
-    { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "failed" } },
+    {
+      kind: "effect-done",
+      session: SESSION,
+      of: 1,
+      outcome: { kind: "failed" },
+    },
   ]);
 });
 
@@ -219,7 +229,12 @@ test("a second frame for the request is refused, and the first answers it", asyn
   expect(answered.resp).toEqual({ ok: true, frame: FRAME });
   await drained();
   expect(heard).toMatchObject([
-    { kind: "effect-done", session: SESSION, of: 2, outcome: { kind: "failed" } },
+    {
+      kind: "effect-done",
+      session: SESSION,
+      of: 2,
+      outcome: { kind: "failed" },
+    },
   ]);
 });
 
@@ -242,9 +257,7 @@ test("a config turn's effects are refused, each owed its effect-done, and the re
 });
 
 test("a turn that throws is a failure naming the renderer, with what it learned on the request's event", async () => {
-  const { renderer } = scripted(
-    threwWith([["lanes", "-"]], "the draw broke"),
-  );
+  const { renderer } = scripted(threwWith([["lanes", "-"]], "the draw broke"));
   const { answered, facts } = await answer(renderer);
   expect(answered.resp).toMatchObject({
     ok: false,
@@ -294,9 +307,7 @@ test("a turn that throws still hands the host what its open views read", async (
     sources: { [SESSION]: [] },
   };
   const subscribed: Subscriptions[] = [];
-  const { renderer } = scripted(
-    threwWith([], "the draw broke", left),
-  );
+  const { renderer } = scripted(threwWith([], "the draw broke", left));
   await answer(renderer, [], subscribed);
   expect(subscribed).toEqual([NO_SUBSCRIPTIONS, left]);
 });
@@ -340,7 +351,15 @@ test("the session's config reaches the renderer first, with the world state read
     { kind: "config", context: REQ, worldState: WORLD },
   ]);
   expect(requests).toEqual([
-    { kind: "request", id: REQUEST, context: REQ, waitMs: 0, idleSince: null },
+    {
+      kind: "request",
+      id: REQUEST,
+      context: REQ,
+      waitMs: 0,
+      idleSince: null,
+      following: [],
+      feeds: UNFOLLOWED_FEEDS,
+    },
   ]);
   expect(subscribed).toEqual([opened, drawn]);
 });

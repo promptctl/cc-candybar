@@ -24,9 +24,8 @@ import {
   type IComputedValue,
   type IObservableValue,
 } from "mobx";
-import type { Fact } from "../facts/fact.js";
 import {
-  type Update,
+  type DaemonFacts,
   type WorldState,
   stampFailureOf,
   shortDigest,
@@ -75,9 +74,10 @@ export interface CollectorDeps {
   // The owners every lane is read from, and the log for those whose owner
   // does not log.
   readonly owners: RenderPayloadDeps;
-  // The daemon's one update fact, stamped by its watch
-  // (src/daemon/update-notice.ts): every session's document carries it.
-  readonly update: () => Fact<Update>;
+  // What every session's document carries of the daemon itself: its update
+  // and the act on it (src/daemon/update-notice.ts), and its own faults.
+  // Observable, so a move of either restamps every session.
+  readonly daemon: () => DaemonFacts;
   readonly clock: Pick<Timekeeper, "now" | "every">;
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
   // frame feeds are the one record of who is watching.
@@ -149,7 +149,7 @@ type StampInputs =
   | {
       readonly kind: "read";
       readonly readings: Readings;
-      readonly update: Fact<Update>;
+      readonly daemon: DaemonFacts;
     }
   | { readonly kind: "failed"; readonly reason: string };
 
@@ -353,7 +353,7 @@ export class Collector {
         undefined,
         session,
         first.readings,
-        first.update,
+        first.daemon,
         instantAt(this.deps.clock),
       );
     } catch (e) {
@@ -476,7 +476,7 @@ export class Collector {
       return {
         kind: "read",
         readings: readingsOf(this.inputsOf(locator), lanes),
-        update: this.deps.update(),
+        daemon: this.deps.daemon(),
       };
     } catch (e) {
       return { kind: "failed", reason: `reading the owners: ${String(e)}` };
@@ -518,7 +518,7 @@ export class Collector {
         prior,
         prior.session,
         moved.readings,
-        moved.update,
+        moved.daemon,
         at,
       );
     } catch (e) {

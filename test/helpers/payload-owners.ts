@@ -11,6 +11,7 @@
 // reads it the way it reads the daemon's. `requestPayload` below declares
 // the lanes over the fakes as the collector declares a session's.
 
+import { daemonFactsOf } from "./daemon-facts";
 import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
 import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-store";
@@ -149,7 +150,7 @@ export function documentOf(inputs: LanedInputs) {
     undefined,
     inputs.hookData.session_id,
     readingsOf(inputs, inputs.lanes()),
-    pendingOf("unread"),
+    daemonFactsOf(),
     instantOf(new Date(0)),
   );
 }

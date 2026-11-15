@@ -9,6 +9,7 @@
 // whose entries a test lands by hand, and reads what it handed in and what
 // the owners hold; no renderer is built.
 
+import { daemonFactsOf } from "./helpers/daemon-facts";
 import { observable, runInAction } from "mobx";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
@@ -134,7 +135,7 @@ function collectorOver(
   const logged: string[] = [];
   const collector = new Collector({
     owners,
-    update,
+    daemon: () => daemonFactsOf(update()),
     clock,
     watched: (session) => watched.has(session),
     deliver: async (event) => {

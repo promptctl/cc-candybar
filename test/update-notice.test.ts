@@ -10,13 +10,12 @@ import {
   viewerRows,
 } from "../src/render/diagnostics";
 import { plainOf } from "../src/render/frame";
+import { commandOf, updateReading } from "../src/daemon/update-notice";
 import {
   describeStamp,
-  factsOf,
   updateIdentity,
   updateNotice,
-  updateReading,
-} from "../src/daemon/update-notice";
+} from "../src/daemon/foundations/update-offer";
 import { type Update } from "../src/facts/world-state";
 import {
   ABSENT,
@@ -30,7 +29,7 @@ import {
   UPDATE_NOTICE_FIELD,
   UPDATE_NOTICE_SESSION_KEY,
 } from "../src/daemon/foundations/update-keys";
-import type { ActState } from "../src/daemon/update-act";
+import type { ActState } from "../src/facts/world-state";
 import type { BuildCurrency } from "../src/daemon/build-currency";
 import type { SourceStamp } from "../src/facts/world-state";
 import type { Currency } from "../src/install/currency";
@@ -151,12 +150,12 @@ describe("identity and facts", () => {
   });
 
   test("the act is the command the provenance implies, never data from a click", () => {
-    expect(factsOf(SOURCE).command).toEqual({
+    expect(commandOf(SOURCE)).toEqual({
       bin: "pnpm",
       args: ["build"],
       cwd: ROOT,
     });
-    expect(factsOf(RELEASE).command).toEqual({
+    expect(commandOf(RELEASE)).toEqual({
       bin: "pnpm",
       args: ["dlx", "@promptctl/cc-candybar@99.0.0", "install"],
     });

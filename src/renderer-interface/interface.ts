@@ -22,6 +22,7 @@ import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest } from "./request-context";
 import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
+import type { Lane, LaneFeeds } from "../config/lanes";
 
 // Which request a statusline frame answers: the host's count of the requests
 // of every kind it accepted, in arrival order, so renders' ids have gaps.
@@ -124,6 +125,12 @@ export type Event =
       // began, as the host's idle clock reads it at the request's instant:
       // null while that frame drew none, or a click is in flight.
       readonly idleSince: Instant | null;
+      // What the host's feeds know of the session at the request's instant:
+      // the lanes that follow it and draw it now, which the statusline hands
+      // the bar to, and what each was sent of late, which the bar's rate
+      // cell shows.
+      readonly following: readonly Lane[];
+      readonly feeds: LaneFeeds;
     }
   | {
       // A session's world state moved since the one the renderer holds: read

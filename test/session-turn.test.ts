@@ -8,6 +8,7 @@
 // own composition (test/helpers/session-rig.ts) and read the way a draw reads
 // it; what moves is an owner, a pick, a request or the update fact.
 
+import { daemonFactsOf } from "./helpers/daemon-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -118,9 +119,9 @@ describe("a world state that cannot be stamped", () => {
     const logged: string[] = [];
     const changed: string[] = [];
     const rig = sessionRig(dir, cleanups, {
-      update: () => {
+      daemon: () => {
         if (broken.get()) throw new Error("update watch exploded");
-        return pendingOf("unread");
+        return daemonFactsOf();
       },
       log: (level, message) => logged.push(`${level} ${message}`),
       observers: { onViewChanged: (sid) => changed.push(sid) },
@@ -153,10 +154,10 @@ describe("a fault that persists", () => {
     const logged: string[] = [];
     const changed: string[] = [];
     const rig = sessionRig(dir, cleanups, {
-      update: () => {
+      daemon: () => {
         tick.get();
         if (broken.get()) throw new Error("update watch exploded");
-        return pendingOf("unread");
+        return daemonFactsOf();
       },
       log: (level, message) => logged.push(`${level} ${message}`),
       observers: { onViewChanged: (sid) => changed.push(sid) },
@@ -184,7 +185,7 @@ describe("what wakes a view", () => {
     const depth = observable.box(0);
     const update = observable.box<Fact<Update>>(pendingOf("unread"));
     const rig = sessionRig(dir, cleanups, {
-      update: () => update.get(),
+      daemon: () => daemonFactsOf(update.get()),
       source: {
         history: () => ({ undo: depth.get(), redo: 0, sinceEdit: 0 }),
       },
@@ -289,7 +290,7 @@ describe("the all-pending document", () => {
         undefined,
         SID,
         pendingReadings,
-        pendingOf("unread"),
+        daemonFactsOf(),
         instantOf(new Date(0)),
       );
       // Nothing is known: every fact of the document is pending, and the draw

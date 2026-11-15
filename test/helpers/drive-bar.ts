@@ -40,7 +40,10 @@ import { withStamp } from "../../scripts/version-stamp.cjs";
 import { textOf, type Frame } from "../../src/render/frame";
 import { clickAnswer, frameRequest, saidOf, toldOf } from "./daemon-e2e";
 import type { DaemonTarget } from "./daemon-wire";
-import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "./spawn-isolated-daemon";
+import {
+  prepareIsolatedDaemonEnv,
+  spawnDaemonWithEnv,
+} from "./spawn-isolated-daemon";
 import {
   describeLink as describeWith,
   effectsOf,
@@ -167,7 +170,11 @@ export async function startBar(
         termCols: size.width,
         termRows: size.rows,
         ssh: opts.ssh,
-        tmux: { socket: path.join(scratch, "tmux.sock"), pane: "%0", truecolor: null },
+        tmux: {
+          socket: path.join(scratch, "tmux.sock"),
+          pane: "%0",
+          truecolor: null,
+        },
         claudeConfigDir,
       },
       REPLY_BUDGET_MS,
@@ -193,17 +200,24 @@ export async function startBar(
   const follow = async (url: string): Promise<Clicked> => {
     const hit = linksOf(last).find((l) => l.url === url);
     if (hit === undefined) {
-      throw new NotDrawnError(`the last render drew no link to ${url}; render again and click what it drew`);
+      throw new NotDrawnError(
+        `the last render drew no link to ${url}; render again and click what it drew`,
+      );
     }
     return send(hit);
   };
 
   const send = async (hit: DrawnLink): Promise<Clicked> => {
     if (!isBarLink(hit.url)) {
-      throw new Error(`"${hit.text}" opens ${hit.url}: the terminal's click, not the daemon's`);
+      throw new Error(
+        `"${hit.text}" opens ${hit.url}: the terminal's click, not the daemon's`,
+      );
     }
     if (effectsOf(hit.url).some(({ verb }) => HOST_VERBS.has(verb))) {
-      return { refused: `not sent: ${describeLink(hit)}`, rendered: await render() };
+      return {
+        refused: `not sent: ${describeLink(hit)}`,
+        rendered: await render(),
+      };
     }
     const answer = await clickAnswer(daemon.target, hit.url, REPLY_BUDGET_MS);
     return {
@@ -234,4 +248,3 @@ export function printable(frame: Pick<Frame, "rows">): string {
     .map((line) => `[${cellLen(line)}] ${line}`)
     .join("\n");
 }
-

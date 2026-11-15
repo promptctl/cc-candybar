@@ -86,7 +86,12 @@ const layersOf = (answers: RepoAnswers) => {
 describe("the gate over a project's config file", () => {
   test("unanswered, it is no layer, and the gate names the directory awaiting", () => {
     const file = write(".cc-candybar.json5", "{}");
-    const resolved = resolveDslConfig(locations(host), book({}), project, project);
+    const resolved = resolveDslConfig(
+      locations(host),
+      book({}),
+      project,
+      project,
+    );
     expect(layersOf(book({}))).toEqual([]);
     expect(resolved.repos).toEqual({
       plugins: null,
@@ -101,7 +106,8 @@ describe("the gate over a project's config file", () => {
 
   test("declined, it is no layer and nothing awaits", () => {
     write(".cc-candybar.json5", "{}");
-    const resolved = resolveDslConfig(locations(host), 
+    const resolved = resolveDslConfig(
+      locations(host),
       book({ [project]: "declined" }),
       project,
       project,
@@ -118,7 +124,13 @@ describe("the gate over a project's config file", () => {
     expect(layersOf(book({}))).toEqual([user]);
     const named = write("named.json5", "{}");
     write(".cc-candybar.json5", "{}");
-    const explicit = resolveDslConfig(locations(host), book({}), project, project, named);
+    const explicit = resolveDslConfig(
+      locations(host),
+      book({}),
+      project,
+      project,
+      named,
+    );
     // An explicit file is the user's, whatever repository it sits in.
     expect(explicit.kind === "chain" && explicit.layers).toEqual([
       { path: named, scope: "plugins" },
@@ -128,12 +140,15 @@ describe("the gate over a project's config file", () => {
 
   test("the durable writer's chain leaves out what the bar's leaves out", () => {
     write(".cc-candybar.json5", "{}");
-    expect(durableConfig(locations(host), book({}), project, project).above).toEqual([]);
+    expect(
+      durableConfig(locations(host), book({}), project, project).above,
+    ).toEqual([]);
   });
 
   test("a book that cannot be read answers for nobody, asks nothing, and says so", () => {
     write(".cc-candybar.json5", "{}");
-    const resolved = resolveDslConfig(locations(host), 
+    const resolved = resolveDslConfig(
+      locations(host),
       { kind: "failed", reason: "repo-configs.json is not JSON" },
       project,
       project,
@@ -159,7 +174,9 @@ describe("the gate over a project's plugins", () => {
       storage: UNOWNED_STORAGE,
       signer: linkSigner(Buffer.alloc(32)),
       gates: bareGates(),
-      stateDir: stateDir(host), locations: locations(host), env: host.env,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      env: host.env,
     };
     const waiting = loadFromDisk(project, project, undefined, deps);
     expect(waiting.repos.awaiting).toEqual([project]);
@@ -173,7 +190,8 @@ describe("the gate over a project's plugins", () => {
     expect(approved.state!.plugins.loaded).toEqual([
       {
         path: path.join(project, ".cc-candybar/plugins/deploy/plugin.json5"),
-        scope: "repo", name: "deploy",
+        scope: "repo",
+        name: "deploy",
       },
     ]);
     approved.state!.registry.dispose();
@@ -183,9 +201,10 @@ describe("the gate over a project's plugins", () => {
     fs.mkdirSync(path.join(project, ".cc-candybar/plugins"), {
       recursive: true,
     });
-    expect(resolveDslConfig(locations(host), book({}), project, project).repos.awaiting).toEqual(
-      [],
-    );
+    expect(
+      resolveDslConfig(locations(host), book({}), project, project).repos
+        .awaiting,
+    ).toEqual([]);
   });
 });
 
@@ -270,7 +289,7 @@ test.each<[LoadCause, string]>([
       kind: "config-watch",
       heard: {
         kind: "changed",
-        paths: new Set(["/p/config.json5", "/u/a.json"]),
+        paths: ["/p/config.json5", "/u/a.json"],
       },
     },
     "config-watch:/p/config.json5,/u/a.json",
@@ -310,7 +329,7 @@ test("the config loaded event names the repositories left waiting and declined, 
       unproven: [{ dir: "/c", reason: "/x is not there" }],
       unread: null,
     },
-      lastError: null,
+    lastError: null,
     lastWarning: null,
     state: undefined as never,
   };
@@ -352,10 +371,14 @@ test("the question offers each answer as a link signed for its session, director
       "approved",
       string,
     ];
-    expect(signer.verify(repoAnswerFields(sessionIdOf(sid), dir, answer), mac)).toBe(true);
+    expect(
+      signer.verify(repoAnswerFields(sessionIdOf(sid), dir, answer), mac),
+    ).toBe(true);
     // The mac answers for this answer only.
     const other = answer === "approved" ? "declined" : "approved";
-    expect(signer.verify(repoAnswerFields(sessionIdOf(sid), dir, other), mac)).toBe(false);
+    expect(
+      signer.verify(repoAnswerFields(sessionIdOf(sid), dir, other), mac),
+    ).toBe(false);
   }
 });
 

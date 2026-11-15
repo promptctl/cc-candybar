@@ -23,7 +23,8 @@ export function seededRng(seed: number): Rng {
 }
 
 /** Integer in [0, bound). */
-export const drawInt = (rng: Rng, bound: number): number => Math.floor(rng() * bound);
+export const drawInt = (rng: Rng, bound: number): number =>
+  Math.floor(rng() * bound);
 
 /**
  * One of `items`. [LAW:parse-dont-validate] A draw from nothing is a broken
@@ -51,9 +52,12 @@ export interface ShapeBounds {
 
 /** A random shape: each node gets 0..maxWidth children until maxDepth. */
 export function drawShape(rng: Rng, bounds: ShapeBounds, depth = 0): Shape {
-  const width = depth >= bounds.maxDepth ? 0 : drawInt(rng, bounds.maxWidth + 1);
+  const width =
+    depth >= bounds.maxDepth ? 0 : drawInt(rng, bounds.maxWidth + 1);
   return {
-    children: Array.from({ length: width }, () => drawShape(rng, bounds, depth + 1)),
+    children: Array.from({ length: width }, () =>
+      drawShape(rng, bounds, depth + 1),
+    ),
   };
 }
 
@@ -69,21 +73,25 @@ export function allNodes(
   const walk = (node: Shape, path: Path, address: Address): void => {
     out.push({ path, address });
     node.children.forEach((child, index) =>
-      walk(child, [...path, index], [
-        ...address,
-        // Levels alternate rows and cells. A compiled bar never puts a row
-        // step under a cell step, since every step inside a row is a place on
-        // its line; the colour function answers for any address alone, which
-        // is all these properties ask of it.
-        {
-          index,
-          count: node.children.length,
-          distribution,
-          axis: path.length % 2 === 0 ? "row" : "cell",
-          lineStart: 0,
-          lineEnd: node.children.length - 1,
-        },
-      ]),
+      walk(
+        child,
+        [...path, index],
+        [
+          ...address,
+          // Levels alternate rows and cells. A compiled bar never puts a row
+          // step under a cell step, since every step inside a row is a place on
+          // its line; the colour function answers for any address alone, which
+          // is all these properties ask of it.
+          {
+            index,
+            count: node.children.length,
+            distribution,
+            axis: path.length % 2 === 0 ? "row" : "cell",
+            lineStart: 0,
+            lineEnd: node.children.length - 1,
+          },
+        ],
+      ),
     );
   };
   walk(shape, [], []);
@@ -92,14 +100,20 @@ export function allNodes(
 
 const childAt = (node: Shape, index: number): Shape => {
   const child = node.children[index];
-  if (child === undefined) throw new Error(`no child ${index} of ${node.children.length}`);
+  if (child === undefined)
+    throw new Error(`no child ${index} of ${node.children.length}`);
   return child;
 };
 
-export const nodeAt = (shape: Shape, path: Path): Shape => path.reduce(childAt, shape);
+export const nodeAt = (shape: Shape, path: Path): Shape =>
+  path.reduce(childAt, shape);
 
 /** A copy of `shape` with the node at `path`'s children replaced. */
-export function withChildren(shape: Shape, path: Path, children: readonly Shape[]): Shape {
+export function withChildren(
+  shape: Shape,
+  path: Path,
+  children: readonly Shape[],
+): Shape {
   if (path.length === 0) return { children };
   const [head, ...rest] = path;
   return {
@@ -111,11 +125,21 @@ export function withChildren(shape: Shape, path: Path, children: readonly Shape[
 
 /** `shape` with one new leaf appended to the node at `path`. */
 export const withSiblingAdded = (shape: Shape, path: Path): Shape =>
-  withChildren(shape, path, [...nodeAt(shape, path).children, { children: [] }]);
+  withChildren(shape, path, [
+    ...nodeAt(shape, path).children,
+    { children: [] },
+  ]);
 
 /** `shape` with the node at `path`'s children in a drawn order (sort by a drawn key). */
-export function withChildrenPermuted(shape: Shape, path: Path, rng: Rng): Shape {
-  const keyed = nodeAt(shape, path).children.map((child) => ({ child, key: rng() }));
+export function withChildrenPermuted(
+  shape: Shape,
+  path: Path,
+  rng: Rng,
+): Shape {
+  const keyed = nodeAt(shape, path).children.map((child) => ({
+    child,
+    key: rng(),
+  }));
   return withChildren(
     shape,
     path,
@@ -124,7 +148,8 @@ export function withChildrenPermuted(shape: Shape, path: Path, rng: Rng): Shape 
 }
 
 export const isUnder = (ancestor: Path, path: Path): boolean =>
-  path.length >= ancestor.length && ancestor.every((index, i) => path[i] === index);
+  path.length >= ancestor.length &&
+  ancestor.every((index, i) => path[i] === index);
 
 export const pathKey = (path: Path): string => path.join(".");
 

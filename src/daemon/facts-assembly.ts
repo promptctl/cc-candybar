@@ -2,10 +2,10 @@ import { compareStructural } from "mobx";
 import { restamp, type Fact } from "../facts/fact";
 import type {
   BuiltinFacts,
+  DaemonFacts,
   RunFact,
   WorldState,
   SourceValue,
-  Update,
 } from "../facts/world-state";
 import type { GitInfo, GitRead, PullRequest } from "../segments/git";
 import type { Instant } from "../utils/instant";
@@ -62,7 +62,7 @@ export function assembleFacts(
   prior: WorldState | undefined,
   session: SessionId,
   readings: Readings,
-  update: Fact<Update>,
+  daemon: DaemonFacts,
   at: Instant,
 ): WorldState {
   const { lanes } = readings;
@@ -112,13 +112,9 @@ export function assembleFacts(
     }),
   );
 
-  const parts = {
-    builtins,
-    sources,
-    runs,
-    update,
-    diagnostics: readings.faults,
-  };
+  const { update } = daemon;
+  const diagnostics = [...readings.faults, ...daemon.diagnostics];
+  const parts = { builtins, sources, runs, update, diagnostics };
   // [LAW:single-enforcer] `restamp` is the one judge of whether a fact moved,
   // and it returns the prior fact itself when not, so the document is
   // unmoved when every fact is the prior's own. The builtins, sources and runs are
@@ -130,7 +126,7 @@ export function assembleFacts(
     sameFacts(sources, prior.sources) &&
     sameFacts(runs, prior.runs) &&
     compareStructural(
-      { update, diagnostics: readings.faults },
+      { update, diagnostics },
       { update: prior.update, diagnostics: prior.diagnostics },
     )
   ) {

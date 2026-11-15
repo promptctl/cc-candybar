@@ -50,8 +50,7 @@ import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
-import type { Drawing } from "../config/lanes";
-import { answeredBy, eventHoldAt } from "../utils/event-hold";
+import { answeredBy, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
 import type { SpawnedChild, Spawner } from "./spawner";
 
@@ -63,7 +62,7 @@ import type {
   LaunchResult,
   Refusal,
   PipeEvent,
-  LauncherWarning,
+  LauncherFact,
   WarningChange,
   JobEnd,
   JobFiles,
@@ -351,10 +350,6 @@ function lose(state: LaunchState, line: SpawnedChild, reason: string): void {
 // reader stopped reading, which `feed` already says is no fault.
 type PipeEventKind = "cut" | "read-error";
 
-// Seconds every render shows a pipe event: long enough to read on a bar that
-// redraws only on events. That it is seen at all is the owed half of the hold.
-export const PIPE_EVENT_HOLD_S = 60;
-
 const lifelineMessage = (fault: string): string =>
   `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`;
 
@@ -394,29 +389,28 @@ function pipeEvent(
 
 // [LAW:single-enforcer] The one write after a pipe event: an answer carrying
 // `event` reached its client. A newer event since is left unmarked.
-function answeredPipeEvent(state: LaunchState, event: PipeEvent): void {
+function answeredPipeEvent(state: LaunchState, event: HeldEvent): void {
   const last = state.pipeEvent;
   if (last === null || !answeredBy(last, event)) return;
   state.pipeEvent = { ...last, answered: true };
 }
 
-// What the launcher warns a render at `at`: the lifeline's fault while it
-// stands, and the latest pipe event while the event hold shows it.
-function launcherWarnings(
-  state: LaunchState,
-  at: Instant,
-  render: Drawing["by"],
-): LauncherWarning[] {
+// What the launcher stands behind now: the lifeline's fault while it stands,
+// and the latest pipe event, without the counts its text was made from.
+function standing(state: LaunchState): LauncherFact[] {
   const event = state.pipeEvent;
-  const hold =
-    event === null ? "over" : eventHoldAt(event, PIPE_EVENT_HOLD_S, at, render);
   return [
     ...(state.fault === null
       ? []
       : [{ kind: "lifeline" as const, message: lifelineMessage(state.fault) }]),
-    ...(event === null || hold === "over"
+    ...(event === null
       ? []
-      : [{ kind: "launch-pipes" as const, message: event.text, event, hold }]),
+      : [
+          {
+            kind: "launch-pipes" as const,
+            event: { text: event.text, at: event.at, answered: event.answered },
+          },
+        ]),
   ];
 }
 
@@ -1216,7 +1210,7 @@ function launcherWithState(
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     jobGroupAlive: (pid) => spawner.signalJob(pid, 0),
     endJob: (pid, status, end) => endJob(spawner, clock, pid, status, end),
-    launcherWarnings: (at, render) => launcherWarnings(state, at, render),
+    standing: () => standing(state),
     answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {
       await Promise.all(state.ending);

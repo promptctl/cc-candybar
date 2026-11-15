@@ -32,7 +32,10 @@ export const field = (event: Event, key: string): string | undefined =>
   event.fields.find(([k]) => k === key)?.[1];
 
 // A session's render event lines, picked so a wait that fails names them.
-export const renderLinesOf = (sid: string, lines: readonly string[]): string[] =>
+export const renderLinesOf = (
+  sid: string,
+  lines: readonly string[],
+): string[] =>
   lines.filter(
     (l) => / \[\w+\] render /.test(l) && field(eventOf(l), "sid") === sid,
   );

@@ -30,6 +30,7 @@ import {
 import { readTailSync } from "../utils/transcript-fs";
 import type { StartTimeRead } from "./process-fingerprint";
 import type { Timekeeper } from "../time.js";
+import { IDLE, type ActState } from "../facts/world-state";
 
 export function actsDir(stateDir: string, entryPath: string): string {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
@@ -47,22 +48,6 @@ export interface ActRecord {
   readonly started: number;
   readonly deadline: number;
 }
-
-// [LAW:types-are-the-program] The act as every daemon sees it. `succeeded`
-// is its own arm, not `idle`, so a daemon watching an act end can tell a
-// rebuilt bundle from nothing having happened.
-export type ActState =
-  | { readonly kind: "idle" }
-  | { readonly kind: "running"; readonly act: number }
-  | { readonly kind: "succeeded"; readonly act: number }
-  | {
-      readonly kind: "failed";
-      readonly act: number;
-      readonly identity: string;
-      readonly reason: string;
-    };
-
-export const IDLE: ActState = { kind: "idle" };
 
 // One act as read from disk. `alive` is read before `end`: a job writes its
 // verdict before its group ends, so "gone, then no verdict" is a job that

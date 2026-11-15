@@ -45,7 +45,9 @@ export function endpointOf(target: DaemonTarget): DaemonEndpoint {
     // An isolated daemon keeps its socket in its state directory
     // (prepareIsolatedDaemonEnv), whose log is the one the daemon itself
     // writes (logPath).
-    log: logPath(hostOf({ XDG_STATE_HOME: path.dirname(path.dirname(target)) })),
+    log: logPath(
+      hostOf({ XDG_STATE_HOME: path.dirname(path.dirname(target)) }),
+    ),
     now: Date.now,
   };
 }
@@ -97,10 +99,7 @@ function overSocket(
         req as unknown as Request,
         Date.now() + timeoutMs,
         systemTimekeeper,
-      ).then(
-        resolve,
-        reject,
-      );
+      ).then(resolve, reject);
     });
   });
 }

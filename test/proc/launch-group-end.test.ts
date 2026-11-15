@@ -5,10 +5,11 @@ import { join } from "node:path";
 import { systemLauncher } from "../../src/proc/system-launcher";
 import {
   MAX_CAPTURED_BYTES,
-  PIPE_EVENT_HOLD_S,
   type TestableLauncher,
 } from "../../src/proc/launch";
 import {
+  launcherWarningsAt,
+  PIPE_EVENT_HOLD_S,
   type LaunchCategory,
   type WarningChange,
 } from "../../src/proc/launcher";
@@ -290,16 +291,20 @@ describe("the pipes a descendant holds past its launch", () => {
     // What a render at `t` seconds after the event shows of it.
     // Found by kind, read now, inside its hold: a lifeline fault under load
     // would list first.
-    const pipes = launcher
-      .launcherWarnings(instantOf(new Date()), "feed")
-      .find((w) => w.kind === "launch-pipes");
+    const pipes = launcherWarningsAt(
+      launcher.standing(),
+      instantOf(new Date()),
+      "feed",
+    ).find((w) => w.kind === "launch-pipes");
     if (pipes?.kind !== "launch-pipes")
       throw new Error("no pipe event shown inside its hold");
     const event = pipes.event;
     const shown = (t: number, render: "feed" | "request") =>
-      launcher
-        .launcherWarnings((event.at + t) as Instant, render)
-        .filter((w) => w.kind === "launch-pipes");
+      launcherWarningsAt(
+        launcher.standing(),
+        (event.at + t) as Instant,
+        render,
+      ).filter((w) => w.kind === "launch-pipes");
     expect(event.text).toContain("user-shell output cut at the");
     expect(event.text).toContain("now fails its writes");
     expect(shown(PIPE_EVENT_HOLD_S - 1, "feed")).toHaveLength(1);

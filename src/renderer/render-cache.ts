@@ -19,6 +19,7 @@ import type {
   EveryEntryLoad,
 } from "../renderer-interface/adapter.js";
 import type { LinkSigner } from "../click/link-signer.js";
+import type { Watches } from "./watches.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { fileHeldSettings } from "./setting-drafts.js";
 import {
@@ -170,7 +171,9 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // What an `env` source reads (StateDeps).
   env: Readonly<Record<string, string | undefined>>;
   sessionState: SessionStateRW;
-  watchers: AdapterToHost["watchers"];
+  // The renderer's watches (src/renderer/watches.ts): the answers book's and
+  // each entry's config watch.
+  watchers: Pick<Watches, "acquire" | "follow">;
   // The owner of every plugin's managed storage, whose folders a state's
   // build holds (StateDeps).
   storage: PluginStorage;
@@ -223,7 +226,7 @@ export interface StateDeps {
   readonly gates: Gates;
   // The daemon's one watcher registry, which the cache's own watches (the
   // answers book's) ride. A build outside the daemon leaves it out.
-  readonly watchers?: AdapterToHost["watchers"];
+  readonly watchers?: Pick<Watches, "acquire" | "follow">;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
   // has no other entry to share with and compiles its own.
@@ -434,7 +437,7 @@ export type LoadCause =
 const heardField = (heard: Invalidation): string => {
   switch (heard.kind) {
     case "changed":
-      return [...heard.paths].join(",");
+      return heard.paths.join(",");
     case "unknown":
       return "unknown";
     case "failed":

@@ -81,11 +81,13 @@ export const drewAwaitedPending = (event: string): boolean =>
 
 // The values no request waits for: each draws pending on a first bar and lands
 // through its owner's refresh, which that owner logs as `<source> refresh`.
-const UNWAITED: ReadonlyArray<{ readonly name: RegExp; readonly lands: string }> =
-  [
-    { name: /^git\.pr[A-Z]/, lands: "] pr refresh " },
-    { name: /^today\./, lands: "] today refresh " },
-  ];
+const UNWAITED: ReadonlyArray<{
+  readonly name: RegExp;
+  readonly lands: string;
+}> = [
+  { name: /^git\.pr[A-Z]/, lands: "] pr refresh " },
+  { name: /^today\./, lands: "] today refresh " },
+];
 
 // The log lines that land the values a render drew pending, when every one of
 // them is a value no request waits for; none otherwise, since a render that

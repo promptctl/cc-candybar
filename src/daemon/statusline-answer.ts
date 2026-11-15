@@ -25,6 +25,7 @@ import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
 import type { RendererHost } from "./renderer-host.js";
 import type { MenuIdle } from "./menu-idle.js";
+import type { FrameFeeds } from "./frame-feed.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -85,8 +86,10 @@ function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
 export async function answerStatusline(
   host: RendererHost,
   collector: Pick<Collector, "requested">,
-  // The session's idle clock, which the request's draw reads at its instant.
+  // The session's idle clock and its feeds, which the request's draw reads
+  // at its instant.
   menuIdle: Pick<MenuIdle, "since">,
+  feeds: Pick<FrameFeeds<CheckedRenderRequest>, "following" | "feedsOf">,
   clock: Pick<Timekeeper, "monotonic" | "now">,
   arrived: CheckedRenderRequest,
   id: RequestId,
@@ -150,6 +153,8 @@ export async function answerStatusline(
       context: req,
       waitMs: waitEndsAt - clock.monotonic(),
       idleSince: menuIdle.since(req.hookData.session_id, at) ?? null,
+      following: [...feeds.following(req.hookData.session_id)],
+      feeds: feeds.feedsOf(req.hookData.session_id, at),
     },
   });
   recorded(facts, delivered);

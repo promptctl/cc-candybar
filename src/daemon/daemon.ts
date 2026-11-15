@@ -61,6 +61,14 @@ import { loadMainRenderer } from "../renderer/main.js";
 import { readingsHost } from "./readings.js";
 import { installFacts } from "../doctor/edge.js";
 import { ClicksInFlight } from "./clicks-in-flight.js";
+import { compareStructural, observable, runInAction } from "mobx";
+import type { DaemonDiagnostic } from "../facts/world-state.js";
+import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
+import type { WatchId } from "../renderer-interface/adapter.js";
+import type {
+  Invalidation,
+  WatcherHandle,
+} from "./foundations/watch-targets.js";
 import { closeByTurn, MenuIdle } from "./menu-idle.js";
 import type { SessionId } from "./foundations/session-id.js";
 
@@ -254,8 +262,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // hold them against.
     now: instant,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it, and each pipe event, is said in daemon.log, and every feed
-    // redraws, so its warning comes on frames too.
+    // dies with it, and each pipe event, is said in daemon.log, and every
+    // session's world state carries it, so its warning comes on frames too.
     observeWarnings: (change) => {
       if (change.kind === "launch-pipes") log("warn", change.text);
       else
@@ -265,7 +273,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
             ? "launch lifeline running again"
             : `launch lifeline ${change.fault}; the next launch starts another`,
         );
-      frameFeeds.wakeWhere("data", () => true);
+      restateFaults();
     },
   });
   // [LAW:one-source-of-truth] The update watch and the lane edge read a pid
@@ -328,6 +336,23 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     logger: log,
     clock,
   });
+  // [LAW:one-source-of-truth] The daemon's own faults, as every session's
+  // world state carries them: whether file events are heard, and what the
+  // launcher stands behind. Restated whenever either may have moved, and
+  // compared whole, so a restatement that moved nothing moves no document.
+  const daemonFaults = observable.box<readonly DaemonDiagnostic[]>([], {
+    deep: false,
+    equals: compareStructural,
+  });
+  function restateFaults(): void {
+    runInAction(() =>
+      daemonFaults.set([
+        ...fileEventsWarnings(fileEvents.delivery()),
+        ...launcher.standing(),
+      ]),
+    );
+  }
+  restateFaults();
   // [LAW:single-enforcer] The daemon's one owner of every declared source's
   // runs: the collector holds each run a session's renderer subscribes to, so
   // one identity is one program however many sessions name it.
@@ -535,14 +560,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         watcherRegistry.judge();
         return;
       case "caught-up":
+        restateFaults();
         parts.renderer.tell(
           { kind: "reload-every", since: notice.since },
           instant(),
         );
-        frameFeeds.wakeWhere("data", () => true);
         return;
       case "moved":
-        frameFeeds.wakeWhere("data", () => true);
+        restateFaults();
         return;
     }
   });
@@ -597,7 +622,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // after a request, so the parts exist by then.
   const collector = new Collector({
     owners: payloadProviders,
-    update: () => updateFact.get(),
+    daemon: () => ({
+      update: { newer: updateFact.get(), ...updateWatch.acts() },
+      diagnostics: daemonFaults.get(),
+    }),
     clock,
     watched: (sessionId) => frameFeeds.feedOpen(sessionId),
     deliver: (event) =>
@@ -606,6 +634,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
 
   const clicks = new ClicksInFlight();
+  // [LAW:single-enforcer] Each watch the renderer holds, by the id it minted,
+  // from its `watch` to its `unwatch`.
+  const rendererWatches = new Map<WatchId, WatcherHandle>();
   const doctorEdge = inputs.doctorEdge(launcher, host);
   const claudeInput = inputs.claudeInput(launcher);
   const readings = readingsHost(payloadProviders);
@@ -656,15 +687,37 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         renderSightings.ofSession(sessionId, now),
     },
     probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
-    // [LAW:effects-at-boundaries] exception: the parts the renderer still
+    pipeEventAnswered: (event) => {
+      launcher.answeredPipeEvent(event);
+      restateFaults();
+    },
+    watches: {
+      watch: (id, key, targets) => {
+        // Each window the registry hears goes back to the renderer with
+        // the watch's deafness as it stands then.
+        const told = (heard: Invalidation | null): void =>
+          parts.renderer.tell(
+            { kind: "watch", id, heard, deaf: handle.deaf },
+            instant(),
+          );
+        const handle = watcherRegistry.acquire(key, targets, told);
+        rendererWatches.set(id, handle);
+        // [LAW:no-ambient-temporal-coupling] The acquire's own push goes
+        // after the notice that asked for it, as it would from another
+        // process: a renderer's start acquires watches before the host holds
+        // the renderer it builds.
+        void clock.defer(() => {
+          if (rendererWatches.get(id) === handle) told(null);
+        });
+      },
+      unwatch: (id) => {
+        rendererWatches.get(id)?.release();
+        rendererWatches.delete(id);
+      },
+    },
+    // [LAW:effects-at-boundaries] exception: the part the renderer still
     // reaches in process.
-    frameFeeds,
-    updateWatch,
-    fileEvents,
-    launcher,
-    cacheTallies: readings.cacheTallies,
     managedStorage,
-    watchers: watcherRegistry,
   });
   const parts: DaemonParts = {
     clicks,

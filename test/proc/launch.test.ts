@@ -19,7 +19,6 @@ import { type LaunchCategory, type Launcher } from "../../src/proc/launcher";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";
-import { instantOf } from "../../src/utils/instant";
 
 function makeSpyHandle(): {
   handle: LaunchStatsHandle;
@@ -100,11 +99,9 @@ const launchDetachedSync: Launcher["launchDetachedSync"] = (opts) =>
   launcher.launchDetachedSync(opts);
 const launchJobSync: Launcher["launchJobSync"] = (opts, files) =>
   launcher.launchJobSync(opts, files);
-// The lifeline's warning stands whatever the instant, so any render reads it.
+// The lifeline's warning stands whatever the instant.
 const lifelineWarnings = () =>
-  launcher
-    .launcherWarnings(instantOf(new Date()), "request")
-    .filter((w) => w.kind === "lifeline");
+  launcher.standing().filter((w) => w.kind === "lifeline");
 const lifeline = () => launcher.__lifelineForTest();
 
 beforeEach(() => {

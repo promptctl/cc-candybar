@@ -11,6 +11,7 @@ import type { RenderCache } from "../../src/renderer/render-cache";
 import type { ViewFacts } from "../../src/renderer-interface/request-context";
 import { WorldStates } from "../../src/renderer/world-states";
 import { systemTimekeeper } from "../../src/time";
+import { daemonFactsOf } from "./daemon-facts";
 
 // What the renderer's turns read of the cache: what a retire closes, and what
 // every output says the open views need read.
@@ -31,8 +32,8 @@ export interface Collected {
 }
 
 export function collected(
-  deps: Pick<CollectorDeps, "owners" | "update" | "log"> &
-    Partial<Pick<CollectorDeps, "clock" | "watched">>,
+  deps: Pick<CollectorDeps, "owners" | "log"> &
+    Partial<Pick<CollectorDeps, "clock" | "watched" | "daemon">>,
   cleanups: Array<() => void>,
 ): Collected {
   const worldStates = new WorldStates();
@@ -45,6 +46,7 @@ export function collected(
   const collector: Collector = new Collector({
     clock: systemTimekeeper,
     watched: () => false,
+    daemon: () => daemonFactsOf(),
     ...deps,
     // The host hands an output's subscriptions back once the renderer's
     // answer settles, a turn of the event loop after the store took the
@@ -52,7 +54,11 @@ export function collected(
     // subscribed yet.
     deliver: async (event) => {
       if (event.kind === "world-state") worldStates.take(event.worldState);
-      else retireSession({ renderCache: cache(), worldStates }, event.session);
+      else
+        retireSession(
+          { renderCache: cache(), worldStates, contexts: new Map() },
+          event.session,
+        );
       await Promise.resolve();
       collector.subscribed(cache().subscriptions());
       return { kind: "answered" };

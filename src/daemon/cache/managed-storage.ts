@@ -324,7 +324,7 @@ export class ManagedStorage {
         this.judged(watched, () => this.sessions.changed(inFolder));
         return;
       case "changed": {
-        const { paths } = invalidation;
+        const paths = new Set(invalidation.paths);
         if (paths.has(path.join(key.folder, path.basename(key.folder)))) {
           this.judged(watched, () => this.sessions.changed(inFolder));
         } else {

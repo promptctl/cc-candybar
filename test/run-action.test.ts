@@ -225,10 +225,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     }),
   });
   const sessionState = new SessionState();
-  const served = collected(
-    { owners: providers, update: () => pendingOf("unread"), log },
-    cleanups,
-  );
+  const served = collected({ owners: providers, log }, cleanups);
   const cache = new RenderCache<SessionSource>(
     {
       clock: systemTimekeeper,

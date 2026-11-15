@@ -87,7 +87,7 @@ import type { TranscriptUsage } from "./segments/session.js";
 import type { MetricsFold } from "./segments/metrics.js";
 import type { AutoCompactWindow } from "./segments/autocompact.js";
 import { oneDay } from "./daemon/foundations/today-facts.js";
-import { type TodayFacts } from "./facts/world-state.js";
+import { IDLE, type TodayFacts } from "./facts/world-state.js";
 import { ABSENT, ok } from "./utils/outcome.js";
 import {
   resolveEffectiveGlobals,
@@ -348,7 +348,10 @@ export function checkPayload(
     undefined,
     CHECK_SESSION,
     checkReadings(config, at),
-    { ...ABSENT, at },
+    {
+      update: { newer: { ...ABSENT, at }, act: IDLE, actsError: null },
+      diagnostics: [],
+    },
     at,
   );
   const { term: _term, ...payload } = composePayload(

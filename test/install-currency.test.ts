@@ -2,12 +2,12 @@ import {
   assessCurrency,
   currencyReport,
   fetchLatestVersion,
-  formatVersion,
   parseReleaseVersion,
   REGISTRY_URL,
   type Currency,
 } from "../src/install/currency";
 import { ABSENT, failed, ok } from "../src/utils/outcome";
+import { formatVersion } from "../src/facts/world-state";
 import { systemTimekeeper } from "../src/time";
 
 const PKG = "@promptctl/cc-candybar";

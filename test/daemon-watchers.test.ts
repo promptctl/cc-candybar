@@ -406,8 +406,8 @@ describe("WatcherRegistry", () => {
       listener("change", "conf");
       await until(() => seen.length === 2, "the removal's invalidation");
       expect(seen).toEqual([
-        { kind: "changed", paths: new Set([path.join(conf, "config.json5")]) },
-        { kind: "changed", paths: new Set([path.join(conf, "conf")]) },
+        { kind: "changed", paths: [path.join(conf, "config.json5")] },
+        { kind: "changed", paths: [path.join(conf, "conf")] },
       ]);
       reg.closeAll();
     } finally {
@@ -450,7 +450,7 @@ describe("WatcherRegistry", () => {
       await until(() => seen.length === 2, "the watched name's invalidation");
       expect(seen[1]).toEqual({
         kind: "changed",
-        paths: new Set([path.join(conf, "config.json5")]),
+        paths: [path.join(conf, "config.json5")],
       });
       reg.closeAll();
     } finally {
@@ -567,7 +567,7 @@ describe("WatcherRegistry", () => {
       fake.opened[0]!.listener("rename", "a");
       fake.opened[0]!.listener("rename", "b");
       await until(() => seen.length === 1, "the new name's invalidation");
-      expect(seen).toEqual([{ kind: "changed", paths: new Set(["/w/b"]) }]);
+      expect(seen).toEqual([{ kind: "changed", paths: ["/w/b"] }]);
       reg.closeAll();
     } finally {
       fake.restore();
@@ -645,7 +645,7 @@ describe("WatcherRegistry", () => {
       await until(() => seen.length === 2, "the watched name's window");
       expect(seen[1]).toEqual({
         kind: "changed",
-        paths: new Set([path.join(conf, "config.json5")]),
+        paths: [path.join(conf, "config.json5")],
       });
       expect(counters).toEqual({
         ...zeroCounters(),
