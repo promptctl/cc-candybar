@@ -36975,7 +36975,7 @@ async function answerStatusline(host, collector, clock, arrived3, id2, at, waitE
   const encodeFrom = clock.monotonic();
   let resp;
   try {
-    resp = RENDER_ANSWERS[req.encoding](presented.frame);
+    resp = RENDER_ANSWERS[req.encoding](parseFrame(presented.frame));
   } catch (e) {
     const failure = failureOf(e);
     done2(presented, `encoding its frame threw: ${failure.message}`);
@@ -50125,7 +50125,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
   if (req.kind === "stats") {
     const { stats: drawn } = await renderer.ask(
       { kind: "stats" },
-      instantOf(new Date(clock.now()))
+      instantAt(clock)
     );
     return stay({
       ok: true,
@@ -50146,7 +50146,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
-        clients: renderSightings.list(instantOf(new Date(clock.now()))),
+        clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest: sourceDigest2,
         daemon: limits.serving(),
@@ -50268,7 +50268,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     }
     const { snapshot } = await renderer.ask(
       { kind: "debug", what: req.what },
-      instantOf(new Date(clock.now()))
+      instantAt(clock)
     );
     return stay({ ok: true, debug: snapshot });
   }
@@ -67678,7 +67678,13 @@ var FrameFeeds = class {
     };
   }
   admit(sessionId2, sub2, lanes) {
-    if (this.closed) return;
+    if (this.closed) {
+      this.deps.log(
+        "info",
+        `feed sid=${JSON.stringify(sessionId2)} dropped lane=${sub2.lane} daemon-closed`
+      );
+      return;
+    }
     if (lanes !== null && !lanes[sub2.lane]) {
       this.refuse(sessionId2, sub2);
       return;
@@ -69669,7 +69675,9 @@ function rendererHost(name, clock, renderer, log, collector) {
     return delivered;
   };
   const ask = async (push, at) => {
-    const output = await renderer.answer({ kind: "adapter", push, at });
+    const output = await renderer.answer({ kind: "adapter", push, at }).catch(
+      (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
+    );
     if (output.kind === "threw")
       throw new Error(
         `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`
@@ -69680,8 +69688,12 @@ function rendererHost(name, clock, renderer, log, collector) {
       );
     return output.reply;
   };
-  const tell = (push, at) => void ask(push, at).catch(
-    (thrown2) => log("error", thrown2.message)
+  const tell = (push, at) => (
+    // [LAW:types-are-the-program] exception: `ask` rejects only with the
+    // Errors it makes, which no promise type carries.
+    void ask(push, at).catch(
+      (thrown2) => log("error", thrown2.message)
+    )
   );
   return { name, answer: turn, deliver, ask, tell };
 }
@@ -82680,7 +82692,7 @@ function renderFrame(parts, sessionId2, fps, at, feed2) {
       statusline: failed3,
       evaluated: 0,
       cellBreaks: 0,
-      lanes: null,
+      lanes: viewLanes(parts, sessionId2),
       failure: { level, line: `frame ${line}` }
     };
   }
@@ -85049,29 +85061,35 @@ function mainRenderer(parts, pushed) {
         return [];
     }
   };
-  async function answer2(input) {
-    switch (input.kind) {
-      case "adapter":
-        try {
-          return { kind: "replied", reply: pushed(input.push, input.at) };
-        } catch (thrown2) {
-          return { kind: "threw", failure: failureOf(thrown2) };
-        }
-      case "event": {
-        const record2 = [];
-        const ended = await turn(input.event, input.at, record2).then(
-          (effects) => ({ kind: "answered", effects }),
-          // [LAW:single-enforcer] Classified here, where it was thrown: a
-          // class crosses no process.
-          (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
-        );
-        return {
-          ...ended,
-          record: record2,
-          subscriptions: parts.renderCache.subscriptions()
-        };
+  return rendererOf({
+    // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
+    // after it lands after its writes.
+    adapter: async (input) => {
+      try {
+        return { kind: "replied", reply: pushed(input.push, input.at) };
+      } catch (thrown2) {
+        return { kind: "threw", failure: failureOf(thrown2) };
       }
+    },
+    event: async (input) => {
+      const record2 = [];
+      const ended = await turn(input.event, input.at, record2).then(
+        (effects) => ({ kind: "answered", effects }),
+        // [LAW:single-enforcer] Classified here, where it was thrown: a
+        // class crosses no process.
+        (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
+      );
+      return {
+        ...ended,
+        record: record2,
+        subscriptions: parts.renderCache.subscriptions()
+      };
     }
+  });
+}
+function rendererOf(arms) {
+  function answer2(input) {
+    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
   }
   return { answer: answer2 };
 }
@@ -85511,7 +85529,7 @@ function createDaemon(inputs) {
     host
   } = inputs;
   const locs = locations(host);
-  const instant = () => instantOf(new Date(clock.now()));
+  const instant = () => instantAt(clock);
   const closing = new AbortController();
   let closed = false;
   const log = (level, msg) => inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
@@ -85660,10 +85678,13 @@ function createDaemon(inputs) {
     log
   });
   const frameFeeds = new FrameFeeds({
-    frame: async (sessionId2, fps, at, following, feeds) => (await parts.renderer.ask(
-      { kind: "frame", session: sessionId2, fps, following, feeds },
-      at
-    )).frame,
+    frame: async (sessionId2, fps, at, following, feeds) => {
+      const { frame: frame2 } = await parts.renderer.ask(
+        { kind: "frame", session: sessionId2, fps, following, feeds },
+        at
+      );
+      return frame2 === null ? null : { ...frame2, bar: parseFrame(frame2.bar) };
+    },
     lanes: async (sessionId2) => (await parts.renderer.ask(
       { kind: "lanes", session: sessionId2 },
       instant()
